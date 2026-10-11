@@ -1,3 +1,4 @@
+import { switchOn } from '@shannon/switches';
 import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MINECRAFT_CONTROL_PATH } from '../contracts/minecraftControlContract.js';
@@ -35,7 +36,7 @@ type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'r
  * exists, its routes answer 503, and no device is held back.
  */
 export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string, now: () => string, primaryModel?: MinecraftPrimaryModelReader) {
-  const commonMode = environment.SHANNON_FCA_MINECRAFT === 'on';
+  const commonMode = switchOn(environment, 'SHANNON_FCA_MINECRAFT');
   const configuration = configuredMinecraftBody(environment);
   const experiences = configuration ? new SQLiteGameExperiences(databasePath) : null;
   const requests = configuration && !commonMode ? new MinecraftBodyRequests(databasePath, configuration, now, experiences, undefined, primaryModel) : null;
@@ -44,7 +45,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } | null = null;
-  if (commonMode && (!configuration || environment.SHANNON_FCA_RUNTIME !== 'on')) throw new Error('FCA_MINECRAFT_CONFIG_REQUIRED');
+  if (commonMode && (!configuration || !switchOn(environment, 'SHANNON_FCA_RUNTIME'))) throw new Error('FCA_MINECRAFT_CONFIG_REQUIRED');
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },

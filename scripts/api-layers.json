@@ -117,7 +117,7 @@
       "id": "pure-packages",
       "kind": "package",
       "description": "The pure packages hold no database, network, environment or timer: they import only @shannon/* and their own files.",
-      "packages": ["packages/cognition/src", "packages/learning/src", "packages/mind/src"],
+      "packages": ["packages/cognition/src", "packages/learning/src", "packages/mind/src", "packages/switches/src"],
       "allow": ["@shannon/*"],
       "forbiddenPattern": "\\bprocess\\.env\\b|\\bfetch\\(|\\bset(?:Timeout|Interval)\\("
     },

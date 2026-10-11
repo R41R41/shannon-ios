@@ -33,6 +33,7 @@ import { configuredJevChooser } from './skillRoutingWiring.js';
 import { fcaResearchTools } from './fcaResearchWiring.js';
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
 import { DatabaseSync } from 'node:sqlite';
+import { switchOn } from '@shannon/switches';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { configuredResponseModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
@@ -55,13 +56,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
-  if (values.SHANNON_FCA_RUNTIME !== 'on') return null;
+  if (!switchOn(values, 'SHANNON_FCA_RUNTIME')) return null;
   if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED');
   const modelName = replacementModel(values.SHANNON_FCA_MODEL);
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
   const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
   if (!provider) throw new Error('FCA_PROVIDER_REQUIRED');
-  const sleepEnabled = values.SHANNON_FCA_SLEEP === 'on';
+  const sleepEnabled = switchOn(values, 'SHANNON_FCA_SLEEP');
   if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ?? new DatabaseSync(parts.path);
@@ -141,7 +142,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       execute: (name, input, context) => conversation.executeTaskTool(name, input, context),
       observeRead: (scope, receipt) => conversation.observeRead(scope, receipt) });
     const sourceVisible = (scope: string, id: string) => Boolean(shared?.memory.read(scope, [id], { kind: 'owner' }).length);
-    const touch = values.SHANNON_FCA_TOUCH === 'on' ? (() => {
+    const touch = switchOn(values, 'SHANNON_FCA_TOUCH') ? (() => {
       if (!jev || !parts.touchAllowed || !shared) throw new Error('FCA_TOUCH_REQUIRES_BODY_JEV_MEMORY');
       return createFcaTouchWiring({ db, runtime: runtime.runtime, actions, selector: new JevTouchSelector(jev), ownerScope: parts.ownerScope,
         allowed: parts.touchAllowed, sourceVisible, threadId: scope => parts.conversations?.threadId(scope) ?? null });

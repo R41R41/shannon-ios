@@ -1,3 +1,5 @@
+import { switchOn, switchedOn, switchedOnExplicitly, type SwitchValues } from '@shannon/switches';
+
 /**
  * The switches of Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`). Pure: the caller hands the values in (the
  * services read their environment; this package reads none).
@@ -37,20 +39,8 @@ export interface MindSwitches {
   structuredCompaction: boolean;
 }
 
-export type SwitchValues = Readonly<Record<string, string | undefined>>;
-
-const OFF = new Set(['off', 'false', '0', 'disabled', 'no', 'none']);
-const ON = new Set(['on', 'true', '1', 'yes']);
-
-/** On unless the value names off (the words of every other switch of the server). */
-export function switchedOn(value: string | undefined): boolean {
-  return !OFF.has(value?.trim().toLowerCase() ?? '');
-}
-
-/** Off unless the value names on. */
-export function switchedOnExplicitly(value: string | undefined): boolean {
-  return ON.has(value?.trim().toLowerCase() ?? '');
-}
+// One reader of every switch (`@shannon/switches`, Syzygy ADR-0009 stage 1); the words are re-exported for existing callers.
+export { switchedOn, switchedOnExplicitly, type SwitchValues };
 
 /** The names of the switches, in the order of the contract's table. */
 export const MIND_SWITCH_NAMES = Object.freeze({
@@ -69,22 +59,23 @@ export const MIND_SWITCH_NAMES = Object.freeze({
 } as const satisfies Record<keyof MindSwitches, string>);
 
 export function mindSwitches(values: SwitchValues): MindSwitches {
-  const stage3 = switchedOn(values.SHANNON_ADR8_STAGE3);
-  const mindEvents = stage3 && switchedOn(values.SHANNON_MIND_EVENTS);
-  const attention = mindEvents && switchedOn(values.SHANNON_ATTENTION);
-  const memoryOutbox = stage3 && switchedOn(values.SHANNON_MEMORY_OUTBOX);
+  const on = (name: (typeof MIND_SWITCH_NAMES)[keyof MindSwitches]) => switchOn(values, name);
+  const stage3 = on('SHANNON_ADR8_STAGE3');
+  const mindEvents = stage3 && on('SHANNON_MIND_EVENTS');
+  const attention = mindEvents && on('SHANNON_ATTENTION');
+  const memoryOutbox = stage3 && on('SHANNON_MEMORY_OUTBOX');
   return Object.freeze({
     stage3,
     mindEvents,
     attention,
-    workspace: attention && switchedOn(values.SHANNON_WORKSPACE),
-    dataFrames: stage3 && switchedOn(values.SHANNON_DATA_FRAMES),
-    proactiveGate: stage3 && switchedOn(values.SHANNON_PROACTIVE_GATE),
+    workspace: attention && on('SHANNON_WORKSPACE'),
+    dataFrames: stage3 && on('SHANNON_DATA_FRAMES'),
+    proactiveGate: stage3 && on('SHANNON_PROACTIVE_GATE'),
     memoryOutbox,
-    temporalFacts: memoryOutbox && switchedOn(values.SHANNON_TEMPORAL_FACTS),
-    evidenceDecay: stage3 && switchedOnExplicitly(values.SHANNON_EVIDENCE_DECAY),
-    identityTiers: stage3 && switchedOn(values.SHANNON_IDENTITY_TIERS),
-    trustLedger: stage3 && switchedOn(values.SHANNON_TRUST_LEDGER),
-    structuredCompaction: stage3 && switchedOn(values.SHANNON_STRUCTURED_COMPACTION),
+    temporalFacts: memoryOutbox && on('SHANNON_TEMPORAL_FACTS'),
+    evidenceDecay: stage3 && on('SHANNON_EVIDENCE_DECAY'),
+    identityTiers: stage3 && on('SHANNON_IDENTITY_TIERS'),
+    trustLedger: stage3 && on('SHANNON_TRUST_LEDGER'),
+    structuredCompaction: stage3 && on('SHANNON_STRUCTURED_COMPACTION'),
   });
 }

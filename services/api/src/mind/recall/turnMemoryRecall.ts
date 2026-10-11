@@ -1,3 +1,4 @@
+import { switchOn } from '@shannon/switches';
 import { configuredResponseModel, replacementModel } from '../../infra/models/anthropic/haikuConfig.js';
 import {
   UNLABELLED_DISCLOSURE_MARKER,
@@ -167,7 +168,7 @@ export function createConfiguredTurnMemoryRecall(
   tree: TreeKnowledgeRecall | null = null,
 ): TurnMemoryRecall {
   return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index, tree,
-    { temporalKnowledge: environment.SHANNON_TEMPORAL_KNOWLEDGE_RECALL?.trim().toLowerCase() === 'on' });
+    { temporalKnowledge: switchOn(environment, 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL') });
 }
 
 export function configuredMemoryModelGateway(

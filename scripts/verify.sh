@@ -29,7 +29,9 @@ run_cognition_eval() {
   "$node_bin" node_modules/typescript/bin/tsc -p packages/evaluation/tsconfig.json --noEmit
   "$node_bin" node_modules/typescript/bin/tsc -p packages/learning/tsconfig.json --noEmit
   "$node_bin" node_modules/typescript/bin/tsc -p packages/mind/tsconfig.json --noEmit
-  "$node_bin" node_modules/vitest/vitest.mjs run packages/cognition/tests packages/evaluation/tests packages/learning/tests packages/mind/tests
+  "$node_bin" node_modules/typescript/bin/tsc -p packages/switches/tsconfig.json --noEmit
+  "$node_bin" node_modules/vitest/vitest.mjs run packages/cognition/tests packages/evaluation/tests packages/learning/tests packages/mind/tests \
+    packages/switches/tests
 }
 
 run_architecture() {
@@ -58,6 +60,9 @@ run_fast() {
   "$node_bin" --test scripts/gemini-tts-lab.test.mjs scripts/gemini-voice-lab.test.mjs
   run_architecture
   run_product_spec
+  # The switch section of deploy/azure/api.env.example is generated from packages/switches (Syzygy ADR-0009 stage 1).
+  "$node_bin" --test scripts/generate-env-example.test.mjs
+  "$node_bin" scripts/generate-env-example.mjs --check
 }
 
 run_ios() {

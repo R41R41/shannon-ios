@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@shannon/cognition": "workspace:*"
+    "@shannon/cognition": "workspace:*",
+    "@shannon/switches": "workspace:*"
   }
 }

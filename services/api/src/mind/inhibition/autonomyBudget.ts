@@ -3,6 +3,7 @@ import { delimiter, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
 import { ownerDay } from '@shannon/cognition';
+import { switchOn } from '@shannon/switches';
 import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/modelPricesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
@@ -64,7 +65,7 @@ export function configuredAutonomy(
   const roots = (value: string | undefined) => (value ?? '').split(delimiter).map(item => item.trim()).filter(Boolean);
   const databasePath = runtime.databasePath && runtime.databasePath !== ':memory:' ? [resolve(runtime.databasePath, '..')] : [];
   return Object.freeze({
-    enabled: environment.SHANNON_AUTONOMY_ENABLED?.trim() === 'true',
+    enabled: switchOn(environment, 'SHANNON_AUTONOMY_ENABLED'),
     dailyBudgetYen: boundedNumber(environment.SHANNON_AUTONOMY_DAILY_BUDGET_YEN, 0, 100_000, SHANNON_AUTONOMY_DAILY_BUDGET_YEN),
     maximumExtraYenPerDay: boundedNumber(environment.SHANNON_AUTONOMY_MAX_EXTRA_YEN, 0, 100_000, 3_000),
     yenPerUsd: boundedNumber(environment.SHANNON_AUTONOMY_YEN_PER_USD, 50, 1_000, 160),

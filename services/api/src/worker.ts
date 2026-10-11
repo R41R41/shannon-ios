@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { fcaSleepConfigured } from './infra/config/fcaSwitches.js';
 import { ShannonBackgroundWorker } from './mind/sleep/backgroundWorker.js';
 import { createConfiguredSleepMemoryAnalyzer } from './mind/sleep/sleepConsolidation.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
@@ -61,7 +62,7 @@ const valueNightly = valueNightSchedule({
   run: (scopeKey, at, notBefore) => valueNight(scopeKey, at, () => store.snapshot(scopeKey), notBefore),
 });
 const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
-  ...(process.env.SHANNON_FCA_RUNTIME === 'on' && process.env.SHANNON_FCA_SLEEP === 'on' ? { fcaSleepScope: configuredOwnerScope(process.env) } : {}),
+  ...(fcaSleepConfigured(process.env) ? { fcaSleepScope: configuredOwnerScope(process.env) } : {}),
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
   minimumSleepMessages: parseInteger(process.env.SHANNON_SLEEP_MIN_MESSAGES, 3),

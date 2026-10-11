@@ -28,6 +28,7 @@
     "@shannon/cognition": "workspace:*",
     "@shannon/learning": "workspace:*",
     "@shannon/mind": "workspace:*",
+    "@shannon/switches": "workspace:*",
     "typescript": "5.9.3"
   }
 }

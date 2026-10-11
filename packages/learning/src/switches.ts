@@ -1,3 +1,5 @@
+import { switchOn, switchedOn, switchedOnExplicitly, type SwitchName, type SwitchValues } from '@shannon/switches';
+
 /**
  * The switches of Syzygy ADR-0008 stage 1 (`docs/cognition-ledger-contract.md`). Pure: the caller hands the values in
  * (the services read their environment; this package reads none).
@@ -23,26 +25,21 @@ export interface CognitionLedgerSwitches {
   decisionTraces: boolean;
 }
 
-export type SwitchValues = Readonly<Record<string, string | undefined>>;
-
-const OFF = new Set(['off', 'false', '0', 'disabled', 'no', 'none']);
-
-/** On unless the value names off. */
-export function switchedOn(value: string | undefined): boolean {
-  return !OFF.has(value?.trim().toLowerCase() ?? '');
-}
+// One reader of every switch (`@shannon/switches`, Syzygy ADR-0009 stage 1); the words are re-exported for existing callers.
+export { switchedOn, switchedOnExplicitly, type SwitchValues };
 
 export function cognitionLedgerSwitches(values: SwitchValues): CognitionLedgerSwitches {
-  const stage1 = switchedOn(values.SHANNON_ADR8_STAGE1);
-  const predictionLedger = stage1 && switchedOn(values.SHANNON_PREDICTION_SHADOW) && switchedOn(values.SHANNON_PREDICTION_LEDGER);
-  const choiceLedger = stage1 && switchedOn(values.SHANNON_CHOICE_LEDGER);
+  const on = (name: SwitchName) => switchOn(values, name);
+  const stage1 = on('SHANNON_ADR8_STAGE1');
+  const predictionLedger = stage1 && on('SHANNON_PREDICTION_SHADOW') && on('SHANNON_PREDICTION_LEDGER');
+  const choiceLedger = stage1 && on('SHANNON_CHOICE_LEDGER');
   return Object.freeze({
     stage1,
     predictionLedger,
     choiceLedger,
-    rewardMood: choiceLedger && switchedOn(values.SHANNON_REWARD_MOOD),
-    valueFacts: choiceLedger && switchedOn(values.SHANNON_VALUE_FACTS),
-    decisionTraces: stage1 && switchedOn(values.SHANNON_DECISION_TRACES),
+    rewardMood: choiceLedger && on('SHANNON_REWARD_MOOD'),
+    valueFacts: choiceLedger && on('SHANNON_VALUE_FACTS'),
+    decisionTraces: stage1 && on('SHANNON_DECISION_TRACES'),
   });
 }
 
@@ -86,27 +83,21 @@ export interface SkillRoutingSwitches {
   conversationReward: boolean;
 }
 
-const ON = new Set(['on', 'true', '1', 'yes']);
-
-/** Off unless the value names on: for a switch whose default is off. */
-export function switchedOnExplicitly(value: string | undefined): boolean {
-  return ON.has(value?.trim().toLowerCase() ?? '');
-}
-
 export function skillRoutingSwitches(values: SwitchValues): SkillRoutingSwitches {
-  const stage2 = switchedOn(values.SHANNON_ADR8_STAGE2);
-  const difficulty = stage2 && switchedOn(values.SHANNON_DIFFICULTY);
-  const skills = stage2 && switchedOn(values.SHANNON_SKILLS);
+  const on = (name: SwitchName) => switchOn(values, name);
+  const stage2 = on('SHANNON_ADR8_STAGE2');
+  const difficulty = stage2 && on('SHANNON_DIFFICULTY');
+  const skills = stage2 && on('SHANNON_SKILLS');
   return Object.freeze({
     stage2,
-    toolMenu: stage2 && switchedOn(values.SHANNON_TOOL_MENU),
-    readTools: stage2 && switchedOn(values.SHANNON_READ_TOOLS),
+    toolMenu: stage2 && on('SHANNON_TOOL_MENU'),
+    readTools: stage2 && on('SHANNON_READ_TOOLS'),
     difficulty,
-    turnVerify: stage2 && switchedOn(values.SHANNON_TURN_VERIFY),
+    turnVerify: stage2 && on('SHANNON_TURN_VERIFY'),
     skills,
-    skillExport: skills && switchedOn(values.SHANNON_SKILL_EXPORT),
-    treeRecall: stage2 && switchedOn(values.SHANNON_TREE_RECALL),
-    sonnetRouting: difficulty && switchedOnExplicitly(values.SHANNON_SONNET_ROUTING),
-    conversationReward: stage2 && switchedOn(values.SHANNON_CONVERSATION_REWARD),
+    skillExport: skills && on('SHANNON_SKILL_EXPORT'),
+    treeRecall: stage2 && on('SHANNON_TREE_RECALL'),
+    sonnetRouting: difficulty && on('SHANNON_SONNET_ROUTING'),
+    conversationReward: stage2 && on('SHANNON_CONVERSATION_REWARD'),
   });
 }

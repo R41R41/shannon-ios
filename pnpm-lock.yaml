@@ -34,12 +34,20 @@ importers:
       '@shannon/cognition':
         specifier: workspace:*
         version: link:../cognition
+      '@shannon/switches':
+        specifier: workspace:*
+        version: link:../switches
 
   packages/mind:
     dependencies:
       '@shannon/cognition':
         specifier: workspace:*
         version: link:../cognition
+      '@shannon/switches':
+        specifier: workspace:*
+        version: link:../switches
+
+  packages/switches: {}
 
   services/api:
     dependencies:
@@ -55,6 +63,9 @@ importers:
       '@shannon/mind':
         specifier: workspace:*
         version: link:../../packages/mind
+      '@shannon/switches':
+        specifier: workspace:*
+        version: link:../../packages/switches
       typescript:
         specifier: 5.9.3
         version: 5.9.3

@@ -24,6 +24,7 @@ const productionSources = [
   ...filesBelow('packages/cognition/src', new Set(['.ts'])),
   ...filesBelow('packages/learning/src', new Set(['.ts'])),
   ...filesBelow('packages/mind/src', new Set(['.ts'])),
+  ...filesBelow('packages/switches/src', new Set(['.ts'])),
 ];
 
 for (const path of productionSources) {

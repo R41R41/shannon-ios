@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { switchOn } from '@shannon/switches';
 import { actionResource, type ActionLease } from '../contracts/actionThreadContract.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 
 /** Called synchronously inside the action writer's transaction, so cleanup cannot race physical-resource release. */
 export function configuredActionResourceProof(values: Readonly<Record<string, string | undefined>>, db: DatabaseSync) {
-  const configuration = values.SHANNON_MINECRAFT_LIFECYCLE === 'on' ? configuredMinecraftBody(values) : null;
+  const configuration = switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE') ? configuredMinecraftBody(values) : null;
   return (lease: ActionLease, resource: string, acknowledgementId: string): boolean => {
     if (!configuration || resource !== actionResource(configuration.deviceId, 'minecraft-body')) return false;
     return minecraftLifecycleResourceProof(db, lease, acknowledgementId, configuration.ownerScopeKey);
@@ -13,7 +14,7 @@ export function configuredActionResourceProof(values: Readonly<Record<string, st
 }
 /** The resources only a domain proof may release (the configured Minecraft body), also after the unknown deadline. */
 export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>) {
-  const configuration = values.SHANNON_MINECRAFT_LIFECYCLE === 'on' ? configuredMinecraftBody(values) : null;
+  const configuration = switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE') ? configuredMinecraftBody(values) : null;
   const body = configuration ? actionResource(configuration.deviceId, 'minecraft-body') : null;
   return (resource: string): boolean => resource === body;
 }

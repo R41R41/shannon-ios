@@ -95,6 +95,7 @@ import { ownerCallElsewhereEnabled } from './mind/perception/perceptionPorts.js'
 import { SQLiteOwnerCallFacts } from './mind/perception/store/ownerCallFacts.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { startLivenessMonitor, withLiveness } from './wiring/livenessWiring.js';
+import { reportSwitches, withSwitches } from './wiring/switchesWiring.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { configuredMind, withMindOps } from './wiring/mindWiring.js';
 import { configuredActionRoutes } from './wiring/serverActionThreadsWiring.js';
@@ -103,6 +104,8 @@ import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
 import { stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 const now = () => new Date().toISOString();
+// The switch table (Syzygy ADR-0009 stage 1): findings are logged once and shown in GET /v1/ops; they never stop the boot.
+const switchWarnings = reportSwitches(process.env, line => console.warn(line));
 // ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust ledger (F6), by switch.
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, ...stage5MemoryStoreOptions(process.env) });
 const peopleFacts = peopleFactReaders(persistentStore, now);
@@ -260,7 +263,8 @@ const liveness = startLivenessMonitor({ databasePath: configuredDatabasePath(), 
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
-  server: scopeKey => withLiveness(withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }), liveness.view(scopeKey)),
+  server: scopeKey => withSwitches(withLiveness(withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }),
+    liveness.view(scopeKey)), switchWarnings),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
