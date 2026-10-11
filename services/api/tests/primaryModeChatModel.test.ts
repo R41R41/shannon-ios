@@ -45,17 +45,20 @@ class RecordingModel implements ShannonChatModel {
 }
 
 describe('primary selection without changing auxiliary or safety boundaries', () => {
-  it('keeps Haiku rethink/escalation and actual served tier while denying automatic Sonnet promotion (a Sonnet-hard turn gets luna_plus)', async () => {
+  it('serves every Haiku turn at luna_plus without escalation, and never promotes to Sonnet (owner answer 3, ADR-0009 stage 1)', async () => {
     const store = new SQLiteModelModeStore(path()), haiku = new RecordingModel('claude-haiku-5-5'), sonnet = new RecordingModel('claude-sonnet-5-5');
     const primary = new PrimaryModeChatModel(store, haiku, sonnet);
-    haiku.result = { escalated: true };
     expect(await primary.generate({ ...request, tier: 'sonnet', escalation: true, firstTokenBudgetMs: 1 })).toMatchObject({ model: haiku.model, servedTier: 'luna_plus' });
-    expect(haiku.seen[0]).toMatchObject({ tier: 'luna_plus', escalation: true }); expect(haiku.seen[0]).not.toHaveProperty('firstTokenBudgetMs');
+    expect(haiku.seen[0]).toMatchObject({ tier: 'luna_plus' });
+    expect(haiku.seen[0]).not.toHaveProperty('escalation');
+    expect(haiku.seen[0]).not.toHaveProperty('firstTokenBudgetMs');
+    expect(await primary.generate({ ...request, tier: undefined })).toMatchObject({ servedTier: 'luna_plus' });
+    expect(haiku.seen[1]).toMatchObject({ tier: 'luna_plus' });
     haiku.result = { servedTier: 'luna_plus' };
     expect(await primary.generate(request)).toMatchObject({ servedTier: 'luna_plus' });
     expect(sonnet.seen).toEqual([]); store.close();
   });
-  it('the real native Haiku still rethinks once at medium after a failed tool', async () => {
+  it('the real native Haiku thinks at medium from its first request and is not raised after a failed tool', async () => {
     const fixture = scriptedAnthropic([
       message([{ type: 'tool_use', id: 'synthetic_call', name: 'study_list', input: {} }], 'tool_use', { usage }), answer(),
     ]);
@@ -66,8 +69,9 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
     const result = await primary.generate({ ...request, escalation: true,
       tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
         call: async () => JSON.stringify({ ok: false, failure: 'failed', retryable: true, text: '合成失敗' }) } });
-    expect(result).toMatchObject({ model: 'claude-haiku-5-5', escalated: true, servedTier: 'luna_plus' });
-    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low', 'medium']);
+    expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna_plus' });
+    expect(result).not.toHaveProperty('escalated');
+    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium', 'medium']);
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true); store.close();
   });
   it('answers a turn routed to Sonnet at medium effort from its first Haiku request (stabilization 2026-10-12)', async () => {

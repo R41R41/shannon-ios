@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { rejectionCounts } from '../src/infra/models/anthropic/anthropicRejection.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/anthropic/anthropicConfig.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
@@ -275,14 +276,26 @@ describe('Haiku full registry and strict tool admission', () => {
   it('keeps the explicit 400 fallback once and logs only structural counts, its closed category and numeric status', async () => {
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const t = await session(['minecraft_request']);
-    const h = native((_body, index) => index === 0 ? rejected(400, 'DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT') : paid(anthropicFixture('structured-answer')));
+    const h = native((_body, index) => index === 0 ? rejected(400, 'input_schema DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT') : paid(anthropicFixture('structured-answer')));
     const result = await h.chat.generate({ ...base, tools: t.tools });
     expect(result.reply).toBeTruthy();
     expect(h.bodies).toHaveLength(2);
     expect(h.bodies[1]!.tools).toBeUndefined();
     expect(h.usage).toHaveLength(1);
     expect(t.requests.recent('owner')).toEqual([]);
-    expect(log.mock.calls).toEqual([[JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'offered_request_rejected', schemaUsage: { tools: 7, optional: 11, unions: 9 } })]]);
+    expect(log.mock.calls).toEqual([[JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'tool_schema_invalid', schemaUsage: { tools: 7, optional: 11, unions: 9 } })]]);
+  });
+
+  it('treats a 400 that does not name the offered tools or schemas as an error: counted, logged by status, no recovery', async () => {
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const t = await session(['minecraft_request']);
+    const h = native(() => rejected(400, 'messages.3: DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT'));
+    const before = rejectionCounts()['400'] ?? 0;
+    await expect(h.chat.generate({ ...base, tools: t.tools })).rejects.toThrow();
+    expect(h.bodies).toHaveLength(1);
+    expect(rejectionCounts()['400']).toBe(before + 1);
+    expect(log.mock.calls).toEqual([[JSON.stringify({ event: 'anthropic_request_rejected', status: 400, category: 'unclassified' })]]);
+    expect(h.usage).toEqual([]);
   });
 
   it.each([401, 403, 408, 409, 429])('does not classify status %s as a schema refusal or issue a plain recovery', async status => {

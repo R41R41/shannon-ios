@@ -121,7 +121,7 @@ describe('a Sonnet turn', () => {
     expect(usage[0]).toMatchObject({ lane: 'chat', model: 'claude-sonnet-5-5', inputTokens: 312 + 4_100, cachedInputTokens: 0, outputTokens: 58 });
     expect(usage[1]!.cachedInputTokens).toBe(4_100);
     expect(usage[1]!.estimatedCostUsd).toBeCloseTo(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 420, cacheWrite: 0, cacheRead: 4_100, output: 96, searches: 0 }), 9);
-    expect(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 1_000_000, cacheWrite: 0, cacheRead: 1_000_000, output: 1_000_000, searches: 1 })).toBeCloseTo(2 + 0.1 + 10 + 0.01, 9);
+    expect(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 1_000_000, cacheWrite: 0, cacheRead: 1_000_000, output: 1_000_000, searches: 1 })).toBeCloseTo(2 + 0.2 + 10 + 0.01, 9);
   });
 
   it('reads the web search\'s pages as her sources', async () => {

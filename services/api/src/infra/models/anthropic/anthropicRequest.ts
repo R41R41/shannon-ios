@@ -22,7 +22,7 @@ export { structuredSchema } from './anthropicSchema.js';
  *   `tool_choice` is `auto`, and `none` for the answer without tools (forced use is a 400 on this model).
  * - Voice offers native web search. Structured text receives a separate non-JSON search receipt through a read tool.
  * - Text: the structured reply through `output_config.format` (the same schema, in the subset Anthropic supports).
- * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default).
+ * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default); Haiku at medium.
  */
 export const SONNET_TEXT_LINES = [
   '[返答の形・Claude]',
@@ -90,6 +90,16 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
   return { type: 'web_search_20260209', name: 'web_search', max_uses: maxUses, allowed_callers: ['direct'] };
 }
 
+/**
+ * The owner's answer 3 of 2026-10-12 (Syzygy ADR-0009 stage 1 plan, §6): a Haiku conversation turn, text or voice, thinks at
+ * medium on every tier and is never raised mid-turn. Sonnet keeps its configured effort.
+ */
+export const HAIKU_CONVERSATION_EFFORT = 'medium';
+
+function conversationEffort(settings: SonnetSettings): SonnetSettings['effort'] {
+  return isHaikuModel(settings.model) ? HAIKU_CONVERSATION_EFFORT : settings.effort;
+}
+
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
@@ -111,7 +121,7 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort, format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
+    output_config: { effort: conversationEffort(settings), format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
   };
   return inline ? appendForegroundMenu(body, toolInstructions(request.tools!, false)) : body;
 }
@@ -141,7 +151,7 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
     messages: sonnetMessages(input),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.voiceThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort },
+    output_config: { effort: conversationEffort(settings) },
   };
   return inline ? appendForegroundMenu(body, toolInstructions(toolsOffered!, true)) : body;
 }

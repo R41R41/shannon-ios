@@ -3,7 +3,7 @@ import { observedAnthropicRequest, observedAnthropicResponse } from './observerP
 import Anthropic from '@anthropic-ai/sdk';
 import { structuredSchema } from './anthropicSchema.js';
 import { anthropicPrices } from './anthropicConfig.js';
-import { cacheHaikuRequest, validateHaikuCacheUsage, type HaikuCacheUsage } from './haikuCache.js';
+import { cacheOneShotRequest, validateHaikuCacheUsage, type HaikuCacheUsage } from './haikuCache.js';
 import { isHaikuModel, replacementModel } from './haikuConfig.js';
 
 type Row = Record<string, unknown>;
@@ -80,9 +80,18 @@ function requestBody(value: unknown, model: string): Anthropic.MessageCreatePara
   const ceiling = body.max_output_tokens ?? 4_000;
   if (typeof ceiling !== 'number' || !Number.isSafeInteger(ceiling) || ceiling <= 0 || ceiling > 128_000) throw new Error('HAIKU_RESPONSES_INVALID_TOKEN_LIMIT');
   const format = outputFormat(body.text);
-  return cacheHaikuRequest({ model, max_tokens: Math.max(1_024, ceiling),
+  return cacheOneShotRequest({ model, max_tokens: Math.max(1_024, ceiling),
     ...(body.instructions ? { system: body.instructions as string } : {}), messages: inputMessages(body.input),
-    thinking: { type: 'adaptive' }, output_config: { effort: 'low', ...(format ? { format } : {}) } });
+    thinking: { type: 'adaptive' }, output_config: { effort: requestedEffort(body.reasoning), ...(format ? { format } : {}) } });
+}
+
+/** The Responses effort a caller asked for, on the native scale; nothing below `low` exists there (ADR-0009 stage 1, quick fix 4). */
+const NATIVE_EFFORT = Object.freeze({ none: 'low', minimal: 'low', low: 'low', medium: 'medium', high: 'high' } as const);
+
+function requestedEffort(reasoning: unknown): (typeof NATIVE_EFFORT)[keyof typeof NATIVE_EFFORT] {
+  const effort = reasoning === undefined ? undefined : row(reasoning).effort;
+  if (typeof effort !== 'string' || !Object.hasOwn(NATIVE_EFFORT, effort)) return 'low';
+  return NATIVE_EFFORT[effort as keyof typeof NATIVE_EFFORT];
 }
 
 function outputFormat(value: unknown): Anthropic.JSONOutputFormat | undefined {

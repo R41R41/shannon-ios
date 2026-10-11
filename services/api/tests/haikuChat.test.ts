@@ -74,16 +74,16 @@ describe('native Haiku conversation migration', () => {
     }
   });
 
-  it('keeps the one rethink after failed tools, without repeating an operation', async () => {
+  it('thinks at medium throughout and is never raised mid-turn after failed tools (owner answer 3, ADR-0009 stage 1)', async () => {
     const h = model([haikuMessage(anthropicFixture('tool-call')), haikuMessage(anthropicFixture('tool-call')), haikuMessage(anthropicFixture('structured-answer'))]);
     let calls = 0;
     const answer = await h.chat.generate({ ...base, escalation: true, tools: {
       definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
       async call() { calls++; return JSON.stringify({ ok: false, text: 'Unavailable', retryable: false }); },
     } });
-    expect(answer.escalated).toBe(true);
+    expect(answer.escalated).toBeUndefined();
     expect(calls).toBe(2);
-    expect(h.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low', 'medium', 'medium']);
+    expect(h.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium', 'medium', 'medium']);
     expect(h.usage).toHaveLength(3);
     expect(JSON.stringify(h.bodies[1]!.messages)).toContain('tool_result');
   });
@@ -111,7 +111,7 @@ describe('native Haiku conversation migration', () => {
     const tiered = new TieredChatModel(h.chat, strong.chat, () => {});
     const answer = await tiered.generate({ ...base, tier: 'sonnet' });
     expect(answer).toMatchObject({ mode: 'anthropic', model: settings.model, servedTier: 'luna' });
-    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'low' });
+    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'medium' });
   });
 
   it('does not retry a caller-cancelled voice turn', async () => {
@@ -215,13 +215,14 @@ describe('native Haiku conversation migration', () => {
     expect(h.bodies[1]).not.toHaveProperty('tools');
   });
 
-  // 429 and 5xx get the one bounded transient retry (stabilization 2026-10-12); nothing is recovered twice.
+  // 429 and 5xx get the one bounded transient retry (stabilization 2026-10-12); nothing is recovered twice. A 400 that does not
+  // name the offered tools or schemas is an error, not a tool-less recovery (ADR-0009 stage 1, quick fix 2).
   it.each([400, 401, 403, 408, 409, 429, 500])('does not repeatedly recover a plain refusal or an excluded status %s', async status => {
     const h = model(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'rejected' } }), { status,
       headers: { 'content-type': 'application/json' } }), { retryWait: async () => {} });
     await expect(h.chat.generate({ ...base, tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6,
       deadline: new TurnDeadline(TEXT_TURN_DEADLINE), async call() { throw new Error('must not run'); } } })).rejects.toThrow();
-    expect(h.bodies).toHaveLength([400, 429, 500].includes(status) ? 2 : 1);
+    expect(h.bodies).toHaveLength([429, 500].includes(status) ? 2 : 1);
     expect(h.usage).toEqual([]);
   });
 });

@@ -355,9 +355,9 @@
       "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicChatModel.ts": {
-      "multi-statement-line": 14,
+      "multi-statement-line": 13,
       "complex-function": 4,
-      "long-line": 31
+      "long-line": 25
     },
     "services/api/src/infra/models/anthropic/anthropicConfig.ts": {
       "long-line": 1
@@ -387,12 +387,12 @@
     "services/api/src/infra/models/anthropic/anthropicRequest.ts": {
       "multi-statement-line": 1,
       "complex-function": 1,
-      "long-line": 8
+      "long-line": 7
     },
     "services/api/src/infra/models/anthropic/anthropicRounds.ts": {
       "long-function": 1,
       "complex-function": 2,
-      "multi-statement-line": 8,
+      "multi-statement-line": 6,
       "long-line": 3
     },
     "services/api/src/infra/models/anthropic/anthropicSchema.ts": {
@@ -492,7 +492,7 @@
     },
     "services/api/src/infra/models/primaryModeChatModel.ts": {
       "multi-statement-line": 2,
-      "long-line": 4
+      "long-line": 3
     },
     "services/api/src/infra/models/reflexContext.ts": {
       "multi-statement-line": 3,

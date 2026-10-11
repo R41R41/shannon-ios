@@ -107,7 +107,8 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
     const h = native((body, index) => {
       if (index === 0) return opened;
       unchangedPrefix(h.bodies[0]!, body, opened);
-      if (index === 1) return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error' } }),
+      // A 400 that names the offered schemas (ADR-0009 stage 1: only such a 400 earns the tool-less answer).
+      if (index === 1) return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'tools.1: invalid input_schema' } }),
         { status: 400, headers: { 'content-type': 'application/json' } });
       const prior = h.bodies[1]!.messages as Messages;
       expect((body.messages as Messages).slice(0, prior.length)).toEqual(prior);

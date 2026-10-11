@@ -1,3 +1,4 @@
+import { READ_RECOVERY_NOTE } from '../src/infra/models/anthropic/anthropicRounds.js';
 import { describe, expect, it } from 'vitest';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
@@ -242,6 +243,18 @@ describe('search is a discoverable conversation read', () => {
     expect(result).toMatchObject({ reply: expect.stringContaining('検索は実行されていません。'), threadTitle: '調査とメモ', threadSummary: '検索を確かめてメモを書く', taskDecision: { disposition: 'none' }, artifacts: [{ name: 'note.txt', content: '買い物' }] });
     expect(result.reply).toContain('実行済み: 書斎に新しいメモか物語を書く');
     expect(result.reply).not.toContain('晴れ'); expect(h.bodies).toHaveLength(4);
+  });
+
+  it('asks again with a user message, never a system message after her end_turn, when she only promised the search', async () => {
+    const h = client([answer('調べます。'), answer('どの地域の天気ですか？', true)]);
+    const autonomy = createInMemoryAutonomyService(() => at); autonomy.tools.useReads({ web: h.chat.searchWeb });
+    const offer = conversationTools(autonomy, 'owner', 'text', true, { audience: { othersKnown: () => false, noteOthers: () => {} } }, 'promise\nweather', new TurnDeadline(TEXT_TURN_DEADLINE), undefined, { reads: { web_search: true } });
+    await h.chat.generate({ ...base, message: '明日の天気を調べて', requireWebSearch: true, tools: withToolMenu(offer.tools!, ['web_search']) });
+    expect(h.bodies).toHaveLength(2);
+    // ADR-0009 stage 1, quick fix 1: a mid-conversation system message may not follow an assistant end_turn.
+    const recovery = (h.bodies[1]!.messages as Array<{ role: string; content: unknown }>).slice(-2);
+    expect(recovery.map(item => item.role)).toEqual(['assistant', 'user']);
+    expect(recovery[1]!.content).toBe(READ_RECOVERY_NOTE);
   });
 
   it.each(['invalid', 'secret', 'unknown_secret', 'not_offered'] as const)('keeps a recovered %s search attempt unsuccessful before any external call', async kind => {

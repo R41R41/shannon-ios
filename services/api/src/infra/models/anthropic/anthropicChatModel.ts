@@ -167,7 +167,6 @@ export class AnthropicChatModel implements ShannonChatModel {
     const body = observeSync('native', { surface: 'text' }, () => sonnetChatBody(this.options.settings, request, this.options.agentHostHint), observedAnthropicRequest, { model: this.model });
     let written = '';
     let searchRequested = request.requireWebSearch === true;
-    const escalation = this.escalation(request, () => written === '');
     const watch = watchdog(request.firstTokenBudgetMs);
     const send = this.sender(request.scopeKey, onReplyText ? (delta, decoder) => {
       const text = decoder.push(delta);
@@ -189,9 +188,9 @@ export class AnthropicChatModel implements ShannonChatModel {
         }, isAnswer: usable,
         missingRequiredRead: message => searchRequested && !searched && !turnWebSearchResult(request.tools) && !searchNeedsInput(message),
         ...(usesOneHourAnthropicCache(this.model) ? { plainBody: sonnetChatBody(this.options.settings, { ...request, tools: undefined }, this.options.agentHostHint) } : {}),
-        ...(escalation ? { escalate: escalation.option } : {}), ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}) });
+        ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}) });
     } catch (error) { throw watch?.timedOut() ? new SonnetFirstTokenTimeout() : error; } finally { watch?.clear(); }
-    const outOfTime = (sent?: string): ShannonChatModelResult => ({ ...this.outOfTimeTurn(request, sent ?? written), ...(escalation?.happened() ? { escalated: true } : {}) });
+    const outOfTime = (sent?: string): ShannonChatModelResult => this.outOfTimeTurn(request, sent ?? written);
     if (result.outOfTime || !result.final) return outOfTime(result.outOfTime?.sent);
     let structured: ReturnType<typeof parsedChatTurn>;
     try {
@@ -204,12 +203,12 @@ export class AnthropicChatModel implements ShannonChatModel {
       return outOfTime();
     }
     const read = turnWebSearchResult(request.tools);
-    const turn = { ...chatTurnResult(this.model, request, { output_text: textOf(result.final) }, structured), mode: this.mode, ...(escalation?.happened() ? { escalated: true as const } : {}) };
+    const turn = { ...chatTurnResult(this.model, request, { output_text: textOf(result.final) }, structured), mode: this.mode };
     if (searchRequested && !searched && !read && !searchNeedsInput(result.final)) return webSearchFailedTurn(turn, webSearchFailure('not_searched'), turnCompletedWriteReceipts(request.tools));
     if (read && read.status !== 'results') return webSearchFailedTurn(turn, read, turnCompletedWriteReceipts(request.tools));
     const webSources = searched?.sources ?? read?.sources ?? webSourcesOf(result);
     const { webSources: _luna, ...rest } = turn;
-    return { ...rest, mode: this.mode, model: this.model, ...(webSources.length ? { webSources } : {}), ...(escalation?.happened() ? { escalated: true } : {}) };
+    return { ...rest, mode: this.mode, model: this.model, ...(webSources.length ? { webSources } : {}) };
   }
 
   /** Her fixed line after what was already written (also the tiered model's answer when a fallback would repeat a word or a tool). */
@@ -228,21 +227,18 @@ export class AnthropicChatModel implements ShannonChatModel {
     const body = observeSync('native', { surface: 'voice' }, () => sonnetVoiceBody(this.options.settings, request, ceiling), observedAnthropicRequest, { model: this.model });
     let spoken = '';
     let voiceRequests = 0;
-    let replyStarted = false;
-    const escalation = this.escalation(request, () => !replyStarted);
     const speak = async (text: string) => { spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
     const watch = watchdog(request.firstTokenBudgetMs);
     const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
     if (request.useWebSearch) bounds.firstOutputMilliseconds = Math.max(bounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS);
-    const send = this.sender(request.scopeKey, onTextDelta ? delta => { replyStarted = true; return speak(delta).then(() => request.useWebSearch ? '' : delta); } : null,
+    const send = this.sender(request.scopeKey, onTextDelta ? delta => speak(delta).then(() => request.useWebSearch ? '' : delta) : null,
       stop, this.firstTokenLatency, watch?.first, bounds);
     let result: SonnetRoundResult;
     try {
       result = await sonnetToolRounds(body, {
         session: tools, send: (body, time, round) => { voiceRequests++; return send(body, time, round); }, isAnswer: () => false, ...(stop ? { signal: stop } : {}), timedOutRound: isHaikuModel(this.model) ? 'answer' : 'fail',
         ...(usesOneHourAnthropicCache(this.model) ? { plainBody: sonnetVoiceBody(this.options.settings, { ...request, tools: undefined }, ceiling) } : {}),
-        ...(escalation ? { escalate: escalation.option } : {}),
         // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
         onCalls: async names => { watch?.first(); if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
       });
@@ -254,7 +250,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     if (result.outOfTime || !result.final) {
       const standing = request.useWebSearch ? '' : completeSpokenSentences(spoken.trim()) || '';
       if (onTextDelta) { if (request.useWebSearch) await onTextDelta(TURN_OUT_OF_TIME_LINE); else await speak(TURN_OUT_OF_TIME_LINE); }
-      return { mode: this.mode, model: this.model, reply: `${standing}${TURN_OUT_OF_TIME_LINE}`, outOfTime: true, ...(escalation?.happened() ? { escalated: true } : {}) };
+      return { mode: this.mode, model: this.model, reply: `${standing}${TURN_OUT_OF_TIME_LINE}`, outOfTime: true };
     }
     observerHandoff('llm', 'decode', { surface: 'voice' });
     return observeAsync('decode', { surface: 'voice' }, async () => {
@@ -268,7 +264,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     if (request.useWebSearch) await onTextDelta?.(reply);
     if (!reply) throw new Error('ANTHROPIC_RESPONSE_EMPTY');
     const webSources = webSourcesOf(result);
-    return { mode: this.mode, model: this.model, reply, ...(webSources.length ? { webSources } : {}), ...(truncated ? { truncated: true } : {}), ...(escalation?.happened() ? { escalated: true } : {}) };
+    return { mode: this.mode, model: this.model, reply, ...(webSources.length ? { webSources } : {}), ...(truncated ? { truncated: true } : {}) };
     }, value => ({ reply: value.reply.slice(0, 4_000), truncated: value.truncated === true }));
   }
 
@@ -280,12 +276,6 @@ export class AnthropicChatModel implements ShannonChatModel {
     // lazy visibility and the native rounds. Opening still delegates to the original deadline/audience/gate/runner.
     const chosen = request.tools.definitions.length < 20 ? request.tools.definitions.map(tool => providerToolName(tool.name)) : [];
     return { ...request, tools: withToolMenu(baseToolSession(request.tools), chosen) };
-  }
-
-  private escalation(request: ShannonChatModelRequest | ShannonVoiceModelRequest, allowed: () => boolean) {
-    if (!isHaikuModel(this.model) || !request.escalation || request.tier === 'luna_plus') return null;
-    let happened = false;
-    return { happened: () => happened, option: { allowed, onEscalated: () => { happened = true; } } };
   }
 
   /**

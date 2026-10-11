@@ -70,7 +70,9 @@ describe('Haiku credential and model selection', () => {
     expect(() => validateResponseModelUsage(DEFAULT_HAIKU_MODEL, envelope)).not.toThrow();
     expect(headers[0]!.get('x-api-key')).toBe('synthetic-haiku-only');
     expect(fixture.bodies).toHaveLength(1);
-    expect(fixture.bodies[0]).toMatchObject({ model: DEFAULT_HAIKU_MODEL, cache_control: { ttl: '1h' } });
+    expect(fixture.bodies[0]).toMatchObject({ model: DEFAULT_HAIKU_MODEL });
+    expect((fixture.bodies[0]!.system as Array<{ cache_control?: unknown }>)[0]).toMatchObject({ cache_control: { ttl: '1h' } });
+    expect(fixture.bodies[0]).not.toHaveProperty('cache_control');
   });
   it('preserves the existing Terra sleep proposer when only a Haiku key is added, with Sonnet routing on or off', () => {
     for (const routing of ['on', 'off']) {
@@ -122,7 +124,7 @@ describe('Haiku mandatory prefix caching', () => {
       { type: 'text', text: original.system }]);
     expect(cacheHaikuRequest(cached)).toBe(cached);
     expect(estimatedAnthropicCostUsd(original.model, { input: 0, cacheWrite: 1_000_000, cacheRead: 0, output: 0, searches: 0 })).toBe(4);
-    expect(anthropicPrices(original.model, 100_001).cacheRead).toBe(0.1);
+    expect(anthropicPrices(original.model, 100_001).cacheRead).toBe(0.2);
     expect(anthropicPrices('claude-sonnet-5', 100_001).cacheRead).toBe(0.2);
   });
   it('requires actual positive native cache usage, including consistent mixed TTL accounting', () => {
@@ -151,7 +153,8 @@ describe('Haiku native background Responses bridge', () => {
     expect(second.usage).toMatchObject({ input_tokens: 712, cache_read_input_tokens: 700, input_tokens_details: { cached_tokens: 700 } });
     expect(() => validateResponseModelUsage(DEFAULT_HAIKU_MODEL, first)).not.toThrow();
     expect(fixture.bodies[0]!.system).toEqual(fixture.bodies[1]!.system);
-    expect(fixture.bodies[0]!).toMatchObject({ max_tokens: 1_024, thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, cache_control: { ttl: '1h' } });
+    expect(fixture.bodies[0]!).toMatchObject({ max_tokens: 1_024, thinking: { type: 'adaptive' }, output_config: { effort: 'low' } });
+    expect(fixture.bodies[0]!).not.toHaveProperty('cache_control');
     expect(fixture.bodies[0]!).not.toHaveProperty('temperature');
     expect(fixture.bodies[0]!).not.toHaveProperty('reasoning');
     expect(fixture.bodies[0]!).not.toHaveProperty('store');
@@ -273,5 +276,28 @@ describe('Haiku exact usage pricing', () => {
     expect(estimatedAnthropicCostUsd(DEFAULT_HAIKU_MODEL, { ...counts, input: 100_000 })).toBe(0.050775);
     const { cacheWrite5m: _five, cacheWrite1h: _hour, ...withoutTTL } = counts;
     expect(estimatedAnthropicCostUsd(DEFAULT_HAIKU_MODEL, withoutTTL)).toBe(0.0001562);
+  });
+});
+
+describe('background one-shot calls (ADR-0009 stage 1, quick fixes 4 and 5)', () => {
+  it('passes the caller\'s effort through on the native scale instead of forcing low', async () => {
+    const efforts = ['none', 'minimal', 'low', 'medium', 'high'];
+    const fixture = scriptedAnthropic(efforts.map(() => answer()));
+    const bridge = responseModelFetcher({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic', fetcher: fixture.fetcher });
+    for (const effort of efforts) await send(bridge, { ...request(), reasoning: { effort } });
+    const sent = fixture.bodies.map(body => (body.output_config as { effort?: string }).effort);
+    expect(sent).toEqual(['low', 'low', 'low', 'medium', 'high']);
+  });
+
+  it('caches only the fixed protocol prefix: no automatic marker on the unique task tail', async () => {
+    const fixture = scriptedAnthropic([answer()]);
+    const bridge = responseModelFetcher({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic', fetcher: fixture.fetcher });
+    const envelope = await (await send(bridge)).json();
+    const body = fixture.bodies[0]!;
+    expect(body).not.toHaveProperty('cache_control');
+    expect(body.system).toEqual([{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: { type: 'ephemeral', ttl: '1h' } },
+      { type: 'text', text: request().instructions }]);
+    // The prefix alone still gives the provider receipt the cache-evidence rule requires.
+    expect(() => validateResponseModelUsage(DEFAULT_HAIKU_MODEL, envelope)).not.toThrow();
   });
 });

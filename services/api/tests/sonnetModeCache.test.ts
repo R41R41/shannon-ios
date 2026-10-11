@@ -44,6 +44,6 @@ describe('owner-selectable Sonnet cache accounting', () => {
     const result = await h.model.generate(request);
     expect(result.model).toBe(settings.model);
     expect(h.bodies[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-    expect(h.recorded[0]!.estimatedCostUsd).toBeCloseTo((420 * 2 + 300 * 2.5 + 700 * 4 + 900 * 0.1 + 96 * 10) / 1e6, 9);
+    expect(h.recorded[0]!.estimatedCostUsd).toBeCloseTo((420 * 2 + 300 * 2.5 + 700 * 4 + 900 * 0.2 + 96 * 10) / 1e6, 9);
   });
 });

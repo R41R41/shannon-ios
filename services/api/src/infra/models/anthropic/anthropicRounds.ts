@@ -10,9 +10,10 @@ import { sonnetTools } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 import { isAnthropicUsageEvidenceError } from './haikuCache.js';
 import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
-import { requestStrictTools, strictRequestFits, strictRequestUsage, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
+import { requestStrictTools, strictRequestFits, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
 import { bridgedAnthropicSession } from './anthropicToolBridge.js';
 import { bridgeOnlyUnacceptedTail } from './anthropicForegroundMenu.js';
+import { offerRefusal, reportOfferRefusal, reportRejection } from './anthropicRejection.js';
 
 /**
  * The tool rounds of a Sonnet turn (Syzygy ADR-0008 stage 2, step 5), at parity with luna's `withToolRounds`
@@ -51,9 +52,10 @@ export interface SonnetRoundOptions {
    * the tiered model answers with luna instead of asking Sonnet again (voice, review H3).
    */
   timedOutRound?: 'answer' | 'fail';
-  /** The base Haiku lane retains the turn's single, pre-answer increase in reasoning effort. */
-  escalate?: { allowed: () => boolean; onEscalated: () => void };
-  /** Haiku and native Sonnet 5.5 retain one recovery from an explicit 4xx refusal of offered schemas. */
+  /**
+   * Haiku and native Sonnet 5.5 retain one recovery from an explicit 400 refusal of the offered tools or schemas
+   * (`anthropicRejection.ts`); any other 4xx is counted and handled as any other error.
+   */
   plainBody?: Anthropic.MessageCreateParamsNonStreaming;
   /** A selected external read is unfinished until its server-owned receipt exists. One bounded recovery, never a replay. */
   missingRequiredRead?: (message: Anthropic.Message) => boolean;
@@ -71,6 +73,13 @@ export interface SonnetRoundResult {
 
 const MAXIMUM_PAUSES = 3;
 
+/**
+ * The bounded read recovery is the owner's side of the turn: a user message after her end_turn (a mid-conversation system
+ * message may not follow an assistant end_turn; ADR-0009 stage 1, quick fix 1).
+ */
+export const READ_RECOVERY_NOTE = '依頼されたWeb検索はまだ実行されていない。調べる約束だけでは完了しない。'
+  + '必要な地域や対象が分かっているならweb_searchを使ってから答える。不明なら必要なことだけを短く聞く。';
+
 export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStreaming, options: SonnetRoundOptions): Promise<SonnetRoundResult> {
   const messages: Anthropic.MessageParam[] = [...body.messages];
   const turns: Anthropic.Message[] = [];
@@ -84,27 +93,28 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
-  let escalated = false;
   let readRecovery = false;
   let bridgeOnly = false;
   let acceptedLength = 0;
   let acceptedVisible = new Set((body.tools ?? []).flatMap(tool => 'name' in tool ? [tool.name] : []));
-  const escalate = () => {
-    if (escalated || !options.escalate?.allowed()) return;
-    escalated = true;
-    body = { ...body, output_config: { ...body.output_config, effort: 'medium' } };
-    options.escalate.onEscalated();
-  };
   const callerStopped = () => options.signal?.aborted === true;
+  // Only a known 400 about the offered tools or schemas earns the one tool-less answer (ADR-0009 stage 1, quick fix 2).
+  const plainRecovery = (error: unknown): boolean => {
+    const category = options.plainBody ? offerRefusal(error) : null;
+    if (!category) return false;
+    reportOfferRefusal(error, request(), category);
+    return true;
+  };
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
     ...body, ...(!appendOnly && session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
   });
   const recoverGrammar = (error: unknown): boolean => {
-    if (!appendOnly || !session?.menu || !visible.has(TOOL_CALL_PROVIDER_NAME) || bridgeOnly || !grammarCapacityRefused(error)) return false;
+    if (!appendOnly || !session?.menu || !visible.has(TOOL_CALL_PROVIDER_NAME) || bridgeOnly) return false;
+    if (offerRefusal(error) !== 'strict_grammar_capacity') return false;
     const before = request();
     const tail = bridgeOnlyUnacceptedTail(messages, acceptedLength);
     if (JSON.stringify(tail) === JSON.stringify(messages)) return false;
-    reportRefusedOffer(error, before, 'strict_grammar_capacity');
+    reportOfferRefusal(error, before, 'strict_grammar_capacity');
     messages.splice(0, messages.length, ...tail);
     visible.clear(); for (const name of acceptedVisible) visible.add(name);
     bridgeOnly = true;
@@ -157,7 +167,8 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
       if (!plain && recoverGrammar(error)) return answer();
-      if (!plain && options.plainBody && refusedOffer(error)) { reportRefusedOffer(error, request()); return answer(true); }
+      if (!plain && plainRecovery(error)) return answer(true);
+      reportRejection(error);
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
       return out();
@@ -178,12 +189,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
       if (recoverGrammar(error)) continue;
-      if (options.plainBody && refusedOffer(error)) { reportRefusedOffer(error, request()); return answer(true); }
+      if (plainRecovery(error)) return answer(true);
+      reportRejection(error);
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);
       turn.toolsOff = true;
-      escalate();
       continue;
     }
     turns.push(message);
@@ -194,7 +205,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     if (!uses.length && message.stop_reason === 'end_turn' && options.missingRequiredRead?.(message) && !readRecovery) {
       readRecovery = true;
       messages.push({ role: 'assistant', content: message.content });
-      note('依頼されたWeb検索はまだ実行されていない。調べる約束だけでは完了しない。必要な地域や対象が分かっているならweb_searchを使ってから答える。不明なら必要なことだけを短く聞く。');
+      messages.push({ role: 'user', content: READ_RECOVERY_NOTE });
       continue;
     }
     if (!uses.length || (options.isAnswer(message) && !options.missingRequiredRead?.(message))) return { final: message, turns, used: turn.used };
@@ -228,29 +239,11 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       // type, then use the same native transport with its inline-tools header (no separate client/retry/session).
       if (additions.length) messages.push({ role: 'system', content: additions as unknown as Anthropic.ContentBlockParam[] });
     }
-    if (ran.some(item => failed((item as { output?: string }).output))) escalate();
   }
 }
 
 function failed(output: string | undefined): boolean {
   try { const value = JSON.parse(output ?? '{}') as { ok?: unknown; failure?: unknown }; return value.ok === false && value.failure !== 'not_offered'; } catch { return false; }
-}
-
-function refusedOffer(error: unknown): boolean {
-  return error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500
-    && ![401, 403, 408, 409, 429].includes(error.status);
-}
-
-/** Provider diagnostics contain no message, body, model input, identifiers or provider-supplied category. */
-function reportRefusedOffer(error: unknown, body?: Anthropic.MessageCreateParamsNonStreaming, category = 'offered_request_rejected'): void {
-  if (!(error instanceof Anthropic.APIError)) return;
-  console.warn(JSON.stringify({ event: 'anthropic_tool_offer_refused', status: error.status, category,
-    ...(body ? { schemaUsage: strictRequestUsage(body) } : {}) }));
-}
-
-/** Closed structural classification only. Provider text is never stored or returned. An explicit 400 is known rejected. */
-function grammarCapacityRefused(error: unknown): boolean {
-  return error instanceof Anthropic.APIError && error.status === 400 && /compiled grammar is too large/iu.test(error.message);
 }
 
 /** Keep original results as quoted data while removing tool references that a plain request cannot declare. */

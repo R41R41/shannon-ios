@@ -60,7 +60,7 @@ export function anthropicPrices(model: string, inputTokens = 0): { input: number
   if (model === 'claude-haiku-5-5') return inputTokens > 100_000
     ? { input: 0.5, output: 2.5, cacheWrite: 0.625, cacheWrite1h: 1, cacheRead: 0.05, searchUsd: 0.01 }
     : { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, searchUsd: 0.01 };
-  if (model === 'claude-sonnet-5-5') return { input: 2, output: 10, cacheWrite: 2.5, cacheWrite1h: 4, cacheRead: 0.1, searchUsd: 0.01 };
+  // Sonnet 5.5 and the older Sonnet 5 share the published rates: cache reads are 10% of input ($0.20; ADR-0009 stage 1, quick fix 3).
   if (model.startsWith('claude-sonnet-5')) return { input: 2, output: 10, cacheWrite: 2.5, cacheWrite1h: 4, cacheRead: 0.2, searchUsd: 0.01 };
   return { input: 10, output: 50, cacheWrite: 12.5, cacheWrite1h: 20, cacheRead: 1, searchUsd: 0.01 };
 }

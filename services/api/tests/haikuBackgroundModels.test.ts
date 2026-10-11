@@ -98,7 +98,8 @@ describe('all background small-model paths use native Haiku', () => {
     expect(calls[0]!.headers.has('authorization')).toBe(false);
     expect(calls[0]!.body.model).toBe(DEFAULT_HAIKU_MODEL);
     expect(calls[0]!.body.system[0]).toEqual({ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: { type: 'ephemeral', ttl: '1h' } });
-    expect(calls[0]!.body.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    // A one-shot call caches only the fixed protocol prefix; no automatic marker on its unique tail (ADR-0009 stage 1).
+    expect(calls[0]!.body).not.toHaveProperty('cache_control');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ scopeKey: 'owner', lane: example.lane, model: DEFAULT_HAIKU_MODEL, inputTokens: 640, cachedInputTokens: 0, outputTokens: 20 });
     expect(rows[0]!.estimatedCostUsd).toBeGreaterThan(0);

@@ -119,6 +119,18 @@ export function cacheHaikuRequest<T extends Anthropic.MessageCreateParamsNonStre
     cache_control: { type: 'ephemeral', ttl: '1h' } } as T;
 }
 
+/**
+ * A background one-shot request (the Responses shim): one 1h breakpoint on the fixed protocol prefix, and no automatic marker,
+ * which would write the unique task tail at the one-hour write price on every call (ADR-0009 stage 1, quick fix 5). The prefix
+ * alone is above the 512-token cache minimum of the native 5.5 models, so every call still reports a cache write or read.
+ */
+export function cacheOneShotRequest<T extends Anthropic.MessageCreateParamsNonStreaming>(body: T): T {
+  if (!usesOneHourAnthropicCache(body.model)) return body;
+  const system = typeof body.system === 'string' ? [{ type: 'text' as const, text: body.system }] : [...(body.system ?? [])];
+  const prefix = { type: 'text' as const, text: HAIKU_PROTOCOL_PREFIX, cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } };
+  return { ...body, system: [prefix, ...system] };
+}
+
 /** Call only after recording the provider's usage. A configured breakpoint alone does not prove a cache write or read. */
 export function validateHaikuCacheUsage(usage: HaikuCacheUsage | null | undefined): void {
   const creation = usage?.cache_creation_input_tokens;

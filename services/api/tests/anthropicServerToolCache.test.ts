@@ -124,7 +124,7 @@ describe('native server-search streaming cache receipts', () => {
     expect(h.recorded).toHaveLength(1);
     expect(h.recorded[0]!.cachedInputTokens).toBe(initial ? 5000 : 8390);
     const price = modelName === 'claude-haiku-5-5' ? { input: .1, write: .125, hour: .2, read: .01, output: .5 }
-      : { input: 2, write: 2.5, hour: 4, read: .1, output: 10 };
+      : { input: 2, write: 2.5, hour: 4, read: .2, output: 10 };
     expect(h.recorded[0]!.estimatedCostUsd).toBeCloseTo((6 * price.input + 7590 * price.write + initial * price.hour
       + (initial ? 5000 : 8390) * price.read + 853 * price.output) / 1e6 + .01, 12);
   });
