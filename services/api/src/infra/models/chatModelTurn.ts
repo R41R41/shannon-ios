@@ -217,7 +217,7 @@ export function chatTurnResult(
     reply: structured.reply,
     ...(structured.threadSummary ? { threadSummary: structured.threadSummary } : {}),
     ...(webSources.length ? { webSources } : {}),
-    ...(structured.places.length ? { places: structured.places } : {}),
+    ...(request.placeSearch && structured.places.length ? { places: structured.places } : {}),
     ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}), ...(request.offerAppLook && structured.appLook ? { appLook: structured.appLook } : {}),
     ...(request.offerReplyFeeling && structured.replyFeeling ? { replyFeeling: structured.replyFeeling } : {}),
     ...(request.offerMinecraftIntent && structured.minecraftIntent ? { minecraftIntent: structured.minecraftIntent } : {}),
@@ -232,4 +232,32 @@ export function chatTurnResult(
 /** A turn offers her registry tools when it has a session with tools and does not force a web search. */
 export function offersTools(request: Pick<ShannonChatModelRequest, 'tools' | 'useWebSearch' | 'placeSearch'>): boolean {
   return Boolean(request.tools?.definitions.length) && !request.useWebSearch && !request.placeSearch;
+}
+
+/**
+ * The fields a text turn may add to its structured reply, with their schemas (Syzygy ADR-0009 stage 1, M4: the cache plan's one
+ * superset schema, `anthropicCachePlan.ts`). `feeling` follows `reply`; the others follow the base fields, in this order.
+ */
+export const TURN_REPLY_FIELDS = Object.freeze({
+  feeling: REPLY_FEELING_SCHEMA, places: placeSearchSchema, roomLook: ROOM_LOOK_SCHEMA, appLook: APP_LOOK_SCHEMA,
+  minecraftIntent: MINECRAFT_INTENT_SCHEMA,
+});
+export type TurnReplyField = keyof typeof TURN_REPLY_FIELDS | 'webSearchNeedsInput';
+
+/** The fields of the superset this turn asks for (the required web read's own field among them). */
+export function offeredReplyFields(request: ShannonChatModelRequest): TurnReplyField[] {
+  const offers: Array<[TurnReplyField, unknown]> = [['feeling', request.offerReplyFeeling], ['places', request.placeSearch],
+    ['roomLook', request.offerRoomLook], ['appLook', request.offerAppLook], ['minecraftIntent', request.offerMinecraftIntent],
+    ['webSearchNeedsInput', request.requireWebSearch]];
+  return offers.filter(([, offered]) => Boolean(offered)).map(([field]) => field);
+}
+
+/** The instructions `chatTurnRequestBody` adds to the system for what this turn offers (the reply's feeling). */
+export function offerInstructions(request: ShannonChatModelRequest): string[] {
+  return request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : [];
+}
+
+/** The request whose instructions hold only what every turn has: no offer's instructions, no tools, no withheld line. */
+export function withoutTurnInstructions(request: ShannonChatModelRequest): ShannonChatModelRequest {
+  return { ...request, offerReplyFeeling: undefined, tools: undefined, toolsWithheld: undefined };
 }

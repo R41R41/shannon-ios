@@ -39,7 +39,7 @@ export function cached(value: AnthropicMessage, model: string, write = 1_800, re
 }
 
 export const answer = (model: string, write?: number, read?: number) => cached(anthropicFixture('structured-answer'), model, write, read);
-const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
+export const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
 const spoken = (model: string, text = 'こんにちは、ライ氏。今日も来てくれてうれしいです。') =>
   cached(message([{ type: 'text', text }], 'end_turn', { id: 'msg_spoken' }), model, 0, 2_400);
 
@@ -50,7 +50,7 @@ function needsInput(model: string): AnthropicMessage {
   return cached(message([{ type: 'text', text: JSON.stringify(reply), citations: null }], 'end_turn', { id: 'msg_needs_input' }), model, 0, 4_100);
 }
 
-function webAnswer(model: string): AnthropicMessage {
+export function webAnswer(model: string): AnthropicMessage {
   return cached(anthropicFixture('web-search-answer'), model, 300, 3_000);
 }
 
@@ -65,7 +65,7 @@ export function chat(context: ScenarioContext, settings: Settings): AnthropicCha
     retryWait: async () => {} });
 }
 
-function tools(names: readonly string[]): ShannonModelToolSession {
+export function tools(names: readonly string[]): ShannonModelToolSession {
   return {
     definitions: names.map(name => shannonTool(name)!), maximumCalls: 4, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
     async call(name: string) { return JSON.stringify({ ok: true, text: `合成結果: ${name}` }); },
@@ -80,7 +80,7 @@ export const voice: ShannonVoiceModelRequest = {
   scopeKey: 'owner', systemPrompt: '合成された人格の層', profilePrompt: '合成された持ち主の層', history: [], message: 'おはよう',
   turnContext: '合成された声のターンの文脈', useWebSearch: false, conversationClass: 'direct',
 };
-const history = [
+export const history = [
   { role: 'user' as const, content: '昨日の話の続きをしたい' },
   { role: 'assistant' as const, content: 'はい、覚えています。' },
 ];

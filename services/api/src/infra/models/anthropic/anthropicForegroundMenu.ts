@@ -12,6 +12,16 @@ export function stableForegroundMenu(model: string, session: ShannonModelToolSes
 }
 
 /**
+ * The opener without the turn's allowlist. Keep a non-deferred tool so inline definitions do not change the provider's tool-use
+ * prefix. The name is checked against the live offer by session.meta; embedding its changing allowlist here would invalidate
+ * every cache entry.
+ */
+export function stableOpener(open: Anthropic.Tool): Anthropic.Tool {
+  const name = { type: 'string', description: '開く道具の名前（現在の[ボクの道具・献立]にある名前）' };
+  return { ...open, input_schema: { ...open.input_schema, properties: { name } } };
+}
+
+/**
  * Jev's selected definitions remain available on the first decision, but no longer change the cached tools/system.
  * The current offer is operator context after the history. Its original session still validates every open and call.
  * Both top-level and by-value definitions count against the complete strict-schema budget. Tools that do not fit
@@ -21,11 +31,7 @@ export function appendForegroundMenu(body: Anthropic.MessageCreateParamsNonStrea
   const tools = (body.tools ?? []) as Anthropic.Tool[];
   const open = tools.find(tool => tool.name === TOOL_OPEN_PROVIDER_NAME);
   if (!open) throw new Error('ANTHROPIC_FOREGROUND_MENU_MISSING');
-  // Keep a non-deferred tool so inline definitions do not change the provider's tool-use prefix. The name is checked
-  // against the live offer by session.meta; embedding its changing allowlist here would invalidate every cache entry.
-  const opener: Anthropic.Tool = { ...open, input_schema: { ...open.input_schema,
-    properties: { name: { type: 'string', description: '開く道具の名前（現在の[ボクの道具・献立]にある名前）' } } } };
-  const bounded = { ...body, tools: [opener, TOOL_CALL_SCHEMA] };
+  const bounded = { ...body, tools: [stableOpener(open), TOOL_CALL_SCHEMA] };
   if (!strictRequestFits(bounded)) throw new Error('ANTHROPIC_OUTPUT_SCHEMA_CAPACITY');
   const candidates = tools.filter(tool => tool.name !== TOOL_OPEN_PROVIDER_NAME);
   const controls = new Set(ALWAYS_LOADED_TOOL_NAMES.map(providerToolName));

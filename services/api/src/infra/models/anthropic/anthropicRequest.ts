@@ -30,6 +30,13 @@ export const SONNET_TEXT_LINES = [
 ].join('\n');
 export const SONNET_VOICE_LINES = '[返答の形・Claude] 話す言葉だけを書く。考えたことや道具の名前は書かない。';
 export const SONNET_WEB_LINE = '[Web検索・Claude] この返事では、答える前に web_search で今の情報を調べ、調べた結果だけをもとに答える。';
+/** The structured answer after the auxiliary search: its evidence came from that search alone. */
+export const WEB_ANSWER_LINE = '[Web検索の回答] このターンの検索結果だけに基づいて答える。調べる予定だけで返事を終えない。確認できない情報は断定しない。';
+/** The field a turn that requires the web read answers with when it must ask for the missing target first. */
+export const WEB_SEARCH_NEEDS_INPUT = Object.freeze({
+  type: 'boolean',
+  description: '検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。',
+});
 
 type Message = Anthropic.MessageParam;
 type ContentBlock = Anthropic.ContentBlockParam;
@@ -96,7 +103,7 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
  */
 export const HAIKU_CONVERSATION_EFFORT = 'medium';
 
-function conversationEffort(settings: SonnetSettings): SonnetSettings['effort'] {
+export function conversationEffort(settings: SonnetSettings): SonnetSettings['effort'] {
   return isHaikuModel(settings.model) ? HAIKU_CONVERSATION_EFFORT : settings.effort;
 }
 
@@ -111,13 +118,13 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
   const tools: Anthropic.ToolUnion[] = offersTools(request) ? sonnetTools(request.tools) : [];
   const schema = ((luna.text as { format?: { schema?: Record<string, unknown> } }).format?.schema) ?? {};
   if (request.requireWebSearch) {
-    schema.properties = { ...schema.properties as object, webSearchNeedsInput: { type: 'boolean', description: '検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。' } };
+    schema.properties = { ...schema.properties as object, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } };
     schema.required = [...schema.required as string[], 'webSearchNeedsInput'];
   }
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
-    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? ['[Web検索の回答] このターンの検索結果だけに基づいて答える。調べる予定だけで返事を終えない。確認できない情報は断定しない。'] : [])].join('\n\n'), settings.model),
+    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,

@@ -357,7 +357,7 @@
     "services/api/src/infra/models/anthropic/anthropicChatModel.ts": {
       "multi-statement-line": 8,
       "complex-function": 2,
-      "long-line": 13
+      "long-line": 11
     },
     "services/api/src/infra/models/anthropic/anthropicFcaContext.ts": {
       "long-line": 7
@@ -384,7 +384,7 @@
     "services/api/src/infra/models/anthropic/anthropicRequest.ts": {
       "multi-statement-line": 1,
       "complex-function": 1,
-      "long-line": 7
+      "long-line": 5
     },
     "services/api/src/infra/models/anthropic/anthropicRounds.ts": {
       "long-function": 1,
