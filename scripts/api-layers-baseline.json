@@ -44,6 +44,7 @@
       "mind/action/taskRuntime/store/taskRuntimeSchema.ts -> ddl x9",
       "mind/action/taskRuntime/store/taskSourceStore.ts -> ddl x4",
       "mind/action/threads/store/actionStore.ts -> ddl x9",
+      "mind/action/threads/store/retainedResourceStore.ts -> ddl x2",
       "mind/attention/store/incomingCallStore.ts -> ddl x5",
       "mind/attention/store/proactiveTopicsStore.ts -> ddl x4",
       "mind/attention/store/reachOutClaims.ts -> ddl x3",

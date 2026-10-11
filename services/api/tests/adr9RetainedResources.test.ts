@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { ACTION_LIMITS } from '@shannon/mind';
-import { SQLiteActionStore, type ActionResourceRetained } from '../src/mind/action/threads/store/actionStore.js';
+import { SQLiteActionStore, type ActionResourceRetained, type ActionRetainedReleaseProof } from '../src/mind/action/threads/store/actionStore.js';
+import { readActionExecutionCounts } from '../src/mind/action/threads/store/actionMetrics.js';
+import { agentTaskSettled } from '../src/mind/action/agentTasks/store/agentTaskSettlement.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { configuredRetainedResources } from '../src/wiring/configuredActionResourceProof.js';
 import { knownAgentHostIds } from '../src/mind/action/agentTasks/store/agentHostIds.js';
@@ -23,10 +25,10 @@ function clock() {
   return { now: () => new Date(time).toISOString(), advance: (milliseconds: number) => { time += milliseconds; } };
 }
 
-function store(retained: ActionResourceRetained, proof: () => boolean = () => false) {
-  const db = new DatabaseSync(':memory:');
-  cleanups.push(() => db.close());
-  return new SQLiteActionStore(db, proof, retained);
+function store(retained: ActionResourceRetained, proof: () => boolean = () => false, db = new DatabaseSync(':memory:'),
+  settled: ActionRetainedReleaseProof = () => false) {
+  cleanups.push(() => { if (db.isOpen) db.close(); });
+  return new SQLiteActionStore(db, proof, retained, settled);
 }
 
 const server = { serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' };
@@ -106,5 +108,49 @@ describe('the retained set is built by hashing the configured names', () => {
     expect(retained(folderMac, [mac, folderMac])).toBe(true);
     expect(retained(folderMac, [folderMac])).toBe(false);
     expect(retained(body, [body])).toBe(false);
+  });
+});
+
+describe('the retained record (review fixes of 2026-10-12)', () => {
+  it('leaves a row released before the record existed free, also under the new policy', () => {
+    const c = clock();
+    const db = new DatabaseSync(':memory:');
+    // Stage 0 released this Host task's unknown slot without any retained record.
+    const before = store(() => false, () => false, db);
+    strandPastRelease(before, c, 'agentTask', 'old-codex-task', [mac, folderMac]);
+    const after = store(configuredRetainedResources(values, () => ['shannon-mac']), () => false, db);
+    expect(claimable(after, c, 'host-after-deploy', [mac, folderMac])).toBe(true);
+  });
+
+  it('treats a settled or owner-paused Agent Host task as the release proof, in the sweep, with an audit row', () => {
+    const c = clock();
+    const db = new DatabaseSync(':memory:');
+    db.exec(`CREATE TABLE agent_tasks (task_id TEXT PRIMARY KEY, status TEXT, pause_reason TEXT);
+      INSERT INTO agent_tasks VALUES ('codex-task', 'running', NULL);`);
+    const settled = (action: { kind: string; sourceId: string }) => action.kind === 'agentTask' && agentTaskSettled(db, action.sourceId);
+    const actions = store(configuredRetainedResources(values, () => ['shannon-mac']), () => false, db, settled);
+    const lease = strandPastRelease(actions, c, 'agentTask', 'codex-task', [mac, folderMac]);
+    expect(readActionExecutionCounts(db, c.now()).retained).toEqual({ held: 2, oldestAt: c.now() });
+    expect(claimable(actions, c, 'blocked', [mac])).toBe(false);
+    db.prepare("UPDATE agent_tasks SET status = 'paused', pause_reason = 'owner' WHERE task_id = 'codex-task'").run();
+    expect(claimable(actions, c, 'after-owner-pause', [mac, folderMac])).toBe(true);
+    expect(actions.get(lease.id)).toMatchObject({ state: 'unknown' });
+    expect(readActionExecutionCounts(db, c.now()).retained.held).toBe(0);
+    const audit = db.prepare('SELECT released_by, reason, resources_json FROM mind_action_retained_releases').all();
+    expect(audit).toEqual([{ released_by: 'scheduler', reason: 'task_settled', resources_json: JSON.stringify([mac, folderMac].sort()) }]);
+  });
+
+  it('lets the owner release a lost task\'s retained keys once, audited and idempotent', () => {
+    const c = clock();
+    const db = new DatabaseSync(':memory:');
+    const actions = store(configuredRetainedResources(values, () => ['shannon-mac']), () => false, db);
+    const lease = strandPastRelease(actions, c, 'agentTask', 'lost-task', [mac, folderMac]);
+    expect(actions.releaseRetainedByOwner('owner', 'missing', 'release-0', 'iphone', c.now())).toBeNull();
+    expect(actions.releaseRetainedByOwner('owner', lease.id, 'release-1', 'iphone', c.now())).toBe(2);
+    expect(actions.releaseRetainedByOwner('owner', lease.id, 'release-1', 'iphone', c.now())).toBe(2);
+    expect(actions.releaseRetainedByOwner('owner', lease.id, 'release-2', 'iphone', c.now())).toBeNull();
+    expect(claimable(actions, c, 'after-owner-release', [mac, folderMac])).toBe(true);
+    const audit = db.prepare('SELECT request_id, released_by, reason FROM mind_action_retained_releases').all();
+    expect(audit).toEqual([{ request_id: 'release-1', released_by: 'iphone', reason: 'owner_release' }]);
   });
 });

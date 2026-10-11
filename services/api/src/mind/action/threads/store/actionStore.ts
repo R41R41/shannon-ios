@@ -2,18 +2,24 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
+import {
+  ensureRetainedResourceSchema, knownRelease, recordRetained, releaseRetained, retainedActionIds, retainedOf, type RetainedRelease,
+} from './retainedResourceStore.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 /**
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
  * through `reconcileResource`. Base or dispatch-added; `resources` is the action's whole set (`retainedResources.ts`).
  */
 export type ActionResourceRetained=(resource:string,resources:readonly string[])=>boolean;
+/** Whether an unknown action's original work is settled elsewhere (its Agent Host task ended), which releases its retained keys. */
+export type ActionRetainedReleaseProof=(action:ActionView)=>boolean;
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
   private readonly refusals=new Map<string,number>();
   constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
-    private readonly retainedAfterRelease:ActionResourceRetained=()=>false) {
+    private readonly retainedAfterRelease:ActionResourceRetained=()=>false,
+    private readonly retainedReleaseProof:ActionRetainedReleaseProof=()=>false) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS mind_actions (
         id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, kind TEXT NOT NULL, origin TEXT NOT NULL, source_id TEXT NOT NULL,
@@ -44,6 +50,7 @@ export class SQLiteActionStore {
         id TEXT PRIMARY KEY,report_json TEXT NOT NULL
       );
     `);
+    ensureRetainedResourceSchema(db);
   }
   /** Claims refused since this process started, by closed reason (ADR-0009 stage 1: `GET /v1/ops`). */
   claimRefusals():Readonly<Record<string,number>> {
@@ -52,6 +59,40 @@ export class SQLiteActionStore {
   private refused(reason:string):null {
     this.refusals.set(reason,(this.refusals.get(reason)??0)+1);
     return null;
+  }
+  /** The owner's explicit release of an unknown action's retained keys (ADR-0009 §9): audited, idempotent by request id. */
+  releaseRetainedByOwner(scopeKey:string,id:string,requestId:string,by:string,at:string):number|null {
+    if(![scopeKey,id,requestId,by].every(value=>typeof value==='string'&&ACTION_ID.test(value)))return null;
+    return this.transaction(()=>{
+      const known=knownRelease(this.db,requestId);
+      if(known)return known.scopeKey===scopeKey&&known.actionId===id?known.count:null;
+      const action=this.get(id);
+      if(!action||action.scopeKey!==scopeKey||action.state!=='unknown')return null;
+      const released=this.endRetained(action,{requestId,scopeKey,actionId:id,releasedBy:by,reason:'owner_release',at});
+      return released.length?released.length:null;
+    });
+  }
+  private endRetained(action:ActionView,release:RetainedRelease,only?:readonly string[]):string[] {
+    const released=releaseRetained(this.db,release,only);
+    if(!released.length)return released;
+    const resources=action.resources.filter(key=>!released.includes(key));
+    this.db.prepare('UPDATE mind_actions SET resources_json=? WHERE id=?').run(JSON.stringify(resources),action.id);
+    return released;
+  }
+  /** Ends the retained records whose action closed, or whose original task settled elsewhere (ADR-0009 §9). */
+  private settleRetained(at:string):void {
+    for(const id of retainedActionIds(this.db)){
+      const action=this.get(id);
+      if(!action||action.state!=='unknown'){
+        const scopeKey=action?.scopeKey??'unknown';
+        releaseRetained(this.db,{requestId:`closed:${id}:${at}`,scopeKey,actionId:id,releasedBy:'scheduler',reason:'action_closed',at});
+        continue;
+      }
+      if(!this.retainedReleaseProof(action))continue;
+      const release:RetainedRelease={requestId:`settled:${id}:${at}`,scopeKey:action.scopeKey,actionId:id,
+        releasedBy:'scheduler',reason:'task_settled',at};
+      this.endRetained(action,release);
+    }
   }
   transaction<T>(work: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
@@ -266,7 +307,7 @@ export class SQLiteActionStore {
     });
   }
   /** Exact original release proof removes only a dynamic exclusion; the action itself remains unknown. */
-  reconcileResource(lease:ActionLease,resource:string,acknowledgementId:string):boolean {
+  reconcileResource(lease:ActionLease,resource:string,acknowledgementId:string,at=new Date().toISOString()):boolean {
     if(!lease||typeof lease.id!=='string'||typeof lease.holder!=='string'||!ACTION_ID.test(lease.id)||!ACTION_ID.test(lease.holder)
       ||!Number.isSafeInteger(lease.generation)||lease.generation<1||typeof acknowledgementId!=='string'||!ACTION_ID.test(acknowledgementId)
       ||typeof resource!=='string'||!/^res:[a-f0-9]{64}$/u.test(resource))return false;
@@ -279,12 +320,16 @@ export class SQLiteActionStore {
       const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(lease.id)!;
       const base=JSON.parse(String(row.base_resources_json)) as string[];
       if(!action.resources.includes(resource))return false;
-      if(base.includes(resource)&&!this.retainedAfterRelease(resource,action.resources))return false;
+      // A base key is released only while it is recorded as retained (a release before the record existed stays free).
+      if(base.includes(resource)&&!retainedOf(this.db,lease.id).has(resource))return false;
       // Re-read the domain's original immutable proof under this writer lock, fencing late native cleanup insertion.
       if(!this.resourceReconciliationAllowed?.(lease,resource,acknowledgementId))return false;
       // Do not settle paid calls, finish the task, clear sent, or release any other operation's exclusion.
       this.db.prepare('UPDATE mind_actions SET resources_json=? WHERE id=?').run(JSON.stringify(action.resources.filter(key=>key!==resource)),lease.id);
       this.db.prepare('INSERT INTO mind_action_resource_acknowledgements VALUES(?,?)').run(acknowledgementId,encoded);
+      const release:RetainedRelease={requestId:`proof:${acknowledgementId}`,scopeKey:action.scopeKey,actionId:lease.id,
+        releasedBy:'domain',reason:'domain_proof',at};
+      releaseRetained(this.db,release,[resource]);
       return true;
     });
   }
@@ -341,7 +386,9 @@ export class SQLiteActionStore {
       this.db.prepare("UPDATE mind_action_budget SET state='held' WHERE action_id=? AND state='reserved'").run(action.id);
     }
     this.db.prepare("UPDATE mind_actions SET state='cancelled',result='deadline',updated_at=? WHERE state='queued' AND deadline IS NOT NULL AND deadline<=?").run(at,at);
-    return this.releaseExpiredUnknown(at);
+    const released=this.releaseExpiredUnknown(at);
+    this.settleRetained(at);
+    return released;
   }
   /**
    * An unknown outcome is never replayed and never resumable; it already is a closed state. What kept the scheduler blocked
@@ -360,16 +407,19 @@ export class SQLiteActionStore {
       const resources=JSON.parse(String(row.resources_json)) as string[];
       const kept=resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,resources));
       this.db.prepare("UPDATE mind_actions SET sent=0,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
+      // The retained keys are recorded now: only a recorded key keeps excluding others (retainedResourceStore.ts).
+      recordRetained(this.db,String(row.id),kept.filter(key=>this.retainedAfterRelease(key,resources)),at);
     }
     return rows.length;
   }
-  /** What an action excludes others from: everything while live or sent-unknown; after release, unproven additions and retained keys. */
+  /** What an action excludes others from: everything while live or sent-unknown; after release, unproven additions and recorded keys. */
   private heldResources(action:ActionView):readonly string[] {
     if(['running','waiting','stopping'].includes(action.state)||(action.state==='unknown'&&action.sent))return action.resources;
     if(action.state!=='unknown')return [];
     const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(action.id);
     const base=JSON.parse(String(row?.base_resources_json??'[]')) as string[];
-    return action.resources.filter(key=>!base.includes(key)||this.retainedAfterRelease(key,action.resources));
+    const recorded=retainedOf(this.db,action.id);
+    return action.resources.filter(key=>!base.includes(key)||recorded.has(key));
   }
 }
 function view(input: object): ActionView {

@@ -31,6 +31,8 @@ export interface ActionThreads {
   acknowledge(report:ActionAcknowledgement):Promise<boolean>;
   /** The scheduler's own counts since its process started (ADR-0009 stage 1, `GET /v1/ops`); closed reasons and numbers only. */
   metrics?():Promise<ActionSchedulerMetrics>;
+  /** The owner's audited release of an unknown action's retained keys (ADR-0009 §9); the count released, or null. */
+  releaseRetained?(scopeKey:string,id:string,requestId:string,by:string):Promise<number|null>;
 }
 
 export interface ActionSchedulerMetrics {

@@ -31,7 +31,8 @@ function claimed(actions: SQLiteActionStore, kind: 'agentTask' | 'ownTime', sour
 describe('action execution counts', () => {
   it('count live actions per kind, overdue sent unknowns, and FCA tasks with two live steps', () => {
     const { db, actions } = store();
-    expect(readActionExecutionCounts(db, AT)).toEqual({ unknownSentOverdue: 0, liveByKind: {}, sharedResources: 0, multiSegmentTasks: 0 });
+    expect(readActionExecutionCounts(db, AT)).toEqual({ unknownSentOverdue: 0, liveByKind: {}, sharedResources: 0, multiSegmentTasks: 0,
+      retained: { held: 0, oldestAt: null } });
     claimed(actions, 'agentTask', 'fca:task-1:1');
     claimed(actions, 'agentTask', 'fca:task-1:2');
     expect(readActionExecutionCounts(db, AT)).toMatchObject({ liveByKind: { agentTask: 2 }, multiSegmentTasks: 1 });

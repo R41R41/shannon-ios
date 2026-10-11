@@ -18,6 +18,8 @@ export interface ExecutionView {
   claimRefusals: { since: string | null; byReason: Readonly<Record<string, number>> };
   sharedResources: number;
   multiSegmentTasks: number;
+  /** Keys still retained after an unknown release (ADR-0009 §9), and the age of the oldest in minutes. */
+  retained: { held: number; oldestAt: string | null; oldestAgeMinutes: number | null };
   sleepLastCompletedAt: string | null;
   ownTimeLastSessionAt: string | null;
   modelRequestRejections: Readonly<Record<string, number>>;
@@ -36,7 +38,17 @@ export interface ExecutionMonitorOptions {
   intervalMs?: number | null;
 }
 
-const EMPTY_COUNTS: ActionExecutionCounts = { unknownSentOverdue: 0, liveByKind: {}, sharedResources: 0, multiSegmentTasks: 0 };
+const EMPTY_COUNTS: ActionExecutionCounts = {
+  unknownSentOverdue: 0,
+  liveByKind: {},
+  sharedResources: 0,
+  multiSegmentTasks: 0,
+  retained: { held: 0, oldestAt: null },
+};
+
+function ageMinutes(since: string | null, at: string): number | null {
+  return since ? Math.max(0, Math.floor((Date.parse(at) - Date.parse(since)) / 60_000)) : null;
+}
 
 function pairs(record: Readonly<Record<string, number>>): string {
   const entries = Object.entries(record);
@@ -53,6 +65,7 @@ export function executionDailyLine(view: ExecutionView, cacheDay: string): strin
     `refusals=${pairs(view.claimRefusals.byReason)}`,
     `sharedResources=${view.sharedResources}`,
     `multiSegmentTasks=${view.multiSegmentTasks}`,
+    `retained=${view.retained.held}`,
     `sleepCompleted=${view.sleepLastCompletedAt ?? 'none'}`,
     `ownTimeSession=${view.ownTimeLastSessionAt ?? 'none'}`,
     `cacheReadTurns=${cacheDayLine(cacheDay)}`,
@@ -103,6 +116,7 @@ export function startExecutionMonitor(options: ExecutionMonitorOptions) {
       claimRefusals: { since: scheduler?.since ?? null, byReason: scheduler?.claimRefusals ?? {} },
       sharedResources: read.actions.sharedResources,
       multiSegmentTasks: read.actions.multiSegmentTasks,
+      retained: { ...read.actions.retained, oldestAgeMinutes: ageMinutes(read.actions.retained.oldestAt, at) },
       sleepLastCompletedAt: liveness?.sleep.lastCompletedAt ?? null,
       ownTimeLastSessionAt: liveness?.ownTime.lastSessionAt ?? null,
       modelRequestRejections: rejectionCounts(),

@@ -52,12 +52,16 @@ export function createActionThreadRoute(actions: ActionThreads | null, ownerScop
       const body = await readJson(request, 4096) as Record<string, unknown>;
       if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.requestId !== 'string' || !ACTION_ID.test(body.requestId)
         || Object.keys(body).some(key => !['requestId', 'scopeKey'].includes(key))) return sendJson(response, 400, { error: 'ACTION_REQUEST' });
-      const match = path.match(/^\/v1\/action-threads\/([A-Za-z0-9_.:@-]{1,160})\/(stop|resume)$/u);
+      const match = path.match(/^\/v1\/action-threads\/([A-Za-z0-9_.:@-]{1,160})\/(stop|resume|release-retained)$/u);
       const target = match?.[1] ?? null;
       if (path !== `${ACTION_THREAD_PATH}/stop-all` && !match) return sendJson(response, 404, { error: 'NOT_FOUND' });
       const before = await actions.list(ownerScope);
       if (target && !before.some(view => view.id === target && view.kind !== 'respond')) return sendJson(response, 404, { error: 'ACTION_NOT_FOUND' });
-      if (match?.[2] === 'resume') {
+      if (match?.[2] === 'release-retained') {
+        // The owner releases what a lost unknown action still holds (ADR-0009 §9); audited in the mind worker.
+        const released = await actions.releaseRetained?.(ownerScope, target!, body.requestId, principal.deviceId) ?? null;
+        if (released === null) return sendJson(response, 409, { error: 'ACTION_NOTHING_RETAINED' });
+      } else if (match?.[2] === 'resume') {
         const view = before.find(item => item.id === target)!;
         if (view.kind !== 'ownTime' || !await actions.resume(ownerScope, target!)) return sendJson(response, 409, { error: 'ACTION_CANNOT_RESUME' });
       } else {

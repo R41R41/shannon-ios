@@ -1,8 +1,9 @@
 import { configuredActionResourceProof, configuredRetainedResources } from './configuredActionResourceProof.js';
 import { DatabaseSync } from 'node:sqlite';
-import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease } from '@shannon/mind';
+import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease, type ActionView } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
 import { knownAgentHostIds } from '../mind/action/agentTasks/store/agentHostIds.js';
+import { agentTaskSettled } from '../mind/action/agentTasks/store/agentTaskSettlement.js';
 import type { MindHost } from '../mind/workspace/workspacePorts.js';
 import { serveMindSocket } from '../infra/ipc/mindSocket.js';
 import { mindSocketPath } from '../infra/config/stage4.js';
@@ -33,7 +34,9 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
   const busyLog=throttledLog(log);
   const startedAt=now();
   const retained=configuredRetainedResources(values,()=>knownAgentHostIds(db));
-  const actions=new SQLiteActionStore(db,configuredActionResourceProof(values,db),retained);
+  // An Agent Host task that settled (or that the owner paused) releases the Host lock its unknown action retained.
+  const settled=(action:ActionView)=>action.kind==='agentTask'&&agentTaskSettled(db,action.sourceId);
+  const actions=new SQLiteActionStore(db,configuredActionResourceProof(values,db),retained,settled);
   let host:MindHost;
   let closeHost:()=>void;
   const projection=(scopeKey:string)=>({...host.projection(scopeKey),faulted:host.faulted,faults:host.faultCount,busy:host.busyCount});
@@ -77,7 +80,8 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
         return actions.reconcile(lease(),a.state as 'completed'|'failed'|'cancelled',String(a.code),at);
       }
       case 'action.reserve':return actions.reserve(lease(),text('reservationId'),String(a.day),Number(a.yen),Number(a.cap),Number(a.spent),at);
-      case 'action.reconcileResource':return actions.reconcileResource(lease(),String(a.resource),text('acknowledgementId'));
+      case 'action.reconcileResource':return actions.reconcileResource(lease(),String(a.resource),text('acknowledgementId'),at);
+      case 'action.releaseRetained':return actions.releaseRetainedByOwner(text('scopeKey'),text('id'),text('requestId'),text('by'),at);
       case 'action.settle':return actions.settle(lease(),text('reservationId'),a.actual===null?null:Number(a.actual),at);
       case 'action.acknowledge':return actions.acknowledge(a as unknown as ActionAcknowledgement,at);
       case 'action.metrics':return {claimRefusals:actions.claimRefusals(),since:startedAt};

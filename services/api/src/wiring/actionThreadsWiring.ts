@@ -20,5 +20,6 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     settle:(lease,reservationId,actual)=>call('action.settle',{lease,reservationId,actual}),
     acknowledge:report=>call('action.acknowledge',report),
     metrics:()=>call<ActionSchedulerMetrics>('action.metrics',{}),
+    releaseRetained:(scopeKey,id,requestId,by)=>call<number|null>('action.releaseRetained',{scopeKey,id,requestId,by}),
   };
 }

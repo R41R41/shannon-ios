@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { retainedSummary } from './retainedResourceStore.js';
 
 /**
  * What `GET /v1/ops` counts of the action threads (Syzygy ADR-0009 stage 1, acceptance §4): closed counts only, read-only.
@@ -6,20 +7,28 @@ import type { DatabaseSync } from 'node:sqlite';
  * - `liveByKind`: running, waiting and stopping actions per kind.
  * - `sharedResources`: resource keys held by more than one live action at once (should be 0).
  * - `multiSegmentTasks`: FCA tasks with more than one live step action at once (should be 0).
+ * - `retained`: resource keys still recorded as retained after an unknown release, and since when the oldest (ADR-0009 §9).
  */
 export interface ActionExecutionCounts {
   unknownSentOverdue: number;
   liveByKind: Readonly<Record<string, number>>;
   sharedResources: number;
   multiSegmentTasks: number;
+  retained: { held: number; oldestAt: string | null };
 }
 
-const EMPTY: ActionExecutionCounts = Object.freeze({ unknownSentOverdue: 0, liveByKind: Object.freeze({}), sharedResources: 0, multiSegmentTasks: 0 });
+const EMPTY: ActionExecutionCounts = Object.freeze({
+  unknownSentOverdue: 0,
+  liveByKind: Object.freeze({}),
+  sharedResources: 0,
+  multiSegmentTasks: 0,
+  retained: Object.freeze({ held: 0, oldestAt: null }),
+});
 const LIVE = "state IN ('running','waiting','stopping')";
 const FCA_SOURCE = /^fca:([^:]+):[0-9]+$/u;
 
-function hasActions(db: DatabaseSync): boolean {
-  return Boolean(db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'mind_actions'").get());
+function hasTable(db: DatabaseSync, name: string): boolean {
+  return Boolean(db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
 }
 
 function liveByKind(db: DatabaseSync): Record<string, number> {
@@ -48,12 +57,15 @@ function multiSegmentTasks(db: DatabaseSync): number {
 }
 
 export function readActionExecutionCounts(db: DatabaseSync, cutoff: string): ActionExecutionCounts {
-  if (!hasActions(db)) return EMPTY;
-  const overdue = db.prepare("SELECT COUNT(*) AS count FROM mind_actions WHERE state = 'unknown' AND sent = 1 AND updated_at <= ?").get(cutoff);
+  if (!hasTable(db, 'mind_actions')) return EMPTY;
+  const overdue = db.prepare("SELECT COUNT(*) AS count FROM mind_actions WHERE state = 'unknown' AND sent = 1 AND updated_at <= ?")
+    .get(cutoff);
+  const retained = hasTable(db, 'mind_action_retained_resources') ? retainedSummary(db) : EMPTY.retained;
   return {
     unknownSentOverdue: Number(overdue?.count ?? 0),
     liveByKind: liveByKind(db),
     sharedResources: sharedResources(db),
     multiSegmentTasks: multiSegmentTasks(db),
+    retained,
   };
 }

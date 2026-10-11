@@ -51,3 +51,16 @@ it('reads back an idempotent stop, keeps foreground running, and refuses unknown
   await h.actions.finish({id:active!.id,holder:active!.holder!,generation:active!.generation},'unknown','lost');
   expect((await h.call(`/${own.id}/resume`,{requestId:'resume'})).status).toBe(409);
 });
+it('lets the owner release what a lost unknown action retains, naming the device, and says when nothing is held (ADR-0009 §9)', async () => {
+  const h = await fixture();
+  const own = await h.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'lost-task' });
+  const calls: unknown[][] = [];
+  let released: number | null = 2;
+  h.actions.releaseRetained = async (...args) => { calls.push(args); return released; };
+  const ok = await h.call(`/${own.id}/release-retained`, { requestId: 'release-1' });
+  expect(ok.status).toBe(200);
+  expect(calls).toEqual([['owner', own.id, 'release-1', 'phone']]);
+  released = null;
+  expect((await h.call(`/${own.id}/release-retained`, { requestId: 'release-2' })).status).toBe(409);
+  expect((await h.call(`/${own.id}/release-retained`, { requestId: 'release-3' }, 'guest')).status).toBe(403);
+});
