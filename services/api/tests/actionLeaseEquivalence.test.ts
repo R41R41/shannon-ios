@@ -150,7 +150,8 @@ describe('one lease read path (ADR-0009 stage 1, S1)', () => {
     for (const [name, seen] of answers) expect({ name, answers: seen.size }).toEqual({ name, answers: name.endsWith('classify') ? 3 : 2 });
     expect(answers.size).toBe(12);
     expect(compared).toBeGreaterThan(1_000_000);
-  });
+    // About a million comparisons: ~26 s on a laptop, more on a 2-core CI runner.
+  }, 180_000);
 
   it('finds the action of a task revision and the task of an FCA action as before', () => {
     for (const id of ids.filter((_, index) => index % 13 === 0)) {
