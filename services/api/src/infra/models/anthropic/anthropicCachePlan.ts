@@ -50,26 +50,25 @@ export const PLAN_NO_TOOLS_LINE = '[ボクの道具] この返事では道具を
 
 type Schema = Record<string, unknown> & { properties: Record<string, Record<string, unknown>>; required: string[] };
 
-function nullable(property: Record<string, unknown>): Record<string, unknown> {
-  const type = property.type;
-  if (typeof type !== 'string') return property;
-  return { ...property, type: [type, 'null'] };
-}
-
 /** The schema of a turn that offers nothing: the fields every text turn has. */
 function baseSchema(): Schema {
   const body = chatTurnRequestBody('', { scopeKey: '', systemPrompt: '', history: [], message: '' }, undefined);
   return (body.text as { format: { schema: Schema } }).format.schema;
 }
 
-/** Every field a turn may add, nullable, with `feeling` right after `reply` (the streamed reply never waits for it). */
+/**
+ * Every field a turn may add, each in the schema it has without the plan, with `feeling` right after `reply` (the streamed reply
+ * never waits for it). The added fields are not made nullable: each already has its own "nothing" (`[]`, `"none"`,
+ * `{ kind: "none" }`, `false`), so the superset adds no union parameter to the base and her feeling's own. A union is the
+ * expensive part of the provider's compiled grammar (M4 grammar fix: with every added field nullable, 15 unions, the
+ * request with the always-loaded tools was refused as a grammar too large).
+ */
 function supersetSchema(): Record<string, unknown> {
   const base = baseSchema();
   const { reply, ...fixed } = base.properties;
   const { feeling, ...rest } = TURN_REPLY_FIELDS as unknown as Record<string, Record<string, unknown>>;
-  const later = Object.fromEntries(Object.entries({ ...rest, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } })
-    .map(([name, property]) => [name, nullable(property)]));
-  const properties = { reply: reply!, feeling: nullable(feeling!), ...fixed, ...later };
+  const later = { ...rest, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } };
+  const properties = { reply: reply!, feeling: feeling!, ...fixed, ...later };
   const required = ['reply', 'feeling', ...base.required.filter(name => name !== 'reply'), ...Object.keys(later)];
   return structuredSchema({ ...base, properties, required }) as Record<string, unknown>;
 }
@@ -144,27 +143,22 @@ export function stableLayers(request: Pick<ShannonChatModelRequest, 'systemPromp
 const SUPERSET_FIELDS: readonly TurnReplyField[] = [...Object.keys(TURN_REPLY_FIELDS) as TurnReplyField[], 'webSearchNeedsInput'];
 
 /** Whether a field may be null also in a turn that offers it (her reply's feeling: null when nothing moved her). */
-function nullableWhenOffered(field: TurnReplyField): boolean {
-  const schema = (TURN_REPLY_FIELDS as Readonly<Record<string, { type?: unknown; anyOf?: unknown }>>)[field];
-  if (!schema) return false;
-  const types = Array.isArray(schema.type) ? schema.type : [];
-  const branches = Array.isArray(schema.anyOf) ? schema.anyOf as Array<{ type?: unknown }> : [];
-  return types.includes('null') || branches.some(branch => branch.type === 'null');
-}
+/** The value an added field takes in a turn that does not use it: the field's own "nothing". */
+const UNUSED_VALUES: Readonly<Record<TurnReplyField, string>> = Object.freeze({
+  feeling: 'null', places: '[]', roomLook: '"none"', appLook: '"none"', minecraftIntent: '{"kind":"none","goal":""}', webSearchNeedsInput: 'false',
+});
 
 /**
- * Which fields of the superset this turn uses and which it does not. A used field keeps the meaning it has without the plan,
- * where it is required: one that may not be null there is said to be required here too.
+ * Which fields of the superset this turn uses, and the value each unused one takes. A used field keeps the meaning it has
+ * without the plan; her feeling keeps its own rule that it is null when nothing moved her.
  */
 export function fieldsLines(request: ShannonChatModelRequest): string[] {
   const used = offeredReplyFields(request);
   const unused = SUPERSET_FIELDS.filter(field => !used.includes(field));
-  const required = used.filter(field => !nullableWhenOffered(field));
-  const nullable = used.filter(nullableWhenOffered);
+  const values = unused.map(field => `${field} は ${UNUSED_VALUES[field]}`).join('、');
   return [
-    ...(required.length ? [`[このターンの返答の欄] ${required.join('、')} はこのターンでは必ず書く（null にしない）。`] : []),
-    ...(nullable.length ? [`[このターンの返答の欄] ${nullable.join('、')} もこのターンでは必ず判断して書く（null は説明にある時だけ）。`] : []),
-    ...(unused.length ? [`[このターンの返答の欄] ${unused.join('、')} はこのターンでは使わないので null にする。`] : []),
+    ...(used.length ? [`[このターンの返答の欄] ${used.join('、')} はこのターンで使う欄。説明どおりに必ず判断して書く。`] : []),
+    ...(unused.length ? [`[このターンの返答の欄] このターンで使わない欄は決まった値にする: ${values}。`] : []),
   ];
 }
 

@@ -50,7 +50,7 @@
      },
      {
       "role": "system",
-      "content": "合成された今のターンの文脈\n\n[ボクの道具] いまはライ氏以外の人もいるかもしれないので、書斎と自分のフォルダの道具は出していない。頼まれたら、二人だけの時にすると伝える（道具が壊れているのではない）。\n\n[このターンの返答の欄] feeling、places、roomLook、appLook、minecraftIntent、webSearchNeedsInput はこのターンでは使わないので null にする。"
+      "content": "合成された今のターンの文脈\n\n[ボクの道具] いまはライ氏以外の人もいるかもしれないので、書斎と自分のフォルダの道具は出していない。頼まれたら、二人だけの時にすると伝える（道具が壊れているのではない）。\n\n[このターンの返答の欄] このターンで使わない欄は決まった値にする: feeling は null、places は []、roomLook は \"none\"、appLook は \"none\"、minecraftIntent は {\"kind\":\"none\",\"goal\":\"\"}、webSearchNeedsInput は false。"
      }
     ],
     "tools": [
@@ -401,114 +401,79 @@
          ]
         },
         "places": {
-         "description": "（0〜5件）",
-         "anyOf": [
-          {
-           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-             "name": {
-              "type": "string"
-             },
-             "address": {
-              "type": "string"
-             },
-             "reason": {
-              "type": "string"
-             },
-             "mapQuery": {
-              "type": "string"
-             }
-            },
-            "required": [
-             "name",
-             "address",
-             "reason",
-             "mapQuery"
-            ]
+         "type": "array",
+         "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+           "name": {
+            "type": "string"
            },
-           "type": "array"
+           "address": {
+            "type": "string"
+           },
+           "reason": {
+            "type": "string"
+           },
+           "mapQuery": {
+            "type": "string"
+           }
           },
-          {
-           "type": "null"
-          }
-         ]
+          "required": [
+           "name",
+           "address",
+           "reason",
+           "mapQuery"
+          ]
+         },
+         "description": "（0〜5件）"
         },
         "roomLook": {
-         "description": "体のカメラで部屋を一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る",
-         "anyOf": [
-          {
-           "enum": [
-            "none",
-            "asked",
-            "curious"
-           ],
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ]
+         "type": "string",
+         "enum": [
+          "none",
+          "asked",
+          "curious"
+         ],
+         "description": "体のカメラで部屋を一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る"
         },
         "appLook": {
-         "description": "アプリのカメラで一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る。_back=外側のカメラ（ライ氏が見せているもの、いる場所）。_front=内側のカメラ（ライ氏自身、服や髪や表情の話の時）",
-         "anyOf": [
-          {
-           "enum": [
-            "none",
-            "asked_back",
-            "asked_front",
-            "curious_back",
-            "curious_front"
-           ],
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ]
+         "type": "string",
+         "enum": [
+          "none",
+          "asked_back",
+          "asked_front",
+          "curious_back",
+          "curious_front"
+         ],
+         "description": "アプリのカメラで一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る。_back=外側のカメラ（ライ氏が見せているもの、いる場所）。_front=内側のカメラ（ライ氏自身、服や髪や表情の話の時）"
         },
         "minecraftIntent": {
-         "anyOf": [
-          {
-           "additionalProperties": false,
-           "properties": {
-            "kind": {
-             "type": "string",
-             "enum": [
-              "none",
-              "task",
-              "stop"
-             ],
-             "description": "マイクラの体に頼むこと。task=ライ氏にゲームの中でしてほしいことをはっきり頼まれた。stop=今していることをやめてと言われた。none=それ以外"
-            },
-            "goal": {
-             "type": "string",
-             "description": "task の時だけ、何をどれだけするかを120字以内で。それ以外は空文字"
-            }
-           },
-           "required": [
-            "kind",
-            "goal"
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+          "kind": {
+           "type": "string",
+           "enum": [
+            "none",
+            "task",
+            "stop"
            ],
-           "type": "object"
+           "description": "マイクラの体に頼むこと。task=ライ氏にゲームの中でしてほしいことをはっきり頼まれた。stop=今していることをやめてと言われた。none=それ以外"
           },
-          {
-           "type": "null"
+          "goal": {
+           "type": "string",
+           "description": "task の時だけ、何をどれだけするかを120字以内で。それ以外は空文字"
           }
+         },
+         "required": [
+          "kind",
+          "goal"
          ]
         },
         "webSearchNeedsInput": {
-         "description": "検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。",
-         "anyOf": [
-          {
-           "type": "boolean"
-          },
-          {
-           "type": "null"
-          }
-         ]
+         "type": "boolean",
+         "description": "検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。"
         }
        },
        "required": [
@@ -558,9 +523,9 @@
    "prefix": {
     "tools": "de57fa82",
     "system": "3476417d",
-    "schema": "170da059",
+    "schema": "23565c1a",
     "effort": "3a66f5bc",
-    "history": "5c261d9a"
+    "history": "e7a6a3be"
    },
    "thread": "a5f7fbd8",
    "cachePlan": true,

@@ -78,6 +78,25 @@ describe('F1: a refused plan request falls back to the shape without the plan, o
   });
 });
 
+describe('a grammar refusal of a plan turn with tools (M4 grammar fix)', () => {
+  it('moves the inline definitions to quoted data and keeps the plan\'s prefix; a second refusal answers in the plan-off shape', async () => {
+    const h = context([refused('The compiled grammar is too large'), answer(HAIKU.model, 0, 2_000)]);
+    const turn = { ...request, tools: tools(['study.list', 'study.read']) };
+    expect((await planChat(h.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');
+    const [first, second] = h.recorder.requests.map(item => item.body as Body);
+    for (const key of ['tools', 'tool_choice', 'system', 'output_config', 'thinking'] as const) expect(second![key]).toEqual(first![key]);
+    expect(JSON.stringify(first!.messages)).toContain('"tool_addition"');
+    expect(JSON.stringify(second!.messages)).not.toContain('"tool_addition"');
+    expect(JSON.stringify(second!.messages)).toContain('[開いている道具の入力定義・データ]');
+    expect(events()).toMatchObject({ 'text:grammar_bridge': 1, 'text:recovered': 1 });
+    const twice = context([refused('The compiled grammar is too large'), refused('The compiled grammar is too large'), answer(HAIKU.model)]);
+    expect((await planChat(twice.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');
+    const last = twice.recorder.requests[2]!.body as Body;
+    expect(last.tools).toBeUndefined();
+    expect(last.output_config).toEqual(sonnetChatBody(HAIKU, { ...turn, tools: undefined }, undefined).output_config);
+  });
+});
+
 describe('F2: a call in a plan turn without tools', () => {
   it('is declined once, and the answer after it is asked for with tool_choice none', async () => {
     const call = cached(message([{ type: 'tool_use', id: 'toolu_stray', name: 'tool_open', input: { name: 'study_list' } }], 'tool_use',
@@ -91,13 +110,14 @@ describe('F2: a call in a plan turn without tools', () => {
 });
 
 describe('F4: the fields a plan turn uses', () => {
-  it('says which are required, which are judged and which stay null', () => {
+  it('says which it uses and the value of each it does not use (no added field is nullable: no added union)', () => {
     const lines = fieldsLines({ ...request, offerReplyFeeling: true, offerMinecraftIntent: true });
     expect(lines).toEqual([
-      '[このターンの返答の欄] minecraftIntent はこのターンでは必ず書く（null にしない）。',
-      '[このターンの返答の欄] feeling もこのターンでは必ず判断して書く（null は説明にある時だけ）。',
-      '[このターンの返答の欄] places、roomLook、appLook、webSearchNeedsInput はこのターンでは使わないので null にする。',
+      '[このターンの返答の欄] feeling、minecraftIntent はこのターンで使う欄。説明どおりに必ず判断して書く。',
+      '[このターンの返答の欄] このターンで使わない欄は決まった値にする: places は []、roomLook は "none"、appLook は "none"、webSearchNeedsInput は false。',
     ]);
+    expect(fieldsLines(request).at(-1)).toContain('feeling は null、');
+    expect(fieldsLines(request).at(-1)).toContain('minecraftIntent は {"kind":"none","goal":""}');
   });
 
   it('counts how often an offered feeling was answered, with and without the plan', async () => {

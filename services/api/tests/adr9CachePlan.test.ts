@@ -9,6 +9,7 @@ import {
   cachePlanApplies, planOutputSchema, planToolPair, plannedChatBody, splitCapabilityLines, splitSkillIndex, stableLayers,
 } from '../src/infra/models/anthropic/anthropicCachePlan.js';
 import { CACHE_PLAN_BREAKPOINTS, cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers.js';
+import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { cacheReceiptsView, recordCacheReceipt, resetCacheReceipts } from '../src/infra/models/anthropic/cacheReceipts.js';
 import { warmDayLine } from '../src/infra/models/anthropic/cacheWarmTurns.js';
 import { ANTHROPIC_STRICT_LIMITS, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
@@ -137,7 +138,10 @@ describe('the stable prefix', () => {
       expect(usage.optional).toBeLessThanOrEqual(ANTHROPIC_STRICT_LIMITS.optional);
       expect(usage.unions).toBeLessThanOrEqual(ANTHROPIC_STRICT_LIMITS.unions);
     }
-    expect(strictRequestUsage(sent(base))).toEqual({ tools: 2, optional: 0, unions: 15 });
+    // No union beyond the base's nine and her feeling's own: the same as a turn without the plan that offers her feeling.
+    expect(strictRequestUsage(sent(base))).toEqual({ tools: 2, optional: 0, unions: 10 });
+    expect(strictRequestUsage(sent(variants.tools!)).unions).toBe(strictRequestUsage(sonnetChatBody(HAIKU, { ...variants.tools!,
+      offerReplyFeeling: true }, undefined)).unions);
   });
 });
 
