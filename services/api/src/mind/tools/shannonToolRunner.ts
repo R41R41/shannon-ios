@@ -1,4 +1,5 @@
 import { minecraftLifecycleExecutors, type MinecraftLifecycleToolPort } from './shannonMinecraftLifecycleTools.js';
+import { deviceActionExecutors, type DeviceActionToolPort } from './shannonDeviceActionTools.js';
 import { observeAsync, observeSync, observerHandoff } from '../../infra/observer/observerContext.js';
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -93,6 +94,12 @@ export class ShannonToolRunner {
   private minecraftLifecycle: MinecraftLifecycleToolPort | null = null;
   useMinecraftLifecycle(port: MinecraftLifecycleToolPort): void { this.minecraftLifecycle = port; this.executors = Object.freeze({ ...this.executors, ...minecraftLifecycleExecutors(port) }); }
   private minecraftTasks: MinecraftTaskToolPort | null = null;
+  /** The device-action outbox (`docs/device-actions-contract.md`); null, her device tools do not exist on this server. */
+  private deviceActions: DeviceActionToolPort | null = null;
+  useDeviceActions(port: DeviceActionToolPort): void {
+    this.deviceActions = port;
+    this.executors = Object.freeze({ ...this.executors, ...deviceActionExecutors(port) });
+  }
   useMinecraftTasks(port: MinecraftTaskToolPort): void { this.minecraftTasks = port; }
   private taskMemory: MemoryToolPort | null = null;
   private taskRuntime: TaskRuntimeToolPort | null = null;
@@ -146,6 +153,7 @@ export class ShannonToolRunner {
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_lifecycle' ? !!scopeKey && (this.minecraftLifecycle?.available(scopeKey) ?? false)
+      : tool.domain === 'device_action' ? !!scopeKey && once('device_action', () => this.deviceActions?.available(scopeKey) ?? false)
       : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && once('minecraft_body', () => this.minecraftTasks!.available(scopeKey)) : minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
@@ -180,6 +188,7 @@ export class ShannonToolRunner {
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
     if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain, tool.name)) return null;
     if (tool?.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle) return null;
+    if (tool?.domain === 'device_action' && !this.deviceActions) return null;
     if (tool?.domain === 'memory_read' && !this.taskMemory) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
     if (tool?.domain === 'daily_read' && !this.reads?.daily) return null;
@@ -246,7 +255,7 @@ export class ShannonToolRunner {
       if(!('run' in prepared))return {tool,result:prepared};
       const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
       return {tool,prepared:{...call,run:async signal=>{
-        const resources=tool.domain==='vm_workspace' || tool.domain==='task_runtime' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
+        const resources=tool.domain==='vm_workspace' || tool.domain==='task_runtime' || tool.domain==='device_action' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
         const refusedNow = await observeAsync('gate', { name: tool.name, phase: 'before_execution' }, async () => {
           await actionPermit(resources);
           // The original gate and live secret predicate are evaluated again after waiting for a resource.

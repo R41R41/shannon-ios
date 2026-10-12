@@ -106,6 +106,8 @@ extension ShannonDesktopRootView {
                             ShannonConversationOrganizeCard(model: conversation, session: session)
                                 .id("organize-session-\(session.id)")
                         }
+                        // A song she chose, while it plays (docs/device-actions-contract.md).
+                        ShannonNowPlayingCard()
                         if conversation.isSending {
                             HStack(spacing: ShannonDesktopSpacing.small) {
                                 ShannonAvatarView(expression: .thinking, size: 26)

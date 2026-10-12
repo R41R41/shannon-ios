@@ -2,7 +2,7 @@
 export interface ToolExecutionEvidence {
   outcome: 'queued' | 'applied' | 'failed' | 'unknown';
   action: string;
-  target: { kind: 'minecraft_request' | 'minecraft_server' | 'folder' | 'aether_document' | 'aether_proposal'; id?: string };
+  target: { kind: 'minecraft_request' | 'minecraft_server' | 'folder' | 'aether_document' | 'aether_proposal' | 'device_action'; id?: string };
   /** Identifiers already issued by the canonical executor. Never manufacture a success receipt. */
   operationId?: string;
   receiptId?: string;

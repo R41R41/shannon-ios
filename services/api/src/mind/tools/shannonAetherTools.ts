@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, withDeviceActionsCapability, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -233,6 +233,9 @@ export function withToolCapabilityLines<T extends { systemPrompt: string; tools?
     ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
   // Her skills (stage 2, step 6): their line only in a turn that offers `skill.read`.
   const withSkills = offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;
-  const withTasks = offered?.some(tool => tool.domain === 'task_runtime') ? { ...withSkills, systemPrompt: `${withSkills.systemPrompt}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}` } : withSkills;
+  // Her device tools (`docs/device-actions-contract.md`): their line and limitations, only in a turn that offers them.
+  const withDevice = offered?.some(tool => tool.domain === 'device_action')
+    ? { ...withSkills, systemPrompt: withDeviceActionsCapability(withSkills.systemPrompt) } : withSkills;
+  const withTasks = offered?.some(tool => tool.domain === 'task_runtime') ? { ...withDevice, systemPrompt: `${withDevice.systemPrompt}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}` } : withDevice;
   return offered?.some(tool => tool.domain === 'memory_read') ? { ...withTasks, systemPrompt: `${withTasks.systemPrompt}\n\n${SHANNON_FCA_SHARED_CAPABILITY.text}` } : withTasks;
 }

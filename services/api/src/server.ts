@@ -102,6 +102,7 @@ import { isActionThreadPath } from './infra/http/actionThreadRoutes.js';
 import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
 import { stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
+import { configuredDeviceActions } from './wiring/deviceActionWiring.js';
 const now = () => new Date().toISOString();
 // ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust ledger (F6), by switch.
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, ...stage5MemoryStoreOptions(process.env) });
@@ -152,8 +153,7 @@ if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) 
 const traceSalt = installSalt(configuredDatabasePath()); // The salt of Jev's input digests in the traces (never in the repository).
 const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, skills: skillMemory?.memory ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
-// Syzygy ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): the tier policy's inputs, the verifier, and the learning of her
-// conversation choices (and, step 6, the uses of her skills). SHANNON_ADR8_STAGE2=off: none of it.
+// ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): tier inputs, verifier, learning of her choices and skill uses. STAGE2=off: none.
 const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now, sonnet, skills, feedback:stage5.feedback?.ports });
 // Her tool calls in conversations are choices too: stage 1's data only, unless stage 2's conversation reward scores them (owner answer I-3).
 if (choiceLedger && !turnRouting?.routing.switches.conversationReward) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
@@ -168,15 +168,13 @@ const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
 const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(scopeKey), now, tasks: voyagerCatalog });
 const reachOuts = new SQLiteReachOutSpeaker(configuredDatabasePath());
 const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
-// Whether only the owner can hear one of his apps now, and which surface then says a message she started on her own
-// (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it; ..._REACH_OUTS=off keeps the state and stops the speaking.
+// Who can hear his apps and which surface says her own messages (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it.
 const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now, {
   reports: reachOutReports, reportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0,
   isBody: (scopeKey, deviceId) => isFullBody(bodyStore.capabilities(scopeKey, deviceId)),
   calls: () => incomingCallRoute?.calls ?? null,
 });
-// A call from her (docs/incoming-call-contract.md): when she chooses to phone him from her own activity, this process rings the owner's iPhone.
-// SHANNON_INCOMING_CALLS=off, or no APNs key, and nothing is rung.
+// A call from her own time rings his iPhone (docs/incoming-call-contract.md); SHANNON_INCOMING_CALLS=off, or no APNs key, rings nothing.
 const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(process.env, configuredDatabasePath(), now, {
   isPaired: (scopeKey, deviceId) => deviceAuth?.listActiveDevicesForScope(scopeKey).some(device => device.deviceId === deviceId) ?? false,
 });
@@ -194,6 +192,7 @@ const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } });
 const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
+const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const kernel = createLocalApiKernel(now, {
   ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
@@ -233,7 +232,7 @@ const kernel = createLocalApiKernel(now, {
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
     ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },
-  notion, minecraftRequests: minecraft.requests,
+  notion, minecraftRequests: deviceActions.reports(minecraft.requests), // Reminders, timers, events and music (docs/device-actions-contract.md).
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
@@ -368,6 +367,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (isSkillsPath(url.pathname)) { await skillsRoute(request, response, principal, url.pathname); return; }
+    if (await deviceActions.serve(request, response, principal, url)) return;
     if (await stage5.serve(request,response,principal,url)) return;
     if (handleRetiredVoiceRoute(url.pathname,response)) return;
     if (url.pathname === '/v1/voice/transcriptions') {
@@ -490,7 +490,7 @@ function shutdown(): void {
     closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
-    ownOutreach.close(); ownerCallFacts.close();
+    ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();
     autonomyStore.close(); modelModes.close();
     persistentStore.close();
     process.exitCode = 0;

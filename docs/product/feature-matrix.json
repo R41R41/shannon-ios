@@ -673,6 +673,62 @@
       }
     },
     {
+      "id": "talk.device-actions",
+      "area": "talk",
+      "title": "リマインダー・タイマー・予定を端末で入れる",
+      "description": "二人だけの会話で頼むと、シャノンが iPhone や Mac のアプリを通して、通知つきのリマインダー・タイマー・カレンダーの予定を入れる。端末が済ませたと報告するまで、済んだとは言わない。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceActionModel.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceEventKitWriter.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceTimers.swift",
+            "apps/ios-app/ShannonApp/ShannonApp.swift#shannonDeviceActions"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceActionModel.swift",
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift#shannonDeviceActions"
+          ]
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "リマインダー・カレンダーへの書き込み・Apple Music は Apple の仕組み（EventKit・MusicKit）。Windows で頼まれた時も、開いている iPhone か Mac のアプリが行う。"
+        }
+      }
+    },
+    {
+      "id": "talk.apple-music",
+      "area": "talk",
+      "title": "Apple Music をかける（再生カード）",
+      "description": "頼んだ時か、シャノンの提案に応じた時だけ、Apple Music の曲を探してかける。会話に、曲・選んだ理由・一時停止・次へ・止めるの小さなカードが出る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceMusic.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonNowPlayingCard.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Timeline.swift#ShannonNowPlayingCard"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DeviceActions/ShannonDeviceMusic.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift#ShannonNowPlayingCard"
+          ],
+          "note": "プレイリストを作ることは macOS の MusicKit に無いので、Mac では「この端末ではできない」と報告する（iPhone では作る）。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "リマインダー・カレンダーへの書き込み・Apple Music は Apple の仕組み（EventKit・MusicKit）。Windows で頼まれた時も、開いている iPhone か Mac のアプリが行う。"
+        }
+      }
+    },
+    {
       "id": "talk.prompt-suggestions",
       "area": "talk",
       "title": "空のトークのおすすめ",

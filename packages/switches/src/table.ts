@@ -191,6 +191,10 @@ export const SWITCHES = [
     doc: 'Morning brief (home weather, today\'s schedule, headlines) as the day\'s initiative, 07-10 owner time; needs SHANNON_OWNER_HOME_LOCATION.',
   },
   {
+    name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
+    doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
+  },
+  {
     name: 'SHANNON_AUTONOMY_ENABLED', default: 'off', kind: 'true_only', owner: 'autonomy', requires: [],
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },

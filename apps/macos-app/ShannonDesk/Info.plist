@@ -31,7 +31,13 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>シャノンとの音声会話と音声入力の間、マイクを使用します。音声会話はトークの「終了」でいつでも終えられます。設定で「イヤホンのときは声で話しかける」や、触れたときに「声で返す」を選んでいる間は、シャノンが話したあとの数秒だけ、返事を聞き取るためにも使用します。録音は保存しません。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。</string>
+	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。会話で頼んだ時は、シャノンがカレンダーに予定を追加します。</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>会話で「予定を入れて」と頼んだ時に、シャノンがカレンダーに予定を追加します。</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>会話で「リマインドして」と頼んだ時に、シャノンがリマインダーに通知つきの項目を追加します。</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>会話で頼んだ時や、シャノンの提案にあなたが応じた時に、Apple Musicの曲を探してこのアプリで再生します。曲を選ぶために、最近聴いた曲・よく聴く曲・ライブラリのプレイリストを読みます。</string>
 	<key>ShannonAPIBaseURL</key>
 	<string>$(SHANNON_API_BASE_URL)</string>
 	<key>ShannonAPIToken</key>

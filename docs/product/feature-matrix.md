@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 150 件。
+機能は全部で 152 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 123 | 3 | 9 | 12 | 3 | 0 |
-| macOS | 134 | 3 | 8 | 2 | 3 | 0 |
-| Windows | 72 | 21 | 41 | 10 | 4 | 2 |
+| iOS | 125 | 3 | 9 | 12 | 3 | 0 |
+| macOS | 136 | 3 | 8 | 2 | 3 | 0 |
+| Windows | 72 | 21 | 41 | 12 | 4 | 2 |
 
 ## 構成（入口）（`structure`）
 
@@ -57,6 +57,8 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.memory-recall-cue` | **思い出しているしるし** 記憶を探している間、そのことを待ちの表示で伝える。 | ○ | ○ | △ |
 | `talk.organize-review` | **整理の提案を確かめる（Aether）** シャノンが出したノートの整理の提案を、1 件ずつ見て採る・断る。 | ○ | ○ | × |
 | `talk.place-map` | **場所の地図カード** 返事に出た場所を、地図のカードで出す。 | ○ | ○ | × |
+| `talk.device-actions` | **リマインダー・タイマー・予定を端末で入れる** 二人だけの会話で頼むと、シャノンが iPhone や Mac のアプリを通して、通知つきのリマインダー・タイマー・カレンダーの予定を入れる。端末が済ませたと報告するまで、済んだとは言わない。 | ○ | ○ | — |
+| `talk.apple-music` | **Apple Music をかける（再生カード）** 頼んだ時か、シャノンの提案に応じた時だけ、Apple Music の曲を探してかける。会話に、曲・選んだ理由・一時停止・次へ・止めるの小さなカードが出る。 | ○ | ○ | — |
 | `talk.prompt-suggestions` | **空のトークのおすすめ** 空のトークで、今日の関心や進行中の作業から、話しかけの候補を 3 つまで出す。 | ○ | ○ | × |
 | `talk.dictation` | **声で入力する（音声入力）** 入力欄に、声で文字を入れる。 | ○ | ○ | × |
 | `talk.dialogue-mode` | **姿と向き合って話す表示（からだ）** トークの表示を、履歴の一覧と、シャノンの姿と向き合う表示とで切り替える。広い画面では、姿が会話の右の補助パネル（目次・現在地と切り替え）に立つ。姿は「すがた」の設定に従う。 | ○ | ○ | △ |
@@ -78,6 +80,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.feeling-strength` Windows（？）: サーバー側の変更なので、Windows でも返事の表情に出るはずだが、ブランチが入ってから確かめる。
 - `talk.memory-recall-cue` Windows（△）: 「返答を待っています…」だけ。記憶を探しているかは出ない。
 - `talk.place-map` macOS（○）: iPhone と同じ地図のカード（A14）。
+- `talk.device-actions` Windows（—）: リマインダー・カレンダーへの書き込み・Apple Music は Apple の仕組み（EventKit・MusicKit）。Windows で頼まれた時も、開いている iPhone か Mac のアプリが行う。
+- `talk.apple-music` macOS（○）: プレイリストを作ることは macOS の MusicKit に無いので、Mac では「この端末ではできない」と報告する（iPhone では作る）。
+- `talk.apple-music` Windows（—）: リマインダー・カレンダーへの書き込み・Apple Music は Apple の仕組み（EventKit・MusicKit）。Windows で頼まれた時も、開いている iPhone か Mac のアプリが行う。
 - `talk.prompt-suggestions` macOS（○）: 空のトークに候補を 3 つまで。選ぶと入力欄に入り、送らない（A14）。
 - `talk.dictation` macOS（○）: 入力欄のマイク（音声入力）。押すと録り、もう一度押すと文字になって入力欄に入る。送るのは所有者。通話がマイクを使っている間は始めない。
 - `talk.dictation` Windows（×）: 声の会話はあるが、入力欄へ声で文字を入れる機能は無い。
