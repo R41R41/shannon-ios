@@ -8,7 +8,9 @@ import { AnthropicUsageEvidenceError, HAIKU_PROTOCOL_PREFIX } from './haikuCache
  * - BP1, 1h: the end of the static system (the protocol prefix, then her fixed system), with the fixed tool pair before it.
  * - BP2, 1h: the last block of the turn's latest user message (her words, not a tool result). The next turn's history
  *   repeats everything up to it byte for byte, so its request reads what this one wrote.
- * - BP3, 1h: the latest tool result after it, so each later round of the turn reads the round before.
+ * - BP3, 5m: the latest tool result after it, so each later round of the turn reads the round before. The rounds of a turn
+ *   follow each other within seconds and no later turn repeats a tool result, so the cheaper five-minute write is enough; the
+ *   one-hour entries come first, as the provider requires, and the usage check accepts a five-minute share of the creation.
  *
  * No top-level automatic marker: it would write the turn's own tail (its context, its menu) at the one-hour price on every
  * request, and that tail is never repeated. BP1 is present on every request, so every response still reports a cache write
@@ -19,9 +21,10 @@ type Block = Anthropic.ContentBlockParam;
 
 export const CACHE_PLAN_BREAKPOINTS = 3;
 const HOUR = Object.freeze({ type: 'ephemeral' as const, ttl: '1h' as const });
+const FIVE_MINUTES = Object.freeze({ type: 'ephemeral' as const, ttl: '5m' as const });
 
-function marked(block: Block): Block {
-  return { ...block, cache_control: { ...HOUR } } as Block;
+function marked(block: Block, ttl: typeof HOUR | typeof FIVE_MINUTES): Block {
+  return { ...block, cache_control: { ...ttl } } as Block;
 }
 
 function blocksOf(message: Anthropic.MessageParam): readonly Block[] {
@@ -46,13 +49,18 @@ function lastIndex(messages: readonly Anthropic.MessageParam[], test: (message: 
 function withMarker(message: Anthropic.MessageParam, results: boolean): Anthropic.MessageParam {
   const blocks = [...blocksOf(message)];
   const at = results ? blocks.map(block => block.type).lastIndexOf('tool_result') : blocks.length - 1;
-  blocks[at] = marked(blocks[at]!);
+  blocks[at] = marked(blocks[at]!, results ? FIVE_MINUTES : HOUR);
   return { ...message, content: blocks };
+}
+
+/** Where the turn's latest words are (BP2): also the number of history messages before them. -1 without words. */
+export function wordsIndex(messages: readonly Anthropic.MessageParam[]): number {
+  return lastIndex(messages, isWords);
 }
 
 /** BP2 and BP3 placed on copies; the caller's messages are never changed. */
 export function markedMessages(messages: readonly Anthropic.MessageParam[]): Anthropic.MessageParam[] {
-  const words = lastIndex(messages, isWords);
+  const words = wordsIndex(messages);
   const results = words < 0 ? -1 : lastIndex(messages, hasResults, words);
   return messages.map((message, index) => {
     if (index === words) return withMarker(message, false);

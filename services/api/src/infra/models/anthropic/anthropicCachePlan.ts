@@ -143,10 +143,29 @@ export function stableLayers(request: Pick<ShannonChatModelRequest, 'systemPromp
 
 const SUPERSET_FIELDS: readonly TurnReplyField[] = [...Object.keys(TURN_REPLY_FIELDS) as TurnReplyField[], 'webSearchNeedsInput'];
 
-function fieldsLine(request: ShannonChatModelRequest): string {
-  const used = new Set(offeredReplyFields(request));
-  const unused = SUPERSET_FIELDS.filter(field => !used.has(field));
-  return unused.length ? `[このターンの返答の欄] ${unused.join('、')} はこのターンでは使わないので null にする。` : '';
+/** Whether a field may be null also in a turn that offers it (her reply's feeling: null when nothing moved her). */
+function nullableWhenOffered(field: TurnReplyField): boolean {
+  const schema = (TURN_REPLY_FIELDS as Readonly<Record<string, { type?: unknown; anyOf?: unknown }>>)[field];
+  if (!schema) return false;
+  const types = Array.isArray(schema.type) ? schema.type : [];
+  const branches = Array.isArray(schema.anyOf) ? schema.anyOf as Array<{ type?: unknown }> : [];
+  return types.includes('null') || branches.some(branch => branch.type === 'null');
+}
+
+/**
+ * Which fields of the superset this turn uses and which it does not. A used field keeps the meaning it has without the plan,
+ * where it is required: one that may not be null there is said to be required here too.
+ */
+export function fieldsLines(request: ShannonChatModelRequest): string[] {
+  const used = offeredReplyFields(request);
+  const unused = SUPERSET_FIELDS.filter(field => !used.includes(field));
+  const required = used.filter(field => !nullableWhenOffered(field));
+  const nullable = used.filter(nullableWhenOffered);
+  return [
+    ...(required.length ? [`[このターンの返答の欄] ${required.join('、')} はこのターンでは必ず書く（null にしない）。`] : []),
+    ...(nullable.length ? [`[このターンの返答の欄] ${nullable.join('、')} もこのターンでは必ず判断して書く（null は説明にある時だけ）。`] : []),
+    ...(unused.length ? [`[このターンの返答の欄] ${unused.join('、')} はこのターンでは使わないので null にする。`] : []),
+  ];
 }
 
 function toolLine(request: ShannonChatModelRequest): string {
@@ -159,7 +178,7 @@ export function planTurnLines(request: ShannonChatModelRequest, layers: StableLa
   const web = !offersTools(request) && Boolean(request.useWebSearch || request.placeSearch);
   return [
     ...layers.turnLines, ...offerInstructions(request), toolLine(request),
-    ...(web ? [WEB_ANSWER_LINE] : []), fieldsLine(request),
+    ...(web ? [WEB_ANSWER_LINE] : []), ...fieldsLines(request),
   ].filter(Boolean);
 }
 
@@ -170,6 +189,21 @@ function withTurnLines(messages: Anthropic.MessageParam[], lines: readonly strin
   const text = lines.join('\n\n');
   if (last?.role === 'system' && typeof last.content === 'string') return [...messages.slice(0, -1), { role: 'system', content: `${last.content}\n\n${text}` }];
   return [...messages, { role: 'system', content: text } as unknown as Anthropic.MessageParam];
+}
+
+const PLANNED = Symbol('shannon.cachePlan');
+
+/**
+ * Whether a request body was built under the plan. The mark is a symbol property: object spreads (the tool rounds' requests)
+ * keep it, and JSON never sends it, so the transport places the plan's breakpoints on exactly these bodies and the one-hour
+ * cache of every other request on the rest (the plan's fallbacks to the shape without it among them).
+ */
+export function isPlannedBody(body: object): boolean {
+  return (body as Record<symbol, unknown>)[PLANNED] === true;
+}
+
+function planned(body: Anthropic.MessageCreateParamsNonStreaming): Anthropic.MessageCreateParamsNonStreaming {
+  return Object.assign(body, { [PLANNED]: true });
 }
 
 function cachedSystem(text: string): Anthropic.TextBlockParam[] {
@@ -192,7 +226,7 @@ export function plannedChatBody(settings: SonnetSettings, request: ShannonChatMo
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
     output_config: { effort: conversationEffort(settings), format: { type: 'json_schema', schema: planOutputSchema() } },
   };
-  if (!offersTools(request)) return body;
+  if (!offersTools(request)) return planned(body);
   // A native 5.5 session always carries the menu here (`boundedToolMenu`); without its opener this throws, as before.
-  return appendForegroundMenu({ ...body, tools: sonnetTools(request.tools) }, toolInstructions(request.tools!, false));
+  return planned(appendForegroundMenu({ ...body, tools: sonnetTools(request.tools) }, toolInstructions(request.tools!, false)));
 }

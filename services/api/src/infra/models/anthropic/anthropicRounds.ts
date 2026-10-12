@@ -64,7 +64,17 @@ export interface SonnetRoundOptions {
    * answered once with the refusal of a name the turn does not offer, and the model answers (`declinedCalls`).
    */
   declineUnofferedCalls?: boolean;
+  /**
+   * The cache plan's way back (Syzygy ADR-0009 stage 1, M4 review F1): the turn's request in the shape without the plan. When
+   * the first request of a turn without tools is refused with a 400 about the offered tools or schemas, the turn is asked
+   * once more with this body; nothing ran and no word went out. A turn with tools has its tool-less answer (`plainBody`).
+   */
+  planFallback?: Anthropic.MessageCreateParamsNonStreaming;
+  /** What the cache plan's turn met, for `GET /v1/ops` (`cacheWarmTurns.ts`); only given under the plan. */
+  onPlanEvent?: (event: PlanRoundEvent) => void;
 }
+
+export type PlanRoundEvent = 'fallback' | 'plain_recovery' | 'grammar_bridge' | 'declined';
 
 export interface SonnetRoundResult {
   /** The last response; null when she ran out of time (`outOfTime`). */
@@ -107,6 +117,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const plainRecovery = (error: unknown): boolean => {
     if (!options.plainBody || !recoverableRefusal(error)) return false;
     reportOfferRefusal(error, request(), offerRefusal(error) ?? 'offered_request_rejected');
+    options.onPlanEvent?.('plain_recovery');
     return true;
   };
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
@@ -119,6 +130,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     const tail = bridgeOnlyUnacceptedTail(messages, acceptedLength);
     if (JSON.stringify(tail) === JSON.stringify(messages)) return false;
     reportOfferRefusal(error, before, 'strict_grammar_capacity');
+    options.onPlanEvent?.('grammar_bridge');
     messages.splice(0, messages.length, ...tail);
     visible.clear(); for (const name of acceptedVisible) visible.add(name);
     bridgeOnly = true;
@@ -140,15 +152,25 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   // Without tools: one answer, resumed when the server paused a web search.
   if (!session) {
     let declined = !options.declineUnofferedCalls;
+    let choice: Partial<Anthropic.MessageCreateParamsNonStreaming> = {};
     for (;;) {
-      const message = await options.send(request(), null, round++);
+      let message: Anthropic.Message;
+      try {
+        message = await options.send(request(choice), null, round++);
+      } catch (error) {
+        if (round !== 1 || callerStopped() || !fellBack(error, options)) throw error;
+        return sonnetToolRounds(options.planFallback!, { ...options, planFallback: undefined, declineUnofferedCalls: false });
+      }
       turns.push(message);
       const stop = refused(message);
       if (stop) return stop;
       if (message.stop_reason === 'pause_turn' && pauses++ < MAXIMUM_PAUSES) { messages.push({ role: 'assistant', content: message.content }); continue; }
       if (declined || message.stop_reason !== 'tool_use') return { final: message, turns, used: 0 };
       declined = true;
+      // A second stray call cannot end the turn: the answer after the decline is asked for without tools.
+      choice = { tool_choice: { type: 'none' } };
       messages.push(...declinedCalls(message));
+      options.onPlanEvent?.('declined');
     }
   }
 
@@ -247,6 +269,17 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (additions.length) messages.push({ role: 'system', content: additions as unknown as Anthropic.ContentBlockParam[] });
     }
   }
+}
+
+/** Whether a refused first request of a plan turn without tools is asked again in the shape without the plan (logged, counted). */
+function fellBack(error: unknown, options: SonnetRoundOptions): boolean {
+  const refusal = offerRefusal(error);
+  if (!options.planFallback || refusal === null) return false;
+  reportRejection(error, true);
+  const status = error instanceof Anthropic.APIError ? error.status : null;
+  console.warn(JSON.stringify({ event: 'cache_plan_fallback', status, class: refusal }));
+  options.onPlanEvent?.('fallback');
+  return true;
 }
 
 /** The model's calls in a turn that offers no tool, and their answer: nothing ran, the name is not offered. */

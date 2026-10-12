@@ -7,7 +7,8 @@ import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import type { LlmUsageStore } from '../llmUsage.js';
 import { recordCacheReceipt, type CacheRoute, type CacheTurn } from '../anthropic/cacheReceipts.js';
-import { cachePlanRequest } from '../anthropic/cachePlanMarkers.js';
+import { cachePlanRequest, wordsIndex } from '../anthropic/cachePlanMarkers.js';
+import { isPlannedBody } from '../anthropic/anthropicCachePlan.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from '../anthropic/observerProjection.js';
 import {
   AnthropicUsageEvidenceError, cacheHaikuRequest, serverSearchCacheStart, settledServerSearchUsage, validateHaikuCacheUsage,
@@ -85,10 +86,11 @@ export interface ClaudeConversationTransport {
 
 export interface ClaudeSendRequest {
   /**
-   * `thread`: the Talk the turn belongs to, kept in the cache receipt only as a short hash. `cachePlan`: the request follows the
-   * foreground cache plan (`cachePlanMarkers.ts`) instead of the one-hour cache of every other request (`cacheHaikuRequest`).
+   * `thread`: the Talk the turn belongs to, kept in the cache receipt only as a short hash. Whether a request follows the
+   * foreground cache plan is the body's own mark (`isPlannedBody`), so a plan turn's fallback to the shape without it is sent
+   * with the one-hour cache of every other request.
    */
-  target: { scopeKey: string; route: CacheRoute; thread?: string; cachePlan?: boolean };
+  target: { scopeKey: string; route: CacheRoute; thread?: string };
   /** Streamed when present: each text delta goes through it in order. */
   listen: ClaudeListener | null;
   caller?: AbortSignal;
@@ -191,7 +193,7 @@ function openAttempt(transport: ClaudeConversationTransport, request: ClaudeSend
   const bounds = isHaikuModel(body.model) && request.voiceBounds && request.listen ? streamWatch(request.voiceBounds) : null;
   const signal = attemptSignal(transport, request, send, { timer, bounds });
   const started = transport.clock();
-  const prepared = preparedBody(body, request.target.cachePlan === true);
+  const prepared = preparedBody(body);
   return {
     transport, request, body, prepared, round, timer, bounds, signal, started, sent: '', observedUsage: null, searchCacheStart: null,
     explicitSearchTtl: undefined, receivedUsage: false, usageRecorded: false,
@@ -199,9 +201,9 @@ function openAttempt(transport: ClaudeConversationTransport, request: ClaudeSend
 }
 
 /** The request as it leaves: the cache plan's breakpoints, or the one-hour cache every other native 5.5 request gets. */
-function preparedBody(body: Body, cachePlan: boolean): Body {
+function preparedBody(body: Body): Body {
   if (!usesOneHourAnthropicCache(body.model)) return body;
-  return cachePlan ? cachePlanRequest(body) : cacheHaikuRequest(body);
+  return isPlannedBody(body) ? cachePlanRequest(body) : cacheHaikuRequest(body);
 }
 
 function attemptSignal(transport: ClaudeConversationTransport, request: ClaudeSendRequest, send: { body: Body; time: RoundTime | null },
@@ -315,9 +317,10 @@ function settle(attempt: Attempt, message: Message): void {
 
 /** What the receipt keeps of the turn: only for a request that names its Talk (none of the one-shot or background callers). */
 function cacheTurn(attempt: Attempt): CacheTurn | undefined {
-  const { thread, cachePlan } = attempt.request.target;
+  const { thread } = attempt.request.target;
   if (thread === undefined) return undefined;
-  return { thread, cachePlan: cachePlan === true, ...(attempt.firstTokenMs === undefined ? {} : { firstTokenMs: attempt.firstTokenMs }) };
+  const first = attempt.firstTokenMs === undefined ? {} : { firstTokenMs: attempt.firstTokenMs };
+  return { thread, cachePlan: isPlannedBody(attempt.body), historyMessages: Math.max(0, wordsIndex(attempt.body.messages)), ...first };
 }
 
 function book(attempt: Attempt, usage: Usage | null | undefined, finalUsage: boolean): void {

@@ -15,6 +15,7 @@ import { ANTHROPIC_STRICT_LIMITS, strictRequestUsage } from '../src/infra/models
 import { chatTurnResult, parsedChatTurn } from '../src/infra/models/chatModelTurn.js';
 import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
+import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js';
 import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
 import { SKILL_INDEX_HEADER } from '../src/mind/memory/skillDocument.js';
 import { PLAN_TALK_SCENARIO } from './support/claudePlanScenarios.js';
@@ -109,6 +110,14 @@ describe('the stable prefix', () => {
     expect(JSON.stringify(sent(variants.withheld!).messages.at(-1))).toContain('いまはライ氏以外の人もいるかもしれない');
   });
 
+  it('takes back out every line withToolCapabilityLines adds for any registered tool (a new line cannot silently move BP1)', () => {
+    const offered = withToolCapabilityLines({ systemPrompt: base.systemPrompt, tools: { definitions: SHANNON_TOOLS } });
+    expect(offered.systemPrompt).not.toBe(base.systemPrompt);
+    const split = splitCapabilityLines(offered.systemPrompt);
+    expect(split.stable).toBe(base.systemPrompt);
+    expect(split.lines.length).toBeGreaterThanOrEqual(5);
+  });
+
   it('takes out exactly what the turn added to her identity and profile', () => {
     expect(splitCapabilityLines(everyLine(base.systemPrompt)).stable).toBe(base.systemPrompt);
     expect(splitCapabilityLines(everyLine(base.systemPrompt)).lines).toHaveLength(7);
@@ -144,7 +153,8 @@ describe('the breakpoints', () => {
     expect(countMarkers(prepared)).toBe(CACHE_PLAN_BREAKPOINTS);
     expect((prepared.system as Anthropic.TextBlockParam[]).map(block => Boolean(block.cache_control))).toEqual([false, true]);
     expect(markedWordsIndex(prepared)).toBe(0);
-    expect(JSON.stringify(prepared.messages.at(-1))).toContain('"cache_control"');
+    expect(JSON.stringify(prepared.messages.at(-1))).toContain('"cache_control":{"type":"ephemeral","ttl":"5m"}');
+    expect(JSON.stringify(prepared.messages[0])).toContain('"cache_control":{"type":"ephemeral","ttl":"1h"}');
     expect(() => cachePlanRequest({ ...round, cache_control: { type: 'ephemeral', ttl: '1h' } })).toThrow('HAIKU_CACHE_PROTOCOL_INVALID');
   });
 });
@@ -175,26 +185,35 @@ describe('a Talk under the plan (golden plan-text-talk)', () => {
 });
 
 describe('the warm-turn view of GET /v1/ops', () => {
-  const body = sent(base);
   const usage = (read: number, write: number) => ({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: read, cache_creation_input_tokens: write,
     cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: write } });
+  const turn = (thread: string, historyMessages: number, firstTokenMs?: number) => ({ thread, cachePlan: true, historyMessages,
+    ...(firstTokenMs === undefined ? {} : { firstTokenMs }) });
 
-  it('counts follow-up turns within the hour of their Talk, the creation they paid and the first-token time by cache read', () => {
-    const turn = (thread: string, firstTokenMs?: number) => ({ thread, cachePlan: true, ...(firstTokenMs === undefined ? {} : { firstTokenMs }) });
-    recordCacheReceipt('text', body, usage(0, 3_000), 0, '2026-10-12T01:00:00.000Z', turn('a', 900));
-    recordCacheReceipt('text', body, usage(3_000, 200), 0, '2026-10-12T01:20:00.000Z', turn('a', 300));
-    recordCacheReceipt('text', body, usage(3_000, 100), 1, '2026-10-12T01:20:05.000Z', turn('a'));
-    recordCacheReceipt('text', body, usage(0, 3_000), 0, '2026-10-12T02:30:00.000Z', turn('a', 1_000));
-    recordCacheReceipt('text', body, usage(0, 3_000), 0, '2026-10-12T02:31:00.000Z', turn('b', 800));
-    recordCacheReceipt('text', body, usage(3_000, 0), 0, '2026-10-12T02:31:00.000Z');
-    const view = cacheReceiptsView();
-    expect(view.foregroundText['2026-10-12']).toEqual({ plan: {
-      turns: 4, warmTurns: 1, warmTurnsWithCacheRead: 1, warmCacheRead: 3_000, warmCacheCreation: 200, warmReadRate: 1, creationPerWarmTurn: 200,
-      firstTokenMs: { cacheRead: { count: 1, p50: 300, p80: 300 }, noCacheRead: { count: 3, p50: 900, p80: 1_000 } },
+  it('counts follow-up turns of a Talk and model that read history beyond the static prefix, their tokens and first-token times', () => {
+    const haiku = sent(base);
+    const other = sent({ ...base, systemPrompt: '別の合成された人格' });
+    const at = (time: string) => `2026-10-12T${time}:00.000Z`;
+    recordCacheReceipt('text', haiku, usage(2_000, 900), 0, at('01:00'), turn('b', 0, 500));
+    recordCacheReceipt('text', haiku, usage(2_000, 1_000), 0, at('01:01'), turn('a', 0, 900));
+    recordCacheReceipt('text', haiku, usage(3_000, 200), 0, at('01:20'), turn('a', 2, 300));
+    recordCacheReceipt('text', haiku, usage(3_000, 100), 1, at('01:21'), turn('a', 2));
+    recordCacheReceipt('text', haiku, usage(2_000, 1_500), 0, at('01:40'), turn('a', 4, 700));
+    recordCacheReceipt('text', haiku, usage(2_000, 1_500), 0, at('03:00'), turn('a', 6));
+    recordCacheReceipt('text', sent(base, SONNET), usage(0, 3_000), 0, at('03:05'), turn('a', 6));
+    recordCacheReceipt('text', other, usage(0, 3_000), 0, at('04:00'), turn('c', 0));
+    recordCacheReceipt('text', other, usage(2_500, 300), 0, at('04:10'), turn('c', 2));
+    recordCacheReceipt('text', haiku, usage(3_000, 0), 0, at('04:20'));
+    const view = cacheReceiptsView().foregroundText;
+    expect(view.days['2026-10-12']).toEqual({ plan: {
+      turns: 8, warmTurns: 3, warmTurnsWithCacheRead: 3, warmTurnsWithHistoryRead: 1, warmTurnsPrefixUnknown: 1, warmInput: 30, warmCacheRead: 7_500,
+      warmCacheCreation: 2_000, historyReadRate: 0.5, cacheReadRate: 1, warmReadShare: 0.787, creationPerWarmTurn: 667,
+      firstTokenMs: { historyRead: { count: 1, p50: 300, p80: 300 }, noHistoryRead: { count: 3, p50: 700, p80: 900 } },
     } });
-    expect(view.recent[0]!.thread).toMatch(/^[0-9a-f]{8}$/u);
-    expect(JSON.stringify(view)).not.toContain('"a"');
-    expect(warmDayLine('2026-10-12')).toBe('plan=1/1');
+    expect(view.staticPrefixesKnown).toBe(1);
+    expect(cacheReceiptsView().recent[0]!.thread).toMatch(/^[0-9a-f]{8}$/u);
+    expect(JSON.stringify(cacheReceiptsView())).not.toContain('"a"');
+    expect(warmDayLine('2026-10-12')).toBe('plan=1/3');
     expect(warmDayLine('2026-10-11')).toBe('none');
   });
 });

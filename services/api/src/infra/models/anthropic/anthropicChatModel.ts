@@ -10,11 +10,11 @@ import {
 import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase, type ShannonModelToolSession } from '../chatModelTools.js';
 import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMenu.js';
 import { providerToolName } from '../../../mind/tools/shannonTools.js';
-import { chatTurnResult, offersTools, parsedChatTurn } from '../chatModelTurn.js';
+import { chatTurnResult, offeredFeelingAnswered, offersTools, parsedChatTurn, type ParsedChatTurn } from '../chatModelTurn.js';
 import type { LlmUsageStore } from '../llmUsage.js';
 import type { SonnetSettings } from './anthropicConfig.js';
 import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
-import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
+import { sonnetToolRounds, type SonnetRoundOptions, type SonnetRoundResult } from './anthropicRounds.js';
 import { isAppendOnlyAnthropicModel, isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
@@ -22,6 +22,7 @@ import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { cachePlanApplies, plannedChatBody } from './anthropicCachePlan.js';
+import { noteFeelingAnswer, notePlanEvent } from './cacheWarmTurns.js';
 import {
   claudeConversationSender, type ClaudeConversationTransport, type ClaudeListener, type ClaudeSend, type ClaudeSendRequest,
 } from '../claude/claudeTransport.js';
@@ -183,6 +184,7 @@ export class AnthropicChatModel implements ShannonChatModel {
       return Promise.resolve(onReplyText(text)).then(() => text);
     } : null, watch?.signal, this.textFirstTokenLatency, watch?.first);
     const usable = (message: Anthropic.Message) => { try { parsedChatTurn({ output_text: textOf(message) }); return true; } catch { return false; } };
+    const plan = this.planTurn(request);
     let result: SonnetRoundResult;
     try {
       result = await sonnetToolRounds(body, { session: offersTools(request) ? request.tools : undefined,
@@ -193,8 +195,8 @@ export class AnthropicChatModel implements ShannonChatModel {
           return message;
         }, isAnswer: usable,
         missingRequiredRead: message => searchRequested && !searched && !turnWebSearchResult(request.tools) && !searchNeedsInput(message),
-        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: this.textBody({ ...request, tools: undefined }) } : {}),
-        ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}), declineUnofferedCalls: this.cachePlan });
+        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: this.textBody({ ...request, tools: undefined }, false) } : {}),
+        ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}), ...plan.rounds });
     } catch (error) { throw watch?.timedOut() ? new SonnetFirstTokenTimeout() : error; } finally { watch?.clear(); }
     const outOfTime = (sent?: string): ShannonChatModelResult => this.outOfTimeTurn(request, sent ?? written);
     if (result.outOfTime || !result.final) return outOfTime(result.outOfTime?.sent);
@@ -208,6 +210,7 @@ export class AnthropicChatModel implements ShannonChatModel {
       if (result.used === 0 && !written) throw error;
       return outOfTime();
     }
+    plan.answered(structured);
     const read = turnWebSearchResult(request.tools);
     const turn = { ...chatTurnResult(this.model, request, { output_text: textOf(result.final) }, structured), mode: this.mode };
     if (searchRequested && !searched && !read && !searchNeedsInput(result.final)) return webSearchFailedTurn(turn, webSearchFailure('not_searched'), turnCompletedWriteReceipts(request.tools));
@@ -275,15 +278,35 @@ export class AnthropicChatModel implements ShannonChatModel {
   }
 
   /** The text turn's request: the cache plan's (`anthropicCachePlan.ts`) or the one before it, byte for byte. */
-  private textBody(request: ShannonChatModelRequest): Anthropic.MessageCreateParamsNonStreaming {
-    const build = this.cachePlan ? plannedChatBody : sonnetChatBody;
+  private textBody(request: ShannonChatModelRequest, plan = this.cachePlan): Anthropic.MessageCreateParamsNonStreaming {
+    const build = plan ? plannedChatBody : sonnetChatBody;
     return build(this.options.settings, request, this.options.agentHostHint);
   }
 
-  /** Where a text turn's requests go: its Talk for the receipts, and the cache plan when it is on. */
+  /** Where a text turn's requests go: its Talk, for the receipts only. */
   private textTarget(request: ShannonChatModelRequest): ClaudeSendRequest['target'] {
     const thread = request.threadKey === undefined ? {} : { thread: request.threadKey };
-    return { scopeKey: request.scopeKey, route: 'text', ...thread, ...(this.cachePlan ? { cachePlan: true } : {}) };
+    return { scopeKey: request.scopeKey, route: 'text', ...thread };
+  }
+
+  /**
+   * What the cache plan adds to a text turn's rounds (review F1, F2): a call in a turn without tools is declined once, a refused
+   * first request falls back to the shape without the plan, and what happened is counted; and, with or without the plan, whether
+   * an offered feeling was answered (F4).
+   */
+  private planTurn(request: ShannonChatModelRequest): { rounds: Partial<SonnetRoundOptions>; answered(structured: ParsedChatTurn): void } {
+    let rejected = false;
+    const answered = (structured: ParsedChatTurn) => {
+      const feeling = offeredFeelingAnswered(request, structured);
+      if (feeling !== null) noteFeelingAnswer(this.cachePlan, feeling);
+      if (rejected) notePlanEvent('text', 'recovered');
+    };
+    if (!this.cachePlan) return { rounds: {}, answered };
+    const onPlanEvent = (event: string) => {
+      rejected ||= event !== 'declined';
+      notePlanEvent('text', event);
+    };
+    return { rounds: { declineUnofferedCalls: true, planFallback: this.textBody(request, false), onPlanEvent }, answered };
   }
 
   /** Normalize discovery before building the body. The native adapter budgets actual schemas, including JSON output. */
