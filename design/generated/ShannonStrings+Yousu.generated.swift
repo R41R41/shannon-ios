@@ -220,6 +220,10 @@ extension ShannonGeneratedStrings {
     public static let yousuTabLearning = "学び"
     /// `yousu.tab.mood`
     public static let yousuTabMood = "気分"
+    /// `yousu.tab.goals`
+    public static let yousuTabGoals = "目標"
+    /// `yousu.tab.inspection`
+    public static let yousuTabInspection = "点検"
     /// `yousu.tab.label`
     public static let yousuTabLabel = "ようすの表示"
     /// `yousu.learning.unavailable`
