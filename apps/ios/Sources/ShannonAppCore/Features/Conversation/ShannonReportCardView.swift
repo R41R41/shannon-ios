@@ -160,15 +160,23 @@ public struct ShannonMessageExtras: View {
 
     public var body: some View {
         let reactions = conversation.reactions
-        VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-            if let card = message.reportCard, !reactions.othersPresent {
-                ShannonReportCardView(card: card)
-            }
-            ShannonReactionChips(message: message, model: reactions, threadID: conversation.selectedThreadId)
-            if let notice = reactions.notice, reactions.noticeMessageID == message.id {
-                Text(notice)
-                    .font(.shannon(.caption))
-                    .foregroundStyle(.secondary)
+        let card = reactions.othersPresent ? nil : message.reportCard
+        let chips = !reactions.emojis(for: message).isEmpty && reactions.target(for: message, threadID: conversation.selectedThreadId) != nil
+        let notice = reactions.noticeMessageID == message.id ? reactions.notice : nil
+        // Nothing at all when there is nothing to show, so the Talk list adds no spacing under the message.
+        if card != nil || chips || notice != nil {
+            VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                if let card {
+                    ShannonReportCardView(card: card)
+                }
+                if chips {
+                    ShannonReactionChips(message: message, model: reactions, threadID: conversation.selectedThreadId)
+                }
+                if let notice {
+                    Text(notice)
+                        .font(.shannon(.caption))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
