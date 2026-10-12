@@ -9,8 +9,9 @@ import {
  * written with it in the same UPDATE. The invariants it keeps:
  * - a finished task (completed, failed, cancelled) never moves again;
  * - nothing becomes `proposed` again;
- * - an unknown task never becomes active: it leaves only by a proof (finished states) or, for the internal root and a
- *   conversation, by retirement or the owner's turn back to their inbox (ready, waiting, stopping, stopped);
+ * - an unknown task never becomes active: it leaves to a finished state, back to an open state other than active when a proof
+ *   about its lost attempt says nothing was sent (`proof`), or, for the internal root and a conversation, by retirement or the
+ *   owner's turn back to their inbox (ready, waiting, stopping, stopped);
  * - a state the kind never takes (an FCA task proposed, a Codex task stopping or unknown) has no projection and is refused.
  */
 export interface TaskEvent {
@@ -19,6 +20,8 @@ export interface TaskEvent {
   readonly waitReason?: string | null;
   /** A Codex task still connecting to its Host (`starting`, else `running`). */
   readonly starting?: boolean;
+  /** The move rests on a proof that the task's lost attempt sent nothing (its lease expired unsent, its stop acknowledged). */
+  readonly proof?: boolean;
 }
 
 export type TaskRefusal = 'illegal' | 'no_projection';
@@ -43,17 +46,20 @@ export const TASK_TRANSITIONS: Readonly<Record<ExecState, readonly ExecState[]>>
 
 const inboxKind = (kind: TaskKind) => kind === 'root' || kind === 'conversation';
 
-/** Whether a task of `kind` may move from `from` (null: a new row, or one no state can be read from) to `to`. */
-export function transitionAllowed(from: ExecState | null, to: ExecState, kind: TaskKind): boolean {
+/**
+ * Whether a task of `kind` may move from `from` (null: a new row, or one no state can be read from) to `to`; `proof` opens the
+ * inbox exits of an unknown task to every kind.
+ */
+export function transitionAllowed(from: ExecState | null, to: ExecState, kind: TaskKind, proof = false): boolean {
   if (from === null || from === to) return true;
   if (TASK_TRANSITIONS[from].includes(to)) return true;
-  return from === 'unknown' && inboxKind(kind) && INBOX_EXITS.includes(to);
+  return from === 'unknown' && (proof || inboxKind(kind)) && INBOX_EXITS.includes(to);
 }
 
 /** Applies one event to a task's state: the new state with its old columns, or the refusal. */
 export function taskTransition(from: ExecState | null, kind: TaskKind, event: TaskEvent): TaskTransition {
   const to = event.to;
-  if (!transitionAllowed(from, to, kind)) return { ok: false, reason: 'illegal', from, to };
+  if (!transitionAllowed(from, to, kind, event.proof === true)) return { ok: false, reason: 'illegal', from, to };
   const waitReason = to === 'waiting' ? event.waitReason ?? null : null;
   const starting = kind === 'codex' && to === 'active' && event.starting === true;
   const legacy = legacyProjection(to, kind, { starting, waitReason });

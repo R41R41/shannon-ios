@@ -226,7 +226,8 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       if (id === step.taskId) continue;
       const task = this.required(step.scopeKey, id); if (terminal(task)) continue;
       this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=1,wait_reason=NULL WHERE task_id=?').run(id);
-      this.authority.event(step.scopeKey, id, 'fca_source_failed', this.now(), { status: 'paused', pauseReason: 'fca_stopped' }, { sourceStepId: step.id });
+      const stopped = task.pauseReason === 'fca_unknown' ? {} : { status: 'paused' as const, pauseReason: 'fca_stopped' }; // unknown stays (S5)
+      this.authority.event(step.scopeKey, id, 'fca_source_failed', this.now(), stopped, { sourceStepId: step.id });
     }
     for (const id of this.sources.dependents(step.scopeKey, step.id)) {
       if (id === step.taskId) continue;

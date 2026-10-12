@@ -43,6 +43,10 @@ describe('the task state machine (ADR-0009 stage 1, S4)', () => {
     expect(taskTransition('unknown', 'conversation', { to: 'ready' })).toMatchObject({ ok: true, legacy: { status: 'queued' } });
     expect(taskTransition('unknown', 'work', { to: 'waiting' }).ok).toBe(false);
     expect(taskTransition('unknown', 'work', { to: 'failed' })).toMatchObject({ ok: true, legacy: { status: 'failed', pauseReason: null } });
+    // A proof that the lost attempt sent nothing lets any kind run again, but never straight into an active step.
+    expect(taskTransition('unknown', 'work', { to: 'ready', proof: true })).toMatchObject({ ok: true, legacy: { status: 'queued' } });
+    expect(taskTransition('unknown', 'sleep', { to: 'stopped', proof: true })).toMatchObject({ ok: true });
+    expect(taskTransition('unknown', 'work', { to: 'active', proof: true }).ok).toBe(false);
   });
 
   it('keeps a Codex task out of the states it never takes and carries the Host starting flag', () => {

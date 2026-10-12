@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ACTION_LIMITS, UNKNOWN_EXIT_MS } from '@shannon/mind';
+import { ACTION_LIMITS, UNKNOWN_EXIT_MS, classifyLease, leaseOutcome, type ActionLease } from '@shannon/mind';
 import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
@@ -73,6 +73,30 @@ describe('the state machine writes every task state (S4)', () => {
     db.prepare("UPDATE fca_task_checkpoints SET step_id = 'step-again' WHERE task_id = ?").run(lost.id);
     expect(() => authority.event('owner', lost.id, 'test_restart', c.now(), { status: 'running', pauseReason: null })).toThrow('TASK_TRANSITION_REFUSED');
     expect(taskTransitionRefusals().byReason).toEqual({ 'illegal:work:failed>ready': 1, 'illegal:work:unknown>active': 1 });
+  });
+
+  it('lets a task marked unknown run again once its lease proves nothing was sent', () => {
+    const c = clock();
+    const db = new DatabaseSync(':memory:');
+    cleanups.push(() => db.close());
+    migrateAgentTasks(db);
+    const actions = new SQLiteActionStore(db);
+    const authority = new SQLiteFcaTaskAuthority(db);
+    const runtime = new SQLiteTaskRuntimeStore(db, { authority, leaseValid: () => true, now: c.now });
+    const reader = new ActionLeaseReader(db);
+    const classify = (lease: ActionLease) => leaseOutcome(classifyLease(reader.inScope(lease.id, 'owner'), lease, c.now()));
+    const task = runtime.createChild('owner', runtime.ensureRoot('owner').id, { title: 'r', goal: 'r' }, 'r');
+    const queued = actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: `fca:${task.id}:${task.revision}` }, c.now());
+    const lease = leaseOf(actions.claim(queued.id, 'runner', c.now())!);
+    expect(runtime.beginStep('owner', task.id, lease, task.revision)).not.toBeNull();
+    // The API reads the expired lease before the scheduler swept it: not yet provably unsent, so unknown.
+    c.advance(ACTION_LIMITS.leaseMs + 1);
+    runtime.recover('owner', classify);
+    expect(runtime.get('owner', task.id)?.phase).toBe('unknown');
+    actions.transaction(() => actions.sweep(c.now()));
+    expect(runtime.recover('owner', classify).map(view => view.phase)).toEqual(['ready']);
+    expect(row(db, task.id)).toMatchObject({ status: 'queued', exec_state: 'ready', unknown_since: null });
+    expect(taskTransitionRefusals().byReason).toEqual({});
   });
 
   it('records the Host starting flag and finds a status another writer changed under it (L3)', () => {

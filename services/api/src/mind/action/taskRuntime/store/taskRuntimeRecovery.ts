@@ -47,8 +47,9 @@ export class TaskRuntimeRecovery {
         parts.failConversation({ id: row.step_id!, scopeKey, taskId, lease, revision: snapshot.revision, messageIds: [], snapshot });
       } else {
         this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL WHERE task_id=?').run(taskId);
+        // The lease says the lost attempt sent nothing: a proof, so a task already marked unknown may run again (S4).
         authority.event(scopeKey, taskId, 'fca_recovered_safe', parts.now(),
-          { status: row.stop_requested ? 'paused' : 'queued', pauseReason: row.stop_requested ? 'fca_stopped' : null }, { actionId: lease.id });
+          { status: row.stop_requested ? 'paused' : 'queued', pauseReason: row.stop_requested ? 'fca_stopped' : null, proof: true }, { actionId: lease.id });
         if (row.stop_requested) parts.finishStops(parts.required(scopeKey, taskId));
       }
       changed.push(parts.get(scopeKey, taskId)!);

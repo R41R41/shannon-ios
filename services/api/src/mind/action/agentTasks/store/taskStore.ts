@@ -22,6 +22,8 @@ export interface TaskStateChange {
   readonly currentAction?: string | null;
   /** When the outcome became unknown, for a task closed as failed with that outcome (`outcome_unknown_closed`). */
   readonly unknownSince?: string;
+  /** The move rests on a proof that the lost attempt sent nothing (`TaskEvent.proof`). */
+  readonly proof?: boolean;
 }
 
 const refusals = new Map<string, number>();
@@ -73,7 +75,8 @@ export function writeTaskState(db: DatabaseSync, taskId: string, change: TaskSta
   const target = deriveTask(facts);
   if (!kind || !target) refuse(`no_state:${kind ?? 'none'}:${change.status}`, at);
   const from = currentExecState(row);
-  const result = taskTransition(from, kind, { to: target.execState, waitReason: target.waitReason, starting: change.status === 'starting' });
+  const event = { to: target.execState, waitReason: target.waitReason, starting: change.status === 'starting', proof: change.proof };
+  const result = taskTransition(from, kind, event);
   if (!result.ok) refuse(transitionRefusalKey(kind, result), at);
   const asked = legacyStateOf(facts);
   if (result.legacy.status !== asked.status || result.legacy.pauseReason !== asked.pauseReason) {
