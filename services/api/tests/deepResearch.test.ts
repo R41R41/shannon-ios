@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { nativeWebSearchBody, nativeWebSearchResult } from '../src/infra/models/anthropic/anthropicWebSearch.js';
 import { nativeWebReadBody, nativeWebReadResult } from '../src/infra/models/anthropic/anthropicWebRead.js';
 import { settledServerSearchUsage, serverSearchCacheStart } from '../src/infra/models/anthropic/haikuCache.js';
-import { mergedWebResults, webReadUrl } from '../src/infra/models/webResearch.js';
+import { homeUserLocation, mergedWebResults, webReadUrl, webUserLocation } from '../src/infra/models/webResearch.js';
 import { readToolExecutors } from '../src/mind/tools/shannonReadTools.js';
 import { webReadResult, webReadUnknown } from '../src/mind/tools/webResearchTools.js';
 import { toolSessionMemory, type ToolExecutionContext } from '../src/mind/tools/shannonToolTypes.js';
@@ -42,15 +42,20 @@ async function run(call: unknown) {
 }
 
 describe('deep research: native search narrowing', () => {
-  it('keeps the unfiltered request exactly as before and adds domains, Fukuoka location and a recency hint only when asked', () => {
+  it('keeps the unfiltered request exactly as before and adds domains, the home location and a recency hint only when asked', () => {
+    vi.stubEnv('SHANNON_OWNER_HOME_LOCATION', '35.7255,139.5383,西東京市'); vi.stubEnv('SHANNON_OWNER_HOME_REGION', '東京都');
     const plain = nativeWebSearchBody('福岡 天気', 3);
     expect(plain.tools).toEqual([{ type: 'web_search_20260209', name: 'web_search', max_uses: 3, allowed_callers: ['direct'] }]);
     expect(plain.messages).toEqual([{ role: 'user', content: '福岡 天気' }]);
     const narrowed = nativeWebSearchBody('福岡 天気', 3, { allowedDomains: ['jma.go.jp', 'https://bad/path', '127.0.0.1'], blockedDomains: ['example.com'],
-      locality: 'fukuoka', recency: 'week' });
+      locality: 'home', recency: 'week' });
     expect(narrowed.tools).toEqual([{ type: 'web_search_20260209', name: 'web_search', max_uses: 3, allowed_callers: ['direct'], allowed_domains: ['jma.go.jp'],
-      user_location: { type: 'approximate', city: 'Fukuoka', region: 'Fukuoka', country: 'JP', timezone: 'Asia/Tokyo' } }]);
+      user_location: { type: 'approximate', city: '西東京市', region: '東京都', country: 'JP', timezone: 'Asia/Tokyo' } }]);
     expect(String(narrowed.messages[0]!.content)).toContain('直近1週間以内');
+    vi.unstubAllEnvs();
+    expect(homeUserLocation({ SHANNON_OWNER_HOME_LOCATION: '35.7255,139.5383,東京都西東京市' })).toMatchObject({ city: '西東京市', region: '東京都', country: 'JP' });
+    expect(webUserLocation('home', {})).toEqual({ type: 'approximate', country: 'JP', timezone: 'Asia/Tokyo' });
+    expect(webUserLocation('none', { SHANNON_OWNER_HOME_LOCATION: '35.7,139.5,西東京市' })).toBeNull();
   });
 
   it('keeps only spans cited from actual results, with their URL', () => {
@@ -107,9 +112,9 @@ describe('deep research: read tools per reply and per task step', () => {
     const executors = readToolExecutors({ web: async input => { searches.push(input); return ok(input.query); },
       webRead: async input => { reads.push(input); return { ...ok('page'), passages: [{ url: input.url, title: 'p', quote: '一節' }] }; } });
     const memory = toolSessionMemory();
-    const first = await run(executors['web.search']!({ query: '天神 イベント', domains: 'fukuoka-now.com, bad domain', locality: 'fukuoka', recency: 'week' }, context(memory)));
+    const first = await run(executors['web.search']!({ query: '天神 イベント', domains: 'fukuoka-now.com, bad domain', locality: 'home', recency: 'week' }, context(memory)));
     expect(first.result.ok).toBe(true);
-    expect(searches[0]).toMatchObject({ query: '天神 イベント', maxUses: 3, filters: { allowedDomains: ['fukuoka-now.com'], locality: 'fukuoka', recency: 'week' } });
+    expect(searches[0]).toMatchObject({ query: '天神 イベント', maxUses: 3, filters: { allowedDomains: ['fukuoka-now.com'], locality: 'home', recency: 'week' } });
     for (const query of ['b', 'c']) expect((await run(executors['web.search']!({ query }, context(memory)))).result.ok).toBe(true);
     expect((await run(executors['web.search']!({ query: 'd' }, context(memory)))).result.failure).toBe('limit');
     expect(searches.at(-1)!.filters).toBeUndefined();

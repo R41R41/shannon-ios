@@ -1,5 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ShannonWebSource } from './chatModelContract.js';
+import { serverEnvironment } from '../config/serverEnvironment.js';
+import { ownerTimeZone } from '../time/localDate.js';
+
+type Environment = Readonly<Record<string, string | undefined>>;
 import { webSearchFailure, type WebSearchResult } from './webSearch.js';
 
 /**
@@ -8,8 +12,12 @@ import { webSearchFailure, type WebSearchResult } from './webSearch.js';
  * from a page it actually returned, with that page's URL: never a span the model wrote.
  */
 export type WebRecency = 'day' | 'week' | 'month' | 'year';
-/** `fukuoka`: the owner's city (approximate location for local results); `japan`: country only; `none`: no location. */
-export type WebLocality = 'fukuoka' | 'japan' | 'none';
+/**
+ * `home`: the owner's home area (`SHANNON_OWNER_HOME_LOCATION`, approximate, for local results; `japan` while it is unset);
+ * `japan`: country only; `none`: no location.
+ */
+export type WebLocality = 'home' | 'japan' | 'none';
+export const WEB_LOCALITIES: readonly WebLocality[] = Object.freeze(['home', 'japan', 'none']);
 
 export interface WebSearchFilters {
   /** At most eight plain hostnames; results only from these. Never together with `blockedDomains`. */
@@ -52,10 +60,26 @@ export function webReadUrl(value: unknown): string | null {
 }
 
 /** The approximate location the native search tool takes for `locality`. */
-export function webUserLocation(locality: WebLocality | undefined): Anthropic.UserLocation | null {
-  if (locality === 'fukuoka') return { type: 'approximate', city: 'Fukuoka', region: 'Fukuoka', country: 'JP', timezone: 'Asia/Tokyo' };
-  if (locality === 'japan') return { type: 'approximate', country: 'JP', timezone: 'Asia/Tokyo' };
+export function webUserLocation(locality: WebLocality | undefined, environment: Environment = serverEnvironment()): Anthropic.UserLocation | null {
+  const timezone = ownerTimeZone(environment);
+  if (locality === 'home') return homeUserLocation(environment) ?? { type: 'approximate', country: 'JP', timezone };
+  if (locality === 'japan') return { type: 'approximate', country: 'JP', timezone };
   return null;
+}
+
+const PREFECTURE = /^(東京都|北海道|(?:京都|大阪)府|[^\s都道府県]{2,3}県)(.+)$/u;
+
+/**
+ * The owner's home as the search tool's approximate location: `SHANNON_OWNER_HOME_LOCATION` is `lat,lon,label` (shared with the
+ * weather reads); the label is the city (`西東京市`), or prefecture and city (`東京都西東京市`). `SHANNON_OWNER_HOME_REGION`
+ * (`東京都`) names the region when the label does not. Null when no home is configured.
+ */
+export function homeUserLocation(environment: Environment): Anthropic.UserLocation | null {
+  const parts = environment.SHANNON_OWNER_HOME_LOCATION?.split(',').map(part => part.trim()) ?? [];
+  if (parts.length < 2 || !parts.slice(0, 2).every(part => /^-?\d{1,3}(?:\.\d+)?$/u.test(part))) return null;
+  const label = parts.slice(2).join(',').trim().slice(0, 60), split = label.match(PREFECTURE);
+  const city = split?.[2] ?? label, region = split?.[1] ?? environment.SHANNON_OWNER_HOME_REGION?.trim().slice(0, 60);
+  return { type: 'approximate', ...(city ? { city } : {}), ...(region ? { region } : {}), country: 'JP', timezone: ownerTimeZone(environment) };
 }
 
 const RECENCY_HINT: Readonly<Record<WebRecency, string>> = Object.freeze({

@@ -17,13 +17,13 @@ const domains = (description: string): ToolInputProperty => ({ type: 'string', d
 export const WEB_SEARCH_FILTER_INPUTS: Readonly<Record<string, ToolInputProperty>> = Object.freeze({
   domains: domains('このサイトだけから探す時: ドメインをカンマ区切りで8つまで（例: jma.go.jp, nhk.or.jp）。ふだんは書かない'),
   excludeDomains: domains('除きたいサイトのドメインをカンマ区切りで8つまで（domains と一緒には使わない）'),
-  locality: { type: 'string', description: '地域に左右される時の場所: fukuoka（ライ氏の住む福岡。近くのお店・天気・行事）、japan（日本の情報）、none（場所に関係ない）',
-    enum: ['fukuoka', 'japan', 'none'] },
+  locality: { type: 'string', description: '地域に左右される時の場所: home（ライ氏の家のあたり。近くのお店・天気・行事）、japan（日本の情報）、none（場所に関係ない）',
+    enum: ['home', 'japan', 'none'] },
   recency: { type: 'string', description: '新しさが大事な時: day / week / month / year（その期間の情報を優先する）', enum: ['day', 'week', 'month', 'year'] },
 });
 
 export const WEB_SEARCH_DESCRIPTION = 'ウェブで今の情報を実際に調べる（天気・ニュース・営業時間など）。調べてほしい依頼は、調べる約束だけで返さずこの道具を使う。'
-  + 'queryには今回の調査対象だけを書き、記憶や会話履歴や秘密を渡さない。必要な地域が分からなければ先に聞く（福岡のことなら locality=fukuoka）。'
+  + 'queryには今回の調査対象だけを書き、記憶や会話履歴や秘密を渡さない。必要な地域が分からなければ先に聞く（ライ氏の家の近くのことなら locality=home）。'
   + `1回の返事で${WEB_SEARCH_PER_REPLY}回まで。足りない観点だけ別のqueryで追加する。ページ本文を確かめたい時は web.read。結果が未確認・失敗なら調べた事実として答えない。`;
 
 function schema(properties: Record<string, ToolInputProperty>, required: readonly string[]): ToolInputSchema {

@@ -8,7 +8,7 @@ import { toolOk, type ToolResult } from '../../tools/toolRegistryPorts.js';
 
 const WORK_CRITERIA = '元の依頼に答える内容を実際の読み取り結果と出典で確認し、要点と出典を親の会話へ返す。確認できない事項は未確認と伝える。'
   + '場所の依頼では実在候補と地図リンクを保持する。';
-const WORK_RULES = 'Research with the read tools: web.search (several focused queries when one is not enough; set locality=fukuoka for local matters '
+const WORK_RULES = 'Research with the read tools: web.search (several focused queries when one is not enough; set locality=home for matters near the owner home '
   + 'and recency for news), web.read for a primary page whose text matters, and the place tool for places. Retain each receipt and synthesize from it. '
   + 'Do not repeat a successful paid search merely to format its answer. Ask the parent only for missing information; never infer an unknown location. '
   + 'Count 今日, 明日 and other relative dates from requestedAt in its time zone (never UTC) and put the explicit date in searches and the report. '

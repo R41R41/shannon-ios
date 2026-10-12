@@ -3,7 +3,7 @@ import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecut
 import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
 import { webSearchContext, webSearchFailure, type WebSearchOperation, type WebSearchResult } from '../../infra/models/webSearch.js';
 import {
-  mergedWebResults, webDomain, webReadUrl, type WebLocality, type WebReadOperation, type WebRecency, type WebSearchFilters,
+  WEB_LOCALITIES, mergedWebResults, webDomain, webReadUrl, type WebLocality, type WebReadOperation, type WebRecency, type WebSearchFilters,
 } from '../../infra/models/webResearch.js';
 import { WEB_READ_PER_REPLY, WEB_READ_PER_TASK_STEP, WEB_SEARCH_PER_REPLY, WEB_SEARCH_PER_TASK_STEP } from './webResearchToolDefinitions.js';
 
@@ -45,7 +45,7 @@ export function searchFilters(input: ToolInput): WebSearchFilters | undefined {
   const allowedDomains = listOfDomains(input, 'domains'), blockedDomains = listOfDomains(input, 'excludeDomains');
   const locality = stringInput(input, 'locality') as WebLocality | undefined, recency = stringInput(input, 'recency') as WebRecency | undefined;
   const filters: WebSearchFilters = { ...(allowedDomains.length ? { allowedDomains } : {}), ...(blockedDomains.length ? { blockedDomains } : {}),
-    ...(locality && ['fukuoka', 'japan', 'none'].includes(locality) ? { locality } : {}),
+    ...(locality && WEB_LOCALITIES.includes(locality) ? { locality } : {}),
     ...(recency && ['day', 'week', 'month', 'year'].includes(recency) ? { recency } : {}) };
   return Object.keys(filters).length ? filters : undefined;
 }
