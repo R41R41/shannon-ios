@@ -3,13 +3,25 @@ import type { TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { PlaceSearchContext } from '../../../integrations/places/placeDiscovery.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { ownerLocalClock, ownerTimeZone } from '../../../infra/time/localDate.js';
+import { RESEARCH_REPORT_FORMAT } from './researchReport.js';
+import { toolOk, type ToolResult } from '../../tools/toolRegistryPorts.js';
 
 const WORK_CRITERIA = '元の依頼に答える内容を実際の読み取り結果と出典で確認し、要点と出典を親の会話へ返す。確認できない事項は未確認と伝える。'
   + '場所の依頼では実在候補と地図リンクを保持する。';
-const WORK_RULES = 'Use the matching existing read tool once, retain its receipt, and synthesize from it. '
+const WORK_RULES = 'Research with the read tools: web.search (several focused queries when one is not enough; set locality=home for matters near the owner home '
+  + 'and recency for news), web.read for a primary page whose text matters, and the place tool for places. Retain each receipt and synthesize from it. '
   + 'Do not repeat a successful paid search merely to format its answer. Ask the parent only for missing information; never infer an unknown location. '
   + 'Count 今日, 明日 and other relative dates from requestedAt in its time zone (never UTC) and put the explicit date in searches and the report. '
-  + 'Report useful received findings to the parent with task.send; keep their sources and uncertainty. Finish only on observed results.';
+  + 'Report useful received findings to the parent with task.send; keep their sources and uncertainty. Finish only on observed results.\n'
+  + RESEARCH_REPORT_FORMAT;
+/** The task a piece of conversation work becomes: the owner's words, when and where he asked, and how to research and report. */
+export function conversationWorkSpec(input: { message: string; places?: PlaceSearchContext; at?: string | Date; timeZone?: string }) {
+  const timeZone = input.timeZone ?? ownerTimeZone(serverEnvironment());
+  const requested = { originalRequest: input.message, requestedAt: ownerLocalClock(input.at ?? new Date(), timeZone), timeZone,
+    ...(input.places ? { permittedPlaceContext: input.places } : {}) };
+  return { title: input.message.slice(0, 100), goal: input.message, completionCriteria: WORK_CRITERIA,
+    context: `[Conversation work]\n${JSON.stringify(requested)}\n${WORK_RULES}` };
+}
 
 /** Admission reuses the current conversation source, ancestor and existing task runner. */
 export function admitConversationWork(turn: FcaConversationTurn | null | undefined, input: {
@@ -18,11 +30,27 @@ export function admitConversationWork(turn: FcaConversationTurn | null | undefin
   at?: string; timeZone?: string;
 }): TaskView | null {
   if (!input.research || !turn?.delegate) return null;
-  const timeZone = input.timeZone ?? ownerTimeZone(serverEnvironment());
-  const requested = { originalRequest: input.message, requestedAt: ownerLocalClock(input.at ?? new Date(), timeZone), timeZone,
-    ...(input.places ? { permittedPlaceContext: input.places } : {}) };
-  return turn.delegate({ title: input.message.slice(0, 100), goal: input.message, completionCriteria: WORK_CRITERIA,
-    context: `[Conversation work]\n${JSON.stringify(requested)}\n${WORK_RULES}` }, input.places);
+  return turn.delegate(conversationWorkSpec(input), input.places);
+}
+
+/**
+ * `web.research` (a voice turn's research, deep research 2026-10-13) as the `task.create` it is: the same conversation-work task
+ * the router admits, from the question the model wrote. Null for anything else.
+ */
+export function researchTaskInput(name: string, input: unknown): { name: 'task.create'; input: ReturnType<typeof conversationWorkSpec> } | null {
+  if (name !== 'web.research') return null;
+  const question = input && typeof input === 'object' ? (input as { question?: unknown }).question : undefined;
+  if (typeof question !== 'string' || !question.trim()) return null;
+  return { name: 'task.create', input: conversationWorkSpec({ message: question.trim().slice(0, 500) }) };
+}
+
+/** What a voice turn hears after `web.research`: admitted, not yet answered; the task's own JSON stays out of the call. */
+export function researchAdmitted(result: ToolResult): ToolResult {
+  if (!result.ok) return result;
+  let id = '';
+  try { id = String((JSON.parse(result.text) as { id?: unknown }).id ?? ''); } catch { /* the acknowledgement stands without an id */ }
+  return toolOk(`調べものを仕事として受け付けた（まだ結果はない。task: ${id}）。短く「調べてみますね」くらいを自分の言葉で伝え、結果を推測して先に答えない。`
+    + '結果はわかった時に伝わる。');
 }
 
 /** What the foreground reply is told once research is admitted: a brief, natural word, nothing guessed or promised. */

@@ -3,7 +3,7 @@ import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import { conversationSecrets } from '../mind/inhibition/disclosurePorts.js';
 import type { ShannonToolRunner } from '../mind/tools/toolRunnerPorts.js';
 import { toolSessionMemory, type ToolDocuments } from '../mind/tools/shannonToolTypes.js';
-import { webReadResult } from '../mind/tools/shannonReadTools.js';
+import { webReadUnknown } from '../mind/tools/shannonReadTools.js';
 import { MEMORY_TOOLS } from '../mind/tools/memoryToolDefinitions.js';
 import type { FcaExternalTools } from '../mind/action/fca/fcaPorts.js';
 import type { TaskOrigin } from '../mind/action/taskRuntime/taskRuntimePorts.js';
@@ -29,7 +29,7 @@ export function fcaResearchTools(parts: {
   const shared = Boolean(parts.task?.origin === 'owner_request' && parts.observeRead);
   const eligible = (tool: { name: string; domain: string }) => shared
     ? !['task_runtime', 'memory_read', 'minecraft_body', 'vm_workspace', 'owner_documents_read'].includes(tool.domain)
-    : tool.name === 'web.search';
+    : tool.name === 'web.search' || tool.name === 'web.read';
   const definitions = [...parts.tools.offered('text', 'owner_alone', parts.scopeKey).filter(eligible), ...(parts.observeMemory ? MEMORY_TOOLS : [])];
   const live = () => {
     if (!parts.ownerAlone() || parts.sourcesVisible?.() === false) throw new Error('FCA_SOURCE_WITHHELD');
@@ -42,7 +42,7 @@ export function fcaResearchTools(parts: {
   return {
     definitions,
     checkpoint() { if (memory.retainedReadDigests.size > 5000) throw new Error('FCA_FOLDER_READS_LIMIT'); return { fcaFolderReadDigests: [...memory.retainedReadDigests] }; },
-    safeToAcknowledgeStop: () => !effectUncommitted && webReadResult(memory)?.status !== 'unknown',
+    safeToAcknowledgeStop: () => !effectUncommitted && !webReadUnknown(memory),
     skillIndex() {
       if (!definitions.some(tool => tool.name === 'skill.read')) return '';
       live();
@@ -91,7 +91,7 @@ export function fcaResearchTools(parts: {
         ...(parts.observeMemory ? { observeMemory: parts.observeMemory } : {}), timeMilliseconds: 45_000, acknowledgementOwner: 'fca' }, call.signal);
       call.signal.throwIfAborted();
       // A lost paid request holds the original segment; it is never converted to a fresh retryable result.
-      if (webReadResult(memory)?.status === 'unknown' || (definition.cost === 'model' && !result.ok
+      if (webReadUnknown(memory) || (definition.cost === 'model' && !result.ok
         && ['failed', 'unavailable', 'timeout'].includes(result.failure ?? ''))) throw new Error('FCA_RESEARCH_RESULT_UNKNOWN');
       if (!result.ok || definition.effect !== 'write') effectUncommitted = priorEffect;
       live();

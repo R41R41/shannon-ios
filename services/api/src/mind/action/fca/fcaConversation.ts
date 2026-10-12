@@ -9,6 +9,7 @@ import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import type { TaskRuntime, TaskStep, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { FcaConversationPort, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { fcaReadReceiptSources } from './fcaConversationSources.js';
+import { researchAdmitted, researchTaskInput } from './conversationWork.js';
 
 /**
  * The synchronous time one foreground turn may spend re-checking task provenance (the inbox, the children, task tools) before
@@ -202,8 +203,11 @@ export function createFcaConversationBridge(parts: {
         return { ...sent, task };
       };
       const operation = createHash('sha256').update(name).update('\0').update(JSON.stringify(input) ?? 'null').digest('hex');
-      return runTaskTool(guarded, name, input, { scopeKey: context.scopeKey, taskId: step.taskId,
+      const research = researchTaskInput(name, input);
+      if (name === 'web.research' && !research) return toolFailure('invalid_input', '調べること（question）が空です。', { retryable: false });
+      const result = runTaskTool(guarded, research?.name ?? name, research?.input ?? input, { scopeKey: context.scopeKey, taskId: step.taskId,
         operationId: `${step.id}:${operation}`, ownerAlone: () => current(context.scopeKey) !== null });
+      return research ? researchAdmitted(result) : result;
     },
   };
 }

@@ -287,7 +287,7 @@ describe('search is a discoverable conversation read', () => {
     expect(streamed.join('')).not.toContain('晴れ'); expect(h.bodies).toHaveLength(2);
   });
 
-  it('does not offer the read to other audiences or autonomy and reserves one operation per turn', async () => {
+  it('does not offer the read to other audiences or autonomy and reserves at most three operations per reply', async () => {
     let calls = 0;
     const operation = async () => { calls++; return { status: 'results' as const, text: 'fact', sources: [{ title: 'source', url: 'https://example.com' }] }; };
     const runner = createInMemoryAutonomyService(() => at).tools; runner.useReads({ web: operation });
@@ -297,10 +297,11 @@ describe('search is a discoverable conversation read', () => {
     expect(runner.offered('autonomy', 'owner_alone').some(tool => tool.name === 'web.search')).toBe(false);
     const memory = toolSessionMemory(); const executors = readToolExecutors({ web: operation });
     const context = { scopeKey: 'owner', surface: 'text' as const, audience: 'owner_alone' as const, memory, timeMilliseconds: 1234 };
-    const first = executors['web.search']!({ query: 'one' }, context), second = executors['web.search']!({ query: 'two' }, context);
-    if (!('run' in first) || !('run' in second)) throw new Error('not prepared');
-    const results = await Promise.all([first.run(), second.run()]); expect(calls).toBe(1); expect(results.map(item => item.result.ok)).toEqual([true, false]);
+    const prepared = ['one', 'two', 'three', 'four'].map(query => executors['web.search']!({ query }, context));
+    if (!prepared.every(call => 'run' in call)) throw new Error('not prepared');
+    const results = await Promise.all(prepared.map(call => (call as { run(): Promise<{ result: { ok: boolean; failure?: string } }> }).run()));
+    expect(calls).toBe(3); expect(results.map(item => item.result.ok)).toEqual([true, true, true, false]); expect(results[3]!.result.failure).toBe('limit');
     const secret = executors['web.search']!({ query: 'private' }, { ...context, memory: toolSessionMemory(), secrets: { carries: () => true } });
-    expect(secret).toMatchObject({ ok: false, failure: 'refused' }); expect(calls).toBe(1);
+    expect(secret).toMatchObject({ ok: false, failure: 'refused' }); expect(calls).toBe(3);
   });
 });

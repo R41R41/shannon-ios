@@ -19,6 +19,8 @@ import { isAppendOnlyAnthropicModel, isHaikuModel, usesOneHourAnthropicCache } f
 import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
+import { nativeWebReadBody, nativeWebReadResult } from './anthropicWebRead.js';
+import { webReadUrl, type WebReadOperation } from '../webResearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { cachePlanApplies, exceptionTurn, plannedChatBody } from './anthropicCachePlan.js';
@@ -136,7 +138,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     if (milliseconds < 1_000) return webSearchFailure('unavailable');
     const signal = AbortSignal.any([AbortSignal.timeout(milliseconds), ...(input.signal ? [input.signal] : [])]);
     const maximumUses = Number.isSafeInteger(input.maxUses) ? Math.min(3, Math.max(1, input.maxUses!)) : 3;
-    const body = nativeWebSearchBody(input.query.slice(0, 2_000), maximumUses);
+    const body = nativeWebSearchBody(input.query.slice(0, 2_000), maximumUses, input.filters);
     const turns: Anthropic.Message[] = [];
     const send = this.sender({ scopeKey: input.scopeKey, route: 'web_search' }, () => null, signal);
     try {
@@ -152,6 +154,23 @@ export class AnthropicChatModel implements ShannonChatModel {
       }
     } catch { input.signal?.throwIfAborted(); return webSearchFailure('unknown'); }
     return webSearchFailure('unknown');
+  };
+
+  /** Deep research: one page read with the native fetch tool (`anthropicWebRead.ts`), through the same transport and booking. */
+  readonly readWeb: WebReadOperation = async input => {
+    input.signal?.throwIfAborted();
+    const milliseconds = Math.min(45_000, Math.max(0, input.milliseconds ?? 45_000));
+    const url = webReadUrl(input.url);
+    if (!url || milliseconds < 1_000) return webSearchFailure(url ? 'unavailable' : 'not_searched');
+    const signal = AbortSignal.any([AbortSignal.timeout(milliseconds), ...(input.signal ? [input.signal] : [])]);
+    const body = nativeWebReadBody(url, (input.focus ?? '').slice(0, 500));
+    const send = this.sender({ scopeKey: input.scopeKey, route: 'web_search' }, () => null, signal);
+    try {
+      return nativeWebReadResult(await pausedServerRounds(body, send, signal));
+    } catch {
+      input.signal?.throwIfAborted();
+      return webSearchFailure('unknown');
+    }
   };
 
   private async text(request: ShannonChatModelRequest, onReplyText: ((text: string) => void | Promise<void>) | null): Promise<ShannonChatModelResult> {
@@ -325,6 +344,20 @@ export class AnthropicChatModel implements ShannonChatModel {
     caller?: AbortSignal, latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds): ClaudeSend {
     return claudeConversationSender(this.transport, { target, listen, caller, latency, onFirst, voiceBounds });
   }
+}
+
+/** A server-tool request and at most three pause continuations (signed content appended whole; tools/system never change). */
+async function pausedServerRounds(body: Anthropic.MessageCreateParamsNonStreaming, send: ClaudeSend, signal: AbortSignal): Promise<Anthropic.Message[]> {
+  const turns: Anthropic.Message[] = [];
+  for (let round = 0; round < 4; round++) {
+    signal.throwIfAborted();
+    const message = await send(body, null, round);
+    signal.throwIfAborted();
+    turns.push(message);
+    if (message.stop_reason !== 'pause_turn') break;
+    body.messages = [...body.messages, { role: 'assistant', content: message.content }];
+  }
+  return turns;
 }
 
 /** The text of a response's `text` blocks, in order (thinking blocks and tool calls are not text). */

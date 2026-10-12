@@ -30,6 +30,7 @@ import type { SelfRewriteRuntimePort } from '../inhibition/selfRewritePorts.js';
 import { selfRewriteExecutors } from './shannonSelfRewriteTools.js';
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
+import { WEB_RESEARCH_TOOL } from './webResearchToolDefinitions.js';
 import { SELF_REWRITE_TOOLS } from './selfRewriteToolDefinitions.js';
 
 /**
@@ -139,7 +140,7 @@ export class ShannonToolRunner {
       if (!asked.has(domain)) asked.set(domain, check());
       return asked.get(domain)!;
     };
-    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && once('memory_read', () => this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && once('task_runtime', () => this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && once('memory_read', () => this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && once('task_runtime', () => this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain, tool.name)
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
@@ -176,7 +177,7 @@ export class ShannonToolRunner {
     const tool = toolFromProviderName(name) ?? shannonTool(name)
       ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name || providerToolName(tool.name) === name) ?? null : null);
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
-    if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
+    if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain, tool.name)) return null;
     if (tool?.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle) return null;
     if (tool?.domain === 'memory_read' && !this.taskMemory) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
@@ -313,7 +314,7 @@ export class ShannonToolRunner {
    */
   useTaskRuntime(port: TaskRuntimeToolPort): void {
     this.taskRuntime = port;
-    this.executors = Object.freeze({ ...this.executors, ...Object.fromEntries(TASK_TOOLS.map(tool => [tool.name,
+    this.executors = Object.freeze({ ...this.executors, ...Object.fromEntries([...TASK_TOOLS, WEB_RESEARCH_TOOL].map(tool => [tool.name,
       (input: ToolInput, context: ToolExecutionContext): PreparedToolCall => ({ summary: '共通タスクを操作します。', run: async () => {
         const result = port.execute(tool.name, input, context);
         return { result, record: { summary: '共通タスクの操作結果を記録しました。', outcome: result.ok ? 'done' : 'failed' } };
@@ -351,8 +352,8 @@ export class ShannonToolRunner {
     this.executors = Object.freeze({ ...this.executors, ...selfRewriteExecutors(port) });
   }
 
-  private readsFor(domain: ReadToolDomain): boolean {
-    return Boolean(this.reads?.[READ_TOOL_PORT[domain]]);
+  private readsFor(domain: ReadToolDomain, name?: string): boolean {
+    return Boolean(this.reads?.[name === 'web.read' ? 'webRead' : READ_TOOL_PORT[domain]]);
   }
 
   /** Syzygy ADR-0008 stage 1: told of every conversation call that ran (`SHANNON_CHOICE_LEDGER`); never set, nothing is told. */

@@ -142,6 +142,8 @@ export interface ShannonChatModel {
   readonly model: string;
   /** Query-only external read; used by the ordinary read tool, without the conversation's private context. */
   searchWeb?: import('./webSearch.js').WebSearchOperation;
+  /** Query-only full-page read of one URL (deep research), the same boundary as `searchWeb`. */
+  readWeb?: import('./webResearch.js').WebReadOperation;
   /** Capture a primary model once at admission, before recall/routing awaits. The returned view never rereads preferences. */
   forTurn?(scopeKey: string): ShannonChatModel;
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult>;

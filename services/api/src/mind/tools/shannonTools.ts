@@ -2,6 +2,7 @@ import { MINECRAFT_LIFECYCLE_TOOLS, MINECRAFT_LIFECYCLE_SUMMARIES } from './mine
 import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS } from './searchToolInputs.js';
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
+import { WEB_RESEARCH_DOING, WEB_RESEARCH_SUMMARIES, WEB_RESEARCH_TOOLS } from './webResearchToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import type { ToolExecutionEvidence } from '../../contracts/toolEvidenceContract.js';
 import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
@@ -307,9 +308,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       query: { type: 'string', description: '何を探すか（例: 静かなカフェ、ラーメン屋）', minLength: 1, maxLength: 120 },
       area: { type: 'string', description: 'どこで（駅・町・住所）', maxLength: 80 },
     }, ['query']) }),
-  readTool({ name: 'web.search', domain: 'web_search', cost: 'model', surfaces: ['text'],
-    description: `ウェブで今の情報を実際に調べる（天気・ニュース・営業時間など）。調べてほしい依頼は、調べる約束だけで返さずこの道具を使う。queryには今回の調査対象だけを書き、記憶や会話履歴や秘密を渡さない。必要な地域が分からなければ先に聞く。1ターンの調査はまとめて1回。結果が未確認・失敗なら調べた事実として答えない。${READ_RULE}`,
-    input: schema({ query: { type: 'string', description: '今調べる内容（対象と地域など、検索に必要な情報だけ）', minLength: 1, maxLength: 500 } }, ['query']) }),
+  ...WEB_RESEARCH_TOOLS,
   // Syzygy ADR-0008 stage 2, step 6 (`SHANNON_SKILLS`): one of her skills, opened from the index in her profile.
   readTool({ name: 'skill.read', domain: 'skill_read',
     description: `ボクのスキル（自分で作った手順書。目次は「ボクのスキル」にある）を1つ開いて、手順・補助・参考を読む。目次の名前を name に書く。一部だけ読む時は section に書く。${READ_RULE}`,
@@ -330,7 +329,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   ...MINECRAFT_LIFECYCLE_SUMMARIES,
   'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
-  'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
+  'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）', ...WEB_RESEARCH_SUMMARIES,
   'study.list': '書斎のメモと物語の一覧を見る',
   'study.search': '書斎の題名と本文から言葉を探す',
   'study.read': '書斎のものを1つ、本文まで読む（版も読める）',
@@ -377,7 +376,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
 export type ToolDoing = 'acts' | 'describes';
 export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
   ...Object.fromEntries(MINECRAFT_LIFECYCLE_TOOLS.map(tool => [tool.name, tool.effect === 'write' ? 'acts' as const : 'describes' as const])),
-  ...Object.fromEntries(MEMORY_TOOLS.map(tool => [tool.name, 'describes' as const])),
+  ...Object.fromEntries(MEMORY_TOOLS.map(tool => [tool.name, 'describes' as const])), ...WEB_RESEARCH_DOING,
   ...Object.fromEntries(TASK_TOOLS.map(tool => [tool.name, tool.effect === 'write' ? 'acts' as const : 'describes' as const])),
   'study.list': 'describes', 'study.search': 'describes', 'study.read': 'describes',
   'study.create': 'acts', 'study.update': 'acts', 'study.rename': 'acts', 'study.move': 'acts', 'study.delete': 'acts', 'study.restore': 'acts',

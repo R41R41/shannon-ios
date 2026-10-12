@@ -1,11 +1,17 @@
 import type { ShannonChatModelResult, ShannonWebSource } from './chatModelContract.js';
 
 /** A bounded external read. Neither generated prose nor a model's claim is a search receipt. */
-export interface WebSearchInput { scopeKey: string; query: string; signal?: AbortSignal; milliseconds?: number; maxUses?: number }
+export interface WebSearchInput {
+  scopeKey: string; query: string; signal?: AbortSignal; milliseconds?: number; maxUses?: number;
+  /** Optional narrowing (deep research); absent, the request is exactly the one before it. */
+  filters?: import('./webResearch.js').WebSearchFilters;
+}
 export interface WebSearchResult {
   status: 'results' | 'empty' | 'not_searched' | 'unavailable' | 'unknown';
   text: string;
   sources: ShannonWebSource[];
+  /** Short spans the provider cited from the pages it returned, with their URL (deep research). */
+  passages?: import('./webResearch.js').WebPassage[];
 }
 export type WebSearchOperation = (input: WebSearchInput) => Promise<WebSearchResult>;
 
