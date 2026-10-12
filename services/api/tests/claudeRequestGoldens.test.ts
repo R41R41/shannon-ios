@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { BACKGROUND_SCENARIOS } from './support/claudeBackgroundScenarios.js';
 import { EDGE_SCENARIOS } from './support/claudeEdgeScenarios.js';
 import { PLAN_SCENARIOS } from './support/claudePlanScenarios.js';
+import { VOICE_PLAN_SCENARIOS } from './support/claudeVoicePlanScenarios.js';
 import { FOREGROUND_SCENARIOS, SCENARIO_TIME, type ClaudeScenario } from './support/claudeForegroundScenarios.js';
 import { cacheReceiptsTaken, forgetCacheReceipts, recordingFetch, usageLedger, type RecordedRequest } from './support/claudeRequestRecorder.js';
 
@@ -18,7 +19,9 @@ import { cacheReceiptsTaken, forgetCacheReceipts, recordingFetch, usageLedger, t
  * the usage and the receipts did not move (`git diff --word-diff` on the fixtures shows only the header lines).
  */
 const folder = new URL('./fixtures/claude-requests/', import.meta.url);
-const SCENARIOS: readonly ClaudeScenario[] = [...FOREGROUND_SCENARIOS, ...EDGE_SCENARIOS, ...PLAN_SCENARIOS, ...BACKGROUND_SCENARIOS];
+const SCENARIOS: readonly ClaudeScenario[] = [
+  ...FOREGROUND_SCENARIOS, ...EDGE_SCENARIOS, ...PLAN_SCENARIOS, ...VOICE_PLAN_SCENARIOS, ...BACKGROUND_SCENARIOS,
+];
 const writing = process.env.SHANNON_WRITE_GOLDEN === '1';
 
 interface Golden {

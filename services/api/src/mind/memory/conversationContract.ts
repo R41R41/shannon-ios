@@ -33,6 +33,23 @@ export interface ThreadSummaryLineage {
   messages: readonly StoredConversationMessage[];
 }
 
+/**
+ * Where a thread's replay epoch starts (Syzygy ADR-0009 stage 1, M5; `conversationWindow.ts`): message ids and numbers only,
+ * never words. Within an epoch every replayed message keeps the bytes it was first rendered with.
+ */
+export interface ReplayEpochRecord {
+  epoch: number;
+  /** The oldest replayed message. */
+  startMessageId: string;
+  /** Replayed as stored from this message on; an older one is clipped to the rule's bound for older messages. */
+  fullFromMessageId: string;
+  /** The budget the epoch was cut for: another budget starts a new epoch. */
+  budgetCharacters: number;
+  startedAt: string;
+}
+
+export type ReplayChannel = 'text' | 'voice';
+
 /** What was said in a thread before its replay window (`conversationReplaySummary.ts`); not the navigation summary. */
 export interface ReplaySummaryRecord {
   summary: string;
@@ -183,6 +200,11 @@ export interface ConversationStore {
   recentMessages?(scopeKey: string, threadId: string, limit: number): readonly StoredConversationMessage[];
   replaySummary?(scopeKey: string, threadId: string): ReplaySummaryRecord | undefined;
   saveReplaySummary?(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void;
+  /** The thread's replay epoch of a channel (`conversationWindow.ts`). Absent: the window is recomputed every turn. */
+  replayEpoch?(scopeKey: string, threadId: string, channel: ReplayChannel): ReplayEpochRecord | undefined;
+  saveReplayEpoch?(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void;
+  /** False when this store keeps no epochs (its table was not created): the window is then computed as without them. */
+  keepsReplayEpochs?(): boolean;
   /** The thread a completed turn was stored in. */
   threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
   /** Her impressions of people (`impressions.ts`). Absent: none are read or written. */

@@ -406,7 +406,7 @@ async function completeLiveVoiceDelegation(
     ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(
-        modelRequest,
+        { ...modelRequest, threadKey: threadId },
         async delta => {
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
           timing.mark('firstToken');
@@ -422,7 +422,7 @@ async function completeLiveVoiceDelegation(
         observer.signal,
       )
     : dependencies.chatModel.generateVoice
-      ? dependencies.chatModel.generateVoice(modelRequest)
+      ? dependencies.chatModel.generateVoice({ ...modelRequest, threadKey: threadId })
       : dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false }));
   observer?.signal?.throwIfAborted();
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));

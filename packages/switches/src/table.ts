@@ -187,6 +187,14 @@ export const SWITCHES = [
     doc: 'Foreground text turns of Claude 5.5 keep one cached prefix (fixed tools, schema and system; per-turn lines after the words).',
   },
   {
+    name: 'SHANNON_CLAUDE_CACHE_PLAN_VOICE', default: 'off', kind: 'explicit_on', owner: 'model', requires: [],
+    doc: 'Claude 5.5 voice turns keep the same cached prefix (fixed tools and system; per-turn lines after the words), canaried apart from text.',
+  },
+  {
+    name: 'SHANNON_REPLAY_EPOCHS', default: 'off', kind: 'explicit_on', owner: 'model', requires: ['SHANNON_CLAUDE_CACHE_PLAN'],
+    doc: 'Replayed history is rendered once per epoch and only appended to until its budget is passed (text; voice also needs the voice plan).',
+  },
+  {
     name: 'SHANNON_MORNING_BRIEF', default: 'off', kind: 'explicit_on', owner: 'outreach', requires: [],
     doc: 'Morning brief (home weather, today\'s schedule, headlines) as the day\'s initiative, 07-10 owner time; needs SHANNON_OWNER_HOME_LOCATION.',
   },

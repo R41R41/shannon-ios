@@ -38,9 +38,10 @@ import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from '../../mind/memory/store/sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
 import { ensureReplaySummarySchema, ensureReplaySummaryTemplateColumns, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
+import { ensureReplayEpochSchema, selectReplayEpoch, upsertReplayEpoch } from '../../mind/memory/store/sqliteReplayEpochs.js';
 import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from '../../mind/tools/store/sqliteToolTraces.js';
 import type { ToolTraceRecord } from '../../mind/tools/shannonToolTrace.js';
-import type { ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
+import type { ReplayChannel, ReplayEpochRecord, ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
 import { SQLiteImpressionStore } from '../../mind/memory/store/sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from '../../mind/emotion/store/moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
@@ -54,6 +55,7 @@ import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/p
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
 import { serverEnvironment } from '../config/serverEnvironment.js';
+import { switchOn } from '@shannon/switches';
 import type { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js';
 import type { MemoryProposer } from '../../mind/memory/memoryProposer.js';
 import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
@@ -101,6 +103,11 @@ export interface SQLiteShannonStoreOptions {
    */
   structuredCompaction?: boolean;
   /**
+   * Replay epochs (Syzygy ADR-0009 stage 1, M5): the table `conversation_replay_epochs`. Absent: `SHANNON_REPLAY_EPOCHS`. Off:
+   * no table, every table as it was, and the replay is computed every turn as before.
+   */
+  replayEpochs?: boolean;
+  /**
    * People facts (Syzygy ADR-0008 stage 3, F6): `temporal` adds the validity columns of `person_memory_items` (with their
    * backfill) and her impressions' temporal fields; `identity` the identity suggestions and the turns' speakers. Absent: nothing.
    */
@@ -136,6 +143,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly personImpressions: SQLiteImpressionStore;
   private readonly shadow: PredictionShadow | null;
   private readonly traces: DecisionTraces | null;
+  private readonly epochsOn: boolean;
   private readonly ledger: PredictionLedger | null;
   private readonly choices: ChoiceLedger | null;
   private readonly values: ValueVersions | null;
@@ -181,6 +189,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    this.epochsOn = options.replayEpochs ?? switchOn(serverEnvironment(), 'SHANNON_REPLAY_EPOCHS');
+    if (this.epochsOn) ensureReplayEpochSchema(this.context.database);
     if (options.structuredCompaction) ensureReplaySummaryTemplateColumns(this.context.database);
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
@@ -331,6 +341,13 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) {
     this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record, this.context.options.structuredCompaction === true));
+  }
+  keepsReplayEpochs() { return this.epochsOn; }
+  replayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel) {
+    return this.epochsOn ? selectReplayEpoch(this.context.database, scopeKey, threadId, channel) : undefined;
+  }
+  saveReplayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord) {
+    if (this.epochsOn) this.context.transaction(() => upsertReplayEpoch(this.context.database, scopeKey, threadId, channel, record));
   }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }

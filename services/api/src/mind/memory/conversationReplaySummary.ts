@@ -7,7 +7,9 @@ import {
 } from '@shannon/mind';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore, ReplaySummaryRecord } from './store/conversationStore.js';
-import { REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, type ReplayRule, type ReplayWindow } from '../recall/recallPorts.js';
+import {
+  REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, summaryCoverRule, type ReplayRule, type ReplayWindow,
+} from '../recall/recallPorts.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { MemoryWithholding, visibleReplayMessages } from './memoryVisibility.js';
 import type { MemoryProposals } from './memoryWriter.js';
@@ -204,8 +206,9 @@ export class ConversationReplaySummarizer {
     // Taken before the state is read: an item forgotten while the writer runs is later than this.
     const startedAt = this.options.now?.() ?? new Date().toISOString();
     const state = this.stateStore.snapshot(scopeKey);
-    const text = replayRule('text', this.options.environment);
-    const voice = replayRule('voice', this.options.environment);
+    // Under replay epochs, the window a cut can leave out (`summaryCoverRule`); without them, the replay's own rule.
+    const text = summaryCoverRule(replayRule('text', this.options.environment));
+    const voice = summaryCoverRule(replayRule('voice', this.options.environment));
     // Only what the owner alone would be replayed; a withheld turn never becomes summary text.
     const visible = visibleReplayMessages(state, this.store, scopeKey, threadId, OWNER_AUDIENCE, text.maximumMessages + 1).messages;
     const items = visible.map(entry => entry.item);
