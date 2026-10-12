@@ -42,6 +42,8 @@ export interface AnthropicFcaOptions {
   timeoutMilliseconds?: number;
   /** Required, and awaited before usage/cache/output validation, including unknown paid outcomes. */
   recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>;
+  /** The owner's clock at each decision, so that 今日 and 明日 are his days (2026-10-13: a child read them in UTC). */
+  clock?(): { localTime: string; timeZone: string };
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -52,6 +54,8 @@ const CONTROL_TOOLS: Anthropic.Tool[] = [
   input_schema: { type: 'object', properties: { summary: { type: 'string', description: 'A nonempty, public summary, at most 2000 characters.' } },
     required: ['summary'], additionalProperties: false },
 }));
+const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this clock, in the owner\'s time zone, never in UTC. '
+  + 'Write explicit dates in searches and reports.';
 const STEP_INSTRUCTIONS = `Take exactly one decision step for the supplied task and its completion criteria.
 Use only the offered tools. Tool calls request actions; they are not evidence that an action succeeded.
 Return either task tool calls, one fca_wait call, or one fca_complete call. Never mix a control call with other calls.
@@ -92,7 +96,8 @@ export class AnthropicFcaModel implements FcaModel {
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
       const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
-      const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ task: input.task, children: input.children ?? [], messages: input.messages,
+      const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
+      const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
         ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
         ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
         ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) }) };

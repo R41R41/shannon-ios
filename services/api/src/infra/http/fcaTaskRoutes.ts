@@ -8,6 +8,8 @@ export function createFcaTaskRoute(parts: {
   runtime: TaskRuntime; ownerScope: string; ownerAlone(): boolean;
   visible?(id: string): boolean;
   progress?(id: string): TaskProgress | null;
+  /** Each report also carries the short form a call says (`report.spoken`, once written); a client waits for it. */
+  spokenReports?: boolean;
   stop(id: string, reason: string): Promise<unknown>; wake(): void;
 }) {
   return async (request: IncomingMessage, response: ServerResponse, principal: { scopeKey: string } | null, url: URL) => {
@@ -21,7 +23,7 @@ export function createFcaTaskRoute(parts: {
         if (url.searchParams.get('projection') === 'now') {
           const projection = fcaNowProjection(parts.runtime, scope, visible, parts.progress);
           if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
-          return sendJson(response, 200, projection);
+          return sendJson(response, 200, parts.spokenReports ? { ...projection, spokenReports: true } : projection);
         }
         const value = id ? visible(id) ? parts.runtime.get(scope, id) : null : parts.runtime.list(scope, { offset: Number(url.searchParams.get('offset') ?? 0), limit: 50 }).filter(task => visible(task.id));
         return sendJson(response, value ? 200 : 404, value ?? { error: 'FCA_TASK_NOT_FOUND' });

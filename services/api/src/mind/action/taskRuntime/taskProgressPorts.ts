@@ -7,7 +7,8 @@ export interface TaskProgress {
   startedAt: string; updatedAt: string;
   findings: Array<{ id: string; text: string; status: 'unconfirmed'; sources: ShannonWebSource[]; updatedAt: string }>;
   places?: ShannonPlace[];
-  report?: { id: string; text: string; updatedAt: string };
+  /** `text` is the full report for the screen; `spoken`, once written, the short form a call says aloud (`fcaSpokenReport.ts`). */
+  report?: { id: string; text: string; updatedAt: string; spoken?: string };
 }
 export interface TaskProgressEvent {
   operationId: string; tool: string; status: TaskProgress['status'];

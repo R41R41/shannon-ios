@@ -11,18 +11,23 @@ private actor ActivityClient: ShannonConversationActivityServing {
     var age: TimeInterval = 0
     var absent = false
     var hold = false
+    var spokenReports: Bool?
     var continuation: CheckedContinuation<ShannonConversationActivityDTO, any Error>?
     var isHeld: Bool { continuation != nil }
     func configure(hold: Bool = false, loseSend: Bool = false, age: TimeInterval = 0, absent: Bool = false) {
         self.hold = hold; self.loseSend = loseSend; self.age = age; self.absent = absent
     }
     func addReport() { report = .init(id: "report-one", text: "一次資料に異なる説明がありました。違いを確かめています。", updatedAt: Date().formatted(.iso8601)) }
+    func addLongReport(spoken: String?) {
+        report = .init(id: "report-long", text: "## 太宰の由来\n- 大宰府という役所の名に由来します。\n- 出典: https://example.com", updatedAt: Date().formatted(.iso8601), spoken: spoken)
+        spokenReports = true
+    }
     func prependOlderReport() { oldReport = .init(id: "old", text: "Previous call", updatedAt: Date().addingTimeInterval(-60).formatted(.iso8601)) }
     func answer() -> ShannonConversationActivityDTO {
         let now = Date().addingTimeInterval(-age).formatted(.iso8601)
         let current = ShannonConversationActivityDTO.Task(id: "task", parentId: nil, kind: "research", origin: "owner_request", title: "Private research", phase: phase, summary: "A summary is not a finding", revision: 1, updatedAt: now, sourceThreadId: "talk", report: report)
         let previous: [ShannonConversationActivityDTO.Task] = oldReport.map { [.init(id: "earlier", parentId: nil, kind: "research", origin: "owner_request", title: "Previous call", phase: "completed", summary: "", revision: 1, updatedAt: now, sourceThreadId: "talk", report: $0)] } ?? []
-        return .init(generatedAt: now, tasks: previous + [current])
+        return .init(generatedAt: now, tasks: previous + [current], spokenReports: spokenReports)
     }
     func loadNow(scopeKey: String) async throws -> ShannonConversationActivityDTO {
         if absent { throw ShannonAPIError.rejected(status: 404) }
@@ -79,6 +84,23 @@ private actor ActivityClient: ShannonConversationActivityServing {
         #expect(model.nextReport(threadID: "talk") == nil)
         model.reset(othersPresent: true, disconnected: false)
         #expect(!model.reportIsCurrent(taskID: "task", reportID: report.id, threadID: "talk"))
+    }
+    @Test func `a call says the short spoken form and waits for it, never the full report`() async throws {
+        let client = ActivityClient(), model = ShannonConversationActivityModel(scopeKey: "owner", client: client)
+        await model.reload()
+        await client.addLongReport(spoken: nil); await model.reload()
+        #expect(model.nextReport(threadID: "talk") == nil)
+        let waiting = model.speechKey
+        await client.addLongReport(spoken: "太宰は、昔の役所の大宰府から来ているそうですよ。"); await model.reload()
+        #expect(model.speechKey != waiting)
+        let report = try #require(model.nextReport(threadID: "talk")?.report)
+        #expect(model.speech(for: report) == "太宰は、昔の役所の大宰府から来ているそうですよ。")
+    }
+    @Test func `an older server's report is still read in full`() async throws {
+        let client = ActivityClient(), model = ShannonConversationActivityModel(scopeKey: "owner", client: client)
+        await model.reload(); await client.addReport(); await model.reload()
+        let report = try #require(model.nextReport(threadID: "talk")?.report)
+        #expect(model.speech(for: report) == report.text)
     }
     @Test func `old first report does not starve a later report from this call`() async throws {
         let client = ActivityClient(), model = ShannonConversationActivityModel(scopeKey: "owner", client: client)

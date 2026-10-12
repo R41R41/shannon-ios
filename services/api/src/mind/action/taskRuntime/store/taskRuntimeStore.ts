@@ -28,6 +28,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   placeContext(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.places(id) : undefined; }
   admitPlaceContext(step: TaskStep, id: string, context: import('../../../../integrations/places/placeDiscovery.js').PlaceSearchContext) { return this.progressStore.admitPlaces(id, context, () => this.matches(step) && this.get(step.scopeKey, id)?.parentId === step.taskId && Boolean(this.options.conversationLeaseValid?.(step.scopeKey, step.lease, this.now()))); }
   progress(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.read(id) : null; }
+  recordSpokenReport(scope: string, id: string, report: string, text: string) { return this.progressStore.speak(scope, id, report, text); }
   recordProgress(step: TaskStep, event: TaskProgressEvent) { return this.progressStore.record(step, event, () => this.matches(step) && this.get(step.scopeKey, step.taskId)?.phase === 'executing' && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())); }
   admitSleep(scope: string, jobId: string) {
     const root = this.authority.root(scope);
@@ -336,6 +337,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
         const parent = this.required(step.scopeKey, task.parentId);
         if (!terminal(parent)) this.sendInTransaction(step.scopeKey, step.taskId, task.parentId,
           commit.summary || `${task.title}: ${status}`, `result:${step.id}`);
+        if (status === 'completed') this.progressStore.completion(step.scopeKey, task, step.id, commit.summary ?? '');
       }
       return this.snapshotInTransaction(step.scopeKey, step.taskId);
     });

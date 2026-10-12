@@ -76,6 +76,8 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   placeContext?(scopeKey: string, taskId: string): import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext | undefined;
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   recordProgress?(step: TaskStep, event: TaskProgressEvent): boolean;
+  /** Writes the spoken form of the task's current report; false once that report was replaced or already has one. */
+  recordSpokenReport?(scopeKey: string, taskId: string, reportId: string, spoken: string): boolean;
   observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
   admitSleep(scopeKey: string, jobId: string): TaskView | null;
   sleepTicketForTask(scopeKey: string, taskId: string): TaskSleepTicket | null;

@@ -66,13 +66,21 @@ public final class ShannonConversationActivityModel {
             state = .recovering
         }
     }
-    public var speechKey: String { tasks.compactMap { $0.report?.id }.joined(separator: "|") }
+    public var speechKey: String {
+        tasks.compactMap { task in task.report.map { report in "\(report.id):\(report.spoken == nil ? 0 : 1)" } }.joined(separator: "|")
+    }
+    /// The words a call says for a report: the server's short spoken form. Only a server that writes none has its full text read.
+    public func speech(for report: ShannonConversationActivityDTO.Report) -> String? {
+        if let spoken = report.spoken?.trimmingCharacters(in: .whitespacesAndNewlines), !spoken.isEmpty { return spoken }
+        guard reading?.spokenReports != true else { return nil }
+        return report.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : report.text
+    }
     public func nextReport(threadID: String?, writtenAfter: Date? = nil) -> ShannonConversationActivityDTO.Task? {
         guard state == .ready, !isStale(), let threadID else { return nil }
         return tasks.first { task in
             task.origin == "owner_request" && task.sourceThreadId == threadID
                 && task.report.map { report in
-                    !attemptedReports.contains(report.id) && !report.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    !attemptedReports.contains(report.id) && speech(for: report) != nil
                         && (writtenAfter.map { report.wasWritten(since: $0) } ?? true)
                 } == true
         }

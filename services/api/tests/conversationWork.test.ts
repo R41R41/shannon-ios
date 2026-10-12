@@ -77,6 +77,11 @@ describe('conversation plus ongoing work', () => {
     const report = f.now().tasks[0].report!; expect(report.text).toContain('一つ資料'); expect(report.text).not.toBe('Public fact observed');
     expect(f.driver.runtime.snapshot('owner', child.parentId!)?.messages.some(message => message.id === report.id && message.text === report.text)).toBe(true);
     expect(f.now().tasks[0].report?.id).toBe(report.id); expect(f.searches()).toBe(1);
+    // The report is on his screen (and said in a call): the next turn sees it marked, and is told not to announce it again.
+    expect((await f.chat('なるほど')).status).toBe(200);
+    expect(f.requests.at(-1)?.turnContext).toContain(`"id":"${report.id}"`);
+    expect(f.requests.at(-1)?.turnContext).toContain('"shownToOwner":true');
+    expect(f.requests.at(-1)?.turnContext).toContain('respond to the reaction itself');
     f.state.apply('owner', { type: 'user-fact-upserted', fact: { id: 'late-secret', statement: 'Public fact observed', confidence: 1, observedAt: at, disclosure: { category: 'secret' } } });
     expect(f.now().tasks[0].findings).toEqual([]); expect(f.now().tasks[0].report?.id).toBe(report.id);
     f.state.apply('owner', { type: 'user-fact-upserted', fact: { id: 'late-report-secret', statement: report.text, confidence: 1, observedAt: at, disclosure: { category: 'secret' } } });

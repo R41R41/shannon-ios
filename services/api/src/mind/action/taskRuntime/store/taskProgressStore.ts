@@ -1,6 +1,6 @@
 import { normalizedPlaceContext, validatedPlaces, type PlaceSearchContext } from '../../../../integrations/places/placeDiscovery.js';
 import type { DatabaseSync } from 'node:sqlite';
-import type { TaskAuthority, TaskStep } from '../taskRuntimePorts.js';
+import type { TaskAuthority, TaskRecord, TaskStep } from '../taskRuntimePorts.js';
 import type { TaskProgress, TaskProgressEvent } from '../taskProgressPorts.js';
 
 /** Subordinate to the same task, step and action lease. No scheduler or alternate status authority. */
@@ -34,6 +34,34 @@ export class TaskProgressStore {
         findings: prior?.findings ?? [], ...(prior?.places ? { places: prior.places } : {}), report };
       this.write(taskId, stepId ?? operationId, operationId, value);
       this.authority.event(scopeKey, taskId, 'fca_progress_observed', at, {}, { stepId, operationId, tool: 'fca.result', status: 'failed' });
+    });
+  }
+  /**
+   * A piece of work that finished without telling its parent anything (`fca_complete` with no `task.send`): its completion
+   * summary becomes the report, so the owner's activity shows it and a call says it (2026-10-13: a finished weather search was
+   * not said until he asked). A report already sent stays the report. The caller holds the committing transaction.
+   */
+  completion(scopeKey: string, task: Pick<TaskRecord, 'id' | 'kind' | 'origin'>, stepId: string, text: string): void {
+    // Work the owner asked for only: not the root, a conversation or a nightly sleep.
+    if (task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind) || !text.trim()) return;
+    const taskId = task.id, prior = this.read(taskId);
+    if (prior?.report) return;
+    const at = this.now(), operationId = `result:${stepId}`;
+    const report = { id: operationId, text: text.slice(0, 2000), updatedAt: at };
+    const value: TaskProgress = { currentStep: 'fca.result', status: 'received', startedAt: prior?.startedAt ?? at, updatedAt: at,
+      findings: prior?.findings ?? [], ...(prior?.places ? { places: prior.places } : {}), report };
+    this.write(taskId, stepId, operationId, value);
+    this.authority.event(scopeKey, taskId, 'fca_progress_observed', at, {}, { stepId, operationId, tool: 'fca.result', status: 'received' });
+  }
+  /** The short spoken form of the current report, written once; a newer report (another id) is never given an older one's. */
+  speak(scopeKey: string, taskId: string, reportId: string, spoken: string): boolean {
+    return this.authority.transaction(() => {
+      if (!this.authority.get(scopeKey, taskId)) return false;
+      const prior = this.read(taskId);
+      if (!prior?.report || prior.report.id !== reportId || prior.report.spoken || !spoken.trim()) return false;
+      const row = this.db.prepare('SELECT step_id,operation_id FROM fca_task_progress WHERE task_id=?').get(taskId)!;
+      this.write(taskId, String(row.step_id), String(row.operation_id), { ...prior, report: { ...prior.report, spoken: spoken.slice(0, 400) } });
+      return true;
     });
   }
   record(step: TaskStep, event: TaskProgressEvent, valid: () => boolean): boolean {

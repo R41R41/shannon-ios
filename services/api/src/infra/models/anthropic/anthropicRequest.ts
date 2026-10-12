@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
 import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../chatModel.js';
+import { VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -141,7 +142,7 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
   const inline = stableForegroundMenu(settings.model, toolsOffered);
   const instructions = [
-    request.systemPrompt, VOICE_REPLY_INSTRUCTIONS,
+    request.systemPrompt, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), SONNET_VOICE_LINES, ...(request.useWebSearch ? [SONNET_WEB_LINE] : []),
   ].join('\n\n');

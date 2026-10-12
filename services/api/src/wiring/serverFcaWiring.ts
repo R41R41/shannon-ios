@@ -45,6 +45,9 @@ import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
+import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
+import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
+import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
@@ -76,7 +79,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });
     };
-    const model = createAnthropicFcaModel({ ...provider, recordUsage });
+    const timeZone = ownerTimeZone(values);
+    const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }) });
     const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
@@ -154,7 +158,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
     const wake = () => { try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
     const timer = setInterval(wake, 1000); timer.unref();
-    const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0, progress: id => visible?.progress?.(parts.ownerScope, id) ?? null });
+    const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
+      localTime: () => ownerLocalClock(new Date(), timeZone),
+      record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
+    const progressShown = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken);
+    const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
+      visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
+      progress: progressShown, spokenReports: true });
     const lifecycleTask = (executionId: string) => {
       const taskId = new ActionLeaseReader(db).fcaTaskOf(executionId, parts.ownerScope);
       return taskId && visible?.(parts.ownerScope, taskId) ? runtime.runtime.taskSources(parts.ownerScope, taskId) : null;
@@ -169,7 +179,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
+    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
   } catch (error) { sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,

@@ -22,7 +22,8 @@ export function conversationFcaProvenance(state: CompanionStateSnapshot, convers
     ...state.prospectiveMemories.filter(item => item.status === 'pending').map(item => [item.id, item.summary] as const),
     ...state.interests.map(item => [memoryIdentifier('interest', item), item] as const),
   ].filter(([id, text]) => visibleMemoryText(state, id, text)).map(([id]) => id);
-  return [...new Set([...recalledMemoryIds, ...profile, ...lineage.filter(message => !withholding.withholdsMessage(message))
+  const visibleLineage = withholding.withReadSnapshot(() => lineage.filter(message => !withholding.withholdsMessage(message)));
+  return [...new Set([...recalledMemoryIds, ...profile, ...visibleLineage
     .flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : [])])];
 }
 
@@ -198,7 +199,7 @@ export function createFcaSourceGuard(parts: {
     const findings = observed.findings.filter(finding => !hidden([finding.text, ...finding.sources.flatMap(source => [source.title, source.url])].join('\n'), finding.updatedAt));
     const places = observed.places?.filter(place => !hidden(JSON.stringify(place), observed.updatedAt));
     const report = observed.report && !hidden(observed.report.text, observed.report.updatedAt) ? observed.report : undefined;
-    return { ...observed, findings, places, report };
+    return { ...observed, findings, places, report: report?.spoken && hidden(report.spoken, report.updatedAt) ? { ...report, spoken: undefined } : report };
   };
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string) => {
     const task = parts.runtime.get(scopeKey, taskId);

@@ -45,13 +45,15 @@ export class MemoryWithholding {
   private readonly experiences = new Map<string, ShannonExperience | null>();
   private readonly summaryDecisions = new Map<string, boolean>();
   private readonly recalledDecisions = new Map<string, boolean>();
+  /** The part of a recalled id's verdict that does not depend on the time of the reply that recalled it (one walk per id). */
+  private readonly provenanceDecisions = new Map<string, boolean>();
   private readonly readDecisions = new Map<string, boolean>();
   private externalReadsPossible = true;
   private queryDepth = 0;
   /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
   private query<T>(work: () => T): T {
     if (this.queryDepth === 0) {
-      this.recalledDecisions.clear(); this.readDecisions.clear();
+      this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear();
       this.externalReadsPossible = this.store?.hasReadSourceProvenance?.(this.scopeKey) !== false;
     }
     this.queryDepth += 1;
@@ -117,14 +119,29 @@ export class MemoryWithholding {
     if (blocked(id)) return true;
     const control = memoryControlFor(this.state, id);
     if (control?.status === 'active' && control.overrideText && observedAt > (control.contextInvalidatedAt ?? control.updatedAt)) return false;
-    if (this.hidden().some(item => item.id === id)) return true;
-    const experience = this.experience(id);
-    if (experience?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, experience.observedAt))) return true;
-    if (experience?.recalledMemoryIds?.some(source => this.recalledWithheld(source, experience.observedAt, seen))) return true;
+    if (this.provenanceWithheld(id, seen)) return true;
     const derived = this.state.userFacts.find(item => item.id === id) ?? this.state.relationships.find(item => item.id === id)
       ?? this.state.prospectiveMemories.find(item => item.id === id);
     return Boolean(derived && (blocked(derived.sourceExperienceId)
       || (derived.evidence && !isMemoryEvidenceVisible(this.state, derived.evidence))));
+  }
+
+  /**
+   * Withheld by what the remembered turn itself is, read or recalled: judged at the turn's own time, so it is the same for every
+   * reply that recalled it. 2026-10-13: keyed by the recalling reply's time, one research step walked the recall graph for 10 s.
+   */
+  private provenanceWithheld(id: string, seen: Set<string>): boolean {
+    const known = this.provenanceDecisions.get(id);
+    if (known !== undefined) return known;
+    const result = this.computeProvenance(id, seen);
+    this.provenanceDecisions.set(id, result);
+    return result;
+  }
+  private computeProvenance(id: string, seen: Set<string>): boolean {
+    if (this.hidden().some(item => item.id === id)) return true;
+    const experience = this.experience(id);
+    if (experience?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, experience.observedAt))) return true;
+    return Boolean(experience?.recalledMemoryIds?.some(source => this.recalledWithheld(source, experience.observedAt, seen)));
   }
 
   /** Source availability is independent of memory-control rules and must survive derived summaries. */

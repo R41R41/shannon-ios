@@ -391,7 +391,7 @@ export class ShannonApiKernel {
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
     const settled = choices ? await textStage('tool_menu_timeout', settleTextTools(toolOffer, choices), () => null) : null;
-    const work = admitConversationWork(fcaTurn, { message, research: body.webSearch === true || Boolean(placeOptions.placeSearch) || settled?.web === true, places: placeOptions.placeSearch });
+    const work = admitConversationWork(fcaTurn, { message, research: body.webSearch === true || Boolean(placeOptions.placeSearch) || settled?.web === true, places: placeOptions.placeSearch, at: occurredAt });
     const placeSkill = !work && placeOptions.placeSearch ? await textStage('places_timeout', optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch), () => null) : null;
     if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await textStage('tool_select_timeout', fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }), () => toolOffer.tools!) };
     toolOffer = { ...toolOffer, tools: conversationHintMenu(toolOffer.tools, Boolean(work)) };

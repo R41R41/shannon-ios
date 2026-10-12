@@ -4,6 +4,8 @@ import Foundation
 public struct ShannonConversationActivityDTO: Codable, Sendable {
     public let generatedAt: String
     public let tasks: [Task]
+    /// The server writes each report's short spoken form; a call waits for it instead of reading the full report.
+    public var spokenReports: Bool? = nil
     public struct Task: Codable, Identifiable, Sendable {
         public let id: String
         public let parentId: String?
@@ -66,6 +68,8 @@ public struct ShannonConversationActivityDTO: Codable, Sendable {
         public let id: String
         public let text: String
         public let updatedAt: String
+        /// What a call says aloud: a few sentences. `text` stays the full report for the screen.
+        public var spoken: String? = nil
         public func wasWritten(since date: Date) -> Bool {
             guard let written = (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(updatedAt))
                 ?? (try? Date.ISO8601FormatStyle().parse(updatedAt)) else { return false }

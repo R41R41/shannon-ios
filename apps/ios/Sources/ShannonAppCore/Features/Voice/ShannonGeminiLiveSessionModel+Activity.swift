@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 extension ShannonGeminiLiveSessionModel {
-    /// A task's already-written public report, spoken in the existing call. No owner utterance,
+    /// A task's already-written public report (its short spoken form), spoken in the existing call. No owner utterance,
     /// model decision, history turn, or task stop is fabricated to make this delivery happen.
     @discardableResult
     func speakActivityReport(_ text: String, stillCurrent: @escaping @MainActor () -> Bool) -> Bool {
@@ -81,10 +81,10 @@ public struct ShannonActivityVoiceReporting: ViewModifier {
             .task(id: "\(activity.speechKey)|\(session.phase.rawValue)|\(threadID ?? "")") {
             guard let callStarted = session.callStartedAt,
                   let task = activity.nextReport(threadID: threadID, writtenAfter: callStarted),
-                  let report = task.report else { return }
+                  let report = task.report, let words = activity.speech(for: report) else { return }
             // Nothing marks a report delivered when a call cannot take it. After an actual attempt,
             // barge-in or an uncertain audio result must not automatically replay the paid TTS.
-            let started = session.speakActivityReport(report.text) {
+            let started = session.speakActivityReport(words) {
                 activity.reportIsCurrent(taskID: task.id, reportID: report.id, threadID: threadID)
             }
             if started { activity.markReportAttempted(report.id) }
