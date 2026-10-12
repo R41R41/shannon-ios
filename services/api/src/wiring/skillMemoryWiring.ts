@@ -37,9 +37,27 @@ export function configuredSkillMemory(
   return { memory, close: () => { if (!parts.database && database.isOpen) database.close(); } };
 }
 
+/**
+ * How long the skill checks built from the owner's whole memory (the seed rule over every remembered turn, and the secret check over
+ * them) are reused while his companion state keeps the same version. A forget, a correction or any other state change is a new
+ * version, so it applies at once; a skill's own status and body are read afresh on every call. Before this, every FCA read
+ * receipt of a skill rebuilt both from all remembered turns: 80 receipts on the 2026-10-12 voice task, seconds per check.
+ */
+export const SKILL_CHECK_REUSE_MS = 2_000;
+
 /** What a turn is handed: the index, one skill by name, and the notes of its use; a skill built from something forgotten is left out at once. */
 export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string) => CompanionStateSnapshot,
-  sources?: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>): SkillTurnPorts {
+  sources?: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>, clock: () => number = Date.now): SkillTurnPorts {
+  type Checks = { version: number; at: number; pass: (sources: readonly string[]) => boolean; check: SkillBodyCheck | null; bodies: Map<string, boolean> };
+  const reused = new Map<string, Checks>();
+  const checksFor = (scopeKey: string, store: NonNullable<typeof sources>): Checks => {
+    const state = snapshot(scopeKey), at = clock(), known = reused.get(scopeKey);
+    if (known && known.version === state.version && at >= known.at && at - known.at < SKILL_CHECK_REUSE_MS) return known;
+    const pass = skillSourcesPass(store, memory, scopeKey);
+    const fresh = { version: state.version, at, pass, check: skillBodyCheck(state, store, scopeKey), bodies: new Map<string, boolean>() };
+    reused.set(scopeKey, fresh);
+    return fresh;
+  };
   const visible = (scopeKey: string) => {
     const state = snapshot(scopeKey);
     return (experienceId: string) => isExperienceSourceVisible(state, experienceId);
@@ -49,7 +67,7 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
     const skills = memory.usable(scopeKey, isVisible).filter(skill => skill.exportHold !== 'withdrawn'
       && isVisible(skill.skillId) && isVisible(versionRevisionId(skill.skillId, skill.version)));
     if (!sources) return skills;
-    const pass = skillSourcesPass(sources, memory, scopeKey), check = skillBodyCheck(snapshot(scopeKey), sources, scopeKey);
+    const { pass, check } = checksFor(scopeKey, sources);
     return skills.filter(skill => pass(skill.sources) && typeof checkedSkillText(skill.body, check) !== 'string');
   };
   const sourceId = (skill: { skillId: string; version: number }) => `shannon-skill://${encodeURIComponent(skill.skillId)}/revision/${encodeURIComponent(versionRevisionId(skill.skillId, skill.version))}`;
@@ -65,16 +83,21 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
       if (!sources || !memory.ready()) return null;
       const skill = memory.store.get(scopeKey, id);
       const isVisible = visible(scopeKey);
+      const checks = checksFor(scopeKey, sources), { pass, check } = checks;
+      // The same body under the same checks gets the same answer: asked once per body while the checks are reused.
+      const bodyPasses = (body: string) => {
+        if (!checks.bodies.has(body)) checks.bodies.set(body, typeof checkedSkillText(body, check) !== 'string');
+        return checks.bodies.get(body)!;
+      };
       if (!skill || skill.status === 'retired' || skill.exportHold === 'withdrawn' || !isVisible(skill.skillId)
-        || !isVisible(versionRevisionId(skill.skillId, skill.version)) || !skillSourcesPass(sources, memory, scopeKey)(skill.sources)) return null;
-      const check = skillBodyCheck(snapshot(scopeKey), sources, scopeKey);
-      if (typeof checkedSkillText(skill.body, check) === 'string') return null;
+        || !isVisible(versionRevisionId(skill.skillId, skill.version)) || !pass(skill.sources)) return null;
+      if (!bodyPasses(skill.body)) return null;
       const revision = revisionId ? memory.store.revisions(scopeKey, id).find(item => item.revisionId === revisionId && item.kind === 'version') : null;
       if (revisionId && !revision) return null;
       if (revisionId && !isVisible(revisionId)) return null;
       const body = revision?.body ?? skill.body;
       // Current ancestry remains required after editing; the exact older body is independently checked under today's controls.
-      if (typeof checkedSkillText(body, check) === 'string') return null;
+      if (!bodyPasses(body)) return null;
       return { body, provenance: revision?.provenance ?? skill.provenance };
     },
     used: (scopeKey, name, use, at) => memory.used(scopeKey, name, use, at),

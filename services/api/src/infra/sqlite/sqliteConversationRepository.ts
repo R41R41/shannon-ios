@@ -268,8 +268,10 @@ export class SQLiteConversationRepository implements ConversationStore {
   hasReadSourceProvenance(scopeKey: string): boolean {
     // Only canonical task:<uuid> experiences can own readSourceIds. Ordinary turns can inherit them by ID.
     // This fresh existence check is independent of FCA enablement and reads no payloads.
+    // A range on the unique event_id index (`task:` up to, not including, `task;`), the same rows as GLOB 'task:*' without a scan:
+    // this is asked at the start of every withholding read (2026-10-12: about a second per voice turn on 855 turns).
     return Boolean(this.context.database.prepare(`SELECT 1 FROM experience_events
-      WHERE scope_key = ? AND event_type = 'turn.completed' AND event_id GLOB 'task:*' LIMIT 1`).get(scopeKey));
+      WHERE event_id >= 'task:' AND event_id < 'task;' AND +scope_key = ? AND +event_type = 'turn.completed' LIMIT 1`).get(scopeKey));
   }
 
   appendTurn(

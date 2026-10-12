@@ -10,11 +10,37 @@ import type { TaskRuntime, TaskStep, TaskView } from '../taskRuntime/taskRuntime
 import type { FcaConversationPort, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { fcaReadReceiptSources } from './fcaConversationSources.js';
 
+/**
+ * The synchronous time one foreground turn may spend re-checking task provenance (the inbox, the children, task tools) before
+ * its model call. Past it the turn goes on as an ordinary conversation: no task context and no task tools for the rest of the
+ * turn (closed, never a guess), logged as `fca_context_budget`. 2026-10-12: these checks blocked the API's one thread for 27 s.
+ */
+export const FCA_TURN_BUDGET_MS = 300;
+/** What the inbox and the children's activity show at most; only these are checked, newest first (never all, then cut). */
+export const FCA_CONTEXT_ITEMS = 8;
+const ACTIVE_PHASES = ['ready', 'executing', 'waiting', 'stopping', 'unknown'];
+
 /** A foreground adapter, with no timer, model client, copied conversation history, or execution lease of its own. */
 export function createFcaConversationBridge(parts: {
   runtime: TaskRuntime; ownerScope: string; visible: FcaSourceGuard; selector?: FcaToolSelector | null;
+  /** `FCA_TURN_BUDGET_MS` unless a test gives its own. */
+  budgetMs?: number;
 }): FcaConversationPort {
-  const active = new Map<string, { step: TaskStep; ownerAlone(): boolean; observed: Set<string>; memories: Set<string>; reads: Set<string> }>();
+  const budgetMs = parts.budgetMs ?? FCA_TURN_BUDGET_MS;
+  type Turn = { step: TaskStep; ownerAlone(): boolean; observed: Set<string>; memories: Set<string>; reads: Set<string>; spentMs: number; overBudget: boolean };
+  const active = new Map<string, Turn>();
+  /** Runs one provenance check of the turn on its budget; once spent, the turn answers closed. */
+  const budgeted = <T>(turn: Turn, closedValue: T, work: () => T): T => {
+    if (turn.overBudget) return closedValue;
+    const started = performance.now();
+    try { return work(); } finally {
+      turn.spentMs += performance.now() - started;
+      if (turn.spentMs > budgetMs) {
+        turn.overBudget = true;
+        console.warn(`Shannon FCA context skipped code=fca_context_budget spentMs=${Math.round(turn.spentMs)}`);
+      }
+    }
+  };
   const key = () => {
     const lease = currentActionExecution()?.lease;
     return lease ? JSON.stringify([lease.id, lease.generation, lease.holder]) : null;
@@ -25,8 +51,8 @@ export function createFcaConversationBridge(parts: {
     if (!turn || !execution || execution.signal.aborted || scopeKey !== parts.ownerScope || turn.step.scopeKey !== scopeKey) return null;
     try {
       const task = parts.runtime.get(scopeKey, turn.step.taskId);
-      return turn.ownerAlone() && task?.phase === 'executing'
-        && parts.visible.sources(scopeKey, task, parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id) ? turn : null;
+      return turn.ownerAlone() && task?.phase === 'executing' && budgeted(turn, false, () => parts.visible.sources(scopeKey, task,
+        parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id)) ? turn : null;
     } catch { return null; }
   };
   const observe = (scopeKey: string, sources: FcaObservedSources): boolean => {
@@ -51,7 +77,8 @@ export function createFcaConversationBridge(parts: {
       const step = input.delivery ? delivery?.status === 'started' ? delivery.step : null
         : parts.runtime.beginConversation(input.scopeKey, input.threadId, execution.lease);
       if (!step) return null;
-      const turn = { step, ownerAlone: input.ownerAlone, observed: new Set<string>(), memories: new Set(input.recalledMemoryIds), reads: new Set<string>() };
+      const turn: Turn = { step, ownerAlone: input.ownerAlone, observed: new Set<string>(), memories: new Set(input.recalledMemoryIds),
+        reads: new Set<string>(), spentMs: 0, overBudget: false };
       active.set(leaseKey, turn);
       observe(input.scopeKey, { readSourceIds: input.readSourceIds });
       let closed = false;
@@ -74,19 +101,22 @@ export function createFcaConversationBridge(parts: {
         context() {
           if (closed || !current(input.scopeKey)) return '';
           const task = parts.runtime.get(input.scopeKey, step.taskId)!;
-          const messages = step.snapshot.messages.filter(message => parts.visible.sources(input.scopeKey, task,
-            parts.runtime.taskSources(input.scopeKey, task.id, [message.id]), step.id)
-            && (parts.visible.content?.(input.scopeKey, message.sourceTaskId, message.text, message.receivedAt) ?? true)).slice(0, 8);
+          // At most eight reports and eight children are checked (and shown); one not visible is left out, never replaced.
+          const messages = step.snapshot.messages.slice(0, FCA_CONTEXT_ITEMS).filter(message => budgeted(turn, false,
+            () => parts.visible.sources(input.scopeKey, task, parts.runtime.taskSources(input.scopeKey, task.id, [message.id]), step.id)
+            && (parts.visible.content?.(input.scopeKey, message.sourceTaskId, message.text, message.receivedAt) ?? true)));
           const children = parts.runtime.list(input.scopeKey, { parentId: step.taskId, limit: 50, order: 'recent' })
-            .filter(child => parts.visible(input.scopeKey, child.id, step.id)).sort((left, right) => Number(['ready', 'executing', 'waiting', 'stopping', 'unknown'].includes(right.phase)) - Number(['ready', 'executing', 'waiting', 'stopping', 'unknown'].includes(left.phase))).slice(0, 8);
+            .sort((left, right) => Number(ACTIVE_PHASES.includes(right.phase)) - Number(ACTIVE_PHASES.includes(left.phase))).slice(0, FCA_CONTEXT_ITEMS)
+            .filter(child => budgeted(turn, false, () => parts.visible(input.scopeKey, child.id, step.id)));
           for (const child of children) {
             const sources = parts.runtime.taskSources(input.scopeKey, child.id);
             if (!observe(input.scopeKey, { recalledMemoryIds: sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]), readSourceIds: sources.flatMap(source => source.readSourceIds ?? []) })) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
           }
-          const activity = children.map(child => { const progress = parts.visible.progress?.(input.scopeKey, child.id); return { id: child.id, title: child.title.slice(0, 160), phase: child.phase, summary: child.summary.slice(0, 1000),
+          const progressOf = (id: string) => budgeted(turn, null, () => parts.visible.progress?.(input.scopeKey, id) ?? null);
+          const activity = children.map(child => { const progress = progressOf(child.id); return { id: child.id, title: child.title.slice(0, 160), phase: child.phase, summary: child.summary.slice(0, 1000),
             progress: progress ? { currentStep: progress.currentStep, status: progress.status, updatedAt: progress.updatedAt,
               findings: progress.findings.slice(-2).map(finding => ({ ...finding, text: finding.text.slice(0, 500), sources: finding.sources.filter(source => source.url.length <= 500).slice(0, 2) })) } : null }; });
-          if (!messages.length && !activity.length) return '';
+          if (turn.overBudget || (!messages.length && !activity.length)) return '';
           const ids = messages.map(message => message.id);
           if (!parts.runtime.observeConversationMessages(step, ids)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
           for (const id of ids) turn.observed.add(id);

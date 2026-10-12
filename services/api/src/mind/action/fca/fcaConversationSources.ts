@@ -1,9 +1,9 @@
-import { conversationSecrets } from '../../inhibition/disclosurePorts.js';
+import { conversationSecrets, type SecretCheck } from '../../inhibition/disclosurePorts.js';
 import { createTaskMemory } from '../../memory/taskMemoryPorts.js';
 import { memoryIdentifier, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { MemoryWithholding } from '../../memory/memoryVisibilityPorts.js';
 import type { TaskMemoryReadSnapshot } from '../../memory/taskMemoryPorts.js';
-import type { ConversationStore } from '../../memory/memoryPorts.js';
+import type { ConversationStore, ShannonExperience } from '../../memory/memoryPorts.js';
 import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
@@ -34,6 +34,18 @@ export function conversationFcaProvenance(state: CompanionStateSnapshot, convers
  */
 export const FCA_SOURCE_VERDICT_MS = 5_000;
 const FCA_SOURCE_VERDICTS_KEPT = 256;
+/**
+ * How long the owner's remembered turns, as every check of one moment needs them (what is withheld is derived from them, and
+ * what he keeps secret), are loaded once and shared while his companion state keeps the same version. 2026-10-12, after the
+ * first fix: each check, each inbox report and each finding still loaded and parsed every remembered turn again.
+ */
+export const FCA_MEMORY_EPOCH_MS = 2_000;
+/**
+ * The most provenance one check walks. A task carrying more is not shown and does not run (closed: its content is dropped, not
+ * checked piecemeal), logged as `fca_provenance_capped`. Production on 2026-10-12 carried at most 14 sources and ~500 ids.
+ */
+export const FCA_PROVENANCE_LIMITS = Object.freeze({ sources: 64, recalledIds: 2_000 });
+let cappedLoggedAt = -Infinity;
 
 /** Re-read canonical conversation provenance under today's memory controls; native task history is never edited. */
 export function createFcaSourceGuard(parts: {
@@ -47,15 +59,29 @@ export function createFcaSourceGuard(parts: {
   type Verdict = { version: number; at: number; visible: boolean; reads: ReadonlyArray<readonly [string, string, boolean]> };
   const verdicts = new Map<string, Verdict>();
   const clock = parts.clock ?? Date.now;
+  type Epoch = { version: number; at: number; state: CompanionStateSnapshot; candidates: readonly ShannonExperience[];
+    withheld: readonly ShannonExperience[]; secrets?: SecretCheck; withholding?: MemoryWithholding };
+  const epochs = new Map<string, Epoch>();
+  /** The snapshot and remembered turns of this moment: one load per state version, reused for `FCA_MEMORY_EPOCH_MS`. */
+  const epochFor = (scopeKey: string): Epoch => {
+    const state = parts.state.snapshot(scopeKey), at = clock(), known = epochs.get(scopeKey);
+    if (known && known.version === state.version && at >= known.at && at - known.at < FCA_MEMORY_EPOCH_MS) return known;
+    const candidates = parts.conversations.experienceCandidates(scopeKey);
+    const withheld = new MemoryWithholding(state, parts.conversations, scopeKey, candidates).withheldExperiences();
+    const fresh: Epoch = { version: state.version, at, state, candidates, withheld };
+    epochs.set(scopeKey, fresh);
+    return fresh;
+  };
   /** Read receipts asked once per check (with the check's own snapshot), and recorded for the verdict. */
-  const recordedReads = (state: CompanionStateSnapshot, scopeKey: string) => {
+  const recordedReads = (epoch: Epoch, scopeKey: string) => {
+    const { state, candidates, withheld } = epoch;
     const seen = new Map<string, readonly [string, string, boolean]>();
     let withholding: MemoryWithholding | null = null;
     const check = parts.readSourceVisible ? (scope: string, id: string, observedAt: string): boolean => {
       if (scope !== scopeKey) return parts.readSourceVisible!(scope, id, observedAt);
       const key = JSON.stringify([id, observedAt]);
       if (!seen.has(key)) {
-        withholding ??= new MemoryWithholding(state, parts.conversations, scopeKey);
+        withholding ??= new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
         seen.set(key, [id, observedAt, parts.readSourceVisible!(scope, id, observedAt, { state, withholding })]);
       }
       return seen.get(key)![2];
@@ -63,10 +89,15 @@ export function createFcaSourceGuard(parts: {
     return { check, list: () => [...seen.values()] };
   };
   /** Still the same answers for every receipt a stored verdict consulted, under the current snapshot. */
-  const readsUnchanged = (state: CompanionStateSnapshot, scopeKey: string, reads: Verdict['reads']): boolean => {
+  const readsUnchanged = (epoch: Epoch, scopeKey: string, reads: Verdict['reads']): boolean => {
     if (!reads.length) return true;
-    const again = recordedReads(state, scopeKey);
-    return reads.every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
+    const again = recordedReads(epoch, scopeKey);
+    // Under the same state version a receipt's answer differs by its time only through memory controls, which did not change; what
+    // can change is whether the source still exists. One time per receipt is asked again: one it was visible at, if any, so that a
+    // source that went away is seen at once. (A receipt that was invisible at every time stays so until the verdict expires: closed.)
+    const representative = new Map<string, readonly [string, string, boolean]>();
+    for (const read of reads) if (!representative.has(read[0]) || (read[2] && !representative.get(read[0])![2])) representative.set(read[0], read);
+    return [...representative.values()].every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
   };
   const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, sources, pendingStepId) => {
     if (scopeKey !== parts.ownerScope) return false;
@@ -75,13 +106,21 @@ export function createFcaSourceGuard(parts: {
       if (!parts.ownerAlone()) return false;
       if (task.scopeKey !== scopeKey) return false;
       if (!sources.length) return true; // Direct owner API tasks have no inherited conversation source.
-      const state = parts.state.snapshot(scopeKey), at = clock();
+      const recalledIds = new Set(sources.flatMap(source => source.recalledMemoryIds)).size;
+      if (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds) {
+        if (clock() - cappedLoggedAt >= 60_000) {
+          cappedLoggedAt = clock();
+          console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} ids=${recalledIds}`);
+        }
+        return false;
+      }
+      const epoch = epochFor(scopeKey), state = epoch.state, at = clock();
       const key = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null, sources]);
       const known = verdicts.get(key);
       if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS
-        && readsUnchanged(state, scopeKey, known.reads)) return known.visible;
-      const reads = recordedReads(state, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
-      const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, undefined, reads.check);
+        && readsUnchanged(epoch, scopeKey, known.reads)) return known.visible;
+      const reads = recordedReads(epoch, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
+      const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, epoch.candidates, reads.check, epoch.withheld);
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
       // memory chunk used to build its own and walk the whole graph again.
       const visible = withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, sources, pendingStepId, state, withholding));
@@ -119,9 +158,12 @@ export function createFcaSourceGuard(parts: {
   const content: NonNullable<FcaSourceGuard['content']> = (scopeKey, taskId, text, observedAt) => {
     try {
       if (!parts.ownerAlone() || scopeKey !== parts.ownerScope) return false;
-      const state = parts.state.snapshot(scopeKey), sources = parts.runtime.taskSources(scopeKey, taskId);
+      const epoch = epochFor(scopeKey), sources = parts.runtime.taskSources(scopeKey, taskId);
       const recalledMemoryIds = [...new Set(sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
-      return !conversationSecrets(state, parts.conversations, scopeKey).carries(text) && !new MemoryWithholding(state, parts.conversations, scopeKey, undefined, parts.readSourceVisible).withholdsReply({ text, observedAt, recalledMemoryIds });
+      // One secret check and one withholding per moment, over the moment's remembered turns (not one per report or finding).
+      epoch.secrets ??= conversationSecrets(epoch.state, { experienceCandidates: () => epoch.candidates }, scopeKey);
+      epoch.withholding ??= new MemoryWithholding(epoch.state, parts.conversations, scopeKey, epoch.candidates, parts.readSourceVisible, epoch.withheld);
+      return !epoch.secrets.carries(text) && !epoch.withholding.withholdsReply({ text, observedAt, recalledMemoryIds });
     } catch { return false; }
   };
   const progress: NonNullable<FcaSourceGuard['progress']> = (scopeKey, taskId) => {

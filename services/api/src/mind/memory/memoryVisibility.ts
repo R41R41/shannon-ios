@@ -71,10 +71,16 @@ export class MemoryWithholding {
     private readonly scopeKey: string,
     private candidates?: readonly ShannonExperience[],
     private readonly readSourceVisible = store?.readSourceVisible?.bind(store),
+    /** The withheld turns among `candidates` under this same `state`, when a caller already derived them (`withheldExperiences`). */
+    withheld?: readonly ShannonExperience[],
   ) {
     this.rules = memoryWithholdingRules(state);
     for (const candidate of candidates ?? []) this.experiences.set(candidate.id, candidate);
+    if (withheld && candidates) this.hiddenExperiences = withheld;
   }
+
+  /** The turns this state withholds among the candidates (derived once; a caller with the same state and candidates may pass it on). */
+  withheldExperiences(): readonly ShannonExperience[] { return this.hidden(); }
 
   /** True when no forgotten, rejected or corrected item exists: nothing can be withheld. */
   get inactive(): boolean { return this.rules.length === 0; }
