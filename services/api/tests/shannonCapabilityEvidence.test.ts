@@ -106,6 +106,10 @@ import { appLookUnavailablePrompt } from '../src/mind/perception/appLookLines.js
 import { ConversationLooks } from '../src/mind/perception/conversationLooks.js';
 import { createConfiguredVoiceVisionGateway } from '../src/surfaces/voice/voiceVision.js';
 import { apiSourceFiles } from './support/sources.js';
+import { SHANNON_DEVICE_ACTIONS_CAPABILITY, withDeviceActionsCapability } from '@shannon/cognition';
+import { DeviceActions } from '../src/surfaces/device/deviceActions.js';
+import { createDeviceActionRoute } from '../src/surfaces/device/deviceActionRoutes.js';
+import { deviceActionExecutors } from '../src/mind/tools/shannonDeviceActionTools.js';
 
 const voiceSkill = (skill: VoiceSkill) => (VOICE_SKILLS as readonly string[]).includes(skill);
 const exists = (...values: unknown[]) => values.every(value => typeof value === 'function');
@@ -236,6 +240,14 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && configuredSkillMemory({ SHANNON_SKILLS: 'off' }, { databasePath: ':memory:', createsSchema: true }) === null
     && !shannonCapabilityPrompt('owner').includes(SHANNON_SKILLS_CAPABILITY.text)
     && withSkillsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_SKILLS_CAPABILITY.text),
+  // Her device tools (docs/device-actions-contract.md): the outbox, its routes and the executors; only in a turn that offers them.
+  device_actions: () => exists(DeviceActions.prototype.request, DeviceActions.prototype.poll, DeviceActions.prototype.report, createDeviceActionRoute,
+    deviceActionExecutors, ShannonToolRunner.prototype.useDeviceActions)
+    && ['reminder.create', 'timer.start', 'calendar.create_event', 'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create']
+      .every(name => SHANNON_TOOLS.some(tool => tool.name === name && tool.domain === 'device_action' && tool.surfaces.join() === 'text,voice' && tool.audiences.join() === 'owner_alone'))
+    && !shannonCapabilityPrompt('owner').includes(SHANNON_DEVICE_ACTIONS_CAPABILITY.text)
+    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).startsWith(shannonCapabilityPrompt('owner'))
+    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).endsWith(SHANNON_DEVICE_ACTIONS_CAPABILITY.text),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };

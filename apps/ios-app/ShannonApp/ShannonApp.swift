@@ -18,6 +18,7 @@ struct ShannonApp: App {
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var privateListeningModel: ShannonPrivateListeningModel
+    @State private var deviceActionModel: ShannonDeviceActionModel
     @State private var pendingPushToken: String?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -56,12 +57,14 @@ struct ShannonApp: App {
         _privateListeningModel = State(initialValue: usesDesignPreview
             ? .designPreview(outputs: [], registered: [], status: .notListening)
             : ShannonPrivateListeningModel(client: client, monitor: ShannonSystemAudioRouteMonitor()))
+        _deviceActionModel = State(initialValue: usesDesignPreview ? .designPreview() : ShannonDeviceActionModel(client: client))
 #else
         let initialModel = ShannonConversationModel(client: client)
         _conversationModel = State(initialValue: initialModel)
         _calendarSharingModel = State(initialValue: ShannonCalendarSharingModel(client: client))
         _privateListeningModel = State(initialValue: ShannonPrivateListeningModel(
             client: client, monitor: ShannonSystemAudioRouteMonitor()))
+        _deviceActionModel = State(initialValue: ShannonDeviceActionModel(client: client))
 #endif
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
@@ -95,6 +98,8 @@ struct ShannonApp: App {
                 .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: true)
                 // An iPhone app in the background is suspended unless it stands by: it withdraws its report when it leaves the foreground.
                 .shannonPrivateListening(privateListeningModel)
+                // Reminders, timers, events and music she was asked for, done here (docs/device-actions-contract.md).
+                .shannonDeviceActions(deviceActionModel)
                 .onOpenURL { url in
                     // `shannon://yousu` opens 「シャノン › ようす」, `shannon://admin/ops` 「設定 › 管理 › 運用」; every other link is a pairing link, as before.
                     guard !ShannonYousuLink.open(url) else { return }

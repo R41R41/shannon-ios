@@ -187,6 +187,10 @@ export const SWITCHES = [
     doc: 'Foreground text turns of Claude 5.5 keep one cached prefix (fixed tools, schema and system; per-turn lines after the words).',
   },
   {
+    name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
+    doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
+  },
+  {
     name: 'SHANNON_AUTONOMY_ENABLED', default: 'off', kind: 'true_only', owner: 'autonomy', requires: [],
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },

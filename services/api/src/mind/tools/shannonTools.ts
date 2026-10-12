@@ -2,6 +2,7 @@ import { MINECRAFT_LIFECYCLE_TOOLS, MINECRAFT_LIFECYCLE_SUMMARIES } from './mine
 import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS } from './searchToolInputs.js';
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
+import { DEVICE_ACTION_DOING, DEVICE_ACTION_SUMMARIES, DEVICE_ACTION_TOOLS } from './deviceActionToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import type { ToolExecutionEvidence } from '../../contracts/toolEvidenceContract.js';
 import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
@@ -14,8 +15,7 @@ import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDef
  * Whether a call may run is decided only by `authorizeToolCall` (`shannonToolGate.ts`); an executor never
  * checks the audience, the stop switch, or the budget itself.
  *
- * The descriptions are in her words, as she reads them. They are the only description of the tools;
- * `capabilities.ts` says in one line each that she has them.
+ * The descriptions are in her words, as she reads them, and the only description of the tools (`capabilities.ts` names them).
  * All results use the shared ToolResult shape below (ADR-0003).
  */
 export type ToolSurface = 'text' | 'voice' | 'autonomy';
@@ -63,7 +63,7 @@ export interface ShannonToolDefinition {
    * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
    * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'memory_read' | 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'minecraft_lifecycle' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
+  domain: 'memory_read' | 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'minecraft_lifecycle' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace' | 'device_action';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. `model`: it calls one (place search asks a model with web search). */
   cost: 'none' | 'model';
@@ -317,7 +317,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       name: { type: 'string', description: 'スキルの名前（目次の「- 」のあとの英字の名前）', minLength: 1, maxLength: 40 },
       section: { type: 'string', description: '一部だけ読む時: 手順・補助・参考のどれか。書かなければ全部', enum: ['手順', '補助', '参考'] },
     }, ['name']) }),
-  ...TASK_TOOLS, ...MEMORY_TOOLS, ...MINECRAFT_LIFECYCLE_TOOLS,
+  ...TASK_TOOLS, ...MEMORY_TOOLS, ...MINECRAFT_LIFECYCLE_TOOLS, ...DEVICE_ACTION_TOOLS,
 ]);
 
 /**
@@ -327,7 +327,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
  * changes with it; `shannonTools.test.ts` holds that every tool has one.
  */
 export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
-  ...MINECRAFT_LIFECYCLE_SUMMARIES,
+  ...MINECRAFT_LIFECYCLE_SUMMARIES, ...DEVICE_ACTION_SUMMARIES,
   'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
   'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
@@ -389,7 +389,7 @@ export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
   'aether.propose': 'acts',
   'minecraft.request': 'acts', 'minecraft.status': 'describes', 'minecraft.cancel': 'acts',
   'notion.read': 'describes', 'voyager.tasks': 'describes', 'schedule.upcoming': 'describes', 'places.search': 'describes', 'web.search': 'describes',
-  'skill.read': 'describes',
+  'skill.read': 'describes', ...DEVICE_ACTION_DOING,
 });
 
 /** Whether a tool acts or describes (an unknown name describes: it is never evidence of doing). */

@@ -72,7 +72,7 @@ export function conversationTools(
   const words = turn.slice(turn.indexOf('\n') + 1);
   // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06); words
   // that name Aether only while her Aether tools are.
-  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface))
+  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface), offersDevice(runner, scopeKey))
       ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
@@ -240,7 +240,7 @@ export function toolMenuCandidates(
     if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return [];
     const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
     const words = turn.slice(turn.indexOf('\n') + 1);
-    const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface))
+    const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface), offersDevice(runner, scopeKey))
       ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
     if (!offer) return [];
     const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
@@ -263,6 +263,18 @@ export function asksAboutOwnThings(transcript: string): boolean {
 /** Words about her Minecraft body or the game. They offer a voice turn her tools only while her body is in the game (`voiceToolOffer`). */
 export function asksAboutMinecraftBody(transcript: string): boolean {
   return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
+}
+
+/** Words that ask for music, a reminder, a timer or a calendar entry: a voice turn is offered her tools while her device tools exist. */
+export function asksForDeviceAction(transcript: string): boolean {
+  return /音楽|曲(?![がげ])|BGM|プレイリスト|アルバム|かけて|流して|再生|スキップ|リマインド|リマインダー|タイマー|アラーム|予定を入れ|予定入れ|カレンダーに/iu.test(transcript);
+}
+
+const proposesMusic = (reply: string) => /曲|音楽|かけ(?:ましょう|ようか|ても)|流し(?:ましょう|ようか|ても)/u.test(reply);
+
+/** Whether the runner has her device tools for this scope (the owner's, switched on). */
+function offersDevice(runner: ShannonToolRunner | undefined, scopeKey: string): boolean {
+  try { return runner?.offered('voice', 'owner_alone', scopeKey).some(tool => tool.domain === 'device_action') ?? false; } catch { return false; }
 }
 
 /** Whether the runner offers her Aether tools on this surface now (Aether configured). */
@@ -292,7 +304,9 @@ export function asksToConfirmToolAction(reply: string): boolean {
  * something she would do with them. Otherwise null: the turn keeps the plain path's speed.
  */
 export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string,
-  minecraftBodyPresent = false, aetherOffered = false): 'asked' | 'follow_up' | null {
+  minecraftBodyPresent = false, aetherOffered = false, deviceOffered = false): 'asked' | 'follow_up' | null {
+  // Music, a reminder, a timer or an event (`docs/device-actions-contract.md`), and his yes to a song she proposed.
+  if (deviceOffered && (asksForDeviceAction(words) || (confirms(words) && lastReplyAsks(server, scopeKey, threadId, proposesMusic)))) return 'asked';
   // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
   // Words that name Aether ask about its documents while her Aether tools are offered; 「Aetherにメモして」 stays the note command.
   if (asksAboutOwnThings(words) || (minecraftBodyPresent && asksAboutMinecraftBody(words)) || (asksForMemo(words) && !namesAether(words))

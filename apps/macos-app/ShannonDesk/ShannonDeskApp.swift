@@ -15,6 +15,7 @@ struct ShannonDeskApp: App {
     @State private var appIconModel: ShannonAppIconModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var privateListeningModel: ShannonPrivateListeningModel
+    @State private var deviceActionModel: ShannonDeviceActionModel
     /// The voice conversation (A16), one for the app: it outlives the page and the window it was started from.
     @State private var voiceCall: ShannonDesktopVoiceCall
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
@@ -57,6 +58,14 @@ struct ShannonDeskApp: App {
         // in the design preview only when asked (-ShannonPreviewDesktopBody), and it never sends anything there.
         let voiceCall = ShannonDesktopVoiceCall()
         _voiceCall = State(initialValue: voiceCall)
+        // Reminders, timers, events and music she was asked for, done on this Mac (docs/device-actions-contract.md).
+#if DEBUG
+        let deviceActions = usesDesignPreview ? ShannonDeviceActionModel.designPreview() : ShannonDeviceActionModel(client: client)
+#else
+        let deviceActions = ShannonDeviceActionModel(client: client)
+#endif
+        deviceActions.inCall = { voiceCall.holdsMicrophone }
+        _deviceActionModel = State(initialValue: deviceActions)
         ShannonDesktopBody.shared.configure(conversation: conversation, voiceCall: voiceCall)
 #if DEBUG
         let showsDesktopBody = !usesDesignPreview || ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDesktopBody")
@@ -118,6 +127,7 @@ struct ShannonDeskApp: App {
             // The Mac app runs whether or not its window is in front, so its report stays fresh and she can speak.
             .shannonEarphoneSpeaking(conversation: conversationModel)
             .shannonPrivateListening(privateListeningModel)
+            .shannonDeviceActions(deviceActionModel)
             .onOpenURL { url in
                 // shannon://yousu and shannon://admin/ops open ようす and 設定 › 管理 › 運用.
                 if ShannonYousuLink.open(url) { return }

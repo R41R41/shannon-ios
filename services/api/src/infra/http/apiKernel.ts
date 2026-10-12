@@ -78,7 +78,7 @@ import {
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
+import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -137,7 +137,7 @@ export interface ShannonApiKernelOptions {
   autonomy?: ShannonAutonomyService;
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
-  minecraftRequests?: { promptBlock(scopeKey: string, at: string): string } | null;
+  minecraftRequests?: ReportedWork | null;
   /**
    * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what
    * it was at ca7cf519 (`SHANNON_ADR8_STAGE2=off` hands none).
@@ -181,7 +181,7 @@ export class ShannonApiKernel {
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
-  private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
+  private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined;
   private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null;

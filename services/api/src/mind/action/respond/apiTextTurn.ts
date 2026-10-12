@@ -49,6 +49,12 @@ import { framedReport, type MindTurnPorts } from '../../workspace/workspacePorts
  * body, `minecraftBody.ts`, and the platform reply route, `platformReply.ts`) passes its audience policy and a `surface`
  * that adds its prompt blocks and keeps the turn where that surface keeps it. Split from `apiKernel.ts` for its size.
  */
+/** Reports of what she asked to be done (`minecraftBodyRequests.ts`; the device-action outbox, `docs/device-actions-contract.md`). */
+export interface ReportedWork {
+  promptBlock(scopeKey: string, at: string): string;
+  devicePromptBlock?(scopeKey: string, at: string): string;
+}
+
 export interface TextTurnDependencies {
   chatModel: ShannonChatModel; stateStore: CompanionStateStore; conversationStore: ConversationStore; background: TurnBackgroundService;
   knowledgeStore: KnowledgeStore | null; dailyMind: DailyMindReader | null; autonomy: ShannonAutonomyService; agentTasks: AgentTaskStore;
@@ -57,8 +63,8 @@ export interface TextTurnDependencies {
   personIdentities: PersonIdentityStore; cognitiveIntents: CognitiveIntentStore; conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall: TurnMemoryRecall | null; people: PeopleMemory; toolServer: ConversationToolServer; now: CompanionClock;
   body: Pick<ShannonBody, 'ownerContext'>;
-  /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
-  minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
+  /** What her Minecraft body (and, `devicePromptBlock`, the owner's devices) reported of what they were asked, for a turn the owner alone reads. */
+  minecraftRequests: ReportedWork | null;
   /** Syzygy ADR-0008 stage 3: the mind of the turn, when there is one (its data frames frame the reports a turn builds itself). */
   mind?: MindTurnPorts | null;
   stage5Capabilities?: ShannonStage5Capabilities;
@@ -280,8 +286,9 @@ export interface TextTurnPrompt {
 
 /** The Minecraft body's reports; with data frames on (stage 3), its reported lines framed as data (`framedReport`). */
 function minecraftReport(dependencies: TextTurnDependencies, scopeKey: string, at: string): string {
-  const block = dependencies.minecraftRequests?.promptBlock(scopeKey, at) ?? '';
-  return block && dependencies.mind?.dataFrames ? framedReport(block, 'minecraft') : block;
+  const framed = (block: string, source: string) => block && dependencies.mind?.dataFrames ? framedReport(block, source) : block;
+  const device = dependencies.minecraftRequests?.devicePromptBlock?.(scopeKey, at) ?? '';
+  return [framed(dependencies.minecraftRequests?.promptBlock(scopeKey, at) ?? '', 'minecraft'), framed(device, 'device')].filter(Boolean).join('\n\n');
 }
 
 export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, parts: {

@@ -149,6 +149,27 @@ export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
   text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。',
 } as const satisfies ShannonCapability);
 
+/**
+ * Her device tools (`docs/device-actions-contract.md`; owner decisions of Syzygy ADR-0009 §10): reminders, timers, calendar events
+ * and Apple Music, done by the owner's own app. Appended by the API (`withDeviceActionsCapability`) only to a turn that offers them,
+ * after everything else of her identity, so the cached prefix is the same with and without it (`anthropicCachePlan.ts`). It says
+ * itself which two limitation lines no longer hold in that turn.
+ */
+export const SHANNON_DEVICE_ACTIONS_CAPABILITY = Object.freeze({
+  id: 'device_actions', audience: 'owner',
+  text: '端末に頼む: ライ氏と二人だけの会話で頼まれたら、ライ氏のiPhoneやMacのシャノンのアプリを通して、リマインダー（通知つき）・タイマー・'
+    + 'カレンダーの予定を入れる（この会話では、上の「今はできないこと」のカレンダーへの登録とタイマーは、端末に頼めばできる）。'
+    + 'Apple Musicで曲を探してかけ、止める・飛ばす。曲はライ氏が頼んだ時か、ボクの提案にライ氏が応じた時だけかけ、'
+    + '自分から黙ってかけない（かけたい曲は言葉で提案する）。選ぶ時はライ氏のよく聴く曲や最近の曲から、会話の雰囲気といまの気持ちに合うものを選び、'
+    + '理由をひと言添える。端末の報告が届くまで済んだとは言わない。アプリが開いていない時、音楽はかけられない。',
+} as const satisfies ShannonCapability);
+
+/** The owner's description with the device block appended; adding it twice changes nothing. */
+export function withDeviceActionsCapability(prompt: string): string {
+  const block = `\n\n${SHANNON_DEVICE_ACTIONS_CAPABILITY.text}`;
+  return prompt.includes(block) ? prompt : `${prompt}${block}`;
+}
+
 /** Capabilities the API may add to the description while it has them. */
 export const SHANNON_STAGE5_CAPABILITIES = Object.freeze([
   {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライ氏は「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},
@@ -169,7 +190,8 @@ export function withStage5Capabilities(prompt: string, available: ShannonStage5C
   return added ? `${prompt.slice(0, at + anchor.length)}${added}${prompt.slice(at + anchor.length)}` : prompt;
 }
 
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, SHANNON_DEVICE_ACTIONS_CAPABILITY,
+  ...SHANNON_STAGE5_CAPABILITIES] as const);
 
 /** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
 export function withSkillsCapability(prompt: string): string {

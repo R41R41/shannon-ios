@@ -12,7 +12,13 @@
 		<string>voip</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。</string>
+	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。会話で頼んだ時は、シャノンがカレンダーに予定を追加します。</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>会話で「予定を入れて」と頼んだ時に、シャノンがカレンダーに予定を追加します。</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>会話で「リマインドして」と頼んだ時に、シャノンがリマインダーに通知つきの項目を追加します。</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>会話で頼んだ時や、シャノンの提案にあなたが応じた時に、Apple Musicの曲を探してこのアプリで再生します。曲を選ぶために、最近聴いた曲・よく聴く曲・ライブラリのプレイリストを読みます。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>現在地に関する質問をしたときだけ、近くの場所や交通を調べるために位置情報を使用します。</string>
     <key>CFBundleDevelopmentRegion</key>

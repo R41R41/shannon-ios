@@ -67,6 +67,9 @@ extension ShannonConversationView {
                         .id("restored-agent-task-\(task.id.uuidString)")
                     }
 
+                    // A song she chose, while it plays (docs/device-actions-contract.md).
+                    ShannonNowPlayingCard()
+
                     if model.isSending {
                         ShannonTypingIndicator(expression: model.currentExpression, isSearchingMemory: model.isSearchingMemory)
                             .id("shannon-is-typing")

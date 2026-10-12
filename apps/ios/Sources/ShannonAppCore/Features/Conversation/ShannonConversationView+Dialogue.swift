@@ -22,6 +22,9 @@ extension ShannonConversationView {
                     }
                     .padding(.horizontal, ShannonSpacing.large)
                     .padding(.top, ShannonSpacing.extraSmall)
+                    // A song she chose, while it plays (docs/device-actions-contract.md).
+                    ShannonNowPlayingCard()
+                        .padding(.horizontal, ShannonSpacing.large)
                     GeometryReader { geometry in
                         if dialogueShowsLive2D {
                             live2DDialogue(palette, geometry: geometry)
