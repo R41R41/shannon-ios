@@ -6,10 +6,20 @@ import { consumeDeviceAllowance, readJson, sendJson } from './serverHttp.js';
 export const ACTION_THREAD_PATH = '/v1/action-threads';
 export const isActionThreadPath = (path: string) => path === ACTION_THREAD_PATH || path.startsWith(`${ACTION_THREAD_PATH}/`);
 const labels = { ownTime: '自分の時間', agentTask: '作業環境での作業', minecraft: 'Minecraft', respond: '会話' };
+const LIVE_STATES = ['queued', 'running', 'waiting', 'stopping'];
+const RECENT_MS = 3_600_000;
+
+/** An unknown outcome stays listed while its notice awaits the owner; otherwise it ages out like a finished action. */
+function listed(view: ActionView, at: string): boolean {
+  if (view.kind === 'respond') return false;
+  if (LIVE_STATES.includes(view.state)) return true;
+  const awaitingOwner = view.state === 'unknown' && view.notification !== undefined && !view.notification.acknowledgedAt;
+  return awaitingOwner || Date.parse(at) - Date.parse(view.updatedAt) < RECENT_MS;
+}
+
 export function publicActionThreads(views: readonly ActionView[], at: string, others: boolean) {
-  const relevant = views.filter(view => view.kind !== 'respond' &&
-    (['queued', 'running', 'waiting', 'stopping', 'unknown'].includes(view.state) || Date.parse(at)-Date.parse(view.updatedAt)<3_600_000));
-  const count = relevant.filter(view => ['queued', 'running', 'waiting', 'stopping'].includes(view.state)).length;
+  const relevant = views.filter(view => listed(view, at));
+  const count = relevant.filter(view => LIVE_STATES.includes(view.state)).length;
   return { availability: 'ready', generatedAt: at, count, othersPresent:others, threads: others ? [] : relevant.slice(-40).map(view => ({
     id: view.id, kind: view.kind, title: labels[view.kind], origin: view.origin, state: view.state,
     progress: view.progress, result: view.result, updatedAt: view.updatedAt, failures: view.failures,

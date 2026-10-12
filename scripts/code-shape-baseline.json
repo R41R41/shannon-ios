@@ -320,7 +320,7 @@
     },
     "services/api/src/infra/http/fcaNowProjection.ts": {
       "multi-statement-line": 2,
-      "long-line": 3
+      "long-line": 2
     },
     "services/api/src/infra/http/fcaTaskRoutes.ts": {
       "complex-function": 1,

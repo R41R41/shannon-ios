@@ -1,12 +1,25 @@
 import type { TaskRuntime } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { TaskProgress } from '../../mind/action/taskRuntime/taskProgressPorts.js';
 
+const FINISHED_PHASES = ['completed', 'failed', 'stopped', 'unknown'];
+const FINISHED_SHOWN_MS = 3_600_000;
+
+/** Live work always shows; finished work (including an unknown outcome, retired after 10 min) shows for an hour, then leaves "now". */
+function current(task: { phase: string; updatedAt: string }, now: number): boolean {
+  if (!FINISHED_PHASES.includes(task.phase)) return true;
+  return now - Date.parse(task.updatedAt) < FINISHED_SHOWN_MS;
+}
+
 /** Only public task metadata and executor receipts. History/inbox/checkpoints never cross this route. */
-export function fcaNowProjection(runtime: TaskRuntime, scope: string, visible: (id: string) => boolean, progress?: (id: string) => TaskProgress | null) {
-  const tasks = runtime.list(scope, { order: 'recent', limit: 100 }).filter(task => !['root', 'conversation'].includes(task.kind) && visible(task.id)).slice(0, 50);
+export function fcaNowProjection(runtime: TaskRuntime, scope: string, visible: (id: string) => boolean, progress?: (id: string) => TaskProgress | null,
+  now: () => number = Date.now) {
+  const at = now();
+  const tasks = runtime.list(scope, { order: 'recent', limit: 100 })
+    .filter(task => !['root', 'conversation'].includes(task.kind) && current(task, at) && visible(task.id))
+    .slice(0, 50);
   let receiptCharacters = 100_000;
   const bounded = <T>(value: T): T | undefined => { const size = JSON.stringify(value).length; if (size > receiptCharacters) return undefined; receiptCharacters -= size; return value; };
-  return { generatedAt: new Date().toISOString(), tasks: tasks.map(task => {
+  return { generatedAt: new Date(at).toISOString(), tasks: tasks.map(task => {
     const observed = progress?.(task.id);
     const report = observed?.report ? bounded(observed.report) : undefined;
     const places = observed?.places ? bounded(observed.places) : undefined;
