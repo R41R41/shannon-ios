@@ -24,6 +24,7 @@ import { webReadUrl, type WebReadOperation } from '../webResearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { cachePlanApplies, exceptionTurn, plannedChatBody } from './anthropicCachePlan.js';
+import { plannedVoiceBody, voicePlanApplies, voicePlanCovers } from './anthropicVoicePlan.js';
 import { noteFeelingAnswer, notePlanEvent } from './cacheWarmTurns.js';
 import {
   claudeConversationSender, type ClaudeConversationTransport, type ClaudeListener, type ClaudeSend, type ClaudeSendRequest,
@@ -93,6 +94,8 @@ export interface AnthropicChatModelOptions {
   retryWait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   /** Text turns follow the foreground cache plan (`anthropicCachePlan.ts`); unset: `SHANNON_CLAUDE_CACHE_PLAN`. Native 5.5 only. */
   cachePlan?: boolean;
+  /** Voice turns follow it (`anthropicVoicePlan.ts`); unset: `SHANNON_CLAUDE_CACHE_PLAN_VOICE`. Native 5.5 only. */
+  voiceCachePlan?: boolean;
 }
 
 export class AnthropicChatModel implements ShannonChatModel {
@@ -103,11 +106,14 @@ export class AnthropicChatModel implements ShannonChatModel {
   private readonly clock: () => number;
   private readonly transport: ClaudeConversationTransport;
   private readonly cachePlan: boolean;
+  private readonly voicePlan: boolean;
 
   constructor(private readonly options: AnthropicChatModelOptions) {
     if (!options.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is required');
     this.model = options.settings.model;
     this.cachePlan = options.cachePlan === undefined ? cachePlanApplies(this.model) : options.cachePlan && isAppendOnlyAnthropicModel(this.model);
+    const voicePlan = options.voiceCachePlan;
+    this.voicePlan = voicePlan === undefined ? voicePlanApplies(this.model) : voicePlan && isAppendOnlyAnthropicModel(this.model);
     this.clock = options.clock ?? (() => performance.now());
     // No SDK retries: the turn's deadline bounds it. The transport alone adds one bounded transient retry for Haiku.
     const client = claudeClient({ apiKey: options.apiKey, timeoutMilliseconds: options.timeoutMilliseconds ?? 45_000, fetch: options.fetch });
@@ -252,7 +258,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     const tools = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
     const ceiling = tools ? Math.max(VOICE_MAX_OUTPUT_TOKENS[request.conversationClass], VOICE_TOOL_OUTPUT_TOKENS) : VOICE_MAX_OUTPUT_TOKENS[request.conversationClass];
     observerHandoff('context', 'native', { surface: 'voice', model: this.model });
-    const body = observeSync('native', { surface: 'voice' }, () => sonnetVoiceBody(this.options.settings, request, ceiling), observedAnthropicRequest, { model: this.model });
+    const plan = this.voicePlanTurn(request, ceiling);
+    const body = observeSync('native', { surface: 'voice' }, () => this.voiceBody(request, ceiling, plan.planned), observedAnthropicRequest, { model: this.model });
     let spoken = '';
     let voiceRequests = 0;
     const speak = async (text: string) => { spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
@@ -261,7 +268,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
     if (request.useWebSearch) bounds.firstOutputMilliseconds = Math.max(bounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS);
     const listen = onTextDelta ? (delta: string) => speak(delta).then(() => request.useWebSearch ? '' : delta) : null;
-    const send = this.sender({ scopeKey: request.scopeKey, route: 'voice' }, listen, stop, this.firstTokenLatency, watch?.first, bounds);
+    const target = { scopeKey: request.scopeKey, route: 'voice' as const, ...(request.threadKey === undefined ? {} : { thread: request.threadKey }) };
+    const send = this.sender(target, listen, stop, this.firstTokenLatency, watch?.first, bounds);
     let result: SonnetRoundResult;
     try {
       result = await sonnetToolRounds(body, {
@@ -269,6 +277,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         ...(usesOneHourAnthropicCache(this.model) ? { plainBody: sonnetVoiceBody(this.options.settings, { ...request, tools: undefined }, ceiling) } : {}),
         // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
         onCalls: async names => { watch?.first(); if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
+        ...plan.rounds,
       });
     } catch (error) {
       const declinedBeforeWork = voiceRequests === 1 && error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500 && ![408, 409].includes(error.status);
@@ -300,6 +309,27 @@ export class AnthropicChatModel implements ShannonChatModel {
   private textBody(request: ShannonChatModelRequest, plan = this.cachePlan): Anthropic.MessageCreateParamsNonStreaming {
     const build = plan ? plannedChatBody : sonnetChatBody;
     return build(this.options.settings, request, this.options.agentHostHint);
+  }
+
+  /** The voice turn's request: the voice plan's (`anthropicVoicePlan.ts`) or the one before it, byte for byte. */
+  private voiceBody(request: ShannonVoiceModelRequest, ceiling: number, plan: boolean): Anthropic.MessageCreateParamsNonStreaming {
+    return (plan ? plannedVoiceBody : sonnetVoiceBody)(this.options.settings, request, ceiling);
+  }
+
+  /**
+   * What the voice plan adds to a voice turn's rounds, as for text (`planTurn`): a call in a turn without tools is declined once,
+   * and a refused first request is asked again in the shape without the plan. A turn with a native web search keeps that shape
+   * (`voice:web_exception`). Nothing here adds a request to an ordinary turn.
+   */
+  private voicePlanTurn(request: ShannonVoiceModelRequest, ceiling: number): { planned: boolean; rounds: Partial<SonnetRoundOptions> } {
+    if (!this.voicePlan) return { planned: false, rounds: {} };
+    if (!voicePlanCovers(request)) {
+      notePlanEvent('voice', 'web_exception');
+      return { planned: false, rounds: {} };
+    }
+    notePlanEvent('voice', 'plan_turn');
+    const onPlanEvent = (event: string) => notePlanEvent('voice', event);
+    return { planned: true, rounds: { declineUnofferedCalls: true, planFallback: this.voiceBody(request, ceiling, false), onPlanEvent } };
   }
 
   /** Where a text turn's requests go: its Talk, for the receipts only. */

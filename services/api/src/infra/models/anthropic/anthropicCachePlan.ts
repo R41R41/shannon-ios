@@ -5,6 +5,7 @@ import {
   SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, SHANNON_DEVICE_ACTIONS_CAPABILITY,
 } from '@shannon/cognition';
 import { serverEnvironment } from '../../config/serverEnvironment.js';
+import { RICH_TEXT_BLOCK_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
 import { SKILL_INDEX_HEADER } from '../../../mind/memory/skillDocument.js';
 import { toolOpenDefinition } from '../../../mind/tools/shannonToolMenu.js';
 import type { ShannonChatModelRequest } from '../chatModel.js';
@@ -163,7 +164,7 @@ export function planTurnLines(request: ShannonChatModelRequest, layers: StableLa
 }
 
 /** The lines joined to the turn's context message after the words, or a message of their own. */
-function withTurnLines(messages: Anthropic.MessageParam[], lines: readonly string[]): Anthropic.MessageParam[] {
+export function withTurnLines(messages: Anthropic.MessageParam[], lines: readonly string[]): Anthropic.MessageParam[] {
   if (!lines.length) return messages;
   const last = messages.at(-1);
   const text = lines.join('\n\n');
@@ -191,7 +192,8 @@ export function planSchemaOf(body: object): PlanSchema | null {
   return mark === 'common' || mark === 'exception' ? mark : null;
 }
 
-function planned(body: Anthropic.MessageCreateParamsNonStreaming, schema: PlanSchema): Anthropic.MessageCreateParamsNonStreaming {
+/** The body marked as built under the plan (`isPlannedBody`); voice turns carry `common`, having no output schema. */
+export function planned(body: Anthropic.MessageCreateParamsNonStreaming, schema: PlanSchema): Anthropic.MessageCreateParamsNonStreaming {
   return Object.assign(body, { [PLANNED]: schema });
 }
 
@@ -202,7 +204,7 @@ function planFormat(settings: SonnetSettings, request: ShannonChatModelRequest, 
   return own as { type: 'json_schema'; schema: Record<string, unknown> };
 }
 
-function cachedSystem(text: string): Anthropic.TextBlockParam[] {
+export function cachedSystem(text: string): Anthropic.TextBlockParam[] {
   return [{ type: 'text', text, cache_control: { type: 'ephemeral', ttl: '1h' } }];
 }
 
@@ -215,7 +217,8 @@ export function plannedChatBody(settings: SonnetSettings, request: ShannonChatMo
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
-    system: cachedSystem([String(luna.instructions), SONNET_TEXT_LINES].join('\n\n')),
+    // Rich chat's lines depend on the surface, not the turn (the app's Talk always, other surfaces never): they stay in the system.
+    system: cachedSystem([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : [])].join('\n\n')),
     messages: withTurnLines(sonnetMessages(luna.input as unknown[]), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },

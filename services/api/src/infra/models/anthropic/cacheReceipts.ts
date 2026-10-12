@@ -117,12 +117,12 @@ function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 
   return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, ...schema, historyMessages: turn.historyMessages, ...first };
 }
 
-/** A foreground text turn's first request also counts toward the warm-turn view (`cacheWarmTurns.ts`). */
+/** A foreground text or voice turn's first request also counts toward the warm-turn view (`cacheWarmTurns.ts`). */
 function noteWarmTurn(receipt: CacheReceipt): void {
-  if (receipt.route !== 'text' || receipt.round !== 0 || receipt.thread === undefined) return;
+  if ((receipt.route !== 'text' && receipt.route !== 'voice') || receipt.round !== 0 || receipt.thread === undefined) return;
   const cacheCreation = receipt.cacheCreation5m + receipt.cacheCreation1h;
   const { tools, system, schema, effort } = receipt.prefix;
-  recordWarmTurn({ at: receipt.at, thread: receipt.thread, model: receipt.model, cachePlan: receipt.cachePlan === true,
+  recordWarmTurn({ at: receipt.at, surface: receipt.route, thread: receipt.thread, model: receipt.model, cachePlan: receipt.cachePlan === true,
     exception: receipt.planSchema === 'exception',
     staticPrefix: [tools, system, schema, effort].join(':'), historyMessages: receipt.historyMessages ?? 0, input: receipt.input,
     cacheRead: receipt.cacheRead, cacheCreation, ...(receipt.firstTokenMs === undefined ? {} : { firstTokenMs: receipt.firstTokenMs }) });

@@ -23,7 +23,9 @@ export { type SleepChange, type SleepContradiction } from './memoryService.js';
 export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, replaySummaryFor, replaySummaryRawRange, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
 export { type OwnerUpcoming } from './ownerUpcoming.js';
 export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
-export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './conversationContract.js';
+export {
+  type ConversationStore, type ReplayChannel, type ReplayEpochRecord, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext,
+} from './conversationContract.js';
 export { type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
 // The writer and its codec are values only to wiring (`wiring/memoryOutboxWiring.ts`, which imports them where they live); here they

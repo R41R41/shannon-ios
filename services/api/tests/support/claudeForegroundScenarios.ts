@@ -40,7 +40,7 @@ export function cached(value: AnthropicMessage, model: string, write = 1_800, re
 
 export const answer = (model: string, write?: number, read?: number) => cached(anthropicFixture('structured-answer'), model, write, read);
 export const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
-const spoken = (model: string, text = 'こんにちは、ライ氏。今日も来てくれてうれしいです。') =>
+export const spoken = (model: string, text = 'こんにちは、ライ氏。今日も来てくれてうれしいです。') =>
   cached(message([{ type: 'text', text }], 'end_turn', { id: 'msg_spoken' }), model, 0, 2_400);
 
 /** A structured answer that asks for the missing place instead of claiming a search. */
@@ -54,7 +54,7 @@ export function webAnswer(model: string): AnthropicMessage {
   return cached(anthropicFixture('web-search-answer'), model, 300, 3_000);
 }
 
-function webSpoken(model: string): AnthropicMessage {
+export function webSpoken(model: string): AnthropicMessage {
   const found = anthropicFixture('web-search-answer');
   const blocks = found.content.filter(block => block.type !== 'text');
   return cached({ ...found, content: [...blocks, { type: 'text', text: '今日は晴れです。', citations: null }] }, model, 300, 3_000);

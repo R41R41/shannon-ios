@@ -4,8 +4,8 @@ import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../surfaces/text/threadTitle.js';
 import type { TurnCaptureRecord } from './turnCaptures.js';
-import { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
-export { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+import { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+export { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
 
 export class InMemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, Map<string, StoredConversationMessage[]>>();
@@ -20,6 +20,7 @@ export class InMemoryConversationStore implements ConversationStore {
   private readonly captures = new Map<string, Map<string, TurnCaptureRecord>>();
   private readonly summaryChains = new Map<string, string>();
   private readonly replaySummaries = new Map<string, ReplaySummaryRecord>();
+  private readonly replayEpochs = new Map<string, ReplayEpochRecord>();
 
   constructor(
     private readonly maximumConversationItems = 200,
@@ -267,6 +268,13 @@ export class InMemoryConversationStore implements ConversationStore {
   replaySummary(scopeKey: string, threadId: string): ReplaySummaryRecord | undefined { return this.replaySummaries.get(`${scopeKey}\u0000${threadId}`); }
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void {
     this.replaySummaries.set(`${scopeKey}\u0000${threadId}`, Object.freeze({ ...record }));
+  }
+
+  replayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel): ReplayEpochRecord | undefined {
+    return this.replayEpochs.get(`${scopeKey}\u0000${threadId}\u0000${channel}`);
+  }
+  saveReplayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void {
+    this.replayEpochs.set(`${scopeKey}\u0000${threadId}\u0000${channel}`, Object.freeze({ ...record }));
   }
 
   threadOfTurn(scopeKey: string, experienceId: string): string | undefined {

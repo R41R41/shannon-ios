@@ -38,9 +38,10 @@ import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from '../../mind/memory/store/sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
 import { ensureReplaySummarySchema, ensureReplaySummaryTemplateColumns, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
+import { ensureReplayEpochSchema, selectReplayEpoch, upsertReplayEpoch } from '../../mind/memory/store/sqliteReplayEpochs.js';
 import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from '../../mind/tools/store/sqliteToolTraces.js';
 import type { ToolTraceRecord } from '../../mind/tools/shannonToolTrace.js';
-import type { ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
+import type { ReplayChannel, ReplayEpochRecord, ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
 import { SQLiteImpressionStore } from '../../mind/memory/store/sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from '../../mind/emotion/store/moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
@@ -181,6 +182,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    ensureReplayEpochSchema(this.context.database);
     if (options.structuredCompaction) ensureReplaySummaryTemplateColumns(this.context.database);
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
@@ -331,6 +333,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) {
     this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record, this.context.options.structuredCompaction === true));
+  }
+  replayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel) { return selectReplayEpoch(this.context.database, scopeKey, threadId, channel); }
+  saveReplayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord) {
+    this.context.transaction(() => upsertReplayEpoch(this.context.database, scopeKey, threadId, channel, record));
   }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }

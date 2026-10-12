@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto';
 import { isOwnerOnly, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { earlierConversationSummaryInstructions } from '../../infra/models/chatModelSupport.js';
-import type { ConversationStore } from '../memory/memoryPorts.js';
+import type { ConversationStore, ReplayChannel, ReplayEpochRecord } from '../memory/memoryPorts.js';
 import { replaySummaryFor, visibleReplayMessages, type VisibleMessage } from '../memory/memoryVisibilityPorts.js';
 import { conversationSecrets, type SecretCheck } from '../inhibition/disclosurePorts.js';
 import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/toolTracePorts.js';
 import { shannonTool } from '../tools/toolRegistryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { switchOn } from '@shannon/switches';
+import { notePlanEvent } from '../../infra/models/anthropic/cacheWarmTurns.js';
 
 /**
  * How much of a thread is replayed to the reply model. The window is a character budget, not a
@@ -30,6 +32,19 @@ export interface ReplayRule {
   spoken: boolean;
   /** Keeps the oldest replayed message still from turn to turn (`stableWindowStart`); absent, the window slides by one. */
   stableHead?: StableHead;
+  /** Replay epochs (`SHANNON_REPLAY_EPOCHS`): rendered once, then only appended to (`epochReplayWindow`). */
+  epochs?: ReplayEpochs;
+}
+
+/**
+ * Replay epochs (Syzygy ADR-0009 stage 1, M5). The window is cut once, at a rebase, to `fillCharacters` (the newest messages,
+ * those among the newest `minimumMessages` as stored and older ones clipped), and from then on each new message is appended as
+ * stored and no replayed message changes a byte, so every turn of the epoch repeats the previous turn's request up to its
+ * words and reads what that turn wrote. When the epoch passes the budget (or the message limit) it is cut again: a new epoch.
+ * The budget less the fill is the room an epoch grows into, a quarter of the budget: some ten text turns.
+ */
+export interface ReplayEpochs {
+  fillCharacters: number;
 }
 
 /**
@@ -55,6 +70,8 @@ export function stableHeadFor(budgetCharacters: number): StableHead {
 }
 
 export const REPLAY_BUDGET_DEFAULT = 12_000;
+/** The text budget under replay epochs when `SHANNON_CONVERSATION_REPLAY_CHARACTERS` is unset (owner answer 4, 2026-10-12). */
+export const EPOCH_REPLAY_BUDGET_DEFAULT = 32_000;
 export const REPLAY_BUDGET_MINIMUM = 2_000;
 export const REPLAY_BUDGET_MAXIMUM = 60_000;
 export const REPLAY_MAXIMUM_MESSAGES = 400;
@@ -75,23 +92,42 @@ export function voiceReplayRule(budgetCharacters = REPLAY_BUDGET_DEFAULT): Repla
   return { budgetCharacters, maximumMessages: REPLAY_MAXIMUM_MESSAGES, minimumMessages: 8, recentCharacters: 600, olderCharacters: 600, spoken: true, stableHead: stableHeadFor(budgetCharacters) };
 }
 
-/** `SHANNON_CONVERSATION_REPLAY_CHARACTERS` and `SHANNON_VOICE_REPLAY_CHARACTERS`, each held to 2,000…60,000. */
-export function replayBudgets(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): { text: number; voice: number } {
+/** The rule with replay epochs: a rebase fills the budget less one stretch of the stable head (a quarter). */
+export function withEpochs(rule: ReplayRule): ReplayRule {
+  const room = stableHeadFor(rule.budgetCharacters).characters;
+  return { ...rule, epochs: { fillCharacters: Math.max(1, rule.budgetCharacters - room) } };
+}
+
+type Environment = Readonly<Record<string, string | undefined>>;
+
+/** Whether a channel replays in epochs: `SHANNON_REPLAY_EPOCHS`, and for voice also `SHANNON_CLAUDE_CACHE_PLAN_VOICE`. */
+export function replayEpochsOn(channel: ReplayChannel, environment: Environment = serverEnvironment()): boolean {
+  if (!switchOn(environment, 'SHANNON_REPLAY_EPOCHS')) return false;
+  return channel === 'text' || switchOn(environment, 'SHANNON_CLAUDE_CACHE_PLAN_VOICE');
+}
+
+/**
+ * `SHANNON_CONVERSATION_REPLAY_CHARACTERS` and `SHANNON_VOICE_REPLAY_CHARACTERS`, each held to 2,000…60,000. Unset, 12,000; the
+ * text budget is 32,000 when text replays in epochs (the history is widened only where the cache carries it).
+ */
+export function replayBudgets(environment: Environment = serverEnvironment(), textEpochs = false): { text: number; voice: number } {
   return {
-    text: boundedBudget(environment.SHANNON_CONVERSATION_REPLAY_CHARACTERS),
-    voice: boundedBudget(environment.SHANNON_VOICE_REPLAY_CHARACTERS),
+    text: boundedBudget(environment.SHANNON_CONVERSATION_REPLAY_CHARACTERS, textEpochs ? EPOCH_REPLAY_BUDGET_DEFAULT : REPLAY_BUDGET_DEFAULT),
+    voice: boundedBudget(environment.SHANNON_VOICE_REPLAY_CHARACTERS, REPLAY_BUDGET_DEFAULT),
   };
 }
 
-function boundedBudget(value: string | undefined): number {
+function boundedBudget(value: string | undefined, fallback: number): number {
   const parsed = value?.trim() ? Number(value) : Number.NaN;
-  if (!Number.isFinite(parsed)) return REPLAY_BUDGET_DEFAULT;
+  if (!Number.isFinite(parsed)) return fallback;
   return Math.min(REPLAY_BUDGET_MAXIMUM, Math.max(REPLAY_BUDGET_MINIMUM, Math.trunc(parsed)));
 }
 
-export function replayRule(channel: 'text' | 'voice', environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): ReplayRule {
-  const budgets = replayBudgets(environment);
-  return channel === 'text' ? textReplayRule(budgets.text) : voiceReplayRule(budgets.voice);
+export function replayRule(channel: ReplayChannel, environment: Environment = serverEnvironment()): ReplayRule {
+  const epochs = replayEpochsOn(channel, environment);
+  const budgets = replayBudgets(environment, epochs && channel === 'text');
+  const rule = channel === 'text' ? textReplayRule(budgets.text) : voiceReplayRule(budgets.voice);
+  return epochs ? withEpochs(rule) : rule;
 }
 
 export interface ReplayWindow {
@@ -102,9 +138,11 @@ export interface ReplayWindow {
   characters: number;
 }
 
-/** The newest contiguous run of `messages` (oldest first) that the rule replays. */
-export function replayWindow(messages: readonly ShannonConversationItem[], rule: ReplayRule): ReplayWindow {
-  const kept: Array<{ index: number; item: ShannonConversationItem }> = [];
+interface KeptMessage { index: number; item: ShannonConversationItem }
+
+/** The newest messages the budget holds, oldest first, as rendered; `start` as in `ReplayWindow`. */
+function keptMessages(messages: readonly ShannonConversationItem[], rule: ReplayRule): { kept: KeptMessage[]; start: number; characters: number } {
+  const kept: KeptMessage[] = [];
   let characters = 0;
   let start = messages.length;
   for (let index = messages.length - 1; index >= 0 && kept.length < rule.maximumMessages; index -= 1) {
@@ -117,7 +155,12 @@ export function replayWindow(messages: readonly ShannonConversationItem[], rule:
     characters += content.length;
     start = index;
   }
-  kept.reverse();
+  return { kept: kept.reverse(), start, characters };
+}
+
+/** The newest contiguous run of `messages` (oldest first) that the rule replays. */
+export function replayWindow(messages: readonly ShannonConversationItem[], rule: ReplayRule): ReplayWindow {
+  const { kept, start, characters } = keptMessages(messages, rule);
   // Nothing left out: the whole thread is replayed and its start is the thread's.
   const from = start > 0 && rule.stableHead ? stableWindowStart(messages, kept, rule.minimumMessages, rule.stableHead) : 0;
   const history = kept.slice(from).map(entry => entry.item);
@@ -125,6 +168,71 @@ export function replayWindow(messages: readonly ShannonConversationItem[], rule:
     history, start: from ? kept[from]!.index : start,
     characters: from ? history.reduce((sum, item) => sum + item.content.length, 0) : characters,
   };
+}
+
+/** A window of an epoch: the record it was rendered by, and whether this turn began the epoch. */
+export interface EpochWindow extends ReplayWindow {
+  record: ReplayEpochRecord;
+  rebased: boolean;
+}
+
+/**
+ * The window of a turn under replay epochs (`ReplayEpochs`). `ids` are the messages' ids, in the order of `messages`. The epoch
+ * goes on while its first message and the message it replays as stored from are still there, its budget is the rule's, and it
+ * holds no more than the budget and the message limit (or only the newest `minimumMessages`, which a cut would keep anyway);
+ * otherwise it is cut again (`rebasedWindow`). Null when nothing can be replayed.
+ */
+export function epochReplayWindow(
+  ids: readonly string[], messages: readonly ShannonConversationItem[], rule: ReplayRule, previous: ReplayEpochRecord | undefined, at: string,
+): EpochWindow | null {
+  const continued = previous ? continuedEpoch(ids, messages, rule, previous) : null;
+  if (continued) return { ...continued, record: previous!, rebased: false };
+  return rebasedWindow(ids, messages, rule, previous, at);
+}
+
+/** The epoch's window as it renders now, or null when it must be cut again. */
+function continuedEpoch(
+  ids: readonly string[], messages: readonly ShannonConversationItem[], rule: ReplayRule, record: ReplayEpochRecord,
+): ReplayWindow | null {
+  if (record.budgetCharacters !== rule.budgetCharacters) return null;
+  const start = ids.indexOf(record.startMessageId);
+  const fullFrom = ids.indexOf(record.fullFromMessageId);
+  if (start < 0 || fullFrom < start) return null;
+  const history: ShannonConversationItem[] = [];
+  let characters = 0;
+  for (let index = start; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    const content = bounded(message.content, index >= fullFrom ? rule.recentCharacters : rule.olderCharacters, rule.spoken);
+    if (!content) continue;
+    history.push({ role: message.role, content });
+    characters += content.length;
+  }
+  const full = characters > rule.budgetCharacters || history.length > rule.maximumMessages;
+  return full && history.length > rule.minimumMessages ? null : { history, start, characters };
+}
+
+/** A new epoch: the newest messages up to the fill, without a stable head (the epoch itself keeps the start still). */
+function rebasedWindow(
+  ids: readonly string[], messages: readonly ShannonConversationItem[], rule: ReplayRule, previous: ReplayEpochRecord | undefined, at: string,
+): EpochWindow | null {
+  const fill = { ...rule, budgetCharacters: rule.epochs?.fillCharacters ?? rule.budgetCharacters, stableHead: undefined };
+  const { kept, start, characters } = keptMessages(messages, fill);
+  if (!kept.length) return null;
+  const fullFrom = kept[Math.max(0, kept.length - rule.minimumMessages)]!.index;
+  const record: ReplayEpochRecord = { epoch: (previous?.epoch ?? 0) + 1, startMessageId: ids[start]!, fullFromMessageId: ids[fullFrom]!,
+    budgetCharacters: rule.budgetCharacters, startedAt: at };
+  return { history: kept.map(entry => entry.item), start, characters, record, rebased: true };
+}
+
+/**
+ * The window the replay summary accounts for (`conversationReplaySummary.ts`). Under epochs, a cut keeps the newest fill and
+ * an epoch grows by at most the budget less the fill before the next cut, so the summary covers everything older than the
+ * newest fill less that room (half the budget), measured after every turn; without epochs, the rule itself.
+ */
+export function summaryCoverRule(rule: ReplayRule): ReplayRule {
+  if (!rule.epochs) return rule;
+  const room = rule.budgetCharacters - rule.epochs.fillCharacters;
+  return { ...rule, budgetCharacters: Math.max(1, rule.epochs.fillCharacters - room), stableHead: undefined, epochs: undefined };
 }
 
 /**
@@ -182,6 +290,30 @@ export interface ConversationReplay extends ReplayWindow {
   summary?: string;
   /** The model request fields: the history, and the turn's context with the summary block and the trace block when there are. */
   request(turnContext: string): { turnContext?: string; history: ShannonConversationItem[] };
+  /** Under replay epochs: the epoch's number, and whether this turn began it. */
+  epoch?: { number: number; rebased: boolean };
+}
+
+/**
+ * The epoch window of a turn (`epochReplayWindow`), its record read and, at a cut, written. A store without epochs, or one
+ * that fails, gives null and the window is computed as without epochs; a record that cannot be written only means the next
+ * turn cuts again. Each cut and each continued epoch is counted for `GET /v1/ops` (`text:epoch_rebase`, `voice:epoch_kept`).
+ */
+function epochFor(
+  channel: ReplayChannel, store: ConversationStore, scopeKey: string, threadId: string, visible: readonly VisibleMessage[], rule: ReplayRule,
+): EpochWindow | null {
+  if (!store.replayEpoch || !store.saveReplayEpoch) return null;
+  let window: EpochWindow | null;
+  try {
+    const previous = store.replayEpoch(scopeKey, threadId, channel);
+    window = epochReplayWindow(visible.map(entry => entry.message.id), visible.map(entry => entry.item), rule, previous, new Date().toISOString());
+  } catch { return null; }
+  if (!window) return null;
+  if (window.rebased) {
+    try { store.saveReplayEpoch(scopeKey, threadId, channel, window.record); } catch { /* the next turn cuts again */ }
+  }
+  notePlanEvent(channel, window.rebased ? 'epoch_rebase' : 'epoch_kept');
+  return window;
 }
 
 /** Where the replay reads what her tools did in the replayed turns (`shannonToolTurns.ts`). */
@@ -211,10 +343,13 @@ export function conversationReplay(
   const rule = replayRule(channel, environment);
   const visible = visibleReplayMessages(state, store, scopeKey, threadId, present, rule.maximumMessages + 1);
   const items = openOnly ? openItems(visible.messages.map(entry => entry.item)) : visible.messages.map(entry => entry.item);
-  let window = replayWindow(items, rule);
+  // Under epochs the window is the epoch's (only where the items are the visible messages themselves, which have ids).
+  const epoch = rule.epochs && !openOnly ? epochFor(channel, store, scopeKey, threadId, visible.messages, rule) : null;
+  let window: ReplayWindow = epoch ?? replayWindow(items, rule);
   const traced = (start: number) => tools && isOwnerOnly(present) ? replayedToolTraces(tools, state, store, scopeKey, threadId, visible.messages, start) : '';
   let toolBlock = traced(window.start);
-  if (toolBlock && window.characters + toolBlock.length > rule.budgetCharacters) {
+  // The trace block follows the words, outside the cached history: under epochs it never moves the window's start.
+  if (!epoch && toolBlock && window.characters + toolBlock.length > rule.budgetCharacters) {
     window = replayWindow(items, { ...rule, budgetCharacters: Math.max(0, rule.budgetCharacters - toolBlock.length) });
     toolBlock = traced(window.start);
   }
@@ -223,8 +358,9 @@ export function conversationReplay(
   const stored = truncated && !openOnly ? replaySummaryFor(state, store, scopeKey, threadId, present, channel) : undefined;
   const summary = stored?.text;
   const history = window.history;
+  const epochFields = epoch ? { epoch: { number: epoch.record.epoch, rebased: epoch.rebased } } : {};
   return {
-    ...window, truncated, ...(summary ? { summary } : {}),
+    history, start: window.start, characters: window.characters, truncated, ...(summary ? { summary } : {}), ...epochFields,
     request: turnContext => {
       // A structured summary (F7) is at most 900 characters with its marker; the 600-character one keeps its 640 limit.
       const context = [turnContext, summary ? earlierConversationSummaryInstructions(summary, stored?.structured ? Math.max(640, Array.from(summary).length) : undefined) : '', toolBlock]

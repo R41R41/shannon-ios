@@ -18,11 +18,17 @@
  * Beside them, per surface: the plan's events (`events`: a fallback to the shape without the plan, a tool-less recovery,
  * the bridge after a grammar refusal, a declined call, and `recovered` turns that answered after such a refusal) and how often
  * an offered feeling was answered (`feeling`, per lane).
+ *
+ * Voice (M6) is counted the same way in lanes of its own: `voice_plan` under `SHANNON_CLAUDE_CACHE_PLAN_VOICE`, `voice_base`
+ * without it (and for a voice turn the plan leaves in its own shape, a native web search), with the events `voice:plan_turn`,
+ * `voice:web_exception` and the round events above. Replay epochs (M5) add `text:epoch_rebase` / `text:epoch_kept` (and voice's).
  */
 export const WARM_TURN_LIMITS = Object.freeze({ warmMilliseconds: 3_600_000, threads: 500, prefixes: 50, samples: 500, days: 2 });
 
 export interface WarmTurnInput {
   at: string;
+  /** The surface of the turn; text when absent. */
+  surface?: 'text' | 'voice';
   thread: string;
   model: string;
   cachePlan: boolean;
@@ -55,9 +61,10 @@ interface WarmLane {
   latency: LatencySamples;
 }
 
-type Lane = 'plan' | 'plan_exception' | 'base';
+type Lane = 'plan' | 'plan_exception' | 'base' | 'voice_plan' | 'voice_base';
 
-function laneName(turn: Pick<WarmTurnInput, 'cachePlan' | 'exception'>): Lane {
+function laneName(turn: Pick<WarmTurnInput, 'cachePlan' | 'exception' | 'surface'>): Lane {
+  if (turn.surface === 'voice') return turn.cachePlan ? 'voice_plan' : 'voice_base';
   if (!turn.cachePlan) return 'base';
   return turn.exception ? 'plan_exception' : 'plan';
 }
@@ -89,7 +96,7 @@ function remember<K, V>(map: Map<K, V>, key: K, value: V, limit: number): void {
 
 /** Whether this turn follows the Talk's previous turn on the same model within the hour; remembers this one as its latest. */
 function followsWithinHour(turn: WarmTurnInput, at: number): boolean {
-  const key = `${turn.model}\n${turn.thread}`;
+  const key = `${turn.surface ?? 'text'}\n${turn.model}\n${turn.thread}`;
   const previous = lastTurnAt.get(key);
   remember(lastTurnAt, key, at, WARM_TURN_LIMITS.threads);
   return previous !== undefined && at >= previous && at - previous <= WARM_TURN_LIMITS.warmMilliseconds;
@@ -129,7 +136,7 @@ function countWarm(total: WarmLane, turn: WarmTurnInput, history: boolean | null
   if (history === null) total.warmTurnsPrefixUnknown += 1;
 }
 
-/** One foreground text turn (its first request). Never throws. */
+/** One foreground text or voice turn (its first request). Never throws. */
 export function recordWarmTurn(turn: WarmTurnInput): void {
   const at = Date.parse(turn.at);
   if (!Number.isFinite(at)) return;
@@ -142,7 +149,7 @@ export function recordWarmTurn(turn: WarmTurnInput): void {
   forgetOldDays();
 }
 
-/** One event of a plan turn on a surface (`text`). */
+/** One event of a plan turn on a surface (`text`, `voice`). */
 export function notePlanEvent(surface: string, event: string): void {
   const key = `${surface}:${event}`;
   events.set(key, (events.get(key) ?? 0) + 1);

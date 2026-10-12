@@ -76,6 +76,8 @@ export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPr
   /** Her registry tools for this turn; offered unless the turn uses web search. */
   tools?: ShannonModelToolSession;
   toolsWithheld?: true;
+  /** The Talk of the turn, for content-free cache receipts only (kept there as a short hash); never sent to a model. */
+  threadKey?: string;
 }
 
 export interface ShannonWebSource {
