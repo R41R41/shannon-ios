@@ -22,12 +22,28 @@ export class TaskProgressStore {
     const row = this.db.prepare('SELECT payload_json FROM fca_task_progress WHERE task_id=?').get(taskId);
     return row ? JSON.parse(String(row.payload_json)) as TaskProgress : null;
   }
+  /**
+   * The runtime's own notice that a task could not finish when no step can record it (an unknown step retired after its
+   * deadline): the status becomes failed and the notice becomes the report, so the owner's activity and call hear of it.
+   */
+  notice(scopeKey: string, taskId: string, stepId: string | null, operationId: string, text: string): void {
+    this.authority.transaction(() => {
+      const at = this.now(), prior = this.read(taskId);
+      const report = { id: operationId, text: text.slice(0, 2000), updatedAt: at };
+      const value: TaskProgress = { currentStep: 'fca.result', status: 'failed', startedAt: prior?.startedAt ?? at, updatedAt: at,
+        findings: prior?.findings ?? [], ...(prior?.places ? { places: prior.places } : {}), report };
+      this.write(taskId, stepId ?? operationId, operationId, value);
+      this.authority.event(scopeKey, taskId, 'fca_progress_observed', at, {}, { stepId, operationId, tool: 'fca.result', status: 'failed' });
+    });
+  }
   record(step: TaskStep, event: TaskProgressEvent, valid: () => boolean): boolean {
     return this.authority.transaction(() => {
       if (!valid()) return false;
       if (!/^[a-zA-Z0-9_.:-]{1,320}$/.test(event.operationId) || !/^[a-z][a-zA-Z0-9_.-]{0,199}$/.test(event.tool)
         || !['running', 'received', 'failed', 'unknown'].includes(event.status)) throw new Error('FCA_PROGRESS');
       const at = this.now(), prior = this.read(step.taskId);
+      // A parent-bound report is a received `task.send`; a failed one is the runtime's own notice.
+      const reported = event.status === 'received' || event.status === 'failed' ? event.report : undefined;
       const sources = (event.read?.sources ?? []).filter(source => {
         try { const url = new URL(source.url); return source.url.length <= 2048 && ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
       }).slice(0, 8).map(source => ({ title: source.title.slice(0, 200), url: source.url.slice(0, 2048) }));
@@ -37,11 +53,14 @@ export class TaskProgressStore {
       const value: TaskProgress = { currentStep: event.tool, status: event.status,
         startedAt: event.status === 'running' ? at : prior?.startedAt ?? at, updatedAt: at,
         findings: findings.slice(-8), ...(event.read?.places ? { places: validatedPlaces(event.read.places) } : prior?.places ? { places: prior.places } : {}),
-        ...(event.report && event.status === 'received' ? { report: { id: event.operationId, text: event.report.text.slice(0, 2000), updatedAt: at } } : prior?.report ? { report: prior.report } : {}) };
-      this.db.prepare('INSERT INTO fca_task_progress VALUES(?,?,?,?) ON CONFLICT(task_id) DO UPDATE SET step_id=excluded.step_id,operation_id=excluded.operation_id,payload_json=excluded.payload_json')
-        .run(step.taskId, step.id, event.operationId, JSON.stringify(value));
+        ...(reported ? { report: { id: event.operationId, text: reported.text.slice(0, 2000), updatedAt: at } } : prior?.report ? { report: prior.report } : {}) };
+      this.write(step.taskId, step.id, event.operationId, value);
       this.authority.event(step.scopeKey, step.taskId, 'fca_progress_observed', at, {}, { stepId: step.id, operationId: event.operationId, tool: event.tool, status: event.status });
       return true;
     });
+  }
+  private write(taskId: string, stepId: string, operationId: string, value: TaskProgress): void {
+    this.db.prepare(`INSERT INTO fca_task_progress VALUES(?,?,?,?) ON CONFLICT(task_id) DO UPDATE
+      SET step_id=excluded.step_id,operation_id=excluded.operation_id,payload_json=excluded.payload_json`).run(taskId, stepId, operationId, JSON.stringify(value));
   }
 }

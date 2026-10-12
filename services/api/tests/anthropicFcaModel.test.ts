@@ -51,7 +51,7 @@ describe('native one-step FCA model', () => {
     expect(JSON.parse(String((fixture.bodies[1]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('Updated compact skill index');
     expect((fixture.bodies[1]!.messages as unknown[]).slice(0, replay.length)).toEqual(replay);
   });
-  it('makes one call, offers the existing strict schemas, maps provider names and returns only appended native history', async () => {
+  it('makes one call, offers the existing schemas (only controls strict), maps provider names and returns only appended native history', async () => {
     const signed = { type: 'thinking', thinking: 'Synthetic private thinking', signature: 'opaque-signature' };
     const redacted = { type: 'redacted_thinking', data: 'opaque-redacted-data' };
     const previous = [
@@ -67,7 +67,7 @@ describe('native one-step FCA model', () => {
     expect(result.decision).toEqual({ kind: 'tools', calls: [
       { id: 'new-list', name: 'task.list', input: {} }, { id: 'new-get', name: 'task.get', input: { value: 'child-1' } },
     ] });
-    expect(fixture.bodies[0]!.tools).toEqual([...tools.map(sonnetTool),
+    expect(fixture.bodies[0]!.tools).toEqual([...tools.map(tool => ({ ...sonnetTool(tool), strict: false })),
       expect.objectContaining({ name: 'fca_wait', strict: true }), expect.objectContaining({ name: 'fca_complete', strict: true })]);
     expect(fixture.bodies[0]!.messages).toEqual([...previous, { role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) }]);
     expect(result.history).toEqual([{ role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) },

@@ -8,7 +8,7 @@ import { SQLiteTaskRuntimeStore } from '../mind/action/taskRuntime/store/taskRun
 import type { TaskStep, TaskRuntime, TaskView, TaskSleepTicket } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaModel } from '../mind/action/fca/fcaPorts.js';
 import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
-import { inActionExecution } from '../infra/context/actionExecution.js';
+import { inActionExecution, type ActionExecution } from '../infra/context/actionExecution.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
 import { ACTION_LIMITS, classifyLease, leaseOutcome, leaseUnsent } from '@shannon/mind';
@@ -106,22 +106,46 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
           executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
-    } catch {
-      const stopped = step && runtime.get(scopeKey, taskId)?.phase === 'stopping';
-      if (stopped && active.execution.modelOutcome !== 'unknown'
-        && stepPorts?.safeToAcknowledgeStop?.() !== false && stepPorts?.tools?.safeToAcknowledgeStop?.() !== false) {
-        // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
-        runtime.recordStoppedStep(step!);
-        await flushReceipts();
-      } else {
-        const lease = active.execution.lease;
-        const action = leases.inScope(lease.id, scopeKey);
-        const unsent = !!action && leaseUnsent(action, lease);
-        await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
-        runtime.recover(scopeKey, classify);
-      }
+    } catch (error) {
+      await settleFailedStep(error, taskId, step, stepPorts, active.execution);
     } finally { active.stop(); }
     });
+  }
+  type StepPorts = ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
+  /** Closes a step that threw: a confirmed stop, a known refusal, or else an unknown outcome. Logs only the closed code. */
+  async function settleFailedStep(error: unknown, taskId: string, step: TaskStep | null, stepPorts: StepPorts, execution: ActionExecution): Promise<void> {
+    const code = fcaErrorCode(error);
+    const stopped = step && runtime.get(scopeKey, taskId)?.phase === 'stopping';
+    if (stopped && execution.modelOutcome !== 'unknown'
+      && stepPorts?.safeToAcknowledgeStop?.() !== false && stepPorts?.tools?.safeToAcknowledgeStop?.() !== false) {
+      // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
+      console.log(`Shannon FCA step stopped task=${taskId} code=${code}`);
+      runtime.recordStoppedStep(step!);
+      await flushReceipts();
+      return;
+    }
+    if (step && rejectedBeforeAnyEffect(code, execution) && failRejectedStep(step)) {
+      // The provider refused the request itself: nothing ran and nothing was charged, and an identical retry is refused again.
+      console.log(`Shannon FCA step failed task=${taskId} code=${code}`);
+      await flushReceipts();
+      return;
+    }
+    console.log(`Shannon FCA step unknown task=${taskId} code=${code}`);
+    const lease = execution.lease;
+    const action = leases.inScope(lease.id, scopeKey);
+    const unsent = !!action && leaseUnsent(action, lease);
+    await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
+    runtime.recover(scopeKey, classify);
+  }
+  /** A known refusal fails the task in the same commit that tells its parent, and leaves a report the owner's call can speak. */
+  function failRejectedStep(step: TaskStep): boolean {
+    const task = runtime.get(scopeKey, step.taskId);
+    if (!task || task.origin !== 'owner_request' || task.kind === 'root' || task.kind === 'conversation' || task.childIds.length) return false;
+    const summary = rejectedTaskReport(task.title);
+    try {
+      runtime.recordProgress?.(step, { operationId: `${step.id}:failed`, tool: 'fca.result', status: 'failed', report: { text: summary } });
+      return runtime.commitStep(step, { disposition: 'fail', summary, history: [] }) !== null;
+    } catch { return false; }
   }
   async function tick(): Promise<void> {
     if (closing || ticking) return;
@@ -158,4 +182,21 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     async drain() { await Promise.all([...running.values()].map(job => job.done)); },
     async close() { closing = true; for (const job of running.values()) job.controller.abort(); await Promise.all([...running.values()].map(job => job.done)); },
   };
+}
+
+/** A closed error code for logs: FCA codes are content-free; anything else is reported only by its class. */
+export function fcaErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  if (/^[A-Z][A-Z0-9_]{2,80}$/u.test(message)) return message;
+  return error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? error.name : 'unknown';
+}
+
+/** Definitive provider refusals of the decision request (not throttling or timeouts), with no paid or tool outcome in doubt. */
+export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
+  const status = /^FCA_MODEL_HTTP_(4\d\d)$/u.exec(code)?.[1];
+  return !!status && !['408', '409', '429'].includes(status) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
+}
+
+export function rejectedTaskReport(title: string): string {
+  return `「${title.slice(0, 80)}」は処理中にエラーが起きて、最後まで進められませんでした。`;
 }

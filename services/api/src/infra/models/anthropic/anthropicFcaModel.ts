@@ -12,6 +12,7 @@ import { observedAnthropicResponse, observedToolName } from './observerProjectio
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
+import { reportRejection } from './anthropicRejection.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -86,7 +87,7 @@ export class AnthropicFcaModel implements FcaModel {
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
     if (input.sharedContext && !input.catalog) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
-    const { current, body, menu } = observeSync('native', {
+    const { turn, body, menu } = observeSync('native', {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
@@ -95,9 +96,12 @@ export class AnthropicFcaModel implements FcaModel {
         ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
         ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
         ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) }) };
-      return { current, menu, body: cacheHaikuRequest({
+      // A system message holding tool changes may not open the conversation (a live 400, 2026-10-12): on a task's first
+      // decision the inline definitions follow its first user message instead of preceding it.
+      const turn = history.some(message => message.role === 'user') ? [...menu.appended, current] : [current, ...menu.appended];
+      return { turn, menu, body: cacheHaikuRequest({
         model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
-        messages: [...history, ...menu.appended, current], tools: menu.tools, tool_choice: { type: 'auto' as const },
+        messages: [...history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
       }) };
     }, value => observedFcaRequest(value.body), { model: this.model });
@@ -122,6 +126,8 @@ export class AnthropicFcaModel implements FcaModel {
       // No hidden resend, including after an abort. Never expose provider error text containing request material.
       if (!dispatched) throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_NOT_DISPATCHED');
       if (error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500) {
+        // Content-free: status, provider error type and a closed message class (`anthropicRejection.ts`).
+        reportRejection(error, true);
         if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: 0, outputTokens: 0 }; }
         throw new Error(`FCA_MODEL_HTTP_${error.status}`);
       }
@@ -139,7 +145,7 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
     const decision = decodeDecision(message.content, menu.names, history, input.sharedContext ? FCA_CONTEXT_NAME : undefined);
     const context = decodeFcaContext(message.content, decision, input);
-    const appended: Anthropic.MessageParam[] = [...menu.appended, current, { role: 'assistant', content: message.content }];
+    const appended: Anthropic.MessageParam[] = [...turn, { role: 'assistant', content: message.content }];
     if (decision.kind !== 'tools') {
       const control = message.content.find(block => block.type === 'tool_use' && CONTROL_TOOLS.some(tool => tool.name === block.name)) as Anthropic.ToolUseBlock;
       appended.push(this.toolResults([...(context.auxiliaryResults ?? []), { id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));

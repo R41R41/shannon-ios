@@ -10,20 +10,28 @@ Optionally add one fca_context call beside the actual action/wait/complete calls
 An expectation precedes an action, references its zero-based index among actual action calls (excluding fca_context), names a concrete observable in its tool result, and states when evidence is due. Do not predict transport success alone. expectedValue is optional expected personal value, separate from the predicted fact. Probability is a tentative estimate, not a calibrated guarantee.
 An appraisal names an already observed eventId from recentOutcomes and its next appraisalRevision. Assess the meaning/value of that evidence, not the tool's success flag. A parent's report of a child's event uses the SAME eventId. Do not appraise unknown outcomes as failures, repeat an unchanged appraisal, or infer a cause from a mismatch. Cause is a short public account of what was observed, never private reasoning. Unknown evidence stays pending/unobserved. No reflection call is required.`;
 const object = (properties: Record<string, unknown>, required = Object.keys(properties)) => ({ type: 'object' as const, additionalProperties: false, properties, required });
-const nullableNumber = (minimum: number, maximum: number) => ({ anyOf: [{ type: 'number', minimum, maximum }, { type: 'null' }] });
+const text = (description: string) => ({ type: 'string', description });
+const number = (description: string) => ({ type: 'number', description });
+const integer = (description: string) => ({ type: 'integer', description });
+const nullableNumber = (description: string) => ({ anyOf: [number(description), { type: 'null' }] });
+/**
+ * Strict tool schemas reject numeric, length and item-count constraints (a live 400, 2026-10-12: "For 'array' type, property
+ * 'maxItems' is not supported"), so every bound is written into the description and `decodeFcaContext` enforces it.
+ */
 export const FCA_CONTEXT_TOOL: Anthropic.Tool = {
-  name: FCA_CONTEXT_NAME, strict: true, description: 'Optional pre-action expectations and evidence-linked affect appraisals; does not execute an action.',
+  name: FCA_CONTEXT_NAME, strict: true,
+  description: 'Optional pre-action expectations and evidence-linked affect appraisals; does not execute an action. At most 8 expectations and 8 appraisals.',
   input_schema: object({
-    expectations: { type: 'array', maxItems: 8, items: object({
-      callIndex: { type: 'integer', minimum: 0, maximum: 7 }, source: { type: 'string', enum: ['tool_result'] },
-      observable: { anyOf: [object({ kind: { type: 'string', enum: ['json_pointer'] }, path: { type: 'string', maxLength: 240 } }),
-        object({ kind: { type: 'string', enum: ['text_contains'] }, text: { type: 'string', minLength: 1, maxLength: 240 } })] },
-      expected: { anyOf: [{ type: 'string', maxLength: 240 }, { type: 'number' }, { type: 'boolean' }, { type: 'null' }] },
-      probability: nullableNumber(0, 1), expectedValue: nullableNumber(-1, 1), withinMs: { type: 'integer', minimum: 1, maximum: 86_400_000 },
+    expectations: { type: 'array', description: 'At most 8 items.', items: object({
+      callIndex: integer('Zero-based index of an actual action call in this response, 0 to 7.'), source: { type: 'string', enum: ['tool_result'] },
+      observable: { anyOf: [object({ kind: { type: 'string', enum: ['json_pointer'] }, path: text('JSON pointer, at most 240 characters.') }),
+        object({ kind: { type: 'string', enum: ['text_contains'] }, text: text('Nonempty, at most 240 characters.') })] },
+      expected: { anyOf: [text('At most 240 characters.'), { type: 'number' }, { type: 'boolean' }, { type: 'null' }] },
+      probability: nullableNumber('0 to 1.'), expectedValue: nullableNumber('-1 to 1.'), withinMs: integer('1 to 86400000 milliseconds.'),
     }) },
-    appraisals: { type: 'array', maxItems: 8, items: object({
-      eventId: { type: 'string', minLength: 1, maxLength: 400 }, revision: { type: 'integer', minimum: 1 },
-      value: { type: 'number', minimum: -1, maximum: 1 }, cause: { type: 'string', minLength: 1, maxLength: 240 }, target: { type: 'string', maxLength: 120 },
+    appraisals: { type: 'array', description: 'At most 8 items.', items: object({
+      eventId: text('Nonempty, at most 400 characters.'), revision: integer('At least 1.'),
+      value: number('-1 to 1.'), cause: text('Nonempty, at most 240 characters.'), target: text('At most 120 characters.'),
     }) },
   }),
 };

@@ -43,8 +43,10 @@ describe('FCA selected native schemas', () => {
     expect(first.decision).toEqual({ kind: 'tools', calls: [{ id: 'open-web', name: 'tool.open', input: { name: 'web_search' } }] });
     const body = f.bodies[0]!;
     expect((body.tools as Anthropic.Tool[]).map(tool => tool.name)).toEqual(['tool_open', 'fca_wait', 'fca_complete']);
-    expect(systemChanges(first.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: sonnetTool(TASK_TOOLS[1]!) } }]);
-    const context = JSON.parse((body.messages as Array<{ content: string }>).at(-1)!.content) as { catalog: unknown[] };
+    expect(systemChanges(first.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { ...sonnetTool(TASK_TOOLS[1]!), strict: false } } }]);
+    // A tool-change system message may not open the conversation: the first decision's task context precedes it.
+    expect((body.messages as Array<{ role: string }>).map(entry => entry.role)).toEqual(['user', 'system']);
+    const context = JSON.parse((body.messages as Array<{ content: string }>)[0]!.content) as { catalog: unknown[] };
     expect(context.catalog).toEqual(catalog.map(tool => ({ name: tool.name.replaceAll('.', '_'), description: tool.description })));
     expect(JSON.stringify(context.catalog)).not.toMatch(/input_schema|additionalProperties/u);
     expect(f.headers[0]!.get('anthropic-beta')).toBe('inline-tools-2026-09-15');
@@ -52,7 +54,7 @@ describe('FCA selected native schemas', () => {
     const old = [...first.history, f.model.toolResults([{ id: 'open-web', text: 'Definition opened', ok: true }])];
     const saved = JSON.stringify(old);
     const second = await f.model.decide(input(['task.list', 'web.search'], old), signal());
-    expect(systemChanges(second.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: sonnetTool(shannonTool('web.search')!) } }]);
+    expect(systemChanges(second.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { ...sonnetTool(shannonTool('web.search')!), strict: false } } }]);
     expect((f.bodies[1]!.messages as unknown[]).slice(0, old.length)).toEqual(old);
     expect(JSON.stringify(old)).toBe(saved);
     const prefix = [...old, ...second.history];

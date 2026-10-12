@@ -1054,7 +1054,7 @@
     },
     "services/api/src/mind/action/taskRuntime/store/taskRuntimeRecovery.ts": {
       "multi-statement-line": 2,
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/mind/action/taskRuntime/store/taskRuntimeStore.ts": {
       "multi-statement-line": 18,

@@ -26,10 +26,14 @@ export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic
   }
   const selected = new Map<string, Anthropic.Tool>();
   for (const definition of input.tools) {
+    // Only the fixed control schemas are strict. Strict catalog definitions broke the provider's per-request limits in
+    // production (live 400s, 2026-10-12: "Too many strict tools (40)", "too many optional parameters (30)", and with a
+    // 20-tool budget "The compiled grammar is too large"). Catalog inputs keep their schema, with the constraints in words,
+    // and the original executor validates every input.
     const tool: Anthropic.Tool = definition.nativeInputSchema ? {
       name: providerToolName(definition.name), description: definition.description, strict: false,
       input_schema: definition.nativeInputSchema as Anthropic.Tool.InputSchema,
-    } : sonnetTool(definition);
+    } : { ...sonnetTool(definition), strict: false };
     if (names.get(tool.name) !== definition.name || selected.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     selected.set(tool.name, tool);
   }

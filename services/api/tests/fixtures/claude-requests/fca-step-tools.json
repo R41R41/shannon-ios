@@ -43,7 +43,7 @@
      {
       "name": "task_create",
       "description": "並行実行・文脈の分離・まとまった仕事の委任に意味がある時に子タスクを作る。細かい一操作ごとには分けない。",
-      "strict": true,
+      "strict": false,
       "input_schema": {
        "type": "object",
        "properties": {
@@ -75,7 +75,7 @@
      {
       "name": "task_list",
       "description": "同じ実行範囲のタスクと直接の子のID・内容・状態を一覧する。",
-      "strict": true,
+      "strict": false,
       "input_schema": {
        "type": "object",
        "properties": {
@@ -91,7 +91,7 @@
      {
       "name": "task_get",
       "description": "IDを指定してタスクの現在の状態・進捗・子のIDを確認する。",
-      "strict": true,
+      "strict": false,
       "input_schema": {
        "type": "object",
        "properties": {
@@ -171,7 +171,7 @@
    "cacheCreation1h": 700,
    "output": 40,
    "prefix": {
-    "tools": "7bea92c3",
+    "tools": "a7a68b1f",
     "system": "2da60490",
     "schema": "-",
     "effort": "8a3bb108",

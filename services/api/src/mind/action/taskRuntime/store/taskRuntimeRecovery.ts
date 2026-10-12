@@ -12,6 +12,8 @@ export interface TaskRecoveryParts {
   pendingReceipts(scope: string): TaskSegmentReceipt[]; activeSteps(scope: string): Array<{ taskId: string; lease: ActionLease }>;
   snapshot(scope: string, id: string): TaskSnapshot; failConversation(step: TaskStep): void;
   send(scope: string, source: string, target: string, text: string, id: string): unknown;
+  /** The owner-visible report that a task could not finish (`TaskProgressStore.notice`). */
+  notice?(scope: string, taskId: string, stepId: string | null, operationId: string, text: string): void;
 }
 const terminal = (task: TaskRecord) => ['completed', 'failed', 'cancelled'].includes(task.status);
 
@@ -87,6 +89,16 @@ export class TaskRuntimeRecovery {
     this.parts.authority.event(task.scopeKey, task.id, 'fca_resumed', this.parts.now(), { status: 'running', pauseReason: null }, { reason });
   }
 
+  /** A retired task's parent hears of it, as after a committed failure, and so does the owner's activity (its report). */
+  private tellRetired(task: TaskRecord, stepId: string | null, parent: TaskRecord | null): void {
+    if (task.origin === 'maintenance') {
+      this.parts.maintenance.report(task, 'failed', stepId ?? `retired-${task.id}`);
+      return;
+    }
+    if (parent && !terminal(parent)) this.parts.send(task.scopeKey, task.id, parent.id, `${task.title}: failed (result unknown)`, `result:retired:${task.id}`);
+    if (task.origin === 'owner_request') this.parts.notice?.(task.scopeKey, task.id, stepId, `retired:${task.id}`, retiredTaskReport(task.title));
+  }
+
   private retire(task: TaskRecord, reason: string): void {
     const { authority, now } = this.parts;
     const row = this.parts.checkpoint(task.id);
@@ -107,8 +119,11 @@ export class TaskRuntimeRecovery {
     this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=NULL,stop_requested=0 WHERE task_id=?').run(task.id);
     authority.event(task.scopeKey, task.id, 'fca_recovered_unknown', now(), { status: 'failed', pauseReason: null }, { reason });
     const parent = task.parentId ? this.parts.required(task.scopeKey, task.parentId) : null;
-    if (task.origin === 'maintenance') this.parts.maintenance.report(task, 'failed', row.step_id ?? `retired-${task.id}`);
-    else if (parent && !terminal(parent)) this.parts.send(task.scopeKey, task.id, parent.id, `${task.title}: failed (result unknown)`, `result:retired:${task.id}`);
+    this.tellRetired(task, row.step_id, parent);
     if (parent) this.parts.finishStops(this.parts.required(task.scopeKey, parent.id));
   }
+}
+
+export function retiredTaskReport(title: string): string {
+  return `「${title.slice(0, 80)}」は結果を確かめられないまま止まり、最後まで進められませんでした。`;
 }

@@ -57,7 +57,8 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       view: task => this.view(task), get: (scope, id) => this.get(scope, id), finishStops: task => this.finishStops(task),
       pendingReceipts: scope => this.pendingReceipts(scope), activeSteps: scope => this.activeSteps(scope),
       snapshot: (scope, id) => this.snapshotInTransaction(scope, id)!, failConversation: step => this.failConversationInTransaction(step),
-      send: (scope, source, target, text, id) => this.sendInTransaction(scope, source, target, text, id) });
+      send: (scope, source, target, text, id) => this.sendInTransaction(scope, source, target, text, id),
+      notice: (scope, taskId, stepId, operationId, text) => this.progressStore.notice(scope, taskId, stepId, operationId, text) });
     this.deliveries = new TaskConversationDeliveryStore(db, { authority: this.authority, sources: this.sources, now: this.now,
       begin: (scope, thread, lease, claim) => this.beginConversation(scope, thread, lease, claim), matches: step => this.matches(step) && Boolean(this.options.conversationLeaseValid?.(step.scopeKey, step.lease, this.now())),
       observed: step => this.observedMessages(this.required(step.scopeKey, step.taskId)) ?? [],

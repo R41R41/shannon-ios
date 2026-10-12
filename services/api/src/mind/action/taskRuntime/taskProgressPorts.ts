@@ -12,5 +12,6 @@ export interface TaskProgress {
 export interface TaskProgressEvent {
   operationId: string; tool: string; status: TaskProgress['status'];
   read?: { text: string; sources: ShannonWebSource[]; places?: ShannonPlace[] };
+  /** A parent-bound `task.send` body (received), or the runtime's own notice that the task could not finish (failed). */
   report?: { text: string };
 }
