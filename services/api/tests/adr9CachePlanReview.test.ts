@@ -105,19 +105,25 @@ describe('F2: a call in a plan turn without tools', () => {
     await planChat(h.run, HAIKU).generate(request);
     const bodies = h.recorder.requests.map(item => item.body as Body);
     expect(bodies.map(body => body.tool_choice)).toEqual([{ type: 'auto' }, { type: 'none' }]);
-    expect(events()).toEqual({ 'text:declined': 1 });
+    expect(events()).toEqual({ 'text:schema_common': 1, 'text:declined': 1 });
   });
 });
 
 describe('F4: the fields a plan turn uses', () => {
-  it('says which it uses and the value of each it does not use (no added field is nullable: no added union)', () => {
-    const lines = fieldsLines({ ...request, offerReplyFeeling: true, offerMinecraftIntent: true });
-    expect(lines).toEqual([
-      '[このターンの返答の欄] feeling、minecraftIntent はこのターンで使う欄。説明どおりに必ず判断して書く。',
-      '[このターンの返答の欄] このターンで使わない欄は決まった値にする: places は []、roomLook は "none"、appLook は "none"、webSearchNeedsInput は false。',
-    ]);
-    expect(fieldsLines(request).at(-1)).toContain('feeling は null、');
-    expect(fieldsLines(request).at(-1)).toContain('minecraftIntent は {"kind":"none","goal":""}');
+  it('says feeling is null on a common turn that does not offer it, and nothing on an exception turn', () => {
+    expect(fieldsLines(request)).toEqual(['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。']);
+    expect(fieldsLines({ ...request, offerReplyFeeling: true })).toEqual([]);
+    expect(fieldsLines({ ...request, offerMinecraftIntent: true })).toEqual([]);
+  });
+
+  it('counts each plan turn\'s schema and keeps an exception turn\'s receipts in their own lane', async () => {
+    const h = context([answer(HAIKU.model, 0, 2_000), answer(HAIKU.model, 300, 2_000)]);
+    await planChat(h.run, HAIKU).generate(request);
+    await planChat(h.run, HAIKU).generate({ ...request, offerAppLook: true });
+    expect(events()).toEqual({ 'text:schema_common': 1, 'text:schema_exception': 1 });
+    expect(cacheReceiptsView().recent.map(receipt => receipt.planSchema)).toEqual(['common', 'exception']);
+    const lanes = Object.values(cacheReceiptsView().foregroundText.days).flatMap(day => Object.keys(day));
+    expect(lanes.sort()).toEqual(['plan', 'plan_exception']);
   });
 
   it('counts how often an offered feeling was answered, with and without the plan', async () => {

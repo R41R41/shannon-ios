@@ -234,17 +234,10 @@ export function offersTools(request: Pick<ShannonChatModelRequest, 'tools' | 'us
   return Boolean(request.tools?.definitions.length) && !request.useWebSearch && !request.placeSearch;
 }
 
-/**
- * The fields a text turn may add to its structured reply, with their schemas (Syzygy ADR-0009 stage 1, M4: the cache plan's one
- * superset schema, `anthropicCachePlan.ts`). `feeling` follows `reply`; the others follow the base fields, in this order.
- */
-export const TURN_REPLY_FIELDS = Object.freeze({
-  feeling: REPLY_FEELING_SCHEMA, places: placeSearchSchema, roomLook: ROOM_LOOK_SCHEMA, appLook: APP_LOOK_SCHEMA,
-  minecraftIntent: MINECRAFT_INTENT_SCHEMA,
-});
-export type TurnReplyField = keyof typeof TURN_REPLY_FIELDS | 'webSearchNeedsInput';
+/** The fields a text turn may add to its structured reply (Syzygy ADR-0009 stage 1, M4: the cache plan's exception turns). */
+export type TurnReplyField = 'feeling' | 'places' | 'roomLook' | 'appLook' | 'minecraftIntent' | 'webSearchNeedsInput';
 
-/** The fields of the superset this turn asks for (the required web read's own field among them). */
+/** The fields this turn adds to its structured reply (the required web read's own field among them). */
 export function offeredReplyFields(request: ShannonChatModelRequest): TurnReplyField[] {
   const offers: Array<[TurnReplyField, unknown]> = [['feeling', request.offerReplyFeeling], ['places', request.placeSearch],
     ['roomLook', request.offerRoomLook], ['appLook', request.offerAppLook], ['minecraftIntent', request.offerMinecraftIntent],
@@ -265,4 +258,9 @@ export function withoutTurnInstructions(request: ShannonChatModelRequest): Shann
 /** For a turn that offered her reply's feeling, whether the answer carried one; null for a turn that did not offer it. */
 export function offeredFeelingAnswered(request: ShannonChatModelRequest, structured: ParsedChatTurn): boolean | null {
   return request.offerReplyFeeling ? Boolean(structured.replyFeeling) : null;
+}
+
+/** The offers of the cache plan's common schema (ADR-0009 stage 1, M4 grammar fix): her reply's feeling, as an owner turn has it. */
+export function withCommonOffers(request: ShannonChatModelRequest): ShannonChatModelRequest {
+  return { ...request, offerReplyFeeling: true };
 }

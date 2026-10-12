@@ -10,12 +10,12 @@ import { toolOpenDefinition } from '../../../mind/tools/shannonToolMenu.js';
 import type { ShannonChatModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import {
-  chatTurnRequestBody, offerInstructions, offeredReplyFields, offersTools, TURN_REPLY_FIELDS, withoutTurnInstructions, type TurnReplyField,
+  chatTurnRequestBody, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
 } from '../chatModelTurn.js';
 import type { SonnetSettings } from './anthropicConfig.js';
 import { appendForegroundMenu, stableOpener } from './anthropicForegroundMenu.js';
 import {
-  conversationEffort, SONNET_TEXT_LINES, sonnetMessages, sonnetTool, sonnetTools, WEB_ANSWER_LINE, WEB_SEARCH_NEEDS_INPUT,
+  conversationEffort, SONNET_TEXT_LINES, sonnetChatBody, sonnetMessages, sonnetTool, sonnetTools, WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
@@ -28,9 +28,10 @@ import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
  *
  * - tools: always the fixed pair `tool_open` / `tool_call` with `tool_choice: auto`, also in a turn that offers no tool (the
  *   turn's own lines then say so). The menu and the selected definitions follow the words, as before (`appendForegroundMenu`).
- * - output: one superset schema for the text surface. Every field a turn may ask for is present and nullable; the turn's
- *   lines say which ones it uses, and the reader still takes only what the turn offered (`chatTurnResult`). A change of
- *   `output_config.format` invalidates the provider's cache for the thread, so the schema must not vary.
+ * - output: the common schema (an owner turn's: the base fields and her feeling) on every turn that offers no rarer field. The
+ *   provider says a change of `output_config.format` invalidates the prompt cache for the thread, so the format must not vary
+ *   from turn to turn. A turn that offers a rarer field (a place search, a look, the Minecraft intent, the required web read)
+ *   is an exception: it sends the schema it has without the plan, accepting that turn's miss (`exceptionTurn`).
  * - system: her identity, the fixed instructions and what she knows of the owner, without anything that depends on the turn.
  *   The tool-dependent capability lines, the skill index, the reply-feeling and tool instructions and the web-answer line move
  *   into the turn's own system message after the words.
@@ -50,35 +51,32 @@ export const PLAN_NO_TOOLS_LINE = '[ボクの道具] この返事では道具を
 
 type Schema = Record<string, unknown> & { properties: Record<string, Record<string, unknown>>; required: string[] };
 
-/** The schema of a turn that offers nothing: the fields every text turn has. */
-function baseSchema(): Schema {
-  const body = chatTurnRequestBody('', { scopeKey: '', systemPrompt: '', history: [], message: '' }, undefined);
-  return (body.text as { format: { schema: Schema } }).format.schema;
+/**
+ * The common schema: exactly the one an owner turn that offers only her feeling has without the plan (the base fields and
+ * `feeling`). A turn that does not offer her feeling uses it too, with `feeling` null. M4 grammar fix: one schema with every
+ * rare field (places, the looks, the Minecraft intent, the required web read's field) was refused with the always-loaded
+ * tools as a grammar too large, while the plan-off schema with the same tool, optional and union counts passed (VM probe,
+ * 2026-10-12), so the rare fields are not in it.
+ */
+function commonSchema(): Record<string, unknown> {
+  const body = chatTurnRequestBody('', withCommonOffers({ scopeKey: '', systemPrompt: '', history: [], message: '' }), undefined);
+  return structuredSchema((body.text as { format: { schema: Schema } }).format.schema) as Record<string, unknown>;
 }
 
 /**
- * Every field a turn may add, each in the schema it has without the plan, with `feeling` right after `reply` (the streamed reply
- * never waits for it). The added fields are not made nullable: each already has its own "nothing" (`[]`, `"none"`,
- * `{ kind: "none" }`, `false`), so the superset adds no union parameter to the base and her feeling's own. A union is the
- * expensive part of the provider's compiled grammar (M4 grammar fix: with every added field nullable, 15 unions, the
- * request with the always-loaded tools was refused as a grammar too large).
+ * A turn that offers a field outside the common schema is an exception: it sends the schema it has without the plan (the
+ * output format changes for that turn; tools, system and the breakpoints stay). Counted per turn (`planSchemaOf`).
  */
-function supersetSchema(): Record<string, unknown> {
-  const base = baseSchema();
-  const { reply, ...fixed } = base.properties;
-  const { feeling, ...rest } = TURN_REPLY_FIELDS as unknown as Record<string, Record<string, unknown>>;
-  const later = { ...rest, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } };
-  const properties = { reply: reply!, feeling: feeling!, ...fixed, ...later };
-  const required = ['reply', 'feeling', ...base.required.filter(name => name !== 'reply'), ...Object.keys(later)];
-  return structuredSchema({ ...base, properties, required }) as Record<string, unknown>;
+export function exceptionTurn(request: ShannonChatModelRequest): boolean {
+  return offeredReplyFields(request).some(field => field !== 'feeling');
 }
 
 let schemaOnce: Record<string, unknown> | undefined;
 let pairOnce: readonly Anthropic.Tool[] | undefined;
 
-/** The one output schema of the text surface under the plan (built on first use: its parts load in a cycle). */
+/** The common output schema of the text surface under the plan (built on first use: its parts load in a cycle). */
 export function planOutputSchema(): Record<string, unknown> {
-  schemaOnce ??= supersetSchema();
+  schemaOnce ??= commonSchema();
   return structuredClone(schemaOnce);
 }
 
@@ -140,26 +138,13 @@ export function stableLayers(request: Pick<ShannonChatModelRequest, 'systemPromp
   };
 }
 
-const SUPERSET_FIELDS: readonly TurnReplyField[] = [...Object.keys(TURN_REPLY_FIELDS) as TurnReplyField[], 'webSearchNeedsInput'];
-
-/** Whether a field may be null also in a turn that offers it (her reply's feeling: null when nothing moved her). */
-/** The value an added field takes in a turn that does not use it: the field's own "nothing". */
-const UNUSED_VALUES: Readonly<Record<TurnReplyField, string>> = Object.freeze({
-  feeling: 'null', places: '[]', roomLook: '"none"', appLook: '"none"', minecraftIntent: '{"kind":"none","goal":""}', webSearchNeedsInput: 'false',
-});
-
 /**
- * Which fields of the superset this turn uses, and the value each unused one takes. A used field keeps the meaning it has
- * without the plan; her feeling keeps its own rule that it is null when nothing moved her.
+ * The field line of a turn on the common schema that does not offer her feeling: `feeling` is null. An exception turn sends
+ * the schema it has without the plan and needs no line.
  */
 export function fieldsLines(request: ShannonChatModelRequest): string[] {
-  const used = offeredReplyFields(request);
-  const unused = SUPERSET_FIELDS.filter(field => !used.includes(field));
-  const values = unused.map(field => `${field} は ${UNUSED_VALUES[field]}`).join('、');
-  return [
-    ...(used.length ? [`[このターンの返答の欄] ${used.join('、')} はこのターンで使う欄。説明どおりに必ず判断して書く。`] : []),
-    ...(unused.length ? [`[このターンの返答の欄] このターンで使わない欄は決まった値にする: ${values}。`] : []),
-  ];
+  if (exceptionTurn(request) || offeredReplyFields(request).includes('feeling')) return [];
+  return ['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。'];
 }
 
 function toolLine(request: ShannonChatModelRequest): string {
@@ -187,17 +172,33 @@ function withTurnLines(messages: Anthropic.MessageParam[], lines: readonly strin
 
 const PLANNED = Symbol('shannon.cachePlan');
 
+/** Which schema a plan body carries: the common one, or the exception turn's own. */
+export type PlanSchema = 'common' | 'exception';
+
 /**
  * Whether a request body was built under the plan. The mark is a symbol property: object spreads (the tool rounds' requests)
  * keep it, and JSON never sends it, so the transport places the plan's breakpoints on exactly these bodies and the one-hour
  * cache of every other request on the rest (the plan's fallbacks to the shape without it among them).
  */
 export function isPlannedBody(body: object): boolean {
-  return (body as Record<symbol, unknown>)[PLANNED] === true;
+  return planSchemaOf(body) !== null;
 }
 
-function planned(body: Anthropic.MessageCreateParamsNonStreaming): Anthropic.MessageCreateParamsNonStreaming {
-  return Object.assign(body, { [PLANNED]: true });
+/** The schema a plan body carries, or null for a body built without the plan. */
+export function planSchemaOf(body: object): PlanSchema | null {
+  const mark = (body as Record<symbol, unknown>)[PLANNED];
+  return mark === 'common' || mark === 'exception' ? mark : null;
+}
+
+function planned(body: Anthropic.MessageCreateParamsNonStreaming, schema: PlanSchema): Anthropic.MessageCreateParamsNonStreaming {
+  return Object.assign(body, { [PLANNED]: schema });
+}
+
+/** The output format of a plan turn: the common schema, or for an exception turn the format it has without the plan. */
+function planFormat(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined) {
+  if (!exceptionTurn(request)) return { type: 'json_schema' as const, schema: planOutputSchema() };
+  const own = sonnetChatBody(settings, { ...request, tools: undefined }, agentHostHint).output_config?.format;
+  return own as { type: 'json_schema'; schema: Record<string, unknown> };
 }
 
 function cachedSystem(text: string): Anthropic.TextBlockParam[] {
@@ -218,9 +219,10 @@ export function plannedChatBody(settings: SonnetSettings, request: ShannonChatMo
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: conversationEffort(settings), format: { type: 'json_schema', schema: planOutputSchema() } },
+    output_config: { effort: conversationEffort(settings), format: planFormat(settings, request, agentHostHint) },
   };
-  if (!offersTools(request)) return planned(body);
+  const schema: PlanSchema = exceptionTurn(request) ? 'exception' : 'common';
+  if (!offersTools(request)) return planned(body, schema);
   // A native 5.5 session always carries the menu here (`boundedToolMenu`); without its opener this throws, as before.
-  return planned(appendForegroundMenu({ ...body, tools: sonnetTools(request.tools) }, toolInstructions(request.tools!, false)));
+  return planned(appendForegroundMenu({ ...body, tools: sonnetTools(request.tools) }, toolInstructions(request.tools!, false)), schema);
 }

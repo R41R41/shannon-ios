@@ -2,7 +2,8 @@
  * The foreground text turns as the cache plan is judged (Syzygy ADR-0009 stage 1, M4; plan §3 row 5: "of the follow-up turns
  * within an hour, at least 70% read the cache"). In this process only, content-free, and empty again after a restart: a Talk is
  * known by a short hash and the model, a turn by its first request (round 0). Per day and per lane (`plan` under
- * `SHANNON_CLAUDE_CACHE_PLAN`, `base` otherwise):
+ * `SHANNON_CLAUDE_CACHE_PLAN` with the common schema, `plan_exception` for a plan turn that sent its own schema because it
+ * offered a rarer field, `base` without the plan):
  *
  * - `turns`: the text turns that named their Talk.
  * - `warmTurns`: those that started within an hour of the previous turn of the same Talk and model. Of them,
@@ -25,6 +26,8 @@ export interface WarmTurnInput {
   thread: string;
   model: string;
   cachePlan: boolean;
+  /** A plan turn that sent its own schema (a rarer field offered): counted in the lane `plan_exception`. */
+  exception?: boolean;
   /** The fingerprint of the static prefix (tools, system, schema, effort). */
   staticPrefix: string;
   /** History messages before the turn's words. */
@@ -52,7 +55,12 @@ interface WarmLane {
   latency: LatencySamples;
 }
 
-type Lane = 'plan' | 'base';
+type Lane = 'plan' | 'plan_exception' | 'base';
+
+function laneName(turn: Pick<WarmTurnInput, 'cachePlan' | 'exception'>): Lane {
+  if (!turn.cachePlan) return 'base';
+  return turn.exception ? 'plan_exception' : 'plan';
+}
 
 const lastTurnAt = new Map<string, number>();
 const staticPrefixes = new Map<string, number>();
@@ -126,7 +134,7 @@ export function recordWarmTurn(turn: WarmTurnInput): void {
   const at = Date.parse(turn.at);
   if (!Number.isFinite(at)) return;
   learnStaticPrefix(turn);
-  const total = laneOf(turn.at.slice(0, 10), turn.cachePlan ? 'plan' : 'base');
+  const total = laneOf(turn.at.slice(0, 10), laneName(turn));
   const history = readHistory(turn);
   total.turns += 1;
   if (turn.firstTokenMs !== undefined) sample(history ? total.latency.history : total.latency.other, turn.firstTokenMs);

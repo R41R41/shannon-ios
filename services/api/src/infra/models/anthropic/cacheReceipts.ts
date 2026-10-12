@@ -22,6 +22,8 @@ export interface CachePrefixFingerprint {
 export interface CacheTurn {
   thread: string;
   cachePlan: boolean;
+  /** Under the plan: the common schema, or the exception turn's own. */
+  planSchema?: 'common' | 'exception';
   /** History messages before the turn's words in the request. */
   historyMessages: number;
   firstTokenMs?: number;
@@ -41,6 +43,7 @@ export interface CacheReceipt {
   /** Only on a foreground turn's requests: the Talk's short hash, the cache plan, and on round 0 the first-token time. */
   thread?: string;
   cachePlan?: boolean;
+  planSchema?: 'common' | 'exception';
   historyMessages?: number;
   firstTokenMs?: number;
 }
@@ -107,10 +110,11 @@ function forgetOldDays(): void {
   for (const day of [...days.keys()]) if (!kept.includes(day)) days.delete(day);
 }
 
-function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 'cachePlan' | 'historyMessages' | 'firstTokenMs'> {
+function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 'cachePlan' | 'planSchema' | 'historyMessages' | 'firstTokenMs'> {
   if (!turn) return {};
   const first = turn.firstTokenMs === undefined ? {} : { firstTokenMs: Math.max(0, Math.round(turn.firstTokenMs)) };
-  return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, historyMessages: turn.historyMessages, ...first };
+  const schema = turn.planSchema === undefined ? {} : { planSchema: turn.planSchema };
+  return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, ...schema, historyMessages: turn.historyMessages, ...first };
 }
 
 /** A foreground text turn's first request also counts toward the warm-turn view (`cacheWarmTurns.ts`). */
@@ -119,6 +123,7 @@ function noteWarmTurn(receipt: CacheReceipt): void {
   const cacheCreation = receipt.cacheCreation5m + receipt.cacheCreation1h;
   const { tools, system, schema, effort } = receipt.prefix;
   recordWarmTurn({ at: receipt.at, thread: receipt.thread, model: receipt.model, cachePlan: receipt.cachePlan === true,
+    exception: receipt.planSchema === 'exception',
     staticPrefix: [tools, system, schema, effort].join(':'), historyMessages: receipt.historyMessages ?? 0, input: receipt.input,
     cacheRead: receipt.cacheRead, cacheCreation, ...(receipt.firstTokenMs === undefined ? {} : { firstTokenMs: receipt.firstTokenMs }) });
 }

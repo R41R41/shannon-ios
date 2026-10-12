@@ -8,7 +8,7 @@ import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../
 import type { LlmUsageStore } from '../llmUsage.js';
 import { recordCacheReceipt, type CacheRoute, type CacheTurn } from '../anthropic/cacheReceipts.js';
 import { cachePlanRequest, wordsIndex } from '../anthropic/cachePlanMarkers.js';
-import { isPlannedBody } from '../anthropic/anthropicCachePlan.js';
+import { isPlannedBody, planSchemaOf } from '../anthropic/anthropicCachePlan.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from '../anthropic/observerProjection.js';
 import {
   AnthropicUsageEvidenceError, cacheHaikuRequest, serverSearchCacheStart, settledServerSearchUsage, validateHaikuCacheUsage,
@@ -320,7 +320,9 @@ function cacheTurn(attempt: Attempt): CacheTurn | undefined {
   const { thread } = attempt.request.target;
   if (thread === undefined) return undefined;
   const first = attempt.firstTokenMs === undefined ? {} : { firstTokenMs: attempt.firstTokenMs };
-  return { thread, cachePlan: isPlannedBody(attempt.body), historyMessages: Math.max(0, wordsIndex(attempt.body.messages)), ...first };
+  const schema = planSchemaOf(attempt.body);
+  const lane = schema === null ? { cachePlan: false } : { cachePlan: true, planSchema: schema };
+  return { thread, ...lane, historyMessages: Math.max(0, wordsIndex(attempt.body.messages)), ...first };
 }
 
 function book(attempt: Attempt, usage: Usage | null | undefined, finalUsage: boolean): void {

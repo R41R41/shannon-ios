@@ -9,9 +9,15 @@
  * nothing or is absent (the always-loaded controls through the menu: 6 strict tools with the fixed pair), `typical` adds the
  * two definitions Jev usually selects, `heavy` six.
  *
- * - by default: `plan-plain`, `plan-tools-minimal`, `plan-tools-typical` (the plan as it is now);
- * - `--compare` also: `off-tools-minimal`, `off-tools-typical` (the shape without the plan), `plan-v1-tools-minimal` (the first
- *   superset, every added field nullable: 15 unions, refused on the VM as a grammar too large) and `plan-tools-heavy`.
+ * - by default: `plan-plain`, `plan-tools-minimal`, `plan-tools-typical` (the plan's common schema, an owner turn's), then
+ *   `plan-exception-looks` (the same minimal offer on a turn that offers both looks: an exception turn, which sends the schema
+ *   it has without the plan; its cache read shows whether the static prefix survives a change of the output format);
+ * - `--compare` also: `off-tools-minimal`, `off-tools-typical`, `off-tools-looks` (the shape without the plan) and
+ *   `plan-tools-heavy`.
+ *
+ * Each line also prints the output schema's character length and, for a plan request, whether its output format is byte for
+ * byte the one the same turn has without the plan (`sameFormatAsOff`): true for every plan request here, the common schema
+ * being exactly an owner turn's.
  *
  * Keys are read from the process environment under the names the server reads (`SHANNON_HAIKU_API_KEY`, else
  * `SHANNON_ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY`; Sonnet: the last two) and never printed. Printed per request: the
@@ -21,7 +27,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { serverEnvironment } from '../src/infra/config/serverEnvironment.js';
-import { planOutputSchema, plannedChatBody } from '../src/infra/models/anthropic/anthropicCachePlan.js';
+import { plannedChatBody } from '../src/infra/models/anthropic/anthropicCachePlan.js';
 import { anthropicApiKey, type SonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { offerRefusal } from '../src/infra/models/anthropic/anthropicRejection.js';
 import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
@@ -44,7 +50,6 @@ const SONNET: SonnetSettings = { model: 'claude-sonnet-5-5', effort: 'low', text
 const CAPS: Readonly<Record<string, number>> = { [HAIKU.model]: 0.03, [SONNET.model]: 0.05 };
 const OFFERS = { minimal: [], typical: ['study_list', 'study_read'],
   heavy: ['study_list', 'study_read', 'aether_search', 'aether_read', 'folder_list', 'folder_read'] } as const;
-const ADDED_FIELDS = ['places', 'roomLook', 'appLook', 'minecraftIntent', 'webSearchNeedsInput'];
 
 const base: ShannonChatModelRequest = {
   scopeKey: 'probe', systemPrompt: '合成された人格の層。これは接続確認のための合成の会話です。',
@@ -60,20 +65,11 @@ function offer(chosen: readonly string[]): ShannonModelToolSession {
   return withToolMenu(session, chosen);
 }
 
-/** The first superset: every added field nullable (an `anyOf` with null), as it was refused on the VM. */
-function firstSuperset(body: Body): Body {
-  const schema = planOutputSchema() as { properties: Record<string, Record<string, unknown>> };
-  for (const name of ADDED_FIELDS) {
-    const { description, ...shape } = schema.properties[name]!;
-    schema.properties[name] = { ...(description === undefined ? {} : { description }), anyOf: [shape, { type: 'null' }] };
-  }
-  const format = { type: 'json_schema' as const, schema };
-  return { ...body, output_config: { ...body.output_config, format } };
-}
-
 interface Probe {
   name: string;
   body(settings: SonnetSettings): Body;
+  /** The same turn without the plan, for the format comparison. */
+  request?: ShannonChatModelRequest;
 }
 
 const planned = (request: ShannonChatModelRequest) => (settings: SonnetSettings) => cachePlanRequest(plannedChatBody(settings, request, undefined));
@@ -81,17 +77,18 @@ const without = (request: ShannonChatModelRequest) => (settings: SonnetSettings)
 
 function probes(compare: boolean): Probe[] {
   const tools = (chosen: readonly string[]) => ({ ...base, tools: offer(chosen) });
+  const looks = { ...tools(OFFERS.minimal), offerRoomLook: true, offerAppLook: true };
+  const plan = (name: string, request: ShannonChatModelRequest): Probe => ({ name, body: planned(request), request });
   const always: Probe[] = [
-    { name: 'plan-plain', body: planned(base) },
-    { name: 'plan-tools-minimal', body: planned(tools(OFFERS.minimal)) },
-    { name: 'plan-tools-typical', body: planned(tools(OFFERS.typical)) },
+    plan('plan-plain', base), plan('plan-tools-minimal', tools(OFFERS.minimal)), plan('plan-tools-typical', tools(OFFERS.typical)),
+    plan('plan-exception-looks', looks),
   ];
   if (!compare) return always;
   return [...always,
     { name: 'off-tools-minimal', body: without(tools(OFFERS.minimal)) },
     { name: 'off-tools-typical', body: without(tools(OFFERS.typical)) },
-    { name: 'plan-v1-tools-minimal', body: settings => cachePlanRequest(firstSuperset(plannedChatBody(settings, tools(OFFERS.minimal), undefined))) },
-    { name: 'plan-tools-heavy', body: planned(tools(OFFERS.heavy)) },
+    { name: 'off-tools-looks', body: without(looks) },
+    plan('plan-tools-heavy', tools(OFFERS.heavy)),
   ];
 }
 
@@ -111,7 +108,10 @@ function cost(model: string, usage: Anthropic.Message['usage']): number {
 
 async function send(client: Anthropic, settings: SonnetSettings, probe: Probe, spent: { usd: number }): Promise<void> {
   const body = { ...probe.body(settings), max_tokens: MAXIMUM_OUTPUT_TOKENS };
-  const line = { model: settings.model, request: probe.name, strict: strictRequestUsage(body) };
+  const format = JSON.stringify(body.output_config?.format ?? null);
+  const off = probe.request ? JSON.stringify(sonnetChatBody(settings, probe.request, undefined).output_config?.format ?? null) : null;
+  const line = { model: settings.model, request: probe.name, strict: strictRequestUsage(body), schemaChars: format.length,
+    ...(off === null ? {} : { sameFormatAsOff: off === format }) };
   if (spent.usd >= CAPS[settings.model]!) {
     console.log(JSON.stringify({ ...line, skipped: 'spend_cap' }));
     return;

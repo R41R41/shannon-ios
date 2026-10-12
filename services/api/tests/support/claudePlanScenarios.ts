@@ -55,7 +55,7 @@ function talkTurn(n: number, extra: Partial<ShannonChatModelRequest>): ShannonCh
 async function talk(context: ScenarioContext) {
   const chat = planChat(context, HAIKU);
   const first = await chat.generateStreaming(talkTurn(0, { offerReplyFeeling: true }), () => {});
-  const second = await chat.generateStreaming(talkTurn(1, { systemPrompt: withSkillsCapability(identity), offerRoomLook: true,
+  const second = await chat.generateStreaming(talkTurn(1, { systemPrompt: withSkillsCapability(identity),
     profilePrompt: `合成された持ち主の層\n\n${skillIndex}`, tools: tools(['study.list', 'skill.read']) }), () => {});
   const third = await chat.generateStreaming(talkTurn(2, { useWebSearch: true }), () => {});
   return [first, second, third].map(turn => turn.reply);

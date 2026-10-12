@@ -6,7 +6,8 @@ import {
 } from '@shannon/cognition';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  cachePlanApplies, planOutputSchema, planToolPair, plannedChatBody, splitCapabilityLines, splitSkillIndex, stableLayers,
+  cachePlanApplies, exceptionTurn, planOutputSchema, planSchemaOf, planToolPair, plannedChatBody, splitCapabilityLines, splitSkillIndex,
+  stableLayers,
 } from '../src/infra/models/anthropic/anthropicCachePlan.js';
 import { CACHE_PLAN_BREAKPOINTS, cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers.js';
 import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
@@ -83,15 +84,27 @@ describe('the cache plan switch', () => {
 });
 
 describe('the stable prefix', () => {
-  it.each([['Haiku', HAIKU], ['Sonnet', SONNET]] as const)('is the same tools, choice, system, schema and effort in every kind of turn (%s)', (_name, settings) => {
+  it.each([['Haiku', HAIKU], ['Sonnet', SONNET]] as const)('is the same tools, choice, system and effort in every kind of turn (%s)', (_name, settings) => {
     const bodies = Object.values(variants).map(request => sent(request, settings));
     for (const body of bodies) {
       expect(body.tools).toEqual(planToolPair());
       expect(body.tool_choice).toEqual({ type: 'auto' });
       expect(body.system).toEqual(bodies[0]!.system);
-      expect(body.output_config).toEqual(bodies[0]!.output_config);
+      expect(body.output_config!.effort).toEqual(bodies[0]!.output_config!.effort);
       expect(body.thinking).toEqual(bodies[0]!.thinking);
       expect(body.cache_control).toBeUndefined();
+    }
+  });
+
+  it.each([['Haiku', HAIKU], ['Sonnet', SONNET]] as const)('sends the common schema, an owner turn\'s, unless a rarer field makes the turn an exception (%s)', (_name, settings) => {
+    const off = (request: ShannonChatModelRequest) => sonnetChatBody(settings, { ...request, tools: undefined }, undefined).output_config;
+    const common = off({ ...base, offerReplyFeeling: true });
+    for (const [name, request] of Object.entries(variants)) {
+      const body = sent(request, settings);
+      const exception = ['feeling', 'required', 'place'].includes(name);
+      expect(exceptionTurn(request), name).toBe(exception);
+      expect(planSchemaOf(plannedChatBody(settings, request, undefined)), name).toBe(exception ? 'exception' : 'common');
+      expect(body.output_config, name).toEqual(exception ? off(request) : common);
     }
   });
 
@@ -128,7 +141,7 @@ describe('the stable prefix', () => {
     expect(stableLayers({ systemPrompt: 'x', profilePrompt: 'y' })).toEqual({ systemPrompt: 'x', profilePrompt: 'y', turnLines: [] });
   });
 
-  it('fits the provider\'s strict limits with one superset schema, also with the whole registry offered', () => {
+  it('fits the provider\'s strict limits with the common schema, also with the whole registry offered', () => {
     const schema = planOutputSchema() as { required: string[]; properties: Record<string, unknown> };
     expect([...schema.required].sort()).toEqual(Object.keys(schema.properties).sort());
     const whole = withToolMenu(tools(SHANNON_TOOLS.filter(tool => tool.surfaces.includes('text')).map(tool => tool.name)), []);
@@ -182,6 +195,16 @@ describe('a Talk under the plan (golden plan-text-talk)', () => {
     }
   });
 
+  it('differs on an exception turn in the output format alone (the rest of its prefix is the common turn\'s)', () => {
+    const turn = { ...base, history: [{ role: 'user' as const, content: '前の言葉' }, { role: 'assistant' as const, content: '前の返事' }] };
+    const common = sent(turn);
+    const exception = sent({ ...turn, offerAppLook: true });
+    const words = markedWordsIndex(common);
+    const withoutFormat = (body: Body) => ({ ...body, output_config: { ...body.output_config, format: undefined } });
+    expect(exception.output_config).not.toEqual(common.output_config);
+    expect(renderedPrefix(withoutFormat(exception), words)).toBe(renderedPrefix(withoutFormat(common), words));
+  });
+
   it('keeps a turn\'s later round append-only after its first request', () => {
     const [first, second] = [text[1]!, text[2]!];
     expect(renderedPrefix(second, first.messages.length - 1)).toBe(renderedPrefix(first, first.messages.length - 1));
@@ -222,7 +245,7 @@ describe('the warm-turn view of GET /v1/ops', () => {
   });
 });
 
-describe('reading a superset answer', () => {
+describe('reading an answer that carries fields the turn did not offer', () => {
   it('takes only the fields the turn offered', () => {
     const raw = JSON.stringify({ reply: '合成の返事', feeling: { kind: 'happy', strength: 'subtle' }, threadSummary: null, threadTitle: '題',
       taskDecision: { disposition: 'none', reason: '合成' }, taskProposal: null, intentPlan: null, artifacts: null,

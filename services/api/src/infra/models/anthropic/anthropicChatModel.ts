@@ -21,7 +21,7 @@ import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearch
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
 import { claudeClient } from '../claude/claudeClient.js';
-import { cachePlanApplies, plannedChatBody } from './anthropicCachePlan.js';
+import { cachePlanApplies, exceptionTurn, plannedChatBody } from './anthropicCachePlan.js';
 import { noteFeelingAnswer, notePlanEvent } from './cacheWarmTurns.js';
 import {
   claudeConversationSender, type ClaudeConversationTransport, type ClaudeListener, type ClaudeSend, type ClaudeSendRequest,
@@ -302,6 +302,7 @@ export class AnthropicChatModel implements ShannonChatModel {
       if (rejected) notePlanEvent('text', 'recovered');
     };
     if (!this.cachePlan) return { rounds: {}, answered };
+    notePlanEvent('text', exceptionTurn(request) ? 'schema_exception' : 'schema_common');
     const onPlanEvent = (event: string) => {
       rejected ||= event !== 'declined';
       notePlanEvent('text', event);
