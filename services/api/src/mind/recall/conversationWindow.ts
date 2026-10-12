@@ -100,10 +100,14 @@ export function withEpochs(rule: ReplayRule): ReplayRule {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** Whether a channel replays in epochs: `SHANNON_REPLAY_EPOCHS`, and for voice also `SHANNON_CLAUDE_CACHE_PLAN_VOICE`. */
+/**
+ * Whether a channel replays in epochs: `SHANNON_REPLAY_EPOCHS`, and the channel's cache plan
+ * (`SHANNON_CLAUDE_CACHE_PLAN` for text, `SHANNON_CLAUDE_CACHE_PLAN_VOICE` for voice) — epochs only pay off where the cache carries them.
+ */
 export function replayEpochsOn(channel: ReplayChannel, environment: Environment = serverEnvironment()): boolean {
   if (!switchOn(environment, 'SHANNON_REPLAY_EPOCHS')) return false;
-  return channel === 'text' || switchOn(environment, 'SHANNON_CLAUDE_CACHE_PLAN_VOICE');
+  const plan = channel === 'text' ? 'SHANNON_CLAUDE_CACHE_PLAN' : 'SHANNON_CLAUDE_CACHE_PLAN_VOICE';
+  return switchOn(environment, plan);
 }
 
 /**
