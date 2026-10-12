@@ -61,20 +61,39 @@ export function settledServerSearchUsage(message: Anthropic.Message, start: Serv
   if (![usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens].every(safe)
     || usage.input_tokens < start.input || usage.output_tokens < start.output || usage.cache_read_input_tokens! < start.read
     || usage.cache_creation_input_tokens! <= start.creation || ttl?.ephemeral_5m_input_tokens !== start.five || ttl.ephemeral_1h_input_tokens !== start.hour) return message;
-  const calls = message.content.filter((block): block is Anthropic.ServerToolUseBlock => block.type === 'server_tool_use' && block.name === 'web_search');
-  const ids = new Set(calls.map(block => block.id));
-  const previous = priorMessages.filter(turn => turn.role === 'assistant').flatMap(turn => Array.isArray(turn.content) ? turn.content : []);
-  const answered = new Set(previous.filter(block => block.type === 'web_search_tool_result').map(block => block.tool_use_id));
-  for (const block of previous) if (block.type === 'server_tool_use' && block.name === 'web_search' && !answered.has(block.id)) ids.add(block.id);
-  const results = message.content.filter(block => block.type === 'web_search_tool_result');
-  const searches = usage.server_tool_use?.web_search_requests;
-  if (!safe(searches) || searches < results.length || !results.length || new Set(calls.map(block => block.id)).size !== calls.length
-    || new Set(results.map(block => block.tool_use_id)).size !== results.length
-    || results.some(block => !ids.has(block.tool_use_id) || !Array.isArray(block.content))) return message;
+  if (!serverResultsMatch(message, priorMessages)) return message;
   const additional = usage.cache_creation_input_tokens! - start.creation;
   return { ...message, usage: { ...usage, cache_creation: {
     ephemeral_5m_input_tokens: start.five + additional, ephemeral_1h_input_tokens: start.hour,
   } } };
+}
+
+const SERVER_WEB_TOOLS = new Set(['web_search', 'web_fetch']);
+type ServerWebResult = Anthropic.WebSearchToolResultBlock | Anthropic.WebFetchToolResultBlock;
+
+/**
+ * The server calls of this response (and any pending from a pause) match its results one to one, by ID, within the provider's
+ * counts; search results are lists and fetch results are pages. Anything else leaves the receipt as it was.
+ */
+function serverResultsMatch(message: Anthropic.Message, priorMessages: readonly Anthropic.MessageParam[]): boolean {
+  const usage = message.usage;
+  const safe = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const calls = message.content.filter((block): block is Anthropic.ServerToolUseBlock =>
+    block.type === 'server_tool_use' && SERVER_WEB_TOOLS.has(block.name));
+  const ids = new Set(calls.map(block => block.id));
+  const previous = priorMessages.filter(turn => turn.role === 'assistant').flatMap(turn => Array.isArray(turn.content) ? turn.content : []);
+  const isResult = (block: { type: string }): block is ServerWebResult =>
+    block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result';
+  const answered = new Set(previous.flatMap(block => isResult(block) ? [block.tool_use_id] : []));
+  for (const block of previous) if (block.type === 'server_tool_use' && SERVER_WEB_TOOLS.has(block.name) && !answered.has(block.id)) ids.add(block.id);
+  const results = message.content.filter(isResult);
+  const counted = (usage.server_tool_use?.web_search_requests ?? 0) + (usage.server_tool_use?.web_fetch_requests ?? 0);
+  const wellFormed = (block: ServerWebResult) => block.type === 'web_search_tool_result'
+    ? Array.isArray(block.content) : block.content.type === 'web_fetch_result';
+  return safe(usage.server_tool_use?.web_search_requests ?? 0) && safe(usage.server_tool_use?.web_fetch_requests ?? 0) && counted >= results.length
+    && results.length > 0 && new Set(calls.map(block => block.id)).size === calls.length
+    && new Set(results.map(block => block.tool_use_id)).size === results.length
+    && results.every(block => ids.has(block.tool_use_id) && wellFormed(block));
 }
 
 export type AnthropicUsageEvidenceCode = 'HAIKU_CACHE_TTL_CONFLICT' | 'HAIKU_CACHE_BREAKPOINT_LIMIT' | 'HAIKU_CACHE_PROTOCOL_INVALID'

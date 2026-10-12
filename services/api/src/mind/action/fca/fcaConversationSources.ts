@@ -211,7 +211,7 @@ export function createFcaSourceGuard(parts: {
 export function fcaReadReceiptSources(receipt: FcaReadReceipt): FcaObservedSources {
   if (!receipt.ok) return {};
   const tool = shannonTool(receipt.name);
-  if (tool?.domain === 'task_runtime' || receipt.name === 'web.search' || receipt.name === 'places.search') return {};
+  if (tool?.domain === 'task_runtime' || receipt.name === 'web.search' || receipt.name === 'web.read' || receipt.name === 'places.search') return {};
   const documents = receipt.documents?.sourceIds ?? receipt.documents?.read;
   if (!documents) return tool?.effect === 'read'
     ? { readSourceIds: [`fca-unresolved://${receipt.name}`] } : {};

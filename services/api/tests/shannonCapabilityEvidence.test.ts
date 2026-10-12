@@ -29,6 +29,9 @@ import { skillExecutors } from '../src/mind/tools/shannonSkillTools.js';
 import { configuredSkillMemory, skillBodyCheck } from '../src/wiring/skillMemoryWiring.js';
 import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
 import { readToolExecutors } from '../src/mind/tools/shannonReadTools.js';
+import { webResearchExecutors } from '../src/mind/tools/webResearchTools.js';
+import { researchTaskInput } from '../src/mind/action/fca/conversationWork.js';
+import { nativeWebReadBody, nativeWebReadResult } from '../src/infra/models/anthropic/anthropicWebRead.js';
 import { readToolPorts } from '../src/wiring/skillRoutingWiring.js';
 import { readToolPlan } from '../src/mind/action/respond/conversationCapabilities.js';
 import { READ_TOOL_DOMAINS, SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
@@ -228,7 +231,11 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && READ_TOOL_DOMAINS.every(domain => SHANNON_TOOLS.some(tool => tool.domain === domain && tool.audiences.join() === 'owner_alone'))
     && readToolPorts({ SHANNON_READ_TOOLS: 'off' }, {} as never) === null
     && !shannonCapabilityPrompt('owner').includes(SHANNON_READ_TOOLS_CAPABILITY.text)
-    && withReadToolsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_READ_TOOLS_CAPABILITY.text),
+    && withReadToolsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_READ_TOOLS_CAPABILITY.text)
+    // Deep research: a page read with cited spans (text and task steps), and a call's research handed to a common task.
+    && SHANNON_TOOLS.some(tool => tool.name === 'web.read' && tool.domain === 'web_search' && tool.surfaces.join() === 'text')
+    && SHANNON_TOOLS.some(tool => tool.name === 'web.research' && tool.domain === 'task_runtime' && tool.surfaces.join() === 'voice')
+    && exists(webResearchExecutors, researchTaskInput, nativeWebReadBody, nativeWebReadResult),
   // Syzygy ADR-0008 stage 2, step 6: her skills, built in her sleep with every body checked, opened with skill.read; only while
   // SHANNON_SKILLS is on and only in a turn that offers skill.read (the line is conditional).
   skills: () => exists(skillExecutors, configuredSkillMemory, skillBodyCheck, configuredSkillImporter, SkillImporter.prototype.dryRun, SkillImporter.prototype.apply, ShannonSkillConsolidator.prototype.consolidate, ShannonToolRunner.prototype.useSkills)

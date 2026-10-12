@@ -123,7 +123,8 @@ describe('the self-diagnosis', () => {
       tools: {
         enabled: true, count: BEFORE_AETHER.length, names: BEFORE_AETHER.map(tool => tool.name),
         offered: {
-          text: { owner_alone: BEFORE_AETHER.length, others: 0 },
+          // `web.research` (a call's research handed to a task) is voice-only.
+          text: { owner_alone: BEFORE_AETHER.filter(tool => tool.surfaces.includes('text')).length, others: 0 },
           // The real web.search tool is text-only; voice keeps its separate native search path.
           voice: { owner_alone: BEFORE_AETHER.filter(tool => tool.surfaces.includes('voice')).length, others: 0 },
           // Her Minecraft body's tools exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
@@ -137,7 +138,7 @@ describe('the self-diagnosis', () => {
   it('counts her Aether tools only while the Aether client is configured', () => {
     const tools = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' })).read().tools;
     expect(tools.names).toEqual(REGISTRY.map(tool => tool.name));
-    expect(tools.offered.text).toEqual({ owner_alone: REGISTRY.length, others: 3 });
+    expect(tools.offered.text).toEqual({ owner_alone: REGISTRY.filter(tool => tool.surfaces.includes('text')).length, others: 3 });
     // The owner's documents in her own time (ADR-0007) are counted only with Aether and SHANNON_AUTONOMY_OWNER_DOCUMENTS=on, on her own time only.
     const aether = { ...configured(), SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' };
     for (const flag of ['off', 'On', 'yes']) expect(createServerSelfDiagnosis(sources({ ...aether, SHANNON_AUTONOMY_OWNER_DOCUMENTS: flag })).read().tools).toEqual(tools);

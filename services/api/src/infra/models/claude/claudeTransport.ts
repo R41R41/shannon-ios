@@ -288,7 +288,7 @@ function startUsage(attempt: Attempt, usage: Usage): void {
   const { body, prepared } = attempt;
   attempt.receivedUsage = true;
   attempt.observedUsage = usage;
-  if (searchAllowance(prepared) && prepared.tools?.length === 1) attempt.searchCacheStart = serverSearchCacheStart(usage);
+  if (onlyServerWebTools(prepared)) attempt.searchCacheStart = serverSearchCacheStart(usage);
   // Haiku's unconfirmed cache is logged once, at the end.
   if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(usage, isHaikuModel(body.model) ? () => {} : undefined);
 }
@@ -400,6 +400,12 @@ function streamWatch(bounds: VoiceStreamBounds): StreamWatch {
     idle();
   };
   return { signal: controller.signal, clear, pause: clear, event: () => first && idle(), output };
+}
+
+/** A request whose only tool is one native web server tool (search, or a page read's fetch). */
+function onlyServerWebTools(body: Body): boolean {
+  const tool = body.tools?.length === 1 ? body.tools[0] : undefined;
+  return Boolean(tool && 'name' in tool && (tool.name === 'web_search' && searchAllowance(body) || tool.name === 'web_fetch' && 'max_uses' in tool));
 }
 
 /** Missing search counts reserve the full per-request allowance, never a zero search charge. */
