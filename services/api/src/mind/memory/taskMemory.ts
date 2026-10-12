@@ -16,10 +16,11 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
   const knowledge = parts.knowledge ?? (typeof (parts.conversations as Partial<ShannonKnowledgeStore>).listShannonKnowledge === 'function'
     ? parts.conversations as ConversationStore & ShannonKnowledgeStore : undefined);
   const available = (scope: string, present: MemoryAudience) => scope === parts.ownerScope && isOwnerOnly(present) && parts.ownerAlone();
-  const read: TaskMemory['read'] = (scope, ids, present) => {
+  const read: TaskMemory['read'] = (scope, ids, present, shared) => {
     if (!available(scope, present)) return [];
-    const state = parts.state.snapshot(scope), store = parts.conversations;
-    const gate = new DisclosureGate(present, state, store, scope), withheld = new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
+    const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
+    const gate = new DisclosureGate(present, state, store, scope);
+    const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
     return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
     const experienceOf = (id: string) => { if (!canonical.has(id)) canonical.set(id, store.experiencesById?.(scope, [id])[0] ?? null); return canonical.get(id) ?? null; };

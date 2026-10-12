@@ -49,6 +49,8 @@ export interface ConversationCapabilityContext {
 }
 
 export const NO_CAPABILITY_CONTEXT: ConversationCapabilityContext = Object.freeze({ prompt: '', sources: Object.freeze([]) });
+/** The context of a turn whose capability reads did not answer in time (`turnTiming.ts`): as without them. */
+export const noCapabilityContext = () => NO_CAPABILITY_CONTEXT;
 
 /**
  * The read projections of one turn: notes and tasks as before, plus the owner-private

@@ -41,10 +41,36 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
     return false;
   }},stop,finish:async(state,code)=>{stop();await actions.finish(lease,state,code);}};
 }
+/**
+ * How long a turn waits behind the scope's earlier turn before it gives up with `ACTION_FOREGROUND_BUSY` (logged as
+ * `queue_timeout`). The durable respond slot still serializes: a turn that stops waiting here never runs beside the earlier one.
+ */
+export const FOREGROUND_QUEUE_WAIT_MS=45_000;
+const log=(line:string)=>{
+  try{console.warn(line);}catch{/* logging never fails a turn */}
+};
+const refused=(reason:'slot'|'queue_timeout',waitedMs:number)=>{
+  log(`Shannon foreground turn refused code=ACTION_FOREGROUND_BUSY reason=${reason} waitedMs=${waitedMs}`);
+  return new Error('ACTION_FOREGROUND_BUSY');
+};
+/** Whether the scope's earlier turn settled within the bound. */
+async function settledWithin(previous:Promise<void>,milliseconds:number):Promise<boolean>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const late=new Promise<false>(resolve=>{
+    timer=setTimeout(()=>resolve(false),milliseconds);
+  });
+  try{
+    return await Promise.race([previous.then(()=>true),late]);
+  }finally{
+    clearTimeout(timer);
+  }
+}
 /** Foreground serialization is scope-wide, including text/voice/platform. A queued turn has no side effects. */
-export function foregroundRunner(actions:ActionThreads){
+export function foregroundRunner(actions:ActionThreads,options:{queueWaitMs?:number}={}){
   const turns=new Map<string,Promise<void>>();
+  const queueWaitMs=options.queueWaitMs??FOREGROUND_QUEUE_WAIT_MS;
   const run=async<T>(scopeKey:string,work:()=>Promise<T>):Promise<T>=>{
+    const admissionStartedAt=Date.now();
     const deadline=new Date(Date.now()+4_000).toISOString();
     const draft:ActionDraft={scopeKey,kind:'respond',origin:'owner_request',sourceId:`turn-${randomUUID()}`,deadline};
     let active:RunningAction|null=null;
@@ -56,21 +82,29 @@ export function foregroundRunner(actions:ActionThreads){
       if(active)break;
       await wait(10);
     }
-    if(!active)throw new Error('ACTION_FOREGROUND_BUSY');
+    if(!active)throw refused('slot',Date.now()-admissionStartedAt);
+    const admittedAt=Date.now();
+    // A lost respond lease (renewals refused, or none could run: a blocked event loop) is named once, with how long it was held,
+    // instead of surfacing only as a model call that was never permitted.
+    const leaseLost=()=>log(`Shannon foreground lease lost code=ACTION_LEASE_LOST heldMs=${Date.now()-admittedAt}`);
+    active.execution.signal.addEventListener('abort',leaseLost,{once:true});
     try{
       // The admission deadline must not expire an accepted long-running turn.
       const value=await inActionExecution(active.execution,work);
       const unknown = active.execution.modelOutcome === 'unknown' || active.execution.stepOutcome === 'unknown';
       await active.finish(unknown ? 'unknown' : 'completed', unknown ? 'tool_outcome_unknown' : 'responded').catch(()=>{});return value;
     }catch(error){await active.finish('unknown','response_interrupted').catch(()=>{});throw error;}
+    finally{active.execution.signal.removeEventListener('abort',leaseLost);}
   };
   return async<T>(scopeKey:string,work:()=>Promise<T>):Promise<T>=>{
     const previous=turns.get(scopeKey) ?? Promise.resolve();
     let release!:()=>void;
     const current=new Promise<void>(resolve=>{release=resolve;});
     turns.set(scopeKey,current);
-    await previous;
-    try{return await run(scopeKey,work);}finally{release();if(turns.get(scopeKey)===current)turns.delete(scopeKey);}
+    try{
+      if(!await settledWithin(previous,queueWaitMs))throw refused('queue_timeout',queueWaitMs);
+      return await run(scopeKey,work);
+    }finally{release();if(turns.get(scopeKey)===current)turns.delete(scopeKey);}
   };
 }
 /** The real loop/cycle remains the progress notebook. The scheduler only owns execution rights. */

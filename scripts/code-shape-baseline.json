@@ -749,7 +749,7 @@
     "services/api/src/mind/action/fca/fcaConversationSources.ts": {
       "complex-function": 1,
       "multi-statement-line": 2,
-      "long-line": 4
+      "long-line": 3
     },
     "services/api/src/mind/action/fca/fcaHistory.ts": {
       "long-line": 1

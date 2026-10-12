@@ -1,5 +1,6 @@
 import { memoryControlFor, visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
 import { MemoryWithholding } from '../mind/memory/memoryVisibilityPorts.js';
+import type { TaskMemoryReadSnapshot as ReadSourceSnapshot } from '../mind/memory/taskMemoryPorts.js';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import type { StudyStore } from '../mind/action/ownTime/store/studyStore.js';
 import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
@@ -19,16 +20,21 @@ export interface FcaReadSourcesOptions {
   folderAvailable?(scopeKey: string, host: string): boolean;
 }
 
-/** Checks reuse of a trusted read receipt as existing conversation replay does, under fresh local memory controls. */
-export function createFcaReadSources(parts: FcaReadSourcesOptions): (scopeKey: string, sourceId: string, observedAt: string) => boolean {
-  return (scopeKey, sourceId, observedAt) => {
+/**
+ * Checks reuse of a trusted read receipt as existing conversation replay does, under fresh local memory controls. `shared`: the
+ * caller's snapshot and withholding of the same synchronous check (the FCA source guard), so that many receipts share one walk.
+ */
+export function createFcaReadSources(parts: FcaReadSourcesOptions):
+  (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
+  return (scopeKey, sourceId, observedAt, shared) => {
     try {
       if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || sourceId.length > 240) return false;
       const match = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u.exec(sourceId);
       if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return false;
       const family = match[1]!, id = decodeURIComponent(match[2]!);
       if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
-      const state = parts.state.snapshot(scopeKey), withholding = new MemoryWithholding(state, parts.conversations, scopeKey);
+      const state = shared?.state ?? parts.state.snapshot(scopeKey);
+      const withholding = shared?.withholding ?? new MemoryWithholding(state, parts.conversations, scopeKey);
       const blocked = [sourceId, id].some(key => {
         const control = memoryControlFor(state, key);
         return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));

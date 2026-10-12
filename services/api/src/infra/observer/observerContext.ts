@@ -135,3 +135,5 @@ export function observerHandoff(fromNode:ObserverNodeId,toNode:ObserverNodeId,pa
   const run=context.getStore();if(!sink||!run||run.audience!=='owner')return;
   emit(run,{spanId:randomUUID(),node:toNode,kind:'handoff',fromNode,toNode,sourceSpanId:run.activeNode===fromNode?run.activeSpan??null:run.latest.get(fromNode)??null,output:projected(payload===undefined?undefined:()=>payload)});
 }
+/** The bounded stages of a turn (`turnTiming.ts`), here beside the spans for the routes that already import this module. */
+export { textStage } from './turnTiming.js';

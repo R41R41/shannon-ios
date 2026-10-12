@@ -8,6 +8,7 @@ import { SpokenSentenceSegmenter } from './spokenSentences.js';
 import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
 import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
+import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -54,15 +55,20 @@ export function createLiveVoiceStreamRoute(
     let receivedPlan = false;
     let receivedDelta = false;
     let spokenReplySegments = 0;
+    // One content-free line per turn (`turnTiming.ts`): written when the last sentence is out, or when the turn fails.
+    let timing: TurnTiming | null = null;
+    let outcome = 'error';
+    const firstSegment = () => timing?.mark('firstSegment'); // Only the first mark counts; the waiting phrase is not a reply sentence.
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
+      timing = new TurnTiming('voice', turnTimingId(record(record(record(body)?.deviceContext)?.userUtterance)?.id));
       await withObserverRun(voiceObservationOptions(scopeKey, body), async () => {
         const apiResponse = await kernel.streamLiveVoiceDelegation({
           method: 'POST',
           path: '/v1/voice/gemini/cascade/delegations',
           body, deviceId: principal.deviceId,
         }, {
-          signal: controller.signal,
+          signal: controller.signal, timing: timing!,
           onPlan: async plan => {
             if (controller.signal.aborted) return;
             const firstPlan = !receivedPlan;
@@ -79,11 +85,13 @@ export function createLiveVoiceStreamRoute(
             receivedDelta = true;
             for (const segment of segmenter.append(delta)) {
               startStream(response);
+              firstSegment();
               spokenReplySegments += 1;
               await writeObservedVoiceSegment(response, segment, voicePlan, 'llm');
             }
           },
         });
+        outcome = controller.signal.aborted ? 'aborted' : turnOutcome(apiResponse);
         if (controller.signal.aborted) return;
 
         if (apiResponse.status < 200 || apiResponse.status >= 300) {
@@ -97,6 +105,7 @@ export function createLiveVoiceStreamRoute(
         if (!receivedDelta && reply) {
           for (const segment of segmenter.append(reply)) {
             startStream(response);
+            firstSegment();
             await writeObservedVoiceSegment(response, segment, voicePlan);
           }
         }
@@ -109,6 +118,7 @@ export function createLiveVoiceStreamRoute(
         }
         for (const segment of segmenter.flush()) {
           startStream(response);
+          firstSegment();
           await writeObservedVoiceSegment(response, segment, voicePlan);
         }
         startStream(response);
@@ -116,6 +126,7 @@ export function createLiveVoiceStreamRoute(
         response.end();
       });
     } catch (error) {
+      outcome = controller.signal.aborted ? 'aborted' : turnOutcome(null, error);
       if (controller.signal.aborted) return;
       console.warn('Shannon live voice stream failed', {
         name: error instanceof Error ? error.name : 'UnknownError',
@@ -130,6 +141,7 @@ export function createLiveVoiceStreamRoute(
         response.end();
       }
     } finally {
+      timing?.finish(outcome);
       request.off('aborted', abort);
       response.off('close', abort);
       release();

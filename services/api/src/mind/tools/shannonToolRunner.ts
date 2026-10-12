@@ -132,12 +132,19 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && (this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && (this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    // A domain's availability is asked once per offer, not once per tool: the task and memory ports re-check a conversation task's
+    // provenance, which is not free (the 2026-10-12 voice stall asked it for every tool of every offer).
+    const asked = new Map<string, boolean>();
+    const once = (domain: string, check: () => boolean): boolean => {
+      if (!asked.has(domain)) asked.set(domain, check());
+      return asked.get(domain)!;
+    };
+    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && once('memory_read', () => this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && once('task_runtime', () => this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_lifecycle' ? !!scopeKey && (this.minecraftLifecycle?.available(scopeKey) ?? false)
-      : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && this.minecraftTasks.available(scopeKey) : minecraftToolOffered(this.minecraft, tool, scopeKey)
+      : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && once('minecraft_body', () => this.minecraftTasks!.available(scopeKey)) : minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true),

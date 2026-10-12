@@ -80,7 +80,7 @@ import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/own
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
-import { withObserverRun, observeAsync, observeSync, observerHandoff } from '../observer/observerContext.js';
+import { withObserverRun, observeAsync, observeSync, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
@@ -90,7 +90,7 @@ import { bindCompletedFeedback } from '../../mind/action/respond/turnFeedback.js
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
 import { withToolCapabilityLines } from '../../mind/tools/shannonAetherTools.js';
-import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
+import { noCapabilityContext, withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
 import { usableThreadSummary } from '../../mind/memory/memoryVisibility.js';
 import { conversationReplay } from '../../mind/recall/conversationWindow.js';
 import { recordConversationProposal } from '../../mind/action/respond/conversationOrchestration.js';
@@ -370,9 +370,9 @@ export class ShannonApiKernel {
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, commonFca: !surface && audience.alone && Boolean(this.fcaConversation?.()), readTools: this.readTools, toolHints: this.toolHints });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
-      ? await observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})) : begun.deterministicContext;
+      ? await textStage('recall_timeout', observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})), () => begun.deterministicContext) : begun.deterministicContext;
     const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, Boolean(fca));
-    const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
+    const capability = capabilityContext instanceof Promise ? await textStage('capability_timeout', capabilityContext, noCapabilityContext) : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
     observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});
@@ -390,10 +390,10 @@ export class ShannonApiKernel {
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
-    const settled = choices ? await settleTextTools(toolOffer, choices) : null;
+    const settled = choices ? await textStage('tool_menu_timeout', settleTextTools(toolOffer, choices), () => null) : null;
     const work = admitConversationWork(fcaTurn, { message, research: body.webSearch === true || Boolean(placeOptions.placeSearch) || settled?.web === true, places: placeOptions.placeSearch });
-    const placeSkill = !work && placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
-    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }) };
+    const placeSkill = !work && placeOptions.placeSearch ? await textStage('places_timeout', optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch), () => null) : null;
+    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await textStage('tool_select_timeout', fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }), () => toolOffer.tools!) };
     toolOffer = { ...toolOffer, tools: conversationHintMenu(toolOffer.tools, Boolean(work)) };
     if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
     layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
