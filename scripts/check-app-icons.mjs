@@ -83,16 +83,22 @@ async function main() {
     failures.push('macOS icons must use the reproducible 84.375% rounded-rectangle layout');
   }
 
-  try {
-    await execFileAsync('swift', ['scripts/apply-macos-icon-mask.swift', '--check'], {
-      cwd: root,
-      maxBuffer: 1024 * 1024,
-    });
-  } catch (error) {
-    // A host without the Swift toolchain (the Linux cloud Agent Host) cannot run this one check; the
-    // manifest and catalog checks above and below still run there. On a Mac and in Xcode Cloud it always runs.
-    if (error?.code === 'ENOENT') skipped.push('macOS icon visual footprint check skipped: the swift command is not installed on this host');
-    else failures.push(`macOS icon visual footprint check failed: ${error.stderr || error.message}`);
+  // The footprint script imports CoreGraphics and ImageIO, which exist only on macOS. A Linux host (the cloud Agent Host,
+  // GitHub Actions) may still have a Swift toolchain, so the platform decides, not the presence of `swift`.
+  if (process.platform !== 'darwin') {
+    skipped.push(`macOS icon visual footprint check skipped: it needs CoreGraphics, and this host is ${process.platform}`);
+  } else {
+    try {
+      await execFileAsync('swift', ['scripts/apply-macos-icon-mask.swift', '--check'], {
+        cwd: root,
+        maxBuffer: 1024 * 1024,
+      });
+    } catch (error) {
+      // A Mac without the Swift toolchain cannot run this one check; the manifest and catalog checks above and below still
+      // run there. On a Mac with Xcode and in Xcode Cloud it always runs.
+      if (error?.code === 'ENOENT') skipped.push('macOS icon visual footprint check skipped: the swift command is not installed on this host');
+      else failures.push(`macOS icon visual footprint check failed: ${error.stderr || error.message}`);
+    }
   }
 
   for (const [platform, directory] of [['iOS', iosAssets], ['macOS', macAssets]]) {

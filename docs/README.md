@@ -17,6 +17,7 @@
 - Release and recovery: [`self-improvement-runbook.md`](self-improvement-runbook.md)
 - Branch and worktree lifecycle: [`BRANCHING.md`](BRANCHING.md)
 - Verification entrypoint: [`../scripts/verify.sh`](../scripts/verify.sh)
+- Test lanes (local targeted tests, the full suite on GitHub Actions, the VM deploy check): [`testing/test-lanes.md`](testing/test-lanes.md)
 - Conversation regression coverage and suite-identity audit: [`testing/conversation-regression-audit.md`](testing/conversation-regression-audit.md)
 - Reach measures (fixed scenarios judged from outside, and counts from use): [`testing/reach-measures-runbook.md`](testing/reach-measures-runbook.md)
 

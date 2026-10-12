@@ -1,0 +1,84 @@
+# The full server suite: typechecks, the fast lane of scripts/verify.sh, and every vitest file under services/ and packages/,
+# split in four. It runs on GitHub's Linux runners and builds nothing of apps/ (no Xcode, no Swift); the Apple lanes stay on
+# the Mac (scripts/verify.sh ios|app|mac) and in Xcode Cloud. No secret is needed: the tests use fakes, never a model or network.
+#
+# Where to read it: the Actions tab of the repository, or the check mark beside a commit on GitHub. The Mac and the VM run
+# targeted tests only (docs/development.md); this workflow is the one place the whole suite runs on every push.
+name: API tests
+
+on:
+  push:
+    branches: ['**']
+    # A push that touches only the Apple apps or the documents does not run the server suite.
+    paths-ignore:
+      - 'apps/**'
+      - 'docs/**'
+  workflow_dispatch:
+
+# One run per branch: a newer push cancels the run still going for the older one.
+concurrency:
+  group: api-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  static:
+    name: typecheck and fast lane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-api
+      # The tsconfig files write their incremental state under node_modules/.cache/tsc; carrying it from the last run of the
+      # branch (or of main) makes the six typechecks recheck only what changed. A stale or missing state only costs time.
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/tsc
+          key: tsc-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            tsc-${{ runner.os }}-${{ github.ref_name }}-
+            tsc-${{ runner.os }}-main-
+      - name: Typecheck services/api
+        run: node node_modules/typescript/bin/tsc -p services/api/tsconfig.json --noEmit
+      - name: Typecheck packages
+        run: |
+          status=0
+          for config in packages/*/tsconfig.json; do
+            echo "::group::tsc -p $config"
+            node node_modules/typescript/bin/tsc -p "$config" --noEmit || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+      # Harness, architecture, check-api-layers --enforce, check-code-shape, product spec and the env example check. On
+      # Linux the one macOS-only step (the icon footprint check, which needs CoreGraphics) reports itself skipped.
+      - name: scripts/verify.sh fast
+        run: scripts/verify.sh fast
+
+  tests:
+    name: vitest ${{ matrix.shard }}/4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-api
+      # The suite opens many short-lived SQLite files; /dev/shm is tmpfs on the hosted runners, so fsync costs nothing.
+      # A runner has two cores: two workers keep one busy while the other waits on a file or a child process.
+      # A few tests write and run a small executable under the temporary directory, so tmpfs is used only when it allows that.
+      - name: vitest run --shard=${{ matrix.shard }}/4
+        run: |
+          if [ -d /dev/shm ] && ! findmnt -no OPTIONS /dev/shm | grep -qw noexec; then
+            export TMPDIR=/dev/shm/shannon-vitest
+            mkdir -p "$TMPDIR"
+          fi
+          echo "TMPDIR=${TMPDIR:-/tmp}"
+          node node_modules/vitest/vitest.mjs run services packages --shard=${{ matrix.shard }}/4 --maxWorkers=2

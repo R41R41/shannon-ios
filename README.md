@@ -94,7 +94,11 @@ scripts/verify.sh app
 scripts/verify.sh mac
 scripts/verify.sh mac-release
 scripts/verify.sh all
+scripts/verify.sh related <changed files>
+scripts/verify.sh deploy <changed files>
 ```
+
+サーバーの全テストはpushごとにGitHub Actions（`.github/workflows/api-tests.yml`）で走る。手元では `fast`、触ったテスト、`related`（変更ファイルをimportするテスト）を回し、本番VMのデプロイでは `scripts/deploy-check.mjs` を使う。詳細と計測値は [`docs/testing/test-lanes.md`](docs/testing/test-lanes.md)。
 
 `fast` は正本リンク、画面契約、横断fixture、責務境界を外部通信なしで検査する。`mac` はMac固有のユニットテストとDebugアプリを検証し、`mac-release` は署名なしのReleaseアプリを生成する。Mac固有UIは `apps/macos-app`、iPhone固有UIは `apps/ios-app`、両者で共有する状態・通信・Markdown処理は `apps/ios/Sources/ShannonAppCore` に置く。
 

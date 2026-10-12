@@ -108,7 +108,7 @@ Before a schema or persistence change:
 1. Record the service state and health result.
 2. Make a timestamped copy of the SQLite database and its WAL/SHM companions when present.
 3. Deploy only reviewed files; never upload local `.env` files or DerivedData.
-4. Run the production typecheck/tests needed by the change.
+4. Confirm the commit's run of the `API tests` workflow (GitHub Actions, the whole suite) is green, then run the deploy lane in the deployed source directory with the VM's Node: `/home/azureuser/shannon-ios-runtime/bin/node scripts/deploy-check.mjs --files-from <added list> --files-from <modified list>` (incremental typecheck, the deploy-critical tests and the tests related to the bundle; [testing/test-lanes.md](testing/test-lanes.md)).
 5. Write the revision **after the source sync and before any restart**, atomically, in the deployed source directory: `cd /home/azureuser/shannon-ios && printf '%s\n' <commit> > DEPLOYED_REVISION.tmp && mv -f DEPLOYED_REVISION.tmp DEPLOYED_REVISION`. The temporary file is in the same directory, so `mv` is a rename and a process never reads a half-written file. The API reads this file once when it starts and reports it as the revision it loaded (`build.revision` of `server` in `GET /v1/ops`, `docs/ops-contract.md`), so a restart before this step would report the previous revision for the new code.
 6. Restart only affected services: `shannon-ios.service`, `shannon-ios-worker.service`, `shannon-ios-world.service`, and/or `shannon-ios-autonomy.service`.
 7. Verify health, logs, database access, and preserved conversation/task counts. The API's startup line `Shannon self-diagnosis {…}` names the revision written in step 5.

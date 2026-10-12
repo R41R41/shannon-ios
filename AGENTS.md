@@ -68,7 +68,7 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 1. Inspect `git status` before editing. The worktree may contain valuable unfinished user changes; preserve unrelated work.
 2. Resolve the requested surface to its owning layer, then read the relevant current source and tests.
 3. Implement a coherent vertical slice. Do not report a partial UI or a compile-only result as complete.
-4. Run `scripts/verify.sh fast` during work, the narrowest useful target next, then `scripts/verify.sh all` for cross-layer work.
+4. Run `scripts/verify.sh fast` during work, the test files you touched and `scripts/verify.sh related <changed files>` next, then `scripts/verify.sh all` for cross-layer work. The whole server suite runs on GitHub Actions on every push (`.github/workflows/api-tests.yml`); a full local `vitest run` is optional, and on this 8 GB Mac only one at a time (`pgrep -fl "node.*vitest"`). See `docs/testing/test-lanes.md`.
 5. Open only `Shannon.xcworkspace` in Xcode. Never open the iOS and Mac `.xcodeproj` files in separate Xcode windows; both consume the same local `ShannonAppCore` package.
 6. If the user requests Azure or physical-device delivery, follow the runbook and complete that delivery. Do not uninstall the app as part of an update.
 7. If an external prerequisite is unavailable, leave the durable task state accurate and name the exact remaining step.
@@ -81,6 +81,8 @@ scripts/verify.sh api
 scripts/verify.sh ios
 scripts/verify.sh app
 scripts/verify.sh all
+scripts/verify.sh related <changed files>
+scripts/verify.sh deploy <changed files>   # the VM deploy lane, scripts/deploy-check.mjs
 ```
 
 Use the real-LLM evaluations only when a change affects extraction, proposal decisions, or model behavior and credentials are deliberately available. Normal regression tests must remain deterministic and free of billable calls.

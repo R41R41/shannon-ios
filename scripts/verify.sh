@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test lanes (docs/testing/test-lanes.md):
+#   - the whole server suite (typechecks, `fast`, every vitest file) runs on GitHub Actions on every push
+#     (.github/workflows/api-tests.yml); `api` and `cognition-eval` still run it here when a full local run is wanted;
+#   - during work: `fast`, the test files you touched, and `related <changed files>` (the tests that import them);
+#   - on the production VM after a bundle is extracted: `deploy <changed files>` (scripts/deploy-check.mjs).
+# The typechecks are incremental (node_modules/.cache/tsc), so a repeat run rechecks only what changed.
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
@@ -90,12 +97,23 @@ run_release_macos_app() {
   scripts/xcode.sh mac-release
 }
 
+# The vitest files whose imports reach the named files (and named test files themselves).
+run_related() {
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: scripts/verify.sh related <changed file>..." >&2
+    exit 2
+  fi
+  "$node_bin" node_modules/vitest/vitest.mjs related --run --passWithNoTests "$@"
+}
+
 run_release_runner() {
   "$node_bin" --test scripts/release-runner.test.mjs
 }
 
 target="${1:-all}"
 case "$target" in
+  related) shift; run_related "$@" ;;
+  deploy) shift; "$node_bin" scripts/deploy-check.mjs "$@" ;;
   fast) run_fast ;;
   architecture) run_architecture ;;
   product-spec) run_product_spec ;;
@@ -120,7 +138,7 @@ case "$target" in
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [fast|architecture|product-spec|api|cognition-eval|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [fast|architecture|product-spec|api|cognition-eval|ios|app|mac|mac-smoke|mac-release|release|release-runner|all|related <files>|deploy [options] <files>]" >&2
     exit 2
     ;;
 esac
