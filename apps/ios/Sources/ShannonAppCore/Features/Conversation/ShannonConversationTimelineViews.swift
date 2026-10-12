@@ -129,6 +129,8 @@ struct ShannonMessageRow: View {
     let isSendingToAether: Bool
     let wasSentToAether: Bool
     let sendToAether: () -> Void
+    /// Rich chat: the quick reactions at the top of the long-press menu.
+    var reactionMenu: ShannonReactionMenuItems? = nil
 
     @Environment(\.colorScheme) var colorScheme
     @State var didCopy = false
@@ -147,6 +149,7 @@ struct ShannonMessageRow: View {
         .accessibilityLabel(accessibilityLabel)
         .sensoryFeedback(.success, trigger: didCopy)
         .contextMenu {
+            if let reactionMenu { reactionMenu }
             Button(action: copyMessage) {
                 Label("コピー", systemImage: "doc.on.doc")
             }

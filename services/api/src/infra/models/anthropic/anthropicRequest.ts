@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
 import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../chatModel.js';
-import { VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
+import { RICH_TEXT_BLOCK_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -125,7 +125,9 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
-    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
+    // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
+    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
+      ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,

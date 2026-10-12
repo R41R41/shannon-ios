@@ -29,7 +29,7 @@ import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from '../../mind
 import { InMemoryConversationStore, type ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, StateEventRequest } from '../../contracts/contracts.js';
 import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from '../../mind/memory/memoryService.js';
-import { dispatchConversationRead } from '../../surfaces/text/apiConversationRead.js';
+import { dispatchConversationRead, reactionTurnLine } from '../../surfaces/text/apiConversationRead.js';
 import type { KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import type { InitiativeInbox } from '../../surfaces/outreach/store/initiativeStore.js';
 import type { AetherContextReader } from '../../integrations/aether/aetherContext.js';
@@ -144,7 +144,7 @@ export interface ShannonApiKernelOptions {
    */
   turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
-  turnRouting?: TurnRouting; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; // Stage2 routing and Stage5 optional, server-bound reaction metadata.
+  turnRouting?: TurnRouting; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; conversationExtras?: () => import('../../contracts/conversationExtrasContract.js').ConversationExtrasPorts | null; // Stage2 routing and Stage5 optional, server-bound reaction metadata; rich chat (docs/rich-chat-contract.md).
   /**
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
@@ -183,7 +183,7 @@ export class ShannonApiKernel {
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
-  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined;
+  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
   private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
@@ -221,7 +221,7 @@ export class ShannonApiKernel {
     this.memoryRecall = options.memoryRecall ?? null;
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
-    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities;
+    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities; this.conversationExtras = options.conversationExtras ?? (() => null);
     this.mind = options.mind ?? null; this.fcaConversation = options.fcaConversation ?? null; this.fcaVoice = options.fcaVoice ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
@@ -271,7 +271,7 @@ export class ShannonApiKernel {
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()) };
     }
-    const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now, ownerAlone:scope=>this.ownerAloneForFeedback(scope), ...(this.feedback?{feedback:this.feedback}:{}) });
+    const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now, ownerAlone:scope=>this.ownerAloneForFeedback(scope), ...(this.feedback?{feedback:this.feedback}:{}), extras: this.conversationExtras() });
     if (conversationRead) return conversationRead;
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
@@ -407,12 +407,12 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) })].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
       ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
-      ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier),
+      ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier), richBlocks: !surface,
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
     })));

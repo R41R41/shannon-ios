@@ -30,6 +30,7 @@ import {
 } from './sqliteStoreCodecs.js';
 import type { PersistedExperienceEvent } from './sqliteStore.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
+import { REPORT_CARD_NOTE_KIND, type ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { insertTurnCaptures, selectTurnCaptures, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
 
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
@@ -240,6 +241,26 @@ export class SQLiteConversationRepository implements ConversationStore {
         (message_id,scope_key,thread_id,turn_id,ordinal,role,content,observed_at,metadata_json)
         VALUES(?,?,?,?,1,'assistant',?,?,?)`).run(messageId,scopeKey,threadId,row.turn_id,content,observedAt,row.metadata_json);
       this.context.database.prepare('UPDATE conversation_threads SET updated_at=? WHERE scope_key=? AND thread_id=?').run(observedAt,scopeKey,threadId);
+      return freezeStoredMessage(row);
+    });
+  }
+
+  appendReportCardOnce(scopeKey: string, threadId: string, messageId: string, note: ReportCardNote): StoredConversationMessage {
+    const { card, observedAt } = note;
+    return this.context.transaction(() => {
+      const existing = this.assistantMessage(scopeKey, threadId, messageId);
+      if (existing) return existing;
+      this.ensureThread(scopeKey, threadId, null);
+      const recalled = boundedRecalledMemoryIds(note.recalledMemoryIds);
+      const metadata = { noteKind: REPORT_CARD_NOTE_KIND, noteOwnerAlone: true, reportCard: card,
+        ...(recalled?.length ? { recalledMemoryIds: recalled } : {}) };
+      const row: MessageRow = { message_id: messageId, thread_id: threadId, turn_id: `${REPORT_CARD_NOTE_KIND}:${messageId}`, role: 'assistant',
+        content: card.answer, observed_at: observedAt, metadata_json: JSON.stringify(metadata) };
+      this.context.database.prepare(`INSERT INTO conversation_messages
+        (message_id,scope_key,thread_id,turn_id,ordinal,role,content,observed_at,metadata_json)
+        VALUES(?,?,?,?,1,'assistant',?,?,?)`).run(messageId, scopeKey, threadId, row.turn_id, row.content, observedAt, row.metadata_json);
+      this.context.database.prepare('UPDATE conversation_threads SET updated_at=? WHERE scope_key=? AND thread_id=?')
+        .run(observedAt, scopeKey, threadId);
       return freezeStoredMessage(row);
     });
   }

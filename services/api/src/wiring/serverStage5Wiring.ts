@@ -14,6 +14,7 @@ import { selfInterestOwnerPort } from './selfInterestWiring.js';
 import { configuredStage5Feedback } from './stage5FeedbackWiring.js';
 import { taskFeedbackWiring } from './taskFeedbackWiring.js';
 import { taskTreeWiring } from './taskTreeWiring.js';
+import { configuredConversationExtras } from './conversationExtrasWiring.js';
 import { selfRewriteRuntimeWiring, type SelfRewriteRuntimeOptions } from './selfRewriteRuntimeWiring.js';
 
 /** Stage5 is composed here. The HTTP server receives one dispatcher and keeps its existing auth and streaming paths. */
@@ -28,6 +29,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
   let timer: ReturnType<typeof setInterval> | null = null;
   let selfRewrite: ReturnType<typeof selfRewriteRuntimeWiring> | null = null;
   const ownerAlone = (scope: string) => { try {return audience?.(scope) === true;} catch {return false;} };
+  let reportVisible: ((taskId: string) => boolean) | null = null;
   const callbacks: TaskTreeLearningCallbacks = {
     dispatchContext(scope, input) {
       let presence:'alone'|'others'|'unknown'='unknown';
@@ -44,14 +46,17 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
   const memory = enabled ? memoryPortsOf(parts.store, parts.now) : null;
   const interests = createSelfInterestRoute({ interests:memory ? selfInterestOwnerPort(parts.store.selfInterests(), memory.commands, parts.now) : null, ownerScopeKey:parts.ownerScope, ownerAlone });
   const trees = taskTreeWiring(tasks, parts.ownerScope, parts.now);
+  // Rich chat (docs/rich-chat-contract.md): reactions and report cards, with or without Stage5; reactions become feedback only with it.
+  const conversationExtras = configuredConversationExtras(parts.store, { ownerScope: parts.ownerScope, now: parts.now, ownerAlone,
+    feedback: () => feedback?.feedback ?? null, reportVisible: taskId => reportVisible?.(taskId) === true });
   const privatePath = (path: string) => isSelfInterestsPath(path)
     || /^\/v1\/agent\/tasks\/[^/]+\/tree(?:\/|$)/u.test(path) || path.startsWith('/v1/autonomy/self-rewrite/');
   return {
-    tasks, feedback,
+    tasks, feedback, conversationExtras,
     capabilities: enabled ? {self_interests:parts.store.selfInterests() !== null, task_tree:!!tasks.taskTrees, owner_feedback:!!feedback} : undefined,
-    attach(options: Pick<SelfRewriteRuntimeOptions, 'autonomy'|'autonomyStore'|'config'> & {ownerAlone(scope: string): boolean; presence?(scope: string):'alone'|'others'|'unknown'; actions: ActionThreads | null;
+    attach(options: Pick<SelfRewriteRuntimeOptions, 'autonomy'|'autonomyStore'|'config'> & {ownerAlone(scope: string): boolean; reportVisible?(taskId: string): boolean; presence?(scope: string):'alone'|'others'|'unknown'; actions: ActionThreads | null;
       selfRewriteRoute?: (request: ApiRequest) => Promise<ApiResponse | undefined>}) {
-      audience = options.ownerAlone; audiencePresence = options.presence ?? null;
+      audience = options.ownerAlone; audiencePresence = options.presence ?? null; reportVisible = options.reportVisible ?? null;
       selfRewriteRoute = options.selfRewriteRoute ?? null;
       if (!enabled) return;
       selfRewrite = selfRewriteRuntimeWiring({environment,path:parts.path,ownerScope:parts.ownerScope,now:parts.now,
@@ -67,6 +72,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
     afterHost: async () => {await taskFeedback?.refresh();},
     async serve(request: IncomingMessage, response: ServerResponse, principal: {scopeKey:string}|null, url: URL): Promise<boolean> {
       if (url.pathname === FEEDBACK_PATH) {await feedbackRoute(request, response, principal); return true;}
+      if (await conversationExtras.serve(request, response, principal, url)) return true;
       if (!privatePath(url.pathname)) return false;
       if (!principal || principal.scopeKey !== parts.ownerScope) {sendJson(response,403,{error:'STAGE5_OWNER_ONLY'});return true;}
       if (!ownerAlone(principal.scopeKey)) {sendJson(response,403,{error:'STAGE5_OWNER_ALONE_REQUIRED'});return true;}

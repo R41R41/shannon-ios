@@ -16,6 +16,12 @@ public enum ShannonMessageMarkdown {
         case code(String, language: String? = nil)
         case divider
         case paragraph(String)
+        /// A GFM pipe table (`ShannonMessageMarkdown+Rich.swift`).
+        case table(ShannonMarkdownTable)
+        /// A standalone `![alt](https://…)` line; only HTTPS images are shown.
+        case image(alt: String, url: URL)
+        /// A ```` ```chart ```` fence holding a valid `ShannonChartSpec`.
+        case chart(ShannonChartSpec)
     }
 
     private static let bareURLExpression = try! NSRegularExpression(
@@ -68,6 +74,7 @@ public enum ShannonMessageMarkdown {
     public static func blocks(from source: String) -> [Block] {
         var result: [Block] = []
         var paragraphLines: [String] = []
+        var tableLines: [String] = []
         var codeLines: [String] = []
         var codeLanguage: String?
         var insideCode = false
@@ -78,8 +85,23 @@ public enum ShannonMessageMarkdown {
             paragraphLines.removeAll(keepingCapacity: true)
         }
 
+        func flushTable() {
+            guard !tableLines.isEmpty else { return }
+            if let table = ShannonMarkdownTable(lines: tableLines) {
+                result.append(.table(table))
+            } else {
+                paragraphLines.append(contentsOf: tableLines)
+            }
+            tableLines.removeAll(keepingCapacity: true)
+        }
+
         func flushCode() {
-            result.append(.code(codeLines.joined(separator: "\n"), language: codeLanguage))
+            let code = codeLines.joined(separator: "\n")
+            if codeLanguage == "chart", let chart = ShannonChartSpec(json: code) {
+                result.append(.chart(chart))
+            } else {
+                result.append(.code(code, language: codeLanguage))
+            }
             codeLines.removeAll(keepingCapacity: true)
             codeLanguage = nil
         }
@@ -87,6 +109,7 @@ public enum ShannonMessageMarkdown {
         let normalized = source.replacingOccurrences(of: "\r\n", with: "\n")
         for rawLine in normalized.components(separatedBy: "\n") {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if !insideCode, !line.hasPrefix("|") { flushTable() }
 
             if line.hasPrefix("```") {
                 flushParagraph()
@@ -100,6 +123,11 @@ public enum ShannonMessageMarkdown {
             }
             if insideCode {
                 codeLines.append(rawLine)
+                continue
+            }
+            if line.hasPrefix("|") {
+                flushParagraph()
+                tableLines.append(line)
                 continue
             }
             if line.isEmpty {
@@ -136,9 +164,15 @@ public enum ShannonMessageMarkdown {
                 result.append(.numbered(marker: numbered.marker, text: numbered.text))
                 continue
             }
+            if let image = imageBlock(from: line) {
+                flushParagraph()
+                result.append(image)
+                continue
+            }
             paragraphLines.append(line)
         }
 
+        flushTable()
         flushParagraph()
         if insideCode || !codeLines.isEmpty { flushCode() }
         return result

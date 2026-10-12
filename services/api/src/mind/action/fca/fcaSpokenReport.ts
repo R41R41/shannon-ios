@@ -51,9 +51,15 @@ function speakableLine(line: string): string {
     .replace(/(?<=[^\x20-\x7e])\s+|\s+(?=[^\x20-\x7e])/gu, '').trim();
 }
 
+/** What is shown and never said: fenced blocks (a chart's JSON, code), table rows, images (rich chat, 2026-10-13). */
+function withoutVisualBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?(?:```|$)/gu, '\n').replace(/!\[[^\]]*\]\([^)]*\)/gu, '')
+    .split(/\r?\n/u).filter(line => !line.trim().startsWith('|')).join('\n');
+}
+
 /** Sentences of speakable text, a sentence end added where a line ended without one. */
 function sentences(text: string): string[] {
-  const lines = text.split(/\r?\n/u).map(line => line.trim()).filter(line => line && !line.startsWith('#') && !SOURCE_LINE.test(line))
+  const lines = withoutVisualBlocks(text).split(/\r?\n/u).map(line => line.trim()).filter(line => line && !line.startsWith('#') && !SOURCE_LINE.test(line))
     .map(speakableLine).filter(Boolean).map(line => /[。！？!?]$/u.test(line) ? line : `${line}。`);
   return lines.join('').match(/[^。！？!?]+[。！？!?]+/gu)?.map(sentence => sentence.trim()).filter(Boolean) ?? [];
 }

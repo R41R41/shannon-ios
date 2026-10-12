@@ -5,6 +5,7 @@ extension ShannonConversationModel {
     func setStage5Audience(othersPresent: Bool) {
         stage5OthersPresent = othersPresent
         feedback.setContext(threadID: selectedThreadId, othersPresent: othersPresent)
+        reactions.setAudience(othersPresent: othersPresent)
         for model in taskTreeModels.values { model.setAudience(othersPresent: othersPresent) }
     }
     func rememberVoiceFeedback(_ response: ShannonLiveVoiceDelegationResponseDTO, participantMode: ShannonVoiceParticipantMode) {
@@ -31,10 +32,7 @@ extension ShannonConversationModel {
             let target = message.turnID.flatMap { id in
                 byTurn[id.hasPrefix("agent-task-result:") ? String(id.dropFirst("agent-task-result:".count)) : id]
             } ?? byTurn[message.id.uuidString.lowercased()]
-            return ConversationMessage(id: message.id, role: message.role, text: message.text, sentAt: message.sentAt,
-                deliveryState: message.deliveryState, emotionSnapshot: message.emotionSnapshot, artifacts: message.artifacts,
-                sourceAttribution: message.sourceAttribution, places: message.places, turnID: message.turnID,
-                captures: message.captures, reminder: message.reminder, studyPiece: message.studyPiece, feedback: target)
+            return message.with(feedback: target)
         }
     }
 }

@@ -101,6 +101,7 @@ public struct ShannonConversationView: View {
         .modifier(ShannonFeedbackContext(conversation: model, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening, interests: memoryModel.interests))
         .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
         .modifier(ShannonNowPolling(model: now, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
+        .modifier(ShannonReportCardRefresh(activity: now, conversation: model))
 #if os(iOS)
         .modifier(ShannonActivityVoiceReporting(activity: now, session: geminiLiveVoiceModel, threadID: voiceWorkspace.threadContext?.threadID))
 #endif

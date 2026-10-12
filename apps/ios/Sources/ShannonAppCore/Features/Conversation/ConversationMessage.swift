@@ -60,6 +60,12 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     /// A piece of her study this message is about.
     public let studyPiece: ShannonStudyPieceLinkDTO?
     public let feedback: ShannonFeedbackDTO?
+    /// The server's id of this message, once the Talk was read from the server (rich chat: reactions target it).
+    public let serverID: String?
+    /// The report card of finished work he asked for; only the owner alone is sent one.
+    public let reportCard: ShannonReportCardDTO?
+    /// The owner's reactions, oldest first, as the server last sent them.
+    public let reactions: [String]
 
     public init(
         id: UUID = UUID(),
@@ -75,8 +81,14 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         captures: [ShannonTurnCaptureDTO] = [],
         reminder: ShannonReminderDTO? = nil,
         studyPiece: ShannonStudyPieceLinkDTO? = nil,
-        feedback: ShannonFeedbackDTO? = nil
+        feedback: ShannonFeedbackDTO? = nil,
+        serverID: String? = nil,
+        reportCard: ShannonReportCardDTO? = nil,
+        reactions: [String] = []
     ) {
+        self.serverID = serverID
+        self.reportCard = reportCard
+        self.reactions = reactions
         self.feedback = feedback
         self.studyPiece = studyPiece
         self.turnID = turnID
@@ -108,7 +120,10 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             captures: captures,
             reminder: reminder,
             studyPiece: studyPiece,
-            feedback: feedback
+            feedback: feedback,
+            serverID: serverID,
+            reportCard: reportCard,
+            reactions: reactions
         )
     }
 
@@ -127,7 +142,19 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             captures: captures,
             reminder: reminder,
             studyPiece: studyPiece,
-            feedback: feedback
+            feedback: feedback,
+            serverID: serverID,
+            reportCard: reportCard,
+            reactions: reactions
+        )
+    }
+
+    /// The same message with the server's current feedback target; everything else kept.
+    public func with(feedback: ShannonFeedbackDTO?) -> ConversationMessage {
+        ConversationMessage(
+            id: id, role: role, text: text, sentAt: sentAt, deliveryState: deliveryState, emotionSnapshot: emotionSnapshot,
+            artifacts: artifacts, sourceAttribution: sourceAttribution, places: places, turnID: turnID, captures: captures,
+            reminder: reminder, studyPiece: studyPiece, feedback: feedback, serverID: serverID, reportCard: reportCard, reactions: reactions
         )
     }
 }

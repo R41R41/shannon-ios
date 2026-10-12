@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 150 件。
+機能は全部で 153 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 123 | 3 | 9 | 12 | 3 | 0 |
-| macOS | 134 | 3 | 8 | 2 | 3 | 0 |
-| Windows | 72 | 21 | 41 | 10 | 4 | 2 |
+| iOS | 126 | 3 | 9 | 12 | 3 | 0 |
+| macOS | 137 | 3 | 8 | 2 | 3 | 0 |
+| Windows | 72 | 21 | 41 | 13 | 4 | 2 |
 
 ## 構成（入口）（`structure`）
 
@@ -66,6 +66,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.artifact-export` | **作ってくれた文書をファイルに保存**【デスクトップの追加】 文書を、選んだ場所へ保存する。 | × | ○ | × |
 | `talk.background-action-threads` | **裏の作業の一覧と停止** 第4段階の小さな入口、由来・状態、個別停止・すべて停止・明示的再開。古い報告・通信断・結果不明・同席者に対応。実装ブランチ、未配布。 | 予定 | 予定 | ？ |
 | `talk.owner-feedback` | **返答への反応** 対象の返答だけに役立った・いまひとつを付け、切り替えや取り消しができる。結果不明時は元の操作を確認して自動再送しない。 | ○ | ○ | — |
+| `talk.report-card` | **調べた結果の報告カード** 頼んだ調べものが終わると、その報告をトークに残す。短い答えの下に、表・グラフ・出典・地図入りのカードを出し、「開く」で全文を読む。ひとりの時だけ見え、元の記憶を忘れると消える。 | ○ | ○ | — |
+| `talk.rich-blocks` | **表・グラフ・画像で見せる** 返事や報告の中身に合わせて、比べる時は表、数の変化はグラフ、手順は番号つき、場所は地図、資料にあった画像は画像で出す。シャノンが選ぶ。表は横に動かせる。 | ○ | ○ | — |
+| `talk.reactions` | **絵文字の反応** どのメッセージにも、長押し（Mac は右クリックかマウスを乗せたボタン）で絵文字を付ける。❤️ 😂 👍 😮 🥲 🙏 と「＋」でほかの絵文字。いくつでも付け、押すと外せる。シャノンの返事への反応は学びの手がかりになり、次の返事で自然に触れる。ひとりの時だけ。 | ○ | ○ | — |
 
 - `talk.thread-search` Windows（×）: 管理画面のトークの一覧に検索は無い。
 - `talk.markdown-code` Windows（△）: Markdown は出る。コードのコピーと折りたたみは無い。
@@ -93,6 +96,15 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.owner-feedback` iOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
 - `talk.owner-feedback` macOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
 - `talk.owner-feedback` Windows（—）: Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。
+- `talk.report-card` iOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.report-card` macOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.report-card` Windows（—）: 所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。
+- `talk.rich-blocks` iOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.rich-blocks` macOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.rich-blocks` Windows（—）: 所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。
+- `talk.reactions` iOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.reactions` macOS（○）: 所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。
+- `talk.reactions` Windows（—）: 所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。
 
 ## 声の会話（`voice`）
 

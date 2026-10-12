@@ -31,9 +31,11 @@ extension ShannonConversationView {
                                 message: message,
                                 isSendingToAether: model.aetherProposalMessageIDs.contains(message.id),
                                 wasSentToAether: model.aetherSubmittedMessageIDs.contains(message.id),
-                                sendToAether: { Task { await model.sendToAether(message) } }
+                                sendToAether: { Task { await model.sendToAether(message) } },
+                                reactionMenu: ShannonReactionMenuItems(message: message, model: model.reactions, threadID: model.selectedThreadId)
                             )
                                 .id(message.id)
+                            ShannonMessageExtras(message: message, conversation: model)
                             if let target = message.feedback { ShannonFeedbackView(target: target, model: model.feedback) }
                             if ShannonTurnCaptureList.hasContent(message) {
                                 ShannonTurnCaptureList(message: message, conversation: model, memory: memoryModel)
@@ -77,6 +79,7 @@ extension ShannonConversationView {
                 .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonSpacing.medium)
                 .padding(.bottom, ShannonSpacing.large)
+                .shannonReactionPicker(model.reactions)
             }
             .scrollIndicators(.hidden)
             .shannonKeyboardDismissMode()

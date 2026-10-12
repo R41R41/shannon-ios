@@ -121,6 +121,8 @@ const textScenarios: ClaudeScenario[] = [
   { name: 'text-preceding-reply', script: [answer(HAIKU.model)],
     run: c => chat(c, HAIKU).generate({ ...text, precedingReply: 'くすぐったいです。' }) },
   { name: 'text-plus-tier', script: [answer(HAIKU.model)], run: c => chat(c, HAIKU).generate({ ...text, tier: 'luna_plus', escalation: true }) },
+  // Rich chat (docs/rich-chat-contract.md): the app's own Talk says how tables, charts and images are shown.
+  { name: 'text-rich-blocks', script: [answer(HAIKU.model)], run: c => chat(c, HAIKU).generate({ ...text, richBlocks: true }) },
 ];
 
 const voiceScenarios: ClaudeScenario[] = [

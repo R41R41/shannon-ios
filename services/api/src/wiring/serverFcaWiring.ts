@@ -46,6 +46,7 @@ import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
+import { createReportCards } from '../mind/action/fca/fcaReportCards.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
 
@@ -163,6 +164,10 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
     const progressShown = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
       parts.ownerAlone);
+    // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
+    const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
+      conversations: parts.conversations, shown: progressShown, now: Date.now, log: line => console.warn(line) }) : null;
+    const cardTimer = reportCards ? setInterval(() => { reportCards.tick(); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
       progress: progressShown, spokenReports: true });
@@ -174,13 +179,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       ...(source.experienceId ? [`experience:${source.experienceId}`] : []),
       ...source.recalledMemoryIds.map(id => `memory:${id}`), ...(source.readSourceIds ?? []).map(id => `read:${id}`),
     ]);
-    return { route, conversation, voice, touch, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
+    return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null, async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
+    }, async close() { clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
   } catch (error) { sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,
