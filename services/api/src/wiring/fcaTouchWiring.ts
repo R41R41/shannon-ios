@@ -14,6 +14,13 @@ interface Row {
   state: string; gesture: string | null; lease_json: string | null; expires_at: string; issued: number;
   observed_delivered: number; result_delivered: number; reaction_json: string | null; reaction_delivered: number;
 }
+/**
+ * The receipt state of a touch command that can no longer be proven (a restart, its expiry, closing), by the rule of the one
+ * unknown exit (`unknownExit`, ADR-0009 stage 1 S5): a gesture issued to the renderer may have acted outside, so it stays
+ * `unknown` (its action closes by the scheduler's exit); one never issued was only a model's selection, so it is retired as
+ * `not_applied` and its action closes as cancelled.
+ */
+const UNPROVEN = "CASE WHEN issued=1 THEN 'unknown' ELSE 'not_applied' END";
 /** One leased candidate selection and one device invocation. No speech, emotion or experience writer. */
 export function createFcaTouchWiring(parts: {
   db: DatabaseSync; runtime: TaskRuntime; actions: ActionThreads; selector: FcaTouchSelector;
@@ -33,8 +40,9 @@ export function createFcaTouchWiring(parts: {
   const sourcesVisible = (input: FcaTouchInput) => [input.experienceId, ...input.stanceSourceIds].every(id => parts.sourceVisible(input.scopeKey, id));
   const usable = (input: FcaTouchInput, gesture?: string) => !closing && input.scopeKey === parts.ownerScope && rootAllows()
     && parts.allowed(input.scopeKey, input.deviceId, gesture) && sourcesVisible(input);
-  // A restarted process cannot prove whether its old command reached the renderer. Never issue it again.
-  db.prepare("UPDATE fca_touch_receipts SET state='unknown' WHERE state IN ('selecting','ready','claimed')").run();
+  // A restarted process cannot prove whether its old command reached the renderer. Never issue it again; it leaves by the one
+  // unknown exit (ADR-0009 stage 1, S5): an issued gesture may have acted (unknown), one never issued did not (not_applied).
+  db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE state IN ('selecting','ready','claimed')`).run();
   async function acknowledge(saved: Row): Promise<void> {
     if (!saved.lease_json || !['applied', 'not_applied', 'unknown', 'none'].includes(saved.state)) return;
     const lease = JSON.parse(saved.lease_json) as ActionLease;
@@ -135,11 +143,11 @@ export function createFcaTouchWiring(parts: {
     for (const saved of db.prepare('SELECT * FROM fca_touch_receipts WHERE scope_key=?').all(parts.ownerScope) as unknown as Row[]) {
       if (['selecting', 'ready', 'claimed'].includes(saved.state) && (!rootAllows() || saved.expires_at <= now())) {
         const job = jobs.get(saved.operation_id); job?.controller.abort(); await job?.done;
-        db.prepare("UPDATE fca_touch_receipts SET state='unknown' WHERE operation_id=? AND state IN ('selecting','ready','claimed')").run(saved.operation_id);
+        db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE operation_id=? AND state IN ('selecting','ready','claimed')`).run(saved.operation_id);
         job?.action?.stop(); jobs.delete(saved.operation_id);
       }
       await acknowledge(row(saved.operation_id)!); deliver(row(saved.operation_id)!);
     }
   }, async close() { closing = true; for (const job of jobs.values()) job.controller.abort(); await Promise.all([...jobs.values()].map(job => job.done));
-    for (const [id, job] of jobs) { db.prepare("UPDATE fca_touch_receipts SET state='unknown' WHERE operation_id=? AND state IN ('selecting','ready','claimed')").run(id); job.action?.stop(); await acknowledge(row(id)!); } jobs.clear(); } };
+    for (const [id, job] of jobs) { db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE operation_id=? AND state IN ('selecting','ready','claimed')`).run(id); job.action?.stop(); await acknowledge(row(id)!); } jobs.clear(); } };
 }

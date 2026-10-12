@@ -14,6 +14,14 @@ import * as old from './support/actionLeaseFixtures.js';
 // Syzygy ADR-0009 stage 1, S1: every lease reader moved onto ActionLeaseReader and the one pure `leaseLive`. This table proves,
 // for every combination of the lease's columns, that each new reader answers exactly what the predicate it replaced answered.
 // The old predicates are copied verbatim from 66a08cd3 into support/actionLeaseFixtures.ts.
+//
+// S5 chose one clock and one deadline rule on purpose, and the table holds the readers to the old predicates under exactly
+// these two changes, each applied to the row the old predicate reads (`normalised`):
+// 1. Times are compared as parsed instants everywhere (the readers outside the store compared ISO text): the old predicate
+//    reads `lease_until` and `deadline` written by `toISOString()`, and `at` likewise.
+// 2. The action's deadline ends the lease for every reader (before: only the store's check and the Minecraft lifecycle): the
+//    old predicate reads a lease whose deadline has passed as expired (`lease_until` at `at`).
+// Everything else (states, generations, holders, sources, resources, scopes, origins) must answer as before.
 
 type Row = Record<string, unknown>;
 
@@ -68,28 +76,55 @@ function* table(): Generator<{ lease: LeaseColumns; identity: Identity }> {
   for (const identity of IDENTITIES) for (const lease of PICKED) yield { lease, identity };
 }
 
+/** Every `at` of the table is the same instant. */
+const AT = '2026-10-12T10:00:00.000Z';
+const iso = (time: unknown) => typeof time === 'string' && Number.isFinite(Date.parse(time)) ? new Date(Date.parse(time)).toISOString() : time;
+
+/** The lease columns as the old predicates must read them to answer under S5's one clock and one deadline rule (see above). */
+function normalised(lease: LeaseColumns): LeaseColumns {
+  const deadline = iso(lease.deadline) as string | null;
+  const deadlinePassed = !!deadline && !(Date.parse(deadline) > Date.parse(AT));
+  const leaseUntil = lease.leaseUntil !== null && deadlinePassed ? AT : iso(lease.leaseUntil) as string | null;
+  return { ...lease, deadline, leaseUntil };
+}
+
+function schemaOf(db: DatabaseSync) {
+  db.exec(`CREATE TABLE fca_task_checkpoints (task_id TEXT PRIMARY KEY, step_id TEXT, lease_json TEXT, stop_requested INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE minecraft_lifecycle_operations (id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, command_json TEXT NOT NULL, receipt_json TEXT);`);
+}
+
 function database() {
   const db = new DatabaseSync(':memory:');
   const store = new SQLiteActionStore(db);
-  db.exec(`CREATE TABLE fca_task_checkpoints (task_id TEXT PRIMARY KEY, step_id TEXT, lease_json TEXT, stop_requested INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE minecraft_lifecycle_operations (id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, command_json TEXT NOT NULL, receipt_json TEXT);`);
+  schemaOf(db);
+  const normal = new DatabaseSync(':memory:');
+  new SQLiteActionStore(normal);
+  schemaOf(normal);
   const insert = db.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,generation,holder,last_holder,lease_until,
+    resources_json,base_resources_json,owner_informed,deadline,progress,result,sent,failures,last_failure,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,0,NULL,'2026-10-12T00:00:00.000Z',?)`);
+  const normalInsert = normal.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,generation,holder,last_holder,lease_until,
     resources_json,base_resources_json,owner_informed,deadline,progress,result,sent,failures,last_failure,created_at,updated_at)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,0,NULL,'2026-10-12T00:00:00.000Z',?)`);
   const ids: string[] = [];
   db.exec('BEGIN');
+  normal.exec('BEGIN');
   let n = 0;
   for (const { lease, identity } of table()) {
     const id = `a${n}`;
     const resources = [...new Set([...identity.base, ...identity.extra])].sort();
-    insert.run(id, identity.scope, identity.kind, identity.origin, identity.source(n), identity.parent, lease.state, lease.generation, lease.holder,
-      lease.lastHolder, lease.leaseUntil, JSON.stringify(resources), JSON.stringify(identity.base), lease.deadline, lease.result, lease.sent,
-      `2026-10-12T00:00:${String(n % 60).padStart(2, '0')}.000Z`);
+    const updated = `2026-10-12T00:00:${String(n % 60).padStart(2, '0')}.000Z`;
+    for (const [target, columns] of [[insert, lease], [normalInsert, normalised(lease)]] as const) {
+      target.run(id, identity.scope, identity.kind, identity.origin, identity.source(n), identity.parent, columns.state, columns.generation,
+        columns.holder, columns.lastHolder, columns.leaseUntil, JSON.stringify(resources), JSON.stringify(identity.base), columns.deadline,
+        columns.result, columns.sent, updated);
+    }
     ids.push(id);
     n += 1;
   }
   db.exec('COMMIT');
-  return { db, store, ids, reader: new ActionLeaseReader(db) };
+  normal.exec('COMMIT');
+  return { db, normal, store, ids, reader: new ActionLeaseReader(db) };
 }
 
 const raw = (db: DatabaseSync, id: string) => db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id) as Row | undefined;
@@ -102,9 +137,9 @@ function same(name: string, before: unknown, after: unknown, id: string, at: str
   if (before !== after) expect.fail(`${name} differs for ${id} at ${at}: before ${String(before)}, after ${String(after)}`);
 }
 
-describe('one lease read path (ADR-0009 stage 1, S1)', () => {
+describe('one lease read path (ADR-0009 stage 1, S1; one clock and one deadline rule, S5)', () => {
   const fixture = database();
-  const { db, store, ids, reader } = fixture;
+  const { db, normal, store, ids, reader } = fixture;
 
   it('reads the same action view as the action store did', () => {
     for (const id of ids) {
@@ -120,29 +155,33 @@ describe('one lease read path (ADR-0009 stage 1, S1)', () => {
 
   it('answers every lease question as the replaced predicates did, for every lease combination', async () => {
     let visited = 0;
+    let changedByS5 = 0;
     for (const id of ids) {
       // Yield now and then so the vitest worker can answer its runner (a long synchronous loop times out its RPC on CI).
       visited += 1;
       if (visited % 500 === 0) await new Promise(resolve => setImmediate(resolve));
       const row = raw(db, id)!;
+      const timed = raw(normal, id)!;
       const record = reader.get(id)!;
       const lease = { ...LEASE, id };
       const inScope = reader.inScope(id, SCOPE);
       for (const at of ATS) {
-        const view: ActionView = old.storeView(row);
-        same('store.check', old.storeCheck(view, lease, at), store.check(lease, at) !== null, id, at);
-        same('store.settle.live', old.settleLive(view, lease, at), leaseLive(record, lease, at, LEASE_RULES.live), id, at);
-        same('taskRuntime.leaseValid', old.taskLeaseValid(row, SCOPE, TASK, lease, at), fcaTaskLeaseValid(record, SCOPE, TASK, lease, at), id, at);
-        same('taskRuntime.conversationLeaseValid', old.conversationLeaseValid(row, SCOPE, lease, at),
+        const view: ActionView = old.storeView(timed);
+        same('store.check', old.storeCheck(view, lease, AT), store.check(lease, at) !== null, id, at);
+        same('store.settle.live', old.settleLive(view, lease, AT), leaseLive(record, lease, at, LEASE_RULES.live), id, at);
+        // The intended changes are reached: the old text-and-no-deadline answer differs here.
+        if (old.settleLive(old.storeView(row), lease, at) !== old.settleLive(view, lease, AT)) changedByS5 += 1;
+        same('taskRuntime.leaseValid', old.taskLeaseValid(timed, SCOPE, TASK, lease, AT), fcaTaskLeaseValid(record, SCOPE, TASK, lease, at), id, at);
+        same('taskRuntime.conversationLeaseValid', old.conversationLeaseValid(timed, SCOPE, lease, AT),
           conversationLeaseValid(record, SCOPE, lease, at), id, at);
-        same('taskRuntime.classify', old.classify(row, SCOPE, lease, at), leaseOutcome(classifyLease(inScope, lease, at)), id, at);
+        same('taskRuntime.classify', old.classify(timed, SCOPE, lease, AT), leaseOutcome(classifyLease(inScope, lease, at)), id, at);
         same('fcaBody.leaseKnown', old.bodyLeaseKnown(row, SCOPE, lease, TASK, BODY),
           bodyLeaseKnown(bodyLeaseAttempt(record, SCOPE, lease, TASK), BODY), id, at);
-        same('fcaBody.leaseValid', old.bodyLeaseValid(row, SCOPE, lease, TASK, BODY, at),
+        same('fcaBody.leaseValid', old.bodyLeaseValid(timed, SCOPE, lease, TASK, BODY, AT),
           bodyLeaseValid(bodyLeaseAttempt(record, SCOPE, lease, TASK), lease, BODY, at), id, at);
         for (const origin of ['owner_request', 'own_time'] as const) {
           const authority: MinecraftLifecycleAuthority = { scopeKey: SCOPE, origin, executionId: id, lease, sourceIds: [] };
-          same(`lifecycle.allowed.${origin}`, old.lifecycleLease(row, authority, SCOPE, at), lifecycleLeaseHeld(record, authority, SCOPE, at), id, at);
+          same(`lifecycle.allowed.${origin}`, old.lifecycleLease(timed, authority, SCOPE, AT), lifecycleLeaseHeld(record, authority, SCOPE, at), id, at);
         }
       }
       same('taskRuntime.unsent', old.unsent(row, SCOPE, lease), !!inScope && leaseUnsent(inScope, lease), id, '');
@@ -154,6 +193,7 @@ describe('one lease read path (ADR-0009 stage 1, S1)', () => {
     for (const [name, seen] of answers) expect({ name, answers: seen.size }).toEqual({ name, answers: name.endsWith('classify') ? 3 : 2 });
     expect(answers.size).toBe(12);
     expect(compared).toBeGreaterThan(1_000_000);
+    expect(changedByS5).toBeGreaterThan(1_000);
     // About a million comparisons: ~26 s on a laptop, more on a 2-core CI runner.
   }, 180_000);
 
@@ -181,9 +221,9 @@ describe('one lease read path (ADR-0009 stage 1, S1)', () => {
     ];
     for (const id of ids.filter((_, index) => index % 11 === 0)) {
       for (const variant of variants) {
-        db.prepare('INSERT OR REPLACE INTO fca_task_checkpoints VALUES(?,?,?,?)').run(TASK, variant.step_id, variant.lease(id), variant.stop);
+        for (const target of [db, normal]) target.prepare('INSERT OR REPLACE INTO fca_task_checkpoints VALUES(?,?,?,?)').run(TASK, variant.step_id, variant.lease(id), variant.stop);
         const step = { id: 's1', scopeKey: SCOPE, taskId: TASK, lease: { ...LEASE, id } };
-        for (const at of ATS) same('fcaShared.stepIsLive', old.fcaStepIsLive(db, step, at), fcaStepLeaseLive(reader.checkpointed(id, TASK), step, at), id, at);
+        for (const at of ATS) same('fcaShared.stepIsLive', old.fcaStepIsLive(normal, step, AT), fcaStepLeaseLive(reader.checkpointed(id, TASK), step, at), id, at);
       }
     }
     expect(answers.get('fcaShared.stepIsLive')?.size).toBe(2);

@@ -118,9 +118,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       return this.get(scopeKey, child.id)!;
     });
   }
-  get(scopeKey: string, taskId: string): TaskView | null {
-    const task = this.authority.get(scopeKey, taskId); return task ? this.view(task) : null;
-  }
+  get(scopeKey: string, taskId: string): TaskView | null { const task = this.authority.get(scopeKey, taskId); return task ? this.view(task) : null; }
   list(scopeKey: string, query: TaskQuery = {}): TaskView[] {
     if (!Number.isInteger(query.limit ?? 100) || (query.limit ?? 100) < 1 || (query.limit ?? 100) > 100
       || !Number.isInteger(query.offset ?? 0) || (query.offset ?? 0) < 0) throw new Error('FCA_PAGE');
@@ -420,9 +418,10 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     return this.authority.transaction(() => this.recovery.recover(scopeKey, actionState));
   }
   unknownSince(scopeKey: string, taskId: string): string | null { return this.recovery.unknownSince(scopeKey, taskId); }
-  retireUnknown(scopeKey: string, cutoff: string): TaskView[] { return this.authority.transaction(() => this.recovery.retireUnknown(scopeKey, cutoff)); }
+  retireUnknown(scopeKey: string, at: string): TaskView[] { return this.authority.transaction(() => this.recovery.retireUnknown(scopeKey, at)); }
   private initialize(id: string, waitReason: string | null): void {
     this.db.prepare('INSERT INTO fca_task_checkpoints(task_id,wait_reason) VALUES(?,?)').run(id, waitReason);
+    this.authority.refresh?.(id, this.now());
   }
   private checkpoint(id: string): Checkpoint {
     const row = this.db.prepare('SELECT * FROM fca_task_checkpoints WHERE task_id=?').get(id);

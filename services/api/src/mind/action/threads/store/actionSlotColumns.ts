@@ -1,14 +1,17 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { TASK_KINDS, deriveTaskKind, slotClassOf, type SlotClass, type TaskKind } from '@shannon/mind';
+import {
+  SLOT_CLASSES, SLOT_LIMITS_OWNER_2026_10_12, TASK_KINDS, deriveTaskKind, slotClassOf, slotLimitsOf, unknownDue, type SlotClass, type SlotLimits,
+  type TaskKind,
+} from '@shannon/mind';
 import { tableColumns } from '../../../../infra/sqlite/sqliteOpen.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { ACTION_SLOTS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { ACTION_SLOTS_STEP, OWNER_SLOT_LIMITS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import { fcaTaskIdOf } from './actionLeaseReader.js';
 
 /**
  * The task link and slot class of an action (Syzygy ADR-0009 stage 1, S3, schema step 009), written at enqueue beside the old
- * columns, and `effect_sent` beside `sent` (it stays set through an unknown release). Nothing decides from them yet. The
- * backfill fills an older build's rows at each start of the API.
+ * columns, and `effect_sent` beside `sent` (it stays set through an unknown release). Since S6 the scheduler admits by the slot
+ * class and the slot tables (step 011 writes the owner's limits). The backfill fills an older build's rows at each start.
  */
 type Row = Record<string, unknown>;
 
@@ -26,9 +29,43 @@ export function hasActionSlotColumns(db: DatabaseSync): boolean {
   return true;
 }
 
-/** Applies step 009 when the action table exists (outside a transaction; the ledger makes it once). */
+/** The action store's slot steps: the columns and tables (009), then the owner's limits as their data (011). */
+export const ACTION_SLOT_STEPS = Object.freeze([ACTION_SLOTS_STEP, OWNER_SLOT_LIMITS_STEP]);
+
+/** Applies steps 009 and 011 when the action table exists (outside a transaction; the ledger makes each once). */
 export function applyActionSlotStep(db: DatabaseSync): void {
-  if (tableColumns(db, 'mind_actions').size) applySchemaSteps(db, [ACTION_SLOTS_STEP]);
+  if (tableColumns(db, 'mind_actions').size) applySchemaSteps(db, ACTION_SLOT_STEPS);
+}
+
+/**
+ * The slot limits as the tables hold them; the owner's limits when the tables are missing or their rows are incomplete or wrong
+ * (`slotLimitProblems`), so a damaged table never opens more slots than the owner allowed.
+ */
+export function readSlotLimits(db: DatabaseSync): SlotLimits {
+  if (!tableColumns(db, 'mind_action_slot_pools').size || !tableColumns(db, 'mind_action_slot_classes').size) return SLOT_LIMITS_OWNER_2026_10_12;
+  const pools = db.prepare('SELECT pool, max_live FROM mind_action_slot_pools').all() as Array<{ pool: unknown; max_live: unknown }>;
+  const classes = db.prepare('SELECT slot_class, pool, max_live FROM mind_action_slot_classes').all() as
+    Array<{ slot_class: unknown; pool: unknown; max_live: unknown }>;
+  return slotLimitsOf(pools, classes) ?? SLOT_LIMITS_OWNER_2026_10_12;
+}
+
+/** An action row's slot class: the stored one, else (an older build's row) the one derived from its kind and task. */
+export function slotClassOfRow(db: DatabaseSync, row: Row): SlotClass {
+  const stored = row.slot_class as SlotClass | null | undefined;
+  if (stored && SLOT_CLASSES.includes(stored)) return stored;
+  return actionSlotColumns(db, { kind: String(row.kind), sourceId: String(row.source_id) }).slotClass;
+}
+
+/**
+ * The slot classes of the scope's actions that hold a slot: live, or sent and still unknown (a respond's unknown holds none).
+ * With `at`, a sent unknown whose exit is due holds none either, as the scheduler's next sweep will record (`unknownDue`).
+ */
+export function liveSlotClasses(db: DatabaseSync, scopeKey: string, at?: string): SlotClass[] {
+  const columns = hasActionSlotColumns(db) ? 'slot_class, kind, source_id, state, updated_at' : 'NULL AS slot_class, kind, source_id, state, updated_at';
+  return db.prepare(`SELECT ${columns} FROM mind_actions WHERE scope_key = ? AND (state IN ('running','waiting','stopping')
+    OR (state = 'unknown' AND kind != 'respond' AND sent = 1))`).all(scopeKey)
+    .filter(row => at === undefined || row.state !== 'unknown' || !unknownDue(String(row.updated_at), at))
+    .map(row => slotClassOfRow(db, row));
 }
 
 function taskRow(db: DatabaseSync, taskId: string): Row | undefined {

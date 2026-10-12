@@ -159,7 +159,9 @@ export class OwnTimeActionRunner {
   async abandoned(scopeKey:string,cycleId:string):Promise<boolean>{
     const own=(await this.actions.list(scopeKey)).find(action=>action.kind==='ownTime'&&action.sourceId===cycleId);
     if(!own||own.sent)return false;
-    return (own.state==='unknown'&&own.result==='unknown_expired')||(own.state==='cancelled'&&own.result==='lease_expired');
+    // An older build's release says `unknown_expired`; the one unknown exit (S5) says how it left.
+    const exited=['unknown_expired','unknown_retired','outcome_unknown_closed'].includes(own.result??'');
+    return (own.state==='unknown'&&exited)||(own.state==='cancelled'&&own.result==='lease_expired');
   }
   close():void{this.active?.stop();this.active=null;}
 }

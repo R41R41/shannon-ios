@@ -60,6 +60,8 @@ export interface TaskAuthority {
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string }): TaskRecord;
   event(scopeKey: string, id: string, type: string, at: string,
     change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string }, payload?: Record<string, unknown>): TaskRecord;
+  /** Writes the state a task's checkpoint now means after a change without an event (ADR-0009 stage 1, S4). */
+  refresh?(id: string, at: string): void;
 }
 export interface TaskRuntimeOptions {
   authority: TaskAuthority;
@@ -118,6 +120,9 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   recover(scopeKey: string, actionState: (lease: ActionLease) => 'live' | 'safe' | 'unknown'): TaskView[];
   /** When the task entered `fca_unknown`; null when it is not unknown. */
   unknownSince?(scopeKey: string, taskId: string): string | null;
-  /** Tasks unknown since `cutoff` or earlier leave `fca_unknown` without replaying anything (root/conversation keep running, others fail). */
-  retireUnknown?(scopeKey: string, cutoff: string): TaskView[];
+  /**
+   * The one unknown exit of FCA tasks at `at` (ADR-0009 stage 1, S5): tasks whose unknown reached it leave `fca_unknown` without
+   * replaying anything (root/conversation run again, others fail as `unknown_retired`).
+   */
+  retireUnknown?(scopeKey: string, at: string): TaskView[];
 }

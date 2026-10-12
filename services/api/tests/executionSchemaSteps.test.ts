@@ -17,7 +17,7 @@ import {
   applySchemaSteps, applySchemaStepsUnderLock, appliedSchemaSteps, schemaStepChecksum, SCHEMA_STEP_TABLE, type SchemaStep,
 } from '../src/infra/sqlite/migrations/schemaSteps.js';
 import {
-  ACTION_SLOTS_STEP, ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP,
+  ACTION_SLOTS_STEP, ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP, OWNER_SLOT_LIMITS_STEP,
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
@@ -40,10 +40,10 @@ function temporaryPath(name = 'shannon.sqlite'): string {
 
 type Row = Record<string, unknown>;
 
-/** What the S3 steps add (008 and 009): columns appended by ALTER TABLE, and two tables. */
+/** What the S3 and S4 steps add (008, 009 and 010): columns appended by ALTER TABLE, and two tables (011 changes rows only). */
 const S3_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
-    'exec_state_at TEXT'],
+    'exec_state_at TEXT', 'exec_starting INTEGER'],
   mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
 };
 const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes'];
@@ -260,7 +260,8 @@ describe('the ledger', () => {
     syncLivenessEpisodes(db, 'owner', ['sleep_stalled'], '2026-10-12T00:00:00.000Z');
     expect(schema(db).find(row => row.name === 'agent_tasks')).toEqual(historical);
     expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([
-      'execution/001_action_threads', 'execution/009_action_slots', 'execution/002_mind_worker_starts', 'execution/003_liveness_episodes',
+      'execution/001_action_threads', 'execution/009_action_slots', 'execution/011_owner_slot_limits', 'execution/002_mind_worker_starts',
+      'execution/003_liveness_episodes',
     ]);
   });
 
@@ -302,6 +303,8 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/007_fca_touch': '556835eff888206da4e83d5253e9809269aa5a572597eb505f87018dad7bc522',
   'execution/008_task_execution_columns': '69c8ae30a01ce3be3a047876121a250cfa7502a2076c90d35a3faad7c5aa451f',
   'execution/009_action_slots': '7dba69dd5efd5de2e3da9fcfc3c6c0be5eebcf3a1225a3e543e0c3a0a3b70f4f',
+  'execution/010_task_host_starting': 'a5d43ddc03296599405e1606e08661e08189f87f4a6bac57b53a96f9afd94f8a',
+  'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
 };
 
 function reindented(step: SchemaStep): SchemaStep {
@@ -345,6 +348,25 @@ describe('the pinned checksums', () => {
     expect(failed.stdout).toContain(`checksum of ${ACTION_THREADS_STEP.id} is edited`);
     expect(failed.stdout).toContain('"name":"unexpected"');
   });
+
+  it('holds the slot tables to the rows the ledger says were written (S3 review L5)', () => {
+    const path = temporaryPath();
+    buildOld(path, false);
+    const before = `${path}.before.jsonl`;
+    const script = fileURLToPath(new URL('../../../scripts/verify-schema-steps.mjs', import.meta.url));
+    expect(spawnSync(process.execPath, [script, 'dump', path, before], { encoding: 'utf8' }).status).toBe(0);
+    openNew(path).close();
+    const check = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(check.stdout).toContain('"pools":[{"pool":"background","max_live":3},{"pool":"foreground","max_live":1},{"pool":"touch","max_live":1}]');
+    expect(check.status).toBe(0);
+    const tamper = new DatabaseSync(path);
+    tamper.exec("UPDATE mind_action_slot_pools SET max_live = 2 WHERE pool = 'background'; DELETE FROM mind_action_slot_classes WHERE slot_class = 'touch'");
+    tamper.close();
+    const failed = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toContain('slot pools background:2,foreground:1,touch:1 are not the rows of execution/011_owner_slot_limits');
+    expect(failed.stdout).toContain('are not the rows of execution/011_owner_slot_limits');
+  });
 });
 
 describe('a step inside a transaction of the caller', () => {
@@ -357,7 +379,7 @@ describe('a step inside a transaction of the caller', () => {
     db.exec('BEGIN');
     expect(() => new SQLiteActionStore(db)).not.toThrow();
     db.exec('ROLLBACK');
-    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id]);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id, OWNER_SLOT_LIMITS_STEP.id]);
   });
 
   it('is applied under a lock the caller holds only when asked, and remembered nowhere', () => {
@@ -368,7 +390,7 @@ describe('a step inside a transaction of the caller', () => {
     db.exec('ROLLBACK');
     expect(appliedSchemaSteps(db)).toEqual([]);
     new SQLiteActionStore(db);
-    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id]);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id, OWNER_SLOT_LIMITS_STEP.id]);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionKind, ActionOrigin, ActionState, ActionView } from '@shannon/mind';
+import type { ActionKind, ActionOrigin, ActionState, ActionView, SlotClass, SlotLimits } from '@shannon/mind';
+import { liveSlotClasses, readSlotLimits } from './actionSlotColumns.js';
 
 /** An action as its lease is read, with the resources it was admitted with (the dispatch may add more to `resources`). */
 export interface ActionLeaseRecord extends ActionView {
@@ -73,6 +74,24 @@ export class ActionLeaseReader {
   fcaTaskOf(id: string, scopeKey: string): string | undefined {
     const row = this.db.prepare('SELECT source_id FROM mind_actions WHERE id=? AND scope_key=? AND kind=?').get(id, scopeKey, 'agentTask');
     return typeof row?.source_id === 'string' ? fcaTaskIdOf(row.source_id) : undefined;
+  }
+
+  /**
+   * The Agent Host tasks whose action closed at the unknown exit as `outcome_unknown_closed` while the task row still shows it
+   * open, with the time the action closed (ADR-0009 stage 1, S5). Read-only; nothing before the tables exist.
+   */
+  closedUnknownHostTasks(): Array<{ taskId: string; closedAt: string }> {
+    const tables = this.db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('mind_actions','agent_tasks')").get();
+    if (Number(tables?.count) !== 2) return [];
+    return this.db.prepare(`SELECT a.source_id, a.updated_at FROM mind_actions a JOIN agent_tasks t ON t.task_id = a.source_id
+      WHERE a.kind = 'agentTask' AND a.state = 'unknown' AND a.result = 'outcome_unknown_closed'
+      AND t.status NOT IN ('completed','failed','cancelled') ORDER BY a.updated_at, a.id LIMIT 100`).all()
+      .map(row => ({ taskId: String(row.source_id), closedAt: String(row.updated_at) }));
+  }
+
+  /** The slot classes holding a slot in the scope at `at`, and the limits they are held to (ADR-0009 stage 1, S6). */
+  slots(scopeKey: string, at: string): { live: SlotClass[]; limits: SlotLimits } {
+    return { live: liveSlotClasses(this.db, scopeKey, at), limits: readSlotLimits(this.db) };
   }
 
   checkpointed(actionId: string, taskId: string): CheckpointedLease | null {

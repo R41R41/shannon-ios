@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { AgentPauseReason, AgentTaskStatus, HostAgentEvent } from '../agentTaskStore.js';
 import { arrayValue, normalizeApproval, stringValue } from './agentTaskPersistenceSupport.js';
+import { writeTaskState } from './taskStore.js';
 
 /** A host pause that carries a next action is waiting for the owner; a bare pause is the owner's own. */
 export function pauseReasonForHostEvent(payload: Record<string, unknown>): AgentPauseReason {
@@ -15,11 +16,13 @@ export function projectHostEvent(database: DatabaseSync, event: HostAgentEvent, 
     database.prepare('UPDATE agent_tasks SET pending_approval_json = NULL WHERE task_id = ?').run(event.taskId);
   };
   const update = (status: AgentTaskStatus, summary: string, currentAction?: string): void => {
+    const at = event.occurredAt || now;
+    // The state machine writes the status with its pause reason (ADR-0009 stage 1, S4); the Host's words follow.
+    const pauseReason = status === 'paused' ? pauseReasonForHostEvent(payload) : null;
+    writeTaskState(database, event.taskId, { status, pauseReason, currentAction: currentAction ?? null }, at);
     database.prepare(`
-      UPDATE agent_tasks
-      SET status = ?, summary = ?, current_action = ?, pause_reason = NULL, pause_sequence = NULL, updated_at = ?
-      WHERE task_id = ?
-    `).run(status, summary, currentAction ?? null, event.occurredAt || now, event.taskId);
+      UPDATE agent_tasks SET summary = ?, current_action = ?, pause_sequence = NULL, updated_at = ? WHERE task_id = ?
+    `).run(summary, currentAction ?? null, at, event.taskId);
   };
   // Stopped and failed work keeps the evidence the owner needs most: what changed and which check failed.
   const keepEvidence = (): void => {
@@ -54,9 +57,7 @@ export function projectHostEvent(database: DatabaseSync, event: HostAgentEvent, 
     case 'paused': {
       update('paused', event.detail ?? '作業を一時停止した。', stringValue(payload.currentAction));
       // The sequence of this pause lets a client tell a new pause from one the owner already saw.
-      database.prepare(`
-        UPDATE agent_tasks SET pause_reason = ?, pause_sequence = latest_sequence + 1 WHERE task_id = ?
-      `).run(pauseReasonForHostEvent(payload), event.taskId);
+      database.prepare('UPDATE agent_tasks SET pause_sequence = latest_sequence + 1 WHERE task_id = ?').run(event.taskId);
       clearPendingApproval();
       keepEvidence();
       break;

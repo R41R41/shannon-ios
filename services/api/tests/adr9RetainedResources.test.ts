@@ -45,7 +45,7 @@ function strandPastRelease(actions: SQLiteActionStore, c: ReturnType<typeof cloc
   actions.transaction(() => actions.sweep(c.now()));
   c.advance(ACTION_LIMITS.unknownReleaseMs);
   actions.transaction(() => actions.sweep(c.now()));
-  expect(actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_expired' });
+  expect(actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'outcome_unknown_closed' });
   return lease;
 }
 

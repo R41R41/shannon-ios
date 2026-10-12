@@ -48,46 +48,43 @@ export function validActionDraft(draft: ActionDraft): boolean {
 /** What a lease is judged by (Syzygy ADR-0009 stage 1, S1: one lease read path, one pure judgement). */
 export type LeaseFacts = Pick<ActionView, 'state' | 'generation' | 'holder' | 'lastHolder' | 'leaseUntil' | 'deadline' | 'sent' | 'result'>;
 /**
- * How a time is compared. Two comparisons exist today and S1 keeps both, without behaviour change:
- * `instant` parses both sides (the action store's check), `text` compares the ISO strings (the readers outside the store,
- * the store's settle). They differ only for a time not written as `toISOString()` (an offset, no milliseconds).
+ * Which states hold a live lease for a reader. Since S5 every reader compares parsed instants (S1 kept the ISO text comparison
+ * of the readers outside the store; they differed only for a time not written by `toISOString()`), and the action's deadline
+ * ends the lease for every reader (S1 kept it only for the store's check and the Minecraft lifecycle; the scheduler's sweep
+ * ends such a lease within its next tick anyway). What stays per reader is the set of states, because it says what a holder
+ * may do there: the store's own checks act while running or waiting, settling and recovery accept a stopping attempt, a
+ * step, a turn and the body act only while running.
  */
-export type LeaseClock = 'instant' | 'text';
-/** Which states hold a live lease, how its time is compared, and whether the action's deadline also ends it. */
 export interface LeaseRule {
   readonly states: readonly ActionState[];
-  readonly clock: LeaseClock;
-  readonly deadline: boolean;
 }
 const LIVE_STATES: readonly ActionState[] = ['running', 'waiting', 'stopping'];
-/** The rules in use, by reader. Each is exactly the predicate its reader computed before S1. */
+/** The rules in use, by reader. */
 export const LEASE_RULES = Object.freeze({
-  /** The action store's `check`: running or waiting, parsed instants, the deadline ends the lease. */
-  store: Object.freeze<LeaseRule>({ states: ['running', 'waiting'], clock: 'instant', deadline: true }),
-  /** The store's `settle` and the recovery of FCA steps: any live state, ISO text, no deadline. */
-  live: Object.freeze<LeaseRule>({ states: LIVE_STATES, clock: 'text', deadline: false }),
-  /** An FCA or conversation step and the Minecraft body: running only, ISO text, no deadline. */
-  step: Object.freeze<LeaseRule>({ states: ['running'], clock: 'text', deadline: false }),
-  /** The Minecraft lifecycle authority: running only, ISO text, the deadline ends the lease. */
-  lifecycle: Object.freeze<LeaseRule>({ states: ['running'], clock: 'text', deadline: true }),
+  /** The action store's `check` (renew, dispatch, checkpoint, reserve): running or waiting. */
+  store: Object.freeze<LeaseRule>({ states: ['running', 'waiting'] }),
+  /** The store's `settle` and the recovery of FCA steps: any live state. */
+  live: Object.freeze<LeaseRule>({ states: LIVE_STATES }),
+  /** An FCA or conversation step, the Minecraft body and its lifecycle authority: running only. */
+  step: Object.freeze<LeaseRule>({ states: ['running'] }),
 });
 
-function later(time: string, at: string, clock: LeaseClock): boolean {
-  if (clock === 'text') return time > at;
+/** Whether `time` is after `at`, as instants; an unreadable time is never after. */
+export function instantAfter(time: string, at: string): boolean {
   return Date.parse(time) > Date.parse(at);
 }
 
-function beforeDeadline(action: LeaseFacts, at: string, rule: LeaseRule): boolean {
-  if (!rule.deadline || !action.deadline) return true;
-  return later(action.deadline, at, rule.clock);
+function beforeDeadline(action: LeaseFacts, at: string): boolean {
+  if (!action.deadline) return true;
+  return instantAfter(action.deadline, at);
 }
 
 /** Whether this exact attempt (generation and holder) still holds its lease at `at` under `rule`. */
 export function leaseLive(action: LeaseFacts, lease: ActionLease, at: string, rule: LeaseRule): boolean {
   if (action.generation !== lease.generation || action.holder !== lease.holder) return false;
   if (!rule.states.includes(action.state)) return false;
-  if (typeof action.leaseUntil !== 'string' || !later(action.leaseUntil, at, rule.clock)) return false;
-  return beforeDeadline(action, at, rule);
+  if (typeof action.leaseUntil !== 'string' || !instantAfter(action.leaseUntil, at)) return false;
+  return beforeDeadline(action, at);
 }
 
 /** This attempt (its holder, or its holder before) or the attempt just before it, which a sweep or a finish closed. */

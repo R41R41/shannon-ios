@@ -75,5 +75,5 @@ export function lifecycleLeaseHeld(action: ActionLeaseRecord | null, authority: 
   if (!action || authority.executionId !== authority.lease.id) return false;
   if (action.scopeKey !== authority.scopeKey || authority.scopeKey !== ownerScope) return false;
   if (action.origin !== authority.origin) return false;
-  return leaseLive(action, authority.lease, at, LEASE_RULES.lifecycle);
+  return leaseLive(action, authority.lease, at, LEASE_RULES.step);
 }

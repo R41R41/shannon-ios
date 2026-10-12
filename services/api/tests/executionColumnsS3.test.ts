@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SLOT_LIMITS_TODAY, deriveTask, fcaPhaseOf, type ExecState } from '@shannon/mind';
+import { SLOT_LIMITS_OWNER_2026_10_12, deriveTask, fcaPhaseOf, type ExecState } from '@shannon/mind';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
@@ -148,7 +148,7 @@ function buildGolden(path: string): void {
   db.close();
 }
 
-const S3_TASK_COLUMNS = ['task_kind', 'capability', 'exec_state', 'wait_reason', 'unknown_since', 'effect_class', 'exec_state_at'];
+const S3_TASK_COLUMNS = ['task_kind', 'capability', 'exec_state', 'wait_reason', 'unknown_since', 'effect_class', 'exec_state_at', 'exec_starting'];
 const S3_ACTION_COLUMNS = ['task_id', 'slot_class', 'effect_sent'];
 
 function legacyRows(db: DatabaseSync, table: string, drop: readonly string[]): Row[] {
@@ -163,7 +163,7 @@ function zeroCounts(db: DatabaseSync) {
   return { tasks: countTaskProjection(db), actions: countActionProjection(db) };
 }
 
-const ZERO = { tasks: { mismatches: 0, nulls: 0 }, actions: { mismatches: 0, nulls: 0 } };
+const ZERO = { tasks: { mismatches: 0, nulls: 0, stateMismatches: 0 }, actions: { mismatches: 0, nulls: 0 } };
 
 describe('the S3 columns on a golden database of 706120d4', () => {
   it('derives every column from the old ones, twice, and the second run writes nothing', async () => {
@@ -178,7 +178,8 @@ describe('the S3 columns on a golden database of 706120d4', () => {
     expect(legacyRows(db, 'mind_actions', S3_ACTION_COLUMNS)).toEqual(actionsBefore);
     expect(checks(db)).toEqual({ integrity: 'ok', foreignKeys: [] });
     expect(zeroCounts(db)).toEqual(ZERO);
-    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual(['execution/008_task_execution_columns', 'execution/009_action_slots']);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual(['execution/008_task_execution_columns', 'execution/010_task_host_starting',
+      'execution/009_action_slots', 'execution/011_owner_slot_limits']);
     for (const row of db.prepare('SELECT * FROM agent_tasks').all()) {
       const [kind, state, wait, effect, since] = EXPECTED_TASKS[String(row.task_id)]!;
       expect([row.task_id, row.task_kind, row.exec_state, row.wait_reason, row.effect_class, row.unknown_since, row.capability])
@@ -191,16 +192,16 @@ describe('the S3 columns on a golden database of 706120d4', () => {
     db.close();
   });
 
-  it('seeds today\'s slot limits exactly', async () => {
+  it('holds the owner\'s slot limits after step 011 (S6)', async () => {
     const path = temporaryPath();
     buildGolden(path);
     const db = openDatabase(path, 'taskRuntime');
     await backfillExecutionColumns(db);
     const pools = db.prepare('SELECT pool, max_live FROM mind_action_slot_pools ORDER BY pool').all();
-    expect(Object.fromEntries(pools.map(row => [row.pool, row.max_live]))).toEqual(SLOT_LIMITS_TODAY.pools);
+    expect(Object.fromEntries(pools.map(row => [row.pool, row.max_live]))).toEqual(SLOT_LIMITS_OWNER_2026_10_12.pools);
     const classes = db.prepare('SELECT slot_class, pool, max_live FROM mind_action_slot_classes').all();
     const seeded = Object.fromEntries(classes.map(row => [row.slot_class, { pool: row.pool, maxLive: row.max_live }]));
-    expect(seeded).toEqual(SLOT_LIMITS_TODAY.classes);
+    expect(seeded).toEqual(SLOT_LIMITS_OWNER_2026_10_12.classes);
     db.close();
   });
 
@@ -227,7 +228,7 @@ describe('the S3 columns on a golden database of 706120d4', () => {
     insertAction(db, { id: 'a-late', kind: 'agentTask', source: 'c-late', state: 'running', sent: 1 });
     db.prepare("UPDATE agent_tasks SET status = 'completed', pause_reason = NULL WHERE task_id = 'c-owner'").run();
     db.prepare("UPDATE mind_actions SET sent = 0, state = 'completed' WHERE id = 'a-research'").run();
-    expect(zeroCounts(db)).toEqual({ tasks: { mismatches: 1, nulls: 1 }, actions: { mismatches: 1, nulls: 1 } });
+    expect(zeroCounts(db)).toEqual({ tasks: { mismatches: 1, nulls: 1, stateMismatches: 0 }, actions: { mismatches: 1, nulls: 1 } });
     await backfillExecutionColumns(db);
     expect(zeroCounts(db)).toEqual(ZERO);
     const late = db.prepare("SELECT exec_state, task_kind FROM agent_tasks WHERE task_id = 'c-late'").get();
@@ -319,7 +320,7 @@ describe('the dual write', () => {
     h.store.sweep('2026-10-12T02:00:00.000Z');
     expect(h.store.get(codex.id)).toMatchObject({ state: 'unknown', sent: true });
     h.store.sweep('2026-10-12T03:00:00.000Z');
-    expect(h.store.get(codex.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_expired' });
+    expect(h.store.get(codex.id)).toMatchObject({ state: 'unknown', sent: false, result: 'outcome_unknown_closed' });
     expect(columns(codex.id)).toMatchObject({ effect_sent: 1 });
     expect(h.store.reconcile(lease, 'completed', 'done', '2026-10-12T03:00:01.000Z')).toBe(true);
     expect(columns(codex.id)).toMatchObject({ effect_sent: 0 });
@@ -358,7 +359,7 @@ describe('the dual write', () => {
     expect(state()).toMatchObject({ exec_state: 'active', wait_reason: null });
     store.enqueue('owner', created.task.id, { idempotencyKey: 'stop', type: 'interrupt' }, '2026-10-12T00:00:06.000Z');
     expect(state()).toMatchObject({ exec_state: 'stopped' });
-    expect(zeroCounts(reader)).toMatchObject({ tasks: { mismatches: 0, nulls: 0 } });
+    expect(zeroCounts(reader)).toMatchObject({ tasks: { mismatches: 0, nulls: 0, stateMismatches: 0 } });
     reader.close();
     store.close();
   });

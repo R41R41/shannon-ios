@@ -410,11 +410,11 @@
     "services/api/src/infra/models/anthropic/anthropicWebSearch.ts": {
       "multi-statement-line": 1,
       "complex-function": 1,
-      "long-line": 7
+      "long-line": 6
     },
     "services/api/src/infra/models/anthropic/haikuCache.ts": {
-      "complex-function": 2,
       "multi-statement-line": 4,
+      "complex-function": 1,
       "long-line": 9
     },
     "services/api/src/infra/models/anthropic/haikuResponses.ts": {
@@ -740,11 +740,11 @@
       "long-line": 4
     },
     "services/api/src/mind/action/fca/conversationWork.ts": {
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/mind/action/fca/fcaConversation.ts": {
       "multi-statement-line": 7,
-      "long-line": 7
+      "long-line": 6
     },
     "services/api/src/mind/action/fca/fcaConversationSources.ts": {
       "complex-function": 1,
@@ -1073,7 +1073,7 @@
     "services/api/src/mind/action/threads/store/actionStore.ts": {
       "multi-statement-line": 9,
       "complex-function": 3,
-      "long-line": 17
+      "long-line": 15
     },
     "services/api/src/mind/attention/attentionPorts.ts": {
       "long-line": 2
@@ -1313,7 +1313,6 @@
     },
     "services/api/src/mind/memory/memoryVisibility.ts": {
       "multi-statement-line": 4,
-      "complex-function": 1,
       "long-line": 7
     },
     "services/api/src/mind/memory/memoryWriter.ts": {
@@ -1666,7 +1665,7 @@
     },
     "services/api/src/mind/tools/shannonReadTools.ts": {
       "multi-statement-line": 1,
-      "long-line": 9
+      "long-line": 6
     },
     "services/api/src/mind/tools/shannonSelfRewriteTools.ts": {
       "multi-statement-line": 4,
@@ -1712,7 +1711,7 @@
       "long-line": 1
     },
     "services/api/src/mind/tools/shannonTools.ts": {
-      "long-line": 23
+      "long-line": 22
     },
     "services/api/src/mind/tools/store/sqliteToolTraces.ts": {
       "long-line": 4
@@ -1915,7 +1914,7 @@
       "long-line": 6
     },
     "services/api/src/surfaces/text/apiConversationRead.ts": {
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/surfaces/text/chatSentenceSplitter.ts": {
       "long-function": 1,
@@ -1926,7 +1925,7 @@
       "complex-function": 2,
       "long-function": 1,
       "multi-statement-line": 2,
-      "long-line": 35
+      "long-line": 34
     },
     "services/api/src/surfaces/voice/apiVoiceCallSummary.ts": {
       "long-line": 1
@@ -2044,7 +2043,6 @@
       "long-line": 2
     },
     "services/api/src/wiring/fcaSleepJobs.ts": {
-      "complex-function": 1,
       "long-line": 4
     },
     "services/api/src/wiring/fcaSleepMemory.ts": {

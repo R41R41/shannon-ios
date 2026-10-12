@@ -11,7 +11,7 @@ import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution, type ActionExecution } from '../infra/context/actionExecution.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
-import { ACTION_LIMITS, classifyLease, leaseOutcome, leaseUnsent } from '@shannon/mind';
+import { UNKNOWN_EXIT_MS, classifyLease, deriveTaskKind, leaseOutcome, leaseUnsent, slotAdmissible, slotClassOf, type SlotClass } from '@shannon/mind';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 
@@ -46,7 +46,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     return !!current && !!saved && current.jobId === saved.jobId && current.dayKey === saved.dayKey
       && current.startAt === saved.startAt && current.endAt === saved.endAt;
   }
-  const running = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  /** The tasks this process runs; `claimed` once their action holds a slot (until then the slot is counted here). */
+  const running = new Map<string, { controller: AbortController; done: Promise<void>; slotClass: SlotClass; claimed: boolean }>();
   let closing = false, ticking = false;
   const classify = (lease: ActionLease) => leaseOutcome(classifyLease(leases.inScope(lease.id, scopeKey), lease, now()));
   async function flushReceipts(): Promise<void> {
@@ -92,6 +93,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
       sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal), value => ({ admitted: value !== null }));
     if (!active) return;
+    const job = running.get(taskId);
+    if (job) job.claimed = true;
     let step: TaskStep | null = null;
     let stepPorts: ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
     try {
@@ -154,19 +157,24 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       runtime.recover(scopeKey, classify);
       // An unknown step is never replayed, but after the deadline its task stops holding parents, limits and sleep.
-      const retired = runtime.retireUnknown?.(scopeKey, new Date(Date.parse(now()) - ACTION_LIMITS.unknownReleaseMs).toISOString()) ?? [];
-      if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${ACTION_LIMITS.unknownReleaseMs / 60_000} min`);
+      const retired = runtime.retireUnknown?.(scopeKey, now()) ?? [];
+      if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${UNKNOWN_EXIT_MS / 60_000} min`);
       for (const [taskId, job] of running) {
         const task = runtime.get(scopeKey, taskId);
         if (!task || task.phase === 'stopping' || !executionAllowed(task)) job.controller.abort();
       }
       const pending = new Set(runtime.pendingReceipts(scopeKey).map(receipt => receipt.taskId));
+      // ADR-0009 stage 1, S6: a task starts only while its slot class has room by the slot tables (the store decides again).
+      const slots = leases.slots(scopeKey, now());
+      const starting = [...running.values()].filter(job => !job.claimed).map(job => job.slotClass);
       for (const task of runtime.readyTasks(scopeKey, 256)) {
-        if (running.size >= 2) break;
         if (pending.has(task.id) || running.has(task.id) || !executionAllowed(task) || options.canRunTask?.(runtime, task.id) === false) continue;
+        const slotClass = slotClassOf({ kind: 'agentTask', sourceId: `fca:${task.id}:${task.revision}` }, deriveTaskKind(task.kind));
+        if (!slotAdmissible(slotClass, [...slots.live, ...starting], slots.limits).ok) continue;
+        starting.push(slotClass);
         const controller = new AbortController();
-        const done = execute(task.id, controller).catch(() => {}).finally(() => running.delete(task.id));
-        running.set(task.id, { controller, done });
+        running.set(task.id, { controller, done: Promise.resolve(), slotClass, claimed: false });
+        running.get(task.id)!.done = execute(task.id, controller).catch(() => {}).finally(() => running.delete(task.id));
       }
     } finally { ticking = false; }
   }

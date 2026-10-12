@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { AgentCommandType, AgentEventTone, AgentTask, ClaimedAgentCommand } from '../agentTaskStore.js';
 import { isTrue, projectedStatusForCommand } from './agentTaskPersistenceSupport.js';
 import { fcaHostPredicate } from './fcaHostPredicate.js';
+import { writeTaskState } from './taskStore.js';
 
 /**
  * One task at a time on a host.
@@ -130,11 +131,15 @@ export class AgentTaskQueue {
     const text = command.type === 'start'
       ? { summary: '作業を始める準備中。', currentAction: '作業環境へ接続中' }
       : projectedStatusForCommand('queued', command.type, command.payload);
-    const changed = this.database.prepare(`
-      UPDATE agent_tasks SET status = 'starting', summary = ?, current_action = ?, assigned_host_id = ?, updated_at = ?
-      WHERE task_id = ? AND status = 'queued'
-    `).run(text.summary ?? '', text.currentAction ?? null, hostId, now, command.taskId);
-    if (command.type === 'start' || Number(changed.changes) > 0) {
+    const queued = this.database.prepare("SELECT 1 AS found FROM agent_tasks WHERE task_id = ? AND status = 'queued'").get(command.taskId);
+    if (queued) {
+      // The state machine writes the status (ADR-0009 stage 1, S4); the Host's words and binding follow.
+      writeTaskState(this.database, command.taskId, { status: 'starting', pauseReason: null, currentAction: text.currentAction ?? null }, now);
+      this.database.prepare(`
+        UPDATE agent_tasks SET summary = ?, current_action = ?, assigned_host_id = ?, updated_at = ? WHERE task_id = ?
+      `).run(text.summary ?? '', text.currentAction ?? null, hostId, now, command.taskId);
+    }
+    if (command.type === 'start' || queued) {
       this.appendEvent(command.taskId, 'starting', '作業環境が依頼を受け取った', undefined, 'progress', now, { hostId });
     }
   }

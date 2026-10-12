@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { DatabaseSync } from 'node:sqlite';
 import { dayBand } from '../contracts/cognitionLedgerContract.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import type { ApiRequest, ApiResponse } from '../contracts/contracts.js';
@@ -8,6 +9,7 @@ import { bindScope, readJson, sendJson } from '../infra/http/serverHttp.js';
 import { createFeedbackRoute, FEEDBACK_PATH } from '../infra/http/feedbackRoutes.js';
 import { createSelfInterestRoute, isSelfInterestsPath } from '../infra/http/selfInterestRoutes.js';
 import { SQLiteAgentTaskStore } from '../mind/action/agentTasks/agentTaskStore.js';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import type { TaskTreeLearningCallbacks } from '../mind/action/agentTasks/agentTasksPorts.js';
 import { memoryPortsOf } from './memoryOutboxWiring.js';
 import { selfInterestOwnerPort } from './selfInterestWiring.js';
@@ -41,6 +43,16 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
     taskUnusable: (scope, input) => taskFeedback?.callbacks.taskUnusable(scope, input) ?? false,
   };
   const tasks = new SQLiteAgentTaskStore(parts.path, enabled ? {taskTreeEnabled:true, taskTreeCallbacks:callbacks} : {});
+  // ADR-0009 stage 1, S5: an Agent Host task whose action closed with its outcome unknown is closed as failed (never re-sent).
+  const closedUnknown = (db: DatabaseSync) => new ActionLeaseReader(db).closedUnknownHostTasks();
+  const unknownExit = setInterval(() => {
+    let closed = 0;
+    try {
+      closed = tasks.closeUnknownOutcomes(parts.now(), closedUnknown);
+    } catch { /* A busy database is tried again on the next tick. */ }
+    if (closed) console.log(`Shannon closed ${closed} Agent Host task(s) with an unknown outcome`);
+  }, 10_000);
+  unknownExit.unref();
   const feedback = configuredStage5Feedback(environment, {...parts, tasks, ownerAlone});
   const feedbackRoute = createFeedbackRoute({feedback:feedback?.feedback ?? null, ownerScopeKey:parts.ownerScope, ownerAlone});
   const memory = enabled ? memoryPortsOf(parts.store, parts.now) : null;
@@ -87,6 +99,6 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
       else sendJson(response,result.status,result.body);
       return true;
     },
-    close() {if (timer) clearInterval(timer);selfRewrite?.close();tasks.close();},
+    close() {if (timer) clearInterval(timer);clearInterval(unknownExit);selfRewrite?.close();tasks.close();},
   };
 }

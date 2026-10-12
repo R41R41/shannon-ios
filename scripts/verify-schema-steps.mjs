@@ -8,10 +8,11 @@
 //                                                                          <before-file> and the ledger with the pinned checksums
 //
 // Both print user_version, integrity_check, the number of foreign_key_check rows and the ledger rows. `check` exits 1 when the
-// schema differs from the before-file (apart from the ledger table and the additions of the S3 steps 008 and 009, which may be
+// schema differs from the before-file (apart from the ledger table and the additions of the steps 008, 009 and 010, which may be
 // there on either side: their columns on agent_tasks and mind_actions and their two slot tables), integrity_check is not ok,
-// a foreign key is broken, or a ledger row names an unknown step or another checksum. `check` also prints the rows of the slot
-// tables and how many rows still miss an S3 column (`s3:` line; the start's backfill brings it to 0). On the VM:
+// a foreign key is broken, a ledger row names an unknown step or another checksum, or the slot tables do not hold exactly the
+// limits the ledger says were written (step 011: the owner's limits; else step 009: the limits of S3). `check` also prints the
+// rows of the slot tables and how many rows still miss a new column (`s3:` line; the start's backfill brings it to 0). On the VM:
 //
 //   N=/home/azureuser/shannon-ios-runtime/bin/node; DB=/home/azureuser/shannon-ios-data/shannon.sqlite
 //   $N scripts/verify-schema-steps.mjs dump  "$DB" /tmp/schema-before.jsonl
@@ -35,13 +36,32 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'execution/007_fca_touch': '556835eff888206da4e83d5253e9809269aa5a572597eb505f87018dad7bc522',
   'execution/008_task_execution_columns': '69c8ae30a01ce3be3a047876121a250cfa7502a2076c90d35a3faad7c5aa451f',
   'execution/009_action_slots': '7dba69dd5efd5de2e3da9fcfc3c6c0be5eebcf3a1225a3e543e0c3a0a3b70f4f',
+  'execution/010_task_host_starting': 'a5d43ddc03296599405e1606e08661e08189f87f4a6bac57b53a96f9afd94f8a',
+  'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
 });
 
-/** What the S3 steps add (Syzygy ADR-0009 stage 1): columns appended by ALTER TABLE, and two new tables with their indexes. */
+/** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
+export const SLOT_SEEDS = Object.freeze({
+  'execution/009_action_slots': Object.freeze({
+    pools: ['background:2', 'foreground:1'],
+    classes: ['codex:background:2', 'creative:background:2', 'minecraft:background:2', 'other:background:2', 'research:background:2',
+      'respond:foreground:1', 'sleep:background:2', 'touch:background:2'],
+  }),
+  'execution/011_owner_slot_limits': Object.freeze({
+    pools: ['background:3', 'foreground:1', 'touch:1'],
+    classes: ['codex:background:1', 'creative:background:1', 'minecraft:background:1', 'other:background:1', 'research:background:2',
+      'respond:foreground:1', 'sleep:background:1', 'touch:touch:1'],
+  }),
+});
+
+/**
+ * What the S3 and S4 steps add (Syzygy ADR-0009 stage 1): columns appended by ALTER TABLE (008, 009, 010), and two new tables
+ * with their indexes (009). Step 011 changes only rows.
+ */
 export const S3_ADDITIONS = Object.freeze({
   columns: Object.freeze({
     agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
-      'exec_state_at TEXT'],
+      'exec_state_at TEXT', 'exec_starting INTEGER'],
     mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
   }),
   tables: Object.freeze(['mind_action_slot_pools', 'mind_action_slot_classes']),
@@ -97,6 +117,10 @@ function s3Facts(db) {
     facts.taskRowsMissing = Number(db.prepare(`SELECT COUNT(*) AS count FROM agent_tasks
       WHERE task_kind IS NULL OR exec_state IS NULL OR effect_class IS NULL OR exec_state_at IS NULL`).get()?.count ?? 0);
   }
+  if (columns('agent_tasks').has('exec_starting')) {
+    // Rows another writer touched after the state machine (an older build): the start's re-derivation brings it to 0.
+    facts.taskRowsStale = Number(db.prepare('SELECT COUNT(*) AS count FROM agent_tasks WHERE updated_at > exec_state_at').get()?.count ?? 0);
+  }
   if (columns('mind_actions').has('slot_class')) {
     facts.actionRowsMissing = Number(db.prepare('SELECT COUNT(*) AS count FROM mind_actions WHERE slot_class IS NULL OR effect_sent IS NULL')
       .get()?.count ?? 0);
@@ -106,6 +130,20 @@ function s3Facts(db) {
     facts.classes = db.prepare('SELECT slot_class, pool, max_live FROM mind_action_slot_classes ORDER BY slot_class').all();
   }
   return facts;
+}
+
+/** Whether the slot tables hold exactly the rows of the last limit-writing step in the ledger (S3 review L5). */
+export function slotSeedProblems(ledger, facts) {
+  const ids = new Set(ledger.map(row => row.id));
+  const step = ['execution/011_owner_slot_limits', 'execution/009_action_slots'].find(id => ids.has(id));
+  if (!step) return [];
+  const expected = SLOT_SEEDS[step];
+  const pools = (facts.pools ?? []).map(row => `${row.pool}:${row.max_live}`).sort();
+  const classes = (facts.classes ?? []).map(row => `${row.slot_class}:${row.pool}:${row.max_live}`).sort();
+  const problems = [];
+  if (JSON.stringify(pools) !== JSON.stringify(expected.pools)) problems.push(`slot pools ${pools.join(',')} are not the rows of ${step}`);
+  if (JSON.stringify(classes) !== JSON.stringify(expected.classes)) problems.push(`slot classes ${classes.join(',')} are not the rows of ${step}`);
+  return problems;
 }
 
 function schemaProblems(beforeLines, afterLines) {
@@ -133,8 +171,9 @@ export function verifySchemaSteps(argv, print = line => console.log(line)) {
       return 0;
     }
     const before = readFileSync(file, 'utf8').split('\n').filter(Boolean);
-    print(`s3: ${JSON.stringify(s3Facts(db))}`);
-    const problems = [...schemaProblems(before, lines), ...ledgerProblems(seen.ledger)];
+    const executionFacts = s3Facts(db);
+    print(`s3: ${JSON.stringify(executionFacts)}`);
+    const problems = [...schemaProblems(before, lines), ...ledgerProblems(seen.ledger), ...slotSeedProblems(seen.ledger, executionFacts)];
     if (seen.integrity !== 'ok') problems.push(`integrity_check: ${seen.integrity}`);
     if (seen.foreignKeyProblems) problems.push(`foreign_key_check: ${seen.foreignKeyProblems} rows`);
     for (const problem of problems) print(problem);

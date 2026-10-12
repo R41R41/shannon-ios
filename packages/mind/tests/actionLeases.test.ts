@@ -21,14 +21,17 @@ describe('one lease judgement (ADR-0009 stage 1, S1)', () => {
     expect(leaseLive({ ...running, leaseUntil: null }, lease, at, LEASE_RULES.live)).toBe(false);
   });
 
-  it('keeps the two time comparisons apart: parsed instants and ISO text', () => {
+  it('compares parsed instants and ends every lease at the deadline (S5: one clock, one deadline rule)', () => {
     const withoutMilliseconds = { ...running, leaseUntil: '2026-10-12T10:00:00Z' };
-    expect(leaseLive(withoutMilliseconds, lease, at, LEASE_RULES.store)).toBe(false);
-    expect(leaseLive(withoutMilliseconds, lease, at, LEASE_RULES.step)).toBe(true);
     const offsetDeadline = { ...running, deadline: '2026-10-12T18:59:00+09:00' };
-    expect(leaseLive(offsetDeadline, lease, at, LEASE_RULES.store)).toBe(false);
-    expect(leaseLive(offsetDeadline, lease, at, LEASE_RULES.lifecycle)).toBe(true);
-    expect(leaseLive(offsetDeadline, lease, at, LEASE_RULES.step)).toBe(true);
+    const laterDeadline = { ...running, deadline: '2026-10-12T19:30:00+09:00' };
+    for (const rule of Object.values(LEASE_RULES)) {
+      expect(leaseLive(withoutMilliseconds, lease, at, rule)).toBe(false);
+      expect(leaseLive(offsetDeadline, lease, at, rule)).toBe(false);
+      expect(leaseLive(laterDeadline, lease, at, rule)).toBe(true);
+      expect(leaseLive({ ...running, deadline: at }, lease, at, rule)).toBe(false);
+    }
+    expect(Object.keys(LEASE_RULES)).toEqual(['store', 'live', 'step']);
   });
 
   it('classifies a lease for recovery in the order the FCA runtime asks', () => {

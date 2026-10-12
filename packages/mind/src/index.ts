@@ -53,3 +53,4 @@ export {
 export * from './actions.js';
 export * from './taskTree.js';
 export * from './tasks.js';
+export * from './taskMachine.js';

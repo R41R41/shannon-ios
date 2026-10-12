@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionLease } from '@shannon/mind';
+import { deriveTaskKind, effectClassOf, unknownDue, unknownExit, type ActionLease } from '@shannon/mind';
 import type { TaskAuthority, TaskRecord, TaskSegmentReceipt, TaskSnapshot, TaskStep, TaskView } from '../taskRuntimePorts.js';
 import type { TaskMaintenanceStore } from './taskMaintenanceStore.js';
 
@@ -18,12 +18,15 @@ export interface TaskRecoveryParts {
 const terminal = (task: TaskRecord) => ['completed', 'failed', 'cancelled'].includes(task.status);
 
 /**
- * Recovery of steps whose action outcome was lost. An unknown step is never replayed: after the unknown deadline (or, for
- * the internal root and a conversation, on the owner's next turn) only the task's own bookkeeping moves on.
+ * Recovery of steps whose action outcome was lost. An unknown step is never replayed: at the one unknown exit (`unknownExit`,
+ * ADR-0009 stage 1 S5: `UNKNOWN_EXIT_MS` after the task became unknown, as parsed instants) or, for the internal root and a
+ * conversation, on the owner's next turn, only the task's own bookkeeping moves on.
  *
- * - root and conversation tasks are the suite's always-on inboxes: their unknown step is closed and they keep running;
- * - every other task becomes `failed` (its parent hears of it, as after a committed failure), so a parent's stop can
- *   finish and the active-task limit is not held forever.
+ * - root and conversation tasks are the suite's always-on inboxes: their unknown step is closed and they wait for their next
+ *   message (a message the lost step may have acted on is not run again: that would replay it);
+ * - every other task becomes `failed` (`unknown_retired`, its parent hears of it, as after a committed failure), so a parent's
+ *   stop can finish and the active-task limit is not held forever. Every FCA task only calls models (`effect_class` none); a
+ *   task that acted outside would close as `outcome_unknown_closed` by the same rule.
  */
 export class TaskRuntimeRecovery {
   constructor(private readonly db: DatabaseSync, private readonly parts: TaskRecoveryParts) {}
@@ -61,15 +64,15 @@ export class TaskRuntimeRecovery {
     return typeof row?.at === 'string' ? row.at : task.updatedAt;
   }
 
-  /** Every task unknown since `cutoff` or earlier (and without a pending receipt) leaves `fca_unknown`. */
-  retireUnknown(scopeKey: string, cutoff: string): TaskView[] {
+  /** Every task (without a pending receipt) whose unknown reached its exit at `at` leaves `fca_unknown`. */
+  retireUnknown(scopeKey: string, at: string): TaskView[] {
     const receipted = new Set(this.parts.pendingReceipts(scopeKey).map(receipt => receipt.taskId));
     const retired: TaskView[] = [];
     for (const task of this.parts.all(scopeKey)) {
       if (task.pauseReason !== 'fca_unknown' || terminal(task) || receipted.has(task.id)) continue;
-      const since = this.unknownSince(scopeKey, task.id);
-      if (since === null || since > cutoff) continue;
-      this.retire(task, 'fca_unknown_expired');
+      if (!unknownDue(this.unknownSince(scopeKey, task.id), at)) continue;
+      const kind = deriveTaskKind(task.kind);
+      this.retire(task, unknownExit(kind ? effectClassOf(kind) : 'none', kind).code);
       retired.push(this.parts.get(scopeKey, task.id)!);
     }
     return retired;

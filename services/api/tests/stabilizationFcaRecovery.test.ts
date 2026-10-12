@@ -165,7 +165,7 @@ describe('an unknown nightly sleep', () => {
     expect(analyzed).toEqual([['stuck night']]);
 
     f.advance(2 * MINUTE); await f.tick(); await f.tick();
-    expect(status(stuckJob)).toMatchObject({ status: 'failed', last_error: 'fca_unknown_expired' });
+    expect(status(stuckJob)).toMatchObject({ status: 'failed', last_error: 'fca_unknown_retired' });
     expect(f.driver.runtime.get('owner', stuck.id)?.phase).toBe('failed');
     // The next night ran; the stuck night's paid analysis was never repeated.
     expect(analyzed).toEqual([['stuck night'], ['next night']]);

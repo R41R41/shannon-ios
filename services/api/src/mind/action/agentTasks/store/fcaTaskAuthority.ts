@@ -3,16 +3,18 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskQuery, TaskRecord, TaskStatus } from '../../taskRuntime/taskRuntimePorts.js';
 import { underWriteLock } from '../../../../infra/sqlite/lockWaits.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { FCA_TASK_AUTHORITY_STEP, TASK_EXECUTION_COLUMNS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
-import { refreshTaskExecution } from './taskExecutionColumns.js';
+import { FCA_TASK_AUTHORITY_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { TASK_STORE_STEPS } from './taskExecutionColumns.js';
+import { refreshTaskState, writeTaskState } from './taskStore.js';
 
 /**
  * Additive FCA projection on the existing task authority (schema step 004). Creates no Agent Host commands. Every status change
- * is an event here, which also writes the task vocabulary's columns (step 008, `taskExecutionColumns.ts`).
+ * is an event here, and the state machine writes it (`taskStore.ts`, ADR-0009 stage 1 S4): the event's status and pause reason,
+ * with the checkpoint as the runtime left it, are the state asked for; a refused move throws and writes nothing.
  */
 export class SQLiteFcaTaskAuthority implements TaskAuthority {
   constructor(private readonly db: DatabaseSync) {
-    applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP, TASK_EXECUTION_COLUMNS_STEP]);
+    applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP, ...TASK_STORE_STEPS]);
   }
   transaction<T>(work: () => T): T {
     return underWriteLock(this.db, null, '', work, 'fca_task_authority');
@@ -48,14 +50,18 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     const current = this.get(scopeKey, id);
     if (!current) throw new Error('FCA_TASK_NOT_FOUND');
     const revision = current.revision + 1;
-    this.db.prepare(`UPDATE agent_tasks SET status=?,pause_reason=?,summary=?,latest_sequence=?,updated_at=? WHERE scope_key=? AND task_id=?`)
-      .run(change.status ?? current.status, change.pauseReason === undefined ? current.pauseReason : change.pauseReason,
-        change.summary ?? current.summary, revision, at, scopeKey, id);
+    const pauseReason = change.pauseReason === undefined ? current.pauseReason : change.pauseReason;
+    writeTaskState(this.db, id, { status: change.status ?? current.status, pauseReason }, at);
+    this.db.prepare(`UPDATE agent_tasks SET summary=?,latest_sequence=?,updated_at=? WHERE scope_key=? AND task_id=?`)
+      .run(change.summary ?? current.summary, revision, at, scopeKey, id);
     this.db.prepare(`INSERT INTO agent_task_events(event_id,task_id,sequence,event_type,title,tone,occurred_at,payload_json)
       VALUES(?,?,?,?,?,'neutral',?,?)`).run(randomUUID(), id, revision, type, type, at,
         JSON.stringify({ ...payload, taskId: id, parentId: current.parentId, revision }));
-    refreshTaskExecution(this.db, id, at);
     return this.get(scopeKey, id)!;
+  }
+  /** The checkpoint changed without a status change (a new task's inbox): the machine writes the state it now means. */
+  refresh(id: string, at: string): void {
+    refreshTaskState(this.db, id, at);
   }
 }
 function record(row: Record<string, unknown>): TaskRecord {

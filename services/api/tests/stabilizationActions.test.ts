@@ -44,7 +44,7 @@ describe('unknown actions are released after the deadline, never replayed', () =
 
     c.advance(MINUTE);
     expect(s.actions.transaction(() => s.actions.sweep(c.now()))).toBe(1);
-    expect(s.actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_expired', resources: [resource] });
+    expect(s.actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'outcome_unknown_closed', resources: [resource] });
     expect(s.actions.claim(next.id, 'runner', c.now())).toMatchObject({ state: 'running' });
     expect(s.actions.resume('owner', lease.id, c.now())).toBe(false);
     // A late canonical acknowledgement still closes the original attempt.
@@ -64,7 +64,7 @@ describe('unknown actions are released after the deadline, never replayed', () =
     actions.transaction(() => actions.sweep(c.now()));
     c.advance(ACTION_LIMITS.unknownReleaseMs);
     expect(actions.transaction(() => actions.sweep(c.now()))).toBe(1);
-    expect(actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_expired' });
+    expect(actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'outcome_unknown_closed' });
     expect([...actions.get(lease.id)!.resources].sort()).toEqual([base, body].sort());
     const claimable = (source: string, resources: string[]) => {
       const next = actions.enqueue({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: source, resources }, c.now());

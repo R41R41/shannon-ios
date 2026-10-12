@@ -215,8 +215,9 @@ export const SLOT_LIMITS_TODAY: SlotLimits = Object.freeze({
 });
 
 /**
- * The owner's limits of 2026-10-12 (ADR-0009 stage 1 plan, §6 answer 1), not in force: three background slots in all; creative
- * 1, research 2, Minecraft 1, Codex 1, sleep 1; the touch reflex in a pool of its own with one. S6 writes them as data.
+ * The owner's limits of 2026-10-12 (ADR-0009 stage 1 plan, §6 answer 1), in force since S6 (schema step 011 writes them as
+ * data): three background slots in all; creative 1, research 2, Minecraft 1, Codex 1, sleep 1, other 1; the touch reflex in a
+ * pool of its own with one; one foreground slot.
  */
 export const SLOT_LIMITS_OWNER_2026_10_12: SlotLimits = Object.freeze({
   pools: Object.freeze({ foreground: 1, background: 3, touch: 1 }),
@@ -240,4 +241,20 @@ export function slotLimitProblems(limits: SlotLimits): string[] {
     else if (!Number.isSafeInteger(limit.maxLive) || limit.maxLive < 1 || limit.maxLive > poolMax) problems.push(`class ${slotClass}: ${limit.maxLive}`);
   }
   return problems;
+}
+
+/** The slot tables' rows as limits, or null when they are incomplete or wrong (`slotLimitProblems`). */
+export function slotLimitsOf(
+  pools: ReadonlyArray<{ readonly pool: unknown; readonly max_live: unknown }>,
+  classes: ReadonlyArray<{ readonly slot_class: unknown; readonly pool: unknown; readonly max_live: unknown }>,
+): SlotLimits | null {
+  const poolLimits: Record<string, number> = {};
+  for (const row of pools) poolLimits[String(row.pool)] = Number(row.max_live);
+  const classLimits: Partial<Record<SlotClass, { pool: string; maxLive: number }>> = {};
+  for (const row of classes) {
+    const slotClass = String(row.slot_class) as SlotClass;
+    if (SLOT_CLASSES.includes(slotClass)) classLimits[slotClass] = { pool: String(row.pool), maxLive: Number(row.max_live) };
+  }
+  const limits = { pools: poolLimits, classes: classLimits as SlotLimits['classes'] };
+  return slotLimitProblems(limits).length ? null : limits;
 }

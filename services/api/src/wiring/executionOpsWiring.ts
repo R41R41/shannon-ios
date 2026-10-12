@@ -8,6 +8,7 @@ import { readActionExecutionCounts, type ActionExecutionCounts } from '../mind/a
 import { countTasksUnknownSince } from '../mind/action/taskRuntime/store/taskUnknownMetrics.js';
 import { countTaskProjection } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
 import { countActionProjection } from '../mind/action/threads/store/actionSlotColumns.js';
+import { taskTransitionRefusals } from '../mind/action/agentTasks/store/taskStore.js';
 
 /** An unknown older than this counts as a backlog (ADR-0009 stage 1, acceptance §4). */
 export const EXECUTION_UNKNOWN_BACKLOG_MS = 10 * 60_000;
@@ -33,6 +34,10 @@ export interface ExecutionView {
   projectionMismatches: number;
   /** S3: task and action rows still missing a derived column (expected 0 once the start's backfill finished). */
   projectionNulls: number;
+  /** S4: task rows whose stored state or wait reason is not what their old columns and checkpoint say (expected 0; -1 unread). */
+  stateMismatches: number;
+  /** S4: task transitions the state machine refused in this API process, by `<reason>:<kind>:<from>><to>` (expected none). */
+  transitionRefusals: { since: string | null; byReason: Readonly<Record<string, number>> };
 }
 
 export interface ExecutionMonitorOptions {
@@ -83,6 +88,8 @@ export function executionDailyLine(view: ExecutionView, cacheDay: string): strin
     `rejections=${pairs(view.modelRequestRejections)}`,
     `projectionMismatches=${view.projectionMismatches}`,
     `projectionNulls=${view.projectionNulls}`,
+    `stateMismatches=${view.stateMismatches}`,
+    `transitionRefusals=${pairs(view.transitionRefusals.byReason)}`,
   ].join(' ');
 }
 
@@ -117,14 +124,14 @@ export function startExecutionMonitor(options: ExecutionMonitorOptions) {
     }
   }
 
-  function projection(): { mismatches: number; nulls: number } {
+  function projection(): { mismatches: number; nulls: number; stateMismatches: number } {
     try {
       const tasks = countTaskProjection(db);
       const actions = countActionProjection(db);
-      return { mismatches: tasks.mismatches + actions.mismatches, nulls: tasks.nulls + actions.nulls };
+      return { mismatches: tasks.mismatches + actions.mismatches, nulls: tasks.nulls + actions.nulls, stateMismatches: tasks.stateMismatches };
     } catch {
       // Unreadable is not "none": -1 tells the reader the check did not run.
-      return { mismatches: -1, nulls: -1 };
+      return { mismatches: -1, nulls: -1, stateMismatches: -1 };
     }
   }
 
@@ -147,6 +154,8 @@ export function startExecutionMonitor(options: ExecutionMonitorOptions) {
       modelRequestRejections: rejectionCounts(),
       projectionMismatches: projected.mismatches,
       projectionNulls: projected.nulls,
+      stateMismatches: projected.stateMismatches,
+      transitionRefusals: taskTransitionRefusals(),
     };
   }
 

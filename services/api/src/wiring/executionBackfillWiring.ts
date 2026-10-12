@@ -7,10 +7,11 @@ import { applyTaskExecutionStep, backfillTaskExecutionBatch } from '../mind/acti
 import { applyActionSlotStep, backfillActionSlotBatch } from '../mind/action/threads/store/actionSlotColumns.js';
 
 /**
- * The S3 backfill (Syzygy ADR-0009 stage 1): at each start of the API, the execution columns of `agent_tasks` (step 008) and of
- * the action threads (step 009) are derived again from the old columns, so a row an older build wrote (after a rollback) is
- * filled too. Batches of 500 rows, each under its own short write lock, with the event loop free between them; a busy batch
- * waits and is tried again. A row already right is not written: the second run changes nothing.
+ * The start's re-derivation (Syzygy ADR-0009 stage 1, S3 and S4): at each start of the API, the task rows another writer touched
+ * after the state machine (an older build during a rollback window: `updated_at` later than `exec_state_at`) and the action rows
+ * missing a column are derived again from their old columns. Batches of 500 rows, each under its own short write lock, with the
+ * event loop free between them; a busy batch waits (on an unref'd timer) and is tried again until the API closes. A row already
+ * right is not written: the second run changes nothing.
  */
 export const EXECUTION_BACKFILL_BATCH = 500;
 
@@ -30,32 +31,41 @@ export interface ExecutionBackfillOptions {
 
 type Batch = (db: DatabaseSync, after: number, limit: number) => { next: number | null; changed: number };
 
-/** Applies steps 008 and 009 where their tables exist (outside any transaction; the ledger makes it once). */
+/** Applies steps 008, 010 and 009, 011 where their tables exist (outside any transaction; the ledger makes it once). */
 export function applyExecutionColumnSteps(db: DatabaseSync): void {
   applyTaskExecutionStep(db);
   applyActionSlotStep(db);
 }
 
-async function lockedBatch(db: DatabaseSync, batch: Batch, after: number, options: Required<Omit<ExecutionBackfillOptions, 'stopped'>>) {
+type Settings = Required<Omit<ExecutionBackfillOptions, 'stopped'>> & Pick<ExecutionBackfillOptions, 'stopped'>;
+
+/** Waits without holding the process open: a closing API is never kept alive by the backfill (S3 review L1). */
+const pause = (ms: number) => delay(ms, undefined, { ref: false });
+
+/** One batch under its own write lock; a busy database waits and tries again, unless the API is closing (null). */
+async function lockedBatch(db: DatabaseSync, batch: Batch, after: number, options: Settings) {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return underWriteLock(db, null, '', () => batch(db, after, options.batch), 'shannon_execution_backfill');
     } catch (error) {
       if (!isSqliteBusy(error) || attempt >= options.busyRetries) throw error;
-      await delay(options.busyRetryMs);
+      await pause(options.busyRetryMs);
+      if (options.stopped?.()) return null;
     }
   }
 }
 
 async function backfillTable(db: DatabaseSync, batch: Batch, options: ExecutionBackfillOptions, result: { changed: number; batches: number }) {
-  const settings = { batch: options.batch ?? EXECUTION_BACKFILL_BATCH, busyRetryMs: options.busyRetryMs ?? 1_000, busyRetries: options.busyRetries ?? 30 };
+  const settings: Settings = { batch: options.batch ?? EXECUTION_BACKFILL_BATCH, busyRetryMs: options.busyRetryMs ?? 1_000,
+    busyRetries: options.busyRetries ?? 30, stopped: options.stopped };
   let after: number | null = 0;
   while (after !== null && !options.stopped?.()) {
-    const done: { next: number | null; changed: number } = await lockedBatch(db, batch, after, settings);
+    const done: { next: number | null; changed: number } | null = await lockedBatch(db, batch, after, settings);
+    if (!done) return;
     result.changed += done.changed;
     result.batches += 1;
     after = done.next;
-    await delay(0);
+    await pause(0);
   }
 }
 

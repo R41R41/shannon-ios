@@ -26,9 +26,10 @@ import { projectHostEvent } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
 import { fcaHostPredicate } from './fcaHostPredicate.js';
 import { TaskTreeStore } from './taskTreeStore.js';
-import { refreshTaskExecution } from './taskExecutionColumns.js';
+import { TASK_STORE_STEPS } from './taskExecutionColumns.js';
+import { writeTaskState } from './taskStore.js';
+import { closeUnknownHostTasks, type ClosedUnknownHostTasks } from './agentTaskUnknownExit.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { TASK_EXECUTION_COLUMNS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import { withAgentTaskRequest } from './agentTaskRequestWindow.js';
 import { taskTreeAuthority } from '@shannon/mind';
 import type { ActionLease } from '../../../../contracts/actionThreadContract.js';
@@ -71,7 +72,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     this.database = openDatabase(path, 'agentTasks');
     this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
     migrateAgentTasks(this.database);
-    applySchemaSteps(this.database, [TASK_EXECUTION_COLUMNS_STEP]);
+    applySchemaSteps(this.database, TASK_STORE_STEPS);
     if (options.taskTreeEnabled) {
       this.taskTrees = new TaskTreeStore(this.database, options.taskTreeCallbacks);
       const rows = this.database.prepare(`SELECT * FROM agent_tasks WHERE ${fcaHostPredicate(this.database)}`).all() as unknown as AgentTaskRow[];
@@ -110,6 +111,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         JSON.stringify(input.plan ?? []), now, now, input.hostHint?.trim() || null,
         input.projectHint?.trim() || null, input.model?.trim() || null, input.reasoningEffort ?? null,
       );
+      writeTaskState(this.database, taskId, { status: 'queued', pauseReason: null }, now);
       this.appendEvent(taskId, 'queued', '作業を受け付けた', input.summary, 'neutral', now, {});
       this.insertCommand(taskId, scopeKey, `${input.idempotencyKey}:start`, 'start', {
         goal: input.goal,
@@ -190,17 +192,19 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         && projection.status !== 'cancelled';
       commandId = this.insertCommand(taskId, scopeKey, input.idempotencyKey, input.type,
         { ...(input.payload ?? {}), ...(denyContinues ? { denyContinues: true } : {}) }, now);
+      const currentAction = projection.currentAction ?? task.currentAction ?? null;
+      // The state machine writes the status with its pause reason (ADR-0009 stage 1, S4); the rest of the row follows.
+      writeTaskState(this.database, taskId, { status: projection.status, pauseReason: projection.status === 'paused' ? 'owner' : null,
+        currentAction }, now);
       this.database.prepare(`
         UPDATE agent_tasks
-        SET status = ?, summary = ?, current_action = ?, pending_approval_json = ?,
-          pause_reason = ?, pause_sequence = NULL, updated_at = ?
+        SET summary = ?, current_action = ?, pending_approval_json = ?, pause_sequence = NULL, updated_at = ?
         WHERE task_id = ? AND scope_key = ?
       `).run(
-        projection.status,
         projection.summary ?? task.summary,
-        projection.currentAction ?? task.currentAction ?? null,
+        currentAction,
         projection.clearApproval ? null : task.pendingApproval ? JSON.stringify(task.pendingApproval) : null,
-        projection.status === 'paused' ? 'owner' : null, now, taskId, scopeKey,
+        now, taskId, scopeKey,
       );
       if (input.type === 'interrupt') this.queue.withdrawTurns(taskId, input.payload ?? {}, now);
       if (settledByStore) this.queue.settle(commandId, now);
@@ -337,6 +341,13 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   getWorkspaceResource(scopeKey: string, requestId: string) { return new AgentWorkspaceResourcePersistence(this.database).get(scopeKey, requestId); }
   claimWorkspaceResource(hostId: string, now: string) { return new AgentWorkspaceResourcePersistence(this.database).claim(hostId, now); }
   recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent) { return new AgentWorkspaceResourcePersistence(this.database).record(hostId, event); }
+  /** The one unknown exit of an Agent Host task (ADR-0009 stage 1, S5; `agentTaskUnknownExit.ts`). Returns how many closed. */
+  closeUnknownOutcomes(now: string, closedUnknown: ClosedUnknownHostTasks): number {
+    let closed = 0;
+    this.transaction(() => { closed = closeUnknownHostTasks(this.database, now, closedUnknown, (...event) => this.appendEvent(...event)); });
+    return closed;
+  }
+
   close(): void {
     if (!this.database.isOpen) return;
     checkpointPassive(this.database);
@@ -465,8 +476,6 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     `).run(eventId, taskId, sequence, type, title, detail ?? null, tone, occurredAt, JSON.stringify(payload));
     this.database.prepare(`UPDATE agent_tasks SET latest_sequence = ?, updated_at = ? WHERE task_id = ?`)
       .run(sequence, occurredAt, taskId);
-    // Every status change of an Agent Host task is followed by its event: the task vocabulary's columns are written here.
-    refreshTaskExecution(this.database, taskId, occurredAt);
   }
 
   private transaction(operation: () => void): void {

@@ -2,8 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { TaskRuntime, TaskSleepTicket, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { SleepFcaJob } from '../mind/sleep/sleepFcaPorts.js';
 import { underWriteLock } from '../infra/sqlite/lockWaits.js';
-import { ACTION_LIMITS } from '@shannon/mind';
 import { parseBackgroundJobPayload } from '../infra/sqlite/sqliteStoreCodecs.js';
+import { failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
 
 /** The old nightly schedule is the authority. The binding never grants owner task privileges. */
 export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = () => new Date().toISOString()) {
@@ -33,12 +33,11 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
         if (!task || !job(runtime, task)) continue;
         const at = now();
         const pending = runtime.pendingReceipts(ownerScope).some(receipt => receipt.taskId === task.id);
-        // A night whose outcome stayed unknown past the deadline is closed as failed, never re-run, so the next night is admitted.
-        const since = task.phase === 'unknown' ? runtime.unknownSince?.(ownerScope, task.id) ?? null : null;
-        const expired = since !== null && Date.parse(since) + ACTION_LIMITS.unknownReleaseMs <= Date.parse(at);
-        if ((['completed', 'failed', 'stopped'].includes(task.phase) && !pending) || expired) {
+        // A night whose outcome stayed unknown leaves by the one unknown exit (ADR-0009 stage 1, S5): the runtime retires the
+        // task as failed, and the job closes with it, never re-run, so the next night is admitted.
+        if (['completed', 'failed', 'stopped'].includes(task.phase) && !pending) {
           const status = task.phase === 'completed' ? 'completed' : 'failed';
-          const error = status === 'completed' ? null : expired ? 'fca_unknown_expired' : `fca_${task.phase}`;
+          const error = status === 'completed' ? null : failedWithUnknownOutcome(db, task.id) ? 'fca_unknown_retired' : `fca_${task.phase}`;
           db.prepare("UPDATE background_jobs SET status=?,completed_at=?,lease_owner=NULL,lease_until=NULL,last_error=? WHERE job_id=? AND scope_key=? AND status='leased' AND lease_owner=?")
             .run(status, at, error, String(row.job_id), ownerScope, owner(task.id));
           const report = db.prepare('SELECT summary_json FROM sleep_runs WHERE sleep_run_id=? AND scope_key=?').get(String(row.job_id), ownerScope);

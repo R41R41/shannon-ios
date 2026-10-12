@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, LEASE_RULES, leaseLive, validActionDraft,
-  type ActionDraft, type ActionLease, type ActionView,
+  ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, LEASE_RULES, actionEffectClass, instantAfter, leaseLive, slotAdmissible,
+  unknownDue, unknownExit, validActionDraft, type ActionDraft, type ActionLease, type ActionView,
 } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 import {
@@ -10,8 +10,10 @@ import {
 } from './retainedResourceStore.js';
 import { actionView as view } from './actionLeaseReader.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { ACTION_SLOTS_STEP, ACTION_THREADS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
-import { actionSlotColumns } from './actionSlotColumns.js';
+import { ACTION_THREADS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import {
+  ACTION_SLOT_STEPS, actionSlotColumns, actionTaskLink, liveSlotClasses, readSlotLimits, slotClassOfRow,
+} from './actionSlotColumns.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 /**
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
@@ -27,7 +29,7 @@ export class SQLiteActionStore {
   constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
     private readonly retainedAfterRelease:ActionResourceRetained=()=>false,
     private readonly retainedReleaseProof:ActionRetainedReleaseProof=()=>false) {
-    applySchemaSteps(db,[ACTION_THREADS_STEP,ACTION_SLOTS_STEP]);
+    applySchemaSteps(db,[ACTION_THREADS_STEP,...ACTION_SLOT_STEPS]);
   }
   /** Claims refused since this process started, by closed reason (ADR-0009 stage 1: `GET /v1/ops`). */
   claimRefusals():Readonly<Record<string,number>> {
@@ -142,11 +144,10 @@ export class SQLiteActionStore {
     const action = this.get(id);
     if (!action || action.state !== 'queued') return this.refused('not_queued');
     if (action.failures >= ACTION_LIMITS.consecutiveFailures) return this.refused('failures');
-    const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state)
-      || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
-    const foreground = action.kind === 'respond';
-    const slots = live.filter(item => (item.kind === 'respond') === foreground).length;
-    if (slots >= (foreground ? 1 : 2)) return this.refused(foreground ? 'foreground_slot' : 'background_slot');
+    // ADR-0009 stage 1, S6: the slot class of the action against its pool and class limits, as the slot tables hold them.
+    const slotClass = slotClassOfRow(this.db, this.db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id)!);
+    const verdict = slotAdmissible(slotClass, liveSlotClasses(this.db, action.scopeKey), readSlotLimits(this.db));
+    if (!verdict.ok) return this.refused(verdict.reason);
     const others = this.list(action.scopeKey).filter(item => item.id!==action.id);
     if (others.some(item => this.heldResources(item).some(key => action.resources.includes(key)))) return this.refused('resource_held');
     const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
@@ -354,39 +355,48 @@ export class SQLiteActionStore {
       return true;
     });
   }
-  /** Returns how many long-unknown actions released their slot in this sweep. */
+  /** Returns how many unknown actions reached their exit in this sweep. Every time is compared as a parsed instant (S5). */
   sweep(at: string): number {
-    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state IN ('running','waiting','stopping') AND (lease_until<=? OR (deadline IS NOT NULL AND deadline<=?))").all(at,at)) {
+    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state IN ('running','waiting','stopping')").all()) {
       const action=view(row);
+      const leaseEnded=action.leaseUntil!==null&&!instantAfter(action.leaseUntil,at);
+      if(!leaseEnded&&!(action.deadline&&!instantAfter(action.deadline,at)))continue;
       this.db.prepare("UPDATE mind_actions SET state=CASE WHEN sent=1 THEN 'unknown' ELSE 'cancelled' END,effect_sent=sent,result='lease_expired',holder=NULL,lease_until=NULL,generation=generation+1,updated_at=? WHERE id=?").run(at,action.id);
       this.db.prepare("UPDATE mind_action_budget SET state='held' WHERE action_id=? AND state='reserved'").run(action.id);
     }
-    this.db.prepare("UPDATE mind_actions SET state='cancelled',result='deadline',updated_at=? WHERE state='queued' AND deadline IS NOT NULL AND deadline<=?").run(at,at);
-    const released=this.releaseExpiredUnknown(at);
+    for(const row of this.db.prepare("SELECT id,deadline FROM mind_actions WHERE state='queued' AND deadline IS NOT NULL AND deadline<>''").all()){
+      if(instantAfter(String(row.deadline),at))continue;
+      this.db.prepare("UPDATE mind_actions SET state='cancelled',result='deadline',updated_at=? WHERE id=?").run(at,String(row.id));
+    }
+    const exited=this.exitUnknown(at);
     this.settleRetained(at);
-    return released;
+    return exited;
   }
   /**
-   * An unknown outcome is never replayed and never resumable; it already is a closed state. What kept the scheduler blocked
-   * was `sent=1`: a live background slot and every resource of the attempt. After `unknownReleaseMs` `sent` is cleared, so
-   * the slot and the base resources are free again. A retained resource (`retainedResources.ts`: an Agent Host lock with its
-   * folder lock, the Minecraft body, base or added) stays excluded until a release proof; other added locks (study, folders
-   * alone) have no such proof and would otherwise block their domain forever, so they are released with the slot. The result becomes
-   * `unknown_expired`, which also gives the owner one fresh notice. Held budget stays held, and a late canonical
-   * acknowledgement or reconcile can still close the original attempt.
+   * The one unknown exit of an action (ADR-0009 stage 1, S5; `unknownExit`). An unknown outcome is never replayed and never
+   * resumable; what kept the scheduler blocked was `sent=1`: a live slot and every resource of the attempt. After
+   * `UNKNOWN_EXIT_MS` the slot is freed (`sent` cleared, `effect_sent` kept) and the result says how it left: the step of a
+   * model-only task is retired (`unknown_retired`), anything that may act outside is closed (`outcome_unknown_closed`). A
+   * retained resource (`retainedResources.ts`: an Agent Host lock with its folder lock, the Minecraft body, base or added) stays
+   * excluded until a release proof or the owner's release; other added locks (study, folders alone) have no such proof and are
+   * released with the slot. The state stays `unknown`, a closed state: held budget stays held, and a late canonical
+   * acknowledgement or reconcile can still close the original attempt (and so prove a retained release).
    */
-  private releaseExpiredUnknown(at:string):number {
-    const cutoff=new Date(Date.parse(at)-ACTION_LIMITS.unknownReleaseMs).toISOString();
-    const rows=this.db.prepare("SELECT id,resources_json,base_resources_json FROM mind_actions WHERE state='unknown' AND sent=1 AND updated_at<=?").all(cutoff);
-    for(const row of rows){
+  private exitUnknown(at:string):number {
+    let exited=0;
+    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND sent=1").all()){
+      if(!unknownDue(String(row.updated_at),at))continue;
+      const action=view(row);
+      const link=actionTaskLink(this.db,action);
+      const exit=unknownExit(actionEffectClass(link.taskKind),link.taskKind);
       const base=JSON.parse(String(row.base_resources_json)) as string[];
-      const resources=JSON.parse(String(row.resources_json)) as string[];
-      const kept=resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,resources));
-      this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=1,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
+      const kept=action.resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,action.resources));
+      this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=1,resources_json=?,result=?,updated_at=? WHERE id=?").run(JSON.stringify(kept),exit.code,at,action.id);
       // The retained keys are recorded now: only a recorded key keeps excluding others (retainedResourceStore.ts).
-      recordRetained(this.db,String(row.id),kept.filter(key=>this.retainedAfterRelease(key,resources)),at);
+      recordRetained(this.db,action.id,kept.filter(key=>this.retainedAfterRelease(key,action.resources)),at);
+      exited+=1;
     }
-    return rows.length;
+    return exited;
   }
   /** What an action excludes others from: everything while live or sent-unknown; after release, unproven additions and recorded keys. */
   private heldResources(action:ActionView):readonly string[] {
