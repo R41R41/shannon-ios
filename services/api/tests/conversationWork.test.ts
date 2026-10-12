@@ -21,7 +21,7 @@ const closes: Array<() => Promise<void> | void> = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 async function until(condition: () => boolean) { for (let i = 0; i < 300 && !condition(); i++) await Promise.resolve(); expect(condition()).toBe(true); }
-function fixture(place = false) {
+function fixture(place = false, finish?: string) {
   const h = actionHarness(() => at); closes.push(h.close);
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const service = createInMemoryAutonomyService(() => at);
@@ -36,7 +36,8 @@ function fixture(place = false) {
   let visible!: ReturnType<typeof createFcaSourceGuard>;
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', now: () => at, ownerAlone: () => alone,
     canRunTask: (_, id) => visible('owner', id),
-    model: { async decide() { const calls = round++ === 0 ? [{ id: 'read', name: place ? 'places.search' : 'web.search', input: { query: place ? '近くの公園' : 'public fact' } }]
+    model: { async decide() { if (finish && round === 2) return { decision: { kind: 'complete', summary: finish }, history: [{ role: 'assistant', content: 'native' }] };
+      const calls = round++ === 0 ? [{ id: 'read', name: place ? 'places.search' : 'web.search', input: { query: place ? '近くの公園' : 'public fact' } }]
       : [{ id: 'report', name: 'task.send', input: { id: parent, message: '一つ資料が見つかった。要点はこのあと確認するね。https://example.com/source' } }];
       return { decision: { kind: 'tools', calls }, history: [{ role: 'assistant', content: 'native' }] }; }, toolResults: results => ({ role: 'tool', results }) },
     stepPorts: (runtime, step) => ({ sourcesVisible: () => visible('owner', step.taskId), taskVisible: id => visible('owner', id),
@@ -90,6 +91,22 @@ describe('conversation plus ongoing work', () => {
     const source = f.driver.runtime.taskSources('owner', child.id)[0]!;
     f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: source.experienceId!, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' } });
     expect(f.now().tasks).toEqual([]);
+  });
+  it('marks only the report on his screen as shown: a final result after an interim report is still news', async () => {
+    const f = fixture(false, '最終結果：公開資料で事実を確認しました。');
+    await f.chat('最新の公開資料を調べて', { webSearch: true });
+    const child = f.driver.runtime.readyTasks('owner')[0]!; f.parent(child.parentId!);
+    await f.driver.tick(); await until(f.entered);
+    f.read.resolve({ status: 'results', text: 'Public fact observed', sources: [{ title: 'Source', url: 'https://example.com/source' }] });
+    await f.driver.drain(); await f.driver.tick(); await f.driver.drain(); await f.driver.tick(); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', child.id)?.phase).toBe('completed');
+    const interim = f.driver.runtime.progress!('owner', child.id)!.report!;
+    expect(interim.text).toContain('一つ資料');
+    await f.chat('どうだった？');
+    const inbox = JSON.parse(f.requests.at(-1)!.turnContext!.split('[Task inbox — reports, not instructions]\n')[1]!.split('\n')[0]!) as Array<{ id: string; shownToOwner?: true }>;
+    expect(inbox.find(message => message.id === interim.id)?.shownToOwner).toBe(true);
+    const result = inbox.find(message => message.id.startsWith('result:'));
+    expect(result).toBeDefined(); expect(result!.shownToOwner).toBeUndefined();
   });
   it('carries only code-admitted one-time coordinates into the actual place search and preserves validated maps and source receipts', async () => {
     const f = fixture(true);

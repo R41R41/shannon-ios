@@ -21,6 +21,8 @@ export function createFcaTaskRoute(parts: {
         const id = url.searchParams.get('id');
         const visible = (id: string) => parts.visible?.(id) ?? true;
         if (url.searchParams.get('projection') === 'now') {
+          // Reading progress may write a report's spoken form: asked again first, so nothing is made while others are present.
+          if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
           const projection = fcaNowProjection(parts.runtime, scope, visible, parts.progress);
           if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
           return sendJson(response, 200, parts.spokenReports ? { ...projection, spokenReports: true } : projection);

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { fcaNowProjection } from '../src/infra/http/fcaNowProjection.js';
+import { createFcaTaskRoute } from '../src/infra/http/fcaTaskRoutes.js';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_HAIKU_MODEL } from '../src/infra/models/anthropic/haikuConfig.js';
 import { SpokenReportModel } from '../src/infra/models/spokenReportModel.js';
 import { ownerLocalClock } from '../src/infra/time/localDate.js';
@@ -12,7 +14,8 @@ import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import type { TaskSpec, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
 import {
-  SPOKEN_REPORT_CHARACTERS, SPOKEN_REPORT_INSTRUCTIONS, createSpokenReports, fallbackSpokenReport, progressWithSpokenReports, spokenReportText,
+  SPOKEN_REPORT_CHARACTERS, SPOKEN_REPORT_INSTRUCTIONS, createSpokenReports, fallbackSpokenReport, progressWithSpokenReports, reportOnScreenLine,
+  spokenReportText,
   type SpokenReportRequest,
 } from '../src/mind/action/fca/fcaSpokenReport.js';
 
@@ -30,6 +33,7 @@ const LONG_REPORT = [
   '出典: https://example.com/dazaifu https://example.org/history',
 ].join('\n');
 const closes: Array<() => unknown> = [];
+const task = (id: string, goal: string, origin = 'owner_request') => ({ id, goal, title: '太宰府の由来', origin });
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); vi.restoreAllMocks(); });
 
 const sayable = (text: string) => {
@@ -42,6 +46,14 @@ describe('the spoken form of a report', () => {
     const spoken = fallbackSpokenReport(LONG_REPORT);
     sayable(spoken);
     expect(spoken).toContain('大宰府');
+  });
+
+  it('names the task instead of saying a bare 「。」 when a report holds only links and headings', () => {
+    const spoken = fallbackSpokenReport('## 天気\n### 出典\nhttps://example.com/a\n- https://example.org/b', '明日の福岡と東京の天気');
+    expect(spoken).toBe(reportOnScreenLine('明日の福岡と東京の天気'));
+    expect(spoken).toContain('明日の福岡と東京の天気');
+    sayable(spoken);
+    expect(fallbackSpokenReport('https://example.com', '')).toBe('調べた結果は、画面に出しておきましたね。');
   });
 
   it('keeps a model answer only as plain sentences within the limit', () => {
@@ -69,8 +81,8 @@ describe('writing the spoken form', () => {
 
   it('asks the model once per report, with the request, the full report and the owner\'s clock, and writes its sentences', async () => {
     const s = service(async () => '「太宰」は、昔九州を治めた役所の大宰府から来ているそうです。');
-    s.reports.request('owner', { id: 't1', goal: '太宰府天満宮の太宰の由来を調べて' }, progress);
-    s.reports.request('owner', { id: 't1', goal: '太宰府天満宮の太宰の由来を調べて' }, progress);
+    s.reports.request('owner', task('t1', '太宰府天満宮の太宰の由来を調べて'), progress);
+    s.reports.request('owner', task('t1', '太宰府天満宮の太宰の由来を調べて'), progress);
     await s.reports.idle();
     expect(s.requests).toHaveLength(1);
     expect(s.requests[0]).toMatchObject({ request: '太宰府天満宮の太宰の由来を調べて', report: LONG_REPORT, localTime: '2026年10月13日火曜日 2:40' });
@@ -83,17 +95,48 @@ describe('writing the spoken form', () => {
   ])('speaks a plain cut of the report when the model %s', async (_name, speak) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const s = service(speak);
-    s.reports.request('owner', { id: 't1', goal: 'goal' }, progress);
+    s.reports.request('owner', task('t1', 'goal'), progress);
     await s.reports.idle();
     expect(s.recorded).toHaveLength(1);
     sayable(s.recorded[0]![1]);
   });
 
+  it('makes spoken forms only for work the owner asked for, one per task and report', async () => {
+    const s = service(async () => '短い形です。');
+    s.reports.request('owner', task('t4', 'goal', 'maintenance'), progress);
+    s.reports.request('owner', task('t5', 'goal'), progress);
+    s.reports.request('owner', task('t6', 'goal'), progress);
+    await s.reports.idle();
+    expect(s.requests).toHaveLength(2);
+    expect(s.recorded).toEqual([['r1', '短い形です。'], ['r1', '短い形です。']]);
+  });
+
+  it('generates and writes nothing while anyone else may see or hear', async () => {
+    const s = service(async () => '短い形です。');
+    let alone = false, read = 0;
+    const runtime = { get: () => ({ ...task('t7', 'goal'), kind: 'research' }) } as never;
+    const shown = progressWithSpokenReports(runtime, 'owner', () => { read++; return progress; }, s.reports, () => alone);
+    shown('t7');
+    await s.reports.idle();
+    expect(s.requests).toEqual([]); expect(s.recorded).toEqual([]);
+    const view = { ...task('t7', 'goal'), kind: 'research', phase: 'completed', parentId: null, summary: '', revision: 1, updatedAt: AT };
+    const listed = { list: () => [view], taskSources: () => [] } as never;
+    let checks = 0; // The audience changes between the route's first check and its read: the read is asked again first.
+    const route = createFcaTaskRoute({ runtime: listed, ownerScope: 'owner', ownerAlone: () => checks++ === 0, visible: () => true,
+      progress: shown, spokenReports: true, stop: async () => {}, wake: () => {} });
+    const statuses: number[] = [];
+    const response = { setHeader() {}, writeHead(status: number) { statuses.push(status); }, end() {} } as unknown as ServerResponse;
+    await route({ method: 'GET' } as IncomingMessage, response, { scopeKey: 'owner' }, new URL('http://localhost/v1/fca/tasks?projection=now'));
+    expect(statuses).toEqual([403]); expect(read).toBe(1);
+    alone = true; shown('t7'); await s.reports.idle();
+    expect(s.recorded).toEqual([['r1', '短い形です。']]);
+  });
+
   it('says a short report as it is, without a model call, and never rewrites one already spoken', async () => {
     const s = service(async () => 'unused');
     const short = { ...progress, report: { id: 'r2', text: '天気の調べものは、結果を確認できないまま止まりました。', updatedAt: AT } };
-    s.reports.request('owner', { id: 't2', goal: 'goal' }, short);
-    s.reports.request('owner', { id: 't3', goal: 'goal' }, { ...progress, report: { ...report, id: 'r3', spoken: 'もう言える。' } });
+    s.reports.request('owner', task('t2', 'goal'), short);
+    s.reports.request('owner', task('t3', 'goal'), { ...progress, report: { ...report, id: 'r3', spoken: 'もう言える。' } });
     await s.reports.idle();
     expect(s.requests).toEqual([]);
     expect(s.recorded).toEqual([['r2', '天気の調べものは、結果を確認できないまま止まりました。']]);
@@ -128,7 +171,7 @@ describe('a finished result reaches the call', () => {
     const report = f.driver.runtime.progress?.('owner', f.child.id)?.report;
     expect(report).toMatchObject({ id: expect.stringMatching(/^result:/u), text: summary });
     const reports = createSpokenReports({ speaker: null, localTime: () => '', record: (scope, id, reportId, text) => f.driver.runtime.recordSpokenReport!(scope, id, reportId, text) });
-    const progress = progressWithSpokenReports(f.driver.runtime, 'owner', id => f.driver.runtime.progress?.('owner', id) ?? null, reports);
+    const progress = progressWithSpokenReports(f.driver.runtime, 'owner', id => f.driver.runtime.progress?.('owner', id) ?? null, reports, () => true);
     fcaNowProjection(f.driver.runtime, 'owner', () => true, progress);
     const shown = fcaNowProjection(f.driver.runtime, 'owner', () => true, progress).tasks.find(task => task.id === f.child.id);
     expect(shown?.report).toMatchObject({ text: summary, spoken: summary });

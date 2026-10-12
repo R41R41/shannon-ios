@@ -62,11 +62,12 @@ export function createFcaConversationBridge(parts: {
         parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id)) ? turn : null;
     } catch { return null; }
   };
-  /** The sender's report on the owner's screen is this message (a `task.send`), or this is the result of work that reported. */
-  const shownToOwner = (scopeKey: string, message: { id: string; sourceTaskId: string }): boolean => {
-    const report = parts.runtime.progress?.(scopeKey, message.sourceTaskId)?.report;
-    return Boolean(report && (report.id === message.id || message.id.startsWith('result:')));
-  };
+  /**
+   * The sender's report on the owner's screen is exactly this message: a `task.send`, or a completion that became the report
+   * (`result:<step>`). A result after an earlier interim report is news and stays unmarked.
+   */
+  const shownToOwner = (scopeKey: string, message: { id: string; sourceTaskId: string }): boolean =>
+    parts.runtime.progress?.(scopeKey, message.sourceTaskId)?.report?.id === message.id;
   const observe = (scopeKey: string, sources: FcaObservedSources): boolean => {
     // A read that just returned still contributes provenance if the audience changed while it was awaiting its result.
     const leaseKey = key(), turn = leaseKey ? active.get(leaseKey) : undefined;

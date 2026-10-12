@@ -82,15 +82,25 @@ export function spokenReportText(raw: string): string | null {
   return spoken && spoken.length >= 4 ? spoken : null;
 }
 
-/** Without a model: the report's first sentences, plainly; a first sentence too long to say is cut at a comma. */
-export function fallbackSpokenReport(report: string): string {
+/** A report with nothing to say aloud (only links or headings): where to find it, in her words, naming what was asked. */
+export function reportOnScreenLine(title: string): string {
+  const named = [...title.replace(/\s+/gu, ' ').trim()].slice(0, 40).join('');
+  return named ? `「${named}」の結果は、画面に出しておきましたね。` : '調べた結果は、画面に出しておきましたね。';
+}
+
+/**
+ * Without a model: the report's first sentences, plainly; a first sentence too long to say is cut at a comma. A report with
+ * no sentence to say (only links or headings) is not read as a bare 「。」: it is named by the task's title instead.
+ */
+export function fallbackSpokenReport(report: string, title = ''): string {
   const parts = sentences(report);
   const whole = withinLimit(parts);
-  if (whole) return whole;
-  const first = parts[0] ?? speakableLine(report.replace(/\s+/gu, ' '));
+  if (whole && [...whole.replace(/[。！？!?\s]/gu, '')].length >= 2) return whole;
+  const first = parts.find(sentence => [...sentence.replace(/[。！？!?\s]/gu, '')].length >= 2);
+  if (!first) return reportOnScreenLine(title);
   const cut = [...first].slice(0, SPOKEN_REPORT_CHARACTERS - 1).join('');
   const comma = Math.max(cut.lastIndexOf('、'), cut.lastIndexOf('，'));
-  return `${comma > 20 ? cut.slice(0, comma) : cut}。`;
+  return `${comma > 20 ? cut.slice(0, comma) : cut.replace(/[。！？!?]+$/u, '')}。`;
 }
 
 /** A short report needs no model: it is already what would be said. */
@@ -99,6 +109,9 @@ function alreadyShort(report: string): string | null {
   return direct && !/https?:\/\//u.test(report) && !/\n\s*[-*・#]/u.test(`\n${report}`) && sentences(report).length <= 3
     && [...report.trim()].length <= SPOKEN_REPORT_CHARACTERS ? direct : null;
 }
+
+/** What of a task the spoken form needs. */
+type SpokenTask = { id: string; goal: string; title: string; origin: string };
 
 /**
  * Writes the spoken form of each report it is shown, once: a short report as it is, a longer one through the speaker (a
@@ -122,22 +135,24 @@ export function createSpokenReports(parts: {
       parts.record(scopeKey, taskId, reportId, spoken);
     } catch { /* A newer report or a closed store: nothing to say for this one. */ }
   };
-  const generate = async (scopeKey: string, taskId: string, goal: string, report: NonNullable<TaskProgress['report']>) => {
+  const generate = async (scopeKey: string, task: SpokenTask, report: NonNullable<TaskProgress['report']>) => {
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(parts.timeoutMs ?? SPOKEN_REPORT_TIMEOUT_MS)]);
     let spoken: string | null = null;
-    try { spoken = spokenReportText(await parts.speaker!.speak({ scopeKey, request: goal, report: report.text, localTime: parts.localTime(), signal })); }
+    try { spoken = spokenReportText(await parts.speaker!.speak({ scopeKey, request: task.goal, report: report.text, localTime: parts.localTime(), signal })); }
     catch { console.warn('Shannon spoken report fallback code=spoken_report_model_failed'); }
-    if (!controller.signal.aborted) write(scopeKey, taskId, report.id, spoken ?? fallbackSpokenReport(report.text));
+    if (!controller.signal.aborted) write(scopeKey, task.id, report.id, spoken ?? fallbackSpokenReport(report.text, task.title));
   };
   return {
     /** Called with what the owner may see now; returns at once. */
-    request(scopeKey: string, task: { id: string; goal: string }, progress: TaskProgress | null): void {
-      const report = progress?.report;
-      if (!report || report.spoken || !report.text.trim() || attempted.has(report.id) || controller.signal.aborted) return;
-      remember(report.id);
+    request(scopeKey: string, task: SpokenTask, progress: TaskProgress | null): void {
+      const report = progress?.report, key = `${task.id}:${report?.id}`;
+      // Only work the owner asked for: the call speaks no other report, so no other is worth a model call.
+      if (!report || task.origin !== 'owner_request' || report.spoken || !report.text.trim()) return;
+      if (attempted.has(key) || controller.signal.aborted) return;
+      remember(key);
       const short = alreadyShort(report.text);
-      if (short || !parts.speaker) return write(scopeKey, task.id, report.id, short ?? fallbackSpokenReport(report.text));
-      const work = generate(scopeKey, task.id, task.goal, report).finally(() => running.delete(work));
+      if (short || !parts.speaker) return write(scopeKey, task.id, report.id, short ?? fallbackSpokenReport(report.text, task.title));
+      const work = generate(scopeKey, task, report).finally(() => running.delete(work));
       running.add(work);
     },
     /** Resolves once every spoken form asked for so far is written. */
@@ -151,10 +166,11 @@ export function createSpokenReports(parts: {
 
 /** The owner's view of a task's progress, asking for the spoken form of a report it shows (the Now route's `progress`). */
 export function progressWithSpokenReports(runtime: Pick<TaskRuntime, 'get'>, scopeKey: string,
-  shown: (taskId: string) => TaskProgress | null, reports: Pick<ReturnType<typeof createSpokenReports>, 'request'>) {
+  shown: (taskId: string) => TaskProgress | null, reports: Pick<ReturnType<typeof createSpokenReports>, 'request'>, ownerAlone: () => boolean) {
   return (taskId: string): TaskProgress | null => {
     const progress = shown(taskId), task = runtime.get(scopeKey, taskId);
-    if (task) reports.request(scopeKey, task, progress);
+    // Nothing is generated or written while anyone else may see or hear (asked again here, at the moment of the request).
+    if (task && progress?.report && ownerAlone()) reports.request(scopeKey, task, progress);
     return progress;
   };
 }
