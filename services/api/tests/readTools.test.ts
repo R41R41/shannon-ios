@@ -111,7 +111,7 @@ describe('her read tools in the registry and the runner', () => {
     const parts = { notion, voyagerCatalog, upcoming: { promptFor: () => '' }, chatModel: new RecordingModel() };
     expect(readToolPorts({ SHANNON_READ_TOOLS: 'off' }, parts)).toBeNull();
     expect(readToolPorts({ SHANNON_ADR8_STAGE2: 'off' }, parts)).toBeNull();
-    expect(Object.keys(readToolPorts({}, parts)!).sort()).toEqual(['notion', 'places', 'upcoming', 'voyagerTasks']);
+    expect(Object.keys(readToolPorts({}, parts)!).sort()).toEqual(['daily', 'notion', 'places', 'upcoming', 'voyagerTasks']);
   });
 });
 

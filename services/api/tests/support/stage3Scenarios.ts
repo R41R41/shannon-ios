@@ -167,7 +167,9 @@ export function databaseDigests(path: string, options: { historicalSkillImports?
 /** The stage-2 wiring as `server.ts` builds it (on, with Jev), on the scenario's database, and how to close it. */
 function stage2Parts(databasePath: string, jev: typeof fetch, now: () => string): { parts: Partial<ShannonApiKernelOptions>; close(): void } {
   const environment = { TYPESAFE_API_KEY: 'jev-test' };
-  const reads = readToolPorts(environment, { notion: null, voyagerCatalog: new DisabledVoyagerCatalog(), upcoming: { promptFor: () => '' }, chatModel: new LocalStubChatModel() });
+  const all = readToolPorts(environment, { notion: null, voyagerCatalog: new DisabledVoyagerCatalog(), upcoming: { promptFor: () => '' }, chatModel: new LocalStubChatModel() });
+  // afb38c28 predates her everyday reads (weather, route, morning brief: `daily_read`), so its byte proof is taken without them.
+  const reads = all ? (({ daily: _daily, ...rest }) => rest)(all) : null;
   const skillMemory = configuredSkillMemory(environment, { databasePath, createsSchema: true, defer: task => task() });
   const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => createInitialCompanionState(scopeKey, now())) : null;
   const routing = configuredTurnRouting(environment, { databasePath, choices: null, skills, now, defer: task => task() });

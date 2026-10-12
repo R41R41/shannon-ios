@@ -12,6 +12,7 @@ import type { VoyagerCatalog } from '../integrations/voyager/organize.js';
 import { type OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
 import { runPlaceDiscoverySkill } from '../integrations/places/placeDiscoverySkill.js';
+import { dailyToolPorts } from './dailyReadWiring.js';
 
 /**
  * Wiring of Syzygy ADR-0008 stage 2 (`docs/skill-and-routing-contract.md`): what the API kernel is handed for the turn's Jev
@@ -80,7 +81,7 @@ export function configuredJevChooser(
 export function readToolPorts(
   environment: Readonly<Record<string, string | undefined>>,
   parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog;
-    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources' | 'searchWithSources'>>; chatModel: ShannonChatModel; now?: () => string },
+    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources' | 'searchWithSources' | 'loopLines'>>; chatModel: ShannonChatModel; now?: () => string },
 ): ReadToolPorts | null {
   if (!skillRoutingSwitches(environment).readTools) return null;
   return {
@@ -108,6 +109,10 @@ export function readToolPorts(
       const projection = parts.upcoming.searchWithSources!(scopeKey, input);
       return { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) };
     } } : {}),
+    daily: dailyToolPorts(environment, {
+      ...(parts.upcoming.loopLines ? { schedule: (scopeKey: string, at: string) => parts.upcoming.loopLines!(scopeKey, at, 'owner') } : {}),
+      ...(parts.chatModel.searchWeb ? { web: parts.chatModel.searchWeb.bind(parts.chatModel) } : {}), ...(parts.now ? { now: parts.now } : {}),
+    }),
     places: async (scopeKey, query, spoken, permitted) => runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: { ...permitted, ...(spoken ? { spoken: true } : {}) } }),
   };
 }

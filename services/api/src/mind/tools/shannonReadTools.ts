@@ -5,6 +5,7 @@ import type { WebSearchOperation, WebSearchResult } from '../../infra/models/web
 import type { WebReadOperation } from '../../infra/models/webResearch.js';
 import { webResearchExecutors } from './webResearchTools.js';
 export { webReadResult, webReadUnknown } from './webResearchTools.js';
+import { dailyToolExecutors, type DailyToolPorts } from './shannonDailyTools.js';
 
 /**
  * The executors of her read tools (Syzygy ADR-0008 stage 2, step 3; `docs/skill-and-routing-contract.md`). Core: approval and
@@ -26,6 +27,8 @@ export interface ReadToolPorts {
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
   upcomingSearch?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
+  /** Weather, a rough route and the morning brief (`shannonDailyTools.ts`, domain `daily_read`). */
+  daily?: DailyToolPorts;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
   places?: (scopeKey: string, query: string, spoken: boolean, context?: import('../../integrations/places/placeDiscovery.js').PlaceSearchContext) => Promise<string | { prompt: string; places: import('../../integrations/places/placeDiscovery.js').ShannonPlace[]; webSources: WebSearchResult['sources'] }>;
 }
@@ -59,6 +62,7 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
   if (!ports) return Object.freeze({});
   const missing = toolFailure('not_offered', 'この道具は、いまのサーバーにはない。', { retryable: false });
   return Object.freeze({
+    ...dailyToolExecutors(ports.daily),
     ...webResearchExecutors(ports),
     'notion.read': input => {
       const query = clip(stringInput(input, 'query') ?? '', 80);

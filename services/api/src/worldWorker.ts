@@ -18,6 +18,7 @@ import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
 import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
 import { configuredMindInbox } from './wiring/mindInboxWiring.js';
 import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
+import { configuredMorningBrief } from './wiring/dailyReadWiring.js';
 import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
@@ -47,6 +48,9 @@ const dailyMindStore = new SQLiteDailyMindStore(databasePath);
 const dailyMindDelegate = createConfiguredDailyMindModel(process.env, stateStore);
 const dailyMindModel:typeof dailyMindDelegate={generate:input=>withObserverRun({scopeKey:input.scopeKey,surface:'world-focus'},()=>observeAsync('context',{operation:'daily-focus',candidate:input.candidate!==null,interestCount:input.recentInterests.length},()=>dailyMindDelegate.generate(input),value=>({selected:value!==null})))};
 const pushStore = new SQLitePushNotificationStore(databasePath);
+// SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
+const morningBrief = configuredMorningBrief(process.env, { databasePath, now: nowISOString, log: line => console.log(line),
+  headlines: () => store.latestItems(12).filter(item => !/jma\.go\.jp/u.test(item.url)).slice(0, 3).map(item => ({ title: item.title, url: item.url })) });
 const pushSender = createConfiguredPushNotificationSender(process.env);
 const once = process.argv.includes('--once');
 let stopping = false;
@@ -86,7 +90,7 @@ try {
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();
       const dailyFocuses = await dailyMindStore.ensureForKnownScopes(store.latestItems(40), dailyMindModel, at);
-      const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses);
+      const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses, morningBrief ? await morningBrief.candidates(at) : undefined);
       nextInitiativeCheckAt = now + nextInitiativeDelayMilliseconds(initiative, at);
       if (initiative.sent > 0) console.log(`Shannon initiative delivered: ${initiative.sent}`);
     }
@@ -102,6 +106,7 @@ try {
 } finally {
   observation?.close();
   pushStore.close();
+  morningBrief?.close();
   dailyMindStore.close();
   stateStore.close();
   initiativeStore.close();

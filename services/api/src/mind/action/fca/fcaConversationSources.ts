@@ -211,7 +211,8 @@ export function createFcaSourceGuard(parts: {
 export function fcaReadReceiptSources(receipt: FcaReadReceipt): FcaObservedSources {
   if (!receipt.ok) return {};
   const tool = shannonTool(receipt.name);
-  if (tool?.domain === 'task_runtime' || receipt.name === 'web.search' || receipt.name === 'web.read' || receipt.name === 'places.search') return {};
+  // Public reads: the web, places, the weather and a rough route carry nothing of the owner's.
+  if (tool?.domain === 'task_runtime' || ['web.search', 'web.read', 'places.search', 'weather.forecast', 'route.estimate'].includes(receipt.name)) return {};
   const documents = receipt.documents?.sourceIds ?? receipt.documents?.read;
   if (!documents) return tool?.effect === 'read'
     ? { readSourceIds: [`fca-unresolved://${receipt.name}`] } : {};

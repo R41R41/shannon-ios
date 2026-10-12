@@ -187,6 +187,10 @@ export const SWITCHES = [
     doc: 'Foreground text turns of Claude 5.5 keep one cached prefix (fixed tools, schema and system; per-turn lines after the words).',
   },
   {
+    name: 'SHANNON_MORNING_BRIEF', default: 'off', kind: 'explicit_on', owner: 'outreach', requires: [],
+    doc: 'Morning brief (home weather, today\'s schedule, headlines) as the day\'s initiative, 07-10 owner time; needs SHANNON_OWNER_HOME_LOCATION.',
+  },
+  {
     name: 'SHANNON_AUTONOMY_ENABLED', default: 'off', kind: 'true_only', owner: 'autonomy', requires: [],
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },

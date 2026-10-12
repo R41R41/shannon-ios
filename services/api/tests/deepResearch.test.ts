@@ -157,6 +157,33 @@ describe('deep research: read tools per reply and per task step', () => {
   });
 });
 
+describe('skills batch 1: research and everyday reads together', () => {
+  it('offers the voice research hand-off and the weather, route and brief reads together to the owner alone in a call', () => {
+    const runner = createInMemoryAutonomyService(() => at).tools;
+    const daily = { place: async () => ({ name: '西東京市', latitude: 35.7255, longitude: 139.5383 }), forecast: async () => { throw new Error('unused'); },
+      today: () => '2026-10-13' };
+    runner.useReads({ web: async () => ok(), webRead: async () => ok(), daily: daily as never });
+    runner.useTaskRuntime({ available: () => true, execute: () => toolOk('{}') });
+    const voice = runner.offered('voice', 'owner_alone', 'owner').map(tool => tool.name);
+    expect(voice).toEqual(expect.arrayContaining(['web.research', 'weather.forecast', 'route.estimate', 'brief.morning']));
+    expect(voice).not.toContain('web.search'); expect(voice).not.toContain('web.read');
+    const text = runner.offered('text', 'owner_alone', 'owner').map(tool => tool.name);
+    expect(text).toEqual(expect.arrayContaining(['web.search', 'web.read', 'weather.forecast', 'brief.morning']));
+    expect(runner.offered('voice', 'others', 'owner').some(tool => ['web.research', 'weather.forecast'].includes(tool.name))).toBe(false);
+  });
+
+  it('asks the brief headlines for the last day of Japanese news through the narrowed search', async () => {
+    const searches: WebSearchInput[] = [];
+    const daily = { place: async () => ({ name: '西東京市', latitude: 35.7255, longitude: 139.5383 }), today: () => '2026-10-13',
+      forecast: async () => { throw new Error('offline'); },
+      web: async (input: WebSearchInput) => { searches.push(input); return ok(); } };
+    const call = readToolExecutors({ daily: daily as never })['brief.morning']!({ news: true }, context());
+    await run(call);
+    expect(searches).toHaveLength(1);
+    expect(searches[0]!.filters).toEqual({ locality: 'japan', recency: 'day' });
+  });
+});
+
 describe('deep research: a call hands research to a task that reports in Markdown', () => {
   it('turns web.research into the conversation-work task, with the answer-first report format, and tells the call it is admitted, not answered', () => {
     const task = researchTaskInput('web.research', { question: '今週末の福岡の天気' })!;

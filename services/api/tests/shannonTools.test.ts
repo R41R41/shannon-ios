@@ -71,14 +71,14 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(new Set(SHANNON_TOOLS.map(tool => tool.name)).size).toBe(SHANNON_TOOLS.length);
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
-      'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
-      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.request', 'minecraft.start', 'minecraft.status', 'minecraft.stop', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
-      'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'task.create', 'task.get', 'task.list', 'task.send', 'voyager.tasks', 'web.read', 'web.research', 'web.search',
+      'brief.morning', 'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
+      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.request', 'minecraft.start', 'minecraft.status', 'minecraft.stop', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'route.estimate', 'schedule.upcoming',
+      'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'task.create', 'task.get', 'task.list', 'task.send', 'voyager.tasks', 'weather.forecast', 'web.read', 'web.research', 'web.search',
     ]);
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
     // and her read tools of ADR-0008 stage 2.
     // Her skills (ADR-0008 stage 2, step 6) too.
-    const conversationOnly = (tool: { domain: string }) => tool.domain === 'memory_read' || tool.domain === 'task_runtime' || tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal' || isReadToolDomain(tool.domain) || tool.domain === 'skill_read';
+    const conversationOnly = (tool: { domain: string }) => tool.domain === 'memory_read' || tool.domain === 'task_runtime' || tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal' || isReadToolDomain(tool.domain) || tool.domain === 'skill_read' || tool.domain === 'daily_read';
     // Her own time only, with the owner alone: the owner's documents (ADR-0007, owner decision 2026-10-06; offered only while switched on).
     const ownTimeOnly = (tool: { domain: string }) => tool.domain === 'owner_documents_read';
     // With anyone else present: only her Aether reading tools (held to 「シャノン用フォルダ」 by the gate, Syzygy ADR-0007 revised).
@@ -89,9 +89,9 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
       expect(tool.domain).toBe(tool.name.startsWith('memory.') ? 'memory_read' : tool.name.startsWith('task.') || tool.name === 'web.research' ? 'task_runtime' : tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
         : ['minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.start', 'minecraft.stop'].includes(tool.name) ? 'minecraft_lifecycle' : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
-          : tool.name === 'skill.read' ? 'skill_read' : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
+          : tool.name === 'skill.read' ? 'skill_read' : ['weather.forecast', 'route.estimate', 'brief.morning'].includes(tool.name) ? 'daily_read' : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
       // Place and current-web searches call bounded model helpers; every other tool calls no model itself.
-      expect(tool.cost).toBe(['places.search', 'web.search', 'web.read'].includes(tool.name) ? 'model' : 'none');
+      expect(tool.cost).toBe(['places.search', 'web.search', 'web.read', 'brief.morning'].includes(tool.name) ? 'model' : 'none');
       if (READ_TOOL_DOMAIN_OF[tool.name]) expect(tool.effect).toBe('read');
       expect(tool.audiences).toEqual(shared.has(tool.name) ? ['owner_alone', 'others'] : ['owner_alone']);
       if (shared.has(tool.name)) expect(tool.effect).toBe('read');
