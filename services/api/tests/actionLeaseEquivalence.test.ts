@@ -118,8 +118,12 @@ describe('one lease read path (ADR-0009 stage 1, S1)', () => {
     expect(reader.get('missing')).toBeNull();
   });
 
-  it('answers every lease question as the replaced predicates did, for every lease combination', () => {
+  it('answers every lease question as the replaced predicates did, for every lease combination', async () => {
+    let visited = 0;
     for (const id of ids) {
+      // Yield now and then so the vitest worker can answer its runner (a long synchronous loop times out its RPC on CI).
+      visited += 1;
+      if (visited % 500 === 0) await new Promise(resolve => setImmediate(resolve));
       const row = raw(db, id)!;
       const record = reader.get(id)!;
       const lease = { ...LEASE, id };
