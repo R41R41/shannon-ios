@@ -53,7 +53,7 @@ interface Turn { body: Body; epoch?: { number: number; rebased: boolean }; chara
 function textTalk(count: number, environment: Record<string, string>) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-epochs-'));
   directories.push(directory);
-  const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now: () => at });
+  const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now: () => at, replayEpochs: true });
   const turns: Turn[] = [];
   for (let n = 0; n < count; n++) {
     const replay = conversationReplay('text', store.snapshot('owner'), store, 'owner', 'thread', OWNER_AUDIENCE, environment);
@@ -198,6 +198,15 @@ describe('where an epoch is kept', () => {
     const columns = (database.prepare('PRAGMA table_info(conversation_replay_epochs)').all() as Array<{ name: string }>).map(column => column.name);
     expect(columns).toEqual(['scope_key', 'thread_id', 'channel', 'epoch', 'start_message_id', 'full_from_message_id', 'budget_characters', 'started_at']);
     database.close();
+  });
+
+  it('SQLite without the switch: no table, and the replay is computed as without epochs', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-epochs-off-'));
+    directories.push(directory);
+    const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now: () => at, replayEpochs: false });
+    store.appendTurn('owner', 'thread', 'こんにちは', 'はい。', at);
+    expect(conversationReplay('text', store.snapshot('owner'), store, 'owner', 'thread', OWNER_AUDIENCE, EPOCHS).epoch).toBeUndefined();
+    store.close();
   });
 
   it('a store without epochs replays as without them', () => {

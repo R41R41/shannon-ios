@@ -302,7 +302,7 @@ export interface ConversationReplay extends ReplayWindow {
 function epochFor(
   channel: ReplayChannel, store: ConversationStore, scopeKey: string, threadId: string, visible: readonly VisibleMessage[], rule: ReplayRule,
 ): EpochWindow | null {
-  if (!store.replayEpoch || !store.saveReplayEpoch) return null;
+  if (!store.replayEpoch || !store.saveReplayEpoch || store.keepsReplayEpochs?.() === false) return null;
   let window: EpochWindow | null;
   try {
     const previous = store.replayEpoch(scopeKey, threadId, channel);

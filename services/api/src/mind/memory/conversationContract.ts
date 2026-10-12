@@ -203,6 +203,8 @@ export interface ConversationStore {
   /** The thread's replay epoch of a channel (`conversationWindow.ts`). Absent: the window is recomputed every turn. */
   replayEpoch?(scopeKey: string, threadId: string, channel: ReplayChannel): ReplayEpochRecord | undefined;
   saveReplayEpoch?(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void;
+  /** False when this store keeps no epochs (its table was not created): the window is then computed as without them. */
+  keepsReplayEpochs?(): boolean;
   /** The thread a completed turn was stored in. */
   threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
   /** Her impressions of people (`impressions.ts`). Absent: none are read or written. */
