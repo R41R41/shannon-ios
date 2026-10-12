@@ -9,10 +9,13 @@ import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRe
 import { publicActionThreads } from '../src/infra/http/actionThreadRoutes.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { SLOT_LIMITS_TODAY } from '@shannon/mind';
+import { useSlotLimits } from './support/slotLimits.js';
 const cleanups:Array<()=>void>=[];
 afterEach(()=>cleanups.splice(0).reverse().forEach(close=>close()));
 const at='2026-10-07T12:00:00.000Z';
-function harness(){let clock=at;const h=actionHarness(()=>clock),tasks=new SQLiteAgentTaskStore(':memory:');cleanups.push(()=>tasks.close(),h.close);
+// Written against the S3 limits (two background slots); since S6 the limits are data.
+function harness(){let clock=at;const h=actionHarness(()=>clock),tasks=new SQLiteAgentTaskStore(':memory:');cleanups.push(()=>tasks.close(),h.close);useSlotLimits(h.db,SLOT_LIMITS_TODAY);
   const wiring=externalActionWiring(h.actions,tasks,null,'owner',()=>clock);
   return {...h,tasks,wiring,now:()=>clock,advance:()=>{clock='2026-10-07T12:00:31.000Z';}};
 }

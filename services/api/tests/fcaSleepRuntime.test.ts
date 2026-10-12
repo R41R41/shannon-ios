@@ -143,22 +143,27 @@ describe('scheduled sleep under the existing FCA authority', () => {
     expect(f.driver.runtime.get('owner', task.id)?.phase).toBe('completed');
   });
 
-  it('uses the same two background slots while conversation admission remains available', async () => {
+  it('shares the owner\'s background slots by class while conversation admission remains available (ADR-0009 stage 1, S6)', async () => {
     const calls = new Map<string, ReturnType<typeof deferred<FcaModelOutput>>>();
     const decide: FcaModel['decide'] = (input, signal) => {
       const call = deferred<FcaModelOutput>(); calls.set(input.task.id, call);
       signal.addEventListener('abort', () => call.reject(new Error('cancelled')), { once: true }); return call.promise;
     };
-    const f = fixture({ sleep: decide, normal: decide }), sleep = f.admit(), normal = f.child('normal');
-    await f.driver.tick(); await until(() => calls.size === 2);
-    const third = f.child('third'); await f.driver.tick();
-    expect(calls.has(third.id)).toBe(false);
-    expect(f.store.list('owner').filter(action => action.state === 'running')).toHaveLength(2);
+    const f = fixture({ sleep: decide, normal: decide }), sleep = f.admit(), normal = f.child('normal'), second = f.child('second');
+    await f.driver.tick(); await until(() => calls.size === 3);
+    // Sleep 1 and research 2 fill the background pool of three; a third research task waits for its class.
+    const fourth = f.child('fourth'); await f.driver.tick();
+    expect(calls.has(fourth.id)).toBe(false);
+    expect(f.store.list('owner').filter(action => action.state === 'running')).toHaveLength(3);
     const respond = await f.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: 'conversation' });
     expect(respond?.state).toBe('running');
-    calls.get(sleep.id)!.resolve(complete()); calls.get(normal.id)!.resolve({ decision: { kind: 'wait', summary: 'Waiting' }, history: ['known response'] }); await f.driver.drain();
-    await f.driver.tick(); await until(() => calls.has(third.id)); calls.get(third.id)!.resolve(complete()); await f.driver.drain();
-    expect(f.driver.runtime.get('owner', third.id)?.phase).toBe('completed');
+    // The two research tasks wait (a completed child would wake the root, which this test does not answer).
+    const waiting = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Waiting' }, history: ['known response'] });
+    calls.get(sleep.id)!.resolve(complete()); calls.get(second.id)!.resolve(waiting()); calls.get(normal.id)!.resolve(waiting());
+    await f.driver.drain();
+    await f.driver.tick(); await until(() => calls.has(fourth.id)); calls.get(fourth.id)!.resolve(complete()); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', fourth.id)?.phase).toBe('completed');
+    expect(f.store.claimRefusals()).toEqual({});
   });
 
   it('persists only successful code-owned sleep phase checkpoints under each segment lease', async () => {

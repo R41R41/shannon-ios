@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
+import { SLOT_LIMITS_TODAY } from '@shannon/mind';
+import { useSlotLimits } from './support/slotLimits.js';
 import { configuredMindWorker } from '../src/wiring/mindWorkerWiring.js';
 import { actionThreadsClient } from '../src/wiring/actionThreadsWiring.js';
 import { MindSocketClient } from '../src/infra/ipc/mindSocket.js';
@@ -19,7 +21,7 @@ afterEach(async()=>{for(const close of cleanups.splice(0).reverse())await close(
 const at='2026-10-09T00:00:00.000Z',later='2026-10-09T00:00:31.000Z';
 const body=actionResource('minecraft','body'),base=actionResource('mind','cycle'),other=actionResource('document','draft');
 function fixture(path=':memory:') {
-  const db=new DatabaseSync(path);cleanups.push(()=>db.close());const store=new SQLiteActionStore(db,()=>true);
+  const db=new DatabaseSync(path);cleanups.push(()=>db.close());const store=new SQLiteActionStore(db,()=>true);useSlotLimits(db,SLOT_LIMITS_TODAY);
   const view=store.claim(store.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'original',resources:[base]},at).id,'original-holder',at)!;
   const lease=leaseOf(view);
   store.reserve(lease,'original-budget','2026-10-09',1200,2000,0,at);store.dispatch(lease,at,[body,other]);

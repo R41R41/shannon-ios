@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
+import { SLOT_LIMITS_TODAY } from '@shannon/mind';
+import { useSlotLimits } from './support/slotLimits.js';
 const databases:DatabaseSync[]=[];
 const at='2026-10-07T12:00:00.000Z';
 const later='2026-10-07T12:00:31.000Z';
-function store(){const db=new DatabaseSync(':memory:');databases.push(db);return new SQLiteActionStore(db);}
+// These cases were written against the S3 limits (one foreground, two background slots); since S6 the limits are data.
+function store(){const db=new DatabaseSync(':memory:');databases.push(db);const s=new SQLiteActionStore(db);useSlotLimits(db,SLOT_LIMITS_TODAY);return s;}
 afterEach(()=>databases.splice(0).forEach(db=>db.close()));
 describe('atomic foreground admission',()=>{
   const draft=(sourceId:string)=>({scopeKey:'owner',kind:'respond' as const,origin:'owner_request' as const,sourceId});

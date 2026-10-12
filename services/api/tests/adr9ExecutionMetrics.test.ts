@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { ACTION_LIMITS } from '@shannon/mind';
+import { ACTION_LIMITS, SLOT_LIMITS_TODAY } from '@shannon/mind';
+import { useSlotLimits } from './support/slotLimits.js';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { readActionExecutionCounts } from '../src/mind/action/threads/store/actionMetrics.js';
 import { countTasksUnknownSince } from '../src/mind/action/taskRuntime/store/taskUnknownMetrics.js';
@@ -19,7 +20,10 @@ const later = (milliseconds: number) => new Date(Date.parse(AT) + milliseconds).
 function store() {
   const db = new DatabaseSync(':memory:');
   cleanups.push(() => db.close());
-  return { db, actions: new SQLiteActionStore(db) };
+  const actions = new SQLiteActionStore(db);
+  // Written against the S3 limits (two background slots, every class up to two); since S6 the limits are data.
+  useSlotLimits(db, SLOT_LIMITS_TODAY);
+  return { db, actions };
 }
 
 function claimed(actions: SQLiteActionStore, kind: 'agentTask' | 'ownTime', source: string, resources: string[] = [], at = AT) {
@@ -58,7 +62,7 @@ describe('action execution counts', () => {
     expect(claimed(actions, 'agentTask', 'three')).toBeNull();
     const first = claimed(actions, 'ownTime', 'held', [actionResource('owner', 'study')]);
     expect(first).toBeNull();
-    expect(actions.claimRefusals()).toEqual({ background_slot: 2 });
+    expect(actions.claimRefusals()).toEqual({ pool_background: 2 });
   });
 });
 
