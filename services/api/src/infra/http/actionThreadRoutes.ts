@@ -14,7 +14,9 @@ function listed(view: ActionView, at: string): boolean {
   if (view.kind === 'respond') return false;
   if (LIVE_STATES.includes(view.state)) return true;
   const awaitingOwner = view.state === 'unknown' && view.notification !== undefined && !view.notification.acknowledgedAt;
-  return awaitingOwner || Date.parse(at) - Date.parse(view.updatedAt) < RECENT_MS;
+  // Reading a notice writes only a receipt, so a just-read notice ages from the moment it was read.
+  const lastTouched = Math.max(Date.parse(view.updatedAt), Date.parse(view.notification?.acknowledgedAt ?? view.updatedAt));
+  return awaitingOwner || Date.parse(at) - lastTouched < RECENT_MS;
 }
 
 export function publicActionThreads(views: readonly ActionView[], at: string, others: boolean) {

@@ -88,8 +88,9 @@ it('lists an unknown outcome while its notice awaits the owner, and lets it age 
     failures: 0, generation: 1, sent: false, resources: [], createdAt: '2026-10-10T00:00:00.000Z', updatedAt: '2026-10-10T00:00:00.000Z' };
   const awaiting = { ...base, id: 'awaiting', notification: { id: 'n1', acknowledgedAt: null } };
   const read = { ...base, id: 'read', notification: { id: 'n2', acknowledgedAt: '2026-10-10T01:00:00.000Z' } };
+  const justRead = { ...base, id: 'just-read', notification: { id: 'n3', acknowledgedAt: '2026-10-11T00:59:00.000Z' } };
   const silent = { ...base, id: 'silent' };
   const fresh = { ...base, id: 'fresh', updatedAt: '2026-10-11T00:30:00.000Z' };
-  const views = [awaiting, read, silent, fresh] as unknown as Parameters<typeof publicActionThreads>[0];
-  expect(publicActionThreads(views, at, false).threads.map(row => row.id)).toEqual(['awaiting', 'fresh']);
+  const views = [awaiting, read, justRead, silent, fresh] as unknown as Parameters<typeof publicActionThreads>[0];
+  expect(publicActionThreads(views, at, false).threads.map(row => row.id)).toEqual(['awaiting', 'just-read', 'fresh']);
 });
