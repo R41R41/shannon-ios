@@ -51,7 +51,7 @@ export class SpokenReportModel implements SpokenReportSpeaker {
       input: [{ role: 'user', content: spokenReportInput(request) }],
       reasoning: { effort: 'none' },
       text: { verbosity: 'low' },
-      max_output_tokens: 400,
+      max_output_tokens: 200,
       store: false,
       prompt_cache_key: stableScopeIdentifier(request.scopeKey),
       safety_identifier: stableScopeIdentifier(request.scopeKey),

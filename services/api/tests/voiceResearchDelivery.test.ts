@@ -14,7 +14,7 @@ import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import type { TaskSpec, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
 import {
-  SPOKEN_REPORT_CHARACTERS, SPOKEN_REPORT_INSTRUCTIONS, createSpokenReports, fallbackSpokenReport, progressWithSpokenReports, reportOnScreenLine,
+  SPOKEN_REPORT_CHARACTERS, SPOKEN_REPORT_INSTRUCTIONS, SPOKEN_REPORT_TARGET_CHARACTERS, createSpokenReports, fallbackSpokenReport, progressWithSpokenReports, reportOnScreenLine,
   spokenReportText,
   type SpokenReportRequest,
 } from '../src/mind/action/fca/fcaSpokenReport.js';
@@ -62,8 +62,17 @@ describe('the spoken form of a report', () => {
     expect(spokenReportText('')).toBeNull();
   });
 
+  it('speaks at most two sentences within 70 characters, the fallback included (owner feedback: still too long by ear)', () => {
+    expect(SPOKEN_REPORT_CHARACTERS).toBeLessThanOrEqual(70);
+    expect(spokenReportText('福岡は雨です。東京は晴れです。大阪は曇りです。')).toBe('福岡は雨です。東京は晴れです。');
+    const long = `福岡は明日、${'朝から晩まで降ったりやんだりの'.repeat(4)}雨で、傘が要りそうです。`;
+    const cut = fallbackSpokenReport(long);
+    sayable(cut);
+    expect(cut.startsWith('福岡は明日')).toBe(true);
+  });
+
   it('tells the model the delivery rules: short, no boilerplate, no snippet disclaimer, dates from now', () => {
-    for (const rule of [`${SPOKEN_REPORT_CHARACTERS}字以内`, '結果がそろいました', '抜粋', '今日・明日', 'URL']) expect(SPOKEN_REPORT_INSTRUCTIONS).toContain(rule);
+    for (const rule of ['1〜2文', `${SPOKEN_REPORT_TARGET_CHARACTERS}字以内`, '結果がそろいました', '抜粋', '今日・明日', 'URL']) expect(SPOKEN_REPORT_INSTRUCTIONS).toContain(rule);
   });
 });
 
@@ -229,7 +238,7 @@ describe('natural words in a call', () => {
   });
 
   it('tells a spoken reply to drop status boilerplate and the habitual snippet disclaimer, and to answer a reaction as one', () => {
-    for (const phrase of ['結果がそろいました', '抜粋', '相づち']) expect(VOICE_NATURAL_INSTRUCTIONS).toContain(phrase);
+    for (const phrase of ['結果がそろいました', '抜粋', '相づち', '1〜2文', '詳しくは画面に出しておくね']) expect(VOICE_NATURAL_INSTRUCTIONS).toContain(phrase);
   });
 
   it('sends the spoken form through the regular Haiku model with her persona and the delivery rules', async () => {

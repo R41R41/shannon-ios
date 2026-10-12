@@ -3,9 +3,13 @@ import type { TaskRuntime } from '../taskRuntime/taskRuntimePorts.js';
 
 /**
  * The short form of a task's report that a call says aloud (owner feedback 2026-10-13: a 2,900-character report read out
- * verbatim was too long to follow by ear). The full report stays the screen's; only this is spoken.
+ * verbatim was too long to follow by ear, and then 1–3 sentences of 120 characters were still too long). The full report
+ * stays the screen's; only this is spoken: 1–2 sentences, about 60 characters asked of the model, 70 the hard cap.
  */
-export const SPOKEN_REPORT_CHARACTERS = 120;
+export const SPOKEN_REPORT_TARGET_CHARACTERS = 60;
+/** The hard cap, punctuation included: a model answer longer than this is not spoken, a plain cut is. */
+export const SPOKEN_REPORT_CHARACTERS = 70;
+const SPOKEN_REPORT_SENTENCES = 2;
 const SPOKEN_REPORT_TIMEOUT_MS = 20_000;
 const ATTEMPTS_KEPT = 512;
 
@@ -13,7 +17,8 @@ const ATTEMPTS_KEPT = 512;
 export const SPOKEN_REPORT_INSTRUCTIONS = [
   '[調べた結果を声で伝える]',
   'ライ氏に頼まれて調べたことの結果が届いた。通話の切れ目に、ボクから自分で伝えるひと言を作る。',
-  `- 1〜3文、全体で${SPOKEN_REPORT_CHARACTERS}字以内。最初に答えを置く。依頼に複数の対象があれば、それぞれを短く言う。`,
+  `- 1〜2文、全体で${SPOKEN_REPORT_TARGET_CHARACTERS}字以内（句読点込みで${SPOKEN_REPORT_CHARACTERS}字を超えない）。最初の文で答えを言い、話しかける口調にする。`,
+  '- 依頼に複数の対象があれば、要点だけをひとまとめに言う。理由・経緯・補足は言わない。詳しいことは画面に残っている。',
   '- 話し言葉にする。見出し・箇条書き・記号・URL・出典の列挙・細かい数字の羅列は使わない。',
   '- 「結果がそろいました」「お待たせしました」「受け付けました」のような状況報告や、検索結果の抜粋だという断り書きは言わない。',
   '- 不確かさは、答えが変わる時だけ短く添える。報告にないことは足さない。',
@@ -58,10 +63,10 @@ function sentences(text: string): string[] {
   return lines.join('').match(/[^。！？!?]+[。！？!?]+/gu)?.map(sentence => sentence.trim()).filter(Boolean) ?? [];
 }
 
-/** The longest run of whole sentences within the limit; null when even the first is longer. */
+/** The longest run of whole sentences (at most two) within the limit; null when even the first is longer. */
 function withinLimit(parts: readonly string[], limit = SPOKEN_REPORT_CHARACTERS): string | null {
   let spoken = '';
-  for (const sentence of parts.slice(0, 3)) {
+  for (const sentence of parts.slice(0, SPOKEN_REPORT_SENTENCES)) {
     if ([...spoken + sentence].length > limit) break;
     spoken += sentence;
   }
@@ -84,7 +89,7 @@ export function spokenReportText(raw: string): string | null {
 
 /** A report with nothing to say aloud (only links or headings): where to find it, in her words, naming what was asked. */
 export function reportOnScreenLine(title: string): string {
-  const named = [...title.replace(/\s+/gu, ' ').trim()].slice(0, 40).join('');
+  const named = [...title.replace(/\s+/gu, ' ').trim()].slice(0, 30).join('');
   return named ? `「${named}」の結果は、画面に出しておきましたね。` : '調べた結果は、画面に出しておきましたね。';
 }
 
@@ -106,7 +111,7 @@ export function fallbackSpokenReport(report: string, title = ''): string {
 /** A short report needs no model: it is already what would be said. */
 function alreadyShort(report: string): string | null {
   const direct = spokenReportText(report);
-  return direct && !/https?:\/\//u.test(report) && !/\n\s*[-*・#]/u.test(`\n${report}`) && sentences(report).length <= 3
+  return direct && !/https?:\/\//u.test(report) && !/\n\s*[-*・#]/u.test(`\n${report}`) && sentences(report).length <= SPOKEN_REPORT_SENTENCES
     && [...report.trim()].length <= SPOKEN_REPORT_CHARACTERS ? direct : null;
 }
 
