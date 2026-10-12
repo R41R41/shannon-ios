@@ -52,3 +52,4 @@ export {
 } from './trustFold.js';
 export * from './actions.js';
 export * from './taskTree.js';
+export * from './tasks.js';

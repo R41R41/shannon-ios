@@ -35,6 +35,11 @@ export const SQLITE_PROFILES = Object.freeze({
   minecraftLifecycle: profile({ wal: true }),
   /** The liveness monitor (`wiring/livenessWiring.ts`): its episode is its one write. */
   liveness: profile({}),
+  /**
+   * The S3 backfill of the execution columns at each start of the API (`wiring/executionBackfillWiring.ts`): a short wait, since
+   * the API's event loop waits with it; a busy batch is tried again later.
+   */
+  executionBackfill: profile({ busyTimeoutMs: 250, wal: true }),
   /** The sleep worker's read-only view of task proofs (`wiring/configuredWorkerFeedback.ts`). */
   readOnly: profile({ readOnly: true }),
 });

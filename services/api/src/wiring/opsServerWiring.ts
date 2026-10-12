@@ -1,5 +1,6 @@
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import type { MindHost } from '../mind/workspace/workspacePorts.js';
+import { startExecutionBackfill } from './executionBackfillWiring.js';
 import { startExecutionMonitor, withExecution } from './executionOpsWiring.js';
 import { startLivenessMonitor, withLiveness } from './livenessWiring.js';
 import { withMindOps } from './mindOpsWiring.js';
@@ -23,7 +24,8 @@ export interface OpsServerParts {
 
 /**
  * The owner's `server` object of `GET /v1/ops`, composed in one place: the self-description, the mind, liveness, the switch
- * findings, the execution metrics and the model cache receipts (ADR-0009 stage 1). The switches are checked once, here, at boot.
+ * findings, the execution metrics and the model cache receipts (ADR-0009 stage 1). The switches are checked once, here, at boot,
+ * and the S3 backfill of the execution columns starts here, once per start of the API (its metrics are part of the same view).
  */
 export function configuredOpsServer(parts: OpsServerParts) {
   const log = parts.log ?? (line => console.warn(line));
@@ -32,6 +34,7 @@ export function configuredOpsServer(parts: OpsServerParts) {
     databasePath: parts.databasePath, ownerScope: parts.ownerScope, ownTimeEnabled: parts.ownTime.enabled,
     timeZone: parts.ownTime.timeZone, environment: parts.environment, now: parts.now,
   });
+  const backfill = startExecutionBackfill({ databasePath: parts.databasePath, log: parts.log });
   const execution = startExecutionMonitor({
     database: liveness.database,
     scheduler: () => parts.mind()?.actions ?? null,
@@ -46,6 +49,7 @@ export function configuredOpsServer(parts: OpsServerParts) {
     return withExecution(withChecks, execution.view(), execution.modelCache());
   };
   const close = (): void => {
+    void backfill.close();
     execution.close();
     liveness.close();
   };

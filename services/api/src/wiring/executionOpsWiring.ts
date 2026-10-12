@@ -6,6 +6,8 @@ import { warmDayLine } from '../infra/models/anthropic/cacheWarmTurns.js';
 import { rejectionCounts } from '../infra/models/anthropic/anthropicRejection.js';
 import { readActionExecutionCounts, type ActionExecutionCounts } from '../mind/action/threads/store/actionMetrics.js';
 import { countTasksUnknownSince } from '../mind/action/taskRuntime/store/taskUnknownMetrics.js';
+import { countTaskProjection } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
+import { countActionProjection } from '../mind/action/threads/store/actionSlotColumns.js';
 
 /** An unknown older than this counts as a backlog (ADR-0009 stage 1, acceptance §4). */
 export const EXECUTION_UNKNOWN_BACKLOG_MS = 10 * 60_000;
@@ -24,6 +26,13 @@ export interface ExecutionView {
   sleepLastCompletedAt: string | null;
   ownTimeLastSessionAt: string | null;
   modelRequestRejections: Readonly<Record<string, number>>;
+  /**
+   * S3: task rows whose stored state does not project back onto `status` and `pause_reason`, plus actions whose `effect_sent`
+   * is not what `sent` and `state` say (expected 0; -1 when the check could not read the tables).
+   */
+  projectionMismatches: number;
+  /** S3: task and action rows still missing a derived column (expected 0 once the start's backfill finished). */
+  projectionNulls: number;
 }
 
 export interface ExecutionMonitorOptions {
@@ -72,6 +81,8 @@ export function executionDailyLine(view: ExecutionView, cacheDay: string): strin
     `cacheReadTurns=${cacheDayLine(cacheDay)}`,
     `warmTextReads=${warmDayLine(cacheDay)}`,
     `rejections=${pairs(view.modelRequestRejections)}`,
+    `projectionMismatches=${view.projectionMismatches}`,
+    `projectionNulls=${view.projectionNulls}`,
   ].join(' ');
 }
 
@@ -106,11 +117,23 @@ export function startExecutionMonitor(options: ExecutionMonitorOptions) {
     }
   }
 
+  function projection(): { mismatches: number; nulls: number } {
+    try {
+      const tasks = countTaskProjection(db);
+      const actions = countActionProjection(db);
+      return { mismatches: tasks.mismatches + actions.mismatches, nulls: tasks.nulls + actions.nulls };
+    } catch {
+      // Unreadable is not "none": -1 tells the reader the check did not run.
+      return { mismatches: -1, nulls: -1 };
+    }
+  }
+
   function view(): ExecutionView {
     refreshScheduler();
     const at = now();
     const read = counts(new Date(Date.parse(at) - EXECUTION_UNKNOWN_BACKLOG_MS).toISOString());
     const liveness = options.liveness();
+    const projected = projection();
     return {
       checkedAt: at,
       unknownBacklog: { actions: read.actions.unknownSentOverdue, tasks: read.tasks },
@@ -122,6 +145,8 @@ export function startExecutionMonitor(options: ExecutionMonitorOptions) {
       sleepLastCompletedAt: liveness?.sleep.lastCompletedAt ?? null,
       ownTimeLastSessionAt: liveness?.ownTime.lastSessionAt ?? null,
       modelRequestRejections: rejectionCounts(),
+      projectionMismatches: projected.mismatches,
+      projectionNulls: projected.nulls,
     };
   }
 

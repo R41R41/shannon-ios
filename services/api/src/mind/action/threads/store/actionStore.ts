@@ -10,7 +10,8 @@ import {
 } from './retainedResourceStore.js';
 import { actionView as view } from './actionLeaseReader.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { ACTION_THREADS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { ACTION_SLOTS_STEP, ACTION_THREADS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { actionSlotColumns } from './actionSlotColumns.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 /**
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
@@ -26,7 +27,7 @@ export class SQLiteActionStore {
   constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
     private readonly retainedAfterRelease:ActionResourceRetained=()=>false,
     private readonly retainedReleaseProof:ActionRetainedReleaseProof=()=>false) {
-    applySchemaSteps(db,[ACTION_THREADS_STEP]);
+    applySchemaSteps(db,[ACTION_THREADS_STEP,ACTION_SLOTS_STEP]);
   }
   /** Claims refused since this process started, by closed reason (ADR-0009 stage 1: `GET /v1/ops`). */
   claimRefusals():Readonly<Record<string,number>> {
@@ -125,9 +126,11 @@ export class SQLiteActionStore {
     if (draft.parentId && (!parent || parent.scopeKey !== draft.scopeKey || parent.origin !== draft.origin || ACTION_TERMINAL.includes(parent.state) || parent.state === 'stopping')) throw new Error('ACTION_PARENT');
     const id = randomUUID();
     const keys=JSON.stringify([...new Set(draft.resources ?? [])].sort());
-    this.db.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,resources_json,base_resources_json,owner_informed,deadline,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,?)`).run(id,draft.scopeKey,draft.kind,draft.origin,draft.sourceId,draft.parentId ?? null,
-        keys,keys,parent?.ownerInformed || draft.ownerInformed ? 1 : 0,draft.deadline ?? null,at,at);
+    const slot=actionSlotColumns(this.db,draft);
+    this.db.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,resources_json,base_resources_json,owner_informed,deadline,
+      created_at,updated_at,task_id,slot_class,effect_sent)
+      VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,?,?,?,0)`).run(id,draft.scopeKey,draft.kind,draft.origin,draft.sourceId,draft.parentId ?? null,
+        keys,keys,parent?.ownerInformed || draft.ownerInformed ? 1 : 0,draft.deadline ?? null,at,at,slot.taskId,slot.slotClass);
     return this.get(id)!;
   }
   claim(id: string, holder: string, at: string): ActionView | null {
@@ -147,7 +150,7 @@ export class SQLiteActionStore {
     const others = this.list(action.scopeKey).filter(item => item.id!==action.id);
     if (others.some(item => this.heldResources(item).some(key => action.resources.includes(key)))) return this.refused('resource_held');
     const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
-    this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
+    this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,effect_sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
     return this.get(id);
   }
   /** Foreground admission has one durable commit; no execution right leaves an uncommitted transaction. */
@@ -178,7 +181,7 @@ export class SQLiteActionStore {
       const keys = [...new Set([...action.resources,...resources])].sort();
       if (keys.length > ACTION_LIMITS.resources) return false;
       if (this.list(action.scopeKey).some(other=>other.id!==action.id && this.heldResources(other).some(key=>keys.includes(key)))) return false;
-      this.db.prepare("UPDATE mind_actions SET sent=1,state='running',resources_json=?,updated_at=? WHERE id=?").run(JSON.stringify(keys),at,lease.id);
+      this.db.prepare("UPDATE mind_actions SET sent=1,effect_sent=1,state='running',resources_json=?,updated_at=? WHERE id=?").run(JSON.stringify(keys),at,lease.id);
       return true;
     });
   }
@@ -189,8 +192,9 @@ export class SQLiteActionStore {
       if (!action || action.generation!==lease.generation || action.holder!==lease.holder || !action.leaseUntil
         || Date.parse(action.leaseUntil)<=Date.parse(at) || !['running','waiting','stopping'].includes(action.state)) return null;
       const failures = state==='failed' ? (action.lastFailure===code ? action.failures+1 : 1) : 0;
-      this.db.prepare('UPDATE mind_actions SET state=?,result=?,failures=?,last_failure=?,generation=generation+?,holder=NULL,lease_until=NULL,updated_at=? WHERE id=?')
-        .run(state,code,failures,state==='failed'?code:null,state==='unknown'?1:0,at,lease.id);
+      this.db.prepare(`UPDATE mind_actions SET state=?,result=?,failures=?,last_failure=?,generation=generation+?,holder=NULL,lease_until=NULL,
+        effect_sent=CASE WHEN sent=1 OR ?='unknown' THEN 1 ELSE 0 END,updated_at=? WHERE id=?`)
+        .run(state,code,failures,state==='failed'?code:null,state==='unknown'?1:0,state,at,lease.id);
       // Unknown/failed calls never release an estimate. Only a known not-sent cancellation returns a reservation.
       this.db.prepare("UPDATE mind_action_budget SET state='held' WHERE action_id=? AND state='reserved'").run(lease.id);
       return this.get(lease.id);
@@ -203,10 +207,10 @@ export class SQLiteActionStore {
       const failures=failureCode ? action.lastFailure===failureCode ? action.failures+1 : 1 : 0;
       this.db.prepare("UPDATE mind_actions SET failures=?,last_failure=? WHERE id=?").run(failures,failureCode ?? null,lease.id);
       if(failures>=ACTION_LIMITS.consecutiveFailures){
-        this.db.prepare("UPDATE mind_actions SET state='failed',result='repeated_failure',sent=0,resources_json=base_resources_json,holder=NULL,lease_until=NULL,updated_at=? WHERE id=?").run(at,lease.id);
+        this.db.prepare("UPDATE mind_actions SET state='failed',result='repeated_failure',sent=0,effect_sent=0,resources_json=base_resources_json,holder=NULL,lease_until=NULL,updated_at=? WHERE id=?").run(at,lease.id);
         return false;
       }
-      this.db.prepare("UPDATE mind_actions SET sent=0,state='waiting',resources_json=base_resources_json,progress=?,updated_at=? WHERE id=?").run(progress,at,lease.id);
+      this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=0,state='waiting',resources_json=base_resources_json,progress=?,updated_at=? WHERE id=?").run(progress,at,lease.id);
       return true;
     });
   }
@@ -233,7 +237,7 @@ export class SQLiteActionStore {
       const action=this.get(id);
       if(!action || action.scopeKey!==scopeKey || action.failures>=5 || !['failed','cancelled'].includes(action.state)) return false;
       if(action.parentId) {const parent=this.get(action.parentId);if(!parent || ACTION_TERMINAL.includes(parent.state) || parent.state==='stopping')return false;}
-      this.db.prepare("UPDATE mind_actions SET state='queued',sent=0,progress=NULL,result=NULL,updated_at=? WHERE id=?").run(at,id);
+      this.db.prepare("UPDATE mind_actions SET state='queued',sent=0,effect_sent=0,progress=NULL,result=NULL,updated_at=? WHERE id=?").run(at,id);
       return true;
     });
   }
@@ -274,7 +278,7 @@ export class SQLiteActionStore {
       this.sweep(at);
       const action=this.get(lease.id);
       if(!action || action.state!=='unknown' || action.generation!==lease.generation+1 || action.lastHolder!==lease.holder)return false;
-      this.db.prepare('UPDATE mind_actions SET state=?,result=?,sent=0,updated_at=? WHERE id=?').run(state,code,at,lease.id);
+      this.db.prepare('UPDATE mind_actions SET state=?,result=?,sent=0,effect_sent=0,updated_at=? WHERE id=?').run(state,code,at,lease.id);
       return true;
     });
   }
@@ -341,7 +345,7 @@ export class SQLiteActionStore {
         const failures=report.failureCode?(action.lastFailure===report.failureCode?action.failures+1:1):0;
         const state=checkpoint?(failures>=5?'failed':'waiting'):report.state==='checkpoint'?'cancelled':report.state;
         const code=checkpoint?(failures>=5?'repeated_failure':null):report.state==='checkpoint'?'step_acknowledged':report.code;
-        this.db.prepare(`UPDATE mind_actions SET state=?,sent=0,resources_json=base_resources_json,progress=?,result=?,
+        this.db.prepare(`UPDATE mind_actions SET state=?,sent=0,effect_sent=0,resources_json=base_resources_json,progress=?,result=?,
           failures=?,last_failure=?,holder=CASE WHEN ?='waiting' THEN holder ELSE NULL END,
           lease_until=CASE WHEN ?='waiting' THEN lease_until ELSE NULL END,updated_at=? WHERE id=?`)
           .run(state,checkpoint?report.code:null,code,failures,report.failureCode??null,state,state,at,action.id);
@@ -354,7 +358,7 @@ export class SQLiteActionStore {
   sweep(at: string): number {
     for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state IN ('running','waiting','stopping') AND (lease_until<=? OR (deadline IS NOT NULL AND deadline<=?))").all(at,at)) {
       const action=view(row);
-      this.db.prepare("UPDATE mind_actions SET state=CASE WHEN sent=1 THEN 'unknown' ELSE 'cancelled' END,result='lease_expired',holder=NULL,lease_until=NULL,generation=generation+1,updated_at=? WHERE id=?").run(at,action.id);
+      this.db.prepare("UPDATE mind_actions SET state=CASE WHEN sent=1 THEN 'unknown' ELSE 'cancelled' END,effect_sent=sent,result='lease_expired',holder=NULL,lease_until=NULL,generation=generation+1,updated_at=? WHERE id=?").run(at,action.id);
       this.db.prepare("UPDATE mind_action_budget SET state='held' WHERE action_id=? AND state='reserved'").run(action.id);
     }
     this.db.prepare("UPDATE mind_actions SET state='cancelled',result='deadline',updated_at=? WHERE state='queued' AND deadline IS NOT NULL AND deadline<=?").run(at,at);
@@ -378,7 +382,7 @@ export class SQLiteActionStore {
       const base=JSON.parse(String(row.base_resources_json)) as string[];
       const resources=JSON.parse(String(row.resources_json)) as string[];
       const kept=resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,resources));
-      this.db.prepare("UPDATE mind_actions SET sent=0,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
+      this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=1,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
       // The retained keys are recorded now: only a recorded key keeps excluding others (retainedResourceStore.ts).
       recordRetained(this.db,String(row.id),kept.filter(key=>this.retainedAfterRelease(key,resources)),at);
     }
