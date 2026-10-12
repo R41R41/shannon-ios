@@ -22,7 +22,7 @@ import type {
   AgentWorkspaceCatalog,
 } from '../agentTaskStore.js';
 import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
-import { projectHostEvent } from './agentTaskHostProjection.js';
+import { closedWithUnknownOutcome, hostEventIgnored, projectHostEventInBatch } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
 import { fcaHostPredicate } from './fcaHostPredicate.js';
 import { TaskTreeStore } from './taskTreeStore.js';
@@ -271,12 +271,13 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
             assigned_host_id: string | null;
             status: AgentTaskStatus;
             fca_kind?: string | null;
+            unknown_since?: string | null;
           } | undefined;
         if (!row) continue;
         if (row.fca_kind != null || row.assigned_host_id !== hostId) throw new Error('AGENT_HOST_TASK_MISMATCH');
         if (this.taskTrees && !this.taskTrees.acceptsEvent(row.scope_key, event)) continue;
-        if (['completed', 'failed', 'cancelled'].includes(row.status) && event.type !== 'command_completed') continue;
-        projectHostEvent(this.database, event, now);
+        if (hostEventIgnored(row, event)) continue;
+        projectHostEventInBatch(this.database, event, now, closedWithUnknownOutcome(row));
         this.taskTrees?.recordEvent(row.scope_key, event, now);
         this.appendEvent(
           event.taskId, `host.${event.type}`, event.title, event.detail,
@@ -343,6 +344,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent) { return new AgentWorkspaceResourcePersistence(this.database).record(hostId, event); }
   /** The one unknown exit of an Agent Host task (ADR-0009 stage 1, S5; `agentTaskUnknownExit.ts`). Returns how many closed. */
   closeUnknownOutcomes(now: string, closedUnknown: ClosedUnknownHostTasks): number {
+    if (!closedUnknown(this.database).length) return 0; // Read without a write lock; the lock only when something closes.
     let closed = 0;
     this.transaction(() => { closed = closeUnknownHostTasks(this.database, now, closedUnknown, (...event) => this.appendEvent(...event)); });
     return closed;

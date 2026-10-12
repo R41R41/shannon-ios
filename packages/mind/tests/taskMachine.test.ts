@@ -49,6 +49,15 @@ describe('the task state machine (ADR-0009 stage 1, S4)', () => {
     expect(taskTransition('unknown', 'work', { to: 'active', proof: true }).ok).toBe(false);
   });
 
+  it('lets a late report reopen only a task closed with its outcome unknown, to completed or paused', () => {
+    expect(taskTransition('failed', 'codex', { to: 'completed', lateReport: true })).toMatchObject({ ok: true, legacy: { status: 'completed' } });
+    expect(taskTransition('failed', 'codex', { to: 'stopped', lateReport: true })).toMatchObject({ ok: true, legacy: { status: 'paused', pauseReason: 'owner' } });
+    expect(taskTransition('failed', 'codex', { to: 'waiting', lateReport: true })).toMatchObject({ ok: true, legacy: { status: 'paused', pauseReason: 'needs_owner' } });
+    expect(taskTransition('failed', 'codex', { to: 'active', lateReport: true }).ok).toBe(false);
+    expect(taskTransition('failed', 'codex', { to: 'completed' }).ok).toBe(false);
+    expect(taskTransition('completed', 'codex', { to: 'stopped', lateReport: true }).ok).toBe(false);
+  });
+
   it('keeps a Codex task out of the states it never takes and carries the Host starting flag', () => {
     expect(taskTransition('active', 'codex', { to: 'unknown' })).toMatchObject({ ok: false, reason: 'no_projection' });
     expect(taskTransition('ready', 'codex', { to: 'active', starting: true })).toMatchObject({ ok: true, starting: true, legacy: { status: 'starting' } });

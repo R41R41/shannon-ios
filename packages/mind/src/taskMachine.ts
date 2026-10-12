@@ -7,7 +7,8 @@ import {
  * The one state machine of a task (Syzygy ADR-0009 stage 1, S4), pure. A writer asks for the state a task should be in; the
  * machine says whether that move is allowed from where the task is, and gives the old `status` and `pause_reason` that are
  * written with it in the same UPDATE. The invariants it keeps:
- * - a finished task (completed, failed, cancelled) never moves again;
+ * - a finished task (completed, failed, cancelled) never moves again, except a task closed with its outcome unknown on a late
+ *   report of its outside work (`lateReport`: completed, or paused again);
  * - nothing becomes `proposed` again;
  * - an unknown task never becomes active: it leaves to a finished state, back to an open state other than active when a proof
  *   about its lost attempt says nothing was sent (`proof`), or, for the internal root and a conversation, by retirement or the
@@ -22,6 +23,11 @@ export interface TaskEvent {
   readonly starting?: boolean;
   /** The move rests on a proof that the task's lost attempt sent nothing (its lease expired unsent, its stop acknowledged). */
   readonly proof?: boolean;
+  /**
+   * A late report of the outside work reaches a task the unknown exit closed as failed (`outcome_unknown_closed`): the truth
+   * wins, so it may become completed, or paused again for the owner (stopped, or waiting for the owner).
+   */
+  readonly lateReport?: boolean;
 }
 
 export type TaskRefusal = 'illegal' | 'no_projection';
@@ -45,21 +51,25 @@ export const TASK_TRANSITIONS: Readonly<Record<ExecState, readonly ExecState[]>>
 });
 
 const inboxKind = (kind: TaskKind) => kind === 'root' || kind === 'conversation';
+/** Where a task closed with an unknown outcome may go on a late report of its outside work. */
+const LATE_REPORT_EXITS: readonly ExecState[] = ['completed', 'stopped', 'waiting'];
 
 /**
  * Whether a task of `kind` may move from `from` (null: a new row, or one no state can be read from) to `to`; `proof` opens the
- * inbox exits of an unknown task to every kind.
+ * inbox exits of an unknown task to every kind, `lateReport` the late-report exits of a failed one.
  */
-export function transitionAllowed(from: ExecState | null, to: ExecState, kind: TaskKind, proof = false): boolean {
+export function transitionAllowed(from: ExecState | null, to: ExecState, kind: TaskKind,
+  event: Pick<TaskEvent, 'proof' | 'lateReport'> = {}): boolean {
   if (from === null || from === to) return true;
   if (TASK_TRANSITIONS[from].includes(to)) return true;
-  return from === 'unknown' && (proof || inboxKind(kind)) && INBOX_EXITS.includes(to);
+  if (from === 'failed') return event.lateReport === true && LATE_REPORT_EXITS.includes(to);
+  return from === 'unknown' && (event.proof === true || inboxKind(kind)) && INBOX_EXITS.includes(to);
 }
 
 /** Applies one event to a task's state: the new state with its old columns, or the refusal. */
 export function taskTransition(from: ExecState | null, kind: TaskKind, event: TaskEvent): TaskTransition {
   const to = event.to;
-  if (!transitionAllowed(from, to, kind, event.proof === true)) return { ok: false, reason: 'illegal', from, to };
+  if (!transitionAllowed(from, to, kind, event)) return { ok: false, reason: 'illegal', from, to };
   const waitReason = to === 'waiting' ? event.waitReason ?? null : null;
   const starting = kind === 'codex' && to === 'active' && event.starting === true;
   const legacy = legacyProjection(to, kind, { starting, waitReason });

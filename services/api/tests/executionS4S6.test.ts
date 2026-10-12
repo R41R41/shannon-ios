@@ -192,6 +192,52 @@ describe('one unknown exit (S5)', () => {
     const other = actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'next-task', resources: [hostLock] }, c.now());
     expect(actions.claim(other.id, 'runner', c.now())).toBeNull();
     expect(actions.claimRefusals()).toMatchObject({ resource_held: 1 });
+
+    // A late Host report is not lost: its evidence is kept and the truth wins (coordinator decision of 2026-10-13).
+    const host = (type: 'completed' | 'paused' | 'failed', payload: Record<string, unknown>, id: string) =>
+      tasks.recordHostEvents('mac', [{ eventId: id, taskId: task.id, type, title: type, occurredAt: c.now(), payload }], c.now());
+    host('failed', { tests: [{ name: 'late', status: 'failed' }] }, 'late-failed');
+    expect(tasks.get('owner', task.id)).toMatchObject({ status: 'failed', tests: [{ name: 'late', status: 'failed' }] });
+    host('paused', { currentAction: '確認してください' }, 'late-paused');
+    expect(tasks.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'needs_owner' });
+    expect(row(db, task.id)).toMatchObject({ exec_state: 'waiting', unknown_since: null });
+    expect(tasks.closeUnknownOutcomes(c.now(), closedUnknown)).toBe(0);
+    expect(tasks.get('owner', task.id)?.timeline.map(item => item.title)).toEqual(expect.arrayContaining(['failed', 'paused']));
+    expect(taskTransitionRefusals().byReason).toEqual({});
+  });
+
+  it('completes a task closed with an unknown outcome when the Host reports its completion late', () => {
+    const c = clock();
+    const tasks = new SQLiteAgentTaskStore(temporaryPath());
+    cleanups.push(() => tasks.close());
+    const { task } = tasks.create('owner', { idempotencyKey: 'codex', conversationThreadID: 't', title: '修正', goal: '直す', summary: '直す。' }, c.now());
+    tasks.claim('mac', c.now());
+    const closedUnknown = () => [{ taskId: task.id, closedAt: c.now() }];
+    expect(tasks.closeUnknownOutcomes(c.now(), closedUnknown)).toBe(1);
+    expect(tasks.get('owner', task.id)).toMatchObject({ status: 'failed', summary: UNKNOWN_CLOSED_SUMMARY });
+    tasks.recordHostEvents('mac', [{ eventId: 'late', taskId: task.id, type: 'completed', title: 'done', detail: '直した。', occurredAt: c.now(),
+      payload: { changes: [{ path: 'a.ts', summary: 'fix' }], tests: [] } }], c.now());
+    expect(tasks.get('owner', task.id)).toMatchObject({ status: 'completed', summary: '直した。', changes: [{ path: 'a.ts', summary: 'fix' }] });
+  });
+
+  it('keeps a batch of Host events when the state machine refuses one row, and counts the refusal', () => {
+    const c = clock();
+    const path = temporaryPath();
+    const tasks = new SQLiteAgentTaskStore(path);
+    cleanups.push(() => tasks.close());
+    const make = (key: string) => tasks.create('owner', { idempotencyKey: key, conversationThreadID: 't', title: key, goal: key, summary: key }, c.now()).task;
+    const [first, second] = [make('a'), make('b')];
+    const db = openDatabase(path, 'agentTasks');
+    cleanups.push(() => db.close());
+    for (const task of [first, second]) db.prepare("UPDATE agent_tasks SET assigned_host_id = 'mac' WHERE task_id = ?").run(task.id);
+    // A row whose stored state says it finished, written by the machine (a state no Host event may leave).
+    db.prepare("UPDATE agent_tasks SET exec_state = 'completed', exec_state_at = '2099-01-01T00:00:00.000Z' WHERE task_id = ?").run(first.id);
+    const event = (id: string, taskId: string) => ({ eventId: id, taskId, type: 'started' as const, title: 'started', occurredAt: c.now(), payload: {} });
+    tasks.recordHostEvents('mac', [event('e1', first.id), event('e2', second.id)], c.now());
+    expect(tasks.get('owner', first.id)?.status).toBe('queued');
+    expect(tasks.get('owner', first.id)?.timeline.map(item => item.title)).toContain('started');
+    expect(tasks.get('owner', second.id)?.status).toBe('running');
+    expect(taskTransitionRefusals().byReason).toEqual({ 'illegal:codex:completed>active': 1 });
   });
 });
 

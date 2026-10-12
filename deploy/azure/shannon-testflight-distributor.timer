@@ -3,6 +3,9 @@ Description=Check for a new Shannon Xcode Cloud build
 
 [Timer]
 OnBootSec=2min
+# A start of the timer itself (a stop/start in a deploy after the boot) also schedules a first run: OnUnitActiveSec has no
+# base in a boot where the service never ran, and OnBootSec may already have passed.
+OnActiveSec=2min
 OnUnitActiveSec=10min
 RandomizedDelaySec=30s
 Persistent=true

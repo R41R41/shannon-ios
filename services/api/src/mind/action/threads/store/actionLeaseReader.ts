@@ -78,14 +78,16 @@ export class ActionLeaseReader {
 
   /**
    * The Agent Host tasks whose action closed at the unknown exit as `outcome_unknown_closed` while the task row still shows it
-   * open, with the time the action closed (ADR-0009 stage 1, S5). Read-only; nothing before the tables exist.
+   * open, with the time the action closed (ADR-0009 stage 1, S5). A task is closed once: one a late Host report reopened (paused
+   * again) is not closed again. Read-only; nothing before the tables exist.
    */
   closedUnknownHostTasks(): Array<{ taskId: string; closedAt: string }> {
     const tables = this.db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('mind_actions','agent_tasks')").get();
     if (Number(tables?.count) !== 2) return [];
     return this.db.prepare(`SELECT a.source_id, a.updated_at FROM mind_actions a JOIN agent_tasks t ON t.task_id = a.source_id
       WHERE a.kind = 'agentTask' AND a.state = 'unknown' AND a.result = 'outcome_unknown_closed'
-      AND t.status NOT IN ('completed','failed','cancelled') ORDER BY a.updated_at, a.id LIMIT 100`).all()
+      AND t.status NOT IN ('completed','failed','cancelled') AND NOT EXISTS (SELECT 1 FROM agent_task_events e
+        WHERE e.task_id = t.task_id AND e.event_type = 'execution.outcome_unknown_closed') ORDER BY a.updated_at, a.id LIMIT 100`).all()
       .map(row => ({ taskId: String(row.source_id), closedAt: String(row.updated_at) }));
   }
 
