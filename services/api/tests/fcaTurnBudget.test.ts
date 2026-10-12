@@ -109,6 +109,35 @@ describe('the provenance cap', () => {
     expect(f.runtime.get('owner', conversation)!.phase).not.toBe('stopped');
   }, 60_000);
 
+  const spread = (ids: readonly string[], sources: number, observedAt: string): TaskSource[] => Array.from({ length: sources }, (_, index) => ({
+    kind: 'memory' as const, stepId: `memory:spread-${index}`, experienceId: null, threadId: null, observedAt, recalledMemoryIds: [ids[100 + index]!] }));
+
+  it('never hides or stops the root or the sleep task, however much provenance they carry', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = fcaProductionShape({ experiences: 300, turns: 2, children: 1, messages: 0 }); cleanup.push(() => f.close());
+    await f.build();
+    const root = f.runtime.ensureRoot('owner');
+    const over = spread(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now());
+    expect(f.visible.sources('owner', root, over)).toBe(true);
+    expect(f.visible.sources('owner', { ...root, kind: 'sleep', origin: 'maintenance' }, over)).toBe(true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(warn.mock.calls.some(([line]) => String(line).includes('fca_provenance_capped'))).toBe(false);
+    expect(['stopped', 'stopping']).not.toContain(f.runtime.get('owner', root.id)!.phase);
+    expect(['stopped', 'stopping']).not.toContain(f.runtime.get('owner', f.children[0]!)!.phase);
+  }, 60_000);
+
+  it('stops a capped research task even when its parent cannot take the report', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = fcaProductionShape({ experiences: 300, turns: 2, children: 1, messages: 0 }); cleanup.push(() => f.close());
+    await f.build();
+    const child = f.runtime.get('owner', f.children[0]!)!;
+    vi.spyOn(f.runtime, 'send').mockImplementation(() => { throw new Error('FCA_MAINTENANCE_INPUT'); }); // As a maintenance parent answers.
+    expect(f.visible.sources('owner', child, spread(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now()))).toBe(false);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(['stopped', 'stopping']).toContain(f.runtime.get('owner', child.id)!.phase);
+    expect(warn.mock.calls.some(([line]) => String(line).includes('code=fca_capped_report_failed'))).toBe(true);
+  }, 60_000);
+
   it('stops a capped research task once and tells its parent in fixed words', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const f = fcaProductionShape({ experiences: 60, turns: 2, children: 1, messages: 0 }); cleanup.push(() => f.close());

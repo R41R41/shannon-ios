@@ -41,15 +41,17 @@ const FCA_SOURCE_VERDICTS_KEPT = 256;
  */
 export const FCA_MEMORY_EPOCH_MS = 2_000;
 /**
- * The most provenance one check walks for a task other than a conversation. Such a task carrying more is not shown and does
- * not run (closed: its content is dropped, not checked piecemeal), logged as `fca_provenance_capped`; it is stopped and its
- * parent is told in a fixed report, so the owner hears it. A conversation task is not capped: what one of its checks walks is
- * its current step and the inbox reports it observed (at most `FCA_CONTEXT_ITEMS`), and the turn's own budget bounds the time.
+ * The most provenance one check walks for a piece of work (`research` or `generic`, not maintenance). Such a task carrying more
+ * is not shown and does not run (closed: its content is dropped, not checked piecemeal), logged as `fca_provenance_capped`; it
+ * is stopped and its parent is told in a fixed report, so the owner hears it. The root, a conversation and the sleep task are
+ * never capped (never hidden, never stopped by this): their provenance accumulates by design, a conversation's check walks its
+ * current step and at most `FCA_CONTEXT_ITEMS` inbox reports, and a turn's own budget bounds its time.
  * Production on 2026-10-12 carried at most 14 sources and ~500 ids.
  */
 export const FCA_PROVENANCE_LIMITS = Object.freeze({ sources: 64, recalledIds: 2_000 });
 /** What the parent of a capped task is told: fixed words, carrying nothing of what the task read. */
 export const FCA_CAPPED_REPORT = '調べものの一つは、調べた記録が多すぎて最後まで進められませんでした。';
+const cappable = (task: TaskView) => (task.kind === 'research' || task.kind === 'generic') && task.origin !== 'maintenance';
 let cappedLoggedAt = -Infinity;
 
 /** Re-read canonical conversation provenance under today's memory controls; native task history is never edited. */
@@ -110,11 +112,14 @@ export function createFcaSourceGuard(parts: {
     if (capped.has(task.id)) return;
     capped.add(task.id);
     setImmediate(() => {
+      // The stop first, on its own: a report that cannot be delivered (a maintenance parent refuses input) never keeps it running.
+      try { parts.runtime.stop(scopeKey, task.id, 'fca_provenance_capped'); } catch {
+        console.warn('Shannon FCA capped task not stopped code=fca_capped_stop_failed');
+      }
       try {
         const root = parts.runtime.ensureRoot(scopeKey);
         if (task.parentId && task.parentId !== root.id) parts.runtime.send(scopeKey, root.id, task.parentId, FCA_CAPPED_REPORT, `fca-capped:${task.id}`);
-        parts.runtime.stop(scopeKey, task.id, 'fca_provenance_capped');
-      } catch { /* The task stays hidden and unrun; the next check tries no more. */ }
+      } catch { console.warn('Shannon FCA capped task not reported code=fca_capped_report_failed'); }
     }).unref?.();
   };
   const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, sources, pendingStepId) => {
@@ -125,7 +130,7 @@ export function createFcaSourceGuard(parts: {
       if (task.scopeKey !== scopeKey) return false;
       if (!sources.length) return true; // Direct owner API tasks have no inherited conversation source.
       const recalledIds = new Set(sources.flatMap(source => source.recalledMemoryIds)).size;
-      if (task.kind !== 'conversation' && (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds)) {
+      if (cappable(task) && (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds)) {
         if (clock() - cappedLoggedAt >= 60_000) {
           cappedLoggedAt = clock();
           console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} ids=${recalledIds}`);
