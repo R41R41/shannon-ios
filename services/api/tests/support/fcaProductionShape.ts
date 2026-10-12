@@ -21,7 +21,7 @@ import type { TaskStep } from '../../src/mind/action/taskRuntime/taskRuntimePort
 export const PRODUCTION_SHAPE = Object.freeze({ experiences: 855, turns: 14, recalledPerTurn: 36, readsPerTurn: 6, children: 6, messages: 64, skills: 10 });
 const emotion = { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' as const };
 
-export function fcaProductionShape(shape: Partial<typeof PRODUCTION_SHAPE> & { budgetMs?: number } = {}) {
+export function fcaProductionShape(shape: Partial<Record<keyof typeof PRODUCTION_SHAPE, number>> & { budgetMs?: number } = {}) {
   const size = { ...PRODUCTION_SHAPE, ...shape };
   const world = memoryWorld();
   const ids: string[] = [];

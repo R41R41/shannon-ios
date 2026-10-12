@@ -91,11 +91,13 @@ export function createFcaConversationBridge(parts: {
           return promise;
         }),
         ...(parts.selector ? { async selectTools(tools, input) {
-          if (closed || !current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
+          // A turn whose task context closed (its budget spent, or the audience changed) keeps the offer it has: its task and
+          // memory tools were already left out by their availability, and a call is checked again. It never fails the turn.
+          if (closed || !current(step.scopeKey)) return tools;
           const base = baseToolSession(tools), signal = execution.signal;
           const selected = await withObserverTask(observation, () => parts.selector!.select({ scopeKey: step.scopeKey, ...input,
             recentResults: [], tools: base.definitions.map(tool => ({ name: tool.name, description: tool.description })), signal }));
-          if (!current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
+          if (!current(step.scopeKey)) return tools;
           return withToolMenu(base, selected.names.map(providerToolName));
         } } : {}),
         context() {
