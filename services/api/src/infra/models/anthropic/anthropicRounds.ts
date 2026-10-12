@@ -59,6 +59,11 @@ export interface SonnetRoundOptions {
   plainBody?: Anthropic.MessageCreateParamsNonStreaming;
   /** A selected external read is unfinished until its server-owned receipt exists. One bounded recovery, never a replay. */
   missingRequiredRead?: (message: Anthropic.Message) => boolean;
+  /**
+   * The cache plan sends the fixed tool pair also when the turn offers no tool. A call in such a turn runs nothing: it is
+   * answered once with the refusal of a name the turn does not offer, and the model answers (`declinedCalls`).
+   */
+  declineUnofferedCalls?: boolean;
 }
 
 export interface SonnetRoundResult {
@@ -134,13 +139,16 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
 
   // Without tools: one answer, resumed when the server paused a web search.
   if (!session) {
+    let declined = !options.declineUnofferedCalls;
     for (;;) {
       const message = await options.send(request(), null, round++);
       turns.push(message);
       const stop = refused(message);
       if (stop) return stop;
       if (message.stop_reason === 'pause_turn' && pauses++ < MAXIMUM_PAUSES) { messages.push({ role: 'assistant', content: message.content }); continue; }
-      return { final: message, turns, used: 0 };
+      if (declined || message.stop_reason !== 'tool_use') return { final: message, turns, used: 0 };
+      declined = true;
+      messages.push(...declinedCalls(message));
     }
   }
 
@@ -240,6 +248,16 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     }
   }
 }
+
+/** The model's calls in a turn that offers no tool, and their answer: nothing ran, the name is not offered. */
+export function declinedCalls(message: Anthropic.Message): Anthropic.MessageParam[] {
+  const uses = message.content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
+  const results = uses.map(use => ({ type: 'tool_result' as const, tool_use_id: use.id, content: NOT_OFFERED_IN_TURN, is_error: true }));
+  return [{ role: 'assistant', content: message.content }, { role: 'user', content: results }];
+}
+
+export const NOT_OFFERED_IN_TURN = JSON.stringify({ ok: false, text: 'この返事では道具を出していないので、何も実行していない。道具なしで答える。',
+  failure: 'not_offered', retryable: false });
 
 function failed(output: string | undefined): boolean {
   try { const value = JSON.parse(output ?? '{}') as { ok?: unknown; failure?: unknown }; return value.ok === false && value.failure !== 'not_offered'; } catch { return false; }

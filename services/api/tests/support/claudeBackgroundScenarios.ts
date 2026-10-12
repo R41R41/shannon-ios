@@ -89,6 +89,8 @@ const ownTimeScenarios: ClaudeScenario[] = [
 
 const skillProposer: ClaudeScenario = {
   name: 'skill-proposer-sonnet', script: [oneShot('{"skills":[]}', 'claude-sonnet-5-5')],
+  // Its client is not pinned (`ambientClaudeClient`): an ambient base URL or bearer token would change what it sends.
+  env: { ANTHROPIC_BASE_URL: '', ANTHROPIC_AUTH_TOKEN: '' },
   run: c => new AnthropicSkillSleepModel({ apiKey: 'synthetic-skill-key', model: 'claude-sonnet-5-5', fetch: c.fetcher, usageStore: c.store, now: c.now })
     .json('owner', 'skills', '合成されたスキル提案の指示', { notes: ['合成された記録'] },
       { type: 'object', additionalProperties: false, required: ['skills'], properties: { skills: { type: 'array', items: { type: 'string' } } } }),

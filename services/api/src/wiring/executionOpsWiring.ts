@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { ActionSchedulerMetrics, ActionThreads } from '../contracts/actionThreadContract.js';
 import type { LivenessView } from '../infra/ops/liveness.js';
 import { cacheDayLine, cacheReceiptsView } from '../infra/models/anthropic/cacheReceipts.js';
+import { warmDayLine } from '../infra/models/anthropic/cacheWarmTurns.js';
 import { rejectionCounts } from '../infra/models/anthropic/anthropicRejection.js';
 import { readActionExecutionCounts, type ActionExecutionCounts } from '../mind/action/threads/store/actionMetrics.js';
 import { countTasksUnknownSince } from '../mind/action/taskRuntime/store/taskUnknownMetrics.js';
@@ -69,6 +70,7 @@ export function executionDailyLine(view: ExecutionView, cacheDay: string): strin
     `sleepCompleted=${view.sleepLastCompletedAt ?? 'none'}`,
     `ownTimeSession=${view.ownTimeLastSessionAt ?? 'none'}`,
     `cacheReadTurns=${cacheDayLine(cacheDay)}`,
+    `warmTextReads=${warmDayLine(cacheDay)}`,
     `rejections=${pairs(view.modelRequestRejections)}`,
   ].join(' ');
 }

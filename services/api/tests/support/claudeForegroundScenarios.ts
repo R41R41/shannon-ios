@@ -21,13 +21,15 @@ export interface ClaudeScenario {
   name: string;
   script: readonly ScriptedReply[];
   run(context: ScenarioContext): Promise<unknown>;
+  /** Process environment the scenario runs under (stubbed for its run only), so an ambient setting cannot change its bytes. */
+  env?: Readonly<Record<string, string>>;
 }
 
 export const SCENARIO_TIME = '2026-10-12T03:00:00.000Z';
-const HAIKU = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } as const;
-const SONNET = { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'between_tools' } as const;
+export const HAIKU = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } as const;
+export const SONNET = { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'between_tools' } as const;
 
-type Settings = typeof HAIKU | typeof SONNET;
+export type Settings = typeof HAIKU | typeof SONNET;
 
 /** A recorded response with complete one-hour cache usage (the shape a Haiku or Sonnet 5.5 request requires). */
 export function cached(value: AnthropicMessage, model: string, write = 1_800, read = 0): AnthropicMessage {
@@ -36,8 +38,8 @@ export function cached(value: AnthropicMessage, model: string, write = 1_800, re
   return { ...value, id: `msg_${model}_${write}_${read}`, model, usage };
 }
 
-const answer = (model: string, write?: number, read?: number) => cached(anthropicFixture('structured-answer'), model, write, read);
-const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
+export const answer = (model: string, write?: number, read?: number) => cached(anthropicFixture('structured-answer'), model, write, read);
+export const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
 const spoken = (model: string, text = 'こんにちは、ライ氏。今日も来てくれてうれしいです。') =>
   cached(message([{ type: 'text', text }], 'end_turn', { id: 'msg_spoken' }), model, 0, 2_400);
 
@@ -48,7 +50,7 @@ function needsInput(model: string): AnthropicMessage {
   return cached(message([{ type: 'text', text: JSON.stringify(reply), citations: null }], 'end_turn', { id: 'msg_needs_input' }), model, 0, 4_100);
 }
 
-function webAnswer(model: string): AnthropicMessage {
+export function webAnswer(model: string): AnthropicMessage {
   return cached(anthropicFixture('web-search-answer'), model, 300, 3_000);
 }
 
@@ -58,38 +60,38 @@ function webSpoken(model: string): AnthropicMessage {
   return cached({ ...found, content: [...blocks, { type: 'text', text: '今日は晴れです。', citations: null }] }, model, 300, 3_000);
 }
 
-function chat(context: ScenarioContext, settings: Settings): AnthropicChatModel {
+export function chat(context: ScenarioContext, settings: Settings): AnthropicChatModel {
   return new AnthropicChatModel({ apiKey: 'synthetic-chat-key', settings, fetch: context.fetcher, usageStore: context.store, now: context.now,
     retryWait: async () => {} });
 }
 
-function tools(names: readonly string[]): ShannonModelToolSession {
+export function tools(names: readonly string[]): ShannonModelToolSession {
   return {
     definitions: names.map(name => shannonTool(name)!), maximumCalls: 4, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
     async call(name: string) { return JSON.stringify({ ok: true, text: `合成結果: ${name}` }); },
   };
 }
 
-const text: ShannonChatModelRequest = {
+export const text: ShannonChatModelRequest = {
   scopeKey: 'owner', systemPrompt: '合成された人格の層', profilePrompt: '合成された持ち主の層', history: [], message: 'こんにちは',
   turnContext: '合成された今のターンの文脈',
 };
-const voice: ShannonVoiceModelRequest = {
+export const voice: ShannonVoiceModelRequest = {
   scopeKey: 'owner', systemPrompt: '合成された人格の層', profilePrompt: '合成された持ち主の層', history: [], message: 'おはよう',
   turnContext: '合成された声のターンの文脈', useWebSearch: false, conversationClass: 'direct',
 };
-const history = [
+export const history = [
   { role: 'user' as const, content: '昨日の話の続きをしたい' },
   { role: 'assistant' as const, content: 'はい、覚えています。' },
 ];
 
-async function streamedText(context: ScenarioContext, settings: Settings, request: ShannonChatModelRequest) {
+export async function streamedText(context: ScenarioContext, settings: Settings, request: ShannonChatModelRequest) {
   const parts: string[] = [];
   const result = await chat(context, settings).generateStreaming(request, piece => { parts.push(piece); });
   return { result, parts };
 }
 
-async function streamedVoice(context: ScenarioContext, settings: Settings, request: ShannonVoiceModelRequest) {
+export async function streamedVoice(context: ScenarioContext, settings: Settings, request: ShannonVoiceModelRequest) {
   const parts: string[] = [];
   const result = await chat(context, settings).generateVoiceStreaming(request, piece => { parts.push(piece); });
   return { result, parts };

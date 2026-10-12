@@ -6,7 +6,8 @@ import { PartialAnswerError, RoundTimer, type RoundTime } from '../../../mind/ac
 import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import type { LlmUsageStore } from '../llmUsage.js';
-import { recordCacheReceipt, type CacheRoute } from '../anthropic/cacheReceipts.js';
+import { recordCacheReceipt, type CacheRoute, type CacheTurn } from '../anthropic/cacheReceipts.js';
+import { cachePlanRequest } from '../anthropic/cachePlanMarkers.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from '../anthropic/observerProjection.js';
 import {
   AnthropicUsageEvidenceError, cacheHaikuRequest, serverSearchCacheStart, settledServerSearchUsage, validateHaikuCacheUsage,
@@ -83,7 +84,11 @@ export interface ClaudeConversationTransport {
 }
 
 export interface ClaudeSendRequest {
-  target: { scopeKey: string; route: CacheRoute };
+  /**
+   * `thread`: the Talk the turn belongs to, kept in the cache receipt only as a short hash. `cachePlan`: the request follows the
+   * foreground cache plan (`cachePlanMarkers.ts`) instead of the one-hour cache of every other request (`cacheHaikuRequest`).
+   */
+  target: { scopeKey: string; route: CacheRoute; thread?: string; cachePlan?: boolean };
   /** Streamed when present: each text delta goes through it in order. */
   listen: ClaudeListener | null;
   caller?: AbortSignal;
@@ -119,6 +124,8 @@ interface Attempt {
   usageRecorded: boolean;
   firstVisibleOutputAfterMs?: number;
   finalUsageAfterMs?: number;
+  /** The turn's first word or call, from the start of its first request (round 0 of a streamed request only). */
+  firstTokenMs?: number;
 }
 
 interface StreamProgress {
@@ -184,11 +191,17 @@ function openAttempt(transport: ClaudeConversationTransport, request: ClaudeSend
   const bounds = isHaikuModel(body.model) && request.voiceBounds && request.listen ? streamWatch(request.voiceBounds) : null;
   const signal = attemptSignal(transport, request, send, { timer, bounds });
   const started = transport.clock();
-  const prepared = usesOneHourAnthropicCache(body.model) ? cacheHaikuRequest(body) : body;
+  const prepared = preparedBody(body, request.target.cachePlan === true);
   return {
     transport, request, body, prepared, round, timer, bounds, signal, started, sent: '', observedUsage: null, searchCacheStart: null,
     explicitSearchTtl: undefined, receivedUsage: false, usageRecorded: false,
   };
+}
+
+/** The request as it leaves: the cache plan's breakpoints, or the one-hour cache every other native 5.5 request gets. */
+function preparedBody(body: Body, cachePlan: boolean): Body {
+  if (!usesOneHourAnthropicCache(body.model)) return body;
+  return cachePlan ? cachePlanRequest(body) : cacheHaikuRequest(body);
 }
 
 function attemptSignal(transport: ClaudeConversationTransport, request: ClaudeSendRequest, send: { body: Body; time: RoundTime | null },
@@ -255,7 +268,8 @@ function noteFirst(attempt: Attempt, progress: StreamProgress, event: Anthropic.
   if (progress.first || attempt.round !== 0 || (text === null && !toolCall)) return;
   progress.first = true;
   attempt.request.onFirst?.();
-  attempt.request.latency.record(attempt.transport.clock() - attempt.started);
+  attempt.firstTokenMs = attempt.transport.clock() - attempt.started;
+  attempt.request.latency.record(attempt.firstTokenMs);
 }
 
 function captureUsage(attempt: Attempt, event: Anthropic.MessageStreamEvent): void {
@@ -294,9 +308,16 @@ async function acceptHanded(attempt: Attempt, progress: StreamProgress, handed: 
 /** The response's usage booked, its cache receipt left, then its cache evidence checked. */
 function settle(attempt: Attempt, message: Message): void {
   book(attempt, message.usage, true);
-  recordCacheReceipt(attempt.request.target.route, attempt.prepared, message.usage, attempt.round);
+  recordCacheReceipt(attempt.request.target.route, attempt.prepared, message.usage, attempt.round, undefined, cacheTurn(attempt));
   attempt.usageRecorded = true;
   if (usesOneHourAnthropicCache(attempt.body.model)) validateNativeUsage(message.usage, unconfirmed(attempt.body.model, message.usage));
+}
+
+/** What the receipt keeps of the turn: only for a request that names its Talk (none of the one-shot or background callers). */
+function cacheTurn(attempt: Attempt): CacheTurn | undefined {
+  const { thread, cachePlan } = attempt.request.target;
+  if (thread === undefined) return undefined;
+  return { thread, cachePlan: cachePlan === true, ...(attempt.firstTokenMs === undefined ? {} : { firstTokenMs: attempt.firstTokenMs }) };
 }
 
 function book(attempt: Attempt, usage: Usage | null | undefined, finalUsage: boolean): void {

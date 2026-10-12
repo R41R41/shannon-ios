@@ -21,6 +21,7 @@ import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearch
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
 import { claudeClient } from '../claude/claudeClient.js';
+import { cachePlanApplies, plannedChatBody } from './anthropicCachePlan.js';
 import {
   claudeConversationSender, type ClaudeConversationTransport, type ClaudeListener, type ClaudeSend, type ClaudeSendRequest,
 } from '../claude/claudeTransport.js';
@@ -87,6 +88,8 @@ export interface AnthropicChatModelOptions {
   webSearch?: WebSearchOperation;
   /** The pause before the one transient retry (tests: no real timer). */
   retryWait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  /** Text turns follow the foreground cache plan (`anthropicCachePlan.ts`); unset: `SHANNON_CLAUDE_CACHE_PLAN`. Native 5.5 only. */
+  cachePlan?: boolean;
 }
 
 export class AnthropicChatModel implements ShannonChatModel {
@@ -96,10 +99,12 @@ export class AnthropicChatModel implements ShannonChatModel {
   readonly textFirstTokenLatency = new FirstTokenLatency();
   private readonly clock: () => number;
   private readonly transport: ClaudeConversationTransport;
+  private readonly cachePlan: boolean;
 
   constructor(private readonly options: AnthropicChatModelOptions) {
     if (!options.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is required');
     this.model = options.settings.model;
+    this.cachePlan = options.cachePlan === undefined ? cachePlanApplies(this.model) : options.cachePlan && isAppendOnlyAnthropicModel(this.model);
     this.clock = options.clock ?? (() => performance.now());
     // No SDK retries: the turn's deadline bounds it. The transport alone adds one bounded transient retry for Haiku.
     const client = claudeClient({ apiKey: options.apiKey, timeoutMilliseconds: options.timeoutMilliseconds ?? 45_000, fetch: options.fetch });
@@ -165,11 +170,11 @@ export class AnthropicChatModel implements ShannonChatModel {
     }
     request = this.boundedToolMenu(request);
     observerHandoff('context', 'native', { surface: 'text', model: this.model });
-    const body = observeSync('native', { surface: 'text' }, () => sonnetChatBody(this.options.settings, request, this.options.agentHostHint), observedAnthropicRequest, { model: this.model });
+    const body = observeSync('native', { surface: 'text' }, () => this.textBody(request), observedAnthropicRequest, { model: this.model });
     let written = '';
     let searchRequested = request.requireWebSearch === true;
     const watch = watchdog(request.firstTokenBudgetMs);
-    const send = this.sender({ scopeKey: request.scopeKey, route: 'text' }, onReplyText ? (delta, decoder) => {
+    const send = this.sender(this.textTarget(request), onReplyText ? (delta, decoder) => {
       const text = decoder.push(delta);
       if (!text) return null;
       const read = turnWebSearchResult(request.tools);
@@ -188,8 +193,8 @@ export class AnthropicChatModel implements ShannonChatModel {
           return message;
         }, isAnswer: usable,
         missingRequiredRead: message => searchRequested && !searched && !turnWebSearchResult(request.tools) && !searchNeedsInput(message),
-        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: sonnetChatBody(this.options.settings, { ...request, tools: undefined }, this.options.agentHostHint) } : {}),
-        ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}) });
+        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: this.textBody({ ...request, tools: undefined }) } : {}),
+        ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}), declineUnofferedCalls: this.cachePlan });
     } catch (error) { throw watch?.timedOut() ? new SonnetFirstTokenTimeout() : error; } finally { watch?.clear(); }
     const outOfTime = (sent?: string): ShannonChatModelResult => this.outOfTimeTurn(request, sent ?? written);
     if (result.outOfTime || !result.final) return outOfTime(result.outOfTime?.sent);
@@ -267,6 +272,18 @@ export class AnthropicChatModel implements ShannonChatModel {
     const webSources = webSourcesOf(result);
     return { mode: this.mode, model: this.model, reply, ...(webSources.length ? { webSources } : {}), ...(truncated ? { truncated: true } : {}) };
     }, value => ({ reply: value.reply.slice(0, 4_000), truncated: value.truncated === true }));
+  }
+
+  /** The text turn's request: the cache plan's (`anthropicCachePlan.ts`) or the one before it, byte for byte. */
+  private textBody(request: ShannonChatModelRequest): Anthropic.MessageCreateParamsNonStreaming {
+    const build = this.cachePlan ? plannedChatBody : sonnetChatBody;
+    return build(this.options.settings, request, this.options.agentHostHint);
+  }
+
+  /** Where a text turn's requests go: its Talk for the receipts, and the cache plan when it is on. */
+  private textTarget(request: ShannonChatModelRequest): ClaudeSendRequest['target'] {
+    const thread = request.threadKey === undefined ? {} : { thread: request.threadKey };
+    return { scopeKey: request.scopeKey, route: 'text', ...thread, ...(this.cachePlan ? { cachePlan: true } : {}) };
   }
 
   /** Normalize discovery before building the body. The native adapter budgets actual schemas, including JSON output. */

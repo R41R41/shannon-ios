@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { BACKGROUND_SCENARIOS } from './support/claudeBackgroundScenarios.js';
+import { EDGE_SCENARIOS } from './support/claudeEdgeScenarios.js';
+import { PLAN_SCENARIOS } from './support/claudePlanScenarios.js';
 import { FOREGROUND_SCENARIOS, SCENARIO_TIME, type ClaudeScenario } from './support/claudeForegroundScenarios.js';
 import { cacheReceiptsTaken, forgetCacheReceipts, recordingFetch, usageLedger, type RecordedRequest } from './support/claudeRequestRecorder.js';
 
@@ -9,10 +11,14 @@ import { cacheReceiptsTaken, forgetCacheReceipts, recordingFetch, usageLedger, t
  * hands to `fetch` (method, URL, headers, body bytes), the usage it booked, the cache receipts it left and what the caller
  * returned, all from recorded provider responses. They are the parity contract of the model layer's later steps: the
  * transport extraction (M3) changes none of them. Regenerate only for a deliberate change of what is sent or booked:
- * `SHANNON_WRITE_GOLDEN=1 vitest run claudeRequestGoldens`.
+ * `SHANNON_WRITE_GOLDEN=1 vitest run claudeRequestGoldens`. Without that setting nothing is written: a missing golden fails.
+ *
+ * The recorded headers include the SDK's own (`user-agent`, `x-stainless-package-version`, the beta header): an upgrade of
+ * `@anthropic-ai/sdk` changes them in every golden. Regenerate in the upgrade's own commit, after checking that the bodies,
+ * the usage and the receipts did not move (`git diff --word-diff` on the fixtures shows only the header lines).
  */
 const folder = new URL('./fixtures/claude-requests/', import.meta.url);
-const SCENARIOS: readonly ClaudeScenario[] = [...FOREGROUND_SCENARIOS, ...BACKGROUND_SCENARIOS];
+const SCENARIOS: readonly ClaudeScenario[] = [...FOREGROUND_SCENARIOS, ...EDGE_SCENARIOS, ...PLAN_SCENARIOS, ...BACKGROUND_SCENARIOS];
 const writing = process.env.SHANNON_WRITE_GOLDEN === '1';
 
 interface Golden {
@@ -32,6 +38,15 @@ function failure(error: unknown): Record<string, unknown> {
 
 async function played(scenario: ClaudeScenario): Promise<{ golden: Golden; raw: string[] }> {
   forgetCacheReceipts();
+  for (const [name, value] of Object.entries(scenario.env ?? {})) vi.stubEnv(name, value);
+  try {
+    return await playedUnderEnvironment(scenario);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
+async function playedUnderEnvironment(scenario: ClaudeScenario): Promise<{ golden: Golden; raw: string[] }> {
   const recorder = recordingFetch(scenario.script);
   const ledger = usageLedger();
   let outcome: Golden['outcome'];
@@ -72,7 +87,8 @@ describe('Claude provider request goldens', () => {
   it.each(SCENARIOS.map(scenario => [scenario.name, scenario] as const))('%s sends, books and returns what was recorded', async (_name, scenario) => {
     const current = await played(scenario);
     const file = goldenFile(scenario.name);
-    if (writing || !existsSync(file)) writeFileSync(file, `${JSON.stringify(current.golden, null, 1)}\n`);
+    if (writing) writeFileSync(file, `${JSON.stringify(current.golden, null, 1)}\n`);
+    expect(existsSync(file), `golden ${scenario.name} (write it with SHANNON_WRITE_GOLDEN=1)`).toBe(true);
     const recorded = JSON.parse(readFileSync(file, 'utf8')) as Golden;
     expect(current.golden.requests.length, 'request count').toBe(recorded.requests.length);
     recorded.requests.forEach((request, index) => {

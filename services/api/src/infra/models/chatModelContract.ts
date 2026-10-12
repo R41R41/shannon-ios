@@ -61,6 +61,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   tools?: ShannonModelToolSession;
   /** The server withheld her tools because others may be present: she is told so in one line. */
   toolsWithheld?: true;
+  /** The Talk of the turn, for content-free cache receipts only (kept there as a short hash); never sent to a model. */
+  threadKey?: string;
 }
 
 export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {

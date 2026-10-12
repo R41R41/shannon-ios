@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
+import { recordWarmTurn, resetWarmTurns, warmTurnsView } from './cacheWarmTurns.js';
 
 /**
  * Content-free receipts of Claude's prompt cache (Syzygy ADR-0009 stage 1, step 1). Each request leaves its route, model, the
@@ -17,6 +18,13 @@ export interface CachePrefixFingerprint {
   history: string;
 }
 
+/** What a foreground turn adds to its receipts: its Talk (kept only as a short hash), its lane and its first-token time. */
+export interface CacheTurn {
+  thread: string;
+  cachePlan: boolean;
+  firstTokenMs?: number;
+}
+
 export interface CacheReceipt {
   at: string;
   route: CacheRoute;
@@ -28,6 +36,10 @@ export interface CacheReceipt {
   cacheCreation1h: number;
   output: number;
   prefix: CachePrefixFingerprint;
+  /** Only on a foreground turn's requests: the Talk's short hash, the cache plan, and on round 0 the first-token time. */
+  thread?: string;
+  cachePlan?: boolean;
+  firstTokenMs?: number;
 }
 
 export interface CacheDayAggregate {
@@ -92,29 +104,47 @@ function forgetOldDays(): void {
   for (const day of [...days.keys()]) if (!kept.includes(day)) days.delete(day);
 }
 
+function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 'cachePlan' | 'firstTokenMs'> {
+  if (!turn) return {};
+  const first = turn.firstTokenMs === undefined ? {} : { firstTokenMs: Math.max(0, Math.round(turn.firstTokenMs)) };
+  return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, ...first };
+}
+
+/** A foreground text turn's first request also counts toward the warm-turn view (`cacheWarmTurns.ts`). */
+function noteWarmTurn(receipt: CacheReceipt): void {
+  if (receipt.route !== 'text' || receipt.round !== 0 || receipt.thread === undefined) return;
+  const cacheCreation = receipt.cacheCreation5m + receipt.cacheCreation1h;
+  recordWarmTurn({ at: receipt.at, thread: receipt.thread, cachePlan: receipt.cachePlan === true, cacheRead: receipt.cacheRead, cacheCreation,
+    ...(receipt.firstTokenMs === undefined ? {} : { firstTokenMs: receipt.firstTokenMs }) });
+}
+
 /** Records one provider response's usage. Never throws: a receipt is an observation, not part of the request. */
 export function recordCacheReceipt(route: CacheRoute, body: Anthropic.MessageCreateParamsNonStreaming,
-  usage: Partial<Anthropic.Message['usage']> | null | undefined, round = 0, at = new Date().toISOString()): void {
+  usage: Partial<Anthropic.Message['usage']> | null | undefined, round = 0, at = new Date().toISOString(), turn?: CacheTurn): void {
   try {
     const creation = usage?.cache_creation;
     const receipt: CacheReceipt = {
       at, route, round, model: body.model, input: count(usage?.input_tokens), cacheRead: count(usage?.cache_read_input_tokens),
       cacheCreation5m: count(creation?.ephemeral_5m_input_tokens), cacheCreation1h: count(creation?.ephemeral_1h_input_tokens),
-      output: count(usage?.output_tokens), prefix: prefixFingerprint(body),
+      output: count(usage?.output_tokens), prefix: prefixFingerprint(body), ...turnFields(turn),
     };
     ring.push(receipt);
     if (ring.length > CACHE_RECEIPT_LIMITS.ring) ring.splice(0, ring.length - CACHE_RECEIPT_LIMITS.ring);
     aggregate(receipt);
+    noteWarmTurn(receipt);
     forgetOldDays();
   } catch {
     // An unreadable request shape leaves no receipt; the request itself is unaffected.
   }
 }
 
-/** What `GET /v1/ops` shows: the latest receipts and, per day and route, how many turns read the cache. */
+/**
+ * What `GET /v1/ops` shows: the latest receipts, per day and route how many turns read the cache, and per day the foreground
+ * text turns that followed their Talk's previous turn within the hour (`cacheWarmTurns.ts`).
+ */
 export function cacheReceiptsView(recent = 20) {
   const byDay = Object.fromEntries([...days].map(([day, routes]) => [day, Object.fromEntries(routes)]));
-  return { recent: ring.slice(-Math.max(0, recent)), days: byDay };
+  return { recent: ring.slice(-Math.max(0, recent)), days: byDay, foregroundText: warmTurnsView() };
 }
 
 /** The day's foreground turns that read the cache, per route: the compact daily log line. */
@@ -128,4 +158,5 @@ export function cacheDayLine(day: string): string {
 export function resetCacheReceipts(): void {
   ring.splice(0, ring.length);
   days.clear();
+  resetWarmTurns();
 }

@@ -409,7 +409,7 @@ export class ShannonApiKernel {
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
         .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
-      message,
+      message, threadKey: threadId,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
       ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier),
