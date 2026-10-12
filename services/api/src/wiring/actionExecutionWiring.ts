@@ -45,7 +45,8 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
  * How long a turn waits behind the scope's earlier turn before it gives up with `ACTION_FOREGROUND_BUSY` (logged as
  * `queue_timeout`). The durable respond slot still serializes: a turn that stops waiting here never runs beside the earlier one.
  */
-export const FOREGROUND_QUEUE_WAIT_MS=45_000;
+// Longer than the longest foreground turn (text deadline 50 s after admission, plus its writes), so a queued turn waits for it.
+export const FOREGROUND_QUEUE_WAIT_MS=75_000;
 const log=(line:string)=>{
   try{console.warn(line);}catch{/* logging never fails a turn */}
 };

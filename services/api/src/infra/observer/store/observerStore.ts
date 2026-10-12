@@ -29,7 +29,10 @@ export class SQLiteObserverStore {
     this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5; PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS observer_events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, scope_key TEXT NOT NULL, recorded_ms INTEGER NOT NULL, payload TEXT NOT NULL); CREATE INDEX IF NOT EXISTS observer_scope_seq ON observer_events(scope_key,sequence); CREATE TABLE IF NOT EXISTS observer_loss(id INTEGER PRIMARY KEY CHECK(id=1),dropped INTEGER NOT NULL CHECK(dropped>=0 AND dropped<=9007199254740991)); INSERT OR IGNORE INTO observer_loss(id,dropped) VALUES(1,0);');
     // Additive and idempotent: rows written before the column existed count as the server's. Another process may add it first.
     if(!(this.db.prepare('PRAGMA table_info(observer_events)').all() as {name:string}[]).some(column=>column.name==='lane')){
+      // Several processes open this sidecar at deploy: wait up to 5 s for the one-time column add instead of 5 ms.
+      this.db.exec('PRAGMA busy_timeout=5000');
       try{this.db.exec("ALTER TABLE observer_events ADD COLUMN lane TEXT NOT NULL DEFAULT 'server'");}catch{/* added concurrently */}
+      this.db.exec('PRAGMA busy_timeout=5');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS observer_lane_seq ON observer_events(lane,sequence)');
     this.prune();
