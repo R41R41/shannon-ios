@@ -51,6 +51,8 @@ public final class ShannonConversationModel {
     var stage5OthersPresent = false
     struct VoiceFeedbackRecord { let threadID: String; let reply: String; let recordID: String }
     public let feedback: ShannonFeedbackModel
+    /// Rich chat: the owner's emoji reactions on messages (`ShannonReactions.swift`).
+    public let reactions: ShannonReactionsModel
     let scopeKey: String
     let client: any ShannonAPIClientProtocol
     /// Her eyes in this app for a turn: the camera state each turn reports, and the one frame of a look.
@@ -81,6 +83,7 @@ public final class ShannonConversationModel {
         usesDisplayCache: Bool? = nil
     ) {
         self.feedback = ShannonFeedbackModel(scopeKey: scopeKey, client: client as? any ShannonFeedbackServing)
+        self.reactions = ShannonReactionsModel(scopeKey: scopeKey, client: client as? any ShannonReactionServing)
         self.scopeKey = scopeKey
         self.client = client
         let shouldUseDisplayCache = usesDisplayCache ?? (client is ShannonAPIClient)

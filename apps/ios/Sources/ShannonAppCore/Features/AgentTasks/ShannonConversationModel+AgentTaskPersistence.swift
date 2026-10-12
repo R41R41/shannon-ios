@@ -154,7 +154,10 @@ extension ShannonConversationModel {
             captures: role == .shannon ? message.captures ?? [] : [],
             reminder: role == .shannon ? message.reminder : nil,
             studyPiece: role == .shannon ? message.studyPiece : nil,
-            feedback: role == .shannon ? message.feedback : nil
+            feedback: role == .shannon ? message.feedback : nil,
+            serverID: message.id,
+            reportCard: role == .shannon ? message.reportCard : nil,
+            reactions: message.reactions ?? []
         )
     }
 

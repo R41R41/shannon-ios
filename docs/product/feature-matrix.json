@@ -4358,6 +4358,92 @@
       }
     },
     {
+      "id": "talk.report-card",
+      "area": "talk",
+      "title": "調べた結果の報告カード",
+      "description": "頼んだ調べものが終わると、その報告をトークに残す。短い答えの下に、表・グラフ・出典・地図入りのカードを出し、「開く」で全文を読む。ひとりの時だけ見え、元の記憶を忘れると消える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonReportCardView.swift#ShannonReportCardView",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+RichChat.swift#refreshReportCards",
+            "services/api/src/mind/action/fca/fcaReportCards.ts"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonReportCardView.swift#ShannonMessageExtras",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift#ShannonMessageExtras"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.rich-blocks",
+      "area": "talk",
+      "title": "表・グラフ・画像で見せる",
+      "description": "返事や報告の中身に合わせて、比べる時は表、数の変化はグラフ、手順は番号つき、場所は地図、資料にあった画像は画像で出す。シャノンが選ぶ。表は横に動かせる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonMessageMarkdown+Rich.swift#ShannonChartSpec",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonRichBlockViews.swift#ShannonRichBlockView"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopArtifactComponents.swift#ShannonRichBlockView",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonRichBlockViews.swift"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.reactions",
+      "area": "talk",
+      "title": "絵文字の反応",
+      "description": "どのメッセージにも、長押し（Mac は右クリックかマウスを乗せたボタン）で絵文字を付ける。❤️ 😂 👍 😮 🥲 🙏 と「＋」でほかの絵文字。いくつでも付け、押すと外せる。シャノンの返事への反応は学びの手がかりになり、次の返事で自然に触れる。ひとりの時だけ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift#ShannonReactionMenuItems",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonReactions.swift#ShannonReactionsModel",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Reactions.swift"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift#shannonMessageReactions",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift#shannonMessageReactions"
+          ],
+          "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。"
+        }
+      }
+    },
+    {
       "id": "tasks.task-tree",
       "area": "tasks",
       "title": "作業の道筋と完了条件",

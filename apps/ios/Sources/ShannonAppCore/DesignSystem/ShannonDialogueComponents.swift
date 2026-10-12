@@ -72,6 +72,10 @@ struct ShannonRichMarkdownText: View {
                 .font(.shannon(.body))
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+        case .table, .image, .chart:
+            ShannonRichBlockView(block: block)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

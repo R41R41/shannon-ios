@@ -92,7 +92,9 @@ extension ShannonDesktopRootView {
                                     Task { await conversation.retryLastFailed() }
                                 } : nil
                             )
+                                .shannonMessageReactions(message, model: conversation.reactions, threadID: conversation.selectedThreadId)
                                 .id(message.id)
+                            ShannonMessageExtras(message: message, conversation: conversation)
                             if let target = message.feedback { ShannonFeedbackView(target: target, model: conversation.feedback) }
                             if ShannonTurnCaptureList.hasContent(message) {
                                 ShannonTurnCaptureList(message: message, conversation: conversation, memory: memory)
@@ -117,6 +119,7 @@ extension ShannonDesktopRootView {
                         }
                     }
                     .frame(maxWidth: 820, alignment: .leading)
+                    .shannonReactionPicker(conversation.reactions)
                     .padding(.horizontal, 34)
                     .padding(.top, 28)
                     .padding(.bottom, 150)

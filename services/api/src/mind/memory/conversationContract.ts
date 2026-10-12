@@ -4,6 +4,7 @@ import type { ShannonConversationItem, ShannonGeneratedArtifact, ShannonTaskDeci
 import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './store/turnCaptures.js';
 import type { MemorySearchHit, MemorySearchOptions } from './store/sqliteMemorySearch.js';
 import type { FeedbackState } from '../../contracts/feedbackContract.js';
+import type { ReportCard, ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
@@ -87,6 +88,10 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */
   captures?: readonly TurnCaptureView[];
   feedback?:FeedbackState;
+  /** The report card of a finished piece of work the owner asked for (`conversationExtrasContract.ts`); owner-alone display only. */
+  reportCard?: ReportCard;
+  /** The owner's emoji reactions on this message, oldest first; projected for the owner alone, never stored in the message. */
+  reactions?: readonly string[];
   /** Provenance of a reply: IDs recalled into its prompt. Server-side only; never sent to clients. */
   recalledMemoryIds?: readonly string[];
 }
@@ -146,6 +151,10 @@ export interface ConversationStore {
   assistantMessage?(scopeKey: string, threadId: string, sourceOrMessageId: string): StoredConversationMessage | null;
   /** Display-only task result written once under a server-owned original-attempt id. */
   appendNoteOnce?(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean): StoredConversationMessage;
+  /**
+   * A report card's message, written once under its id (`reportCardMessageId`): display history, no user message, no experience.
+   */
+  appendReportCardOnce?(scopeKey: string, threadId: string, messageId: string, note: ReportCardNote): StoredConversationMessage;
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
   /** Deterministic full-text recall over all experiences and thread summaries. */
   searchMemory?(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[];

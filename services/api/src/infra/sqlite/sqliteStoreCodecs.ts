@@ -3,10 +3,11 @@ import type { BackgroundJobPayload } from '../../mind/sleep/store/backgroundJobS
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../models/chatModel.js';
 import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredConversationMessage } from '../../mind/memory/store/conversationStore.js';
 import { reminderReference, type ReminderReference } from '../../mind/memory/store/turnCaptures.js';
+import { validatedReportCard, type ReportCard } from '../../contracts/conversationExtrasContract.js';
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
 export interface TurnPayload { source?: string; readSourceIds?: readonly string[]; userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
-export interface MessageMetadata { noteOwnerAlone?: boolean; stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; bodyLook?: { id: string; outcome: 'seen' | 'not_seen' }; }
+export interface MessageMetadata { noteOwnerAlone?: boolean; stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; bodyLook?: { id: string; outcome: 'seen' | 'not_seen' }; reportCard?: ReportCard; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
   return restoreCompanionState(expectedScopeKey, parseJson(raw), nowIso);
@@ -34,6 +35,7 @@ export function freezeStoredMessage(row: MessageRow): StoredConversationMessage 
     ...(metadata?.studyPiece ? { studyPiece: Object.freeze({ ...metadata.studyPiece }) } : {}),
     ...(metadata?.reminder ? { reminder: Object.freeze({ ...metadata.reminder }) } : {}),
     ...(metadata?.bodyLook ? { bodyLook: Object.freeze({ ...metadata.bodyLook }) } : {}),
+    ...(metadata?.reportCard ? { reportCard: Object.freeze(metadata.reportCard) } : {}),
     ...(metadata?.recalledMemoryIds ? { recalledMemoryIds: metadata.recalledMemoryIds } : {}),
   });
 }
@@ -51,6 +53,7 @@ export function parseMessageMetadata(raw: string): MessageMetadata | null {
     ...(validSourceAttribution(row.sourceAttribution) ? { sourceAttribution: row.sourceAttribution } : {}),
     ...(validStudyPiece(row.studyPiece) ? { studyPiece: { id: row.studyPiece.id, title: row.studyPiece.title } } : {}),
     ...(validBodyLook(row.bodyLook) ? { bodyLook: { id: row.bodyLook.id, outcome: row.bodyLook.outcome } } : {}),
+    ...(validatedReportCard(row.reportCard) ? { reportCard: validatedReportCard(row.reportCard)! } : {}),
     // Every reminder already stores its initiative source reference, so older rows resolve too.
     ...(reminderReference((value as { sourceItemId?: unknown }).sourceItemId)
       ? { reminder: reminderReference((value as { sourceItemId?: unknown }).sourceItemId)! } : {}),

@@ -315,6 +315,9 @@ struct DesktopMarkdownView: View {
             Divider()
         case .paragraph(let text):
             Text(ShannonMessageMarkdown.render(text))
+        case .table, .image, .chart:
+            ShannonRichBlockView(block: block)
+                .frame(maxWidth: 680, alignment: .leading)
         }
     }
 }

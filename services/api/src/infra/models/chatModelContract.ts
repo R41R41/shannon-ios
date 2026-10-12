@@ -57,6 +57,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   offerAppLook?: boolean;
   /** The structured reply gets a `minecraftIntent` field: in a game-chat turn of the owner she may ask her Minecraft body to do something (`minecraftBody.ts`). */
   offerMinecraftIntent?: boolean;
+  /** The reply is shown in the app's Talk (rich chat): the request says how to show tables, charts and images. Absent elsewhere. */
+  richBlocks?: boolean;
   /** Her registry tools for this turn (`chatModelTools.ts`); offered unless the turn forces a web search. */
   tools?: ShannonModelToolSession;
   /** The server withheld her tools because others may be present: she is told so in one line. */

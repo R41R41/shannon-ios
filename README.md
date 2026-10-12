@@ -10,6 +10,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | Skill import and common tool/search connection | [`docs/skill-import-and-shared-tools.md`](docs/skill-import-and-shared-tools.md) |
 | Common FCA runtime (opt-in first slice) | [`docs/fca-runtime-contract.md`](docs/fca-runtime-contract.md) |
 | Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
+| Rich chat (report cards, tables/charts/images, reactions) | [`docs/rich-chat-contract.md`](docs/rich-chat-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | Model and cache | [`docs/haiku-model-cache-contract.md`](docs/haiku-model-cache-contract.md) |
 | Owner model mode | [`docs/model-mode-contract.md`](docs/model-mode-contract.md) |

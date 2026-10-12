@@ -12,6 +12,9 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     /// The completed turn this message belongs to; captures are keyed by it.
     public let sourceExperienceId: String?
     public var feedback: ShannonFeedbackDTO? = nil
+    /// Rich chat: a report card (owner alone, its work still visible) and the owner's reactions (owner alone).
+    public var reportCard: ShannonReportCardDTO? = nil
+    public var reactions: [String]? = nil
     public let captures: [ShannonTurnCaptureDTO]?
     public let reminder: ShannonReminderDTO?
     /// A piece of her study this message is about; the timeline shows a card that opens the reader.

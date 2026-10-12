@@ -1,3 +1,4 @@
+import type { ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -301,6 +302,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
   assistantMessage(scopeKey: string, threadId: string, sourceOrMessageId: string) { return this.conversations.assistantMessage(scopeKey,threadId,sourceOrMessageId); }
   appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean) { return this.conversations.appendNoteOnce(scopeKey,threadId,messageId,content,observedAt,noteKind,ownerAlone); }
+  appendReportCardOnce(scopeKey: string, threadId: string, messageId: string, note: ReportCardNote) {
+    return this.conversations.appendReportCardOnce(scopeKey, threadId, messageId, note);
+  }
   taskExperiences(): SQLiteTaskExperiences { return new SQLiteTaskExperiences(this.context.database); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
   searchMemory(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit, options); }
