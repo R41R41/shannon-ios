@@ -17,16 +17,17 @@ import {
   applySchemaSteps, applySchemaStepsUnderLock, appliedSchemaSteps, schemaStepChecksum, SCHEMA_STEP_TABLE, type SchemaStep,
 } from '../src/infra/sqlite/migrations/schemaSteps.js';
 import {
-  ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP,
+  ACTION_SLOTS_STEP, ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP,
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
 
 /**
  * Syzygy ADR-0009 stage 1, S2: the execution DDL moved into the schema steps and their ledger. On a database built by the old
- * constructors (88d7bfd0, copied verbatim in `support/executionSchema88d7bfd0.ts`) the new code adds the ledger table and
- * nothing else, keeps every row and is idempotent; a fresh database gets the same schema as before; two processes that open
- * the file at once apply each step once.
+ * constructors (88d7bfd0, copied verbatim in `support/executionSchema88d7bfd0.ts`) the new code adds the ledger table and,
+ * since S3, the additive columns and slot tables of steps 008 and 009, and nothing else; it keeps every row and is idempotent;
+ * a fresh database gets the same schema as before apart from those additions; two processes that open the file at once apply
+ * each step once.
  */
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -38,6 +39,32 @@ function temporaryPath(name = 'shannon.sqlite'): string {
 }
 
 type Row = Record<string, unknown>;
+
+/** What the S3 steps add (008 and 009): columns appended by ALTER TABLE, and two tables. */
+const S3_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
+    'exec_state_at TEXT'],
+  mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
+};
+const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes'];
+
+/** The schema rows without the S3 additions: what the S2 steps alone must leave unchanged. */
+function withoutS3(rows: Row[]): Row[] {
+  return rows.filter(row => !S3_TABLES.includes(String(row.tbl_name))).map(row => {
+    const columns = row.type === 'table' ? S3_COLUMNS[String(row.name)] : undefined;
+    if (!columns || typeof row.sql !== 'string') return row;
+    return { ...row, sql: columns.reduce((text, column) => text.replace(`, ${column}`, ''), row.sql) };
+  });
+}
+
+/** The rows without the S3 tables and columns (which the S2 steps' own check does not cover). */
+function withoutS3Contents(all: Record<string, Row[]>): Record<string, Row[]> {
+  const kept = Object.entries(all).filter(([table]) => !S3_TABLES.includes(table));
+  return Object.fromEntries(kept.map(([table, rows]) => {
+    const names = (S3_COLUMNS[table] ?? []).map(column => column.split(' ')[0]!);
+    return [table, rows.map(row => Object.fromEntries(Object.entries(row).filter(([name]) => !names.includes(name))))];
+  }));
+}
 
 /** sqlite_master without the ledger, ordered; `normalised` folds whitespace. */
 function schema(db: DatabaseSync, normalised = false): Row[] {
@@ -146,7 +173,7 @@ function checks(db: DatabaseSync): { integrity: unknown; foreignKeys: unknown[] 
 }
 
 describe('the execution schema steps on a database built by 88d7bfd0', () => {
-  it.each([['fresh at 88d7bfd0', false], ['grown through older versions', true]])('%s: adds the ledger and nothing else, twice', (_name, legacy) => {
+  it.each([['fresh at 88d7bfd0', false], ['grown through older versions', true]])('%s: adds the ledger and the S3 additions only, twice', (_name, legacy) => {
     const path = temporaryPath();
     buildOld(path, legacy);
     const before = openDatabase(path, 'readOnly');
@@ -155,8 +182,9 @@ describe('the execution schema steps on a database built by 88d7bfd0', () => {
     expect(POPULATED.filter(table => (oldRows[table]?.length ?? 0) < ROWS)).toEqual([]);
 
     const first = openNew(path);
-    expect(schema(first)).toEqual(oldSchema);
-    expect(contents(first)).toEqual(oldRows);
+    expect(withoutS3(schema(first))).toEqual(oldSchema);
+    expect(withoutS3Contents(contents(first))).toEqual(oldRows);
+    expect(first.prepare('SELECT COUNT(*) AS count FROM mind_actions WHERE slot_class IS NULL').get()?.count).toBe(ROWS);
     expect(checks(first)).toEqual({ integrity: 'ok', foreignKeys: [] });
     const ledger = appliedSchemaSteps(first);
     expect(new Map(ledger.map(step => [step.id, step.checksum]))).toEqual(new Map(EXECUTION_STEPS.map(step => [step.id, schemaStepChecksum(step)])));
@@ -165,8 +193,8 @@ describe('the execution schema steps on a database built by 88d7bfd0', () => {
     first.close();
 
     const second = openNew(path);
-    expect(schema(second)).toEqual(oldSchema);
-    expect(contents(second)).toEqual(oldRows);
+    expect(withoutS3(schema(second))).toEqual(oldSchema);
+    expect(withoutS3Contents(contents(second))).toEqual(oldRows);
     expect(appliedSchemaSteps(second)).toEqual(ledger);
     expect(checks(second)).toEqual({ integrity: 'ok', foreignKeys: [] });
     second.close();
@@ -182,8 +210,8 @@ describe('the execution schema steps on a database built by 88d7bfd0', () => {
     migrateAgentTasks(fresh);
     fresh.close();
     const created = openNew(newPath);
-    expect(schema(created)).toEqual(schema(old));
-    expect(schema(created, true)).toEqual(schema(old, true));
+    expect(withoutS3(schema(created))).toEqual(schema(old));
+    expect(withoutS3(schema(created, true))).toEqual(schema(old, true));
     old.close();
     created.close();
   });
@@ -232,7 +260,7 @@ describe('the ledger', () => {
     syncLivenessEpisodes(db, 'owner', ['sleep_stalled'], '2026-10-12T00:00:00.000Z');
     expect(schema(db).find(row => row.name === 'agent_tasks')).toEqual(historical);
     expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([
-      'execution/001_action_threads', 'execution/002_mind_worker_starts', 'execution/003_liveness_episodes',
+      'execution/001_action_threads', 'execution/009_action_slots', 'execution/002_mind_worker_starts', 'execution/003_liveness_episodes',
     ]);
   });
 
@@ -272,6 +300,8 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/005_fca_task_runtime': 'afe6a267ad1becc288b14682bc54264e583a1f7c6d5eaf0b4dfa6b6c8912bd55',
   'execution/006_task_trees': 'f103e9be1f1d2eb571f161ce5a51595365677e4840d5f2cbee41cc91884855eb',
   'execution/007_fca_touch': '556835eff888206da4e83d5253e9809269aa5a572597eb505f87018dad7bc522',
+  'execution/008_task_execution_columns': '69c8ae30a01ce3be3a047876121a250cfa7502a2076c90d35a3faad7c5aa451f',
+  'execution/009_action_slots': '7dba69dd5efd5de2e3da9fcfc3c6c0be5eebcf3a1225a3e543e0c3a0a3b70f4f',
 };
 
 function reindented(step: SchemaStep): SchemaStep {
@@ -327,7 +357,7 @@ describe('a step inside a transaction of the caller', () => {
     db.exec('BEGIN');
     expect(() => new SQLiteActionStore(db)).not.toThrow();
     db.exec('ROLLBACK');
-    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id]);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id]);
   });
 
   it('is applied under a lock the caller holds only when asked, and remembered nowhere', () => {
@@ -338,7 +368,7 @@ describe('a step inside a transaction of the caller', () => {
     db.exec('ROLLBACK');
     expect(appliedSchemaSteps(db)).toEqual([]);
     new SQLiteActionStore(db);
-    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id]);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id, ACTION_SLOTS_STEP.id]);
   });
 });
 

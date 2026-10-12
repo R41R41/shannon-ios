@@ -1073,7 +1073,7 @@
     "services/api/src/mind/action/threads/store/actionStore.ts": {
       "multi-statement-line": 9,
       "complex-function": 3,
-      "long-line": 18
+      "long-line": 17
     },
     "services/api/src/mind/attention/attentionPorts.ts": {
       "long-line": 2

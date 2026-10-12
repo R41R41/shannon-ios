@@ -1,7 +1,7 @@
 import { configuredActionResourceProof, configuredRetainedResources } from './configuredActionResourceProof.js';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { applySchemaSteps } from '../infra/sqlite/migrations/schemaSteps.js';
-import { ACTION_THREADS_STEP, MIND_WORKER_STARTS_STEP } from '../infra/sqlite/migrations/executionSteps.js';
+import { ACTION_SLOTS_STEP, ACTION_THREADS_STEP, MIND_WORKER_STARTS_STEP } from '../infra/sqlite/migrations/executionSteps.js';
 import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease, type ActionView } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
 import { knownAgentHostIds } from '../mind/action/agentTasks/store/agentHostIds.js';
@@ -31,8 +31,8 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
   // DatabaseSync blocks this whole worker while it waits, so the wait (MIND_WORKER_BUSY_TIMEOUT_MS) stays under the API's 1 s IPC deadline (a late admission
   // reply could otherwise hold the foreground slot for a whole lease). A busy write is caught and retried, never a crash.
   const db=openDatabase(databasePath,'mindWorker');
-  // Both of the worker's schema steps before the socket serves: recording a start never takes the write lock for schema.
-  applySchemaSteps(db,[ACTION_THREADS_STEP,MIND_WORKER_STARTS_STEP]);
+  // The worker's schema steps before the socket serves: recording a start never takes the write lock for schema.
+  applySchemaSteps(db,[ACTION_THREADS_STEP,MIND_WORKER_STARTS_STEP,ACTION_SLOTS_STEP]);
   const busyLog=throttledLog(log);
   const startedAt=now();
   const retained=configuredRetainedResources(values,()=>knownAgentHostIds(db));

@@ -26,6 +26,9 @@ import { projectHostEvent } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
 import { fcaHostPredicate } from './fcaHostPredicate.js';
 import { TaskTreeStore } from './taskTreeStore.js';
+import { refreshTaskExecution } from './taskExecutionColumns.js';
+import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
+import { TASK_EXECUTION_COLUMNS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import { withAgentTaskRequest } from './agentTaskRequestWindow.js';
 import { taskTreeAuthority } from '@shannon/mind';
 import type { ActionLease } from '../../../../contracts/actionThreadContract.js';
@@ -68,6 +71,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     this.database = openDatabase(path, 'agentTasks');
     this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
     migrateAgentTasks(this.database);
+    applySchemaSteps(this.database, [TASK_EXECUTION_COLUMNS_STEP]);
     if (options.taskTreeEnabled) {
       this.taskTrees = new TaskTreeStore(this.database, options.taskTreeCallbacks);
       const rows = this.database.prepare(`SELECT * FROM agent_tasks WHERE ${fcaHostPredicate(this.database)}`).all() as unknown as AgentTaskRow[];
@@ -461,6 +465,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     `).run(eventId, taskId, sequence, type, title, detail ?? null, tone, occurredAt, JSON.stringify(payload));
     this.database.prepare(`UPDATE agent_tasks SET latest_sequence = ?, updated_at = ? WHERE task_id = ?`)
       .run(sequence, occurredAt, taskId);
+    // Every status change of an Agent Host task is followed by its event: the task vocabulary's columns are written here.
+    refreshTaskExecution(this.database, taskId, occurredAt);
   }
 
   private transaction(operation: () => void): void {

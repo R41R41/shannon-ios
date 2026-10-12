@@ -3,12 +3,16 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskQuery, TaskRecord, TaskStatus } from '../../taskRuntime/taskRuntimePorts.js';
 import { underWriteLock } from '../../../../infra/sqlite/lockWaits.js';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { FCA_TASK_AUTHORITY_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { FCA_TASK_AUTHORITY_STEP, TASK_EXECUTION_COLUMNS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { refreshTaskExecution } from './taskExecutionColumns.js';
 
-/** Additive FCA projection on the existing task authority (schema step 004). Creates no Agent Host commands. */
+/**
+ * Additive FCA projection on the existing task authority (schema step 004). Creates no Agent Host commands. Every status change
+ * is an event here, which also writes the task vocabulary's columns (step 008, `taskExecutionColumns.ts`).
+ */
 export class SQLiteFcaTaskAuthority implements TaskAuthority {
   constructor(private readonly db: DatabaseSync) {
-    applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP]);
+    applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP, TASK_EXECUTION_COLUMNS_STEP]);
   }
   transaction<T>(work: () => T): T {
     return underWriteLock(this.db, null, '', work, 'fca_task_authority');
@@ -50,6 +54,7 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     this.db.prepare(`INSERT INTO agent_task_events(event_id,task_id,sequence,event_type,title,tone,occurred_at,payload_json)
       VALUES(?,?,?,?,?,'neutral',?,?)`).run(randomUUID(), id, revision, type, type, at,
         JSON.stringify({ ...payload, taskId: id, parentId: current.parentId, revision }));
+    refreshTaskExecution(this.db, id, at);
     return this.get(scopeKey, id)!;
   }
 }
