@@ -73,7 +73,7 @@ describe('deep research: native search narrowing', () => {
 
 describe('deep research: full-page read with the native fetch tool', () => {
   it('bounds the fetch: two pages at most, a content-token cap, citations on, and only public http(s) URLs', () => {
-    expect(nativeWebReadBody(PAGE, '締切').tools).toEqual([{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2, allowed_callers: ['direct'],
+    expect(nativeWebReadBody(PAGE, '締切').tools).toEqual([{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, allowed_callers: ['direct'],
       max_content_tokens: 12_000, citations: { enabled: true } }]);
     expect(['javascript:x', 'http://127.0.0.1/a', 'https://user:pw@example.com/', 'file:///etc/passwd', 'https://localhost/'].map(webReadUrl)).toEqual([null, null, null, null, null]);
     expect(webReadUrl(PAGE)).toBe(PAGE);
@@ -84,6 +84,13 @@ describe('deep research: full-page read with the native fetch tool', () => {
       passages: [{ url: PAGE, title: '市からのお知らせ', quote: '受付は10月20日（月）まで' }] });
     expect(nativeWebReadResult([fetched('srv_f1', { requests: 2 }) as never]).status).toBe('unknown');
     expect(nativeWebReadResult([fetched('srv_f1', { error: 'url_not_accessible' }) as never]).status).toBe('empty');
+  });
+
+  it('accepts the web_fetch_20250910 shape: thinking first, no code execution blocks', () => {
+    const value = fetched();
+    value.content = [{ type: 'thinking', thinking: '読む', signature: 'sig' } as never, ...value.content];
+    expect(nativeWebReadResult([value as never])).toMatchObject({ status: 'results', sources: [{ title: '市からのお知らせ', url: PAGE }],
+      passages: [{ url: PAGE, quote: '受付は10月20日（月）まで' }] });
   });
 
   it('reads through the chat model transport and books its usage; the fetch results settle as a server-tool cache write', async () => {

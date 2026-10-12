@@ -265,9 +265,19 @@ export function asksAboutMinecraftBody(transcript: string): boolean {
   return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
 }
 
-/** Words that ask for music, a reminder, a timer or a calendar entry: a voice turn is offered her tools while her device tools exist. */
+/** A music word (not 作曲・編曲) followed, within a short phrase, by what to do with it: play, stop, change or skip. */
+const MUSIC_REQUEST = /(?<![作編])(?:音楽|曲|BGM|プレイリスト|アルバム)[^。！？!?\n]{0,12}?(?:かけて|かけよう|流して|再生して|聴かせて|聞かせて|止めて|とめて|変えて|替えて|スキップ|飛ばして)|(?:次|前)の曲/iu;
+const REMINDER_REQUEST = /リマインド|リマインダー|忘れないように|[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?に(?:教えて|知らせて|声をかけて|声かけて)|通知して/u;
+const TIMER_REQUEST = /タイマー|[0-9０-９一二三四五六七八九十]+分(?:後に|後で|たったら|経ったら)/u;
+const CALENDAR_REQUEST = /予定(?:を|に)?(?:入れて|入れといて|入れておいて|追加)|カレンダーに/u;
+
+/**
+ * Explicit device intents only (music, a reminder, a timer, a calendar entry): a voice turn is offered her tools while her
+ * device tools exist. Loose words (話しかけて, 出かけて, 電話かけて, 聞き流して, 再生可能, 作曲) keep the plain path's speed;
+ * a yes to her own music proposal is matched where this is called.
+ */
 export function asksForDeviceAction(transcript: string): boolean {
-  return /音楽|曲(?![がげ])|BGM|プレイリスト|アルバム|かけて|流して|再生|スキップ|リマインド|リマインダー|タイマー|アラーム|予定を入れ|予定入れ|カレンダーに/iu.test(transcript);
+  return [MUSIC_REQUEST, REMINDER_REQUEST, TIMER_REQUEST, CALENDAR_REQUEST].some(pattern => pattern.test(transcript));
 }
 
 const proposesMusic = (reply: string) => /曲|音楽|かけ(?:ましょう|ようか|ても)|流し(?:ましょう|ようか|ても)/u.test(reply);

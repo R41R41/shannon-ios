@@ -155,6 +155,13 @@ describe('her device tools in a conversation', () => {
     expect(withToolCapabilityLines({ systemPrompt: owner, tools: { definitions: [{ name: 'study.read', domain: 'aether_study' }] } }).systemPrompt).toBe(owner);
     expect(asksForDeviceAction('なんか落ち着く曲かけて')).toBe(true);
     expect(asksForDeviceAction('次の角を曲がって')).toBe(false);
+    const asked = ['音楽かけて', 'BGM流して', 'ジャズの曲を流して', 'この曲止めて', '曲をスキップ', '次の曲', 'プレイリストを再生して',
+      '明日リマインドして', 'リマインダーお願い', '忘れないように言って', '7時に教えて', '会議のこと通知して',
+      'タイマー3分', '5分後に教えて', '10分たったら呼んで', '金曜に予定を入れて', '予定に追加しといて', 'カレンダーに入れて'];
+    const plain = ['話しかけて', '出かけてくるね', '電話かけて', '聞き流して', 'これは再生可能エネルギーの話', '作曲の勉強してる', '編曲が好き',
+      '次の角を曲がって', 'スキップして帰った', '時間あるかな'];
+    expect(asked.filter(words => !asksForDeviceAction(words))).toEqual([]);
+    expect(plain.filter(words => asksForDeviceAction(words))).toEqual([]);
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, true)).toBe('asked');
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, false)).toBeNull();
   });
