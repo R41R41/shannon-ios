@@ -261,3 +261,8 @@ export function offerInstructions(request: ShannonChatModelRequest): string[] {
 export function withoutTurnInstructions(request: ShannonChatModelRequest): ShannonChatModelRequest {
   return { ...request, offerReplyFeeling: undefined, tools: undefined, toolsWithheld: undefined };
 }
+
+/** For a turn that offered her reply's feeling, whether the answer carried one; null for a turn that did not offer it. */
+export function offeredFeelingAnswered(request: ShannonChatModelRequest, structured: ParsedChatTurn): boolean | null {
+  return request.offerReplyFeeling ? Boolean(structured.replyFeeling) : null;
+}

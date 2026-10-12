@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { structuredSchema } from './anthropicSchema.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { sendClaudeOnce } from '../claude/claudeOnce.js';
-import { unknownCostUpperBound } from '../claude/claudeUsage.js';
+import { knownInput, unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { cacheOneShotRequest, validateHaikuCacheUsage, type HaikuCacheUsage } from './haikuCache.js';
 import { isHaikuModel, replacementModel } from './haikuConfig.js';
 
@@ -158,7 +158,7 @@ function responseEnvelope(message: Anthropic.Message, request: Anthropic.Message
   const input = knownInputCounts.length && Number.isSafeInteger(inputSum) ? inputSum : null;
   const output = count(usage.output_tokens) ? usage.output_tokens : null;
   const valid = inputCounts.every(count) && input !== null && output !== null && Number.isSafeInteger(input + output);
-  const unknownUpperBound = unknownCostUpperBound(request.model, request.max_tokens);
+  const unknownUpperBound = unknownCostUpperBound(request.model, request.max_tokens, 0, knownInput(message.usage));
   const mappedUsage = { input_tokens: input, output_tokens: output, total_tokens: input !== null && output !== null ? input + output : null,
     input_tokens_details: { cached_tokens: usage.cache_read_input_tokens }, uncached_input_tokens: usage.input_tokens,
     cache_creation_input_tokens: usage.cache_creation_input_tokens, cache_read_input_tokens: usage.cache_read_input_tokens,

@@ -206,7 +206,8 @@ describe('Haiku native background Responses bridge', () => {
     const fixture = scriptedAnthropic([malformed]);
     const bridge = responseModelFetcher({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic', fetcher: fixture.fetcher });
     const envelope = await (await send(bridge)).json() as Envelope;
-    expect(envelope.usage).toMatchObject({ input_tokens: 712, output_tokens: null, cache_read_input_tokens: 700, usage_complete: false, unknown_cost_upper_bound_usd: 1.00256 });
+    expect(envelope.usage).toMatchObject({ input_tokens: 712, output_tokens: null, cache_read_input_tokens: 700, usage_complete: false, unknown_cost_upper_bound_usd: 0.0005202 });
+    // The bound prices the input counts that were reported and the whole output ceiling (ADR-0009 stage 1, M4 review; was 1.00256).
     expect(responseUsage(envelope)).toMatchObject({ inputTokens: 712, cachedInputTokens: 700 });
     expect(envelope.output_text).toBe('');
     expect(() => validateResponseModelUsage(DEFAULT_HAIKU_MODEL, envelope)).toThrow('HAIKU_RESPONSE_USAGE_INVALID');
@@ -218,6 +219,7 @@ describe('Haiku native background Responses bridge', () => {
     const fixture = scriptedAnthropic([partial, absent]);
     const bridge = responseModelFetcher({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic', fetcher: fixture.fetcher });
     const first = await (await send(bridge)).json() as Envelope;
+    // Without the uncached input count the input is unknown: the full-context bound stays.
     expect(first.usage).toMatchObject({ input_tokens: 700, cache_read_input_tokens: 700, usage_complete: false, unknown_cost_upper_bound_usd: 1.00256 });
     expect(first.usage).not.toHaveProperty('uncached_input_tokens');
     const second = await (await send(bridge, { ...request(), max_output_tokens: 2_000 })).json() as Envelope;

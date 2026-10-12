@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY } from '@shannon/cognition';
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
-import { estimatedAnthropicCostUsd, knownCount, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
+import { estimatedAnthropicCostUsd, knownCount, knownInput, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { sendClaudeOnce } from '../claude/claudeOnce.js';
 import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
@@ -170,9 +170,10 @@ export class AnthropicFcaModel implements FcaModel {
     const total = input + counts.output;
     const complete = [native?.input_tokens, native?.output_tokens, native?.cache_creation_input_tokens, native?.cache_read_input_tokens].every(tokenCount)
       && Number.isSafeInteger(total);
+    const bound = complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens, 0, knownInput(native));
     return { model: this.model, usageComplete: complete, inputTokens: input, cachedInputTokens: counts.cacheRead,
       cacheCreationInputTokens: counts.cacheWrite, outputTokens: counts.output, totalTokens: total,
-      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens)),
+      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), bound),
     };
   }
 }

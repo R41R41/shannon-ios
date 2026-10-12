@@ -3,6 +3,7 @@ import { AnthropicChatModel } from '../../src/infra/models/anthropic/anthropicCh
 import type { ShannonChatModelRequest } from '../../src/infra/models/chatModel.js';
 import { SKILL_INDEX_HEADER } from '../../src/mind/memory/skillDocument.js';
 import { anthropicFixture, message } from './anthropicFixtures.js';
+import { providerError } from './claudeRequestRecorder.js';
 import {
   answer, cached, HAIKU, SONNET, text, toolCall, tools, webAnswer, type ClaudeScenario, type ScenarioContext, type Settings,
 } from './claudeForegroundScenarios.js';
@@ -77,6 +78,10 @@ export const PLAN_SCENARIOS: readonly ClaudeScenario[] = [
   { name: 'plan-text-unoffered-call', script: [unofferedCall(), answer(HAIKU.model, 0, 2_300)], run: c => streamed(c, HAIKU, planText) },
   { name: 'plan-sonnet-text-tools', script: [toolCall(SONNET.model), answer(SONNET.model, 0, 4_100)],
     run: c => streamed(c, SONNET, { ...planText, tier: 'sonnet', tools: tools(['study.list']) }) },
+  { name: 'plan-text-rejected-fallback', script: [providerError(400, 'invalid_request_error', {}, 'The compiled grammar is too large'), answer(HAIKU.model)],
+    run: c => streamed(c, HAIKU, planText) },
+  { name: 'plan-text-tools-rejected', script: [providerError(400, 'invalid_request_error', {}, 'Too many strict tools'), answer(HAIKU.model)],
+    run: c => streamed(c, HAIKU, { ...planText, tools: tools(['study.list']) }) },
   { name: PLAN_TALK_SCENARIO, script: [
     answerSaying(HAIKU.model, 1, 3_000, 0), toolCall(HAIKU.model), answerSaying(HAIKU.model, 2, 300, 3_100),
     webAnswer(HAIKU.model), answerSaying(HAIKU.model, 3, 200, 3_300),

@@ -76,7 +76,7 @@ export function forgetCacheReceipts(): void {
 }
 
 /** A response with the provider's error envelope. */
-export function providerError(status: number, type: string, headers: Record<string, string> = {}): () => Response {
-  const body = JSON.stringify({ type: 'error', error: { type, message: 'synthetic provider error' } });
+export function providerError(status: number, type: string, headers: Record<string, string> = {}, text = 'synthetic provider error'): () => Response {
+  const body = JSON.stringify({ type: 'error', error: { type, message: text } });
   return () => new Response(body, { status, headers: { 'content-type': 'application/json', ...headers } });
 }

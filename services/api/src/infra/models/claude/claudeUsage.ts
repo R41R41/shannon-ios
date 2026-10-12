@@ -68,10 +68,36 @@ export function nativeUsageComplete(usage: Anthropic.Message['usage'] | null | u
   return [usage?.input_tokens, usage?.output_tokens, usage?.cache_creation_input_tokens, usage?.cache_read_input_tokens].every(tokenCount);
 }
 
-/** What a request whose bill is unknown may have cost: a full-context one-hour write, its whole output ceiling and every allowed search. */
-export function unknownCostUpperBound(model: string, maximumOutputTokens: number, searches = 0): number {
-  const price = anthropicPrices(model, 1_000_000);
-  return price.cacheWrite1h + maximumOutputTokens * price.output / 1_000_000 + searches * price.searchUsd;
+/** The three input counts of a receipt, when all three were reported (a stream reports them at `message_start`). */
+export interface KnownInput {
+  input: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
+
+export function knownInput(usage: Partial<Anthropic.Message['usage']> | null | undefined): KnownInput | null {
+  const input = usage?.input_tokens;
+  const cacheWrite = usage?.cache_creation_input_tokens;
+  const cacheRead = usage?.cache_read_input_tokens;
+  if (!tokenCount(input) || !tokenCount(cacheWrite) || !tokenCount(cacheRead)) return null;
+  return Number.isSafeInteger(input + cacheWrite + cacheRead) ? { input, cacheWrite, cacheRead } : null;
+}
+
+/**
+ * What a request whose bill is unknown may have cost: its whole output ceiling and every allowed search, and for the input the
+ * counts the provider already reported (every write at the one-hour price), or, when none were reported, a full-context
+ * one-hour write. A caller passes known input only for a request whose input cannot grow after it was counted (no server
+ * tool: a web search adds its results to the input later in the same request).
+ */
+export function unknownCostUpperBound(model: string, maximumOutputTokens: number, searches = 0, input: KnownInput | null = null): number {
+  if (!input) {
+    const price = anthropicPrices(model, 1_000_000);
+    return price.cacheWrite1h + maximumOutputTokens * price.output / 1_000_000 + searches * price.searchUsd;
+  }
+  const price = anthropicPrices(model, input.input + input.cacheWrite + input.cacheRead);
+  const tokens = input.input * price.input + input.cacheWrite * price.cacheWrite1h + input.cacheRead * price.cacheRead
+    + maximumOutputTokens * price.output;
+  return Math.round((tokens / 1_000_000 + searches * price.searchUsd) * 1e9) / 1e9;
 }
 
 export interface ClaudeUsageRow {
@@ -130,7 +156,8 @@ export function conversationCounts(entry: ConversationUsage): AnthropicUsageCoun
 export function bookConversationUsage(store: LlmUsageStore | undefined, entry: ConversationUsage): void {
   const counts = conversationCounts(entry);
   const unknownBill = usesOneHourAnthropicCache(entry.model) && (!entry.finalUsage || !nativeUsageComplete(entry.usage));
-  const bound = unknownBill ? unknownCostUpperBound(entry.model, entry.maximumOutputTokens, counts.searches) : 0;
+  const input = entry.maximumSearches === 0 ? knownInput(entry.usage) : null;
+  const bound = unknownBill ? unknownCostUpperBound(entry.model, entry.maximumOutputTokens, counts.searches, input) : 0;
   const estimatedCostUsd = Math.max(estimatedAnthropicCostUsd(entry.model, counts), bound);
   bookClaudeUsage(store, { scopeKey: entry.scopeKey, lane: 'chat', model: entry.model, counts, estimatedCostUsd, at: entry.at });
 }

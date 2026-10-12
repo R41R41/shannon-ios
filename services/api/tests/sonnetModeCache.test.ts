@@ -25,8 +25,10 @@ describe('owner-selectable Sonnet cache accounting', () => {
     expect(parts).toEqual([]);
     expect(h.bodies).toHaveLength(1);
     expect(h.recorded).toHaveLength(1);
+    // A stream that broke after message_start is bounded by the input it reported and the whole output ceiling (ADR-0009
+    // stage 1, M4 review: 420 input at $2 + 16,000 output at $10 per million; before, a full-context write: 4.16).
     expect(h.recorded[0]).toMatchObject({ model: settings.model, inputTokens: 420,
-      outputTokens: stream ? 1 : 96, estimatedCostUsd: stream ? 4.16 : 0.0018 });
+      outputTokens: stream ? 1 : 96, estimatedCostUsd: stream ? 0.16084 : 0.0018 });
   });
 
   it('retains a conservative bound rather than recording missing usage as a zero-priced successful answer', async () => {
@@ -35,7 +37,8 @@ describe('owner-selectable Sonnet cache accounting', () => {
     await expect(h.model.generate(request)).rejects.toThrow('HAIKU_RESPONSE_USAGE_INVALID');
     expect(h.bodies).toHaveLength(1);
     expect(h.recorded[0]).toMatchObject({ model: settings.model, inputTokens: 1320, cachedInputTokens: 900, outputTokens: 0 });
-    expect(h.recorded[0]!.estimatedCostUsd).toBe(4.16);
+    // The reported input (420 at $2, 900 read at $0.20) and the whole output ceiling; a full-context write before M4's review.
+    expect(h.recorded[0]!.estimatedCostUsd).toBe(0.16102);
   });
 
   it('charges a mixed provider TTL receipt by its actual counts while requesting one-hour reuse', async () => {

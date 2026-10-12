@@ -608,7 +608,7 @@
         "is_error": true,
         "cache_control": {
          "type": "ephemeral",
-         "ttl": "1h"
+         "ttl": "5m"
         }
        }
       ]
@@ -658,7 +658,7 @@
      }
     ],
     "tool_choice": {
-     "type": "auto"
+     "type": "none"
     },
     "thinking": {
      "type": "adaptive"
@@ -1137,6 +1137,7 @@
    },
    "thread": "a5f7fbd8",
    "cachePlan": true,
+   "historyMessages": 0,
    "firstTokenMs": 0
   },
   {
@@ -1156,7 +1157,8 @@
     "history": "d8986bc5"
    },
    "thread": "a5f7fbd8",
-   "cachePlan": true
+   "cachePlan": true,
+   "historyMessages": 0
   }
  ],
  "outcome": {

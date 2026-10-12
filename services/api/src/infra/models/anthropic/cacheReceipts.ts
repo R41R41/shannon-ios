@@ -22,6 +22,8 @@ export interface CachePrefixFingerprint {
 export interface CacheTurn {
   thread: string;
   cachePlan: boolean;
+  /** History messages before the turn's words in the request. */
+  historyMessages: number;
   firstTokenMs?: number;
 }
 
@@ -39,6 +41,7 @@ export interface CacheReceipt {
   /** Only on a foreground turn's requests: the Talk's short hash, the cache plan, and on round 0 the first-token time. */
   thread?: string;
   cachePlan?: boolean;
+  historyMessages?: number;
   firstTokenMs?: number;
 }
 
@@ -104,18 +107,20 @@ function forgetOldDays(): void {
   for (const day of [...days.keys()]) if (!kept.includes(day)) days.delete(day);
 }
 
-function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 'cachePlan' | 'firstTokenMs'> {
+function turnFields(turn: CacheTurn | undefined): Pick<CacheReceipt, 'thread' | 'cachePlan' | 'historyMessages' | 'firstTokenMs'> {
   if (!turn) return {};
   const first = turn.firstTokenMs === undefined ? {} : { firstTokenMs: Math.max(0, Math.round(turn.firstTokenMs)) };
-  return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, ...first };
+  return { thread: shortHash(turn.thread), cachePlan: turn.cachePlan, historyMessages: turn.historyMessages, ...first };
 }
 
 /** A foreground text turn's first request also counts toward the warm-turn view (`cacheWarmTurns.ts`). */
 function noteWarmTurn(receipt: CacheReceipt): void {
   if (receipt.route !== 'text' || receipt.round !== 0 || receipt.thread === undefined) return;
   const cacheCreation = receipt.cacheCreation5m + receipt.cacheCreation1h;
-  recordWarmTurn({ at: receipt.at, thread: receipt.thread, cachePlan: receipt.cachePlan === true, cacheRead: receipt.cacheRead, cacheCreation,
-    ...(receipt.firstTokenMs === undefined ? {} : { firstTokenMs: receipt.firstTokenMs }) });
+  const { tools, system, schema, effort } = receipt.prefix;
+  recordWarmTurn({ at: receipt.at, thread: receipt.thread, model: receipt.model, cachePlan: receipt.cachePlan === true,
+    staticPrefix: [tools, system, schema, effort].join(':'), historyMessages: receipt.historyMessages ?? 0, input: receipt.input,
+    cacheRead: receipt.cacheRead, cacheCreation, ...(receipt.firstTokenMs === undefined ? {} : { firstTokenMs: receipt.firstTokenMs }) });
 }
 
 /** Records one provider response's usage. Never throws: a receipt is an observation, not part of the request. */

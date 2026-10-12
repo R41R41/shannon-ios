@@ -774,7 +774,7 @@
         "content": "{\"ok\":true,\"text\":\"合成結果: study_list\"}",
         "cache_control": {
          "type": "ephemeral",
-         "ttl": "1h"
+         "ttl": "5m"
         }
        }
       ]
@@ -1303,6 +1303,7 @@
    },
    "thread": "a5f7fbd8",
    "cachePlan": true,
+   "historyMessages": 0,
    "firstTokenMs": 0
   },
   {
@@ -1322,7 +1323,8 @@
     "history": "1631b0ef"
    },
    "thread": "a5f7fbd8",
-   "cachePlan": true
+   "cachePlan": true,
+   "historyMessages": 0
   }
  ],
  "outcome": {
