@@ -172,8 +172,10 @@ describe('a finished result reaches the call', () => {
     expect(report).toMatchObject({ id: expect.stringMatching(/^result:/u), text: summary });
     const reports = createSpokenReports({ speaker: null, localTime: () => '', record: (scope, id, reportId, text) => f.driver.runtime.recordSpokenReport!(scope, id, reportId, text) });
     const progress = progressWithSpokenReports(f.driver.runtime, 'owner', id => f.driver.runtime.progress?.('owner', id) ?? null, reports, () => true);
-    fcaNowProjection(f.driver.runtime, 'owner', () => true, progress);
-    const shown = fcaNowProjection(f.driver.runtime, 'owner', () => true, progress).tasks.find(task => task.id === f.child.id);
+    // Read "now" at the test's own clock: finished work leaves the view an hour after it ends.
+    const testNow = () => Date.parse(AT);
+    fcaNowProjection(f.driver.runtime, 'owner', () => true, progress, testNow);
+    const shown = fcaNowProjection(f.driver.runtime, 'owner', () => true, progress, testNow).tasks.find(task => task.id === f.child.id);
     expect(shown?.report).toMatchObject({ text: summary, spoken: summary });
   });
 
