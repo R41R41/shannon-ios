@@ -33,9 +33,6 @@ import {
   type RecentWorldSignal,
 } from '../../../mind/action/respond/initiativeSelection.js';
 
-
-
-
 const CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 
 interface InitiativeCandidate extends CandidateRow {
@@ -135,6 +132,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     at = this.now(),
     timeZone = 'Asia/Tokyo',
     dailyFocuses: ReadonlyMap<string, DailyMindFocus> = new Map(),
+    /** `SHANNON_MORNING_BRIEF` (`wiring/dailyReadWiring.ts`): today's brief by scope, handed in only in the owner's morning. */
+    morningBriefs: ReadonlyMap<string, InitiativeCandidate> = new Map(),
   ): InitiativeLoopResult {
     const local = localDateParts(new Date(at), timeZone);
     if (local.hour >= QUIET_START_HOUR || local.hour < QUIET_END_HOUR) {
@@ -179,6 +178,13 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       // A promise due later today keeps the day's only slot; a spontaneous topic can wait.
       if (commitmentAwaitingTodaySlot(scope.scope_key, JSON.parse(scope.snapshot_json), at, timeZone, delivered)) {
         lastStop = 'reserved-for-commitment';
+        continue;
+      }
+      // SHANNON_MORNING_BRIEF: the brief takes the day's one slot after a due or reserved promise, before anything else.
+      const brief = morningBriefs.get(scope.scope_key), briefOpen = brief !== undefined && !delivered(brief.item_id) && fresh(brief);
+      if (briefOpen && this.persistMessage(scope.scope_key, state, brief, null, null, dayKey, at) === 'sent') {
+        considered += 1;
+        sent += 1;
         continue;
       }
       const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
@@ -325,6 +331,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いからです。` : 'ボクが気になったからです。';
     const content = candidate.source_id === 'commitment'
       ? `「${truncate(candidate.title, 240)}」という約束が残っています。今、続けますか？ もう済んでいたら、完了にできますよ。`
+      : candidate.source_id === 'morning-brief'
+      ? (candidate.summary ?? candidate.title).slice(0, 2_000)
       : candidate.source_id === 'intent'
       ? truncate(candidate.summary ?? `「${candidate.title}」という目的を覚えています。次の一手を一緒に確認しませんか？`, 500)
       : dailyFocus?.openingLine
@@ -343,7 +351,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       initiativeId,
       sourceItemId: candidate.item_id,
       dailyMindDayKey: dailyFocus?.dayKey ?? null,
-      ...(candidate.source_id === 'intent' || candidate.source_id === 'commitment' ? {} : {
+      ...(candidate.source_id === 'intent' || candidate.source_id === 'commitment' || candidate.source_id === 'morning-brief' ? {} : {
         sourceAttribution: {
           title: truncate(candidate.source_title, 200),
           url: candidate.url,

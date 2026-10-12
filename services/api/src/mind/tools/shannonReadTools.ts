@@ -3,6 +3,7 @@ import { clip, type PreparedToolCall, type ToolExecutor } from './shannonToolTyp
 import { toolFailure, toolOk, type ReadToolDomain } from './shannonTools.js';
 import { webSearchContext, webSearchFailure, type WebSearchOperation, type WebSearchResult } from '../../infra/models/webSearch.js';
 import type { ToolSessionMemory } from './shannonToolTypes.js';
+import { dailyToolExecutors, type DailyToolPorts } from './shannonDailyTools.js';
 
 const WEB_READS = new WeakMap<ToolSessionMemory, WebSearchResult>();
 export function webReadResult(memory: ToolSessionMemory): WebSearchResult | null { return WEB_READS.get(memory) ?? null; }
@@ -25,6 +26,8 @@ export interface ReadToolPorts {
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
   upcomingSearch?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
+  /** Weather, a rough route and the morning brief (`shannonDailyTools.ts`, domain `daily_read`). */
+  daily?: DailyToolPorts;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
   places?: (scopeKey: string, query: string, spoken: boolean, context?: import('../../integrations/places/placeDiscovery.js').PlaceSearchContext) => Promise<string | { prompt: string; places: import('../../integrations/places/placeDiscovery.js').ShannonPlace[]; webSources: WebSearchResult['sources'] }>;
 }
@@ -58,6 +61,7 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
   if (!ports) return Object.freeze({});
   const missing = toolFailure('not_offered', 'この道具は、いまのサーバーにはない。', { retryable: false });
   return Object.freeze({
+    ...dailyToolExecutors(ports.daily),
     'web.search': (input, context) => {
       if (!ports.web) return missing;
       const query = clip(stringInput(input, 'query') ?? '', 500);

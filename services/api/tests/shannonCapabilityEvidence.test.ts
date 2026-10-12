@@ -32,6 +32,7 @@ import { readToolExecutors } from '../src/mind/tools/shannonReadTools.js';
 import { readToolPorts } from '../src/wiring/skillRoutingWiring.js';
 import { readToolPlan } from '../src/mind/action/respond/conversationCapabilities.js';
 import { READ_TOOL_DOMAINS, SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
+import { dailyToolExecutors } from '../src/mind/tools/shannonDailyTools.js';
 import {
   SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_CAPABILITIES, SHANNON_CONDITIONAL_CAPABILITIES, SHANNON_MINECRAFT_BODY_CAPABILITY, withAetherAccessCapability, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
@@ -226,6 +227,8 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   // and only in a turn that offers them (the line is conditional).
   read_tools: () => exists(readToolExecutors, readToolPorts, readToolPlan, ShannonToolRunner.prototype.useReads)
     && READ_TOOL_DOMAINS.every(domain => SHANNON_TOOLS.some(tool => tool.domain === domain && tool.audiences.join() === 'owner_alone'))
+    // Weather, the route estimate and the morning brief (`daily_read`), handed with the same ports.
+    && exists(dailyToolExecutors) && ['weather.forecast', 'route.estimate', 'brief.morning'].every(name => SHANNON_TOOLS.some(tool => tool.name === name && tool.domain === 'daily_read' && tool.audiences.join() === 'owner_alone'))
     && readToolPorts({ SHANNON_READ_TOOLS: 'off' }, {} as never) === null
     && !shannonCapabilityPrompt('owner').includes(SHANNON_READ_TOOLS_CAPABILITY.text)
     && withReadToolsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_READ_TOOLS_CAPABILITY.text),

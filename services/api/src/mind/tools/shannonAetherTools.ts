@@ -229,7 +229,7 @@ export function withToolCapabilityLines<T extends { systemPrompt: string; tools?
   const withAether = offered?.some(tool => tool.name === 'aether.search')
     ? { ...withBody, systemPrompt: withAetherAccessCapability(withBody.systemPrompt) } : withBody;
   // Her read tools (stage 2, step 3): their line only in a turn that offers them.
-  const withReads = offered?.some(tool => tool.domain !== undefined && isReadToolDomain(tool.domain))
+  const withReads = offered?.some(tool => tool.domain !== undefined && (isReadToolDomain(tool.domain) || tool.domain === 'daily_read'))
     ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
   // Her skills (stage 2, step 6): their line only in a turn that offers `skill.read`.
   const withSkills = offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;

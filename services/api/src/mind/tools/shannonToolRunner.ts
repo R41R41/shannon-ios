@@ -141,6 +141,7 @@ export class ShannonToolRunner {
     };
     const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && once('memory_read', () => this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && once('task_runtime', () => this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
+      : tool.domain === 'daily_read' ? Boolean(this.reads?.daily)
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_lifecycle' ? !!scopeKey && (this.minecraftLifecycle?.available(scopeKey) ?? false)
@@ -180,6 +181,7 @@ export class ShannonToolRunner {
     if (tool?.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle) return null;
     if (tool?.domain === 'memory_read' && !this.taskMemory) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
+    if (tool?.domain === 'daily_read' && !this.reads?.daily) return null;
     if (tool?.domain === 'vm_workspace' && !this.selfRewrite) return null;
     if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
