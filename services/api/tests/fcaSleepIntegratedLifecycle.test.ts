@@ -75,6 +75,19 @@ describe('sleep joins the existing common FCA lifecycle through the production s
     expect(f.actions.db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE activity_type='sleep'").get()).toEqual({ n: 1 });
   });
 
+  it('reads a night with fewer user messages than SHANNON_SLEEP_MIN_MESSAGES by the local rules, never the model (ADR-0009 S9)', async () => {
+    let analyses = 0;
+    const f = integratedFcaHarness({ sleep: { analyzer: { mode: 'openai', async analyze() { analyses++; return []; } }, minimumMessages: 2 },
+      decide: () => round({ kind: 'wait', summary: 'waiting' }) });
+    cleanup.push(() => f.close());
+    const night = scheduled(f); // One user message: below the minimum of two.
+    for (let n = 0; n < 8 && f.driver.runtime.get('owner', night.taskId)?.phase !== 'completed'; n++) { await f.tick(); await f.writeMemory(); }
+    expect(f.driver.runtime.get('owner', night.taskId)?.phase).toBe('completed');
+    expect(analyses).toBe(0);
+    // The local rules still learn what was said outright.
+    expect(f.store.snapshot('owner').userFacts.some(fact => fact.statement === statement)).toBe(true);
+  });
+
   it('continues only restricted maintenance with others present, without owner tools or privilege inheritance', async () => {
     let analyses = 0;
     const f = fixture({ mode: 'local-rules', async analyze() { analyses++; return proposal; } });

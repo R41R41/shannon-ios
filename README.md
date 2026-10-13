@@ -82,7 +82,10 @@ pnpm install
 pnpm check
 pnpm test
 pnpm dev:api
+pnpm --filter @shannon/api worker:mind   # 別のターミナルで。共通タスク基盤（ADR-0009 S9 から常に on）は心の中枢の action threads で動く
 ```
+
+`.env` には `SHANNON_ADR8_STAGE4=on` と、タスクのモデルの鍵（既定は Haiku: `SHANNON_HAIKU_API_KEY` または共有の Anthropic 鍵）が要る。足りなければ API は起動時に `FCA_ACTION_THREADS_REQUIRED` / `FCA_PROVIDER_REQUIRED` で、設定すべき名前を示して止まる（`.env.example`）。
 
 Codexを含む全開発経路では、同じ検証入口を使う。
 
