@@ -4,7 +4,7 @@ import { decideTier, type DifficultyAnswers } from '@shannon/learning';
 import { TIER_CASES, TIER_SCENARIOS, validReachDefinition } from '../../../packages/evaluation/src/reach/index.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
-import { strictRequestFits } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { requestStrictTools, strictRequestFits } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
 import { scriptedAnthropic } from './support/anthropicFixtures.js';
 import { stubSession, tierScript } from './reach/reachTier.js';
 import { shannonTool } from '../src/mind/tools/shannonTools.js';
@@ -43,9 +43,11 @@ describe('the tier scenario set', () => {
     expect(calls).toEqual([{ name: item.expectTool, ok: true, effect: 'read' }]);
     expect(scripted.bodies).toHaveLength(2);
     const initial = scripted.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming;
-    expect(activeAnthropicToolNames(initial)).not.toContain(item.expectTool!.replaceAll('.', '_'));
-    expect(tierScript(item, initial)[0]!.content).toEqual([{ type: 'tool_use', id: 'toolu_script', name: 'tool_call',
-      input: { name: item.expectTool!.replaceAll('.', '_'), argumentsJson: expect.any(String) } }]);
+    // Past the grammar budget the tool is a native non-strict definition (2026-10-13); the bridge still reaches it.
+    expect(activeAnthropicToolNames(initial)).toContain(item.expectTool!.replaceAll('.', '_'));
+    expect(requestStrictTools(initial).map(tool => tool.name)).not.toContain(item.expectTool!.replaceAll('.', '_'));
+    expect(tierScript(item, initial)[0]!.content).toEqual([{ type: 'tool_use', id: 'toolu_script', name: item.expectTool!.replaceAll('.', '_'),
+      input: expect.any(Object) }]);
     for (const raw of scripted.bodies) expect(strictRequestFits(raw as unknown as Anthropic.MessageCreateParamsNonStreaming)).toBe(true);
     // Real tool-round receipt, from the original session, reaches the following provider request.
     const next = scripted.bodies[1]! as unknown as Anthropic.MessageCreateParamsNonStreaming;

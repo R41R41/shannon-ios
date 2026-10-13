@@ -4,6 +4,21 @@
 export const VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。ただし相手が長い話・物語・長めのセリフなどをはっきり求めたときは、求められた長さで最後まで話してよい。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。';
 
 /**
+ * The Claude voice reply's length (owner feedback 2026-10-13, 「長くて聞いていられない」; live replies still ran 110–174 characters):
+ * the historical profile's 「複雑な回答でも原則3文」 no longer stands beside the 1–2 sentence rule of `VOICE_NATURAL_INSTRUCTIONS`.
+ * Also given to a voice turn answered through the structured text request (`spokenReply`). The historical GPT profile keeps
+ * `VOICE_REPLY_INSTRUCTIONS`.
+ */
+export const SHORT_VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。'
+  + 'ふだんは1〜2文の短い文（全体でおよそ60字）にし、複雑な内容でも要点だけを言う。'
+  + '言い切れない続きがある時だけ、要点のあとに続きを話そうかと聞くか、詳しくは画面に出すと短く添える。'
+  + '相手が長い話・物語・長めのセリフや詳しい説明をはっきり求めたときだけ、求められた長さで最後まで話してよい。'
+  + 'Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。';
+
+/** A voice turn's reply written through the structured text request is still spoken (`spokenReply`). */
+export const SPOKEN_STRUCTURED_REPLY_LINE = '[声で話す返事] この返事のreplyはそのまま声で読み上げる。表・箇条書き・Markdown・URLは使わない。';
+
+/**
  * How a text reply is shown in the app (rich chat, owner decision 2026-10-13, Syzygy ADR-0009 §10): the form follows the content,
  * chosen by her. The current Claude text request only; a voice reply and the historical GPT profile keep their words.
  * The app renders exactly these blocks (`ShannonMessageMarkdown`): pipe tables, ```chart JSON, https images, numbered lists.

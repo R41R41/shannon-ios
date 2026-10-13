@@ -1,5 +1,5 @@
 import type { ShannonModelToolSession, ToolCallOutcome } from '../../infra/models/chatModelTools.js';
-import { ALWAYS_LOADED_TOOL_NAMES, providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
+import { alwaysLoadedToolNames, providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
 
 /**
  * The tool menu applied to a turn's session (Syzygy ADR-0008 stage 2, §8 「道具は名前と短い説明だけを毎回渡し、使うときに定義を
@@ -52,8 +52,9 @@ const NOT_OPENABLE = JSON.stringify({ ok: false, text: 'その名前の道具は
  */
 export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[], options?: { deferMemoryReads?: boolean }): ShannonModelToolSession {
   const offered = base.definitions;
-  // What Jev chose, and always the ways to stop and to ask for approval (`ALWAYS_LOADED_TOOL_NAMES`) when the turn offers them.
-  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (ALWAYS_LOADED_TOOL_NAMES.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
+  // What Jev chose, and always the ways to stop and to ask for approval (`alwaysLoadedToolNames`) when the turn offers them.
+  const loaded = alwaysLoadedToolNames(offered);
+  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (loaded.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
   const open = toolOpenDefinition(offered);
   const current = () => [...offered.filter(tool => visible.has(tool.name)), open];
   const session = { maximumCalls: base.maximumCalls } as Record<string, unknown>;

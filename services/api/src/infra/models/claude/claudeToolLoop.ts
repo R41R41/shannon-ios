@@ -10,13 +10,13 @@ import { claudeTools } from '../anthropic/anthropicRequest.js';
 import { observedToolName } from '../anthropic/observerProjection.js';
 import { isAppendOnlyAnthropicModel } from '../anthropic/haikuConfig.js';
 import { isAnthropicUsageEvidenceError } from '../anthropic/haikuCache.js';
-import { requestStrictTools, strictRequestFits, TOOL_CALL_PROVIDER_NAME } from '../anthropic/anthropicToolCapacity.js';
+import { nonStrictTool, strictGrammarFits, TOOL_CALL_PROVIDER_NAME } from '../anthropic/anthropicToolCapacity.js';
 import { bridgedAnthropicSession } from '../anthropic/anthropicToolBridge.js';
-import { bridgeOnlyUnacceptedTail } from '../anthropic/anthropicForegroundMenu.js';
+import { activeAnthropicToolNames, nonStrictUnacceptedTail } from '../anthropic/anthropicForegroundMenu.js';
 import { carriesOffer, offerRefusal, recoverableRefusal, reportOfferRefusal, reportRejection } from '../anthropic/anthropicRejection.js';
 import type { ClaudeSend } from './claudeTransport.js';
 import {
-  declinedCalls, fellBack, plainMessages, READ_RECOVERY_NOTE, SonnetRefusalError, toolResults, toolUses,
+  declinedCalls, fellBack, plainMessages, READ_RECOVERY_NOTE, SonnetRefusalError, toolResults, toolUses, TOOLS_FAILED_NOTE, withNote,
 } from './claudeToolLoopParts.js';
 
 export { declinedCalls, NOT_OFFERED_IN_TURN, READ_RECOVERY_NOTE, SonnetRefusalError } from './claudeToolLoopParts.js';
@@ -107,7 +107,7 @@ class ToolLoop {
   private readonly messages: Anthropic.MessageParam[];
   private readonly turns: Message[] = [];
   private readonly appendOnly: boolean;
-  /** Every offered schema is strict, including deferred ones; the provider accepts at most 20 strict tools per request. */
+  /** Every native tool name of the request, strict or not (strict ones within `ANTHROPIC_GRAMMAR_BUDGET`). */
   private readonly visible: Set<string>;
   private readonly session: ShannonModelToolSession | undefined;
   private readonly turn: ToolStepState = { used: 0, toolsOff: false };
@@ -116,17 +116,15 @@ class ToolLoop {
   private readRecovery = false;
   private bridgeOnly = false;
   private acceptedLength = 0;
-  private acceptedVisible: Set<string>;
 
   constructor(private readonly body: Body, private readonly options: ClaudeToolLoopOptions) {
     this.messages = [...body.messages];
     this.appendOnly = isAppendOnlyAnthropicModel(body.model);
     // The request already appended the initially selected schemas after its stable opener and history. Opening another tool
     // appends only its new definition, preserving signed tools/system/history and the original execution gate.
-    this.visible = new Set(requestStrictTools(body).map(tool => tool.name));
+    this.visible = new Set(activeAnthropicToolNames(body));
     const bridged = this.appendOnly && options.session?.menu && this.visible.has(TOOL_CALL_PROVIDER_NAME);
     this.session = bridged ? bridgedAnthropicSession(options.session!, this.visible) : options.session;
-    this.acceptedVisible = new Set((body.tools ?? []).flatMap(tool => 'name' in tool ? [tool.name] : []));
   }
 
   run(): Promise<ClaudeToolLoopResult> {
@@ -197,7 +195,6 @@ class ToolLoop {
       return this.roundFailed(session, error);
     }
     this.acceptedLength = this.messages.length;
-    this.acceptedVisible = new Set(this.visible);
     const stop = this.refused(message);
     if (stop) return stop;
     if (this.paused(message)) return null;
@@ -246,17 +243,19 @@ class ToolLoop {
   }
 
   /**
-   * The definitions of tools opened in this step that fit the request, inline (`tool_addition`). The stable Messages types do
-   * not yet include beta inline blocks: their schema is checked by the SDK's beta type, sent through the same transport.
+   * The definitions of tools opened in this step, inline (`tool_addition`): strict while the grammar budget allows (never after a
+   * grammar refusal), otherwise native non-strict. The stable Messages types do not yet include beta inline blocks: their schema
+   * is checked by the SDK's beta type, sent through the same transport.
    */
   private addInlineTools(): void {
-    if (!this.appendOnly || !this.session?.menu || this.bridgeOnly) return;
+    if (!this.appendOnly || !this.session?.menu) return;
     const admitted: Anthropic.Tool[] = [];
     const additions: BetaRequestToolAdditionBlock[] = claudeTools(this.options.session).flatMap(tool => {
-      if (this.visible.has(tool.name) || !strictRequestFits(this.request(), [...admitted, tool])) return [];
-      admitted.push(tool);
+      if (this.visible.has(tool.name)) return [];
+      const strict = !this.bridgeOnly && strictGrammarFits(this.request(), [...admitted, tool]);
+      if (strict) admitted.push(tool);
       this.visible.add(tool.name);
-      return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: tool } }];
+      return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: strict ? tool : nonStrictTool(tool) } }];
     });
     if (additions.length) this.messages.push({ role: 'system', content: additions as unknown as Anthropic.ContentBlockParam[] });
   }
@@ -283,7 +282,8 @@ class ToolLoop {
 
   private plainRequest(): Body {
     const { tools: _tools, tool_choice: _choice, ...plainBody } = this.options.plainBody ?? this.body;
-    if (this.turn.used === 0) return plainBody;
+    // Never silently without tools: she is told they failed for this reply, so she does not invent a reason.
+    if (this.turn.used === 0) return { ...plainBody, messages: withNote(plainBody.messages, TOOLS_FAILED_NOTE) };
     return { ...plainBody, messages: [...plainMessages(this.messages), { role: 'system' as const, content: TOOLS_GONE_NOTE }] };
   }
 
@@ -308,18 +308,18 @@ class ToolLoop {
     return true;
   }
 
-  /** An acknowledged grammar refusal: the unaccepted tail becomes the bridge's quoted data, once. */
+  /** An acknowledged grammar refusal: the unaccepted tail's definitions lose strict decoding (they stay native tools), once. */
   private recoverGrammar(error: unknown): boolean {
     if (!this.appendOnly || !this.session?.menu || !this.visible.has(TOOL_CALL_PROVIDER_NAME) || this.bridgeOnly) return false;
     if (offerRefusal(error) !== 'strict_grammar_capacity') return false;
     const before = this.request();
-    const tail = bridgeOnlyUnacceptedTail(this.messages, this.acceptedLength);
+    const tail = nonStrictUnacceptedTail(this.messages, this.acceptedLength);
     if (JSON.stringify(tail) === JSON.stringify(this.messages)) return false;
     reportOfferRefusal(error, before, 'strict_grammar_capacity');
     this.options.onPlanEvent?.('grammar_bridge');
     this.messages.splice(0, this.messages.length, ...tail);
     this.visible.clear();
-    for (const name of this.acceptedVisible) this.visible.add(name);
+    for (const name of activeAnthropicToolNames(this.request())) this.visible.add(name);
     this.bridgeOnly = true;
     return true;
   }

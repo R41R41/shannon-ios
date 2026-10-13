@@ -1,8 +1,8 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../config/serverEnvironment.js';
-import { VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonVoiceModelRequest } from '../chatModel.js';
+import { SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
+import type { ShannonVoiceModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu } from './anthropicForegroundMenu.js';
@@ -37,7 +37,7 @@ export function voicePlanCovers(request: Pick<ShannonVoiceModelRequest, 'useWebS
 
 /** The cached system of every voice turn of a Talk. */
 export function voiceStableSystem(systemPrompt: string): string {
-  return [splitCapabilityLines(systemPrompt).stable, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].join('\n\n');
+  return [splitCapabilityLines(systemPrompt).stable, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].join('\n\n');
 }
 
 /** The voice turn's own lines, after its context: capability lines, what she knows of the owner, the skill index, the tool line. */

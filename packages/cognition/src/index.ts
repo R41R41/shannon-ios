@@ -49,6 +49,7 @@ export {
   shannonCapabilityPrompt,
   withAetherAccessCapability,
   withReadToolsCapability,
+  withToolWebSearchLine,
   SHANNON_READ_TOOLS_CAPABILITY,
   withSkillsCapability,
   SHANNON_SKILLS_CAPABILITY,

@@ -1,6 +1,7 @@
 import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
 import { observedAnthropicRequest } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
+import { withToolWebSearchLine } from '@shannon/cognition';
 import { PartialAnswerError, TurnDeadline, TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE } from '../../../mind/action/respond/turnDeadline.js';
 import { completeSpokenSentences } from '../../../surfaces/voice/spokenSentences.js';
 import { ChatSentenceSplitter } from '../../../surfaces/text/chatSentenceSplitter.js';
@@ -350,7 +351,10 @@ export class AnthropicChatModel implements ShannonChatModel {
   }
 
   /** Normalize discovery before building the body. The native adapter budgets actual schemas, including JSON output. */
-  private boundedToolMenu<T extends { tools?: ShannonModelToolSession }>(request: T): T {
+  private boundedToolMenu<T extends { tools?: ShannonModelToolSession; systemPrompt: string }>(request: T): T {
+    // With her read tools she looks things up herself in text and voice: the fixed web-search line's toggle wording is replaced.
+    const systemPrompt = withToolWebSearchLine(request.systemPrompt);
+    if (systemPrompt !== request.systemPrompt) request = { ...request, systemPrompt };
     if (!isAppendOnlyAnthropicModel(this.model) || !request.tools || !request.tools.definitions.length) return request;
     if (request.tools.menu && request.tools.definitions.length <= 20) return request;
     // Build before the body so the same session supplies full discovery instructions, always-loaded controls,

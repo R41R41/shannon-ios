@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -115,6 +116,22 @@ describe('the proactive morning brief (SHANNON_MORNING_BRIEF)', () => {
     expect(message).toMatchObject({ sourceTitle: '朝のまとめ', content: expect.stringContaining('おはようございます、今日の福岡市は') });
     expect(message!.content).toContain('[見出し](https://example.com/a)');
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map(), candidates)).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
+    initiatives.close(); brief.close(); state.close();
+  });
+  it('is still delivered when an own-time message already used the day\'s spontaneous slot (2026-10-13)', async () => {
+    const path = databasePath();
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    const thread = state.createThread('owner', 'いつものトーク');
+    const brief = configuredMorningBrief({ ...HOME, SHANNON_MORNING_BRIEF: 'on' }, { databasePath: path, now: () => at, fetcher, headlines: () => [] })!;
+    const candidates = await brief.candidates(at);
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+    const database = new DatabaseSync(path);
+    database.prepare(`INSERT INTO initiative_messages (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url, content, expression, day_key, created_at)
+      VALUES ('story', 'owner', ?, 'own-time:story', '物語', '', '物語を書きました', 'curious', '2026-10-13', ?)`).run(thread, at);
+    database.close();
+    expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map(), candidates)).toMatchObject({ sent: 1 });
+    expect(initiatives.unreadMessages('owner').map(message => message.sourceTitle)).toContain('朝のまとめ');
     initiatives.close(); brief.close(); state.close();
   });
 });

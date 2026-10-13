@@ -18,6 +18,17 @@ export class SonnetRefusalError extends Error {
  * The bounded read recovery is the owner's side of the turn: a user message after her end_turn (a mid-conversation system
  * message may not follow an assistant end_turn; ADR-0009 stage 1, quick fix 1).
  */
+/** The answer without tools after the provider refused the offered tools: no invented reason, no claim it cannot be done. */
+export const TOOLS_FAILED_NOTE = 'この返事では道具の呼び出しが一時的にうまくいかず、道具なしで答える。'
+  + '道具が使えない理由（テキストでないと使えない、設定やオンが要る等）を作らない。調べものや操作が要る依頼なら、もう一度やってみると短く伝える。';
+
+/** A note after the request's messages, joined to a closing system message of plain text. */
+export function withNote(messages: readonly Anthropic.MessageParam[], text: string): Anthropic.MessageParam[] {
+  const last = messages.at(-1);
+  if (last?.role === 'system' && typeof last.content === 'string') return [...messages.slice(0, -1), { role: 'system', content: `${last.content}\n\n${text}` }];
+  return [...messages, { role: 'system', content: text }];
+}
+
 export const READ_RECOVERY_NOTE = '依頼されたWeb検索はまだ実行されていない。調べる約束だけでは完了しない。'
   + '必要な地域や対象が分かっているならweb_searchを使ってから答える。不明なら必要なことだけを短く聞く。';
 

@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
-import { TOOL_CALL_SCHEMA, strictRequestFits, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { ANTHROPIC_GRAMMAR_BUDGET, TOOL_CALL_SCHEMA, strictRequestFits, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from '../src/infra/models/anthropic/observerProjection.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import type { ShannonModelToolSession } from '../src/infra/models/chatModelTools.js';
@@ -141,9 +141,11 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('stable foreground cach
     const h = native(model, (_body, index) => answers[index]!);
     await run(h.chat, 'text', raw);
     const initial = h.bodies[0]!;
-    expect(activeAnthropicToolNames(nativeBody(initial))).toHaveLength(count === 19 ? 20 : 2);
-    expect(definitions(initial)).toHaveLength(count === 19 ? 18 : 0);
-    if (count === 19) expect(definitions(initial).map(tool => tool.name)).not.toContain(target);
+    // Within the grammar budget a definition is strict; the rest are native non-strict definitions (2026-10-13).
+    expect(activeAnthropicToolNames(nativeBody(initial))).toHaveLength(count === 19 ? 21 : 2);
+    expect(definitions(initial)).toHaveLength(count === 19 ? 19 : 0);
+    expect(strictRequestUsage(nativeBody(initial)).tools).toBeLessThanOrEqual(ANTHROPIC_GRAMMAR_BUDGET.tools);
+    if (count === 19) expect(definitions(initial).filter(tool => tool.strict).map(tool => tool.name)).not.toContain(target);
     for (const tool of offered) expect(JSON.stringify(initial.messages)).toContain(`- ${tool.name.replaceAll('.', '_')}: `);
     expect(initial.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true }), TOOL_CALL_SCHEMA]);
     expect(raw.call).toHaveBeenCalledOnce();
@@ -161,16 +163,16 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('stable foreground cach
     }
   });
 
-  it('keeps schema complexity bounded while selected overflow tools remain executable through the stable bridge', async () => {
+  it('keeps schema complexity within the grammar budget while selected overflow tools stay native and executable', async () => {
     const offered = Array.from({ length: 19 }, (_, index) => ({ ...shannonTool('study.list')!, name: `fixture.tool${index}` }));
     const target = offered.at(-1)!.name.replaceAll('.', '_');
     const raw = session(offered);
     const h = native(model, (_body, index) => index === 0
       ? call('tool_call', 'optional-overflow', { name: target, argumentsJson: '{}' }) : final('text'));
     await run(h.chat, 'text', raw);
-    expect(strictRequestUsage(nativeBody(h.bodies[0]!)).optional).toBe(24);
-    expect(definitions(h.bodies[0]!)).toHaveLength(6);
-    expect(definitions(h.bodies[0]!).map(tool => tool.name)).not.toContain(target);
+    expect(strictRequestUsage(nativeBody(h.bodies[0]!)).optional).toBeLessThanOrEqual(ANTHROPIC_GRAMMAR_BUDGET.optional);
+    expect(definitions(h.bodies[0]!)).toHaveLength(19);
+    expect(definitions(h.bodies[0]!).find(tool => tool.name === target)?.strict).toBe(false);
     expect(raw.call).toHaveBeenCalledOnce();
     expect(raw.call.mock.calls[0]?.[0]).toBe(target);
     for (const body of h.bodies) expect(strictRequestFits(nativeBody(body))).toBe(true);
