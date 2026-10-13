@@ -1,3 +1,5 @@
+import { foregroundFree } from './visionNotice.js';
+
 /**
  * An escalation of the camera's notice (Syzygy ADR-0011 §4.3 `escalate`): the frame the worker held is shown once to the model
  * that sees a look, with nothing of the Talk (no context, so nothing private can ride along), and what she says is her note in the
@@ -16,8 +18,8 @@ export interface VisionEscalationDependencies {
   alone(scopeKey: string): boolean;
   /** The owner wrote or spoke just now, or a voice call is going on (`ownerActive` of the notice): no escalation then. */
   ownerActive(scopeKey: string): boolean;
-  /** The foreground speaking right, when the mind provides one. */
-  foreground?<T>(scopeKey: string, work: () => Promise<T>): Promise<T>;
+  /** Whether a turn holds the foreground speaking right now; the look is made outside it, and given up if it is held at saying. */
+  foregroundBusy?(scopeKey: string): Promise<boolean>;
   say(scopeKey: string, decisionId: string, text: string, at: string): { threadId: string } | null;
   /** The used frame on the common vision contract (`visionLook`). */
   looked(scopeKey: string, look: { deviceId: string; outcome: 'seen' | 'not_seen' | 'withheld'; width: number; height: number; byteLength: number }): void;
@@ -35,8 +37,7 @@ export class VisionEscalation {
     const usable = viewer && input.mimeType === 'image/jpeg' && input.base64.length <= VISION_ESCALATION_LIMITS.base64Characters
       && this.dependencies.now() - Date.parse(input.at) <= VISION_ESCALATION_LIMITS.freshMs;
     if (!usable || !this.dependencies.alone(input.scopeKey) || this.dependencies.ownerActive(input.scopeKey)) return { seen: false };
-    const work = () => this.seen(viewer!, input);
-    return this.dependencies.foreground ? this.dependencies.foreground(input.scopeKey, work) : work();
+    return this.seen(viewer!, input);
   }
 
   private async seen(viewer: VisionEscalationViewer, input: Parameters<VisionEscalation['look']>[0]): Promise<{ seen: boolean }> {
@@ -48,7 +49,9 @@ export class VisionEscalation {
     } catch {
       text = '';
     }
-    const alone = this.dependencies.alone(input.scopeKey) && !this.dependencies.ownerActive(input.scopeKey);
+    const free = await foregroundFree(this.dependencies, input.scopeKey);
+    const fresh = this.dependencies.now() - Date.parse(input.at) <= VISION_ESCALATION_LIMITS.freshMs + 15_000;
+    const alone = free && fresh && this.dependencies.alone(input.scopeKey) && !this.dependencies.ownerActive(input.scopeKey);
     this.dependencies.looked(input.scopeKey, { deviceId: input.deviceId, outcome: !text ? 'not_seen' : alone ? 'seen' : 'withheld', ...size });
     if (!text || !alone) return { seen: false };
     const said = this.dependencies.say(input.scopeKey, input.decisionId, text, new Date(this.dependencies.now()).toISOString());

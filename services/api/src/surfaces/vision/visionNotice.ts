@@ -7,7 +7,9 @@ import { VISION_NOTICE_CATEGORIES, type VisionNoticeCategory } from '../../contr
  * note, marked as said with the owner alone. It is her speaking up on her own (ADR-0002, 2026-10-03), so:
  * - the audience is checked again right before and right after the words are made: with anyone else present nothing is said;
  * - the owner talking just now holds it (she does not cut in), and a notice older than its freshness is dropped, never queued;
- * - it waits for the foreground speaking right (ADR-0008 answer 3) when the mind provides one.
+ * - the words are made outside the foreground speaking right (ADR-0008 answer 3); only the instant of saying needs it free: when a
+ *   turn holds it then, the notice is given up, never waited for. Nothing takes the owner's `respond` slot for her notice, so no
+ *   action of hers is recorded as an owner request.
  */
 export const VISION_NOTICE_LIMITS = Object.freeze({
   /** A decision older than this when it reaches the API is not said. */
@@ -46,13 +48,23 @@ export interface VisionNoticeDependencies {
   voiceActive?(scopeKey: string): boolean;
   /** Her note in the Talk, once per decision id (marked owner-alone), or null when there is nowhere to say it. */
   say(scopeKey: string, decisionId: string, text: string, at: string): { threadId: string } | null;
-  /** The foreground speaking right, when the mind provides one. */
-  foreground?<T>(scopeKey: string, work: () => Promise<T>): Promise<T>;
+  /** Whether a turn holds the foreground speaking right now (a live `respond` action); an unknown answer counts as held. */
+  foregroundBusy?(scopeKey: string): Promise<boolean>;
   now(): number;
 }
 
+/** Whether the foreground is free this instant; without a mind (stage 4 off) there is no slot to read, and it is free. */
+export async function foregroundFree(dependencies: Pick<VisionNoticeDependencies, 'foregroundBusy'>, scopeKey: string): Promise<boolean> {
+  if (!dependencies.foregroundBusy) return true;
+  try {
+    return !await dependencies.foregroundBusy(scopeKey);
+  } catch {
+    return false;
+  }
+}
+
 export type VisionNoticeResult = { delivered: true; threadId: string }
-  | { delivered: false; reason: 'stale' | 'others' | 'owner_active' | 'no_line' | 'nowhere' | 'invalid' };
+  | { delivered: false; reason: 'stale' | 'others' | 'owner_active' | 'no_line' | 'nowhere' | 'invalid' | 'foreground_busy' };
 
 export class VisionNoticeSpeaker {
   constructor(private readonly dependencies: VisionNoticeDependencies) {}
@@ -62,8 +74,7 @@ export class VisionNoticeSpeaker {
     const category = input.category as VisionNoticeCategory;
     const blocked = this.blocked(input.scopeKey, input.at);
     if (blocked) return { delivered: false, reason: blocked };
-    const work = () => this.spoken(input.scopeKey, input.decisionId, category, input.at);
-    return this.dependencies.foreground ? this.dependencies.foreground(input.scopeKey, work) : work();
+    return this.spoken(input.scopeKey, input.decisionId, category, input.at);
   }
 
   private blocked(scopeKey: string, at: string): 'stale' | 'others' | 'owner_active' | null {
@@ -83,6 +94,7 @@ export class VisionNoticeSpeaker {
     const text = line?.replace(/\s+/gu, ' ').trim().slice(0, VISION_NOTICE_LIMITS.lineCharacters) ?? '';
     if (!text) return { delivered: false, reason: 'no_line' };
     // The audience and the freshness again, after the words were made: a guest who arrived meanwhile hears nothing.
+    if (!await foregroundFree(this.dependencies, scopeKey)) return { delivered: false, reason: 'foreground_busy' };
     const blocked = this.blocked(scopeKey, at);
     if (blocked) return { delivered: false, reason: blocked };
     const said = this.dependencies.say(scopeKey, decisionId, text, new Date(this.dependencies.now()).toISOString());

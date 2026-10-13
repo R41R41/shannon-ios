@@ -22,17 +22,32 @@ look model, which asks the provider not to keep the request as the existing look
 
 ### Deploying the nginx change (VM)
 
-The vision location and the `client_body_buffer_size` lines are in `deploy/azure/nginx-location.conf`. On `azure-constant-server`:
+The change touches every `/companion/` request, whatever the vision switches are, so it goes in on its own and is checked first.
+`deploy/azure/nginx-location.conf` is the server-block part and `deploy/azure/nginx-http-limits.conf` the http-block part.
 
-1. Back up the site file that holds the sh4nnon.com TLS server block (`sudo cp /etc/nginx/sites-available/<site> /etc/nginx/sites-available/<site>.bak-$(date +%F)`).
-2. Add `client_body_buffer_size 4m;` inside the existing `location ^~ /companion/` block, and add the whole `location ^~ /companion/v1/vision/` block
-   above it (it is a longer prefix, so order does not decide, but keeping it first reads clearly).
-3. `sudo nginx -t`, then `sudo systemctl reload nginx` (a reload keeps connections; no restart).
-4. Check that nothing spills: send a synthetic 3 MB JPEG to a 404 path under `/companion/` with a device token and confirm
-   `sudo find /var/lib/nginx/body -type f` (or the distribution's `client_body_temp` directory) stays empty; nginx logs
-   `a client request body is buffered to a temporary file` at warn level when it would spill, so `sudo grep -c 'buffered to a temporary file' /var/log/nginx/error.log`
-   must not grow.
-5. Only then start `shannon-ios-vision.service` and switch `SHANNON_VISION_WORKER=on`.
+- **No body on disk.** Each location's `client_body_buffer_size` equals its `client_max_body_size`, so an accepted body stays in
+  memory and never reaches `client_body_temp` (camera frames, photos, recorded speech, her folder's files).
+- **No large buffer for everyone.** nginx allocates the body buffer before the API checks the device token (a chunked body gets
+  the whole buffer at once), so the large buffers are only on the routes that take large bodies, each with a per-address rate
+  and connection limit (429 beyond): `= /v1/voice/vision/snapshots` and `= /v1/voice/transcriptions` 4m; `^~ /v1/body/looks/`,
+  `^~ /v1/app/looks/` and `^~ /v1/autonomy/host-steps/` 1m; the vision worker 256k at 4 requests a second. Everything else
+  under `/companion/` is 256k (ordinary JSON is 64 KiB in the API; Agent Host state and calendar uploads 256 KiB).
+- The syntax was checked with nginx 1.18.0 on the VM in an isolated test configuration (`nginx -t -p <tmp> -c <tmp>/nginx.conf`,
+  2026-10-14); production nginx was not touched.
+
+On `azure-constant-server`:
+
+1. Back up: `sudo cp /etc/nginx/sites-available/<site> /etc/nginx/sites-available/<site>.bak-$(date +%F)`.
+2. `sudo cp deploy/azure/nginx-http-limits.conf /etc/nginx/conf.d/shannon-limits.conf` (the http block includes `conf.d/*.conf`
+   on Ubuntu; check with `grep -n conf.d /etc/nginx/nginx.conf`).
+3. In the sh4nnon.com TLS server block, replace the old `location ^~ /companion/` block with all the location blocks of
+   `nginx-location.conf` (the vision block may stay out until the vision worker is enabled; the others go in now).
+4. `sudo nginx -t`, then `sudo systemctl reload nginx` (a reload keeps connections).
+5. Check: a normal turn, a voice turn, a shared photo and an app look still work; a 3 MB synthetic JPEG to
+   `/companion/v1/voice/vision/snapshots` with a device token leaves `sudo find /var/lib/nginx/body -type f` empty and adds no
+   `buffered to a temporary file` line to `/var/log/nginx/error.log`; a 600 KB body to any other `/companion/` path gets 413.
+6. Rollback: restore the backup, remove `/etc/nginx/conf.d/shannon-limits.conf`, `sudo nginx -t && sudo systemctl reload nginx`.
+7. Only then start `shannon-ios-vision.service` and switch `SHANNON_VISION_WORKER=on`.
 
 ## Contract (`services/api/src/contracts/visionContract.ts`)
 

@@ -39,7 +39,7 @@ describe('vision bridge', () => {
     await handle('vision.presence', { scopeKey: 'owner', deviceId: 'device-1', personCount: 3, at: percept.at });
     expect(events[1]?.detail).toMatchObject({ code: 'presence:others' });
     // Two people seen on a device make the API's own audience `others`, so every device stops and nothing is said.
-    expect(audiences).toEqual(['device-1:others']);
+    expect(audiences).toEqual(['vision:device-1:others']);
   });
 
   it('says no notice without a model, and none with anyone else present', async () => {

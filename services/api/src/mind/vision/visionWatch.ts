@@ -191,6 +191,15 @@ export class VisionWatch {
     return this.checked(principal, meta, base, answer, failure, reservation.amountUsd, started, this.options.now() - decided);
   }
 
+  /** Notices and escalations in the last hour; a ledger that cannot be read counts as the cap reached (fail closed: no notice). */
+  private spokenLastHour(scopeKey: string, now: number): number {
+    try {
+      return this.choices.countSince(scopeKey, ['notice', 'escalate'], iso(now - 60 * 60_000));
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  }
+
   private lastChosen(scopeKey: string, candidateId: string): number | null {
     try {
       const at = this.choices.lastChosenAt(scopeKey, candidateId);
@@ -230,7 +239,7 @@ export class VisionWatch {
     const now = this.options.now();
     const verdict = visionNoticeVerdict({ predicate: answer.predicate, choiceId: answer.choice?.id ?? null, confidence: answer.choice?.confidence ?? null,
       level: level === 0 ? 0 : 1, now, lastChosenAt: id => this.lastChosen(principal.scopeKey, id),
-      spokenLastHour: this.choices.countSince(principal.scopeKey, ['notice', 'escalate'], iso(now - 60 * 60_000)) });
+      spokenLastHour: this.spokenLastHour(principal.scopeKey, now) });
     const record = this.record({ ...base, degrade: level }, answer, verdict.outcome, verdict.discardReason, started, reservedUsd, decisionMs,
       verdict.candidateId);
     if (verdict.candidateId) {

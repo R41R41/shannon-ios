@@ -128,12 +128,19 @@ describe('she does not cut in', () => {
     expect([...said, ...seen]).toEqual([]);
   });
 
-  it('waits for the foreground speaking right when the mind provides one', async () => {
+  it('makes the words outside the foreground slot, and gives up instead of waiting when a turn holds it at saying', async () => {
     const order: string[] = [];
-    const speaker = new VisionNoticeSpeaker({ compose: async () => { order.push('compose'); return 'ライ氏。'; }, ownerLastActiveAt: () => null,
+    let busy = false;
+    const speaker = new VisionNoticeSpeaker({ compose: async () => { order.push('compose'); busy = true; return 'ライ氏。'; }, ownerLastActiveAt: () => null,
       alone: () => true, say: () => { order.push('say'); return { threadId: 't' }; }, now: () => Date.parse(minute(10)),
-      foreground: async (_scope, work) => { order.push('admitted'); const value = await work(); order.push('released'); return value; } });
-    await speaker.deliver({ scopeKey: 'owner', decisionId: 'd2', category: 'owner_waved', at: minute(10) });
-    expect(order).toEqual(['admitted', 'compose', 'say', 'released']);
+      foregroundBusy: async () => { order.push(`busy:${busy}`); return busy; } });
+    expect(await speaker.deliver({ scopeKey: 'owner', decisionId: 'd2', category: 'owner_waved', at: minute(10) }))
+      .toEqual({ delivered: false, reason: 'foreground_busy' });
+    expect(order).toEqual(['compose', 'busy:true']);
+    const failing = new VisionNoticeSpeaker({ compose: async () => 'ライ氏。', ownerLastActiveAt: () => null, alone: () => true,
+      say: () => { order.push('said anyway'); return { threadId: 't' }; }, now: () => Date.parse(minute(10)),
+      foregroundBusy: async () => { throw new Error('MIND_IPC_DEADLINE'); } });
+    expect(await failing.deliver({ scopeKey: 'owner', decisionId: 'd3', category: 'owner_waved', at: minute(10) })).toMatchObject({ delivered: false });
+    expect(order).not.toContain('said anyway');
   });
 });

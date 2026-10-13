@@ -36,8 +36,8 @@ export interface VisionBridgeParts {
   conversations: VisionBridgeConversation;
   usage: Pick<LlmUsageStore, 'recordLlmUsage'>;
   affect?: { applyFcaAffectEvidence(scopeKey: string, evidence: FcaAffectEvidence, visible: () => boolean): unknown };
-  /** The foreground speaking right (ADR-0008 answer 3), when the mind provides one. */
-  foreground?<T>(scopeKey: string, work: () => Promise<T>): Promise<T>;
+  /** Whether a turn holds the foreground speaking right now (ADR-0008 answer 3): a live `respond` action of the mind. */
+  foregroundBusy?(scopeKey: string): Promise<boolean>;
   /** Whether a voice call with her is going on now (the kernel's owner-call watch). */
   voiceActive?(scopeKey: string): boolean;
   /** The body store's audience report: a device that saw two or more people makes the API's audience `others` for its window. */
@@ -103,7 +103,7 @@ function noticeSpeaker(values: Readonly<Record<string, string | undefined>>, par
     alone: scopeKey => parts.presence(scopeKey) === 'alone',
     ownerLastActiveAt: scopeKey => ownerLastActiveAt(parts.conversations, scopeKey),
     say: noteSayer(parts),
-    ...(parts.foreground ? { foreground: parts.foreground } : {}),
+    ...(parts.foregroundBusy ? { foregroundBusy: parts.foregroundBusy } : {}),
     ...(parts.voiceActive ? { voiceActive: parts.voiceActive } : {}),
     now: parts.now,
   });
@@ -139,7 +139,7 @@ export function visionBridgeHandler(values: Readonly<Record<string, string | und
     alone: scopeKey => parts.presence(scopeKey) === 'alone', say: noteSayer(parts), now: parts.now,
     ownerActive: scopeKey => ownerActive({ ownerLastActiveAt: scope => ownerLastActiveAt(parts.conversations, scope),
       ...(parts.voiceActive ? { voiceActive: parts.voiceActive } : {}) }, scopeKey, parts.now()),
-    ...(parts.foreground ? { foreground: parts.foreground } : {}),
+    ...(parts.foregroundBusy ? { foregroundBusy: parts.foregroundBusy } : {}),
     looked: (scopeKey, look) => visionLook({ scopeKey, source: 'app_camera', purpose: 'escalate', deviceId: look.deviceId, outcome: look.outcome,
       audience: 'owner_alone', at: new Date(parts.now()).toISOString(), perceiver: parts.perceiver,
       image: { format: 'jpeg', width: look.width, height: look.height, byteLength: look.byteLength } }),
@@ -156,7 +156,9 @@ export function visionBridgeHandler(values: Readonly<Record<string, string | und
       const at = time(args, 'at');
       // The device saw two or more people: the API's own audience becomes `others` for the body's freshness window, so every
       // device stops watching and no notice or escalation is said (a candidate only: nobody is named).
-      parts.body?.noteAudience(scopeKey, text(args, 'deviceId'), 'others', new Date(parts.now()).toISOString());
+      // A row of its own (`vision:<device>`): the device's own presence reads ("owner") cannot overwrite the stricter state before
+      // its 90 s pass, since any `others` row in the window makes the audience others.
+      parts.body?.noteAudience(scopeKey, `vision:${text(args, 'deviceId')}`, 'others', new Date(parts.now()).toISOString());
       return perceive(parts, scopeKey, { code: 'presence:others', probability: 1, sourceId: `presence-${Date.parse(at)}`, sourceKind: 'app_camera',
         privacy: 'owner_private', ttlMs: 10 * 60_000, body: text(args, 'deviceId'), at, personCount: integer(args, 'personCount', 64) });
     }
@@ -193,15 +195,18 @@ export async function configuredVisionBridge(values: Readonly<Record<string, str
 /** The API server's bridge, composed from its kernel, mind and store (keeps `server.ts` to one line). */
 export function serverVisionBridge(values: Readonly<Record<string, string | undefined>>, parts: {
   kernel: { ownerPresenceForFeedback(scopeKey: string): 'alone' | 'others' | 'unknown'; ownerVoiceActive(scopeKey: string): boolean };
-  mind: { mind: MindPerceiver; host?: unknown } | null;
+  mind: { mind: MindPerceiver; actions?: unknown } | null;
   store: VisionBridgeConversation & Pick<LlmUsageStore, 'recordLlmUsage'> & NonNullable<VisionBridgeParts['affect']>;
   body: NonNullable<VisionBridgeParts['body']>;
 }): Promise<{ close(): Promise<void> } | null> {
-  // The remote mind's foreground runner (stage 4): the `respond` slot a turn holds, so her notice waits for the turn to end.
-  const host = parts.mind?.host as { foreground?: VisionBridgeParts['foreground'] } | null | undefined;
+  // The mind's actions (stage 4): a live `respond` action is a turn holding the foreground. Read only; nothing is taken.
+  const actions = (parts.mind as { actions?: { list(scopeKey: string): Promise<readonly { kind: string; state: string }[]> } } | null)?.actions;
+  const live = new Set(['queued', 'running', 'waiting', 'stopping']);
+  const foregroundBusy = actions
+    ? async (scopeKey: string) => (await actions.list(scopeKey)).some(action => action.kind === 'respond' && live.has(action.state)) : undefined;
   return configuredVisionBridge(values, {
     voiceActive: scopeKey => parts.kernel.ownerVoiceActive(scopeKey), body: parts.body,
-    ...(typeof host?.foreground === 'function' ? { foreground: host.foreground } : {}),
+    ...(foregroundBusy ? { foregroundBusy } : {}),
     databasePath: configuredDatabasePath(), ownerScope: configuredOwnerScope(values), now: Date.now, log: line => console.log(line),
     presence: scopeKey => parts.kernel.ownerPresenceForFeedback(scopeKey), perceiver: parts.mind?.mind ?? null,
     conversations: parts.store, usage: parts.store, affect: parts.store,

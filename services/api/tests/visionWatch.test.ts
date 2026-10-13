@@ -207,3 +207,13 @@ describe('vision watch: review fixes', () => {
     expect(restarted.bridge.notices).toEqual([]);
   });
 });
+
+describe('vision watch: a ledger that cannot be read', () => {
+  it('says no notice (fail closed)', async () => {
+    const broken = { record: () => { throw new Error('busy'); }, lastChosenAt: () => null, countSince: () => { throw new Error('busy'); } };
+    const world = visionWorld({ choices: broken });
+    world.decisions.next = [answer('notice:owner_returned')];
+    expect(await send(world)).toMatchObject({ reply: { outcome: 'quiet' } });
+    expect(world.bridge.notices).toEqual([]);
+  });
+});
