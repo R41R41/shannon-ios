@@ -193,6 +193,10 @@ struct ShannonBodyAttachment: ViewModifier {
 
     func body(content: Content) -> some View {
         feelings(signals(content))
+            // Watching while the app is open (ADR-0011 §4.4) stops with anyone else around, and her reaction shows here.
+            .modifier(ShannonCameraWatchBodyLink(
+                watch: conversation.cameraWatch, bodyModel: bodyModel,
+                othersPresent: bodyModel.audience == .others || othersMayBeListening, usesLive2D: usesLive2D))
             .environment(bodyModel)
             .task {
                 bodyModel.sceneIsActive = scenePhase == .active

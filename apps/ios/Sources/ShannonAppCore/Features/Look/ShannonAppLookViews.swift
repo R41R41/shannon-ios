@@ -41,6 +41,10 @@ struct ShannonAppLookCueView: View {
 /// system's camera prompt. Several surfaces may carry it; only the frontmost one shows anything.
 struct ShannonAppLookPresenter: ViewModifier {
     let coordinator: ShannonAppLookCoordinator
+    /// Watching while the app is open (ADR-0011 §4.4): its 「見ています」 sign is shown wherever the look's sign is.
+    var watch: ShannonCameraWatchCoordinator?
+    /// The surface places the 「見ています」 sign itself (the iPhone's stack above the navigation bar).
+    var placesWatchSign = false
 
     @State private var id = UUID()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -50,20 +54,34 @@ struct ShannonAppLookPresenter: ViewModifier {
         let frontmost = coordinator.isFrontmost(presenter: id)
         content
             .overlay(alignment: .top) {
-                if frontmost, let cue = coordinator.cue {
-                    ShannonAppLookCueView(cue: cue)
-                        .padding(.top, ShannonSpacing.small)
-                        .padding(.horizontal, ShannonSpacing.large)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .onTapGesture { coordinator.dismissCue(cue.id) }
-                        .onAppear { AccessibilityNotification.Announcement(ShannonAppLookCopy.cueAccessibility).post() }
+                VStack(spacing: ShannonSpacing.small) {
+                    if frontmost, !placesWatchSign, let watch, watch.showsSign {
+                        ShannonCameraWatchIndicator(watch: watch)
+                            .transition(.opacity)
+                    }
+                    if frontmost, let cue = coordinator.cue {
+                        ShannonAppLookCueView(cue: cue)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .onTapGesture { coordinator.dismissCue(cue.id) }
+                            .onAppear { AccessibilityNotification.Announcement(ShannonAppLookCopy.cueAccessibility).post() }
+                    }
                 }
+                .padding(.top, ShannonSpacing.small)
+                .padding(.horizontal, ShannonSpacing.large)
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: coordinator.cue?.id)
-            .onAppear { coordinator.register(presenter: id) }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: watch?.showsSign)
+            .onAppear {
+                coordinator.register(presenter: id)
+                attachWatch()
+            }
             // The thumbnail is not kept past the screen it was shown on (nor into the app switcher's snapshot).
             .onChange(of: scenePhase) { if scenePhase != .active { coordinator.dismissCue() } }
-            .onDisappear { coordinator.unregister(presenter: id) }
+            .onChange(of: watch?.isWatching) { announceWatching(frontmost: frontmost) }
+            .onDisappear {
+                coordinator.unregister(presenter: id)
+                watch?.unregister(sign: id)
+            }
 #if os(iOS)
             .sheet(isPresented: Binding(
                 get: { frontmost && coordinator.primerPhase != nil },
@@ -82,10 +100,26 @@ struct ShannonAppLookPresenter: ViewModifier {
     }
 }
 
+extension ShannonAppLookPresenter {
+    /// Watching opens the camera only while a surface shows its sign, and gives the camera to a one-shot look.
+    private func attachWatch() {
+        guard let watch else { return }
+        coordinator.cameraClaim = { [weak watch] held in await watch?.yieldCamera(held) }
+        watch.register(sign: id)
+    }
+
+    private func announceWatching(frontmost: Bool) {
+        guard frontmost, let watch else { return }
+        let words = watch.isWatching ? ShannonCameraWatchCopy.watchingAccessibility : watch.notice
+        if let words { AccessibilityNotification.Announcement(words).post() }
+    }
+}
+
 public extension View {
-    /// Shows 「いま見ました」 and the camera explanation for the looks of this conversation.
-    func shannonAppLook(_ model: ShannonConversationModel) -> some View {
-        modifier(ShannonAppLookPresenter(coordinator: model.appLook))
+    /// Shows 「いま見ました」 and the camera explanation for the looks of this conversation, and 「見ています」 while the
+    /// camera watches. `placesWatchSign` is for a surface that puts the 「見ています」 sign in its own layout.
+    func shannonAppLook(_ model: ShannonConversationModel, placesWatchSign: Bool = false) -> some View {
+        modifier(ShannonAppLookPresenter(coordinator: model.appLook, watch: model.cameraWatch, placesWatchSign: placesWatchSign))
     }
 }
 
@@ -97,10 +131,10 @@ extension ShannonPermissionPrimerContent {
         title: "シャノンが見るために、カメラを使います",
         message: "このあと表示される確認で「許可」を選ぶと、シャノンがいま1枚だけ見ます。",
         benefits: [
-            .init(symbol: "bubble.left.and.bubble.right", text: "見るのは、アプリを開いて話している時に、見てと言われた時か、話の流れで気になった時だけです。"),
-            .init(symbol: "photo", text: "見た時は「いま見ました」と小さな画像を表示します。知らないうちに撮ることはありません。"),
-            .init(symbol: "lock.shield", text: "写した1枚は見るために一度送るだけで、端末にもシャノンのサーバーにも保存しません。"),
-            .init(symbol: "switch.2", text: "設定の「会話中にシャノンがカメラで見る」で、いつでも止められます。"),
+            .init(symbol: "bubble.left.and.bubble.right", text: "見てと言われた時や、話の流れで気になった時に、1枚見ます。アプリが画面に出ている間は様子も見て、何か変わった時だけ小さくした1枚を送ります。ほかの人が映った時は止めます。"),
+            .init(symbol: "photo", text: "様子を見ている間は「見ています」と表示し、見た時は「いま見ました」と出します。知らないうちに撮ることはありません。"),
+            .init(symbol: "lock.shield", text: "映像も送った1枚も、端末にもシャノンのサーバーにも保存しません。"),
+            .init(symbol: "switch.2", text: "設定の「会話中にシャノンがカメラで見る」と「アプリを開いている間は見る」で、いつでも止められます。"),
         ],
         allowTitle: "続ける",
         deniedTitle: "カメラがオフになっています",

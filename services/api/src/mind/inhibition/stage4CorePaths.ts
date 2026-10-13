@@ -1,3 +1,5 @@
+import { VISION_CORE_PATHS } from './visionCorePaths.js';
+
 /** Fixed response paths for the Stage 4 execution owner. This definition stays in approval_and_budget. */
 export const STAGE4_CORE_PATHS = Object.freeze([
     // Stage 4: the only mind owner, execution rights, IPC and their adapters are core too.
@@ -19,4 +21,6 @@ export const STAGE4_CORE_PATHS = Object.freeze([
     'services/api/src/wiring/mindWorkerWiring.ts',
     'services/api/src/wiring/remoteMindWiring.ts',
     'services/api/src/infra/http/actionThreadRoutes.ts',
+    // Syzygy ADR-0011 stage 1: the vision worker, its budget guard and the camera's privacy boundary.
+    ...VISION_CORE_PATHS,
 ]);

@@ -57,6 +57,11 @@ public enum ShannonAppLookEncoder {
     public static let thumbnailSide = 160
 
     public static func frame(from image: CGImage) -> ShannonAppLookFrame? {
+        frame(from: image, maximumSide: maximumSide, maximumBytes: maximumBytes)
+    }
+
+    /// The same, with a smaller bound: watching sends at most 512 pixels and 200,000 bytes (Syzygy ADR-0011 §4.4).
+    public static func frame(from image: CGImage, maximumSide: Int, maximumBytes: Int) -> ShannonAppLookFrame? {
         guard let scaled = resized(image, maximumSide: maximumSide) else { return nil }
         for quality in [0.72, 0.58, 0.44, 0.3] {
             if let data = jpeg(scaled, quality: quality), data.count <= maximumBytes {

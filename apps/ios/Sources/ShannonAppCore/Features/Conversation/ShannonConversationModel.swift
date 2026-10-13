@@ -63,6 +63,8 @@ public final class ShannonConversationModel {
     let client: any ShannonAPIClientProtocol
     /// Her eyes in this app for a turn: the camera state each turn reports, and the one frame of a look.
     public var appLook = ShannonAppLookCoordinator()
+    /// Her camera while the app is open (Syzygy ADR-0011 §4.4): watching, its sign, and her reaction to what she saw.
+    public let cameraWatch: ShannonCameraWatchCoordinator
     let cache: ShannonConversationCache?
     let agentTaskStore: ShannonAgentTaskStore?
     var cachedHistories: [String: [ShannonConversationCache.CachedMessage]]
@@ -96,6 +98,7 @@ public final class ShannonConversationModel {
         self.reactions = ShannonReactionsModel(scopeKey: scopeKey, client: client as? any ShannonReactionServing)
         self.scopeKey = scopeKey
         self.client = client
+        self.cameraWatch = ShannonCameraWatchCoordinator(client: client as? any ShannonVisionServing, environment: .live)
         let shouldUseDisplayCache = usesDisplayCache ?? (client is ShannonAPIClient)
         self.cache = shouldUseDisplayCache ? .standard : nil
         self.agentTaskStore = shouldUseDisplayCache ? .standard : nil
@@ -116,6 +119,8 @@ public final class ShannonConversationModel {
         } else {
             self.messages = []
         }
+        // A design preview never opens the camera or sends a frame.
+        cameraWatch.maySend = { [weak self] in self.map { !$0.isDesignPreview } ?? false }
     }
 
 #if DEBUG

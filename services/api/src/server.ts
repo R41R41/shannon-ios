@@ -7,7 +7,7 @@ import { configuredServerObserver } from './wiring/serverObserverWiring.js';
 import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
 import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readJson, sendJson, VoiceRequestAllowances } from './infra/http/serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './infra/auth/apiAuth.js';
-import { configuredVisionBridge } from './wiring/visionBridgeWiring.js';
+import { serverVisionBridge } from './wiring/visionBridgeWiring.js';
 import { handleVoiceVisionSnapshot } from './surfaces/voice/serverVoiceVisionRoute.js';
 import { createPairingRoute } from './infra/auth/serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './surfaces/voice/voiceVision.js';
@@ -461,22 +461,16 @@ server.listen(port, host, () => {
   console.log('Shannon persistence ready: sqlite');
   console.log(selfDiagnosis.startupLine());
 });
-// Syzygy ADR-0011 stage 1: the vision worker's bridge (audience, percepts, a notice's line). SHANNON_VISION_WORKER off: no socket.
-const visionBridge = await configuredVisionBridge(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
-  now: Date.now, presence: scopeKey => kernel.ownerPresenceForFeedback(scopeKey), perceiver: mind?.mind ?? null, conversations: persistentStore,
-  usage: persistentStore, affect: persistentStore, log: line => console.log(line) });
+const visionBridge = await serverVisionBridge(process.env, { kernel, mind, store: persistentStore }); // ADR-0011 S1; off: no socket.
 let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close(async () => {
-    await visionBridge?.close();
     await fca?.close();
-    signalObserver?.close(); deviceAuth?.close();
+    signalObserver?.close(); deviceAuth?.close(); void visionBridge?.close();
     pushStore.close(); worldStore.close(); initiativeStore.close();
-    stage5.close();
-    testFlightDeliveryStore.close(); dailyMindStore.close();
-    organizeStore.close();
+    stage5.close(); testFlightDeliveryStore.close(); dailyMindStore.close(); organizeStore.close();
     turnRouting?.close();
     mind?.close();
     withheldActions?.close();

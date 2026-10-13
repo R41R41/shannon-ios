@@ -3058,6 +3058,32 @@
       }
     },
     {
+      "id": "look.app-camera-watch",
+      "area": "look",
+      "title": "アプリを開いている間は見る",
+      "description": "アプリが前に出ていてライ氏と二人の時だけ、端末でカメラを見続け、変化があった時だけ1枚を視覚ワーカーへ送る。表情で返すか、短く話しかける。「見ています」と「止める」を常に出す。絵は保存しない（Syzygy ADR-0011 §4.4、サーバーの SHANNON_VISION_CAMERA は既定で切）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonCameraWatchCoordinator.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonCameraWatchIndicator.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonCameraWatchSystem.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookViews.swift#shannonAppLook"
+          ]
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "ADR-0011 §4.4 はシャノンの iPhone・Mac アプリのカメラだけに当てはまる。Windows の体の「部屋をひと目見る」は変えない。"
+        }
+      }
+    },
+    {
       "id": "look.permission-setting",
       "area": "look",
       "title": "見てよいかの設定",

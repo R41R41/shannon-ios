@@ -7,6 +7,8 @@ import UIKit
 /// The switch is the owner's; the camera permission stays with the system and is only reported here.
 public struct ShannonAppLookSettingsSection: View {
     @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) private var enabled = true
+    /// 「アプリを開いている間は見る」 (Syzygy ADR-0011 §4.4), on unless the owner turned it off.
+    @AppStorage(ShannonCameraWatchPreference.enabledDefaultsKey) private var watches = true
     @State private var permission = ShannonMediaPermission.undetermined
     @State private var hasCamera = true
     @Environment(\.openURL) private var openURL
@@ -53,6 +55,36 @@ public struct ShannonAppLookSettingsSection: View {
         .onAppear(perform: refresh)
         // The permission may have been changed in the system's settings while the app was away.
         .onChange(of: scenePhase) { refresh() }
+        watchSection
+    }
+
+    /// Watching while the app is open: its own switch, under the one-shot look. It never asks for the camera itself.
+    private var watchSection: some View {
+        Section {
+            Toggle(isOn: $watches) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ShannonCameraWatchCopy.toggleTitle)
+                        Text(ShannonCameraWatchCopy.statusText(enabled: watches, permission: permission, hasCamera: hasCamera))
+                            .font(.shannon(.footnote))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("camera-watch-status")
+                    }
+                } icon: {
+#if os(iOS)
+                    Image(systemName: "eye.circle").foregroundStyle(ShannonPalette.resolve(colorScheme).action)
+#else
+                    Image(systemName: "eye.circle")
+#endif
+                }
+            }
+            .disabled(!hasCamera)
+            .frame(minHeight: ShannonTouchTarget.minimum)
+            .accessibilityHint(ShannonCameraWatchCopy.toggleHint)
+            .accessibilityIdentifier("settings-camera-watch")
+        } footer: {
+            Text(ShannonCameraWatchCopy.explanation)
+        }
     }
 
     private func refresh() {

@@ -38,13 +38,19 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     discard: { workspace.discardCallMemory(using: conversationModel) },
                     close: { workspace.callMemory = nil })
             }
+            // 「見ています」 while the camera watches (Syzygy ADR-0011 §4.4), in the stack for the same reason as the pill.
+            if conversationModel.cameraWatch.showsSign {
+                ShannonCameraWatchIndicator(watch: conversationModel.cameraWatch)
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .padding(.vertical, ShannonSpacing.extraSmall)
+            }
             // 「友人も一緒」 with the call minimised: the owner's screen under the pill (Talk, or a sheet's page) is
             // covered, and VoiceOver does not read it either (coordinator decision 2026-10-06).
             content
                 .shannonGuestCover(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens, style: .overlay)
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
-        .shannonAppLook(conversationModel)
+        .shannonAppLook(conversationModel, placesWatchSign: true)
         .sheet(isPresented: $isPresented, onDismiss: {
             // Minimizing while the microphone explanation waits must not strand the call.
             if geminiVoiceModel.microphonePrimerPhase == .explain { endCall() }

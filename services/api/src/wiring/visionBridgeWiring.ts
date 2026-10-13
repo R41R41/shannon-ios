@@ -1,4 +1,6 @@
 import { VISION_SOURCE_KINDS } from '../contracts/visionContract.js';
+import { configuredOwnerScope } from '../infra/config/ownerScope.js';
+import { configuredDatabasePath } from '../infra/sqlite/sqliteStore.js';
 import { serveMindSocket } from '../infra/ipc/mindSocket.js';
 import { visionBridgeSocketPath, visionSwitches } from '../infra/config/visionConfig.js';
 import { configuredResponseModel } from '../infra/models/anthropic/haikuConfig.js';
@@ -175,4 +177,17 @@ export async function configuredVisionBridge(values: Readonly<Record<string, str
     parts.log(`Shannon vision bridge unavailable code=${error instanceof Error && /^[A-Z0-9_]{1,60}$/u.test(error.message) ? error.message : 'unknown'}`);
     return null;
   }
+}
+
+/** The API server's bridge, composed from its kernel, mind and store (keeps `server.ts` to one line). */
+export function serverVisionBridge(values: Readonly<Record<string, string | undefined>>, parts: {
+  kernel: { ownerPresenceForFeedback(scopeKey: string): 'alone' | 'others' | 'unknown' };
+  mind: { mind: MindPerceiver } | null;
+  store: VisionBridgeConversation & Pick<LlmUsageStore, 'recordLlmUsage'> & NonNullable<VisionBridgeParts['affect']>;
+}): Promise<{ close(): Promise<void> } | null> {
+  return configuredVisionBridge(values, {
+    databasePath: configuredDatabasePath(), ownerScope: configuredOwnerScope(values), now: Date.now, log: line => console.log(line),
+    presence: scopeKey => parts.kernel.ownerPresenceForFeedback(scopeKey), perceiver: parts.mind?.mind ?? null,
+    conversations: parts.store, usage: parts.store, affect: parts.store,
+  });
 }

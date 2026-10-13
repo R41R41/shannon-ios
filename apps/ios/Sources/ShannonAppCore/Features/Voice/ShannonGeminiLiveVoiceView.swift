@@ -80,6 +80,9 @@ public struct ShannonGeminiLiveVoiceView: View {
         .fullScreenCover(isPresented: $workspace.showsCamera) {
             ShannonVoiceCameraPicker(onCapture: receiveCameraImage, onCancel: { workspace.showsCamera = false })
                 .ignoresSafeArea()
+                // Watching while the app is open (ADR-0011 §4.4) gives the camera to the system's camera meanwhile.
+                .onAppear { claimCamera(true) }
+                .onDisappear { claimCamera(false) }
         }
         .sheet(item: permissionPrimerKind) { kind in
             permissionPrimerSheet(kind)
@@ -471,6 +474,11 @@ public struct ShannonGeminiLiveVoiceView: View {
             composerIsFocused = false
             workspace.showsTextComposer = false
         }
+    }
+
+    private func claimCamera(_ held: Bool) {
+        guard let claim = appLook?.cameraClaim else { return }
+        Task { await claim(held) }
     }
 }
 #endif

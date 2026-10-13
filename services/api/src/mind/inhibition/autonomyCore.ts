@@ -1,7 +1,6 @@
 import { FCA_CORE_PATHS } from './fcaCorePaths.js';
 import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
-import { VISION_CORE_PATHS } from './visionCorePaths.js';
 import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
 import { MODEL_MODE_CORE_PATHS } from './modelModeCorePaths.js';
 import { EXECUTIVE_CORE_PATHS } from './executiveCorePaths.js';
@@ -440,7 +439,6 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/wiring/mindWiring.ts',
     'services/api/src/contracts/mindInboxContract.ts',
     ...STAGE4_CORE_PATHS,
-    ...VISION_CORE_PATHS,
   ]),
   deployment: Object.freeze([
     ...STAGE5_CORE_PATHS.deployment,

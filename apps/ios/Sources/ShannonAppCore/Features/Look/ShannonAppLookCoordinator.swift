@@ -83,6 +83,8 @@ public final class ShannonAppLookCoordinator {
     private var presenters: [UUID] = []
     @ObservationIgnored private var primerChoice: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var isLooking = false
+    /// Told before the one frame of a look is taken (true) and after (false): watching yields the camera meanwhile.
+    @ObservationIgnored public var cameraClaim: (@MainActor (Bool) async -> Void)?
 
     public init(environment: ShannonAppLookEnvironment = .live) {
         self.environment = environment
@@ -132,6 +134,9 @@ public final class ShannonAppLookCoordinator {
             let image: CGImage
             do {
                 defer { isCapturing = false }
+                // Watching (ADR-0011 §4.4) closes its camera for the look and opens it again after.
+                await cameraClaim?(true)
+                defer { releaseCameraClaim() }
                 image = try await environment.camera.capture(camera)
             }
             // A frame taken as the app left the screen is dropped unseen.
@@ -151,6 +156,11 @@ public final class ShannonAppLookCoordinator {
         } catch {
             return .refused(environment.isForeground() ? .failed : .background)
         }
+    }
+
+    private func releaseCameraClaim() {
+        guard let claim = cameraClaim else { return }
+        Task { await claim(false) }
     }
 
     // MARK: The camera permission, asked on the first look
