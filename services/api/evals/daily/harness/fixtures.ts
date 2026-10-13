@@ -2,6 +2,7 @@ import type { WebSearchInput, WebSearchOperation, WebSearchResult } from '../../
 import type { WebReadInput, WebReadOperation } from '../../../src/infra/models/webResearch.js';
 import type { WeatherFetch } from '../../../src/integrations/weather/openMeteo.js';
 import type { VoyagerCatalog, VoyagerOpenTaskList, VoyagerTaskProjection } from '../../../src/integrations/voyager/organize.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../../../src/infra/models/chatModel.js';
 import type { ForecastDayFixture, InitialState, PlaceFixture } from '../types.js';
 import { localInstant, localOf } from './clock.js';
 import { DEFAULT_WEATHER, PLACES } from '../tasks/common.js';
@@ -17,10 +18,12 @@ export interface FixtureLog {
   /** The resolved place name of each forecast asked for. */
   forecasts: string[];
   voyagerReads: string[];
+  /** The request of each place search the harness answered (`fixturePlaceSearch`). */
+  placeSearches: string[];
 }
 
 export function emptyFixtureLog(): FixtureLog {
-  return { webQueries: [], webReads: [], geocoded: [], forecasts: [], voyagerReads: [] };
+  return { webQueries: [], webReads: [], geocoded: [], forecasts: [], voyagerReads: [], placeSearches: [] };
 }
 
 function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
@@ -134,4 +137,25 @@ export function fixtureVoyager(initial: InitialState, log: FixtureLog): VoyagerC
         .map(task => ({ id: task.id, title: task.title, dueAt: task.dueAt! }));
     },
   };
+}
+
+/**
+ * The model with its place searches answered from the task's `placeResults` (`runPlaceDiscoverySkill` asks the model with
+ * `placeSearch`, and the model would search the live web for it). Every other request goes to the model as it is.
+ */
+export function fixturePlaceSearch<T extends ShannonChatModel>(model: T, initial: InitialState, log: FixtureLog): T {
+  return new Proxy(model, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (property !== 'generate' || typeof value !== 'function') return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+      return async (request: ShannonChatModelRequest) => {
+        if (!request.placeSearch) return (value as ShannonChatModel['generate']).call(target, request);
+        log.placeSearches.push(request.message.slice(0, 200));
+        const found = (initial.placeResults ?? []).filter(place => new RegExp(place.match, 'u').test(request.message));
+        return { mode: target.mode, model: target.model, reply: found.length ? found.map(place => `${place.name}: ${place.reason}`).join('\n') : '候補は見つからなかった。',
+          places: found.map(({ name, address, reason, mapQuery }) => ({ name, address, reason, mapQuery, mapUrl: `https://maps.apple.com/?q=${encodeURIComponent(mapQuery)}` })),
+          webSources: [] } as Awaited<ReturnType<ShannonChatModel['generate']>>;
+      };
+    },
+  });
 }

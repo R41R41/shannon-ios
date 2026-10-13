@@ -50,6 +50,13 @@ export interface WebFixture {
 /** A place the fake geocoder knows. Names are matched exactly, then as a substring. */
 export interface PlaceFixture { name: string; latitude: number; longitude: number; admin?: string }
 
+/**
+ * A candidate the place search finds (`runPlaceDiscoverySkill`): the harness answers a place search from these instead of the model's
+ * own web search, which would read the live web. `match` (a regular expression over the request) chooses the candidates; the map
+ * link is built from `mapQuery` as the app builds it.
+ */
+export interface PlaceResultFixture { match: string; name: string; address: string; reason: string; mapQuery: string }
+
 /** One day of the fake forecast, counted from the task's local date (0 = today). */
 export interface ForecastDayFixture {
   offset: number;
@@ -84,6 +91,8 @@ export interface InitialState {
   voyagerTasks?: readonly VoyagerTaskFixture[];
   web?: readonly WebFixture[];
   places?: readonly PlaceFixture[];
+  /** What a place search finds (none: it finds nothing, and says so). */
+  placeResults?: readonly PlaceResultFixture[];
   weather?: WeatherFixture;
 }
 

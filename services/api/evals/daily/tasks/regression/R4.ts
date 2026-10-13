@@ -12,6 +12,12 @@ export default defineTask({
         text: '博多駅周辺の人気のラーメン店として、豚骨ラーメンの老舗Aと、細麺で知られる店Bが挙げられる。もつ鍋なら中洲の店Cが地元で評判。',
         sources: [{ title: '博多の飲食店ガイド（記録した結果）', url: 'https://example.org/hakata/food-guide' }] },
     ],
+    // The place search answers from these (no live web): 「近くのラーメン屋」 is a place search too.
+    placeResults: [
+      { match: 'ラーメン', name: '豚骨ラーメンの老舗A', address: '福岡市博多区博多駅前（架空）', reason: '博多駅から歩いて5分、豚骨の老舗', mapQuery: '豚骨ラーメン 博多駅前' },
+      { match: 'ラーメン', name: '細麺の店B', address: '福岡市博多区博多駅中央街（架空）', reason: '細麺で知られる', mapQuery: 'ラーメン 博多駅中央街' },
+      { match: 'もつ鍋', name: 'もつ鍋の店C', address: '福岡市博多区中洲（架空）', reason: '地元で評判のもつ鍋', mapQuery: 'もつ鍋 中洲' },
+    ],
   },
   turns: [{ say: '博多駅の近くでおすすめのラーメン屋、調べて' }],
   simulator: {

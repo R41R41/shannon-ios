@@ -29,7 +29,7 @@ import { stage5MemoryStoreOptions } from '../../../src/wiring/stage5MemoryWiring
 import type { DailyEvalTask, InitialState } from '../types.js';
 import { localInstant } from './clock.js';
 import { FAKE_DEVICE_ID, seededDeviceState, startFakeDevice, type FakeDeviceState } from './device.js';
-import { emptyFixtureLog, fixtureVoyager, fixtureWeather, fixtureWeb, type FixtureLog } from './fixtures.js';
+import { emptyFixtureLog, fixturePlaceSearch, fixtureVoyager, fixtureWeather, fixtureWeb, type FixtureLog } from './fixtures.js';
 
 export const OWNER_SCOPE = 'owner';
 
@@ -160,10 +160,12 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
   };
   const memoryPorts = memoryPortsOf(store, now);
   const fixtures = emptyFixtureLog(), web = fixtureWeb(initial, fixtures);
-  const chat = options.model ?? createConfiguredChatModel(options.live ? environment : {}, usage);
+  const liveChat = options.model ?? createConfiguredChatModel(options.live ? environment : {}, usage);
   // The recorded web: the model's own query-only reads answer from the task's fixtures.
-  Object.defineProperty(chat, 'searchWeb', { value: web.search, configurable: true, writable: true });
-  Object.defineProperty(chat, 'readWeb', { value: web.read, configurable: true, writable: true });
+  Object.defineProperty(liveChat, 'searchWeb', { value: web.search, configurable: true, writable: true });
+  Object.defineProperty(liveChat, 'readWeb', { value: web.read, configurable: true, writable: true });
+  // Place searches answer from the task's `placeResults`, never from the model's own (live) web search.
+  const chat = fixturePlaceSearch(liveChat, initial, fixtures);
   const probe: TokenProbe = { firstTokenAt: null };
   // Live: the kernel's model is production's (`server.ts`): the primary-mode model over Haiku and the Sonnet tier, with the
   // owner's mode stored in this trial's database. The scripted test model stays as it is.

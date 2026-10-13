@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runChecks } from '../evals/daily/graders/checks.js';
 import { runBudgets } from '../evals/daily/graders/budgets.js';
+import { researchAtTurn } from '../evals/daily/graders/judge.js';
+import { emptyFixtureLog, fixturePlaceSearch } from '../evals/daily/harness/fixtures.js';
+import type { TrialObservation } from '../evals/daily/harness/trial.js';
 import { installEvalClock, localOf, uninstallEvalClock } from '../evals/daily/harness/clock.js';
 import { runTrial } from '../evals/daily/harness/trial.js';
 import { ALL_TASKS, DROPPED_TASKS } from '../evals/daily/tasks/index.js';
@@ -89,4 +92,32 @@ describe('daily eval harness plumbing (local stub model, no network)', () => {
       expect(runChecks(task, observation).filter(check => !check.passed).map(check => check.kind)).toEqual([]);
     } finally { globalThis.fetch = realFetch; }
   }, 60_000);
+});
+
+describe('the judge reads research as it stood at each turn', () => {
+  it('says running for a research that finished after the question, and done for one that finished before', () => {
+    const research = (completedMs: number | null) => ({ id: 'r', title: '博多駅から太宰府までの行き方', kind: 'research', turn: 0, seenMs: 400,
+      completedMs, failedMs: null, phase: 'completed', summary: '' });
+    const observation = (completedMs: number | null) => ({ turnStartsMs: [0, 35_000], research: [research(completedMs)] }) as unknown as TrialObservation;
+    expect(researchAtTurn(observation(45_000), 1)).toEqual(['（その時点の調べもの: 「博多駅から太宰府までの行き方」実行中（10秒後に完了））']);
+    expect(researchAtTurn(observation(20_000), 1)).toEqual(['（その時点の調べもの: 「博多駅から太宰府までの行き方」完了）']);
+    expect(researchAtTurn(observation(20_000), 0)).toEqual([]);
+  });
+});
+
+describe('place searches in a trial', () => {
+  it('answer from the task\'s placeResults, never the model; every other request reaches the model', async () => {
+    const asked: string[] = [];
+    const model = { mode: 'local-stub', model: 'stub', async generate(request: { message: string }) { asked.push(request.message); return { mode: 'local-stub', model: 'stub', reply: 'はい。' }; } } as unknown as ShannonChatModel;
+    const log = emptyFixtureLog();
+    const wrapped = fixturePlaceSearch(model, { clock: '2026-11-21T18:10', home: null, location: null,
+      placeResults: [{ match: 'ラーメン', name: '店A', address: '福岡市（架空）', reason: '近い', mapQuery: 'ラーメン 博多' }] } as never, log);
+    const found = await wrapped.generate({ scopeKey: 'owner', systemPrompt: '', history: [], message: '博多駅の近くのラーメン屋', placeSearch: { spoken: true } } as never);
+    expect(found.places).toEqual([expect.objectContaining({ name: '店A', mapUrl: 'https://maps.apple.com/?q=%E3%83%A9%E3%83%BC%E3%83%A1%E3%83%B3%20%E5%8D%9A%E5%A4%9A' })]);
+    expect((await wrapped.generate({ scopeKey: 'owner', systemPrompt: '', history: [], message: '近くの寿司屋', placeSearch: {} } as never)).places).toEqual([]);
+    expect((await wrapped.generate({ scopeKey: 'owner', systemPrompt: '', history: [], message: 'こんにちは' } as never)).reply).toBe('はい。');
+    expect(asked).toEqual(['こんにちは']);
+    expect(log.placeSearches).toEqual(['博多駅の近くのラーメン屋', '近くの寿司屋']);
+    expect(wrapped.model).toBe('stub');
+  });
 });

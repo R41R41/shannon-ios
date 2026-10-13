@@ -17,8 +17,8 @@ One trial runs Shannon **in this process, through the real turn paths**, from a 
   action store through the `actionThreads` seam of `configuredServerFca` instead of the mind worker's socket.
 - **Fakes** (`harness/`): the clock (`clock.ts`: the process clock reads the task's local time when the trial starts and then runs
   at real speed), the owner's location (voice GPS), the iPhone (`device.ts`: polls the outbox and keeps fake reminders, timers,
-  calendar and music), recorded web search and page reads, the Open-Meteo weather/geocoding API, and Voyager's task catalog
-  (`fixtures.ts`). Only the model is live.
+  calendar and music), recorded web search and page reads, the place search (`placeResults`: the model's own web search is never asked for
+  places), the Open-Meteo weather/geocoding API, and Voyager's task catalog (`fixtures.ts`). Only the model is live.
 - **Isolation**: the eval process may reach only `api.anthropic.com` and, while `TYPESAFE_API_KEY` is set, Jev (the origin of
   `SHANNON_JEV_ENDPOINT` or Jev's default; owner decision 2026-10-13, 「評価からもJevを呼ぶ」) (`network.ts`). With its key Jev
   is the voice router and chooses the turn's tool menu, as in production; without it the router is the Haiku fallback and there
@@ -36,7 +36,7 @@ Each trial is graded by (`graders/`):
    token ≤ 4 s, research result ≤ 60 s, Shannon's model spend ≤ ¥30 per task (from the recorded usage, `SHANNON_EVALS_YEN_PER_USD`
    default 150).
 3. **Rubric judge**: Claude Sonnet (`SHANNON_EVALS_JUDGE_MODEL`, default `claude-sonnet-5-5`) scores each criterion 0–2 from
-   the conversation and the observed state; pass at two thirds of the maximum (0.66: 4 of 6) unless the task says otherwise.
+   the conversation (with the research as it stood when each turn began) and the observed state; pass at two thirds of the maximum (0.66: 4 of 6) unless the task says otherwise.
 
 A trial passes when all three pass. **Each task runs once** (owner decision 2026-10-13: k=1 for every set, no pass^k): the
 result of a task is the PASS/FAIL of its single trial. Multi-turn tasks (R4, R5, D3) continue with a **user simulator** (`simulator.ts`): Sonnet playing the owner

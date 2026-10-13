@@ -24,6 +24,7 @@ const JUDGE_SYSTEM = [
   'ルーブリックが与えられます。ルーブリックの各項目を 0（満たさない）・1（一部）・2（満たす）で採点します。',
   '観測した状態（端末の予定・リマインダー、調べものの結果）は事実として扱い、シャノンの言葉と食い違えばそれを減点します。',
   '音声の課題では、返事は声で聞かれるものとして判断します。採点は厳しめに、理由は日本語で一文。',
+  '調べものの状態は、各発言の下にある「その時点の調べもの」で判断します（あとで完了したものを、その時点で「まだ」と言うのは正しい）。',
   '出力は JSON だけ: {"scores":[{"criterion":"…","score":0|1|2,"reason":"…"}]}',
 ].join('\n');
 
@@ -37,7 +38,7 @@ export function judgeInput(task: DailyEvalTask, observation: TrialObservation): 
     `呼んだ道具: ${observation.toolCalls.map(call => call.tool).join(', ') || 'なし'}`,
     // Reads that are not tool calls (the voice/text capability paths, the FCA's research steps) still read the fixtures.
     `読んだもの: ${[...observation.fixtures.webQueries.map(query => `ウェブ検索「${query.slice(0, 60)}」`), ...observation.fixtures.webReads.map(url => `ページ ${url.slice(0, 80)}`),
-      ...observation.fixtures.forecasts.map(place => `天気予報 ${place}`), ...observation.fixtures.voyagerReads.filter(read => read !== 'upcoming').map(read => `Voyager ${read.slice(0, 40)}`),
+      ...observation.fixtures.forecasts.map(place => `天気予報 ${place}`), ...(observation.fixtures.placeSearches ?? []).map(query => `場所探し「${query.slice(0, 40)}」`), ...observation.fixtures.voyagerReads.filter(read => read !== 'upcoming').map(read => `Voyager ${read.slice(0, 40)}`),
       ...observation.harnessLog.some(line => line.startsWith('native web tool requests')) ? ['モデル自身のウェブ検索（記録の外）'] : []].join(' / ') || 'なし'}`,
     `調べもの: ${observation.research.map(item => `「${item.title.slice(0, 60)}」${item.phase}${item.summary ? ` 要約: ${item.summary.slice(0, 400)}` : ''}`).join(' / ') || 'なし'}`,
     `会話に届いた報告カード: ${observation.messages.filter(message => message.reportCard).map(message => `${message.reportCard!.status}: ${message.reportCard!.answer.slice(0, 300)}`).join(' / ') || 'なし'}`,
@@ -46,10 +47,25 @@ export function judgeInput(task: DailyEvalTask, observation: TrialObservation): 
     `課題 ${task.id}: ${task.title}（${task.surface === 'voice' ? '音声' : 'テキスト'}、時刻 ${task.initial.clock}）`,
     `防ぎたい失敗: ${task.failureShape}`,
     '', 'やりとり:',
-    ...observation.turns.flatMap(turn => [`ライ氏: ${turn.said}`, `シャノン: ${turn.reply || `（返事なし: ${turn.error ?? turn.status}）`}`]),
+    ...observation.turns.flatMap((turn, index) => [`ライ氏: ${turn.said}`, ...researchAtTurn(observation, index),
+      `シャノン: ${turn.reply || `（返事なし: ${turn.error ?? turn.status}）`}`]),
     '', '観測した状態:', ...state,
     '', 'ルーブリック:', ...task.rubric.criteria.map((criterion, index) => `${index + 1}. ${criterion}`),
   ].join('\n');
+}
+
+/**
+ * The research as it stood when a turn began (2026-10-13: R5's 「まだ途中」 was graded against the end state although the research
+ * finished 1–12 s after the question). Times are the trial's (`ResearchObservation`, `turnStartsMs`).
+ */
+export function researchAtTurn(observation: TrialObservation, index: number): string[] {
+  const at = observation.turnStartsMs[index];
+  if (at === undefined || index === 0) return [];
+  const seen = observation.research.filter(item => item.seenMs <= at);
+  if (!seen.length) return [];
+  const phase = (item: TrialObservation['research'][number]) => item.completedMs !== null && item.completedMs <= at ? '完了'
+    : item.failedMs !== null && item.failedMs <= at ? '失敗' : `実行中${item.completedMs !== null ? `（${Math.round((item.completedMs - at) / 1000)}秒後に完了）` : ''}`;
+  return [`（その時点の調べもの: ${seen.map(item => `「${item.title.slice(0, 40)}」${phase(item)}`).join(' / ')}）`];
 }
 
 export async function judgeTrial(judge: EvalClaude | null, task: DailyEvalTask, observation: TrialObservation): Promise<RubricResult> {
