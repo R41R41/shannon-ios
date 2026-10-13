@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ShannonToolDefinition } from '../../../mind/tools/shannonTools.js';
+import { serverEnvironment } from '../../config/serverEnvironment.js';
 
 /** Provider limits apply to the complete request, including inline definitions and the final JSON schema. */
 export const ANTHROPIC_STRICT_LIMITS = Object.freeze({ tools: 20, optional: 24, unions: 16 });
@@ -63,9 +64,24 @@ export function strictRequestFits(body: Anthropic.MessageCreateParamsNonStreamin
  */
 export const ANTHROPIC_GRAMMAR_BUDGET = Object.freeze({ tools: 8, optional: 12, unions: 12 });
 
-/** Whether these strict definitions keep the request within the grammar budget (and the provider's counted limits). */
+/**
+ * Conversation tools are not strict unless `SHANNON_STRICT_CONVERSATION_TOOLS=on` (2026-10-13, VM probe of `claude-haiku-5-5`):
+ * a strict tool makes the provider compile a grammar for the request's whole tool set, and a set it has not compiled before (the
+ * turn's selection changes from turn to turn) delayed the first token by 5.5–7.6 s (voice without any strict tool: no delay;
+ * text, whose output schema stays strict: 3.8 s instead of 7.6 s). Every executor validates its input anyway.
+ */
+export function strictConversationTools(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
+  return environment.SHANNON_STRICT_CONVERSATION_TOOLS?.trim().toLowerCase() === 'on';
+}
+
+/** A conversation tool as it is sent: strict only while `strictConversationTools()`. */
+export function conversationTool(tool: Anthropic.Tool): Anthropic.Tool {
+  return strictConversationTools() ? tool : nonStrictTool(tool);
+}
+
+/** Whether these definitions may go strict: only with strict conversation tools, and within the grammar budget and the counted limits. */
 export function strictGrammarFits(body: Anthropic.MessageCreateParamsNonStreaming, extra: readonly Anthropic.Tool[] = []): boolean {
-  return strictRequestFits(body, extra) && strictRequestFits(body, extra, ANTHROPIC_GRAMMAR_BUDGET);
+  return strictConversationTools() && strictRequestFits(body, extra) && strictRequestFits(body, extra, ANTHROPIC_GRAMMAR_BUDGET);
 }
 
 /** The same definition, offered without strict decoding. */

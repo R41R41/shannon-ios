@@ -15,6 +15,7 @@ import { serverEnvironment } from '../config/serverEnvironment.js';
 import { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
 import { AnthropicChatModel } from './anthropic/anthropicChatModel.js';
 import { configuredResponseModel, isHaikuModel } from './anthropic/haikuConfig.js';
+import { haikuVoiceThinking } from './anthropic/anthropicConfig.js';
 export { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
 
 const LOCAL_REPLY = 'はい、聞こえています。LLMの鍵を設定すると、ここからボクが会話できるようになります。';
@@ -328,7 +329,7 @@ export function createConfiguredChatModel(
   if (!configured) return new LocalStubChatModel();
   const { apiKey, model } = configured;
   if (isHaikuModel(model)) return new AnthropicChatModel({
-    apiKey, settings: { model, effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' },
+    apiKey, settings: { model, effort: 'low', textThinking: 'adaptive', voiceThinking: haikuVoiceThinking(environment) },
     agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac', usageStore,
   });
   return new OpenAIResponsesChatModel({

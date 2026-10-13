@@ -63,6 +63,52 @@ export function voiceWaitingPhrase(providerName: string): string {
   return /(?:create|update|rename|move|delete|restore)$/u.test(providerName) ? 'ちょっと書いてみますね。' : 'ちょっと見てみますね。';
 }
 
+/** A sentence that only announces a look or a write (「ちょっと調べてみますね、ライ氏。」), as her fixed waiting phrase does. */
+const WAITING_ANNOUNCEMENT = new RegExp('^\\s*(?:(?:うん|よし|はい|じゃあ|では|了解(?:です)?|わかりました)[、。！!]?\\s*)?(?:ライ氏[、,]?\\s*)?'
+  + '[^。！？!?\\n]{0,16}?(?:見て|調べて|確認して|確かめて|探して|書いて|読んで|開いて|のぞいて|覗いて)(?:み|き)?ます(?:ね|よ)?'
+  + '(?:[、,]\\s*ライ氏)?[。．.！!…〜ー\\s]*$', 'u');
+
+export function isWaitingAnnouncement(sentence: string): boolean {
+  return WAITING_ANNOUNCEMENT.test(sentence);
+}
+
+/**
+ * One waiting phrase per spoken turn (owner feedback 2026-10-13: 「ちょっと見てみますね。ちょっと調べてみますね、ライ氏。」). Once
+ * something was said before a tool call (her fixed phrase or the model's own words), the first sentence the model says after
+ * that call is held until it ends; a sentence that only announces a look again is dropped, anything else is spoken unchanged.
+ */
+export class VoiceWaitingEcho {
+  private armed = false;
+  private held = '';
+
+  /** A tool call follows words already said: the model's next sentence is checked. */
+  arm(): void {
+    this.armed = true;
+    this.held = '';
+  }
+
+  /** What of this delta may be spoken now. */
+  take(delta: string): string {
+    if (!this.armed) return delta;
+    this.held += delta;
+    const end = this.held.search(/[。！？!?\n]/u);
+    if (end < 0) return this.held.length > 80 ? this.flush() : '';
+    const sentence = this.held.slice(0, end + 1);
+    const rest = this.held.slice(end + 1);
+    this.armed = false;
+    this.held = '';
+    return isWaitingAnnouncement(sentence) ? rest.replace(/^\s+/u, '') : `${sentence}${rest}`;
+  }
+
+  /** Before another call or at the end of the reply: what is held is decided as it stands. */
+  flush(): string {
+    const held = this.held;
+    this.armed = false;
+    this.held = '';
+    return held && !isWaitingAnnouncement(held) ? held : '';
+  }
+}
+
 export const TOOLS_WITHHELD_INSTRUCTIONS = '[ボクの道具] いまはライ氏以外の人もいるかもしれないので、書斎と自分のフォルダの道具は出していない。頼まれたら、二人だけの時にすると伝える（道具が壊れているのではない）。';
 
 export const TOOL_INSTRUCTIONS = [

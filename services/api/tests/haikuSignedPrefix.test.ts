@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { shannonTool } from '../src/mind/tools/shannonTools.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+
+// The strict tool admission these tests cover stays behind SHANNON_STRICT_CONVERSATION_TOOLS=on (off by default since the
+// 2026-10-13 latency probe: a strict tool set the provider had not compiled cost seconds before the first token).
+beforeEach(() => { vi.stubEnv('SHANNON_STRICT_CONVERSATION_TOOLS', 'on'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('native 5.5 compatibility: %s', model => {
 const base = { scopeKey: 'owner', systemPrompt: 'Identity', history: [], message: 'Read the study' };

@@ -189,7 +189,7 @@ describe('search is a discoverable conversation read', () => {
     const opened = h.bodies[1]!.messages as Array<unknown>;
     expect(opened.slice(0, initial.length)).toEqual(initial);
     expect(opened.at(-1)).toEqual({ role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition',
-      definition: expect.objectContaining({ name: 'web_search', strict: true }) } }] });
+      definition: expect.objectContaining({ name: 'web_search', strict: false }) } }] });
     expect(h.bodies).toHaveLength(4); // Open, selected call, one actual auxiliary search, then synthesis.
     expect(h.bodies.filter(body => !(body.output_config as object)?.hasOwnProperty('format'))).toHaveLength(1);
   });

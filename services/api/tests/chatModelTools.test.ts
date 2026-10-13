@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import {
   CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, SKIPPED_FOR_TIME, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, TURN_OUT_OF_TIME_LINE, VOICE_SECOND_PHRASE, VOICE_TOOL_OUTPUT_TOKENS,
-  functionCallsOf, withToolRounds, type ShannonModelToolSession,
+  functionCallsOf, isWaitingAnnouncement, VoiceWaitingEcho, withToolRounds, type ShannonModelToolSession,
 } from '../src/infra/models/chatModelTools.js';
 import { streamedVoiceToolTurn } from '../src/infra/models/chatModelVoiceTools.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
@@ -530,5 +530,30 @@ describe('the second waiting phrase after her own lead-in', () => {
       onSpent: () => {}, onSpentWithoutReply: () => {}, clock: () => now, tickMilliseconds: 5,
     });
     expect(heard).toEqual(['見てみますね。', VOICE_SECOND_PHRASE, 'メモが1つあります。']);
+  });
+});
+
+describe('one waiting phrase a spoken turn (2026-10-13)', () => {
+  it('tells an announcement of a look from an answer', () => {
+    for (const said of ['ちょっと調べてみますね、ライ氏。', '少し確認してみますね。', 'ライ氏、ちょっと見てきますね！', 'うん、書いてみますね。']) {
+      expect(isWaitingAnnouncement(said), said).toBe(true);
+    }
+    for (const said of ['書斎にメモが1つありますね。', '調べてみたら晴れでしたね。', '16時半ごろ出れば余裕です。', 'それなら明日一緒に見てみますね、映画の話の続きも楽しみです。']) {
+      expect(isWaitingAnnouncement(said), said).toBe(false);
+    }
+  });
+
+  it('holds the first sentence after a call, drops a repeated announcement and passes everything else unchanged', () => {
+    const echo = new VoiceWaitingEcho();
+    expect(echo.take('先に')).toBe('先に');
+    echo.arm();
+    expect(echo.take('ちょっと調べて')).toBe('');
+    expect(echo.take('みますね、ライ氏。メモが')).toBe('メモが');
+    expect(echo.take('1つあります。')).toBe('1つあります。');
+    echo.arm();
+    expect(echo.take('晴れです。')).toBe('晴れです。');
+    echo.arm();
+    expect(echo.take('見てみますね')).toBe('');
+    expect(echo.flush()).toBe('');
   });
 });

@@ -152,7 +152,8 @@ describe('the stable prefix', () => {
       expect(usage.unions).toBeLessThanOrEqual(ANTHROPIC_STRICT_LIMITS.unions);
     }
     // No union beyond the base's nine and her feeling's own: the same as a turn without the plan that offers her feeling.
-    expect(strictRequestUsage(sent(base))).toEqual({ tools: 2, optional: 0, unions: 10 });
+    // The fixed pair is not strict (SHANNON_STRICT_CONVERSATION_TOOLS off, 2026-10-13): only the schema is compiled.
+    expect(strictRequestUsage(sent(base))).toEqual({ tools: 0, optional: 0, unions: 10 });
     expect(strictRequestUsage(sent(variants.tools!)).unions).toBe(strictRequestUsage(claudeTextBody(HAIKU, { ...variants.tools!,
       offerReplyFeeling: true }, undefined)).unions);
   });

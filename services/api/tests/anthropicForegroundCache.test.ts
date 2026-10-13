@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
 import { ANTHROPIC_GRAMMAR_BUDGET, TOOL_CALL_SCHEMA, strictRequestFits, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
@@ -10,6 +10,11 @@ import { offerWithMenu, withToolMenu } from '../src/mind/tools/shannonToolMenu.j
 import { shannonTool, type ShannonToolDefinition } from '../src/mind/tools/shannonTools.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+
+// The strict tool admission these tests cover stays behind SHANNON_STRICT_CONVERSATION_TOOLS=on (off by default since the
+// 2026-10-13 latency probe: a strict tool set the provider had not compiled cost seconds before the first token).
+beforeEach(() => { vi.stubEnv('SHANNON_STRICT_CONVERSATION_TOOLS', 'on'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 type Body = Record<string, unknown>;
 type Messages = Array<{ role: string; content: string | Array<Record<string, unknown>> }>;

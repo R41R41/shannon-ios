@@ -17,12 +17,24 @@ import { serverEnvironment } from '../../config/serverEnvironment.js';
  */
 export type SonnetEffort = 'low' | 'medium' | 'high';
 export type SonnetThinking = 'adaptive' | 'between_tools';
+/** Haiku rejects `between_tools`; its voice turn either thinks adaptively or not at all (`haikuVoiceThinking`). */
+export type ClaudeVoiceThinking = SonnetThinking | 'disabled';
 
 export interface ClaudeChatSettings {
   model: string;
   effort: SonnetEffort;
   textThinking: SonnetThinking;
-  voiceThinking: SonnetThinking;
+  voiceThinking: ClaudeVoiceThinking;
+}
+
+/**
+ * Haiku's voice turn does not think before it speaks unless `SHANNON_HAIKU_VOICE_THINKING=adaptive` (2026-10-13, VM probe of
+ * `claude-haiku-5-5` at effort low: adaptive thinking spent 450–650 hidden tokens and 2–3 s before the first spoken word of a
+ * one- or two-sentence reply). The Sonnet tier's voice already answers before thinking (`between_tools`); Haiku rejects that
+ * value, so its equivalent is `disabled`. Text keeps adaptive thinking.
+ */
+export function haikuVoiceThinking(environment: Environment = serverEnvironment()): ClaudeVoiceThinking {
+  return environment.SHANNON_HAIKU_VOICE_THINKING?.trim().toLowerCase() === 'adaptive' ? 'adaptive' : 'disabled';
 }
 
 export const DEFAULT_SONNET_MODEL = 'claude-sonnet-5-5';

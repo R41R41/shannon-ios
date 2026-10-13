@@ -8,7 +8,7 @@ import { ChatSentenceSplitter } from '../../../surfaces/text/chatSentenceSplitte
 import {
   VOICE_MAX_OUTPUT_TOKENS, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult, type ShannonVoiceModelRequest, type ShannonWebSource,
 } from '../chatModel.js';
-import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase, type ShannonModelToolSession } from '../chatModelTools.js';
+import { VOICE_TOOL_OUTPUT_TOKENS, VoiceWaitingEcho, voiceWaitingPhrase, type ShannonModelToolSession } from '../chatModelTools.js';
 import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMenu.js';
 import { providerToolName } from '../../../mind/tools/shannonTools.js';
 import { chatTurnResult, offeredFeelingAnswered, offersTools, parsedChatTurn, type ParsedChatTurn } from '../chatModelTurn.js';
@@ -253,12 +253,17 @@ export class AnthropicChatModel implements ShannonChatModel {
     const body = observeSync('native', { surface: 'voice' }, () => this.voiceBody(request, ceiling, plan.planned), observedAnthropicRequest, { model: this.model });
     let spoken = '';
     let voiceRequests = 0;
-    const speak = async (text: string) => { spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
+    const speak = async (text: string) => { if (!text) return; spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
+    const echo = new VoiceWaitingEcho(); // One waiting phrase a turn: a repeated announcement after a call is not said again.
+    const waitingSaid = request.waitingSaid === true;
     const watch = watchdog(request.firstTokenBudgetMs);
     const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
     if (request.useWebSearch) bounds.firstOutputMilliseconds = Math.max(bounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS);
-    const listen = onTextDelta ? (delta: string) => speak(delta).then(() => request.useWebSearch ? '' : delta) : null;
+    const listen = onTextDelta ? (delta: string) => {
+      const said = request.useWebSearch ? delta : echo.take(delta);
+      return speak(said).then(() => request.useWebSearch ? '' : said);
+    } : null;
     const target = { scopeKey: request.scopeKey, route: 'voice' as const, ...(request.threadKey === undefined ? {} : { thread: request.threadKey }) };
     const send = this.sender(target, listen, stop, this.firstTokenLatency, watch?.first, bounds);
     let result: ClaudeToolLoopResult;
@@ -267,7 +272,13 @@ export class AnthropicChatModel implements ShannonChatModel {
         session: tools, send: (body, time, round) => { voiceRequests++; return send(body, time, round); }, isAnswer: () => false, ...(stop ? { signal: stop } : {}), timedOutRound: isHaikuModel(this.model) ? 'answer' : 'fail',
         ...(usesOneHourAnthropicCache(this.model) ? { plainBody: claudeVoiceBody(this.options.settings, { ...request, tools: undefined }, ceiling) } : {}),
         // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
-        onCalls: async names => { watch?.first(); if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
+        onCalls: async names => {
+          watch?.first();
+          if (!onTextDelta) return;
+          await speak(echo.flush());
+          if (!spoken && !waitingSaid && names[0]) await speak(voiceWaitingPhrase(names[0]));
+          if (spoken || waitingSaid) echo.arm();
+        },
         ...plan.rounds,
       });
     } catch (error) {
@@ -275,6 +286,7 @@ export class AnthropicChatModel implements ShannonChatModel {
       if (request.useWebSearch && !signal?.aborted && !declinedBeforeWork) { const failed = webSearchFailure('unknown'); await onTextDelta?.(failed.text); return { mode: this.mode, model: this.model, reply: failed.text }; }
       throw watch?.timedOut() && !signal?.aborted ? new SonnetFirstTokenTimeout() : error;
     } finally { watch?.clear(); }
+    if (onTextDelta) await speak(echo.flush());
     if (result.outOfTime || !result.final) {
       const standing = request.useWebSearch ? '' : completeSpokenSentences(spoken.trim()) || '';
       if (onTextDelta) { if (request.useWebSearch) await onTextDelta(TURN_OUT_OF_TIME_LINE); else await speak(TURN_OUT_OF_TIME_LINE); }

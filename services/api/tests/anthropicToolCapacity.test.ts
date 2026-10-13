@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TOOLS, providerToolName, type ShannonToolDefinition } from '../src/mind/tools/shannonTools.js';
 import { validToolInput } from '../src/mind/tools/shannonToolInput.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
@@ -10,6 +10,11 @@ import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropi
 import { bridgedAnthropicSession } from '../src/infra/models/anthropic/anthropicToolBridge.js';
 import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+
+// The strict tool admission these tests cover stays behind SHANNON_STRICT_CONVERSATION_TOOLS=on (off by default since the
+// 2026-10-13 latency probe: a strict tool set the provider had not compiled cost seconds before the first token).
+beforeEach(() => { vi.stubEnv('SHANNON_STRICT_CONVERSATION_TOOLS', 'on'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 const request = { scopeKey: 'owner', systemPrompt: 'Synthetic owner context', history: [], message: 'マイクラを起動して' };
 const productionSelection = ['minecraft.request', 'minecraft.status', 'skill.read', 'task.create', 'task.list', 'task.get', 'task.send', 'memory.search', 'minecraft.lifecycle_status', 'minecraft.start', 'minecraft.login'];

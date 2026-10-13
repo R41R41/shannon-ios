@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { rejectionCounts } from '../src/infra/models/anthropic/anthropicRejection.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
@@ -15,6 +15,11 @@ import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRe
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+
+// The strict tool admission these tests cover stays behind SHANNON_STRICT_CONVERSATION_TOOLS=on (off by default since the
+// 2026-10-13 latency probe: a strict tool set the provider had not compiled cost seconds before the first token).
+beforeEach(() => { vi.stubEnv('SHANNON_STRICT_CONVERSATION_TOOLS', 'on'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('native 5.5 compatibility: %s', model => {
 const goal = 'エンダードラゴンを討伐してください';

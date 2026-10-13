@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
 import type { ShannonChatModelRequest, ShannonConversationItem, ShannonVoiceModelRequest } from '../chatModel.js';
 import {
-  RICH_TEXT_BLOCK_INSTRUCTIONS, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE, VOICE_NATURAL_INSTRUCTIONS,
+  COMPUTED_ANSWER_LINE, RICH_TEXT_BLOCK_INSTRUCTIONS, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE, VOICE_NATURAL_INSTRUCTIONS,
 } from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
@@ -32,6 +32,7 @@ export { structuredSchema } from './anthropicSchema.js';
 export const CLAUDE_TEXT_LINES = [
   '[返答の形・Claude]',
   '最後の返事は指定のJSONの形だけで書く（前後に文を書かない）。道具を呼ぶ返事では文章を書かずに道具だけを呼ぶ。',
+  COMPUTED_ANSWER_LINE,
 ].join('\n');
 export const CLAUDE_VOICE_LINES = '[返答の形・Claude] 話す言葉だけを書く。考えたことや道具の名前は書かない。';
 export const CLAUDE_WEB_LINE = '[Web検索・Claude] この返事では、答える前に web_search で今の情報を調べ、調べた結果だけをもとに答える。';
