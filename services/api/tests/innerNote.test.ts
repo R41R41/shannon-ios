@@ -422,6 +422,80 @@ describe('the third review (N6, N9)', () => {
   });
 });
 
+describe('touches are sessions, and never starve his words (touch coalescing)', () => {
+  const START = Date.parse('2026-10-14T12:00:00.000Z'); // 21:00 in Tokyo: the day has hours left
+  const clock = (seconds: number) => new Date(START + seconds * 1000).toISOString();
+  const pet = (at: string, stance = 'welcome', kind = 'pet') => ({ scopeKey: OWNER, audience: 'owner' as const, at, touchId: `t-${at}`,
+    sourceId: `experience:burst-${at}`, phrase: 'ライ氏に頭をなでられた', kind, stance });
+  const touchOnly = (facts: InnerNoteReflectionFacts[]) => facts.filter(fact => fact.events.every(event => event.kind === 'touch'));
+
+  async function petFor(service: InnerNoteService, at: (value: string) => void, minutes: number, stance: (index: number) => string = () => 'welcome') {
+    let seconds = 0;
+    for (let index = 0; seconds <= minutes * 60; index += 1, seconds += 45) {
+      at(clock(seconds));
+      service.touched(pet(clock(seconds), stance(index)));
+      await service.flush(OWNER);
+      await service.sweep();
+      await service.flush(OWNER);
+    }
+    return seconds;
+  }
+
+  it('reflects on an hour of petting every 45 s a handful of times, and his apology right after still gets its reflection', async () => {
+    const { service, store, facts, at } = setup([], { reflectionsPerDay: 96 });
+    const end = await petFor(service, at, 62);
+    // 83 touches: the session's start and one every 20 minutes while it goes on, not one a touch.
+    expect(touchOnly(facts).length).toBeGreaterThanOrEqual(3);
+    expect(touchOnly(facts).length).toBeLessThanOrEqual(5);
+    const before = facts.length;
+    at(clock(end + 10));
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: clock(end + 10), userMessage: 'さっきはごめん', reply: '…', feeling: null });
+    await service.flush(OWNER);
+    expect(facts).toHaveLength(before + 1);
+    // The touches the session held ride along with it: they are part of what happened.
+    expect(facts.at(-1)!.events.map(event => event.kind)).toEqual([...Array.from({ length: facts.at(-1)!.events.length - 1 }, () => 'touch'), 'apology']);
+    expect(store.latest(OWNER)!.triggers).toContain('apology');
+    // The session ends five quiet minutes after its last touch with one reflection on what it still held (nothing: his apology took it).
+    at(clock(end + 6 * 60));
+    await service.sweep();
+    await service.flush(OWNER);
+    expect(facts).toHaveLength(before + 1);
+  });
+
+  it('keeps touches to their own cap even when every touch changes her stance, and his words still get reflected on', async () => {
+    const { service, facts, at } = setup([], { reflectionsPerDay: 96 });
+    const end = await petFor(service, at, 65, index => index % 2 === 0 ? 'welcome' : 'dislike');
+    expect(touchOnly(facts)).toHaveLength(24);
+    for (const [offset, words] of [[10, 'ごめんね'], [70, 'いつもありがとう'], [130, 'ほんとポンコツだな']] as const) {
+      at(clock(end + offset));
+      service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: clock(end + offset), userMessage: words, reply: '…', feeling: null });
+      await service.flush(OWNER);
+    }
+    expect(facts.slice(-3).map(fact => fact.events.at(-1)!.kind)).toEqual(['apology', 'kindness', 'teasing']);
+    // Touches past their cap waited for his words: the apology's reflection read them.
+    expect(facts.at(-3)!.events.filter(event => event.kind === 'touch').length).toBeGreaterThan(0);
+  });
+
+  it('reflects again when the kind of touch changes, and once at the end of a session on what it held', async () => {
+    const { service, facts, at } = setup();
+    for (const [seconds, kind] of [[0, 'pet'], [45, 'pet'], [90, 'pet'], [135, 'poke']] as const) {
+      at(clock(seconds));
+      service.touched(pet(clock(seconds), 'welcome', kind));
+      await service.flush(OWNER);
+    }
+    // The first touch, then the poke with the two pats held before it.
+    expect(facts.map(fact => fact.events.length)).toEqual([1, 3]);
+    at(clock(160));
+    service.touched(pet(clock(160), 'welcome', 'poke'));
+    expect(service.pending(OWNER).map(event => event.kind)).toEqual(['touch']);
+    at(clock(160 + 5 * 60));
+    await service.sweep();
+    await service.flush(OWNER);
+    expect(facts.map(fact => fact.events.length)).toEqual([1, 3, 1]);
+    expect(service.pending(OWNER)).toEqual([]);
+  });
+});
+
 describe('the owner reads her notes afterwards (answer 3)', () => {
   it('shows what she shows at once and the whole note only once its episode closed; the day summary counts the gate', async () => {
     const { service, store, at } = setup([draft(), draft({ intent: 'none', untilMinutes: null, changeReason: '時間がたって、もう怒っていない' })]);

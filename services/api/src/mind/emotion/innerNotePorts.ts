@@ -42,6 +42,8 @@ export interface InnerNoteTouch {
   /** The touch as she remembers it (`experience:<burst id>`): forgetting it, or its retention, takes the notes it prompted. */
   sourceId?: string;
   phrase: string;
+  /** The kind of touch (`poke`, `pet`, ...): a session of the same kind and stance is one reflection. */
+  kind?: string;
   stance?: string;
   reflex?: string;
   said?: string;

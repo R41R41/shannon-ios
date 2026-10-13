@@ -366,6 +366,7 @@
     "mind/emotion/innerNotePorts.ts",
     "mind/emotion/innerNoteReflection.ts",
     "mind/emotion/innerNoteService.ts",
+    "mind/emotion/innerNoteTouchSessions.ts",
     "mind/emotion/rewardMood.ts",
     "mind/emotion/store/innerNoteStore.ts",
     "mind/emotion/store/moodHistory.ts",

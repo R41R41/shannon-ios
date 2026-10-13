@@ -17,6 +17,15 @@ export const INNER_NOTE_SERVICE_LIMITS = Object.freeze({
   sweepMilliseconds: 60_000,
   /** At most this many reflections a day (a cost guard; the ADR expects a few to a few dozen). */
   reflectionsPerDay: 96,
+  /**
+   * Touches are sessions (`innerNoteTouchSessions.ts`): one ends after this long without a touch, is reflected on again at most this
+   * often while it goes on, and holds at most this many touches in between. Reflections on touches alone take at most
+   * `touchReflectionsPerDay` of the day's cap, so his words always have the rest.
+   */
+  touchQuietMilliseconds: 5 * 60_000,
+  touchRefreshMilliseconds: 20 * 60_000,
+  touchHeld: 8,
+  touchReflectionsPerDay: 24,
   /** The provider call's own bound. */
   timeoutMilliseconds: 30_000,
   maximumOutputTokens: 2_400, // adaptive thinking shares it: the JSON must not be cut (a cut answer is logged by its stop code).
