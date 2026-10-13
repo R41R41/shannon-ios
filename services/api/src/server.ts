@@ -189,7 +189,7 @@ minecraft.connect({ stateStore: persistentStore, conversationStore: persistentSt
 const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel: haiku }); // Read-tool helpers remain auxiliary regardless of primary mode.
 // ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
 const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
-  notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } });
+  notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
 const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);

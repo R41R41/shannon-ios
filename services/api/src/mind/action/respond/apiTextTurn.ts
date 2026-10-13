@@ -187,7 +187,7 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
   let orchestrationState = surface ? null : observedStep('orchestration', () => observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(body.scopeKey, threadId),
     scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode,
-    tasks: dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
+    tasks: dependencies.agentTasks.list(body.scopeKey),
   }));
   if (orchestrationState) orchestrationState = observedStep('orchestration', () => dependencies.conversationOrchestration.save(orchestrationState!));
   const explicitCommand = !audience.alone || surface ? null : observedStep('command', () => executeConversationCommand(body.scopeKey, threadId,
@@ -325,8 +325,8 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const ownerWork = !surface || audience.alone;
   const turnContext = [
     basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt),
-    ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:'))),
-      agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')), threadId)] : []), audience.instructions, surface?.prompt ?? '',
+    ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey)),
+      agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey), threadId)] : []), audience.instructions, surface?.prompt ?? '',
   ].filter(Boolean).join('\n\n');
   return {
     prompt: [basePrompt.identity, basePrompt.profile, turnContext].filter(Boolean).join('\n\n'),

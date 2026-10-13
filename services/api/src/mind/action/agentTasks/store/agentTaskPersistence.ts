@@ -128,9 +128,13 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     return { task: this.requiredTask(scopeKey, taskId), created };
   }
 
+  /**
+   * The owner's Agent Host tasks, newest first, at most 100. The common runtime's tasks are left out in the query, before the
+   * limit (ADR-0009 S9: they were cut after it, so many common tasks could push his Codex tasks out of the app's list).
+   */
   list(scopeKey: string): readonly AgentTask[] {
     const rows = this.database.prepare(`
-      SELECT * FROM agent_tasks WHERE scope_key = ? ORDER BY updated_at DESC LIMIT 100
+      SELECT * FROM agent_tasks WHERE scope_key = ? AND ${hostTaskPredicate(this.database)} ORDER BY updated_at DESC LIMIT 100
     `).all(scopeKey) as unknown as AgentTaskRow[];
     return Object.freeze(rows.map(row => this.inflate(row)));
   }

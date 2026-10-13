@@ -54,4 +54,12 @@ describe('one task model', () => {
     // Host paths still refuse a common task by its kind.
     expect(() => host.enqueue(scope, 'root', { idempotencyKey: 'steer-root', type: 'steer', payload: { message: 'x' } }, at)).toThrow();
   });
+
+  it('lists the owner\'s Agent Host tasks before the limit: many newer common tasks never push one out (S9)', () => {
+    const codex = host.create(scope, { idempotencyKey: 'old-host-work', conversationThreadID: 'thread', title: 'c', goal: 'g', summary: 's' }, at).task;
+    common('root', 'root', null);
+    for (let index = 0; index < 101; index++) common(`work-${index}`, 'generic', 'root');
+    db.prepare("UPDATE agent_tasks SET updated_at='2026-10-14T00:00:00.000Z' WHERE task_kind<>'codex'").run();
+    expect(host.list(scope).map(task => task.id)).toEqual([codex.id]);
+  });
 });

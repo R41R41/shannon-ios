@@ -286,7 +286,7 @@
       "complex-function": 3,
       "multi-statement-line": 11,
       "long-function": 1,
-      "long-line": 47
+      "long-line": 46
     },
     "services/api/src/infra/http/apiOrganizeRoutes.ts": {
       "long-function": 1,
@@ -485,7 +485,7 @@
     },
     "services/api/src/infra/models/tieredChatModel.ts": {
       "multi-statement-line": 3,
-      "long-line": 6
+      "long-line": 5
     },
     "services/api/src/infra/models/turnChecker.ts": {
       "long-line": 1
@@ -954,7 +954,7 @@
     "services/api/src/mind/action/respond/apiTextTurn.ts": {
       "multi-statement-line": 2,
       "complex-function": 1,
-      "long-line": 14
+      "long-line": 12
     },
     "services/api/src/mind/action/respond/cognitiveIntent.ts": {
       "complex-function": 1
@@ -1909,7 +1909,7 @@
       "complex-function": 2,
       "long-function": 1,
       "multi-statement-line": 2,
-      "long-line": 34
+      "long-line": 32
     },
     "services/api/src/surfaces/voice/apiVoiceCallSummary.ts": {
       "long-line": 1
