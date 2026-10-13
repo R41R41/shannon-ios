@@ -1,9 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import type { ShannonModelToolSession } from '../chatModelTools.js';
-import { TOOL_OPEN_PROVIDER_NAME } from '../../../mind/tools/shannonToolMenu.js';
+import { alwaysLoadedToolNames, TOOL_OPEN_PROVIDER_NAME } from '../../../mind/tools/shannonToolMenu.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
-import { alwaysLoadedToolNames, providerToolName, toolFromProviderName } from '../../../mind/tools/shannonTools.js';
+import { providerToolName, toolFromProviderName } from '../../../mind/tools/shannonTools.js';
 import { nonStrictTool, strictGrammarFits, strictRequestFits, TOOL_CALL_SCHEMA, TOOL_CALL_INSTRUCTIONS } from './anthropicToolCapacity.js';
 
 /** Only native 5.5 function-tool sessions use this protocol. Native web search keeps its own request. */

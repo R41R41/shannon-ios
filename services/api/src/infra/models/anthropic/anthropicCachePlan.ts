@@ -218,7 +218,8 @@ export function plannedChatBody(settings: SonnetSettings, request: ShannonChatMo
     model: settings.model,
     max_tokens: 16_000,
     // Rich chat's lines depend on the surface, not the turn (the app's Talk always, other surfaces never): they stay in the system.
-    system: cachedSystem([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []), ...spokenReplyLines(request)].join('\n\n')),
+    system: cachedSystem([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
+      ...spokenReplyLines(request)].join('\n\n')),
     messages: withTurnLines(sonnetMessages(luna.input as unknown[]), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
