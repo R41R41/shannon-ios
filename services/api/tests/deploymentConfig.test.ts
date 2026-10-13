@@ -32,7 +32,18 @@ describe('Azure deployment contract', () => {
       'utf8',
     );
 
-    expect(configuration).toContain('client_max_body_size 4m;');
-    expect(configuration).toContain('camera snapshots at 3 MiB');
+    // The photo route keeps its 3 MiB (plus headroom) in its own location; the rest of /companion/ is small (ADR-0011 review).
+    const blocks = [...configuration.matchAll(/location ([^{]+)\{([^}]*)\}/gu)].map(match => ({ location: match[1]!.trim(), body: match[2]! }));
+    const snapshots = blocks.find(block => block.location === '= /companion/v1/voice/vision/snapshots');
+    expect(snapshots?.body).toContain('client_max_body_size 4m;');
+    expect(snapshots?.body).toContain('limit_req zone=');
+    expect(blocks.find(block => block.location === '^~ /companion/')?.body).toContain('client_max_body_size 256k;');
+    // No accepted body is written to client_body_temp: each location's buffer is its whole maximum body.
+    for (const block of blocks) {
+      const maximum = /client_max_body_size (\w+);/u.exec(block.body)?.[1];
+      expect(maximum, block.location).toBeDefined();
+      expect(block.body, block.location).toContain(`client_body_buffer_size ${maximum};`);
+    }
+    expect(readFileSync(new URL('../../../deploy/azure/nginx-http-limits.conf', import.meta.url), 'utf8')).toContain('limit_req_zone');
   });
 });
