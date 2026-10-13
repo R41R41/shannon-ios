@@ -30,6 +30,7 @@ export const BACKGROUND_ROUTES = Object.freeze({
   replay_summary: 'memory_background', replay_template: 'memory_background', person_facts: 'memory_background',
   impressions: 'memory_background', platform_summary: 'memory_background', knowledge: 'memory_background',
   skill_sleep: 'memory_background', sleep: 'sleep', daily_mind: 'sleep',
+  inner_note: 'memory_background', // Syzygy ADR-0012: the reflection that writes her inner note, after a turn.
 } as const satisfies Readonly<Record<string, LlmUsageLane>>);
 
 export type BackgroundRoute = keyof typeof BACKGROUND_ROUTES;
@@ -91,6 +92,11 @@ export interface StructuredOptions<T = unknown> {
   at?: () => string;
   /** What a request that got no answer throws (stopped, or no status); unset: the error itself, or the signal's reason. */
   unsent?: (error: unknown) => unknown;
+  /**
+   * The caller's instructions are the same bytes on every call (Syzygy ADR-0012: her inner note's reflection): they get a second
+   * one-hour breakpoint of their own after the protocol prefix, so the whole fixed part is read from the cache. Unset: as before.
+   */
+  cacheSystem?: true;
 }
 
 /** A provider refusal carries its status and the provider's error body (data, never logged here). */
@@ -105,7 +111,8 @@ export async function completeStructured<T = unknown>(route: BackgroundRoute, sy
   const { claude, signal } = options;
   const unsent = options.unsent ?? ((error: unknown) => error);
   if (signal?.aborted) throw unsent(stopped(signal));
-  const body = observeSync('native', { route }, () => structuredBody(claude.model, system, input, schema, options.effort, options.maximumOutputTokens),
+  const body = observeSync('native', { route }, () => structuredBody(claude.model, system, input, schema, options.effort, options.maximumOutputTokens,
+    options.cacheSystem === true),
     observedAnthropicRequest, { model: claude.model });
   let message: Anthropic.Message;
   try {
@@ -140,10 +147,12 @@ function stopped(signal: AbortSignal): unknown {
 
 /** The request as it leaves: the protocol prefix (`cacheOneShotRequest`), the instructions, the input and the format. */
 export function structuredBody(model: string, system: string, input: StructuredInput, schema: StructuredSchema | null,
-  effort: BackgroundEffort, maximumOutputTokens: number): Anthropic.MessageCreateParamsNonStreaming {
+  effort: BackgroundEffort, maximumOutputTokens: number, cacheSystem = false): Anthropic.MessageCreateParamsNonStreaming {
   const format = schema ? { format: { type: 'json_schema' as const, schema: structuredSchema(schema) as Record<string, unknown> } } : {};
+  const cached = { type: 'ephemeral' as const, ttl: '1h' as const };
+  const instructions = cacheSystem && system ? [{ type: 'text' as const, text: system, cache_control: cached }] : system;
   return cacheOneShotRequest({
-    model, max_tokens: Math.max(1_024, maximumOutputTokens), ...(system ? { system } : {}), messages: structuredMessages(input),
+    model, max_tokens: Math.max(1_024, maximumOutputTokens), ...(system ? { system: instructions } : {}), messages: structuredMessages(input),
     thinking: { type: 'adaptive' }, output_config: { effort: NATIVE_EFFORT[effort], ...format },
   });
 }

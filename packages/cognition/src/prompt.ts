@@ -23,6 +23,8 @@ export interface CompanionPromptOptions {
   now?: string;
   /** The server's emotion timing; the table's defaults when absent. */
   timing?: ShannonEmotionTiming;
+  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): what she still holds eases as her inner note says (`lingeringFeelingLine`). */
+  innerNote?: boolean;
 }
 
 function fixed(value: number): string {
@@ -84,7 +86,7 @@ export function buildCompanionStatePrompt(
     `変わらない性格: 自発性 ${fixed(snapshot.temperament.initiative)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
     currentFeelingLine(snapshot, options.now, options.timing),
-    lingeringFeelingLine(snapshot, options.now, options.timing),
+    lingeringFeelingLine(snapshot, options.now, options.timing, options.innerNote ? { innerNote: true } : {}),
     interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
     interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
     fitSections([facts.length

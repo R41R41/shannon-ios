@@ -444,6 +444,10 @@ export function visibilityFor(intensity: number): ShannonExpressiveEmotion['visi
   return intensity < 0.3 ? 'hidden' : intensity < 0.62 ? 'subtle' : 'expressed';
 }
 
+/** The line of sulking and anger while her inner note is on: they are hers and follow her note (no rule of how light; owner 2026-10-14). */
+export const INNER_NOTE_EXPRESSIVE_LINE = 'Do not force advice when companionship is wanted. '
+  + 'Her jealousy, sulking, anger and teasing are her own, as her inner note says.';
+
 /**
  * `others`: the owner's own call while someone else can hear. A feeling she carries may have a cause
  * that is his alone (what was said or done between the two of them), so the feeling may show and its
@@ -452,6 +456,8 @@ export function visibilityFor(intensity: number): ShannonExpressiveEmotion['visi
 export function buildExpressiveEmotionPrompt(
   emotion: ShannonExpressiveEmotion,
   audience: 'owner' | 'guest' | 'others' = 'owner',
+  /** Syzygy ADR-0012 D5.1 (`SHANNON_INNER_NOTE`): sulking and anger follow her inner note instead of always staying light. */
+  options: { innerNote?: boolean } = {},
 ): string {
   return [
     '[Current expressive emotion — guidance, never a reason to fake facts]',
@@ -460,7 +466,8 @@ export function buildExpressiveEmotionPrompt(
     audience === 'guest'
       ? 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.'
       : `Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.${audience === 'others' ? ' Do not say why you feel this way while others can hear.' : ''}`,
-    'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
+    options.innerNote ? INNER_NOTE_EXPRESSIVE_LINE
+      : 'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');
 }

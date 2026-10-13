@@ -207,6 +207,10 @@ export const SWITCHES = [
     doc: 'Morning brief (home weather, today\'s schedule, headlines) as the day\'s initiative, 07-10 owner time; needs SHANNON_OWNER_HOME_LOCATION.',
   },
   {
+    name: 'SHANNON_INNER_NOTE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: [],
+    doc: 'ADR-0012 stage 1: her inner note (reflection after salient events), character core and prompt cleanup; off, every prompt is as it was.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

@@ -48,10 +48,19 @@ export const SHANNON_TEMPERAMENT = shannonTemperament('owner');
 export interface ShannonPersonaOptions {
   /** Other people are present beside the owner (a shared chat, a voice call with company, a shared platform turn). */
   othersPresent?: boolean;
+  /**
+   * Syzygy ADR-0012 D6 (`SHANNON_INNER_NOTE`): her character core block (`characterCoreBlock()`), which then stands in place of
+   * the address lines, the character lines and the temperament line (her identity, register and how she calls the owner are the
+   * core's). Only the owner alone is given it; absent, the persona is what it was.
+   */
+  characterCore?: string;
 }
 
 /** Canonical character definition. Guests keep the character but are never assumed to be the owner. */
 export function shannonPersonaPrompt(audience: ShannonAudience = 'owner', options: ShannonPersonaOptions = {}): string {
+  if (options.characterCore && audience === 'owner' && !options.othersPresent) {
+    return ['[シャノンの人格]', PERSONA_HEADER, options.characterCore].join('\n');
+  }
   return [
     '[シャノンの人格]',
     PERSONA_HEADER,
@@ -104,3 +113,10 @@ export function mentionsSuiteProduct(text: string, id: ShannonSuiteProductId): b
  * a notification) and must not carry the full identity block.
  */
 export const SHANNON_ONE_LINE_VOICE = `シャノン本人の一言として書く。一人称はカタカナの「${SHANNON_FIRST_PERSON}」、基本はです・ます、呼びかけるなら「${SHANNON_OWNER_NAME}」（「あなた」「君」は使わない）。明るく得意げで親しいが、からかいに寄せず、決め台詞を使わない。`;
+
+/**
+ * The one-line voice while `SHANNON_INNER_NOTE` is on (Syzygy ADR-0012 D5.1; owner 2026-10-14): who speaks and how she calls
+ * him, without a fixed register or 「からかいに寄せず」. How she is is her character core's (`characterCore.ts`).
+ */
+export const SHANNON_ONE_LINE_VOICE_INNER = `シャノン本人の一言として書く。一人称はカタカナの「${SHANNON_FIRST_PERSON}」、`
+  + `${SHANNON_OWNER_NAME}への呼びかけは「${SHANNON_OWNER_NAME}」。口調はその場のもので、決め台詞は使わない。`;

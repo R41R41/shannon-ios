@@ -356,3 +356,20 @@ export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInt
   selfInterestIndexUsed, selfInterestNightKey, selfInterestProjection,
   type SelfInterest, type SelfInterestAction, type SelfInterestProposal, type SelfInterestOwnerCommand,
   type SelfInterestChange, type SelfInterestSnapshot, type SelfInterestDetail, type SelfInterestEvidenceView, type SelfInterestVisible } from './selfInterests.js';
+// Syzygy ADR-0012 stage 1: her character core and her inner note (pure parts; `SHANNON_INNER_NOTE`).
+export { CHARACTER_CORE, characterCoreBlock, characterCoreHashInput, type CharacterCore } from './characterCore.js';
+export { SHANNON_ONE_LINE_VOICE_INNER } from './persona.js';
+export { INNER_NOTE_UNPLEASANT_LINE } from './emotionContinuity.js';
+export { INNER_NOTE_EXPRESSIVE_LINE } from './emotionState.js';
+export {
+  INNER_NOTE_DAY_REASONS, INNER_NOTE_INTENTS, INNER_NOTE_LIMITS, INNER_NOTE_SCALES, INNER_NOTE_SHOWN_KINDS, INNER_NOTE_TELLS, INNER_NOTE_TRIGGERS,
+  asciiRouteSummary, boundedUntil, clippedNoteText, gatedIntent, goodnightIn, innerNoteActive, innerNoteCurrent, innerNoteDay, innerNoteEventLine,
+  innerNoteFace, innerNoteRouteSummary, innerNoteTextLines, innerNoteTouchBlock, innerNoteTurnBlock, isInnerNoteDayReason, isInnerNoteIntent,
+  isInnerNoteScale, isInnerNoteTell, isInnerNoteTrigger, localClock, settleInnerNote, shownKind, teasingIn, withoutOwnApology, zonedParts,
+  type InnerNote, type InnerNoteDayEnd, type InnerNoteDayReason, type InnerNoteDraft, type InnerNoteEvent, type InnerNoteFlags, type InnerNoteHooks,
+  type InnerNoteIntent, type InnerNoteScale, type InnerNoteTell, type InnerNoteText, type InnerNoteTrigger, type SettleInnerNoteInput,
+} from './innerNote.js';
+export {
+  INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,
+  type InnerNoteReflectionFacts,
+} from './innerNotePrompt.js';
