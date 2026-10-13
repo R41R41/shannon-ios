@@ -101,10 +101,4 @@ extension ShannonConversationModel {
     public var hasFailedMessage: Bool {
         messages.contains { $0.role == .user && $0.deliveryState == .failed }
     }
-
-    public var latestContextReference: ActiveMemoryDTO? {
-        state?.activeMemories
-            .filter { $0.relevance >= 0.45 }
-            .max(by: { $0.relevance < $1.relevance })
-    }
 }

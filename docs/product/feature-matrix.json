@@ -3442,7 +3442,7 @@
       "id": "settings.avatar-style",
       "area": "settings",
       "title": "トークのアバターの種類",
-      "description": "返事の横のアイコンを、表情の絵にするかなどを選ぶ。「表情アイコン」の絵は 2026-10-05 に替えた（Live2D の姿のシャノンを前のアイコンの絵柄で描いた 22 の表情。所有者の決定）。気持ちの種類に絵があるときは、その絵を出す（talk.emotion-kind-icons）。",
+      "description": "返事の横のアイコンを、表情の絵にするかなどを選ぶ。「表情アイコン」の絵は 2026-10-05 に替えた（Live2D の姿のシャノンを前のアイコンの絵柄で描いた 22 の表情。所有者の決定）。気持ちの種類に絵があるときは、その絵を出す（talk.emotion-kind-icons）。2026-10-13（所有者のフィードバック）から、メッセージの横では枠・下地なしで小さく、目のアイコンは Waterlight Eye の目だけ、表情アイコンは顔の切り抜きを、そのメッセージの気持ちで出す。",
       "surfaces": {
         "ios": {
           "status": "yes",
@@ -3455,7 +3455,7 @@
           "status": "yes",
           "evidence": [
             "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonChatAvatarStyle",
-            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonChatAvatarView"
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonMessageAvatarView"
           ],
           "note": "設定 › 外観 の「アバター」。トークの返事の横のアイコンが変わる（A14）。"
         },

@@ -97,7 +97,7 @@ extension ShannonConversationView {
                 .padding(.horizontal, ShannonSpacing.large)
                 .accessibilityIdentifier("body-now-line")
 
-            ShannonActionThreadsCapsule(model: actionThreads, compact: true)
+            // 「裏の作業の記録」 is already over Talk (its top inset); a second copy here was a duplicate.
             dialogueUserLine(palette)
             dialogueReply(palette, geometry: geometry)
         }
@@ -163,6 +163,11 @@ extension ShannonConversationView {
 
     // MARK: The words
 
+    /// The reply's height: the words' own height up to `limit`; the limit until the words are measured.
+    func dialogueReplyHeight(limit: CGFloat) -> CGFloat {
+        dialogueReplyContentHeight > 0 ? min(dialogueReplyContentHeight, limit) : limit
+    }
+
     @ViewBuilder
     private func dialogueUserLine(_ palette: ShannonPalette) -> some View {
         if !dynamicTypeSize.isAccessibilitySize, let userMessage = latestUserMessage {
@@ -186,28 +191,49 @@ extension ShannonConversationView {
             }
             .transition(.opacity)
         } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
+            let replyLimit = dialogueIsExpanded
+                ? min(360, geometry.size.height * 0.48)
+                : (dynamicTypeSize.isAccessibilitySize ? 180 : 156)
+            let replyOverflows = dialogueReplyContentHeight > (dynamicTypeSize.isAccessibilitySize ? 180 : 156) + 1
             ShannonDialogueBubble(
                 palette: palette,
                 isExpanded: dialogueIsExpanded,
                 maxWidth: min(560, geometry.size.width - 32)
             ) {
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                    ScrollView(dialogueIsExpanded ? .vertical : []) {
-                        ShannonRichMarkdownText(source: reply.text, palette: palette)
-                            .textSelection(.enabled)
-                        if ShannonTurnCaptureList.hasContent(reply) {
-                            ShannonTurnCaptureList(message: reply, conversation: model, memory: memoryModel)
+                    // The bubble is as tall as the words up to a limit; past it the words scroll inside and fade at
+                    // the edge, with 「続きを読む」. A fixed frame around an unscrollable view cut a line in half
+                    // and left empty space (owner feedback).
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                            ShannonRichMarkdownText(source: reply.text, palette: palette)
+                                .textSelection(.enabled)
+                            if ShannonTurnCaptureList.hasContent(reply) {
+                                ShannonTurnCaptureList(message: reply, conversation: model, memory: memoryModel)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            dialogueReplyContentHeight = height
                         }
                     }
-                    .scrollIndicators(.hidden)
-                    .frame(
-                        maxHeight: dialogueIsExpanded
-                            ? min(360, geometry.size.height * 0.48)
-                            : (dynamicTypeSize.isAccessibilitySize ? 180 : 156)
-                    )
+                    .scrollIndicators(dialogueIsExpanded ? .automatic : .hidden)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(height: dialogueReplyHeight(limit: replyLimit))
+                    .mask {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: replyOverflows && !dialogueIsExpanded ? 0.82 : 1),
+                                .init(color: .black.opacity(replyOverflows && !dialogueIsExpanded ? 0 : 1), location: 1),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
 
                     HStack(spacing: ShannonSpacing.extraSmall) {
-                        if reply.text.count > 120 {
+                        if replyOverflows || dialogueIsExpanded {
                             Button {
                                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
                                     dialogueIsExpanded.toggle()

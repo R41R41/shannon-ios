@@ -1,23 +1,27 @@
 import SwiftUI
 
-/// A small, persistent activity entry beside the conversation input. Call phase stays separate.
+/// A small activity entry beside the conversation input: only work that is in progress or waiting. Finished
+/// work leaves it at once (「いま」 keeps it); a swipe hides a row without stopping the work. Call phase stays separate.
 public struct ShannonNowCompact: View {
     let model: ShannonConversationActivityModel
     @State private var showsDetails = false
+    @State private var dragOffset: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     public init(model: ShannonConversationActivityModel) { self.model = model }
     public var body: some View {
-        if model.showsActivity {
+        if model.showsStrip {
             let palette = ShannonPalette.resolve(colorScheme)
+            let featured = model.stripFeatured
             Button { showsDetails = true } label: {
                 HStack(alignment: .center, spacing: ShannonSpacing.small) {
-                    Image(systemName: model.featured?.symbol ?? "gearshape.2")
+                    Image(systemName: featured?.symbol ?? "gearshape.2")
                         .foregroundStyle(palette.intelligenceSky)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(model.state == .privateAudience ? "作業中" : model.featured?.title ?? "いまの活動")
+                        Text(model.state == .privateAudience ? "作業中" : featured?.title ?? "いまの活動")
                             .font(.shannon(.subheadline).weight(.medium)).lineLimit(2)
                         if model.state != .privateAudience {
-                            Text(model.state == .recovering ? "最新の報告を確かめています" : model.isStale() ? "前回の報告・現在の状態を確認中" : model.featured?.currentStepTitle ?? model.featured?.phaseTitle ?? "")
+                            Text(model.state == .recovering ? "最新の報告を確かめています" : model.isStale() ? "前回の報告・現在の状態を確認中" : featured?.statusTitle ?? "")
                                 .font(.shannon(.caption)).foregroundStyle(palette.textSecondary).lineLimit(2)
                         }
                     }
@@ -29,8 +33,15 @@ public struct ShannonNowCompact: View {
                 .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
             }
             .buttonStyle(.plain).foregroundStyle(palette.textPrimary)
+            .offset(x: dragOffset)
+            .opacity(1 - min(0.6, abs(dragOffset) / 240))
+            .simultaneousGesture(swipeToHide(featured))
+            .contextMenu {
+                if let featured { Button("この表示を隠す", systemImage: "eye.slash") { hide(featured) } }
+            }
             .accessibilityIdentifier("conversation-now-entry")
             .accessibilityHint("調査の途中結果と、いま進めていることを開きます。会話は続きます。")
+            .accessibilityAction(named: "この表示を隠す") { if let featured { hide(featured) } }
 #if os(iOS)
             .sheet(isPresented: $showsDetails) {
                 NavigationStack { ShannonNowPanel(model: model).navigationTitle("いま")
@@ -40,6 +51,30 @@ public struct ShannonNowCompact: View {
 #else
             .popover(isPresented: $showsDetails) { ShannonNowPanel(model: model).frame(width: 360, height: 500) }
 #endif
+        }
+    }
+
+    /// A horizontal swipe past a third of a short distance hides the row; the work itself goes on.
+    private func swipeToHide(_ task: ShannonConversationActivityDTO.Task?) -> some Gesture {
+        DragGesture(minimumDistance: 16)
+            .onChanged { value in
+                guard task != nil, abs(value.translation.width) > abs(value.translation.height) else { return }
+                dragOffset = value.translation.width
+            }
+            .onEnded { value in
+                guard let task, abs(value.translation.width) > 90,
+                      abs(value.translation.width) > abs(value.translation.height) else {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { dragOffset = 0 }
+                    return
+                }
+                hide(task)
+            }
+    }
+
+    private func hide(_ task: ShannonConversationActivityDTO.Task) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            model.dismissFromStrip(task.id)
+            dragOffset = 0
         }
     }
 }
@@ -92,7 +127,7 @@ public struct ShannonNowPanel: View {
             Label(task.phaseTitle, systemImage: task.symbol).font(.shannon(.footnote))
             Text(task.origin == "maintenance" ? "内部の記憶整理" : task.origin == "own_time" ? "自分の時間" : "あなたの依頼")
                 .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
-            if let currentStep = task.currentStepTitle { Text(currentStep).font(.shannon(.callout)) }
+            if let currentStep = task.activeStepTitle { Text(currentStep).font(.shannon(.callout)) }
             if !task.summary.isEmpty { Text(task.summary).font(.shannon(.callout)).textSelection(.enabled) }
             if let report = task.report, !report.text.isEmpty {
                 Text("途中の報告").font(.shannon(.caption).weight(.medium))

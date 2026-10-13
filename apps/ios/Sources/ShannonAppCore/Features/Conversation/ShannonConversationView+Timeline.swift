@@ -23,10 +23,6 @@ extension ShannonConversationView {
                         case .day(let day):
                             ShannonConversationDayDivider(day: day)
                         case .message(let message):
-                            if message.id == latestShannonMessageID,
-                               let reference = model.latestContextReference {
-                                ShannonContextReferenceCard(memory: reference)
-                            }
                             ShannonMessageRow(
                                 message: message,
                                 isSendingToAether: model.aetherProposalMessageIDs.contains(message.id),

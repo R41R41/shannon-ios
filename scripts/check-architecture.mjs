@@ -91,7 +91,9 @@ const threadListSheet = source(resolve(
 
 for (const [label, text, requiredTokens] of [
   ['iPhone conversation root', conversationRoot, ['NavigationStack', '.navigationTitle(', '.toolbar { workspaceToolbar }', '.sheet(isPresented: $showsThreadList)']],
-  ['iPhone Talk workspace', conversationWorkspace, ['switch selectedPage', '.safeAreaInset(edge: .bottom', '.background(.bar)']],
+  // Owner feedback 2026-10-13 (TestFlight 243): Talk's bars have no background and its controls float over the
+  // conversation, so the guard asks for that modifier instead of the former `.background(.bar)`.
+  ['iPhone Talk workspace', conversationWorkspace, ['switch selectedPage', '.safeAreaInset(edge: .bottom', 'ShannonFloatingTalkChrome()']],
   ['iPhone thread list', threadListSheet, ['NavigationStack', 'List {', '.searchable(', '.toolbar {']],
 ]) {
   for (const token of requiredTokens) {

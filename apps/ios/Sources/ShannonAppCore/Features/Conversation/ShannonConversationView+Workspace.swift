@@ -5,9 +5,11 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
+    /// Talk shows no title: its controls float over the conversation (owner feedback, TestFlight 243). The other
+    /// pages keep their names.
     var workspaceNavigationTitle: String {
         guard selectedPage == .talk else { return selectedPage.title }
-        return model.threads.first(where: { $0.threadId == model.selectedThreadId })?.title ?? ShannonGeneratedStrings.navTalk
+        return ""
     }
 
     @ToolbarContentBuilder
@@ -15,6 +17,7 @@ extension ShannonConversationView {
         ToolbarItem(placement: .navigation) {
             Button(action: openThreadList) {
                 Image(systemName: "sidebar.left")
+                    .modifier(ShannonFloatingToolbarGlyph())
             }
             .accessibilityLabel("トークと画面を開く")
             .accessibilityValue(ShannonEntryMarks.accessibilityValue(
@@ -53,6 +56,7 @@ extension ShannonConversationView {
                     figureDisplayOptions
                 } label: {
                     Image(systemName: displayMode.switchActionSymbolName)
+                        .modifier(ShannonFloatingToolbarGlyph())
                 } primaryAction: {
                     toggleDisplayMode()
                 }
@@ -62,6 +66,7 @@ extension ShannonConversationView {
 
                 Button(action: createThreadFromHeader) {
                     Image(systemName: "square.and.pencil")
+                        .modifier(ShannonFloatingToolbarGlyph())
                 }
                 .accessibilityLabel(ShannonGeneratedStrings.talkNewThread)
             }
@@ -197,8 +202,9 @@ extension ShannonConversationView {
 #endif
                 composer(palette)
             }
-            .background(.bar)
+            // No panel behind the composer: the conversation stays visible under it, and the composer floats.
         }
+        .modifier(ShannonFloatingTalkChrome())
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.id)
@@ -223,5 +229,43 @@ extension ShannonConversationView {
                 .map(\.title),
             interests: model.state?.interests ?? []
         )
+    }
+}
+
+/// Talk's bars have no background: the conversation scrolls visibly under the status bar, the header's
+/// buttons and the composer, which float over it (owner feedback, TestFlight 243).
+struct ShannonFloatingTalkChrome: ViewModifier {
+    func body(content: Content) -> some View {
+#if os(iOS)
+        if #available(iOS 26.0, *) {
+            content
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                .scrollEdgeEffectHidden(true, for: [.top, .bottom])
+        } else if #available(iOS 18.0, *) {
+            content.toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        } else {
+            content.toolbarBackground(.hidden, for: .navigationBar)
+        }
+#else
+        content
+#endif
+    }
+}
+
+/// A header button over the conversation stays legible: iOS 26 draws its own glass around toolbar items;
+/// earlier systems get a small material circle.
+struct ShannonFloatingToolbarGlyph: ViewModifier {
+    func body(content: Content) -> some View {
+#if os(iOS)
+        if #available(iOS 26.0, *) {
+            content
+        } else {
+            content
+                .frame(width: 34, height: 34)
+                .background(.regularMaterial, in: Circle())
+        }
+#else
+        content
+#endif
     }
 }

@@ -37,8 +37,9 @@ struct DesktopMessageView: View {
         } else {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: ShannonDesktopSpacing.small) {
-                    // The avatar follows 設定 › 外観 › アバター, as on the iPhone (A14).
-                    ShannonChatAvatarView(face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral), size: 28)
+                    // The avatar follows 設定 › 外観 › アバター, as on the iPhone (A14): her eyes or a close-up of her
+                    // face as this message felt, with no tile.
+                    ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: 24)
                     Text("シャノン")
                         .font(.shannonDesktop(.callout).weight(.semibold))
                     Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)

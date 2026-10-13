@@ -23,7 +23,7 @@ extension ShannonConversationView {
             }
         }
         .padding(6)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: composerIsExpanded ? 24 : ShannonShape.extraLarge, style: .continuous))
+        .modifier(ShannonFloatingComposerSurface(cornerRadius: composerIsExpanded ? 24 : ShannonShape.extraLarge))
         .overlay {
             RoundedRectangle(cornerRadius: composerIsExpanded ? 24 : ShannonShape.extraLarge, style: .continuous)
                 .stroke(palette.divider.opacity(composerIsFocused ? 0.95 : 0.62), lineWidth: composerIsFocused ? 1.2 : 0.7)
@@ -306,5 +306,22 @@ extension ShannonConversationView {
         .buttonStyle(.plain)
         .disabled(!composerActionIsEnabled)
         .accessibilityLabel(composerActionLabel)
+    }
+}
+
+/// The composer floats over the conversation: Liquid Glass on iOS 26 and later, regular material before.
+struct ShannonFloatingComposerSurface: ViewModifier {
+    let cornerRadius: CGFloat
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+#if os(iOS)
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(.regularMaterial, in: shape)
+        }
+#else
+        content.background(.regularMaterial, in: shape)
+#endif
     }
 }
