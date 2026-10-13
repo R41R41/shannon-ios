@@ -21,7 +21,7 @@ const closes: Array<() => Promise<void> | void> = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 async function until(condition: () => boolean) { for (let i = 0; i < 300 && !condition(); i++) await Promise.resolve(); expect(condition()).toBe(true); }
-function fixture(place = false, finish?: string, onGenerate?: (bridge: ReturnType<typeof createFcaConversationBridge>) => void) {
+function fixture(place = false, finish?: string, onGenerate?: (bridge: ReturnType<typeof createFcaConversationBridge>) => void | Promise<void>) {
   const h = actionHarness(() => at); closes.push(h.close);
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const service = createInMemoryAutonomyService(() => at);
@@ -49,7 +49,7 @@ function fixture(place = false, finish?: string, onGenerate?: (bridge: ReturnTyp
   const bridge = createFcaConversationBridge({ runtime: driver.runtime, ownerScope: 'owner', visible });
   const requests: ShannonChatModelRequest[] = [];
   const kernel = createLocalApiKernel(() => at, { stateStore: state, conversationStore: conversations, fcaConversation: () => bridge,
-    chatModel: { mode: 'local-stub', model: 'foreground', async generate(request) { requests.push(request); onGenerate?.(bridge); return { mode: 'local-stub', model: 'foreground', reply: '調べてみるね。話しながら待ってて。' }; } } });
+    chatModel: { mode: 'local-stub', model: 'foreground', async generate(request) { requests.push(request); await onGenerate?.(bridge); return { mode: 'local-stub', model: 'foreground', reply: '調べてみるね。話しながら待ってて。' }; } } });
   const chat = async (message: string, extra: Record<string, unknown> = {}) => {
     const action = (await h.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: `turn-${++turns}` }))!;
     const lease = leaseOf(action);
@@ -104,6 +104,41 @@ describe('conversation plus ongoing work', () => {
     expect(tasks[0]!.goal).toBe('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？');
     expect(results.map(result => result.ok)).toEqual([true, true]);
     for (const result of results) expect(result.text).toContain(`task: ${tasks[0]!.id}`);
+  });
+  it('starts conversation work while its turn is still in progress and binds its provenance afterwards (owner decision 2026-10-13)', async () => {
+    let f!: ReturnType<typeof fixture>;
+    const during: string[] = [];
+    f = fixture(false, undefined, async () => {
+      const child = f.driver.runtime.readyTasks('owner')[0]!;
+      during.push(child.id, String(f.visible('owner', child.id)));
+      f.parent(child.parentId!);
+      await f.driver.tick(); await until(f.entered); // the web search runs before the reply is written
+      during.push(f.driver.runtime.get('owner', child.id)!.phase);
+    });
+    expect((await f.chat('最新の公開資料を調べて', { webSearch: true })).status).toBe(200);
+    expect(during.slice(1)).toEqual(['true', 'executing']);
+    expect(f.driver.runtime.taskSources('owner', during[0]!).every(source => source.experienceId && !('pending' in source && source.pending))).toBe(true);
+    f.read.resolve({ status: 'results', text: 'Public fact observed', sources: [{ title: 'Source', url: 'https://example.com/source' }] });
+    await f.driver.drain(); await f.driver.tick(); await f.driver.drain();
+    expect(f.now().tasks[0]).toMatchObject({ id: during[0] });
+    expect(f.now().tasks[0]!.report?.text).toContain('一つ資料');
+  });
+  it('stops conversation work already running when its turn is lost', async () => {
+    let f!: ReturnType<typeof fixture>;
+    let child = '';
+    f = fixture(false, undefined, async () => {
+      child = f.driver.runtime.readyTasks('owner')[0]!.id;
+      await f.driver.tick(); await until(f.entered);
+      throw new Error('MODEL_LOST');
+    });
+    await f.chat('最新の公開資料を調べて', { webSearch: true }).catch(() => null);
+    f.read.resolve({ status: 'results', text: 'Public fact observed', sources: [{ title: 'Source', url: 'https://example.com/source' }] });
+    for (let i = 0; i < 5; i++) { await f.driver.tick(); await f.driver.drain(); }
+    // Its paid search was in flight when it was stopped: never replayed, it leaves by the unknown exit, and reports nothing.
+    expect(['stopped', 'unknown']).toContain(f.driver.runtime.get('owner', child)?.phase);
+    expect(f.visible('owner', child)).toBe(false);
+    expect(f.driver.runtime.progress?.('owner', child)?.report).toBeUndefined();
+    expect(f.searches()).toBe(1);
   });
   it('still admits web.research on its own when the turn admitted no research', async () => {
     const results: Array<{ ok: boolean; text: string }> = [];

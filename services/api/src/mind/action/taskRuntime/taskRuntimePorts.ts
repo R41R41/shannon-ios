@@ -33,6 +33,8 @@ export interface TaskConversationSource {
 }
 export type TaskSource = (Omit<TaskConversationSource, 'experienceId'> & {
   kind?: 'conversation'; stepId: string; experienceId: string | null;
+  /** The turn of this source is still in progress (not bound, not failed) and the task is conversation work, which runs on it. */
+  pending?: true;
 }) | { kind: 'memory'; stepId: string; experienceId: null; threadId: null; observedAt: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] };
 export interface TaskSourceObservation { observationId: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] }
 export interface TaskSnapshot {
