@@ -227,15 +227,16 @@ final class ShannonChatStreamTests: XCTestCase {
 
     @MainActor
     func testACutOffReplyIsKeptMarkedAndResendFindsTheStoredTurnInsteadOfSendingTwice() async {
+        let storedAt = Date().formatted(.iso8601)
         let client = StreamingClient(
             sentences: ["途中まで。"],
             outcome: .interrupted(ShannonChatStreamInterrupted(partialText: "途中まで。", threadId: "t-1", underlying: nil)),
             history: ConversationHistoryResponseDTO(
                 threadId: "t-1",
                 messages: [
-                    StoredConversationMessageDTO(id: "u-1", role: "user", content: "元気？", observedAt: "2026-10-13T00:00:00.000Z"),
+                    StoredConversationMessageDTO(id: "u-1", role: "user", content: "元気？", observedAt: storedAt),
                     StoredConversationMessageDTO(
-                        id: "a-1", role: "assistant", content: "途中まで。続きです。", observedAt: "2026-10-13T00:00:02.000Z",
+                        id: "a-1", role: "assistant", content: "途中まで。続きです。", observedAt: storedAt,
                         sourceExperienceId: "turn-1"),
                 ],
                 state: Fixture.state()
@@ -260,19 +261,27 @@ final class ShannonChatStreamTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
 
-    func testAStoredTurnIsOnlyOneThisDeviceDidNotAlreadyShow() {
+    func testAStoredTurnIsOnlyOneThisDeviceDidNotAlreadyShow() throws {
+        let sentAt = try Date("2026-10-13T00:00:00Z", strategy: .iso8601)
         let stored = [
-            StoredConversationMessageDTO(id: "u-0", role: "user", content: "うん", observedAt: "2026-10-13T00:00:00.000Z"),
+            StoredConversationMessageDTO(id: "u-0", role: "user", content: "うん", observedAt: "2026-10-13T00:00:01.000Z"),
             StoredConversationMessageDTO(
-                id: "a-0", role: "assistant", content: "前の返事", observedAt: "2026-10-13T00:00:01.000Z",
+                id: "a-0", role: "assistant", content: "前の返事", observedAt: "2026-10-13T00:00:03.000Z",
                 sourceExperienceId: "turn-0"),
         ]
-        XCTAssertTrue(ShannonConversationModel.storedTurnExists(in: stored, sentText: " うん\n", knownIdentities: []))
-        XCTAssertFalse(ShannonConversationModel.storedTurnExists(in: stored, sentText: "うん", knownIdentities: ["turn-0"]))
-        XCTAssertFalse(ShannonConversationModel.storedTurnExists(in: stored, sentText: "うん", knownIdentities: ["a-0"]))
-        XCTAssertFalse(ShannonConversationModel.storedTurnExists(in: stored, sentText: "ちがう", knownIdentities: []))
+        func exists(_ messages: [StoredConversationMessageDTO], _ text: String, known: Set<String> = [], at: Date? = nil) -> Bool {
+            ShannonConversationModel.storedTurnExists(in: messages, sentText: text, sentAt: at ?? sentAt, knownIdentities: known)
+        }
+        XCTAssertTrue(exists(stored, " うん\n"))
+        XCTAssertFalse(exists(stored, "うん", known: ["turn-0"]))
+        XCTAssertFalse(exists(stored, "うん", known: ["a-0"]))
+        XCTAssertFalse(exists(stored, "ちがう"))
         // His message alone (her reply not stored yet) is not a finished turn.
-        XCTAssertFalse(ShannonConversationModel.storedTurnExists(in: Array(stored.prefix(1)), sentText: "うん", knownIdentities: []))
+        XCTAssertFalse(exists(Array(stored.prefix(1)), "うん"))
+        // An older turn with the same words (「おはよう」 yesterday) is not the one that was cut off.
+        XCTAssertFalse(exists(stored, "うん", at: sentAt.addingTimeInterval(3_600)))
+        // A server clock a few seconds behind the device still matches.
+        XCTAssertTrue(exists(stored, "うん", at: sentAt.addingTimeInterval(8)))
     }
 }
 

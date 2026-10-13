@@ -132,6 +132,8 @@ extension ShannonDesktopRootView {
                                 Text(conversation.isSearchingMemory ? "記憶を探しています…" : "考えている…").foregroundStyle(.secondary)
                             }
                         }
+                        Color.clear.frame(height: 1)
+                            .shannonMarksConversationBottom($talkIsAtBottom)
                     }
                     .frame(maxWidth: 820, alignment: .leading)
                     .shannonReactionPicker(conversation.reactions)
@@ -151,8 +153,10 @@ extension ShannonDesktopRootView {
                 .onChange(of: conversation.messages.count) {
                     scrollConversation(using: proxy)
                 }
+                .shannonFollowsConversationBottom($talkIsAtBottom)
                 .onChange(of: conversation.visibleStreamingReply?.text.count) {
-                    guard conversation.visibleStreamingReply != nil, requestedMessageJumpID == nil else { return }
+                    // Each sentence is followed only while he is at the end; scrolled up to read, he stays there.
+                    guard talkIsAtBottom, conversation.visibleStreamingReply != nil, requestedMessageJumpID == nil else { return }
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                         proxy.scrollTo("desktop-streaming-reply", anchor: .bottom)
                     }

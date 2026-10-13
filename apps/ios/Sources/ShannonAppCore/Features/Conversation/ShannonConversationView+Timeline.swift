@@ -81,6 +81,7 @@ extension ShannonConversationView {
                     }
 
                     Color.clear.frame(height: 1).id("conversation-bottom")
+                        .shannonMarksConversationBottom($conversationIsAtBottom)
                 }
                 .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonSpacing.medium)
@@ -98,7 +99,10 @@ extension ShannonConversationView {
             .onChange(of: model.isSending) {
                 scrollToBottom(proxy)
             }
+            .shannonFollowsConversationBottom($conversationIsAtBottom)
             .onChange(of: model.visibleStreamingReply?.text.count) {
+                // Each sentence is followed only while he is at the end; scrolled up to read, he stays there.
+                guard conversationIsAtBottom else { return }
                 scrollToBottom(proxy)
             }
 #if DEBUG

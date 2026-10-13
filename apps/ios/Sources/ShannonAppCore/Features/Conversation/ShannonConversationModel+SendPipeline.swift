@@ -113,7 +113,7 @@ extension ShannonConversationModel {
                 // STREAM_FAILED: the turn is complete and stored; the Talk has the reply.
                 rememberUncertainTurn(
                     userMessageID, sentText: text, threadID: retracted.threadId ?? threadAtSend,
-                    threadAtSend: threadAtSend, knownIdentities: knownIdentities, settlesBy: Date())
+                    threadAtSend: threadAtSend, knownIdentities: knownIdentities, sentAt: sentAt, settlesBy: Date())
                 isSending = false
                 scheduleUncertainTurnRecovery(userMessageID)
                 return nil
@@ -127,7 +127,7 @@ extension ShannonConversationModel {
             errorMessage = ShannonFailureCopy.streamInterrupted
             rememberUncertainTurn(
                 userMessageID, sentText: text, threadID: interrupted.threadId ?? threadAtSend,
-                threadAtSend: threadAtSend, knownIdentities: knownIdentities,
+                threadAtSend: threadAtSend, knownIdentities: knownIdentities, sentAt: sentAt,
                 settlesBy: sentAt.addingTimeInterval(Self.serverTurnBudgetSeconds))
             isSending = false
             scheduleUncertainTurnRecovery(userMessageID)
@@ -144,7 +144,7 @@ extension ShannonConversationModel {
                 // 再送 first looks for the turn in the Talk, so a turn the server did finish is not made twice.
                 rememberUncertainTurn(
                     userMessageID, sentText: text, threadID: selectedThreadId, threadAtSend: selectedThreadId,
-                    knownIdentities: knownIdentities, settlesBy: sentAt.addingTimeInterval(Self.serverTurnBudgetSeconds))
+                    knownIdentities: knownIdentities, sentAt: sentAt, settlesBy: sentAt.addingTimeInterval(Self.serverTurnBudgetSeconds))
             }
         }
         isSending = false

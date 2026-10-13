@@ -73,3 +73,46 @@ struct ShannonDialogueStreamingBubble: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+/// Whether the reader is at (or near) the end of a conversation's scroll view, so that her reply as it is written
+/// is followed only when he was already there and never pulls him back from what he scrolled up to read.
+/// iOS 18 / macOS 15 read the scroll geometry; earlier systems use the bottom marker's `shannonMarksConversationBottom`.
+public struct ShannonFollowsConversationBottom: ViewModifier {
+    @Binding var isNearBottom: Bool
+    /// How close to the end still counts as at the end (a sentence or two).
+    static let tolerance: CGFloat = 120
+
+    public init(isNearBottom: Binding<Bool>) {
+        _isNearBottom = isNearBottom
+    }
+
+    public func body(content: Content) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height
+                    >= geometry.contentSize.height - Self.tolerance
+            } action: { _, nearBottom in
+                isNearBottom = nearBottom
+            }
+        } else {
+            content
+        }
+    }
+}
+
+public extension View {
+    /// Tracks whether the scroll view is at its end (see `ShannonFollowsConversationBottom`).
+    func shannonFollowsConversationBottom(_ isNearBottom: Binding<Bool>) -> some View {
+        modifier(ShannonFollowsConversationBottom(isNearBottom: isNearBottom))
+    }
+
+    /// On iOS 17 / macOS 14, the bottom marker of a lazy stack says whether the end is on screen.
+    func shannonMarksConversationBottom(_ isNearBottom: Binding<Bool>) -> some View {
+        onAppear {
+            if #unavailable(iOS 18, macOS 15) { isNearBottom.wrappedValue = true }
+        }
+        .onDisappear {
+            if #unavailable(iOS 18, macOS 15) { isNearBottom.wrappedValue = false }
+        }
+    }
+}

@@ -39,6 +39,8 @@ struct ShannonUncertainTurn: Sendable {
     let threadAtSend: String?
     /// Server message ids and turn ids already on screen when he sent: a stored reply among them is an older turn.
     let knownIdentities: Set<String>
+    /// When he sent it: a stored message of his older than this is an earlier turn with the same words.
+    let sentAt: Date
     /// Until when the server may still be writing the turn (its 30-second model budget, and some margin).
     let settlesBy: Date
 }
@@ -139,6 +141,7 @@ extension ShannonConversationModel {
         threadID: String?,
         threadAtSend: String?,
         knownIdentities: Set<String>,
+        sentAt: Date,
         settlesBy: Date
     ) {
         uncertainTurns[userMessageID] = ShannonUncertainTurn(
@@ -146,6 +149,7 @@ extension ShannonConversationModel {
             threadID: threadID,
             threadAtSend: threadAtSend,
             knownIdentities: knownIdentities,
+            sentAt: sentAt,
             settlesBy: settlesBy
         )
     }
@@ -216,6 +220,7 @@ extension ShannonConversationModel {
         guard Self.storedTurnExists(
             in: history.messages,
             sentText: pending.sentText,
+            sentAt: pending.sentAt,
             knownIdentities: pending.knownIdentities
         ) else { return .absent }
 
@@ -235,13 +240,19 @@ extension ShannonConversationModel {
         return .recovered
     }
 
-    /// Whether `stored` holds a turn for `sentText` that was not on screen when it was sent: his message followed
-    /// by her reply, among the last few, with a reply id and turn id this device did not already show.
+    /// How far the server's clock may run behind this device's when a stored message is compared with the send time.
+    nonisolated static let clockSkewAllowance: TimeInterval = 10
+
+    /// Whether `stored` holds a turn for `sentText` that was not on screen when it was sent: his message, stored at
+    /// or after `sentAt` (less the clock allowance), followed by her reply, among the last few, with a reply id and
+    /// turn id this device did not already show. An older 「おはよう」 with the same words is never taken for it.
     nonisolated static func storedTurnExists(
         in stored: [StoredConversationMessageDTO],
         sentText: String,
+        sentAt: Date,
         knownIdentities: Set<String>
     ) -> Bool {
+        let earliest = sentAt.addingTimeInterval(-clockSkewAllowance)
         let wanted = sentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !wanted.isEmpty, stored.count >= 2 else { return false }
         let lowest = max(0, stored.count - 12)
@@ -249,12 +260,18 @@ extension ShannonConversationModel {
             let user = stored[index]
             let reply = stored[index + 1]
             guard user.role == "user", reply.role == "assistant",
-                  user.content.trimmingCharacters(in: .whitespacesAndNewlines) == wanted else { continue }
+                  user.content.trimmingCharacters(in: .whitespacesAndNewlines) == wanted,
+                  let storedAt = storedDate(user.observedAt), storedAt >= earliest else { continue }
             if knownIdentities.contains(reply.id) { continue }
             if let turn = reply.sourceExperienceId, knownIdentities.contains(turn) { continue }
             return true
         }
         return false
+    }
+
+    nonisolated static func storedDate(_ value: String) -> Date? {
+        if let parsed = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(value) { return parsed }
+        return try? Date.ISO8601FormatStyle().parse(value)
     }
 
     /// Back in front: a reply whose stream broke while the app was away is looked for in the Talk.
