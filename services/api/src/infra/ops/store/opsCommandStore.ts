@@ -4,7 +4,7 @@ import {
   OPS_COMMAND_LIMITS, OPS_COMMAND_NO_REPORT,
   type OpsCommandCode, type OpsCommandOutcome, type OpsCommandReportCode, type OpsCommandRequest, type OpsCommandStatus, type OpsCommandType,
 } from '../../../contracts/opsCommandContract.js';
-import { opsLifecycleMapping, type OpsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
+import { opsActionKindMatches, opsLifecycleMapping, type OpsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
 import { ActionLeaseReader } from '../../../mind/action/threads/store/actionLeaseReader.js';
 
@@ -221,7 +221,8 @@ export class OpsCommandStore {
       const bound=this.database.prepare('SELECT action_id,execution_kind FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null;execution_kind:string}|undefined;
       const action=new ActionLeaseReader(this.database).get(actionId);
       if(!bound||bound.execution_kind!=='respond'||bound.action_id&&bound.action_id!==actionId
-        ||!action||action.kind!=='respond'||action.origin!=='owner_request'||action.scopeKey!==scopeKey||action.sourceId!==`ops:${id}`)return false;
+        ||!action||!opsActionKindMatches(bound.execution_kind,action.kind)
+        ||action.origin!=='owner_request'||action.scopeKey!==scopeKey||action.sourceId!==`ops:${id}`)return false;
       this.database.prepare('UPDATE ops_lifecycle_dispatches SET action_id=? WHERE command_id=?').run(actionId,id);return true;
     });
   }

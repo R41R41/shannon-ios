@@ -220,6 +220,10 @@ export class ShannonToolRunner {
     if (tool.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle?.available(context.scopeKey)) return { tool, result: toolFailure('unavailable', 'マイクラ管理の新しい状態が届いていません。', { retryable: false }) };
     if (tool.domain === 'memory_read' && !this.taskMemory?.available(context.scopeKey, context)) return { tool, result: toolFailure('not_offered', 'この実行では記憶の道具を使えません。', { retryable: false }) };
     if (tool.domain === 'task_runtime' && !this.taskRuntime?.available(context.scopeKey)) return { tool, result: toolFailure('not_offered', 'この実行ではタスクの道具を使えない。', { retryable: false }) };
+    // Offered while the turn's task context was open; it may have closed since (its budget spent): a closed refusal, never a throw.
+    if (tool.domain === 'minecraft_body' && this.minecraftTasks && !(context.scopeKey && this.minecraftTasks.available(context.scopeKey))) {
+      return { tool, result: toolFailure('unavailable', 'いまはマイクラの依頼を受け付けられません。少しあとでもう一度頼んでください。', { retryable: false }) };
+    }
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
       return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }), 'not_offered');
     }

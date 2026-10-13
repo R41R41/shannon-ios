@@ -25,7 +25,11 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   return {
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();
-      if (context.scopeKey !== parts.ownerScope || !parts.ownerAlone() || !parts.conversation.taskToolsAvailable(context.scopeKey)) throw new Error('FCA_SOURCE_WITHHELD');
+      // 2026-10-13: the turn's task context closed after its menu was built (`fca_context_budget`), and the call threw. Whatever
+      // closed it (the scope, the audience, the budget), the request is refused as a closed value she can say, and nothing starts.
+      if (context.scopeKey !== parts.ownerScope || !parts.ownerAlone() || !parts.conversation.taskToolsAvailable(context.scopeKey)) {
+        return toolFailure('unavailable', 'いまはマイクラの依頼を受け付けられません。少しあとでもう一度頼んでください。', { retryable: false });
+      }
       const value = input as { goal?: string; id?: string };
       if (name === 'minecraft.request') {
         const bodies = parts.control.available();

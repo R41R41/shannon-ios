@@ -46,6 +46,11 @@ function fixture() {
 }
 
 describe('Minecraft requests enter the canonical common task tree', () => {
+  it('refuses a request as a closed unavailable value when the turn has no open task context (2026-10-13: it threw)', async () => {
+    const f = fixture();
+    expect(await f.execute('minecraft.request', { goal: 'Find stone' })).toMatchObject({ ok: false, failure: 'unavailable', retryable: false });
+    expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toEqual([]);
+  });
   it('binds a foreground child before admission, shows it during its originating turn, and keeps descendants pending until the existing writer commits', async () => {
     const f = fixture(); let child = '';
     await f.foreground(async turn => {
