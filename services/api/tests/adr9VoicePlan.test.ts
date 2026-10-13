@@ -8,8 +8,8 @@ import { cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers
 import { CLAUDE_VOICE_LINES, claudeVoiceBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { cacheReceiptsView, recordCacheReceipt, resetCacheReceipts } from '../src/infra/models/anthropic/cacheReceipts.js';
 import { warmDayLine } from '../src/infra/models/anthropic/cacheWarmTurns.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
-import { VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
+import type { ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { SKILL_INDEX_HEADER } from '../src/mind/memory/skillDocument.js';
 import { VOICE_PLAN_TALK_SCENARIO } from './support/claudeVoicePlanScenarios.js';
@@ -91,11 +91,11 @@ describe('the stable voice prefix', () => {
   it('keeps the voice instructions whole and in the order the request without the plan has them', () => {
     const planned = systemText(sent(base));
     const off = systemText(cachePlanRequest(claudeVoiceBody(HAIKU, base, 300) as never));
-    for (const line of [VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES]) {
+    for (const line of [SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES]) {
       expect(planned).toContain(line);
       expect(off).toContain(line);
     }
-    const order = (text: string) => [VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].map(line => text.indexOf(line));
+    const order = (text: string) => [SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].map(line => text.indexOf(line));
     expect(order(planned)).toEqual([...order(planned)].sort((a, b) => a - b));
     expect(voiceStableSystem(variants.tools!.systemPrompt)).toBe(voiceStableSystem(identity));
   });

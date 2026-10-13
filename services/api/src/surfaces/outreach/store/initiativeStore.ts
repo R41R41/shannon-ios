@@ -154,6 +154,20 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     let lastStop: InitiativeLoopResult['stopped'] = null;
     for (const scope of scopes) {
       const dayKey = `${local.year}-${pad(local.month)}-${pad(local.day)}`;
+      const state = parseState(scope.snapshot_json);
+      const delivered = (itemId: string) => Boolean(this.database.prepare(
+        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
+      ).get(scope.scope_key, itemId));
+      // Syzygy ADR-0008 stage 3 (review M4): a candidate the gate held today is passed over, and a hold moves on to the next one.
+      const fresh = <T extends CandidateRow>(candidate: T) => !this.gate?.heldToday(scope.scope_key, 'initiative', initiativeIntent(candidate, at), at);
+      // SHANNON_MORNING_BRIEF: the owner asked for the brief every morning (2026-10-13: an own-time message at 07:00 had used the
+      // day's slot first). It has its own daily key, so it does not need the day's slot and a due promise still goes out the same
+      // morning; it stands for the day's spontaneous topic. Quiet hours and the gate's holds still apply.
+      const brief = morningBriefs.get(scope.scope_key);
+      if (brief !== undefined && !delivered(brief.item_id) && fresh(brief)) {
+        considered += 1;
+        if (this.persistMessage(scope.scope_key, state, brief, null, null, morningBriefDayKey(dayKey), at) === 'sent') sent += 1;
+      }
       if (this.sentOnDay(scope.scope_key, dayKey)) {
         lastStop = 'today-is-enough';
         continue;
@@ -162,14 +176,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'recent-conversation';
         continue;
       }
-      const state = parseState(scope.snapshot_json);
       const promises = dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
       considered += promises.length;
-      const delivered = (itemId: string) => Boolean(this.database.prepare(
-        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
-      ).get(scope.scope_key, itemId));
-      // Syzygy ADR-0008 stage 3 (review M4): a candidate the gate held today is passed over, and a hold moves on to the next one.
-      const fresh = <T extends CandidateRow>(candidate: T) => !this.gate?.heldToday(scope.scope_key, 'initiative', initiativeIntent(candidate, at), at);
       const open = promises.filter(candidate => !delivered(candidate.item_id));
       if (open.length) {
         if (firstWritten(open.filter(fresh), candidate => this.persistMessage(scope.scope_key, state, candidate, null, null, dayKey, at)) === 'sent') sent += 1;
@@ -180,11 +188,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'reserved-for-commitment';
         continue;
       }
-      // SHANNON_MORNING_BRIEF: the brief takes the day's one slot after a due or reserved promise, before anything else.
-      const brief = morningBriefs.get(scope.scope_key), briefOpen = brief !== undefined && !delivered(brief.item_id) && fresh(brief);
-      if (briefOpen && this.persistMessage(scope.scope_key, state, brief, null, null, dayKey, at) === 'sent') {
-        considered += 1;
-        sent += 1;
+      // Beside promises, the morning's brief stands for the day's spontaneous message.
+      if (this.sentOnDay(scope.scope_key, morningBriefDayKey(dayKey))) {
+        lastStop = 'today-is-enough';
         continue;
       }
       const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
@@ -486,6 +492,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     `).get(scopeKey, cutoff));
   }
 
+  /** The day's spontaneous slot (the morning brief's own key is not it). */
   private sentOnDay(scopeKey: string, dayKey: string): boolean {
     return Boolean(this.database.prepare(`
       SELECT 1 AS found FROM initiative_messages WHERE scope_key = ? AND day_key = ? LIMIT 1
@@ -497,4 +504,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   }
 
   private secureFiles(): void { secureDatabaseFiles(this.path); }
+}
+
+/** The morning brief's own daily key in `initiative_messages` (unique per scope and key): one brief a day, apart from the day's slot. */
+export function morningBriefDayKey(dayKey: string): string {
+  return `${dayKey}:morning-brief`;
 }

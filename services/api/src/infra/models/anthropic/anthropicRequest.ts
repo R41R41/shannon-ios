@@ -1,7 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonConversationItem, type ShannonVoiceModelRequest } from '../chatModel.js';
-import { RICH_TEXT_BLOCK_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
+import type { ShannonChatModelRequest, ShannonConversationItem, ShannonVoiceModelRequest } from '../chatModel.js';
+import {
+  RICH_TEXT_BLOCK_INSTRUCTIONS, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE, VOICE_NATURAL_INSTRUCTIONS,
+} from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
 import { attachmentProjection, WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -124,6 +126,11 @@ export function conversationEffort(settings: ClaudeChatSettings): ClaudeChatSett
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
+/** A voice turn answered through the structured text request keeps the spoken rules (`spokenReply`). */
+export function spokenReplyLines(request: Pick<ShannonChatModelRequest, 'spokenReply'>): string[] {
+  return request.spokenReply ? [SPOKEN_STRUCTURED_REPLY_LINE, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS] : [];
+}
+
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
@@ -141,7 +148,7 @@ export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonCha
     max_tokens: 16_000,
     // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
     system: system([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
-      ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
+      ...spokenReplyLines(request), ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: claudeTurnMessages(textTurnConversation(request)),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
@@ -158,7 +165,7 @@ export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVo
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
   const inline = stableForegroundMenu(settings.model, toolsOffered);
   const instructions = [
-    request.systemPrompt, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
+    request.systemPrompt, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), CLAUDE_VOICE_LINES, ...(request.useWebSearch ? [CLAUDE_WEB_LINE] : []),
   ].join('\n\n');
