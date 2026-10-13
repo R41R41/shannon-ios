@@ -196,6 +196,10 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       if (agentic && (conversationInProgress(dependencies, cycle.scopeKey, writeAt) || ownerRepliedAt(dependencies, cycle.scopeKey, performAt))) {
         return { outcome: 'failed', usage, summary: `話している最中なので、話しかけませんでした（理由: ${label}）。`, reasonCode: 'conversation_in_progress' };
       }
+      // A moment's message is checked again right before it is sent: still worth a word, and nobody else may see or hear her now.
+      if (step.moment && !momentOf(dependencies, cycle.scopeKey, step.moment, writeAt)) {
+        return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'moment_gone', summary: `気づいたことを話すのは、やめておきました（理由: ${label}）。` };
+      }
       // Someone else may have come while she wrote it: in a session that read the owner's documents she holds it.
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、話しかけるのをやめておきました（理由: ${label}）。` };
       let delivery: ReturnType<AutonomyReachOuts['say']>;

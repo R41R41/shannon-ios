@@ -11,7 +11,9 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * The message is the only thing the activity loop ever sends, and only to the owner.
  */
 export type ShowingOutcome =
-  | 'sent' | 'already-told' | 'quiet-hours' | 'recent-conversation' | 'today-is-enough' | 'reserved-for-commitment' | 'unavailable' | 'held';
+  | 'sent' | 'already-told' | 'quiet-hours' | 'recent-conversation' | 'today-is-enough' | 'reserved-for-commitment' | 'unavailable' | 'held'
+  /** Made readable, and not announced: no line was written (owner decision 2026-10-14, `unannouncedShowing`). */
+  | 'unannounced';
 
 export interface ShowablePiece {
   id: string;
@@ -35,15 +37,16 @@ export interface StudyShowing {
 
 /**
  * Showing a piece without the fixed line (owner decision 2026-10-14). 「見せてもいい」 makes the piece readable in his study list as
- * before, but no templated message 「…短い物語を書きました…」 is written or said: that a piece waits for his reading reaches him only
- * as a moment she perceives (`awaiting_reaction`, `mind/attention/proactiveMoments.ts`), and only in her own words.
+ * before, but no templated message 「…短い物語を書きました…」 is written or said, and the piece is not marked shown: it stays
+ * waiting for his reading, which reaches him only as a moment she perceives (`awaiting_reaction`, `mind/attention/proactiveMoments.ts`),
+ * in her own words. No reaction is predicted for it, so a reaction that does not come is no prediction error.
  * `SHANNON_STUDY_SHOWING_LINE=on` restores the line.
  */
 export function unannouncedShowing(showing: StudyShowing): StudyShowing {
   return {
     announces: false,
     mayMessageNow: (scopeKey, at) => showing.mayMessageNow(scopeKey, at),
-    tell: () => 'sent',
+    tell: () => 'unannounced',
     ownerActiveSince: (scopeKey, since) => showing.ownerActiveSince(scopeKey, since),
     ...(showing.ownerFirstActiveAfter ? { ownerFirstActiveAfter: (scopeKey: string, after: string) => showing.ownerFirstActiveAfter!(scopeKey, after) } : {}),
   };

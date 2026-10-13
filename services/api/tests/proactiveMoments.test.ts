@@ -280,9 +280,10 @@ function gateWorld() {
   const initiatives = new SQLiteInitiativeStore(path, now);
   const speaker = new SQLiteReachOutSpeaker(path, () => false, gate.gate);
   let current = facts(returnedAt(START));
+  let others = false;
   const store = new SQLiteProactiveMoments(path);
   const moments = new ProactiveMoments({
-    store, facts: () => current, others: () => false, blocked: () => null,
+    store, facts: () => current, others: () => others, blocked: () => null,
     context: () => ({ owner_spoke_within_minutes: null, own_messages_today: 0, last_own_message_minutes_ago: null, stories_awaiting_reaction: false }),
     ask: async () => 0.9, usdPerDecision: 0.001, maximumDecisionsPerDay: 24, maximumMessagesPerDay: 8,
   });
@@ -301,6 +302,7 @@ function gateWorld() {
   return {
     ...harness, moments, model, count, holds, ownerSpeaks, advance, close, now,
     set: (next: ProactiveMomentFacts) => { current = next; },
+    setOthers: (value: boolean) => { others = value; },
   };
 }
 
@@ -343,6 +345,17 @@ describe('speaking of a moment: her own words, through the proactive gate', () =
     w.close();
   });
 
+  it('checks again right before sending: someone who came while she wrote keeps her words unsent', async () => {
+    const w = gateWorld();
+    await w.moments.consider(scope, w.now());
+    w.model.during = kind => { if (kind === 'reach_out') w.setOthers(true); };
+    await runUntilIdle(w.loop);
+    expect(w.model.kinds()).toEqual(['reach_out']);
+    expect(w.count('SELECT COUNT(*) AS n FROM initiative_messages')).toBe(0);
+    expect(w.entries().find(entry => entry.kind === 'action' && entry.tool === 'owner.reach_out_held')).toMatchObject({ outcome: 'done' });
+    w.close();
+  });
+
   it('leaves her loop as it was when she wanted no moment: her own thought comes first, not a message', async () => {
     const w = gateWorld();
     await w.loop.tick();
@@ -352,10 +365,14 @@ describe('speaking of a moment: her own words, through the proactive gate', () =
 });
 
 describe('the templated lines are retired (owner decision 2026-10-14)', () => {
-  it('makes a piece readable and shown without writing any line, even at night or with the day\'s slot used', async () => {
+  it('makes a piece readable without any line, keeps it waiting for his reading, and predicts no reaction', async () => {
     const showing = new FakeShowing();
     showing.may = 'quiet-hours';
-    const { loop, model, store, advance } = loopHarness({ showing: unannouncedShowing(showing) as FakeShowing, loop: { cycleIntervalMilliseconds: 60 * MINUTE, cyclesPerDay: 6 } });
+    const shown: string[] = [];
+    const { loop, model, store, service, advance, entries } = loopHarness({
+      showing: unannouncedShowing(showing) as FakeShowing, loop: { cycleIntervalMilliseconds: 60 * MINUTE, cyclesPerDay: 6 },
+      prediction: { reachOut: () => undefined, shown: (_scope, piece) => { shown.push(piece.id); } },
+    });
     model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }];
     await runUntilIdle(loop);
     const piece = store.study.list(scope)[0]!;
@@ -363,8 +380,19 @@ describe('the templated lines are retired (owner decision 2026-10-14)', () => {
     model.plans = [{ thought: '見せます。', steps: [{ action: 'ready', pieceId: piece.id }] }];
     await runUntilIdle(loop);
     expect(showing.told).toEqual([]);
-    expect(store.study.get(scope, piece.id)).toMatchObject({ status: 'shown', readableVersion: 1 });
-    expect(await loop.tick()).not.toBe('stepped');
+    // Readable, not marked shown: it stays waiting for his reading, so the moment `awaiting_reaction` can arise.
+    expect(store.study.get(scope, piece.id)).toMatchObject({ status: 'ready', readableVersion: 1 });
+    expect(store.study.get(scope, piece.id)!.shownAt ?? null).toBeNull();
+    expect(service.study.overview(scope).pieces[0]).toMatchObject({ hidden: false, awaitingReaction: true });
+    expect(shown).toEqual([]);
+    const action = entries().find(entry => entry.kind === 'action' && entry.tool === 'study.ready')!;
+    expect(action.summary).toBe('物語「傘のある駅」をライ氏が読めるようにしました（知らせてはいません）。');
+    expect(action.summary).not.toContain('持ち主');
+    // No cycle comes back to tell him later: there is nothing to tell.
+    advance(5 * MINUTE);
+    await loop.tick();
+    await loop.tick();
+    expect(entries().filter(entry => entry.kind === 'action' && (entry.tool === 'study.show' || entry.tool === 'study.ready'))).toHaveLength(1);
     expect(showing.told).toEqual([]);
   });
 
