@@ -21,8 +21,10 @@ const HAS_SORRY = new RegExp(SORRY, 'u');
 const ENDS_FAULT = new RegExp(`(?:悪かった|言いすぎた|言い過ぎた|やりすぎた|やり過ぎた|許して)(?:よ|ね|わ)?${TAIL}$`, 'u');
 
 const TEASE = '(?:ポンコツ|ぽんこつ|へっぽこ|ドジ|チョロい|ちょろい|チョロ|バカ|ばか|アホ|あほ)';
-const TEASE_AT_HER = new RegExp(`(?:シャノン|お前|おまえ|君|きみ|あんた)[^。！？!?]{0,12}${TEASE}`, 'u');
-const TEASE_PREDICATE = new RegExp(`${TEASE}(?:だな|だね|だよね|だよな|じゃん|すぎ|め|なの|でしょ)`, 'u');
+const FIRST_PERSON = '俺|僕|ぼく|おれ|オレ|私|わたし|自分|うち';
+const TEASE_AT_HER = new RegExp(`(?:シャノン|お前|おまえ|君|きみ|あんた)(?:(?!${FIRST_PERSON})[^。！？!?]){0,12}${TEASE}`, 'u');
+/** The word as the whole judgement, said to her with nothing else as its subject (「ほんとポンコツだなあ」, not 「このアプリポンコツすぎ」). */
+const TEASE_PREDICATE = new RegExp(`^(?:ほんと(?:に)?|本当に|まじで?|マジで?|やっぱり?|相変わらず|もう)?${SEP}${TEASE}(?:だな|だね|だよね|だよな|じゃん|すぎ|め|なの|でしょ)`, 'u');
 const MOCK_GENIUS = /天才(?:\(笑\)|（笑）|ww)/u;
 
 const short = (message: string, maximum: number) => Array.from(message.trim()).length <= maximum;

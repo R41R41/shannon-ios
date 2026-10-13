@@ -72,10 +72,11 @@ export function composedInnerNote(environment: Readonly<Record<string, string | 
   };
 }
 
-/** The last lines of the conversation in progress with the owner alone, through the replay's own forgetting filter. */
+/** The last lines of the conversation in progress with the owner alone, through the replay's own forgetting filter, with their turns. */
 function recentLines(parts: InnerNoteParts, scopeKey: string, at: string) {
   const thread = parts.conversation.listThreads(scopeKey)[0];
   if (!thread || Date.parse(at) - Date.parse(thread.updatedAt) > INNER_NOTE_SERVICE_LIMITS.recentFreshMilliseconds) return [];
   return visibleReplayMessages(parts.state.snapshot(scopeKey), parts.conversation as ConversationStore, scopeKey, thread.threadId, OWNER_AUDIENCE,
-    INNER_NOTE_SERVICE_LIMITS.recentLines).messages.map(entry => entry.item);
+    INNER_NOTE_SERVICE_LIMITS.recentLines).messages.map(entry => ({ ...entry.item,
+    ...(entry.message.sourceExperienceId ? { sourceId: `experience:${entry.message.sourceExperienceId}` } : {}) }));
 }

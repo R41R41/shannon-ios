@@ -428,6 +428,7 @@ export function innerNoteTurnBlock(note: InnerNote | null, audience: 'owner' | '
   pending: readonly InnerNoteEvent[] = [], timeZone = 'Asia/Tokyo'): string {
   if (!note || !innerNoteCurrent(note, at) || audience === 'guest') return '';
   if (audience === 'others') return innerNoteActive(note, at) ? `[いまの見せ方]（ほかの人もいる場）見せる気持ち: ${note.hooks.shown}` : '';
+  if (innerNoteExpired(note, at)) return pastNoteBlock(note, timeZone);
   const span = horizon(note, timeZone);
   return [
     `[心のメモ]（${localClock(note.createdAt, timeZone)}にボクが自分で書いた独白。いまの自分の気持ち）`,
@@ -442,14 +443,24 @@ export function innerNoteTurnBlock(note: InnerNote | null, audience: 'owner' | '
 export function innerNoteTouchBlock(note: InnerNote | null, audience: 'owner' | 'others', at: string, timeZone = 'Asia/Tokyo'): string {
   if (!note || !innerNoteCurrent(note, at)) return '';
   if (audience === 'others') return innerNoteActive(note, at) ? `[いまの見せ方]（ほかの人もいる場）見せる気持ち: ${note.hooks.shown}` : '';
+  if (innerNoteExpired(note, at)) return pastNoteBlock(note, timeZone);
   const span = horizon(note, timeZone);
   return ['[心のメモ]（さっき自分で書いた独白。いまの自分の気持ち）', `- 本音: ${note.text.honne}`, `- 建て前: ${note.text.tatemae}`,
     `- つもり: ${note.text.plan}${span ? `（${span}）` : ''}`].join('\n');
 }
 
-/** Jev's one English line (D5.4, `voice_route.v3`): only while a note is current; ASCII only, so nothing of hers in Japanese leaks. */
+/**
+ * A sulk whose time ran out (N1): only as what she felt a while ago, in the past tense and without its hooks, until her settling
+ * reflection writes how she is now. Never as 「いまの自分の気持ち」.
+ */
+function pastNoteBlock(note: InnerNote, timeZone: string): string {
+  return [`[さっきまでの気持ち]（${localClock(note.createdAt, timeZone)}に書いたメモ。そのつもりの時間はもう過ぎた）`, `- 本音: ${note.text.honne}`,
+    `- 建て前: ${note.text.tatemae}`].join('\n');
+}
+
+/** Jev's one English line (D5.4, `voice_route.v3`): only while a note is current and not run out; ASCII only. */
 export function innerNoteRouteSummary(note: InnerNote | null, at: string): string | undefined {
-  if (!note || !innerNoteCurrent(note, at)) return undefined;
+  if (!note || !innerNoteCurrent(note, at) || innerNoteExpired(note, at)) return undefined;
   const plain = asciiRouteSummary(note.hooks.routeSummary);
   return plain || undefined;
 }

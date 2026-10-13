@@ -149,8 +149,16 @@ export class SQLiteInnerNoteStore {
     }
   }
 
+  /** Counts one reflection attempt of a day, unless `limit` were reached; true when it may run. One statement, so it is atomic. */
+  attempt(scopeKey: string, dayKey: string, limit: number): boolean {
+    const result = this.database.prepare(`INSERT INTO shannon_inner_note_attempts (scope_key, day_key, attempts) VALUES (?, ?, 1)
+      ON CONFLICT (scope_key, day_key) DO UPDATE SET attempts = attempts + 1 WHERE attempts < ?`).run(scopeKey, dayKey, limit);
+    return Number(result.changes) > 0;
+  }
+
   /** Deletes notes written before an instant (retention: they follow what the touches and turns they come from keep). Returns how many. */
   pruneBefore(scopeKey: string, before: string): number {
+    this.database.prepare('DELETE FROM shannon_inner_note_attempts WHERE scope_key = ? AND day_key < ?').run(scopeKey, before.slice(0, 10));
     return Number(this.database.prepare('DELETE FROM shannon_inner_notes WHERE scope_key = ? AND created_at < ?').run(scopeKey, before).changes);
   }
 

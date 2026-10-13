@@ -154,6 +154,7 @@
     "infra/sqlite/lockWaits.ts",
     "infra/sqlite/migrations/emotion/001_inner_notes.ts",
     "infra/sqlite/migrations/emotion/002_inner_note_episodes.ts",
+    "infra/sqlite/migrations/emotion/003_inner_note_attempts.ts",
     "infra/sqlite/migrations/emotionSteps.ts",
     "infra/sqlite/migrations/execution/001_action_threads.ts",
     "infra/sqlite/migrations/execution/002_mind_worker_starts.ts",
