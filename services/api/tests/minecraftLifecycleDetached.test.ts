@@ -11,11 +11,11 @@ import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyServi
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ActionLeaseReader } from '../src/mind/action/threads/store/actionLeaseReader.js';
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
-import { noticeLine } from '../src/mind/workspace/promptLayout.js';
+import { noticeLine, VOICE_ENDED_FIRST_MINUTES } from '../src/mind/workspace/promptLayout.js';
 import { offeredTools } from '../src/mind/tools/shannonTools.js';
 import { toolTraceCall, toolTracePrompt, traceLabel, supersededFailuresDropped } from '../src/mind/tools/shannonToolTrace.js';
 import { InMemoryToolTraces, ToolTurnLog } from '../src/mind/tools/shannonToolTurns.js';
-import { inboxPerception } from '../src/mind/perception/perceptionPorts.js';
+import { inboxPerception, voicePerception } from '../src/mind/perception/perceptionPorts.js';
 import { applyOp, emptyScope, initialSalience } from '../src/mind/workspace/workspaceState.js';
 import { NOTICE_MARKERS, PROMPT_LAYOUT_LIMITS, workspaceBlocks } from '../src/mind/workspace/workspacePorts.js';
 import { OWNER_AUDIENCE } from '@shannon/cognition';
@@ -23,6 +23,7 @@ import { actionHarness } from './support/actionThreadHarness.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
+import type { LifecycleOutcomeReport, LifecycleOutcomeTeller } from '../src/wiring/lifecycleOutcomeTellingWiring.js';
 import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecycleReceipt, MinecraftLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
 
 // Syzygy ADR-0009 stage 1 S7 and the 2026-10-13 TI-REQ: a conversation's lifecycle request runs under its own Minecraft action.
@@ -33,7 +34,7 @@ const values = { SHANNON_MINECRAFT_LIFECYCLE: 'on', SHANNON_ADR8_STAGE4: 'on', S
 const body = actionResource('operator', 'minecraft-body');
 async function until(test: () => boolean) { for (let i = 0; i < 500; i++) { if (test()) return; await delay(2); } expect(test()).toBe(true); }
 
-function fixture() {
+function fixture(told?: LifecycleOutcomeTeller) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-lifecycle-detached-')), path = join(directory, 'store.sqlite');
   close.push(() => rmSync(directory, { recursive: true, force: true }));
   let at = '2026-10-13T07:49:13.000Z', alone = true, sequence = 0;
@@ -41,7 +42,7 @@ function fixture() {
   const autonomy = new ShannonAutonomyService({ store, config: configuredAutonomy({ SHANNON_AUTONOMY_ENABLED: 'true' }), now: () => at });
   const h = actionHarness(() => at, path); close.push(h.close);
   const configured = configuredMinecraftLifecycle(values, { path, autonomy, actions: h.actions, ownerAlone: () => alone,
-    taskAllowed: () => false, now: () => at })!;
+    taskAllowed: () => false, now: () => at, ...(told ? { told } : {}) })!;
   // Closing aborts a running operation; its cancellation drain waits on this clock, so the clock moves while it closes.
   close.push(async () => { const ticking = setInterval(() => { at = new Date(Date.parse(at) + 1000).toISOString(); }, 20);
     try { await configured.close(); } finally { clearInterval(ticking); } });
@@ -346,5 +347,139 @@ describe('a lifecycle operation retried after a failed first try reaches her nex
     expect(supersededFailuresDropped([failed, { tool: 'minecraft.status', ok: true }])).toEqual([failed, { tool: 'minecraft.status', ok: true }]);
     expect(supersededFailuresDropped([{ tool: 'folder.read', target: 'a', ok: false, failure: 'refused' }, { tool: 'folder.read', target: 'b', ok: true }])).toHaveLength(2);
     expect(supersededFailuresDropped([{ tool: 'minecraft.login', ok: true }, failed])).toHaveLength(2);
+  });
+});
+
+/**
+ * The review of 1360e94d (2026-10-14): what a later turn is told of a turn's calls hides only a refusal decided before anything
+ * ran, and only when it is known that the same thing then succeeded; an outcome that cannot be read says only 「受け付けた」; the
+ * voice turn puts a task's end first once, not for an hour.
+ */
+describe('what a later turn is told of a failed try, an unreadable outcome and a task\'s end in voice', () => {
+  const HIDDEN = '（伏せた）';
+  it('keeps every failure it cannot know was superseded (the review\'s repros), and drops only a refusal before execution of the same thing', () => {
+    // timer.start(300) failed, timer.start(600) succeeded: no target, so the two are not known to be the same.
+    const timer = [{ tool: 'timer.start', ok: false, failure: 'invalid_input' }, { tool: 'timer.start', ok: true }];
+    expect(supersededFailuresDropped(timer)).toEqual(timer);
+    // aetherFolder.delete(A) conflicted, delete(B) succeeded; also with the same target, a conflict is after execution.
+    const deletes = [{ tool: 'aetherFolder.delete', target: 'A', ok: false, failure: 'conflict' }, { tool: 'aetherFolder.delete', target: 'B', ok: true }];
+    expect(supersededFailuresDropped(deletes)).toEqual(deletes);
+    const same = [{ tool: 'aetherFolder.delete', target: 'A', ok: false, failure: 'conflict' }, { tool: 'aetherFolder.delete', target: 'A', ok: true }];
+    expect(supersededFailuresDropped(same)).toEqual(same);
+    // folder.read of two secrets: both targets read （伏せた）, which says nothing of whether they are the same.
+    const secrets = [{ tool: 'folder.read', target: HIDDEN, ok: false, failure: 'invalid_input' }, { tool: 'folder.read', target: HIDDEN, ok: true }];
+    expect(supersededFailuresDropped(secrets)).toEqual(secrets);
+    // A timeout may have run: the retry may be a second execution, and both stay.
+    const timeout = [{ tool: 'folder.write', target: 'notes/a.md', ok: false, failure: 'timeout' }, { tool: 'folder.write', target: 'notes/a.md', ok: true }];
+    expect(supersededFailuresDropped(timeout)).toEqual(timeout);
+    // A web read and a research call without a target, and a lifecycle retry that was not accepted as an operation, stay too.
+    expect(supersededFailuresDropped([{ tool: 'web.read', ok: false, failure: 'not_offered' }, { tool: 'web.read', ok: true }])).toHaveLength(2);
+    expect(supersededFailuresDropped([{ tool: 'minecraft.login', ok: false, failure: 'invalid_input' }, { tool: 'minecraft.login', ok: true }])).toHaveLength(2);
+
+    // Dropped: the same real target refused by the input check, then read; the same lifecycle operation refused, then accepted.
+    const read = { tool: 'folder.read', target: 'notes/a.md', ok: true };
+    expect(supersededFailuresDropped([{ tool: 'folder.read', target: 'notes/a.md', ok: false, failure: 'invalid_input' }, read])).toEqual([read]);
+    const accepted = { tool: 'minecraft.login', ok: true, operation: `lifecycle:${'e'.repeat(64)}` };
+    expect(supersededFailuresDropped([{ tool: 'minecraft.login', ok: false, failure: 'invalid_input' }, accepted])).toEqual([accepted]);
+    expect(supersededFailuresDropped([{ tool: 'minecraft.login', ok: false, failure: 'unavailable' }, accepted])).toHaveLength(2);
+  });
+
+  it('says only 「受け付けた」 when how the operation ended cannot be read, and reads every id however many', async () => {
+    const f = fixture(), [first] = await f.calls('minecraft.login', 'unreadable', [{}]);
+    const command = await f.command();
+    const call = toolTraceCall('minecraft.login', '{}', first!, undefined);
+    const replay = (outcomes: ConstructorParameters<typeof ToolTurnLog>[2]) => {
+      const log = new ToolTurnLog(new InMemoryToolTraces(), f.at, outcomes);
+      log.open('owner', 'thread', 'ログインして', false, 'u').called(call);
+      log.turnStored('owner', 'thread', 'turn-1', 'ログインして', true, 'u');
+      return toolTracePrompt(log.traces('owner', 'thread', ['turn-1']).map(record => ({ record, label: traceLabel(1) })));
+    };
+    for (const unreadable of [() => null, () => { throw new Error('SQLITE_BUSY'); }]) {
+      const said = replay(unreadable);
+      expect(said).toContain('minecraft.login → 受け付けた');
+      expect(said).not.toContain('まだ結果は届いていない');
+      expect(said).not.toContain('そのあと');
+    }
+    expect(replay(() => new Map())).toContain('minecraft.login → 受け付けた。まだ結果は届いていない');
+    // No limit of 12: the one real operation behind 150 others is read.
+    const leases = new ActionLeaseReader(f.db);
+    f.poll({ receipts: [f.receipt(command)] });
+    await until(() => f.store.get(command.authority.executionId)!.state === 'completed');
+    const others = Array.from({ length: 150 }, (_, index) => `lifecycle:${index.toString(16).padStart(64, '0')}`);
+    expect(leases.lifecycleOutcomes('owner', [...others, command.id])).toEqual(new Map([[command.id, 'completed']]));
+    // Without its tables nothing can be known (null), which is not 「not ended」.
+    const empty = new ActionLeaseReader(new (await import('node:sqlite')).DatabaseSync(':memory:'));
+    expect(empty.lifecycleOutcomes('owner', [command.id])).toBeNull();
+  });
+
+  it('puts only the newest task end first in a voice turn, only in the first voice turn after it, and never for long', () => {
+    const START = Date.parse('2026-10-14T05:00:00.000Z');
+    const time = (seconds: number) => new Date(START + seconds * 1_000).toISOString();
+    const scope = emptyScope();
+    const perceive = (event: ReturnType<typeof inboxPerception>, code: string | null = null, tool: string | null = null) => {
+      applyOp(scope, { op: 'perceive', event: event!, initial: initialSalience(event!, []), detail: code ? { code, tool, reason: null } : null, at: event!.time });
+      return event!;
+    };
+    const ended = (tool: string, seconds: number, seq: number) => perceive(inboxPerception({ draft: { kind: 'task_outcome', code: 'done', audience: 'owner',
+      source: 'api', sourceId: `${tool}@${seconds}`, tool }, at: time(seconds), seq }), 'done', tool);
+    ended('minecraft.start', 0, 1);
+    ended('minecraft.login', 10, 2);
+    // A promise's time, which is strong enough for voice: it is not kept out by the ends.
+    const promise = perceive(inboxPerception({ draft: { kind: 'promise_due', code: 'due', audience: 'owner', source: 'api', sourceId: 'promise-p-1@1', deltaMinutes: 0 },
+      at: time(20), seq: 3 }), 'due');
+    const voice = (seconds: number, currentItemId: string | null = null) => workspaceBlocks(scope, { surface: 'voice', present: OWNER_AUDIENCE, at: time(seconds),
+      currentItemId, current: { surface: 'voice', sourceId: 'voice-thread' }, dataFrames: false, text: () => null });
+    const now = voice(60);
+    expect(now.split('\n')[1]).toContain('〈minecraft.login〉が終わった');
+    expect(now).not.toContain('minecraft.start');
+    expect(initialSalience(promise, [])).toBeGreaterThanOrEqual(PROMPT_LAYOUT_LIMITS.voice.minimumSalience);
+    expect(now).toContain(NOTICE_MARKERS.promise_due);
+
+    // This turn's own utterance (in the same voice Talk) does not count as a turn that had it.
+    const utterance = voicePerception({ threadId: 'voice-thread', transcript: 'おはよう', present: OWNER_AUDIENCE, alone: true, guest: false, at: time(70) })!;
+    applyOp(scope, { op: 'perceive', event: utterance, initial: initialSalience(utterance, []), detail: null, at: utterance.time });
+    expect(voice(70, utterance.id)).toContain('〈minecraft.login〉が終わった');
+    // The next voice turn of the same Talk: the turn before had it first, so it is ranked by salience (0.5, below the voice line).
+    const next = voicePerception({ threadId: 'voice-thread', transcript: 'ありがとう', present: OWNER_AUDIENCE, alone: true, guest: false, at: time(90) })!;
+    applyOp(scope, { op: 'perceive', event: next, initial: initialSalience(next, []), detail: null, at: next.time });
+    expect(voice(90, next.id)).not.toContain('minecraft.login');
+
+    // Without a voice turn in between, it is first for at most ten minutes.
+    const fresh = emptyScope();
+    const event = inboxPerception({ draft: { kind: 'task_outcome', code: 'done', audience: 'owner', source: 'api', sourceId: 'x@1', tool: 'minecraft.stop' }, at: time(0), seq: 1 })!;
+    applyOp(fresh, { op: 'perceive', event, initial: initialSalience(event, []), detail: { code: 'done', tool: 'minecraft.stop', reason: null }, at: event.time });
+    const layout = (seconds: number) => workspaceBlocks(fresh, { surface: 'voice', present: OWNER_AUDIENCE, at: time(seconds), currentItemId: null, current: null,
+      dataFrames: false, text: () => null });
+    expect(layout(VOICE_ENDED_FIRST_MINUTES * 60)).toContain('minecraft.stop');
+    expect(layout(VOICE_ENDED_FIRST_MINUTES * 60 + 1)).not.toContain('minecraft.stop');
+  });
+});
+
+/** Owner decision 2026-10-14: the runner's `settled` drives telling him, once, with the Talk it was asked in. */
+describe('a conversation\'s lifecycle operation is told to him when it settles', () => {
+  it.each([
+    ['completed', { outcome: 'completed', code: 'changed' }],
+    ['refused', { outcome: 'refused', code: 'players_present' }],
+  ] as const)('%s: one report with its operation, action, end and Talk', async (end, patch) => {
+    const reports: LifecycleOutcomeReport[] = [];
+    const f = fixture(async report => { reports.push(report); });
+    const [accepted] = await f.calls('minecraft.login', `told-${end}`, [{}]);
+    expect(accepted).toMatchObject({ ok: true });
+    const command = await f.command();
+    expect(reports).toEqual([]);
+    f.poll({ receipts: [f.receipt(command, patch)] });
+    await until(() => reports.length === 1);
+    expect(reports).toEqual([{ scopeKey: 'owner', threadId: 'thread', operationId: command.id, action: 'login', outcome: end }]);
+    f.poll({ receipts: [f.receipt(command, patch)] });
+    await delay(20);
+    expect(reports).toHaveLength(1);
+  });
+
+  it('a call refused by the input check (nothing accepted) tells him nothing', async () => {
+    const reports: LifecycleOutcomeReport[] = [];
+    const f = fixture(async report => { reports.push(report); });
+    expect((await f.calls('minecraft.login', 'bad', [{ server: 'home' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
+    await delay(20);
+    expect(reports).toEqual([]);
   });
 });

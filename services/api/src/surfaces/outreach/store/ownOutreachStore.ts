@@ -2,8 +2,11 @@
 import type { OwnBodyCallFact, OwnOutreachFacts, OwnOutreachReader } from '../ownOutreach.js';
 import { DatabaseSync } from 'node:sqlite';
 
-/** Source references of `initiative_messages` that are not her own initiative: an answer to a look in a conversation. */
-const NOT_HER_INITIATIVE = ['body-look:'] as const;
+/**
+ * Source references of `initiative_messages` that are not her own initiative: an answer to a look in a conversation, and the end
+ * of a Minecraft operation he asked for (`lifecycle-outcome:`, `minecraftLifecycleContract.ts`).
+ */
+const NOT_HER_INITIATIVE = ['body-look:', 'lifecycle-outcome:'] as const;
 
 /**
  * Reads the tables through its own connection. A table that does not exist yet holds nothing: no call can be
