@@ -11,7 +11,6 @@ import {
   type MinecraftBodyConfiguration, type MinecraftConversationKind, type MinecraftIntent, type MinecraftServerBinding, type MinecraftTurnRequest, type MinecraftTurnResponse,
 } from '../../contracts/minecraftBodyContract.js';
 import type { MinecraftTurnLog } from '../../mind/action/respond/respondPorts.js';
-import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
 import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
 import { MinecraftTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
@@ -51,11 +50,6 @@ export interface MinecraftBodyDependencies {
   memory?: MemoryProposals | null;
   /** F6: the people facts' readers and recorders (absent: switched off). */
   peopleFacts?: ConstructorParameters<typeof PlatformPeople>[4];
-  /**
-   * Phase 4: the request queue (`minecraftBodyRequests.ts`). The owner's game-chat task becomes one more entrance to it
-   * while the body is claiming; his 「止まって」 asks every open request to stop.
-   */
-  requests?: Pick<MinecraftBodyRequests, 'present' | 'enqueue' | 'cancelOpen'> & Partial<Pick<MinecraftBodyRequests, 'requiresPrimaryModel'>> | null;
 }
 
 /** A turn is answered only while it is fresh; game chat older than this is past. A retry of an answered turn is replayed whatever its age. */
@@ -153,7 +147,8 @@ export class MinecraftBody {
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
     const proposed = completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
-    const intent = owner ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : this.queuedIntent(scopeKey, request, threadId, proposed) : undefined;
+    // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.
+    const intent: MinecraftTurnResponse['intent'] = owner ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : proposed : undefined;
     return {
       reply: intent?.rejected ? '選択中のモデルでマイクラの体に頼みごとを渡せなかった。体が対応してつながったあとで、もう一度頼んでほしい。' : completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters),
       ...(intent ? { intent } : {}),
@@ -161,29 +156,6 @@ export class MinecraftBody {
       duplicate: false,
       ...(ignored ? { ignored } : {}),
     };
-  }
-
-  /**
-   * The owner's intent as one entrance to the request queue: a task becomes a request while the body is claiming (the
-   * response names it, and the body takes it through its claim like a request from the phone); a stop asks every open
-   * request to stop. Without a claiming body the intent is answered as before and the body acts on it itself.
-   */
-  private queuedIntent(scopeKey: string, request: MinecraftTurnRequest, threadId: string, intent: MinecraftIntent): MinecraftTurnResponse['intent'] {
-    const requests = this.dependencies.requests;
-    if (!requests) return intent;
-    try {
-      if (intent.kind === 'stop') { requests.cancelOpen(scopeKey); return intent; }
-      if (intent.kind !== 'task') return intent;
-      if (!requests.present(scopeKey)) return requests.requiresPrimaryModel?.() ? { kind: 'none', goal: '', rejected: 'queue_unavailable' } : intent;
-      const queued = requests.enqueue(scopeKey, {
-        goal: intent.goal, dedupeKey: `mc:${request.requestId}`, origin: { surface: 'minecraft', threadId, messageId: `mc:${request.requestId}` },
-      });
-      if (queued.kind === 'queued') return { ...intent, request: { id: queued.request.id } };
-      return requests.requiresPrimaryModel?.() ? { kind: 'none', goal: '', rejected: queued.kind === 'model_unavailable' ? 'model_unavailable' : 'queue_unavailable' } : intent;
-    } catch (error) {
-      console.error('Shannon Minecraft request queue failed', error instanceof Error ? error.message : 'unknown');
-      return requests.requiresPrimaryModel?.() && intent.kind === 'task' ? { kind: 'none', goal: '', rejected: 'queue_unavailable' } : intent;
-    }
   }
 
   /** Where nobody can be told apart: her identity and the delivery note, no memory read, nothing kept. */

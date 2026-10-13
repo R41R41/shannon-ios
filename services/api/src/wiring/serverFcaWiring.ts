@@ -41,7 +41,7 @@ import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
-import { configuredResponseModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
+import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
 import { stage4Enabled, mindSocketPath } from '../infra/config/stage4.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
@@ -67,14 +67,15 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
-  if (!switchOn(values, 'SHANNON_FCA_RUNTIME')) return null;
-  if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED');
+  // Syzygy ADR-0009 S9: the common runtime is always on (`SHANNON_FCA_RUNTIME` is retired). What it needs is checked here, at
+  // start, and a missing part stops the API at once with what to set.
+  if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED: the common task runtime needs the mind worker; set SHANNON_ADR8_STAGE4=on');
   const modelName = replacementModel(values.SHANNON_FCA_MODEL);
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
   const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
-  if (!provider) throw new Error('FCA_PROVIDER_REQUIRED');
-  const sleepEnabled = switchOn(values, 'SHANNON_FCA_SLEEP');
-  if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
+  if (!provider) throw new Error(`FCA_PROVIDER_REQUIRED: no key for the task model ${modelName}; set ${fcaKeyNames(modelName)}`);
+  // Sleep always takes the common runtime (S9 retired `SHANNON_FCA_SLEEP`); the API hands its store, the worker its owner night.
+  const sleepEnabled = Boolean(parts.sleepStore);
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
   const client = new MindSocketClient(mindSocketPath(values, parts.path));
@@ -210,4 +211,10 @@ export async function serveFcaTaskRoute(service: ReturnType<typeof configuredSer
   if (!service) sendJson(response, 503, { error: 'FCA_NOT_ENABLED' });
   else await service.route(request, response, principal, url);
   return true;
+}
+
+/** The environment names that give the task model its key (names only, never a value). */
+function fcaKeyNames(model: string): string {
+  if (model === 'claude-sonnet-5-5') return 'SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY';
+  return isHaikuModel(model) ? 'SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
 }

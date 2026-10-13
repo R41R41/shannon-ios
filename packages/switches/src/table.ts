@@ -20,13 +20,17 @@ export interface SwitchEntry {
   readonly owner: string;
   readonly requires: readonly string[];
   readonly doc: string;
+  /**
+   * The value a new installation sets (`deploy/azure/api.env.example`), when it differs from the code's default: the default
+   * stays what the historical OFF profiles read, and the example says what the server needs now.
+   */
+  readonly setup?: 'on';
 }
 
 const STAGE1 = 'SHANNON_ADR8_STAGE1';
 const STAGE2 = 'SHANNON_ADR8_STAGE2';
 const STAGE3 = 'SHANNON_ADR8_STAGE3';
 const STAGE4 = 'SHANNON_ADR8_STAGE4';
-const FCA = 'SHANNON_FCA_RUNTIME';
 
 export const SWITCHES = [
   {
@@ -147,28 +151,17 @@ export const SWITCHES = [
     doc: 'The replay summary is a template rendered by code.',
   },
   {
-    name: STAGE4, default: 'off', kind: 'explicit_on', owner: 'actions', requires: ['SHANNON_WORKSPACE'],
-    doc: 'ADR-0008 stage 4 action threads in the mind worker.',
+    name: STAGE4, default: 'off', kind: 'explicit_on', owner: 'actions', requires: ['SHANNON_WORKSPACE'], setup: 'on',
+    doc: 'ADR-0008 stage 4 action threads in the mind worker. Required: the common task runtime is always on (ADR-0009 S9), '
+      + 'so the API stops at start without it (FCA_ACTION_THREADS_REQUIRED); run the mind worker (worker:mind) beside the API.',
   },
   {
     name: 'SHANNON_ADR8_STAGE5', default: 'off', kind: 'on_only', owner: 'tasks', requires: [],
     doc: 'ADR-0008 stage 5 ports: self interests, task trees, reply-bound feedback, gated self revision.',
   },
   {
-    name: FCA, default: 'off', kind: 'on_only', owner: 'fca', requires: [STAGE4],
-    doc: 'The common FCA task runtime (needs action threads; the server refuses to start without them).',
-  },
-  {
-    name: 'SHANNON_FCA_SLEEP', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
-    doc: 'Nightly sleep runs as an FCA task.',
-  },
-  {
-    name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
+    name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [STAGE4],
     doc: 'Touch reflexes run under the FCA runtime.',
-  },
-  {
-    name: 'SHANNON_FCA_MINECRAFT', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
-    doc: 'Minecraft requests run as FCA tasks (needs the body configuration).',
   },
   {
     name: 'SHANNON_MINECRAFT_LIFECYCLE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [STAGE4],

@@ -136,7 +136,7 @@ export interface ShannonApiKernelOptions {
   memory?: PeopleMemoryParts | null;
   autonomy?: ShannonAutonomyService;
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
-  /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
+  /** What the owner's devices reported about what she asked them (`devicePromptBlock`), for a turn the owner alone reads. */
   minecraftRequests?: ReportedWork | null;
   /**
    * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what
@@ -276,7 +276,7 @@ export class ShannonApiKernel {
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } };
+      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey) } };
     }
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
     if (testFlightResponse) return testFlightResponse;
@@ -456,7 +456,7 @@ export class ShannonApiKernel {
     if (completion.taskProposal && !suppressAgentTaskProposal) {
       if (orchestrationState) {
         orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
-          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
+          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey),
         ));
       }
       response.uiBlocks = [...(response.uiBlocks ?? []), {

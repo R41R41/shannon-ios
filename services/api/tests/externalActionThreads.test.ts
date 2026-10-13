@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import { externalActionWiring } from '../src/wiring/externalActionWiring.js';
-import { minecraftActionPort } from '../src/wiring/minecraftActionWiring.js';
-import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
 import { publicActionThreads } from '../src/infra/http/actionThreadRoutes.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -16,13 +14,13 @@ afterEach(()=>cleanups.splice(0).reverse().forEach(close=>close()));
 const at='2026-10-07T12:00:00.000Z';
 // Written against the S3 limits (two background slots); since S6 the limits are data.
 function harness(){let clock=at;const h=actionHarness(()=>clock),tasks=new SQLiteAgentTaskStore(':memory:');cleanups.push(()=>tasks.close(),h.close);useSlotLimits(h.db,SLOT_LIMITS_TODAY);
-  const wiring=externalActionWiring(h.actions,tasks,null,'owner',()=>clock);
+  const wiring=externalActionWiring(h.actions,tasks,'owner',()=>clock);
   return {...h,tasks,wiring,now:()=>clock,advance:()=>{clock='2026-10-07T12:00:31.000Z';}};
 }
 describe('canonical outside work under mind execution rights',()=>{
   it('keeps a trusted self task in the autonomy lane and preserves a prior canonical owner admission',async()=>{
     const h=actionHarness(()=>at),tasks=new SQLiteAgentTaskStore(':memory:',{taskTreeEnabled:true});cleanups.push(()=>tasks.close(),h.close);
-    const wiring=externalActionWiring(h.actions,tasks,null,'owner',()=>at);
+    const wiring=externalActionWiring(h.actions,tasks,'owner',()=>at);
     const authority={origin:'own_time' as const,budgetLane:'autonomy' as const,ownerInformed:false,permissionId:'proposal:self'};
     const task=tasks.create('owner',{idempotencyKey:'self',conversationThreadID:'talk',title:'task',goal:'goal',summary:'summary',taskAuthority:authority},at).task;
     await wiring.beforeHost({method:'POST',path:'/v1/agent/host/commands/claim',body:{hostId:'host-one',actionThreads:1}});
@@ -76,7 +74,7 @@ describe('canonical outside work under mind execution rights',()=>{
   it('does not deliver work to an un-upgraded host, and OFF retains the original claim route',async()=>{
     const h=harness(),request={method:'POST' as const,path:'/v1/agent/host/commands/claim',body:{hostId:'mac'}};
     expect((await h.wiring.beforeHost(request))?.status).toBe(503);
-    expect(await externalActionWiring(null,h.tasks,null,'owner',h.now).beforeHost(request)).toBeUndefined();
+    expect(await externalActionWiring(null,h.tasks,'owner',h.now).beforeHost(request)).toBeUndefined();
   });
   it('keeps a lost outside result locked, acknowledges command receipt separately, and closes only on the original turn result',async()=>{
     const h=harness();h.tasks.heartbeat({hostId:'mac',displayName:'Mac',kind:'local',capabilities:[],projects:[],models:[]},at);
@@ -116,60 +114,6 @@ describe('canonical outside work under mind execution rights',()=>{
     h.tasks.enqueue('owner',task.id,{idempotencyKey:'legacy-pause',type:'interrupt',payload:{}},at);
     expect((await h.wiring.beforeHost({method:'POST',path:'/v1/agent/host/actions/permit',body:{hostId:'mac',taskId:task.id,lease:response.command.actionLease}}))?.body).toEqual({allowed:false});
     expect(h.store.get(response.command.actionLease.id)?.state).toBe('stopping');
-  });
-  it('never marks Minecraft claimed when admission is blocked, propagates cancellation, and closes only after a body result',async()=>{
-    const h=harness(),folder=mkdtempSync(join(tmpdir(),'shannon-stage4-body-'));cleanups.push(()=>rmSync(folder,{recursive:true,force:true}));
-    const queue=new MinecraftBodyRequests(join(folder,'body.sqlite'),{ownerScopeKey:'owner',deviceId:'body'},h.now);cleanups.push(()=>queue.close());
-    queue.execution=minecraftActionPort(h.actions);
-    await queue.claim('owner','body',{waitSeconds:0,holding:[]});
-    const asked=queue.enqueue('owner',{goal:'collect wood',origin:{surface:'text'},dedupeKey:'one'});
-    if(asked.kind!=='queued')throw new Error('fixture');
-    const slots=[];for(const sourceId of ['a','b'])slots.push(await h.actions.claim((await h.actions.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId})).id));
-    expect(await queue.claim('owner','body',{waitSeconds:0,holding:[]})).toEqual({request:null,cancel:[]});
-    expect(queue.recent('owner')[0]?.state).toBe('queued');
-    await h.actions.finish(leaseOf(slots[0]!), 'completed','done');
-    expect(await queue.claim('owner','body',{waitSeconds:0,holding:[]})).toMatchObject({request:{id:asked.request.id}});
-    const action=h.store.list('owner').find(item=>item.kind==='minecraft')!;
-    await h.actions.stop('owner',action.id,'body-stop');
-    expect(await queue.claim('owner','body',{waitSeconds:0,holding:[asked.request.id]})).toMatchObject({cancel:[asked.request.id]});
-    expect(h.store.get(action.id)?.state).toBe('stopping');
-    queue.report('owner','body',asked.request.id,{outcome:'stopped',code:'stopped',gained:[]});
-    await queue.acknowledgeExecution('owner',asked.request.id,'cancelled');
-    expect(h.store.get(action.id)?.state).toBe('cancelled');
-  });
-  it('retains a silent Minecraft lock until the authenticated body confirms it abandoned the old request',async()=>{
-    const h=harness(),folder=mkdtempSync(join(tmpdir(),'shannon-stage4-body-restart-'));cleanups.push(()=>rmSync(folder,{recursive:true,force:true}));
-    const queue=new MinecraftBodyRequests(join(folder,'body.sqlite'),{ownerScopeKey:'owner',deviceId:'body'},h.now);cleanups.push(()=>queue.close());
-    queue.execution=minecraftActionPort(h.actions);await queue.claim('owner','body',{waitSeconds:0,holding:[]});
-    const asked=queue.enqueue('owner',{goal:'wood',origin:{surface:'text'},dedupeKey:'old'});if(asked.kind!=='queued')throw new Error('fixture');
-    await queue.claim('owner','body',{waitSeconds:0,holding:[]});const action=h.store.list('owner')[0]!;
-    h.advance();h.store.transaction(()=>h.store.sweep(h.now()));
-    expect(h.store.get(action.id)?.state).toBe('unknown');
-    expect(await queue.claim('owner','foreign-body',{waitSeconds:0,holding:[]})).toBe('DEVICE_DENIED');
-    expect(h.store.get(action.id)?.state).toBe('unknown');
-    expect(await queue.claim('owner','body',{waitSeconds:0,holding:[asked.request.id]})).toMatchObject({cancel:[asked.request.id]});
-    queue.enqueue('owner',{goal:'stone',origin:{surface:'text'},dedupeKey:'new'});
-    expect(h.store.get(action.id)?.state).toBe('unknown');
-    expect(await queue.claim('owner','body',{waitSeconds:0,holding:[]})).toMatchObject({request:{goal:'stone'}});
-    expect(queue.recent('owner').find(v=>v.id===asked.request.id)?.state).toBe('cancelled');
-    expect(h.store.get(action.id)?.state).toBe('cancelled');
-  });
-  it('durably retries a known Minecraft result after IPC failure without accepting a contradictory duplicate',async()=>{
-    const h=harness(),folder=mkdtempSync(join(tmpdir(),'shannon-stage4-body-ack-'));cleanups.push(()=>rmSync(folder,{recursive:true,force:true}));
-    const path=join(folder,'body.sqlite'),port=minecraftActionPort(h.actions),configuration={ownerScopeKey:'owner',deviceId:'body'};
-    let queue=new MinecraftBodyRequests(path,configuration,h.now);cleanups.push(()=>queue.close());
-    queue.execution={...port,acknowledge:async()=>{throw new Error('IPC unavailable');}};
-    await queue.claim('owner','body',{waitSeconds:0,holding:[]});
-    const asked=queue.enqueue('owner',{goal:'wood',origin:{surface:'text'},dedupeKey:'old'});if(asked.kind!=='queued')throw new Error('fixture');
-    await queue.claim('owner','body',{waitSeconds:0,holding:[]});const action=h.store.list('owner')[0]!;
-    queue.report('owner','body',asked.request.id,{outcome:'done',gained:[]});
-    await expect(queue.acknowledgeExecution('owner',asked.request.id,'completed')).rejects.toThrow('IPC unavailable');
-    queue.report('owner','body',asked.request.id,{outcome:'failed',code:'error',gained:[]});
-    queue.close();h.advance();h.store.transaction(()=>h.store.sweep(h.now()));
-    expect(h.store.get(action.id)?.state).toBe('unknown');
-    queue=new MinecraftBodyRequests(path,configuration,h.now);queue.execution=port;
-    await queue.claim('owner','body',{waitSeconds:0,holding:[]});
-    expect(h.store.get(action.id)?.state).toBe('completed');expect(queue.recent('owner')[0]?.state).toBe('done');
   });
   it('discloses only closed summaries, and no task details at all with others present',async()=>{
     const h=harness();await h.actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:'secret-source',ownerInformed:true});

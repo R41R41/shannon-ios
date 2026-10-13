@@ -6,7 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming, MemoryAudience } from '@shannon/cognition';
 import type { FcaAffectEvidence } from '../../mind/emotion/emotionPorts.js';
 import { ownerSpoke } from '@shannon/cognition';
-import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
+import type { BackgroundJobPayload, BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
 import type { ShannonConversationItem } from '../models/chatModel.js';
 import type {
   ConversationStore,
@@ -372,8 +372,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string, timeZone?: string) { return this.jobs.enqueueTurnRefinement(scopeKey, experienceId, userMessage, observedAt, timeZone); }
   recoverUnqueuedTurnRefinements(nowIso: string) { return this.jobs.recoverUnqueuedTurnRefinements(nowIso); }
-  enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string) { return this.jobs.enqueueSleepConsolidations(dayKey, startAt, endAt, nowIso); }
-  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string) { return this.jobs.claimNextBackgroundJob(workerId, nowIso, leaseUntilIso, excludedSleepScope); }
+  enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string, onlyScope?: string) { return this.jobs.enqueueSleepConsolidations(dayKey, startAt, endAt, nowIso, onlyScope); }
+  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string, onlyKind?: BackgroundJobPayload['kind']) {
+    return this.jobs.claimNextBackgroundJob(workerId, nowIso, leaseUntilIso, excludedSleepScope, onlyKind);
+  }
   completeClaimedBackgroundJob(job: ClaimedBackgroundJob, workerId: string, completedAt: string, operation: () => void) { return this.jobs.completeClaimedBackgroundJob(job, workerId, completedAt, operation); }
   failClaimedBackgroundJob(job: ClaimedBackgroundJob, workerId: string, nowIso: string, errorCode: string) { return this.jobs.failClaimedBackgroundJob(job, workerId, nowIso, errorCode); }
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }

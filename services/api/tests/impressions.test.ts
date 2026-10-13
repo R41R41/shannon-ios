@@ -660,8 +660,7 @@ describe('her own thinking and the worker', () => {
     const dispatcher = new DurableBackgroundDispatcher(h.store, h.store);
     const errors: string[] = [];
     const seen: string[] = [];
-    const worker = (updater: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> }) => new ShannonBackgroundWorker(h.store, h.store, h.store,
-      new LocalRuleSleepMemoryAnalyzer(), { now: () => new Date(h.now()), reportError: code => errors.push(code), impressionUpdater: updater });
+    const worker = (updater: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> }) => new ShannonBackgroundWorker(h.store, h.store, h.store, { now: () => new Date(h.now()), reportError: code => errors.push(code), impressionUpdater: updater });
     const turn = (message: string) => {
       const completed = { scopeKey: 'owner', threadId: 'thread', capturedState: h.store.snapshot('owner'), userMessage: message, shannonReply: 'そうですか。',
         messageEmotion: { primary: 'neutral' } as never, completedAt: h.now() };

@@ -1,16 +1,13 @@
-import { switchOn } from '@shannon/switches';
 import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MINECRAFT_CONTROL_PATH } from '../contracts/minecraftControlContract.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
-import type { MinecraftPrimaryModelReader } from '../contracts/minecraftPrimaryModelContract.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from '../infra/auth/deviceAuth.js';
 import { namesDesktopBody } from '../mind/inhibition/desktopBodyIdentity.js';
 import { SQLiteGameExperiences } from '../mind/memory/store/gameExperiences.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
-import { MinecraftBodyRequests } from '../surfaces/minecraft/minecraftBodyRequests.js';
 import { readJson, sendJson } from '../infra/http/serverHttp.js';
 import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
 import { createMinecraftBodyRoute } from './minecraftBodyRouteWiring.js';
@@ -28,36 +25,34 @@ export function gameBodyMayCall(method: string | undefined, path: string): boole
     || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
 }
 
-type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'requests'>;
+type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent'>;
 
 /**
- * Her Minecraft body as the server wires it: its game experiences, the request queue her tools and the owner's game chat
- * fill (phase 4), the game-chat route, and the gate on its device token. `SHANNON_MINECRAFT_BODY_JSON` unset: none of it
- * exists, its routes answer 503, and no device is held back.
+ * Her Minecraft body as the server wires it: its game experiences, the game-chat route whose owner intents enter the common
+ * task tree, the body's control and lifecycle routes, and the gate on its device token. `SHANNON_MINECRAFT_BODY_JSON` unset:
+ * none of it exists, its routes answer 503, and no device is held back. Since Syzygy ADR-0009 S9 the body always takes the
+ * common path (the phase-4 request queue is retired), which needs the common runtime.
  */
-export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string, now: () => string, primaryModel?: MinecraftPrimaryModelReader) {
-  const commonMode = switchOn(environment, 'SHANNON_FCA_MINECRAFT');
+export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string) {
   const configuration = configuredMinecraftBody(environment);
   const experiences = configuration ? new SQLiteGameExperiences(databasePath) : null;
-  const requests = configuration && !commonMode ? new MinecraftBodyRequests(databasePath, configuration, now, experiences, undefined, primaryModel) : null;
-  const stopMaintenance = requests?.startMaintenance() ?? (() => {});
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } | null = null;
-  if (commonMode && (!configuration || !switchOn(environment, 'SHANNON_FCA_RUNTIME'))) throw new Error('FCA_MINECRAFT_CONFIG_REQUIRED');
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
     connectControl(value: NonNullable<typeof common>): void { common = value; },
-    requests,
     /** Her Minecraft body's token: never given a desktop-body identity (`desktopBodyIdentity.ts`). */
     isGameDevice: isGameBody,
     /** `ShannonBodyOptions.game`: the one device whose game events are taken. */
     game: configuration ? { deviceId: configuration.deviceId, ownerScopeKey: configuration.ownerScopeKey, experiences } : null,
     /** The game-chat route, once the conversation kernel it answers through exists. */
     connect(dependencies: RouteDependencies): void {
-      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, requests: commonMode ? null : requests, ...(commonMode ? { fcaIntent: input => common ? common.intent(input) : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const }) } : {}) });
+      const fcaIntent: MinecraftBodyDependencies['fcaIntent'] = input => common ? common.intent(input)
+        : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const });
+      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent });
     },
     /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */
     refusesConsole(request: IncomingMessage, response: ServerResponse, devices: { authenticate(authorization: string | undefined): ShannonDevicePrincipal | null } | null): boolean {
@@ -94,7 +89,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
       if (path === MINECRAFT_CONTROL_PATH) {
         if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
         else if (!principal || !isGameBody(principal)) sendJson(response, 403, { error: 'FCA_BODY_DEVICE_DENIED' });
-        else if (!commonMode || !common) sendJson(response, 503, { error: 'FCA_BODY_NOT_ENABLED' });
+        else if (!common) sendJson(response, 503, { error: 'FCA_BODY_NOT_ENABLED' });
         else {
           const input = await readJson(request, 1024 * 1024);
           try { sendJson(response, 200, common.control.poll(principal, input)); }
@@ -109,8 +104,6 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
     close(): void {
       route?.close();
       experiences?.close();
-      stopMaintenance();
-      requests?.close();
     },
   };
 }

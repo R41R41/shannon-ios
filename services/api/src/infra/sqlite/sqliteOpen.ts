@@ -67,6 +67,11 @@ export function openDatabase(path: string, name: SqliteProfileName): DatabaseSyn
   }
 }
 
+/** SQLite's `data_version` of this connection: it moves with every commit by any other connection. */
+export function dataVersion(database: DatabaseSync): number {
+  return Number((database.prepare('PRAGMA data_version').get() as { data_version: number }).data_version);
+}
+
 /** The names of a table's columns (empty when the table does not exist). */
 export function tableColumns(database: DatabaseSync, table: string): Set<string> {
   if (!/^[a-z_]+$/u.test(table)) throw new Error('SCHEMA_TABLE');

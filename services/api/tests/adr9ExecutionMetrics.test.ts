@@ -115,11 +115,11 @@ describe('the owner\'s ops server view', () => {
     const { join } = await import('node:path');
     const directory = mkdtempSync(join(tmpdir(), 'shannon-ops-server-'));
     const lines: string[] = [];
-    const ops = configuredOpsServer({ environment: { SHANNON_FCA_RUNTIME: 'on' }, databasePath: join(directory, 'db.sqlite'), ownerScope: 'owner',
+    const ops = configuredOpsServer({ environment: { SHANNON_FCA_TOUCH: 'on' }, databasePath: join(directory, 'db.sqlite'), ownerScope: 'owner',
       ownTime: { enabled: false, timeZone: 'Asia/Tokyo' }, describe: scope => scope === 'owner' ? { revision: 'r' } : null,
       mind: () => null, outbox: null, now: () => AT, log: line => lines.push(line) });
     cleanups.push(() => rmSync(directory, { recursive: true, force: true }), () => ops.close());
-    expect(lines).toEqual(['Shannon switches: requires_off SHANNON_FCA_RUNTIME needs=SHANNON_ADR8_STAGE4']);
+    expect(lines).toEqual(['Shannon switches: requires_off SHANNON_FCA_TOUCH needs=SHANNON_ADR8_STAGE4']);
     const view = ops.view('owner') as Record<string, unknown>;
     expect(Object.keys(view).sort()).toEqual(['execution', 'liveness', 'modelCache', 'revision', 'switches']);
     expect(ops.view('guest')).toBeNull();

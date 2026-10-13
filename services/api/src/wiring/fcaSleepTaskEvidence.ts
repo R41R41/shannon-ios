@@ -21,7 +21,7 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
         JOIN fca_task_history h ON h.task_id=e.task_id AND h.step_id=e.step_id
         JOIN agent_tasks t ON t.task_id=e.task_id AND t.scope_key=e.scope_key
         WHERE e.scope_key=? AND e.event_id=? AND e.task_id=? AND e.observation='observed'
-        AND t.fca_origin='owner_request' AND t.fca_kind IS NOT NULL AND t.fca_kind!='sleep'`).get(scope, record.outcomeId, record.taskId);
+        AND t.fca_origin='owner_request' AND t.task_kind NOT IN ('codex','sleep')`).get(scope, record.outcomeId, record.taskId);
       if (!proof?.result_json) return false;
       const evidenceSources = JSON.parse(String(proof.sources_json)) as TaskSource[];
       const historySources = JSON.parse(String(proof.history_sources)) as TaskSource[];

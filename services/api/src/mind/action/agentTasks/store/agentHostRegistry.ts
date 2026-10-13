@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { fcaHostPredicate } from './fcaHostPredicate.js';
+import { hostTaskPredicate } from './taskKinds.js';
 import type {
   AgentHostDescriptor,
   AgentHostHeartbeat,
@@ -136,7 +136,7 @@ export class AgentHostRegistry {
     return this.database.prepare(`
       SELECT h.*,
         (SELECT COUNT(*) FROM agent_tasks t
-          WHERE t.assigned_host_id = h.host_id AND ${fcaHostPredicate(this.database, 't')}
+          WHERE t.assigned_host_id = h.host_id AND ${hostTaskPredicate(this.database, 't')}
             AND t.status IN ('queued','starting','running','waiting_approval','paused')) AS active_count
       FROM agent_hosts h
       ORDER BY CASE h.host_kind WHEN 'local' THEN 0 ELSE 1 END, h.display_name

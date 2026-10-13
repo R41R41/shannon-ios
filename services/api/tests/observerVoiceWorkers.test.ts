@@ -138,7 +138,7 @@ describe('observed voice and background work', () => {
     world.store.enqueueTurnRefinement('owner', turn.id, turn.userMessage, MEMORY_AT);
     const restore = installObserverSink(event => events.push(event));
     try {
-      const worker = new ShannonBackgroundWorker(world.store, world.store, world.store, new LocalRuleSleepMemoryAnalyzer(),
+      const worker = new ShannonBackgroundWorker(world.store, world.store, world.store,
         { now: () => new Date(MEMORY_AT) });
       expect(await worker.runOnce()).toBe('processed');
       expect(events.filter(event => event.kind === 'run.started')).toHaveLength(1);

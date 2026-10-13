@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
-import { fcaHostPredicate } from '../src/mind/action/agentTasks/store/fcaHostPredicate.js';
+import { hostTaskPredicate } from '../src/mind/action/agentTasks/store/taskKinds.js';
 import { TaskTreeStore } from '../src/mind/action/agentTasks/store/taskTreeStore.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
@@ -278,15 +278,15 @@ describe('the ledger', () => {
     reader.close();
   });
 
-  it('answers the Host predicate again until the FCA columns appear, then keeps it for the connection', () => {
+  it('answers the Host predicate again until the task kind column appears, then keeps it for the connection', () => {
     const path = temporaryPath();
     const host = openDatabase(path, 'agentTasks');
     migrateAgentTasks(host);
-    expect(fcaHostPredicate(host, 't')).toBe('1=1');
+    expect(hostTaskPredicate(host, 't')).toBe('1=1');
     const fca = openDatabase(path, 'taskRuntime');
     new SQLiteFcaTaskAuthority(fca);
-    expect(fcaHostPredicate(host, 't')).toBe('t.fca_kind IS NULL');
-    expect(fcaHostPredicate(host)).toBe('fca_kind IS NULL');
+    expect(hostTaskPredicate(host, 't')).toBe("t.task_kind = 'codex'");
+    expect(hostTaskPredicate(host)).toBe("task_kind = 'codex'");
     fca.close();
     host.close();
   });

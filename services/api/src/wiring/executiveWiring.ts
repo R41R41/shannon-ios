@@ -15,7 +15,7 @@ import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
  * The Executive in the own-time worker (Syzygy ADR-0009 stage 2, E5), behind `SHANNON_EXECUTIVE` (explicit `on`, default off;
  * needs `SHANNON_AUTONOMY_ENABLED`). It is handed to the one loop of the worker, so it holds the same lease (`activity-loop`):
  * with it on the old loop never thinks on its own, and with it off the loop is exactly what it was. Own-time FCA tasks (E4) are
- * offered only while the common FCA runtime is on (`SHANNON_FCA_RUNTIME`); the API process runs them.
+ * offered by the common FCA runtime (always on since ADR-0009 S9); the API process runs them.
  */
 export interface ExecutiveWiringParts {
   databasePath: string;
@@ -31,7 +31,7 @@ export function configuredExecutive(
   environment: Readonly<Record<string, string | undefined>>, parts: ExecutiveWiringParts,
 ): { executive: ExecutivePort; close(): void } | null {
   if (!switchOn(environment, 'SHANNON_EXECUTIVE') || !switchOn(environment, 'SHANNON_AUTONOMY_ENABLED')) return null;
-  const tasks = switchOn(environment, 'SHANNON_FCA_RUNTIME') ? ownTimeTasks(parts.databasePath, parts.now) : null;
+  const tasks = ownTimeTasks(parts.databasePath, parts.now);
   const executive = createExecutive({
     value: parts.values ? (scopeKey, capability, context) => valueOf(parts.values!.activeCells(scopeKey), capability, context) : undefined,
     ...(parts.interests ? { interests: parts.interests } : {}),

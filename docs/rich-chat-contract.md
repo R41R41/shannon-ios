@@ -4,7 +4,7 @@ Owner decisions of 2026-10-13 (Syzygy ADR-0009 §10, option A of sections 1–3 
 
 ## 1. Report cards
 
-**When.** `createReportCards` (`services/api/src/mind/action/fca/fcaReportCards.ts`) runs every 5 s inside the FCA runtime's process (`serverFcaWiring.ts`, `SHANNON_FCA_RUNTIME=on`). It looks at the 40 most recent tasks and writes a card for each that
+**When.** `createReportCards` (`services/api/src/mind/action/fca/fcaReportCards.ts`) runs every 5 s inside the FCA runtime's process (`serverFcaWiring.ts`, always on since ADR-0009 S9). It looks at the 40 most recent tasks and writes a card for each that
 
 - is `owner_request`, kind `research` or `generic`, phase `completed` or `failed`, finished within the last 24 hours;
 - sits directly under the root or a conversation task (a nested child reports to its parent instead);

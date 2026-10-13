@@ -75,12 +75,13 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     return recovered;
   }
 
-  enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string): number {
-    const scopes = this.context.database.prepare(`
+  /** One night per scope that talked that day; `onlyScope` (the worker's: the owner's) leaves every other scope out. */
+  enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string, onlyScope?: string): number {
+    const scopes = (this.context.database.prepare(`
       SELECT DISTINCT scope_key
       FROM conversation_messages
       WHERE role = 'user' AND observed_at >= ? AND observed_at < ?
-    `).all(startAt, endAt) as unknown as Array<{ scope_key: string }>;
+    `).all(startAt, endAt) as unknown as Array<{ scope_key: string }>).filter(row => onlyScope === undefined || row.scope_key === onlyScope);
     const insert = this.context.database.prepare(`
       INSERT OR IGNORE INTO background_jobs
         (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at)
@@ -104,7 +105,9 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     return inserted;
   }
 
-  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string): ClaimedBackgroundJob | null {
+  /** `onlyKind`: the worker claims turn refinements only (Syzygy ADR-0009 S9: every night is the common runtime's). */
+  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string,
+    onlyKind?: BackgroundJobPayload['kind']): ClaimedBackgroundJob | null {
     return this.context.transaction(() => {
       const bound = Boolean(this.context.database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fca_task_maintenance'").get());
       const exclusion = bound ? 'AND NOT EXISTS (SELECT 1 FROM fca_task_maintenance m WHERE m.scope_key=background_jobs.scope_key AND m.job_id=background_jobs.job_id)' : '';
@@ -122,9 +125,10 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
           )
         ${exclusion}
         AND NOT (job_kind='sleep-consolidation' AND scope_key=? AND attempts=0 AND status='pending')
+        AND (? IS NULL OR job_kind = ?)
         ORDER BY sequence ASC
         LIMIT 1
-      `).get(nowIso, nowIso, nowIso, excludedSleepScope ?? '') as unknown as BackgroundJobRow | undefined;
+      `).get(nowIso, nowIso, nowIso, excludedSleepScope ?? '', onlyKind ?? null, onlyKind ?? null) as unknown as BackgroundJobRow | undefined;
       if (!row) return null;
       const changed = this.context.database.prepare(`
         UPDATE background_jobs

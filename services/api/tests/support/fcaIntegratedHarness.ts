@@ -42,7 +42,7 @@ export const round = (decision: FcaModelOutput['decision']): FcaModelOutput => (
 export function integratedFcaHarness(parts: {
   decide(input: FcaModelInput, signal: AbortSignal): FcaModelOutput | Promise<FcaModelOutput>;
   web?: WebSearchOperation;
-  sleep?: { analyzer: SleepMemoryAnalyzer; knowledgeAnalyzer?: KnowledgeAnalyzer };
+  sleep?: { analyzer: SleepMemoryAnalyzer; knowledgeAnalyzer?: KnowledgeAnalyzer; minimumMessages?: number };
 }) {
   const world = memoryWorld(), calls: FcaModelInput[] = [];
   const activity = createAutonomyStore(world.path);
@@ -66,7 +66,7 @@ export function integratedFcaHarness(parts: {
   }; } });
   function connect() {
     sleep = parts.sleep ? createFcaSleepWiring({ store: world.store, ownerScope: 'owner', now: world.now,
-      values: { SHANNON_SKILLS: 'off', SHANNON_KNOWLEDGE_ENABLED: 'false', SHANNON_SLEEP_MIN_MESSAGES: '1' },
+      values: { SHANNON_SKILLS: 'off', SHANNON_KNOWLEDGE_ENABLED: 'false', SHANNON_SLEEP_MIN_MESSAGES: String(parts.sleep.minimumMessages ?? 1) },
       analyzer: parts.sleep.analyzer, knowledgeAnalyzer: parts.sleep.knowledgeAnalyzer ?? null }) : null;
     bodyStore = new MinecraftControlStore(actions.db);
     control = new MinecraftControl(bodyStore, configuration, { now: () => Date.parse(world.now()), ownerAlone, pollMilliseconds: 1,
