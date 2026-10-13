@@ -104,7 +104,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -317,7 +317,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -560,7 +560,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -708,7 +708,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -774,7 +774,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "e44984b0"
    },
    "thread": "cfd029e3",
@@ -796,7 +796,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "d4df9272"
    },
    "thread": "cfd029e3",
@@ -818,7 +818,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "d4df9272"
    },
    "thread": "cfd029e3",
@@ -839,7 +839,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "d4df9272"
    },
    "thread": "cfd029e3",

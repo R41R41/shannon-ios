@@ -71,7 +71,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "cache_control": {
      "type": "ephemeral",
@@ -108,7 +108,7 @@
     "tools": "c57350f1",
     "system": "1c4d7b10",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "44a636cc"
    }
   }

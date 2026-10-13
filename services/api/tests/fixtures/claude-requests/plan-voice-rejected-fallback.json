@@ -104,7 +104,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -166,7 +166,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "cache_control": {
      "type": "ephemeral",
@@ -203,7 +203,7 @@
     "tools": "-",
     "system": "d782b943",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "a507cfea"
    },
    "thread": "cfd029e3",

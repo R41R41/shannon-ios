@@ -104,7 +104,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -240,7 +240,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium"
+     "effort": "low"
     },
     "stream": true
    }
@@ -284,7 +284,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "28db6c85"
    },
    "thread": "cfd029e3",
@@ -306,7 +306,7 @@
     "tools": "de57fa82",
     "system": "a760e042",
     "schema": "-",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "28db6c85"
    },
    "thread": "cfd029e3",

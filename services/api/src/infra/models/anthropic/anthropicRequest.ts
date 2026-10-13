@@ -8,7 +8,7 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSes
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { SonnetSettings } from './anthropicConfig.js';
-import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
+import { usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { appendForegroundMenu, stableForegroundMenu } from './anthropicForegroundMenu.js';
 export { structuredSchema } from './anthropicSchema.js';
@@ -101,13 +101,14 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
 }
 
 /**
- * The owner's answer 3 of 2026-10-12 (Syzygy ADR-0009 stage 1 plan, §6): a Haiku conversation turn, text or voice, thinks at
- * medium on every tier and is never raised mid-turn. Sonnet keeps its configured effort.
+ * The owner's decision of 2026-10-13 (「会話は浅めに固定」): a foreground conversation turn, text or voice, with or without the
+ * cache plan, thinks at low on every model and tier, the same every turn so the cached prefix stays stable. Deeper work (FCA
+ * tasks, sleep, other background routes) keeps its own effort. Replaces the 2026-10-12 Haiku medium.
  */
-export const HAIKU_CONVERSATION_EFFORT = 'medium';
+export const CONVERSATION_EFFORT = 'low';
 
-export function conversationEffort(settings: SonnetSettings): SonnetSettings['effort'] {
-  return isHaikuModel(settings.model) ? HAIKU_CONVERSATION_EFFORT : settings.effort;
+export function conversationEffort(_settings: SonnetSettings): SonnetSettings['effort'] {
+  return CONVERSATION_EFFORT;
 }
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
