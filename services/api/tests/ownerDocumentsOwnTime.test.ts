@@ -122,7 +122,8 @@ describe('the owner\'s documents in her own time: switched on', () => {
   it('requires a pursuit she is working on now: none, an unknown one, or a closed one reads nothing', async () => {
     const { harness, owners, pursuit, ownerReads } = await ownTime();
     const own = harness.service.addPursuit(scope, { kind: 'question', title: '宿の話', why: '気になるからです。', origin: 'self' }).pursuit!;
-    harness.service.updatePursuit(scope, own.id, { status: 'done' });
+    // Since ADR-0009 stage 2 (E2) her own "done" is only a proposal; she rests it, so it is not one she works on now.
+    harness.service.updatePursuit(scope, own.id, { status: 'resting' });
     const memory = toolSessionMemory();
     expect(harness.service.tools.prepare('ownerDocs.read', { documentId: owners.id }, { scopeKey: scope, surface: 'autonomy', audience: 'owner_alone', memory }))
       .toMatchObject({ result: { ok: false, failure: 'invalid_input' } });

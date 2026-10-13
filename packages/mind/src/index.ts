@@ -53,3 +53,6 @@ export {
 export * from './actions.js';
 export * from './taskTree.js';
 export * from './tasks.js';
+export * from './capabilities.js';
+export * from './goals.js';
+export * from './deliberation.js';

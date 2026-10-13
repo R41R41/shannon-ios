@@ -137,6 +137,8 @@ export class SQLiteAutonomyStore {
     this.informed = parts.informed(this.database);
     this.hostSteps = new AutonomyHostFolderSteps(this.database);
     this.hostOperations = new HostFolderOperationsStore(this.database);
+    // After the study's and the loop's tables exist: once per database, her pursuits become goals (Syzygy ADR-0009 stage 2, E2).
+    this.pursuits.migrateGoals(new Date().toISOString());
     secureDatabaseFiles(path);
   }
 

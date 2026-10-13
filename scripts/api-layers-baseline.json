@@ -4,7 +4,7 @@
   "violations": {
     "ddl-in-migrations": [
       "infra/auth/store/deviceAuthStore.ts -> ddl x3",
-      "infra/observer/store/observerStore.ts -> ddl x3",
+      "infra/observer/store/observerStore.ts -> ddl x5",
       "infra/ops/store/opsCommandStore.ts -> ddl x5",
       "infra/ops/store/opsStore.ts -> ddl x1",
       "infra/sqlite/mindOwnership.ts -> ddl x1",
@@ -74,6 +74,7 @@
       "surfaces/body/store/bodyLookStore.ts -> ddl x3",
       "surfaces/body/store/bodyReactionStore.ts -> ddl x8",
       "surfaces/body/store/bodyStore.ts -> ddl x6",
+      "surfaces/device/store/deviceActionStore.ts -> ddl x6",
       "surfaces/minecraft/store/minecraftControlStore.ts -> ddl x4",
       "surfaces/minecraft/store/minecraftLifecycleStore.ts -> ddl x4",
       "surfaces/minecraft/store/minecraftPrimaryModels.ts -> ddl x1",
@@ -99,7 +100,7 @@
     ],
     "pragma-in-opener": [
       "infra/auth/store/deviceAuthStore.ts -> PRAGMA x3",
-      "infra/observer/store/observerStore.ts -> PRAGMA x4",
+      "infra/observer/store/observerStore.ts -> PRAGMA x7",
       "infra/ops/store/opsCommandStore.ts -> PRAGMA x1",
       "infra/ops/store/opsStore.ts -> PRAGMA x3",
       "infra/sqlite/mindOwnership.ts -> PRAGMA x1",
@@ -150,6 +151,7 @@
       "surfaces/body/store/bodyLookStore.ts -> PRAGMA x3",
       "surfaces/body/store/bodyReactionStore.ts -> PRAGMA x3",
       "surfaces/body/store/bodyStore.ts -> PRAGMA x4",
+      "surfaces/device/store/deviceActionStore.ts -> PRAGMA x3",
       "surfaces/minecraft/store/minecraftPrimaryModels.ts -> PRAGMA x1",
       "surfaces/minecraft/store/minecraftRequestsStore.ts -> PRAGMA x3",
       "surfaces/outreach/store/initiativeStore.ts -> PRAGMA x4",
