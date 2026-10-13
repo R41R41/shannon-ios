@@ -97,6 +97,19 @@ describe('one budget for FCA steps (E3)', () => {
     expect(calls).toEqual([]);
   });
 
+  it('lowers an operator\'s Minecraft request to its asked yen cap, never raising it and touching no other task (2026-10-14)', async () => {
+    const { db } = world();
+    const store = new TaskBudgetStore(db);
+    const { actions } = fakeActions(true);
+    const caps: Record<string, number> = { 't-op': 500, 't-high': 5000 };
+    const budget = fcaBudget({ actions, store, now, minecraftRequest: () => true, taskCapYen: id => caps[id] ?? null });
+    const of = (id: string) => ({ ...(task('owner_request') as object), id, kind: 'generic' }) as never;
+    for (const id of ['t-op', 't-high', 't-owner']) store.add(id, 'owner', 'owner_request', 600, now());
+    expect(await budget.before(of('t-op'), lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('500円・300歩') });
+    expect(await budget.before(of('t-high'), lease)).toEqual({ ok: true });
+    expect(await budget.before(of('t-owner'), lease)).toEqual({ ok: true });
+  });
+
   it('counts as a Minecraft request only the admitted task: bound at creation, with its criteria, under the conversation or root', () => {
     const admitted = { origin: 'owner_request' as const, completionCriteria: MINECRAFT_REQUEST_CRITERIA };
     expect(admittedMinecraftRequest(admitted, { kind: 'conversation' }, true)).toBe(true);

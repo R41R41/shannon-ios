@@ -40,13 +40,16 @@ function temporaryPath(name = 'shannon.sqlite'): string {
 
 type Row = Record<string, unknown>;
 
-/** What the S3 and S4 steps add (008, 009 and 010): columns appended by ALTER TABLE, and two tables (011 changes rows only). */
+/**
+ * What the S3 and S4 steps add (008, 009 and 010): columns appended by ALTER TABLE, and two tables (011 changes rows only); and
+ * the operator's audit table of 012 (2026-10-14).
+ */
 const S3_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
     'exec_state_at TEXT', 'exec_starting INTEGER'],
   mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
 };
-const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes'];
+const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes', 'operator_audit'];
 
 /** The schema rows without the S3 additions: what the S2 steps alone must leave unchanged. */
 function withoutS3(rows: Row[]): Row[] {
@@ -305,6 +308,7 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/009_action_slots': '7dba69dd5efd5de2e3da9fcfc3c6c0be5eebcf3a1225a3e543e0c3a0a3b70f4f',
   'execution/010_task_host_starting': 'a5d43ddc03296599405e1606e08661e08189f87f4a6bac57b53a96f9afd94f8a',
   'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
+  'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
 };
 
 function reindented(step: SchemaStep): SchemaStep {

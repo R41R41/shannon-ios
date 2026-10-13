@@ -282,21 +282,15 @@ const valuesRoute = createValuesRoute({
 });
 const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, ...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
 if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
-const fca = configuredServerFca(process.env, { ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
+const fca = configuredServerFca(process.env, { ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), operator: { lifecycle, actions: mind?.actions ?? null, activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore }, ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
 const voiceAllowances = new VoiceRequestAllowances();
 const handleVoiceTranscription = createVoiceTranscriptionRoute({ transcriber: voiceTranscriber, allowances: voiceAllowances });
-const geminiSpeechRoute = createGeminiSpeechRoute(
-  process.env, persistentStore, (deviceId) => voiceAllowances.consumeSpeech(deviceId),
-);
-const geminiLiveRoute = createGeminiLiveRoute(
-  process.env, kernel, (deviceId) => voiceAllowances.consumeControl(deviceId),
-);
-const liveVoiceStreamRoute = createLiveVoiceStreamRoute(
-  kernel, (deviceId) => voiceAllowances.consumeControl(deviceId),
-);
+const geminiSpeechRoute = createGeminiSpeechRoute(process.env, persistentStore, (deviceId) => voiceAllowances.consumeSpeech(deviceId));
+const geminiLiveRoute = createGeminiLiveRoute(process.env, kernel, (deviceId) => voiceAllowances.consumeControl(deviceId));
+const liveVoiceStreamRoute = createLiveVoiceStreamRoute(kernel, (deviceId) => voiceAllowances.consumeControl(deviceId));
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT' && request.method !== 'DELETE') {

@@ -21,6 +21,8 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=read-only
+# The operator socket (docs/operator-minecraft-contract.md) is the API's alone: ProtectHome=read-only does not stop an AF_UNIX connect.
+InaccessiblePaths=/home/azureuser/shannon-ios-data/operator-runtime
 RestrictSUIDSGID=true
 # The loop writes only to the database. It has no workspace or folder of its own yet (ADR-0002 step 4).
 ReadWritePaths=/home/azureuser/shannon-ios-data

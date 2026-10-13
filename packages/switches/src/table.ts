@@ -227,6 +227,10 @@ export const SWITCHES = [
     name: 'SHANNON_EXECUTIVE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: ['SHANNON_AUTONOMY_ENABLED'],
     doc: 'ADR-0009 stage 2: the Executive decides her own time (one deliberation, one capability); off, the old own-time loop thinks.',
   },
+  {
+    name: 'SHANNON_OPERATOR_MINECRAFT', default: 'off', kind: 'explicit_on', owner: 'minecraft', requires: [],
+    doc: 'Owner 2026-10-14: a VM operator may ask, over a service-user socket, for Minecraft lifecycle or one request (operator-minecraft-contract).',
+  },
 ] as const satisfies readonly SwitchEntry[];
 
 export type SwitchName = (typeof SWITCHES)[number]['name'];

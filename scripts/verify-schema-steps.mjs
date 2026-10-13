@@ -38,6 +38,7 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'execution/009_action_slots': '7dba69dd5efd5de2e3da9fcfc3c6c0be5eebcf3a1225a3e543e0c3a0a3b70f4f',
   'execution/010_task_host_starting': 'a5d43ddc03296599405e1606e08661e08189f87f4a6bac57b53a96f9afd94f8a',
   'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
+  'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
@@ -73,6 +74,8 @@ export const S3_ADDITIONS = Object.freeze({
     'mind_action_slot_pools', 'mind_action_slot_classes',
     // Stage 2 (E2, E3, E5): goal events and the migration mark, the FCA task budget, the Executive's deliberations; each made on first use.
     'autonomy_pursuit_events', 'autonomy_pursuit_marks', 'fca_task_budget', 'executive_deliberations',
+    // 2026-10-14: the operator's append-only audit (execution/012), made when SHANNON_OPERATOR_MINECRAFT is first on.
+    'operator_audit',
   ]),
 });
 

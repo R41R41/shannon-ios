@@ -110,9 +110,17 @@ function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null
   return `${head}できごと`;
 }
 
+/** A lifecycle operation the operator asked for on his behalf (`operator.minecraft.<action>`): never one she accepted. */
+function operatorOutcomeLine(item: WorkspaceItem, ago: string, tool: string): string {
+  const head = `${NOTICE_MARKERS.task_outcome}${ago}、運用者がライ氏の代わりに頼んだ〈${tool}〉`;
+  if (item.detail?.reason === 'lifecycle_result_unknown') return `${head}は${RESULT_UNKNOWN_LINE}`;
+  return `${head}が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
+}
+
 /** A task's end; an accepted Minecraft lifecycle operation that never started says so, with its closed reason. */
 function taskOutcomeLine(item: WorkspaceItem, ago: string): string {
   const tool = item.detail?.tool ?? '作業';
+  if (tool.startsWith('operator.')) return operatorOutcomeLine(item, ago, tool.slice('operator.'.length));
   const notStarted = NOT_STARTED_WORD[item.detail?.reason ?? ''];
   if (notStarted) return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉を始められなかった（${notStarted}）`;
   if (item.detail?.reason === 'lifecycle_result_unknown') return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉は${RESULT_UNKNOWN_LINE}`;
