@@ -6,6 +6,12 @@ import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts
 export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   maximumNativeCharacters: 64_000, maximumRounds: 24, recentRounds: 6,
   maximumSummaryCharacters: 32_000, maximumBatches: 8,
+  // Inline tool definitions are rebuilt from the catalog and sit in the cached prefix; a Minecraft body's 77 skills alone are
+  // about 46,000 characters (Minebot lane 2026-10-14, task ecf64b3e failed its second step on them). Their own bound keeps
+  // repeated selection changes from growing the request without limit; past it the round is compacted like any other.
+  maximumToolDefinitionCharacters: 160_000,
+  // Both together stay below about 100k tokens, Haiku's next price step (review P3-1).
+  maximumReplayCharacters: 200_000,
 });
 function policyOf(overrides: Partial<FcaHistoryPolicy>): FcaHistoryPolicy {
   const policy = { ...FCA_HISTORY_POLICY, ...overrides };
@@ -17,7 +23,8 @@ const size = (value: unknown): number => JSON.stringify(value).length;
 
 /**
  * Every covered native round appears in the summary input, whole and in original order; only a round longer than the summary input by
- * itself has its longest texts shortened there, with the cut marked (`clippedRound`). Native history is never cut.
+ * itself has its longest texts shortened there, with the cut marked (`clippedRound`). Stored native history is never cut; a newest
+ * round too long by itself is replayed for its next step as a clipped public epoch (`clippedReplay`).
  */
 export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec,
   overrides: Partial<FcaHistoryPolicy> = {}): FcaHistoryPlan {
@@ -36,42 +43,75 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
     ...window.summary ? codec.bootstrap(window.summary.bootstrapText) : [],
     ...window.rounds.filter(round => round.sequence > (window.summary?.resetThroughSequence ?? 0)).flatMap(round => [...round.entries]),
   ];
-  if (window.rounds.length <= policy.maximumRounds && size(history) <= policy.maximumNativeCharacters) {
+  if (window.rounds.length <= policy.maximumRounds && replayFits(history, codec, policy)) {
     const summary = window.summary?.template ?? null;
     return { kind: 'ready', replay: { history, summary, summaryText: summary ? renderedCompaction(summary, 'text') : '' } };
   }
   // The newest rounds stay native; when they alone are too long (a research round's web results are 30,000–40,000 characters:
   // owner test 2026-10-13, two rounds of 41,554 and 33,778 left the task unknown with FCA_HISTORY_RECENT_LIMIT), fewer stay,
-  // down to the newest one. Only a newest round too long by itself still holds.
+  // down to the newest one. A newest round too long by itself is replayed clipped (`clippedReplay`).
   const recent = Math.min(policy.recentRounds, projected.length - 1);
   const eligible = recent > 0 ? projected.slice(0, -recent) : [];
-  if (!eligible.length) throw new Error('FCA_HISTORY_RECENT_LIMIT');
+  if (!eligible.length) return clippedReplay(window.summary?.template ?? null, projected.at(-1), codec, policy);
   const input = summaryInput(eligible, window.summary?.template ?? null, policy.maximumSummaryCharacters);
   if (!input.rounds.length) throw new Error('FCA_HISTORY_ROUND_LIMIT');
   return { kind: 'compact', input, request: { baseRevision: window.revision, sourceRevision: window.sourceRevision,
     tailSequence: window.tailSequence, sequences: input.rounds.map(round => round.sequence), retained: projected.slice(input.rounds.length) } };
 }
 
+/**
+ * Whether the replay fits its bounds. It is replayed byte for byte either way; only what each part is measured against differs:
+ * inline tool definitions (`reproducible`) apart from the rest, and both together (review P3-1).
+ */
+function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy: FcaHistoryPolicy): boolean {
+  const definitional = (entry: unknown) => codec.reproducible?.(entry) === true;
+  const native = size(history.filter(entry => !definitional(entry))), definitions = size(history.filter(definitional));
+  return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
+    && native + definitions <= policy.maximumReplayCharacters;
+}
+
 /** The shortest any message of a clipped round becomes: enough to say what it was. */
 const CLIPPED_MESSAGE_CHARACTERS = 400;
 type ProjectedRound = { sequence: number; stepId: string; messages: CompactionMessage[] };
+const SUMMARY_CUT = (omitted: number) => `…（要約用に後略: ${omitted}字）`;
+const REPLAY_CUT = (omitted: number) => `…（長いため後略: ${omitted}字）`;
 
 /**
- * One round for the summary input with its longest texts cut (the end marked) until the input fits, or null when it cannot.
- * Every message stays, with its id, role and call id.
+ * One round with its longest texts cut (the end marked) until `measure` fits `maximum`, or null when it cannot.
+ * Every message stays, with its id, role and call id, so each tool call keeps its result.
  */
-function clippedRound(round: ProjectedRound, previous: unknown, maximum: number): ProjectedRound | null {
+function clippedRound(round: ProjectedRound, measure: (round: ProjectedRound) => number, maximum: number,
+  marker: (omitted: number) => string): ProjectedRound | null {
   const messages = round.messages.map(message => ({ ...message }));
-  const over = () => size({ previous, rounds: [{ ...round, messages }] }) - maximum;
+  const over = () => measure({ ...round, messages }) - maximum;
   for (let guard = 0; guard < messages.length * 4 && over() > 0; guard++) {
     const longest = messages.reduce((best, message) => message.content.length > best.content.length ? message : best);
     if (longest.content.length <= CLIPPED_MESSAGE_CHARACTERS) return null;
     let keep = Math.max(CLIPPED_MESSAGE_CHARACTERS, longest.content.length - over() - 64);
     // Never between the halves of a surrogate pair (review of 1a647abc).
     if (/[\uD800-\uDBFF]/u.test(longest.content[keep - 1] ?? '')) keep -= 1;
-    longest.content = `${longest.content.slice(0, keep)}…（要約用に後略: ${longest.content.length - keep}字）`;
+    longest.content = `${longest.content.slice(0, keep)}${marker(longest.content.length - keep)}`;
   }
   return over() > 0 ? null : { ...round, messages };
+}
+
+/**
+ * The newest round alone is longer than the native budget and nothing older can be summarized (Minebot lane 2026-10-14: a
+ * Minecraft task's first round, with its observation, never reached a second step). This step replays a fresh public epoch
+ * instead: the existing summary, if any, and that round's public transcript with its longest texts cut and marked. Signed
+ * blocks never enter a changed prefix and nothing is stored: the original round stays whole in the history, the replay is
+ * rebuilt identically while it stays the newest, and the next step's ordinary compaction covers it. The task's goal and
+ * completion criteria are not in this history; each decision states them again in its own message.
+ */
+function clippedReplay(previous: FcaHistorySummaryInput['previous'], newest: ProjectedRound | undefined, codec: FcaHistoryCodec,
+  policy: FcaHistoryPolicy): FcaHistoryPlan {
+  if (!newest) throw new Error('FCA_HISTORY_RECENT_LIMIT');
+  const replayOf = (round: ProjectedRound) => codec.bootstrap(JSON.stringify({ kind: 'fca_public_history', summary: previous, rounds: [round] }));
+  const clipped = clippedRound(newest, round => size(replayOf(round)), policy.maximumNativeCharacters, REPLAY_CUT);
+  if (!clipped) throw new Error('FCA_HISTORY_RECENT_LIMIT');
+  const clippedMessages = clipped.messages.filter((message, index) => message.content !== newest.messages[index]!.content).length;
+  return { kind: 'ready', replay: { history: replayOf(clipped), summary: previous,
+    summaryText: previous ? renderedCompaction(previous, 'text') : '', clippedMessages } };
 }
 
 /** The oldest eligible rounds that fit the summary input, in order. */
@@ -84,7 +124,8 @@ function summaryInput(eligible: readonly ProjectedRound[], previous: FcaHistoryS
     }
     // The oldest round alone is longer than the summary input: it is still covered whole (every message, in order), its longest
     // texts shortened for the summary only. The native round itself is replaced by the summary, as any compacted round is.
-    const clipped = input.rounds.length ? null : clippedRound(round, previous, maximum);
+    const clipped = input.rounds.length ? null
+      : clippedRound(round, candidate => size({ previous, rounds: [candidate] }), maximum, SUMMARY_CUT);
     if (clipped) input.rounds.push(clipped);
     break;
   }
@@ -108,6 +149,8 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     const plan = planFcaHistory(window, ports.codec, policy);
     if (plan.kind === 'ready') {
       if (batches > 0) observerHandoff('compact', 'context', { phase: 'history_replay', compactedBatches: batches });
+      const clippedMessages = plan.replay.clippedMessages;
+      if (clippedMessages !== undefined) observerHandoff('fca', 'context', { phase: 'history_clipped', clippedMessages });
       return plan.replay;
     }
     if (!ports.summarizer) throw new Error('FCA_HISTORY_SUMMARIZER_REQUIRED');

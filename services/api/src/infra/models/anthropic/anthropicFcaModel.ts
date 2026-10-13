@@ -122,6 +122,7 @@ export class AnthropicFcaModel implements FcaModel {
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
       }) };
     }, value => observedFcaRequest(value.body), { model: this.model });
+    logRequestSize(this.model, history, body);
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     try {
@@ -223,6 +224,16 @@ function observedFcaRequest(body: Anthropic.MessageCreateParamsNonStreaming) {
 function observedFcaResponse(message: Anthropic.Message) {
   const { stopReason, usage } = observedAnthropicResponse(message);
   return { stopReason, usage, selectedTools: message.content.flatMap(block => block.type === 'tool_use' ? [observedFcaToolName(block.name)] : []) };
+}
+
+/**
+ * The sizes of each FCA request, content-free, so that history plus tool definitions cannot pass the provider's next price step
+ * unnoticed (review P3-1): characters of the replayed history, of its inline tool definitions, and of the whole request.
+ */
+function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming): void {
+  const definitions = history.filter(message => isFcaToolChangeMessage(message as unknown as Record<string, unknown>));
+  console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
+    toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length }));
 }
 
 function nativeHistory(history: readonly unknown[]): Anthropic.MessageParam[] {

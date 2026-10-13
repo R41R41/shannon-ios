@@ -34,6 +34,8 @@ export interface AutonomyPlannedStep {
   call?: true;
   /** For `reach_out` with `follow_up`: the initiative id of the message that got no answer. */
   originId?: string;
+  /** For `reach_out`: the key of a moment she perceived and wanted to speak of (owner decision 2026-10-14, `proactiveMoments.ts`). */
+  moment?: string;
   /** For `think`: a thinking step after something happened in this cycle, with what happened in front of her. */
   again?: true;
   /** For `look`: chosen after a message of hers got no answer; she thinks once more with what she saw. */

@@ -6,7 +6,7 @@
  * Closed symbols, ids and instants only: never a word of the owner's or of hers. What a row is about is named by its kind and
  * code (and, for a withheld action, the closed tool and reason of `withheldActionContract.ts`).
  */
-export const MIND_INBOX_KINDS = ['own_time_step', 'task_outcome', 'promise_due', 'notice'] as const;
+export const MIND_INBOX_KINDS = ['own_time_step', 'task_outcome', 'promise_due', 'notice', 'moment'] as const;
 export type MindInboxKind = typeof MIND_INBOX_KINDS[number];
 
 /** Who could see or hear her when it happened, as the process that writes the row knew it. */
@@ -17,12 +17,14 @@ export type MindInboxAudience = typeof MIND_INBOX_AUDIENCES[number];
 export const MIND_INBOX_SOURCES = ['own_time', 'worker', 'api'] as const;
 export type MindInboxSource = typeof MIND_INBOX_SOURCES[number];
 
-/** The codes of each kind: a step of her own time and how it ended; a task's end; a promise's due time; a notice. */
+/** The codes of each kind: a step of her own time and how it ended; a task's end; a promise's due time; a notice; a moment. */
 export const MIND_INBOX_CODES: Readonly<Record<MindInboxKind, readonly string[]>> = Object.freeze({
   own_time_step: Object.freeze(['done', 'failed']),
   task_outcome: Object.freeze(['done', 'failed', 'cancelled']),
   promise_due: Object.freeze(['due']),
   notice: Object.freeze(['withheld']),
+  // A moment her own time perceived of the owner (owner decision 2026-10-14, `mind/attention/proactiveMoments.ts`).
+  moment: Object.freeze(['owner_returned', 'long_quiet', 'morning', 'late_night', 'awaiting_reaction']),
 });
 
 export interface MindInboxDraft {
@@ -36,7 +38,7 @@ export interface MindInboxDraft {
   tool?: string | null;
   /** A closed reason code (a withheld reason of `withheldActionContract.ts`), when there is one. */
   reason?: string | null;
-  /** Minutes from a promise's due time (negative before it), for `promise_due`. */
+  /** Minutes from a promise's due time (negative before it), for `promise_due`; for a `moment`, the minutes he was away or quiet. */
   deltaMinutes?: number | null;
   /** A reference the workspace may re-read through the withholding and the disclosure gate (`experience:<id>`), never text. */
   ref?: string | null;

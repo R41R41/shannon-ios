@@ -165,7 +165,7 @@ export class InnerNoteService implements InnerNotePort {
     if (state.tries >= SETTLE_TRIES) {
       this.dependencies.log?.('inner_note_settle_gave_up');
       this.settling.delete(note.id);
-      return this.markClosed(scopeKey, at);
+      return this.endEpisode(scopeKey, note, at);
     }
     if (this.settling.size >= 64) this.settling.clear();
     this.settling.set(note.id, { tries: state.tries + 1, nextAt: Date.parse(at) + 2 ** (state.tries + 1) * 60_000 });
@@ -222,6 +222,18 @@ export class InnerNoteService implements InnerNotePort {
     if (!written) this.markClosed(scopeKey, at);
   }
 
+  /**
+   * N8: her sulk ends in code after its settling failed: one row of the same day, calm (intent none, no until, nothing shown), marked
+   * `endedByCode`; the day goes on (its id, its apologies, its summary). Readers give its words only as what she felt a while ago.
+   */
+  private endEpisode(scopeKey: string, note: StoredInnerNote, at: string): void {
+    this.dependencies.store.append({ scopeKey, dayId: note.dayId, dayKey: note.dayKey, dayEndsAt: note.dayEndsAt, text: note.text,
+      hooks: { ...note.hooks, shown: 'neutral', tell: 'none', until: null, intent: 'none' }, triggers: ['until'], events: [], sourceIds: note.sourceIds,
+      flags: { endedByCode: true }, changeReason: null, summary: null, coreVersion: CHARACTER_CORE.version, coreHash: CHARACTER_CORE.hash,
+      episodeStartedAt: null, usage: null, elapsedMs: 0, createdAt: at, closing: false });
+    this.latestCache.delete(scopeKey);
+  }
+
   private markClosed(scopeKey: string, at: string): void {
     this.dependencies.store.markClosed(scopeKey, at);
     this.latestCache.delete(scopeKey);
@@ -275,8 +287,8 @@ export class InnerNoteService implements InnerNotePort {
     const settled = settleInnerNote({ draft, previous, triggers, at, dayEndsAt: day.dayEndsAt, holding: holding(snapshot, at),
       visibleFrom: SHANNON_EMOTION_CONTINUITY.visibleFrom });
     this.dependencies.store.append({ scopeKey, ...day, text: draft.text, hooks: settled.hooks, triggers, events,
-      sourceIds: lineage([...entries.map(entry => entry.source), ...recent.map(line => line.sourceId)], previous, previous ? null : yesterday,
-        closing && yesterday ? { yesterday: yesterday.sourceIds } : null), flags: settled.flags, changeReason: draft.changeReason,
+      sourceIds: lineage([...entries.map(entry => entry.source), ...recent.map(line => line.sourceId)], previous, previous ? null : summarySources(yesterday),
+        closing && yesterday ? { yesterday: summarySources(yesterday)!.sourceIds } : null), flags: settled.flags, changeReason: draft.changeReason,
       summary: closing ? draft.summary : null, coreVersion: CHARACTER_CORE.version, coreHash: CHARACTER_CORE.hash, episodeStartedAt: settled.episodeStartedAt,
       usage, elapsedMs: performance.now() - started, createdAt: at, closing: closing !== null });
     this.latestCache.delete(scopeKey);
@@ -359,4 +371,9 @@ function observed(note: StoredInnerNote | null, previous: StoredInnerNote | null
   return { written: true, intent: { from: previous?.hooks.intent ?? null, to: note.hooks.intent }, shown: note.hooks.shown, tell: note.hooks.tell,
     scale: note.hooks.scale, until: note.hooks.until, closed: note.closedAt !== null, flags: Object.keys(note.flags),
     costUsd: note.usage?.costUsd ?? null, cacheReadTokens: note.usage?.cacheReadTokens ?? null, elapsedMs: note.elapsedMs };
+}
+
+/** A day summary as a source: its own sources and the note itself (`note:<id>`), so that deleting the summary takes what read it (N6). */
+function summarySources(summary: { id: string; sourceIds: readonly string[] } | null): { sourceIds: readonly string[] } | null {
+  return summary ? { sourceIds: [...summary.sourceIds, `note:${summary.id}`] } : null;
 }

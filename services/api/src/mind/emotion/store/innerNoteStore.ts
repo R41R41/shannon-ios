@@ -131,11 +131,11 @@ export class SQLiteInnerNoteStore {
   }
 
   /** The summary of the last day she closed (something that happened; never an attitude to carry on), with its sources (lineage). */
-  lastClosedSummary(scopeKey: string): { summary: string; closedAt: string; sourceIds: readonly string[] } | null {
-    const row = this.database.prepare(`SELECT summary, closed_at, source_ids_json FROM shannon_inner_notes WHERE scope_key = ? AND closed_at IS NOT NULL
-      AND summary IS NOT NULL ORDER BY sequence DESC LIMIT 1`).get(scopeKey) as Row | undefined;
+  lastClosedSummary(scopeKey: string): { id: string; summary: string; closedAt: string; sourceIds: readonly string[] } | null {
+    const row = this.database.prepare(`SELECT note_id, summary, closed_at, source_ids_json FROM shannon_inner_notes WHERE scope_key = ?
+      AND closed_at IS NOT NULL AND summary IS NOT NULL ORDER BY sequence DESC LIMIT 1`).get(scopeKey) as Row | undefined;
     return row && typeof row.summary === 'string' && typeof row.closed_at === 'string'
-      ? { summary: row.summary, closedAt: row.closed_at, sourceIds: parsedJson<string[]>(row.source_ids_json, []) } : null;
+      ? { id: text(row.note_id), summary: row.summary, closedAt: row.closed_at, sourceIds: parsedJson<string[]>(row.source_ids_json, []) } : null;
   }
 
   /** A source known later by its stored id (a voice turn's utterance, once the turn is stored as an experience). */
@@ -206,7 +206,7 @@ export class SQLiteInnerNoteStore {
   forget(scopeKey: string, forgotten: (note: StoredInnerNote) => boolean): number {
     const rows = this.database.prepare(`SELECT ${COLUMNS} FROM shannon_inner_notes WHERE scope_key = ? ORDER BY sequence DESC LIMIT 2000`)
       .all(scopeKey) as Row[];
-    const doomed = rows.map(noteOf).filter(forgotten).map(note => note.id);
+    const doomed = cascade(rows.map(noteOf), forgotten);
     const remove = this.database.prepare('DELETE FROM shannon_inner_notes WHERE scope_key = ? AND note_id = ?');
     for (const id of doomed) remove.run(scopeKey, id);
     return doomed.length;
@@ -215,4 +215,22 @@ export class SQLiteInnerNoteStore {
   close(): void {
     if (this.owned && this.database.isOpen) this.database.close();
   }
+}
+
+/**
+ * The notes to delete when the owner forgets (N6): those `forgotten` names, every later note of the same day (each read the one
+ * before it, whatever its capped lineage still lists), and every note that read a deleted day's summary (`note:<id>`) with the rest
+ * of its day. One pass in the order they were written.
+ */
+function cascade(notes: readonly StoredInnerNote[], forgotten: (note: StoredInnerNote) => boolean): string[] {
+  const doomed = new Set<string>();
+  const fromDay = new Map<string, number>();
+  for (const note of [...notes].sort((left, right) => left.sequence - right.sequence)) {
+    const readDeleted = note.sourceIds.some(id => id.startsWith('note:') && doomed.has(id.slice('note:'.length)));
+    const afterDeleted = (fromDay.get(note.dayId) ?? Number.POSITIVE_INFINITY) <= note.sequence;
+    if (!readDeleted && !afterDeleted && !forgotten(note)) continue;
+    doomed.add(note.id);
+    if (!fromDay.has(note.dayId)) fromDay.set(note.dayId, note.sequence);
+  }
+  return [...doomed];
 }

@@ -1,5 +1,5 @@
 import {
-  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, visibleMemoryText,
+  apologyIn, goodnightIn, soothingIn, teasingIn, visibleMemoryText,
   type CompanionStateSnapshot, type InnerNoteEvent,
 } from '@shannon/cognition';
 import type { InnerNoteTurn } from './innerNotePorts.js';
@@ -16,7 +16,11 @@ import type { StoredInnerNote } from './store/innerNoteStore.js';
 /** At most this many sources on one note (N3): a day's own moments and the summary it read, never weeks of them. */
 export const LINEAGE_LIMIT = 64;
 
-interface ForgetIndex { key: string; ids: ReadonlySet<string>; any: boolean }
+/** The shortest quote of forgotten words that makes a note's words forgotten too (N9): a greeting is not a quote. */
+export const FORGOTTEN_QUOTE_MIN = 12;
+const QUOTE_EVIDENCE_LIMIT = 400;
+
+interface ForgetIndex { key: string; ids: ReadonlySet<string>; any: boolean; quotes: ReadonlySet<string> }
 const indexes = new WeakMap<CompanionStateSnapshot, ForgetIndex>();
 
 /**
@@ -27,15 +31,44 @@ export function forgetIndex(snapshot: CompanionStateSnapshot): ForgetIndex {
   const known = indexes.get(snapshot);
   if (known) return known;
   const controls = snapshot.memoryControls.filter(control => control.status !== 'active' || control.overrideText);
+  const gone = controls.filter(control => control.status !== 'active');
   const index = { key: controls.map(control => `${control.memoryId}:${control.status}:${control.updatedAt}`).join('|'),
-    ids: new Set(controls.filter(control => control.status !== 'active').map(control => control.memoryId)), any: controls.length > 0 };
+    ids: new Set(gone.map(control => control.memoryId)), any: controls.length > 0, quotes: forgottenQuotes(snapshot, gone) };
   indexes.set(snapshot, index);
   return index;
 }
 
 /** Whether words (his, hers, a note's own) may still be read: none of them is the evidence of a forgotten or corrected item. */
 function wordsVisible(snapshot: CompanionStateSnapshot, words: readonly (string | null | undefined)[]): boolean {
-  return !forgetIndex(snapshot).any || words.every(text => !text || isMemoryEvidenceVisible(snapshot, text));
+  const { quotes } = forgetIndex(snapshot);
+  return quotes.size === 0 || words.every(text => !text || !quotesIn(normalized(text), quotes));
+}
+
+const normalized = (value: string): string => value.replace(/[\s。、！？!?「」]/gu, '');
+
+/** Whether a text contains a forgotten quote: any window of `FORGOTTEN_QUOTE_MIN` characters it shares with a forgotten item's evidence. */
+function quotesIn(text: string, quotes: ReadonlySet<string>): boolean {
+  for (let start = 0; start + FORGOTTEN_QUOTE_MIN <= text.length; start += 1) if (quotes.has(text.slice(start, start + FORGOTTEN_QUOTE_MIN))) return true;
+  return false;
+}
+
+/**
+ * The windows of the evidence of what the owner had her forget or rejected (N9): only those (a correction keeps its moment), each
+ * evidence its first `QUOTE_EVIDENCE_LIMIT` characters, and none shorter than `FORGOTTEN_QUOTE_MIN`.
+ */
+function forgottenQuotes(snapshot: CompanionStateSnapshot, gone: CompanionStateSnapshot['memoryControls']): Set<string> {
+  const goneIds = new Set(gone.map(control => control.memoryId));
+  const blocked = (id: string | undefined) => Boolean(id && goneIds.has(id));
+  const evidence = [...gone.flatMap(control => [control.sourceEvidence,
+    snapshot.userFacts.find(item => item.id === control.memoryId)?.evidence,
+    snapshot.relationships.find(item => item.id === control.memoryId)?.evidence]),
+  ...snapshot.prospectiveMemories.filter(memory => blocked(memory.id) || blocked(memory.sourceExperienceId)).map(memory => memory.evidence ?? memory.summary)];
+  const quotes = new Set<string>();
+  for (const text of evidence) {
+    const quote = normalized(text ?? '').slice(0, QUOTE_EVIDENCE_LIMIT);
+    for (let start = 0; start + FORGOTTEN_QUOTE_MIN <= quote.length; start += 1) quotes.add(quote.slice(start, start + FORGOTTEN_QUOTE_MIN));
+  }
+  return quotes;
 }
 
 /** Whether an event's words (his, hers, her line after a touch) may still be read. */
@@ -69,7 +102,10 @@ export function lineage(own: readonly (string | undefined)[], previous: Pick<Sto
   yesterday: { sourceIds: readonly string[] } | null, closing: { yesterday: readonly string[] } | null = null): string[] {
   const all = [...previous?.sourceIds ?? [], ...yesterday?.sourceIds ?? [], ...own.filter((id): id is string => Boolean(id))];
   const dropped = new Set(closing?.yesterday ?? []);
-  return [...new Set(all.filter(id => !dropped.has(id)))].slice(-LINEAGE_LIMIT);
+  const kept = [...new Set(all.filter(id => !dropped.has(id)))];
+  // The summary it read (`note:<id>`) stays whatever else is capped: deleting that summary deletes what read it (N6).
+  const notes = kept.filter(id => id.startsWith('note:'));
+  return [...notes, ...kept.filter(id => !id.startsWith('note:')).slice(-(LINEAGE_LIMIT - notes.length))];
 }
 
 /**

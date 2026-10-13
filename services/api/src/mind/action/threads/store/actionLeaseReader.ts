@@ -115,6 +115,21 @@ export class ActionLeaseReader {
       .map(row => ({ id: String(row.source_id), result: String(row.result), at: String(row.updated_at) }));
   }
 
+  /**
+   * The lifecycle operations of the scope that ran under their own Minecraft action and left `unknown` at its one exit
+   * (`outcome_unknown_closed`) with no accepted receipt, newest first, at most 50: id, action and the time of the exit.
+   */
+  unknownExitedLifecycle(scopeKey: string): Array<{ id: string; action: string; at: string }> {
+    const tables = this.db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
+      AND name IN ('mind_actions','minecraft_lifecycle_operations')`).get();
+    if (Number(tables?.count) !== 2) return [];
+    return this.db.prepare(`SELECT o.id,json_extract(o.command_json,'$.action') AS action,a.updated_at FROM minecraft_lifecycle_operations o
+      JOIN mind_actions a ON a.id=o.execution_id WHERE a.scope_key=? AND a.kind='minecraft' AND a.source_id=o.id AND a.state='unknown'
+      AND a.result='outcome_unknown_closed' AND (o.receipt_json IS NULL OR json_extract(o.receipt_json,'$.outcome')='unknown')
+      ORDER BY a.updated_at DESC LIMIT 50`).all(scopeKey)
+      .map(row => ({ id: String(row.id), action: String(row.action), at: String(row.updated_at) }));
+  }
+
   /** Whether the action left `unknown` at its one exit (ADR-0009 D2, S5): its slot is free and nothing of it is resent. */
   unknownExited(id: string): boolean {
     const tables = this.db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='mind_actions'").get();

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
-import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecycleReceipt, MinecraftLifecycleRequest, MinecraftLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
+import { MINECRAFT_LIFECYCLE_ACTIONS, validLifecyclePoll, type MinecraftLifecycleCommand, type MinecraftLifecyclePoll, type MinecraftLifecycleReceipt,
+  type MinecraftLifecycleRequest, type MinecraftLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycle } from '../src/surfaces/minecraft/minecraftLifecycle.js';
 import { MinecraftLifecycleStore } from '../src/surfaces/minecraft/store/minecraftLifecycleStore.js';
 
@@ -155,3 +156,72 @@ describe('Minecraft lifecycle operator authority and receipts', () => {
     expect(JSON.stringify(f.db.prepare('SELECT * FROM minecraft_lifecycle_snapshot').all())).not.toContain('ownerUuid');
   });
 });
+
+/** The body's contract for `set_day` (Minebot lane, body ea1ef4ce, 2026-10-14): fixed `time set day` over private RCON. */
+describe('set_day receipts', () => {
+  const running = (f: ReturnType<typeof fixture>) => f.poll({ states: [f.state({ running: 'running', bot: 'joined' })] });
+  const day = (f: ReturnType<typeof fixture>, patch: Partial<MinecraftLifecycleReceipt> = {}) => {
+    const observedAt = new Date().toISOString();
+    return f.receipt({ action: 'set_day', observedAt, state: f.state({ running: 'running', bot: 'joined', otherPlayers: 0, observedAt }), ...patch });
+  };
+  it('is a lifecycle action of the contract and the operator receives it as such', async () => {
+    expect(MINECRAFT_LIFECYCLE_ACTIONS).toContain('set_day');
+    const f = fixture(); f.service.poll(f.principal, running(f));
+    const result = f.service.execute({ ...f.request, action: 'set_day' });
+    expect(f.service.poll(f.principal, running(f)).commands.map(command => command.action)).toEqual(['set_day']);
+    expect(validLifecyclePoll(running(f), Date.now())).toBe(true);
+    f.service.poll(f.principal, running(f));
+    expect(f.service.poll(f.principal, f.poll({ states: [f.state({ running: 'running' })], receipts: [day(f)] })).acknowledged).toEqual(['operation']);
+    expect(await result).toMatchObject({ action: 'set_day', outcome: 'completed', code: 'changed', state: { running: 'running' } });
+    expect(f.service.safe('execution')).toBe(true);
+  });
+  it('accepts completion only as changed on a running server without a stop guard', async () => {
+    const f = fixture(); f.service.poll(f.principal, running(f));
+    const result = f.service.execute({ ...f.request, action: 'set_day' });
+    f.service.poll(f.principal, running(f));
+    const at = new Date().toISOString();
+    const guard = { admissionClosed: true as const, otherPlayers: 0 as const, checkedAt: at };
+    for (const invalid of [day(f, { state: f.state({ running: 'stopped', observedAt: at }) }), day(f, { state: f.state({ running: 'unknown', observedAt: at }) }),
+      day(f, { code: 'already_running' }), day(f, { stopGuard: guard }), day(f, { inputsReleased: false })]) {
+      expect(f.service.poll(f.principal, f.poll({ states: [f.state({ running: 'running' })], receipts: [invalid] })).acknowledged).toEqual([]);
+    }
+    expect(f.service.poll(f.principal, f.poll({ states: [f.state({ running: 'running' })], receipts: [day(f)] })).acknowledged).toEqual(['operation']);
+    expect((await result).code).toBe('changed');
+  });
+  it('settles refused/players_present as a known refusal that releases the operation', async () => {
+    const f = fixture(); f.service.poll(f.principal, running(f));
+    const result = f.service.execute({ ...f.request, action: 'set_day' });
+    f.service.poll(f.principal, running(f));
+    const at = new Date().toISOString();
+    const refused = day(f, { outcome: 'refused', code: 'players_present', state: f.state({ running: 'running', otherPlayers: 2, observedAt: at }) });
+    expect(f.service.poll(f.principal, f.poll({ states: [f.state({ running: 'running' })], receipts: [refused] })).acknowledged).toEqual(['operation']);
+    expect(await result).toMatchObject({ outcome: 'refused', code: 'players_present' });
+    expect(f.service.safe('execution')).toBe(true);
+  });
+  it('holds an RCON error or unexpected reply (unknown, inputs not released) as unknown, never resent', async () => {
+    const f = fixture(); f.service.poll(f.principal, running(f));
+    const result = f.service.execute({ ...f.request, action: 'set_day' }).catch(error => (error as Error).message);
+    f.service.poll(f.principal, running(f));
+    const unknown = day(f, { outcome: 'unknown', code: 'error', inputsReleased: false });
+    f.service.poll(f.principal, f.poll({ states: [f.state({ running: 'running' })], receipts: [unknown] }));
+    expect(await result).toBe('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');
+    expect(f.service.safe('execution')).toBe(false);
+    expect(f.service.poll(f.principal, running(f)).commands).toEqual([]);
+    await expect(f.service.execute({ ...f.request, action: 'set_day' })).rejects.toThrow('UNKNOWN');
+  });
+  it('turns a body that drops set_day without a receipt (one predating it) into unknown at its deadline, not a wait', async () => {
+    const f = fixture();
+    const service = new MinecraftLifecycle(f.store, f.configuration, { ...f.options, waitMilliseconds: 30 });
+    service.poll(f.principal, running(f));
+    const result = service.execute({ ...f.request, action: 'set_day' }).catch(error => (error as Error).message);
+    expect(service.poll(f.principal, running(f)).commands.map(command => command.action)).toEqual(['set_day']);
+    // The old body polls on and never answers; after the deadline the command is cancelled and its outcome is unknown.
+    const deadline = Date.now() + 2_000;
+    let outcome: string | undefined;
+    void result.then(value => { outcome = value as string; });
+    while (outcome === undefined && Date.now() < deadline) { await new Promise(resolve => setTimeout(resolve, 5)); service.poll(f.principal, running(f)); }
+    expect(outcome).toBe('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');
+    expect(service.safe('execution')).toBe(false);
+  });
+});
+

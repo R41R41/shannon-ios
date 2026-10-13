@@ -99,6 +99,8 @@ export interface InnerNoteFlags {
   apologyOnlyReason?: true;
   /** An ordinary sulk reached an hour from its start: it ended there, whatever the draft said (D4, the owner's safety bound). */
   capEnded?: true;
+  /** Written by the server, not by her: her settling reflection kept failing, and the sulk ended in code (its words are the last note's). */
+  endedByCode?: true;
 }
 
 /** A note as stored and read. */
@@ -428,7 +430,7 @@ export function innerNoteTurnBlock(note: InnerNote | null, audience: 'owner' | '
   pending: readonly InnerNoteEvent[] = [], timeZone = 'Asia/Tokyo'): string {
   if (!note || !innerNoteCurrent(note, at) || audience === 'guest') return '';
   if (audience === 'others') return innerNoteActive(note, at) ? `[いまの見せ方]（ほかの人もいる場）見せる気持ち: ${note.hooks.shown}` : '';
-  if (innerNoteExpired(note, at)) return pastNoteBlock(note, timeZone);
+  if (innerNoteExpired(note, at) || note.flags.endedByCode) return pastNoteBlock(note, timeZone);
   const span = horizon(note, timeZone);
   return [
     `[心のメモ]（${localClock(note.createdAt, timeZone)}にボクが自分で書いた独白。いまの自分の気持ち）`,
@@ -443,7 +445,7 @@ export function innerNoteTurnBlock(note: InnerNote | null, audience: 'owner' | '
 export function innerNoteTouchBlock(note: InnerNote | null, audience: 'owner' | 'others', at: string, timeZone = 'Asia/Tokyo'): string {
   if (!note || !innerNoteCurrent(note, at)) return '';
   if (audience === 'others') return innerNoteActive(note, at) ? `[いまの見せ方]（ほかの人もいる場）見せる気持ち: ${note.hooks.shown}` : '';
-  if (innerNoteExpired(note, at)) return pastNoteBlock(note, timeZone);
+  if (innerNoteExpired(note, at) || note.flags.endedByCode) return pastNoteBlock(note, timeZone);
   const span = horizon(note, timeZone);
   return ['[心のメモ]（さっき自分で書いた独白。いまの自分の気持ち）', `- 本音: ${note.text.honne}`, `- 建て前: ${note.text.tatemae}`,
     `- つもり: ${note.text.plan}${span ? `（${span}）` : ''}`].join('\n');
@@ -460,7 +462,7 @@ function pastNoteBlock(note: InnerNote, timeZone: string): string {
 
 /** Jev's one English line (D5.4, `voice_route.v3`): only while a note is current and not run out; ASCII only. */
 export function innerNoteRouteSummary(note: InnerNote | null, at: string): string | undefined {
-  if (!note || !innerNoteCurrent(note, at) || innerNoteExpired(note, at)) return undefined;
+  if (!note || !innerNoteCurrent(note, at) || innerNoteExpired(note, at) || note.flags.endedByCode) return undefined;
   const plain = asciiRouteSummary(note.hooks.routeSummary);
   return plain || undefined;
 }

@@ -26,7 +26,9 @@ export function prepareShowing(dependencies: StepDependencies, cycle: AutonomyLo
       const sent = told === 'sent' || told === 'already-told';
       return {
         outcome: 'done', link: `shannon-study://${piece.id}`, tool: sent ? 'study.show' : 'study.ready',
-        summary: sent ? `物語「${clip(ready.title, 60)}」を持ち主に見せました。`
+        summary: sent ? `物語「${clip(ready.title, 60)}」をライ氏に見せました。`
+          // Owner decision 2026-10-14: readable in his study list, not announced, not marked shown (it stays waiting for his reading).
+          : told === 'unannounced' ? `物語「${clip(ready.title, 60)}」をライ氏が読めるようにしました（知らせてはいません）。`
           : `物語「${clip(ready.title, 60)}」を「見せてもいい」にしました。知らせるのは、あとにします（${waitingReason(told)}）。`,
         // Syzygy ADR-0008 stage 1: whether and how the owner reacts is predicted when he is told (`StudyDesk.react` settles it).
         commit: (_remaining, commitAt) => { if (sent) { store.study.markShown(cycle.scopeKey, piece.id, commitAt); dependencies.prediction?.shown?.(cycle.scopeKey, { id: piece.id, revised }, commitAt); } },

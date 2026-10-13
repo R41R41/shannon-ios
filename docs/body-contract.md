@@ -4,7 +4,7 @@ What Shannon's body must send and may read. The body is the Live2D desktop appli
 
 Everything here is additive: routes and tables are only added. Two changes of 2026-10-02 alter what an existing message does: a touch event now moves her feeling and is remembered (see [When she is touched](#when-she-is-touched)), and her capability description gained one line about her body (since 2026-10-06 ending 「体は自分のもの。触れられ方は自分で受け取る。」, Syzygy ADR-0005 owner answer 7). A change of 2026-10-05 alters one more: `callStarted` / `callEnded` from a body that only feels touch are stored instead of answering `ignored` / `touch_only`, and her voice requests may be refused with `409 OWNER_IN_CALL_ELSEWHERE` (see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)).
 
-The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`), **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`), and **says what it did with a message she started on her own** (`POST /v1/body/reach-outs/{id}/delivery`). It also **asks whether she says something when she is touched** (`POST /v1/body/reactions`). The server never calls the body and never generates a reply because of an event. Two routes call a model: the answer to a look, and a reaction to a touch; no other route here does.
+The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads the retired fixed lines**, which are always empty now (`GET /v1/body/nudges`, owner decision 2026-10-14), **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`), and **says what it did with a message she started on her own** (`POST /v1/body/reach-outs/{id}/delivery`). It also **asks whether she says something when she is touched** (`POST /v1/body/reactions`). The server never calls the body and never generates a reply because of an event. Two routes call a model: the answer to a look, and a reaction to a touch; no other route here does.
 
 ## Transport
 
@@ -115,7 +115,7 @@ What the server returns to the body is safe to show to others unless marked:
 
 - `presence` carries the feeling's face and strength, never its cause. The cause is conversation text and stays in the app.
 - `presence` carries how many stories await a reaction, never a title or text.
-- A nudge with `audience: owner` must not be shown while a stream is live or someone else is present.
+- A nudge with `audience: owner` must not be shown while a stream is live or someone else is present (the route answers none since 2026-10-14).
 
 ## `GET /v1/body/presence`
 
@@ -204,6 +204,7 @@ What the body must do:
 - `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
 - After showing a message, or deciding not to, report what happened once: see [What the body did with her message](#what-the-body-did-with-her-message).
 - Added 2026-10-02, and nothing for the body to do: while one of the owner's apps is privately listening (his sound comes out of registered earphones or wired headphones), that app says her message through his earphones instead, and the message is then absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives. Exactly one surface says a message. A body that reports `away`, `hidden` or `muted` gives the message back so that such an app may still say it. See `docs/private-listening-contract.md`.
+- Added 2026-10-14 (**a body's spoken delivery**, `services/api/src/surfaces/outreach/initiativeFreshness.ts`, `SHANNON_BODY_INITIATIVE_FRESHNESS`, default on): a body asks for it on its own poll with `GET /v1/initiatives?scopeKey=…&for=body`. Without the marker the answer is the list as it always was, for every client (the Windows desk shares the body's device id), and `POST /v1/initiatives/read` marks read as it always did. With the marker, each unread initiative other than her own messages is judged again at the moment of saying: what is past the proactive gate's own intent expiry (a story she shows and a goal 75 minutes, a topic of the world 150 minutes) and a morning brief outside its own morning (07:00–10:00) are left out (they stay unread text in the Talk and the apps; they are not rephrased); a budget request (a system request, not her speech), a goal's state (neutral text) and a topic of the world that does not carry her own words come with `"spoken": false`: show them as a bubble and never say them aloud. Due promises, a look's answer and her own messages are not judged here.
 - Added 2026-10-03, and nothing for the body to do: she may choose to phone the owner's iPhone with a message instead of writing it (`docs/incoming-call-contract.md`). Such a message is the call's from the moment she asks: it is absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives, also after he declined or did not answer. Only a call that could not ring gives the message back. Nothing rings for an ordinary message of hers, which reaches the body as before.
 
 ### A second call (`follow_up`)
@@ -273,39 +274,35 @@ The registration is stored and returned in `presence`. Two flags are read by the
 
 ## `GET /v1/body/nudges`
 
-軽い声かけ, stage 1: fixed lines the body may show (and speak) by itself at a suitable moment. No model is called and nothing is stored.
+**Retired by the owner's decision of 2026-10-14** (Syzygy ADR-0002 note of that day: 「全てやめる代わりに、それらが本心からシャノンから自発的に発言され得るようにしておきたい」). The route keeps its shape for bodies that still ask, and `nudges` is always empty, at every hour and in every situation; `quietUntil` is always `null`. The five seed lines (`bodyNudges.ts`) and the server's scene windows are gone, so an old body says nothing from this route and needs no update.
 
 ```json
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-02T01:00:00.000Z",
+  "generatedAt": "2026-10-14T01:00:00.000Z",
   "limits": { "notDuringConversation": true, "quietAfterConversationMinutes": 15, "maximumPerHour": 2, "maximumPerDay": 10 },
   "quietUntil": null,
-  "nudges": [
-    { "id": "seed-ownerReturned-1", "scene": "ownerReturned", "audience": "any", "text": "おかえりなさい、ライ氏。", "expression": "joyful",
-      "voice": { "affect": "happy", "intensity": 0.5, "delivery": "conversational" }, "expiresAt": "2026-10-02T01:30:00.000Z" }
-  ]
+  "nudges": []
 }
 ```
 
-| Field | Notes |
-| --- | --- |
-| `scene` | When the body may use the line: `ownerReturned` (the owner came back to the PC), `longQuiet` (the owner has been at the PC a long time without talking to her), `morning`, `lateNight`, `awaitingReaction` (a story is waiting for the owner's reaction). The body detects the moment. |
-| `audience` | `any`, or `owner`: only while nobody else can see or hear the body. |
-| `text` | At most 40 characters, shown as it is. |
-| `expression`, `feeling` | The face to show with it, in the `presence` vocabulary. `feeling` is optional. |
-| `voice` | Direction hint in the existing voice vocabulary: `affect` (a conversational emotion), `intensity` 0–1, `delivery` (`conversational` \| `quick` \| `gentle` \| `focused` \| `energetic`). |
-| `expiresAt` | 30 minutes after `generatedAt`. Fetch again instead of showing an expired line. |
+The scenes (`ownerReturned`, `longQuiet`, `morning`, `lateNight`, `awaitingReaction`) are now **moments she perceives** in her own time, not occasions for a line (see [Moments she perceives](#moments-she-perceives)). If she says something about one, it is a message she started on her own, written in her own words, delivered as [A message she starts on her own](#a-message-she-starts-on-her-own).
 
-The server offers only what applies when asked: `morning` between 05:00 and 10:00 and `lateNight` between 23:00 and 04:00 (`Asia/Tokyo`), `awaitingReaction` while `study.awaitingReaction` is above zero.
+## Moments she perceives
 
-Limits the body must respect (the server cannot see what the body shows):
+Owner decision 2026-10-14; `services/api/src/mind/attention/proactiveMoments.ts` (rules), `proactiveMomentDesk.ts` (perceive, decide), `store/proactiveMomentStore.ts` (`proactive_moments`), wiring `wiring/proactiveMomentsWiring.ts` in her own time's worker. `SHANNON_PROACTIVE_MOMENTS=off` (or her own time off, or the proactive gate off) switches all of it off.
 
-- Not during a conversation with her, and not for `quietAfterConversationMinutes` (15) after one. The server knows about conversations on other devices: while one is that recent, `nudges` is empty and `quietUntil` says when to ask again. The body applies the same rule to conversations it hosts itself.
-- At most `maximumPerHour` (2) and `maximumPerDay` (10), counted by the body over everything it shows from this route.
-- A nudge is not a conversation turn. Do not send it to `/v1/chat`, and do not report it as an event.
+- **What she perceives** (closed facts, once per key; nothing while her window is not showing or the body last said he went away, and nothing while anyone else may see or hear her, a live stream included: an infrastructure privacy guard, not a persona rule): `owner_returned` (an `ownerReturned` event of at least 10 minutes away, within the last 10 minutes; once per event), `long_quiet` (he neither wrote nor spoke for 120 minutes and the body reported no away or return in that time; once per quiet, keyed on his last word), `morning` (owner-local 05:00–10:00, once a day), `late_night` (23:00–04:00, once a night), `awaiting_reaction` (a story of hers he can read and has not reacted to; once per version). Each new moment is handed to the mind's inbox (`mind_inbox` kind `moment`), which a conversation's workspace shows as a fact of her body (`[いまの場]`: 「ライ氏が席に戻ってきた」…).
+- **Whether she wants to say something.** Free checks first: nobody else may see or hear her (a moment waits, and is never taken, while others are there), her loop is ready and not paused, the budget is not used up, she may still speak up today, the reach-out spacing has passed, he has not written or spoken within the owner-active hold, no voice call with her body is under way (its newest `callStarted`), no cycle of hers is open. Then one Jev question (`proactive_moment.v2`, a probability ≥ 0.5): would she genuinely want to say something now (a habit, a duty or a set greeting is not a reason). Without `TYPESAFE_API_KEY`, or when Jev fails, she stays quiet (fail closed). Caps a day: 24 decisions (`SHANNON_PROACTIVE_MOMENTS_MAX_DECISIONS`), 8 moments spoken of (`SHANNON_PROACTIVE_MOMENTS_MAX_MESSAGES`).
+- **What she says.** A moment she wanted becomes a one-step cycle of her loop (like telling him a piece): her reach-out (`autonomyLoopReachOutStep.ts`) writes one message in her own words with the moment as one fact line in front of her and two rules (it is not an occasion for a set greeting; if a set greeting is all, an empty message). No rule forbids or prescribes what she says of her own feelings, a sulk included (owner, 2026-10-14: 「そういう風にルール化するととたんにAGIから遠ざかる」): there is no moment of her mood, the facts carry none, and her inner state reaches her only through the inner note once ADR-0012 wires it; the gate and the caps still bound every message. It passes the proactive gate (reason `wonder` with the subject `moment:<kind>`, or `share` with `piece:<id>` for a story waiting; the intent arose when she perceived the moment) and is recorded and charged like any message of hers. A moment is worth a word for 10 minutes (`owner_returned`), 30 (`long_quiet`) or 60 (the others).
 
-The lines are a **seed set of five, one per scene, awaiting the owner's review** (`services/api/src/surfaces/body/bodyNudges.ts`). `packages/cognition` holds no canonical list of short lines, so they were written in the voice of the existing fixed sentences (ボク, ライ氏, です・ます). Persona is core: changing or adding a line is the owner's decision.
+Her body delivers that message as it delivers any of hers: shown and spoken within five minutes while 「話しかける」 (`speak`) is on, shown silently within an hour, not at all after that.
+
+**Fixed texts that remain, and why** (owner decision 2026-10-14: no scripted speech of hers; genuine speech is welcome):
+
+- Retired: the five body lines (above); the line of telling him a piece (「…短い物語を書きました…」, `studyShowingMessage`; off unless `SHANNON_STUDY_SHOWING_LINE=on`: 「見せてもいい」 still makes the piece readable in his study list, and a story waiting reaches him only as an `awaiting_reaction` moment, in her own words); the openings of a topic of the world (「これ、少し気になりました」 and the like: a topic is written with the daily mind's own grounded line, or as its title and address only, text) and of a goal (now neutral status text, text only on a body).
+- A due promise (owner decision 2026-10-14): written at the moment it is due, in her own words, by one background model call from its facts alone (what, when, due or overdue; `mind/action/respond/commitmentLine.ts`, the world worker), used only when it names the promise while he is alone (with anyone else at her body, a stream included, it must not) and carries no number the facts do not; otherwise, and when the write fails or times out, the neutral factual line `約束：「…」（…）` (with others present 「約束の時刻です（内容はアプリで確認できます）。」) is the one fixed text that remains for promises, so a promise is never lost. It is system delivery of something he asked for: no moment cap, nothing of her mood or inner note, and it stays voiced on her body.
+- Kept, not her own initiative: the morning brief (a feature he asked for; said aloud only on its own morning); the budget request (a system request; text only on a body); command replies, waiting phrases and notification banners (answers to him and status, not speech she starts); a touch line is model-written.
 
 ## Looking at the room
 
@@ -899,7 +896,7 @@ Deliberately, for this version:
 - **A presence stream** (`GET /v1/body/presence/stream`, Server-Sent Events). The API's HTTP layer answers one JSON document per request; the only streaming route is the model-driven NDJSON reply of a voice turn, which lasts as long as one model call. Presence changes are written by other processes (the background worker and the activity loop) into SQLite, and nothing notifies the API process, so a stream would be a server-side polling loop held open against the 30-second request timeout and the reverse proxy. Polling with `etag` gives the same result with less machinery.
 - **Any server-initiated push to the body.** The server holds no connection to the PC and has no address for it.
 - **Sentence streaming for `/v1/chat`.** A text reply still arrives whole.
-- **Per-moment generated nudges.** Stage 1 is fixed lines only: no model call, no cost, nothing about the moment sent to a model.
+- **Fixed or per-scene generated lines.** Retired on 2026-10-14; see [Moments she perceives](#moments-she-perceives).
 - **A touch reaction in her own-time activity, in a text reply, or as a push.** Her line for a touch exists only in the answer of `POST /v1/body/reactions`; the apps do not receive it unless the owner answers it aloud. Touches other than the five kinds, and a reaction to the plain events (`ownerReturned`, `windowShown`, …), are not built.
 - **Choosing a gesture.** The answer carries a face (`expression`, `feeling`) and words. Which gesture goes with them is the body's choice.
 - **Body awareness in the prompt, beyond the look and the touch.** The capabilities wording names two things of the body: one look at the room, with its four rules, and that she feels a touch and may answer it. Telling her what else her body can do (from the registered capabilities) and letting a reply choose an expression or gesture are later changes to core that need the owner's approval.

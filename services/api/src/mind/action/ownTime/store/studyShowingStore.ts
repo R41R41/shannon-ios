@@ -96,6 +96,15 @@ export class SQLiteStudyShowing implements StudyShowing {
     `).get(scopeKey, since));
   }
 
+  /** When the owner last wrote or spoke, in any Talk, or null: the start of a quiet (`proactiveMoments.ts`). A timestamp only. */
+  ownerLastActiveAt(scopeKey: string): string | null {
+    if (!this.tableExists('conversation_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT MAX(observed_at) AS last_at FROM conversation_messages WHERE scope_key = ? AND role = 'user'
+    `).get(scopeKey) as unknown as { last_at: string | null } | undefined;
+    return row?.last_at ?? null;
+  }
+
   ownerFirstActiveAfter(scopeKey: string, after: string): string | null {
     if (!this.tableExists('conversation_messages')) return null;
     const row = this.database.prepare(`

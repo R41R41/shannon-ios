@@ -149,7 +149,7 @@ export const SHANNON_FCA_PROGRESS_CAPABILITY = Object.freeze({
 /** Available independently of game connection, only with a fresh registered operator. */
 export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
   id: 'minecraft_lifecycle', audience: 'owner',
-  text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。',
+  text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。ライ氏と二人の会話で頼まれた時は、ほかの参加者がいなければワールドの時刻を昼にできます。',
 } as const satisfies ShannonCapability);
 
 /**

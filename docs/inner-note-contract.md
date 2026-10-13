@@ -24,8 +24,10 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   written past it ends the sulk (`capEnded`), and a sulk with no `until` stops showing at the hour. A `day` sulk needs a reason of a
   kind (`intentional`, `repeated`, `big`) and ends with her day. A sulk whose time ran out is not active: no face, no `shown`, no
   line for Jev, and the reply and touch prompts get it only as 「さっきまでの気持ち」 (past tense, without its hooks). The sweep asks her
-  to settle, again with backoff (2, 4, 8 minutes) while the reflection fails, and after three failures closes the note as it stands. Marks for the Observer: `gateStopped`, `untilClamped`, `capEnded`, `dayDowngraded`,
-  `forgaveWhileHigh`, `apologyOnlyReason` (a heuristic of the words; the ADR's Jev question is deferred).
+  to settle, again with backoff (2, 4, 8 minutes) while the reflection fails, and after three failures ends the sulk in code: one more row of the same day (its last words, intent `none`, no `until`, nothing
+  shown, flag `endedByCode`), read only as 「さっきまでの気持ち」; the day is not closed (its id, its apologies and its summary go on to
+  3:00 or his goodnight). Marks for the Observer: `gateStopped`, `untilClamped`, `capEnded`, `dayDowngraded`, `forgaveWhileHigh`,
+  `apologyOnlyReason` (a heuristic of the words; the ADR's Jev question is deferred), `endedByCode`.
 - **Her day.** Ends at the earlier of 3:00 in the owner's time zone (0:00–3:00 belongs to the day before) and his goodnight to her
   (`goodnightIn`: the whole message is a goodnight). The nightly sleep job is **not** read: the common task runtime (ADR-0009 S9)
   changed how its completion is recorded, so the day relies on 3:00 and goodnight only. She then reflects once more and the note is
@@ -72,9 +74,13 @@ what prompted it, the core version and hash, the model, usage and cost, `created
 
 **Forgetting (D3).** A note carries its sources: its own events (a turn `experience:<id>` — a voice turn's utterance is bound to its
 stored turn when the app stores it —, a touch `experience:<burst id>`), the conversation lines it read, the same day's note it was
-written after, and — for the first note of a day — the summary of the day before. A closing note keeps its own day's sources only, so
-nothing reaches back further than one day; at most 64 sources a note. A note is forgotten when one of its sources is, when the words of
-a forgotten turn are among its events, or when its own words quote one (a backstop); it is then not read and is deleted on the queue.
+written after, and — for the first note of a day — the summary of the day before, with that summary note itself (`note:<id>`, kept
+whatever the cap). A closing note keeps its own day's sources only, so nothing reaches back further than one day; at most 64 sources a
+note. A note is forgotten when one of its sources is, when the words of a forgotten turn are among its events, or when its own words
+quote one (a backstop); it is then not read and is deleted on the queue. Deleting a note deletes every later note of the same day
+(each read the one before, whatever its capped lineage still lists) and every day that read a deleted summary. The word match counts
+only items the owner had her forget or rejected (a correction keeps its moment), and only a shared run of 12 characters or more (a
+greeting is not a quote; evidence is read up to 400 characters).
 Reads check against an index of the owner's forgetting built once per state; the sweep scans the stored notes only when that changed.
 A reflection whose events were forgotten while its call ran is discarded; queued events of a forgotten turn are dropped.
 

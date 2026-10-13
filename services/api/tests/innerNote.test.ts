@@ -6,6 +6,8 @@ import {
 } from '@shannon/cognition';
 import { SQLiteInnerNoteStore } from '../src/mind/emotion/store/innerNoteStore.js';
 import { INNER_NOTES_STEP } from '../src/infra/sqlite/migrations/emotion/001_inner_notes.js';
+import { INNER_NOTE_EPISODES_STEP } from '../src/infra/sqlite/migrations/emotion/002_inner_note_episodes.js';
+import { INNER_NOTE_ATTEMPTS_STEP } from '../src/infra/sqlite/migrations/emotion/003_inner_note_attempts.js';
 import { schemaStepChecksum } from '../src/infra/sqlite/migrations/schemaSteps.js';
 import { InnerNoteService } from '../src/mind/emotion/innerNoteService.js';
 import type { InnerNoteReflector } from '../src/mind/emotion/innerNoteReflection.js';
@@ -71,6 +73,10 @@ describe('inner note storage (schema step emotion/001_inner_notes)', () => {
     expect(INNER_NOTES_STEP.id).toBe('emotion/001_inner_notes');
     // Never edit the step: a change is a new step (SHANNON_SCHEMA_STEP_CHANGED).
     expect(schemaStepChecksum(INNER_NOTES_STEP)).toBe('d683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc');
+    // N10: the later steps are pinned the same way.
+    expect([INNER_NOTE_EPISODES_STEP.id, INNER_NOTE_ATTEMPTS_STEP.id]).toEqual(['emotion/002_inner_note_episodes', 'emotion/003_inner_note_attempts']);
+    expect(schemaStepChecksum(INNER_NOTE_EPISODES_STEP)).toBe('82db51e74ebb56f08b3392b192a27490a0f3fc111deb956c022a59b9497452df');
+    expect(schemaStepChecksum(INNER_NOTE_ATTEMPTS_STEP)).toBe('da679362296ea082a98c9b58ea1105862782f38e1f131b07162f319eddee1010');
     const { database } = setup();
     const columns = database.prepare("PRAGMA table_info('shannon_inner_notes')").all().map(row => String(row.name));
     expect(columns).toEqual(expect.arrayContaining(['honne', 'tatemae', 'reason', 'plan', 'bottom', 'shown', 'tell', 'until_at', 'scale', 'intent',
@@ -178,7 +184,7 @@ describe('the reflection writes her note after salient events (ADR-0012 D2.3)', 
 describe('forgetting follows the note and everything derived from it (H1)', () => {
   it('deletes the notes of a forgotten voice turn by its words, and every later note of its lineage', async () => {
     const { service, store, at, setSnapshot } = setup();
-    service.turnEnded({ scopeKey: OWNER, surface: 'voice', alone: true, at: T0, userMessage: 'ごめん、出来心で', reply: 'しばらく口ききません', feeling: null,
+    service.turnEnded({ scopeKey: OWNER, surface: 'voice', alone: true, at: T0, userMessage: 'ごめん、出来心でケーキを全部食べちゃった', reply: 'しばらく口ききません', feeling: null,
       sourceId: 'utterance:u1' });
     service.bind(OWNER, 'utterance:u1', 'experience:e-voice');
     await service.flush(OWNER);
@@ -188,7 +194,7 @@ describe('forgetting follows the note and everything derived from it (H1)', () =
     const derived = store.latest(OWNER)!;
     expect(derived.sourceIds).toEqual(expect.arrayContaining(['experience:e-voice', 'experience:burst-2026-10-14T13:35:00.000Z']));
     // He has her forget the turn: by its id (bound) and by its words, both notes go, the later one through its lineage.
-    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('e-voice', 'ごめん、出来心で')] });
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('e-voice', 'ごめん、出来心でケーキを全部食べちゃった')] });
     expect(service.current(OWNER, '2026-10-14T13:36:00.000Z')).toBeNull();
     await service.sweep();
     expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10)).toEqual([]);
@@ -273,30 +279,41 @@ describe('the cap and the queue (H2, low)', () => {
 });
 
 describe('the re-review (N1–N4)', () => {
-  it('retries an expired sulk\'s settling with backoff, then closes it as it stands (N1)', async () => {
+  it('retries an expired sulk\'s settling with backoff, then ends the sulk in code without closing her day (N1, N8)', async () => {
     const failing = () => new Error('INNER_NOTE_UPSTREAM_529');
-    const { service, store, at } = setup([draft({ untilMinutes: 10 }), failing(), failing(), failing()]);
+    const { service, store, at, facts } = setup([draft({ untilMinutes: 10 }), failing(), failing(), failing()]);
     service.touched(touch());
     await service.flush(OWNER);
+    const first = store.latest(OWNER)!;
     const minutes = (value: number) => new Date(Date.parse('2026-10-14T13:41:00.000Z') + value * 60_000).toISOString();
-    // Tries at +0, +2 and +6 minutes (backoff 2, 4, 8); at +14 the third failure closes it.
+    // Tries at +0, +2 and +6 minutes (backoff 2, 4, 8); at +14 the third failure ends the sulk.
     for (const offset of [0, 1, 2, 6, 14]) {
       at(minutes(offset));
       await service.sweep();
       await service.flush(OWNER);
-      expect(store.latest(OWNER)!.closedAt, `at +${offset}`).toBe(offset === 14 ? minutes(14) : null);
+      expect(store.latest(OWNER)!.flags.endedByCode ?? null, `at +${offset}`).toBe(offset === 14 ? true : null);
     }
-    expect(service.current(OWNER, minutes(15))).toBeNull();
+    const ended = store.latest(OWNER)!;
+    // N8: one row of the same day, calm, not closed: the day keeps its id, its apologies and its summary for 3:00.
+    expect(ended).toMatchObject({ dayId: first.dayId, closedAt: null, summary: null, hooks: { intent: 'none', until: null, shown: 'neutral', tell: 'none' } });
+    expect(ended.text).toEqual(first.text);
+    expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10).filter(note => note.closedAt)).toEqual([]);
+    expect(innerNoteTurnContext(service, OWNER, 'owner', minutes(15))).toContain('[さっきまでの気持ち]');
+    expect(innerNoteRouteInput(service, OWNER, true, minutes(15))).toEqual({});
+    at(minutes(30));
+    await service.sweep();
+    await service.flush(OWNER);
+    expect(facts).toHaveLength(4);
   });
 
   it('records the conversation lines it read as sources, and forgets a note that quotes a forgotten turn (N2)', async () => {
-    const { service, store, setSnapshot } = setup([draft({ text: { ...draft().text, honne: '「来週の旅行の話」をされて、ちょっと嬉しかった。' } })], {},
-      { recent: () => [{ role: 'user', content: '来週の旅行の話なんだけど', sourceId: 'experience:e-trip' }] });
+    const { service, store, setSnapshot } = setup([draft({ text: { ...draft().text, honne: '「来週の京都旅行で行くお寺の話」をされて、ちょっと嬉しかった。' } })], {},
+      { recent: () => [{ role: 'user', content: '来週の京都旅行で行くお寺の話なんだけど', sourceId: 'experience:e-trip' }] });
     service.touched(touch());
     await service.flush(OWNER);
     expect(store.latest(OWNER)!.sourceIds).toContain('experience:e-trip');
     // Forgotten by its words only (no id): the note's own words quote it, so it goes too.
-    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('other-id', '来週の旅行の話')] });
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('other-id', '来週の京都旅行で行くお寺の話')] });
     await service.sweep();
     expect(store.latest(OWNER)).toBeNull();
   });
@@ -310,7 +327,8 @@ describe('the re-review (N1–N4)', () => {
     at('2026-10-15T13:00:00.000Z');
     service.touched(touch('2026-10-15T13:00:00.000Z'));
     await service.flush(OWNER);
-    expect(store.latest(OWNER)!.sourceIds).toEqual([`experience:burst-${T0}`, 'experience:burst-2026-10-15T13:00:00.000Z']);
+    // N6: and the summary it read, as a note of its own.
+    expect(store.latest(OWNER)!.sourceIds).toEqual([expect.stringMatching(/^note:/u), `experience:burst-${T0}`, 'experience:burst-2026-10-15T13:00:00.000Z']);
     at('2026-10-15T18:01:00.000Z');
     await service.sweep();
     // The second day's closing note keeps its own moment only: forgetting the first day's touch would not reach it.
@@ -326,6 +344,70 @@ describe('the re-review (N1–N4)', () => {
     second.service.touched(touch('2026-10-14T13:40:00.000Z'));
     await second.service.flush(OWNER);
     expect(second.facts).toHaveLength(0);
+  });
+});
+
+describe('the third review (N6, N9)', () => {
+  it('deletes every later note of a day whose note was forgotten, however busy the day (N6)', async () => {
+    const { service, store, at, setSnapshot } = setup([draft(), draft(), draft(), draft({ summary: '忙しい日。' })], { reflectionsPerDay: 100 });
+    service.touched(touch());
+    await service.flush(OWNER);
+    // A busy evening: seventy of his turns in one reflection, more sources than one note keeps.
+    at('2026-10-14T13:40:00.000Z');
+    for (let index = 0; index < 70; index += 1) {
+      service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: '2026-10-14T13:40:00.000Z', userMessage: `ほんとポンコツだな${index}`, reply: 'むっ',
+        feeling: null, sourceId: `experience:busy-${index}` });
+    }
+    await service.flush(OWNER);
+    at('2026-10-14T13:50:00.000Z');
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: '2026-10-14T13:50:00.000Z', userMessage: 'ごめん', reply: '…', feeling: null,
+      sourceId: 'experience:late' });
+    await service.flush(OWNER);
+    const notes = store.since(OWNER, '2026-10-14T00:00:00.000Z', 10);
+    expect(notes).toHaveLength(3);
+    expect(store.latest(OWNER)!.sourceIds).toHaveLength(64);
+    expect(store.latest(OWNER)!.sourceIds).not.toContain(`experience:burst-${T0}`);
+    // A summary she read the next day goes with its day: the next day's first note lists it.
+    at('2026-10-14T18:01:00.000Z');
+    await service.sweep();
+    const closing = store.latest(OWNER)!;
+    at('2026-10-15T01:00:00.000Z');
+    service.touched(touch('2026-10-15T01:00:00.000Z'));
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.sourceIds).toContain(`note:${closing.id}`);
+    expect(store.latest(OWNER)!.sourceIds.length).toBeLessThanOrEqual(64);
+    // He has her forget the first touch: its note goes, every later note of that day though its capped lineage lost it, and what read the day.
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten(`burst-${T0}`)] });
+    await service.sweep();
+    expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10)).toEqual([]);
+  });
+
+  it('keeps a later day that never read a forgotten day, and an earlier note of the same day', async () => {
+    const { service, store, at, setSnapshot } = setup([draft(), draft()], { reflectionsPerDay: 100 });
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: T0, userMessage: 'ごめん', reply: '…', feeling: null, sourceId: 'experience:early' });
+    await service.flush(OWNER);
+    at('2026-10-14T13:40:00.000Z');
+    service.touched(touch('2026-10-14T13:40:00.000Z'));
+    await service.flush(OWNER);
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('burst-2026-10-14T13:40:00.000Z')] });
+    await service.sweep();
+    expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10).map(note => note.sourceIds)).toEqual([['experience:early']]);
+  });
+
+  it('matches only forgotten words, and only a quote of twelve characters or more (N9)', async () => {
+    const { service, store, setSnapshot } = setup([draft({ text: { ...draft().text, honne: 'おはようって言われて、来週の京都旅行で行くお寺の話を思い出した。' } })]);
+    service.touched(touch());
+    await service.flush(OWNER);
+    const corrected = { memoryId: 'fact-trip', kind: 'user_fact', status: 'active', pinned: false, updatedAt: T0, changeReason: 'test',
+      overrideText: '再来週の旅行', sourceEvidence: '来週の京都旅行で行くお寺の話' } as never;
+    // A greeting forgotten is not a quote; a corrected fact is not forgotten; a short forgotten phrase is not matched.
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('greet', 'おはよう'), corrected, forgotten('short', '京都旅行')] });
+    await service.sweep();
+    expect(store.latest(OWNER)).not.toBeNull();
+    expect(service.current(OWNER, T0)).not.toBeNull();
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('trip', '来週の京都旅行で行くお寺の話')] });
+    await service.sweep();
+    expect(store.latest(OWNER)).toBeNull();
   });
 });
 

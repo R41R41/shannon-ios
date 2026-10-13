@@ -22,6 +22,11 @@ import { configuredMorningBrief } from './wiring/dailyReadWiring.js';
 import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
+import { configuredCommitmentLineWriter } from './mind/action/respond/commitmentLineModel.js';
+import { commitmentLinePreparer } from './wiring/commitmentLinesWiring.js';
+import { SQLiteInitiativeSources } from './surfaces/outreach/store/initiativeSources.js';
+import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
+import { BODY_LIMITS } from './contracts/bodyContract.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,
@@ -47,6 +52,15 @@ const stateStore = new SQLiteShannonStore({ path: databasePath, now: nowISOStrin
 const dailyMindStore = new SQLiteDailyMindStore(databasePath);
 const dailyMindDelegate = createConfiguredDailyMindModel(process.env, stateStore);
 const dailyMindModel:typeof dailyMindDelegate={generate:input=>withObserverRun({scopeKey:input.scopeKey,surface:'world-focus'},()=>observeAsync('context',{operation:'daily-focus',candidate:input.candidate!==null,interestCount:input.recentInterests.length},()=>dailyMindDelegate.generate(input),value=>({selected:value!==null})))};
+// A promise's notice in her own words (owner decision 2026-10-14): written at the moment it is due, from its facts; the neutral
+// factual line when it cannot be written or trusted. With anyone else at her body (a stream included), the private-safe wording.
+const initiativeSources = new SQLiteInitiativeSources(databasePath);
+const bodyStore = new SQLiteBodyStore(databasePath);
+const commitmentLines = commitmentLinePreparer({
+  writer: configuredCommitmentLineWriter(process.env, stateStore), scopeKey: configuredOwnerScope(process.env), timeZone: 'Asia/Tokyo',
+  snapshot: scopeKey => stateStore.snapshot(scopeKey), delivered: (scopeKey, itemId) => initiativeSources.delivered(scopeKey, itemId),
+  others: (scopeKey, at) => bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds),
+});
 const pushStore = new SQLitePushNotificationStore(databasePath);
 // SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
 const morningBrief = configuredMorningBrief(process.env, { databasePath, now: nowISOString, log: line => console.log(line),
@@ -90,7 +104,8 @@ try {
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();
       const dailyFocuses = await dailyMindStore.ensureForKnownScopes(store.latestItems(40), dailyMindModel, at);
-      const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses, morningBrief ? await morningBrief.candidates(at) : undefined);
+      const promises = await commitmentLines(at, shutdownController.signal).catch(() => new Map<string, string>());
+      const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses, morningBrief ? await morningBrief.candidates(at) : undefined, promises);
       nextInitiativeCheckAt = now + nextInitiativeDelayMilliseconds(initiative, at);
       if (initiative.sent > 0) console.log(`Shannon initiative delivered: ${initiative.sent}`);
     }
@@ -108,6 +123,8 @@ try {
   pushStore.close();
   morningBrief?.close();
   dailyMindStore.close();
+  initiativeSources.close();
+  bodyStore.close();
   stateStore.close();
   initiativeStore.close();
   proactiveGate?.close(); mindInbox?.close(); withheldActions?.close();
