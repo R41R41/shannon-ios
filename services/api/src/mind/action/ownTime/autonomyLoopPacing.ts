@@ -50,6 +50,29 @@ export function startSessionIfDue(dependencies: StepDependencies, scopeKey: stri
   });
 }
 
+/**
+ * A moment she perceived of the owner and wanted to speak of (owner decision 2026-10-14, `mind/attention/proactiveMoments.ts`):
+ * one cycle of a single reach-out step, outside her sessions and her day's cycles like telling him a piece (`show`), so nothing
+ * else follows it (no thought, no observation that plans another step). Its step is prepared, asked of the gate, recorded and
+ * gated like any message of hers (`autonomyLoopReachOutStep.ts`). Null when there is none, or while he is talking.
+ */
+export function startMomentCycle(dependencies: StepDependencies, scopeKey: string, at: string): AutonomyLoopCycle | null {
+  const { store, config, moments } = dependencies;
+  if (!moments || ownerTalking(dependencies, scopeKey, at)) return null;
+  let moment: ReturnType<typeof moments.take> = null;
+  try { moment = moments.take(scopeKey, at); } catch { moment = null; }
+  if (!moment) return null;
+  return store.loop.startCycle(scopeKey, autonomyDayKey(at, config), 'show', [{ kind: 'reach_out', reason: moment.reason, moment: moment.key }], at);
+}
+
+/**
+ * Whether a ready piece that was not told yet starts a cycle that tells him: never when showing writes no line (owner decision
+ * 2026-10-14: a ready piece is already readable and stays waiting for his reading), else when she may message.
+ */
+export function mayShowNow(showing: StepDependencies['showing'], scopeKey: string, at: string): boolean {
+  return showing.announces !== false && showing.mayMessageNow(scopeKey, at) === 'ok';
+}
+
 /** The owner wrote or spoke within the quiet window: her own activity stands back. */
 export function ownerTalking(dependencies: Pick<StepDependencies, 'loop' | 'showing' | 'concurrentActions'>, scopeKey: string, at: string): boolean {
   if(dependencies.concurrentActions)return false;

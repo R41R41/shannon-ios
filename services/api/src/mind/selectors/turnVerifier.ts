@@ -26,7 +26,10 @@ const OBJECT = /(?:メモ|ノート|物語|お話|下書き|原稿|書斎|ファ
 const CLAIM = /(?:保存|書き込み|書き換え|作成|追記|記録|追加|更新|送信)(?:しました|しておきました|済みです|完了しました)|(?:書き|書いて|残し|残して|作り|作って|置き|置いて|メモし|直し|直して|送り|送って)(?:ました|おきました)/u;
 const QUESTION = /(?:か|かな|でしょうか)[。？?]?$|[？?]$/u;
 const MINECRAFT_OBJECT = /(?:マイクラ|Minecraft|マインクラフト|サーバー)/iu;
-const ACTION_CLAIM = /(?:起動|停止|ログイン|ログアウト|完了|終了|採掘|キャンセル|討伐)(?:しました|済みです)|(?:集め|建て|終わり|止め|倒し|取り消し)(?:ました|ておきました)/u;
+/** 「ワールドを昼にしました」: a set_day claim. 「ワールド」 alone is no Minecraft object (「物語のワールド設定」, 「ワールドカップ」). */
+const DAY_CLAIM = /ワールド(?:の時刻)?を昼に(?:しました|しておきました)/u;
+const minecraftClaim = (sentence: string) => MINECRAFT_OBJECT.test(sentence) || DAY_CLAIM.test(sentence);
+const ACTION_CLAIM = /(?:起動|停止|ログイン|ログアウト|完了|終了|採掘|キャンセル|討伐)(?:しました|済みです)|(?:集め|建て|終わり|止め|倒し|取り消し)(?:ました|ておきました)|昼に(?:しました|しておきました)/u;
 const NEGATED = /(?:ませんでした|できなかった|できませんでした|ていません|まだ終わっていません)/u;
 
 /** The sentences of a reply that claim a write of hers. */
@@ -36,13 +39,13 @@ export function writeClaims(reply: string, nativeEvidence = true): string[] {
   // A failed second action cannot negate an affirmative claim before 「しましたが、」.
   return reply.split(/(?<=[。！!？?\n])/u).flatMap(sentence => sentence.split(/(?<=ました|です|済み)(?:が|けど|ものの)[、,]?|[、,](?:しかし|一方|ただし)[、,]?/u))
     .map(sentence => sentence.trim()).filter(sentence =>
-    (OBJECT.test(sentence) && CLAIM.test(sentence) || MINECRAFT_OBJECT.test(sentence) && (CLAIM.test(sentence) || ACTION_CLAIM.test(sentence)))
+    (OBJECT.test(sentence) && CLAIM.test(sentence) || minecraftClaim(sentence) && (CLAIM.test(sentence) || ACTION_CLAIM.test(sentence)))
     && !QUESTION.test(sentence) && !NEGATED.test(sentence));
 }
 
 /** Narrow supported-domain checks. Unrecognised prose and legacy executors still use the existing write-success rule. */
 function domainMatches(claim: string, name: string): boolean {
-  if (MINECRAFT_OBJECT.test(claim)) return name.startsWith('minecraft.');
+  if (minecraftClaim(claim)) return name.startsWith('minecraft.');
   if (name.startsWith('minecraft.')) return false;
   if (/提案/u.test(claim)) return name === 'aether.propose';
   if (name === 'aether.propose') return false;
@@ -60,7 +63,9 @@ function explicitTargets(claim: string): string[] {
 function actionMatches(claim: string, evidence: ToolExecutionEvidence): boolean {
   if (evidence.target.kind === 'minecraft_server') {
     if (!evidence.receiptId || evidence.receiptId !== evidence.operationId || !evidence.target.id) return false;
-    const wanted = /ログアウト/u.test(claim) ? 'logout' : /ログイン/u.test(claim) ? 'login' : /起動/u.test(claim) ? 'start' : /停止|止め/u.test(claim) ? 'stop' : null;
+    // A start or stop verb wins over 「昼」 (「昼にサーバーを起動しました」 is a start; review P3-3).
+    const wanted = /ログアウト/u.test(claim) ? 'logout' : /ログイン/u.test(claim) ? 'login' : /起動/u.test(claim) ? 'start'
+      : /停止|止め/u.test(claim) ? 'stop' : /昼|時刻/u.test(claim) ? 'set_day' : null;
     return wanted !== null && wanted === evidence.action;
   }
   if (evidence.target.kind === 'minecraft_request') return evidence.action === 'cancel'

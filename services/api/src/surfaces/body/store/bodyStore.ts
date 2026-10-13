@@ -165,6 +165,16 @@ export class SQLiteBodyStore {
     return row ? { type: row.event_type, occurredAt: row.occurred_at } : null;
   }
 
+  /** The newest `ownerReturned` in `[since, until]`, whoever was around: its key, its time and how long he was away (`proactiveMoments.ts`). */
+  latestReturn(scopeKey: string, since: string, until: string): { id: string; occurredAt: string; minutesAway: number } | null {
+    const row = this.database.prepare(`
+      SELECT event_key, occurred_at, minutes_away FROM body_events
+      WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ? AND event_type = 'ownerReturned'
+      ORDER BY occurred_at DESC, received_at DESC LIMIT 1
+    `).get(scopeKey, since, until) as unknown as { event_key: string; occurred_at: string; minutes_away: number | null } | undefined;
+    return row ? { id: row.event_key, occurredAt: row.occurred_at, minutesAway: Number(row.minutes_away ?? 0) } : null;
+  }
+
   /** `callStarted` / `callEnded` of the scope in `[since, until]`, any audience: a device, a type and a time (`ownerCallElsewhere.ts`). */
   callEvents(scopeKey: string, since: string, until: string): Array<{ deviceId: string; type: 'callStarted' | 'callEnded'; occurredAt: string; receivedAt: string }> {
     const rows = this.database.prepare(`

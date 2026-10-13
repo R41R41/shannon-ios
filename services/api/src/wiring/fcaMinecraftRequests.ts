@@ -36,7 +36,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       if (page.length < 100) return tasks;
     }
   };
-  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: '共通FCAのmc.*の道具で実行する。minecraft.reflexで視覚操作の短いセッションを要求できる。' });
+  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: '共通FCAのmc.*の道具で実行する。判断ごとの身体の観測は要約で、全体はminecraft.observeで読む。一人称画像が得られるときはminecraft.reflexで視覚操作の短いセッションを要求できる。' });
   return {
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();

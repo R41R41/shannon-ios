@@ -1,5 +1,6 @@
 import { restoreCompanionState, visibleMemoryText, type CompanionStateSnapshot, type ProspectiveMemory } from '@shannon/cognition';
 import type { CandidateRow } from './initiativeSelection.js';
+export { neutralCommitmentLine } from './commitmentLine.js';
 
 const QUIET_START_HOUR = 23;
 /** 「あとで」 re-arms exactly one later reminder, never sooner than this. */

@@ -8,10 +8,13 @@ import { MinecraftControlStore } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
 
 interface Frame { poll: MinecraftControlPoll; received: number }
+/** After a capture of this connection came back without a picture, short visual control is not offered for this long. */
+export const MINECRAFT_CAPTURE_RETRY_MILLISECONDS = 10 * 60_000;
 /** A paired body supplies observations and executes exact commands; the shared FCA owns all long-term decisions. */
 export class MinecraftControl {
   readonly frames = new Map<string, Frame>();
   private readonly images = new Map<string, { dataUrl: string; expires: number }>();
+  private readonly captureMisses = new Map<string, { connectionId: string; at: number }>();
   constructor(readonly store: MinecraftControlStore, readonly configuration: MinecraftBodyConfiguration,
     private readonly options: { now(): number; leaseValid(lease: ActionLease, taskId: string): boolean; ownerAlone(): boolean; leaseKnown?(lease: ActionLease, taskId: string): boolean; pollMilliseconds?: number; cancelWaitMilliseconds?: number }) {}
   private allowed(command: Pick<MinecraftControlCommand, 'kind' | 'lease' | 'context'>): boolean {
@@ -25,6 +28,21 @@ export class MinecraftControl {
   }
   available(): string[] { return [...this.frames.keys()].filter(id => this.frame(id)); }
   observe(bodyId: string): BodyObservation | null { return this.frame(bodyId)?.poll.observation ?? null; }
+  /**
+   * Whether this body cannot give a first-person picture now, so a session that requires one would only end
+   * `observation_unavailable` (Minebot lane 2026-10-14: a task's whole first step went to such a session, decisions 0).
+   * The body says so (`rendererConfigured: false`), or a capture of its current connection came back without a picture and
+   * it has not reported `imageAvailable: true` since; after `MINECRAFT_CAPTURE_RETRY_MILLISECONDS` one is tried again.
+   */
+  imagesUnavailable(bodyId: string): boolean {
+    const frame = this.frame(bodyId);
+    if (!frame) return true;
+    const facts = frame.poll.observation.facts;
+    if (facts.rendererConfigured === false) return true;
+    if (facts.imageAvailable === true) return false;
+    const miss = this.captureMisses.get(bodyId);
+    return !!miss && miss.connectionId === frame.poll.connectionId && this.options.now() - miss.at < MINECRAFT_CAPTURE_RETRY_MILLISECONDS;
+  }
   image(ref: string): string | null {
     const image = this.images.get(ref); if (!image || image.expires < this.options.now()) { this.images.delete(ref); return null; } return image.dataUrl;
   }
@@ -56,11 +74,17 @@ export class MinecraftControl {
       if (receipt.image && command.kind !== 'capture') continue;
       if (!this.store.settle(receipt)) continue;
       acknowledged.push(receipt.id);
+      let pictured = false;
       if (receipt.image && receipt.outcome === 'completed' && this.options.now() - Date.parse(receipt.image.capturedAt) >= 0 && this.options.now() - Date.parse(receipt.image.capturedAt) <= 2500) {
         const ref = `frame:${createHash('sha256').update(receipt.id).digest('hex')}`;
         const expires = this.options.now() + 3000;
         this.images.set(ref, { dataUrl: receipt.image.dataUrl, expires });
         observation.image = { ref, capturedAt: receipt.image.capturedAt, expiresAt: new Date(expires).toISOString() };
+        pictured = true;
+      }
+      if (command.kind === 'capture' && receipt.outcome !== 'cancelled') {
+        if (pictured) this.captureMisses.delete(bodyId);
+        else this.captureMisses.set(bodyId, { connectionId: input.connectionId, at: this.options.now() });
       }
     }
     for (const [ref, image] of this.images) if (image.expires < this.options.now()) this.images.delete(ref);

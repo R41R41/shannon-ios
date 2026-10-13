@@ -54,6 +54,9 @@ import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
 import { configuredMindInbox } from './wiring/mindInboxWiring.js';
 import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
+import { configuredProactiveMoments } from './wiring/proactiveMomentsWiring.js';
+import { unannouncedShowing } from './mind/action/ownTime/autonomyShowing.js';
+import { switchOn } from '@shannon/switches';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -94,7 +97,9 @@ const proactiveGate = configuredProactiveGate(process.env, {
 });
 const reachOuts = new SQLiteReachOutSpeaker(databasePath, othersAroundBody, proactiveGate?.gate ?? null);
 // Telling him a piece is ready passes the same gate (point share, its subject the piece; review M1).
-const showing = new SQLiteStudyShowing(databasePath, undefined, proactiveGate?.gate ?? null);
+const showingStore = new SQLiteStudyShowing(databasePath, undefined, proactiveGate?.gate ?? null);
+// Owner decision 2026-10-14: telling him a piece writes no fixed line unless SHANNON_STUDY_SHOWING_LINE=on (`unannouncedShowing`).
+const showing = switchOn(process.env, 'SHANNON_STUDY_SHOWING_LINE') ? showingStore : unannouncedShowing(showingStore);
 // After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
@@ -176,6 +181,27 @@ const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachO
 // Syzygy ADR-0008 stage 3: the one function her own time is handed of the mind (rows of closed fields in `mind_inbox`, once the API
 // created it). SHANNON_WORKSPACE=off (or SHANNON_ADR8_STAGE3=off): none, and every step is what it was.
 const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
+// Moments she perceives instead of the body's fixed lines (owner decision 2026-10-14, `proactiveMoments.ts`): each may lead her, if
+// she wants to, to one message in her own words through her reach-out and the proactive gate. SHANNON_PROACTIVE_MOMENTS=off: none.
+const moments = configuredProactiveMoments(process.env, {
+  databasePath, timeZone: config.timeZone, gate: proactiveGate !== null,
+  body: {
+    windowVisible: (scopeKey, at) => bodyIngestEnabled(process.env) && reachOutReports.windowVisible(scopeKey, at),
+    latestReturn: (scopeKey, since, until) => bodyStore.latestReturn(scopeKey, since, until),
+    latestOfTypes: (scopeKey, types, since, until) => bodyStore.latestOfTypes(scopeKey, types, since, until),
+    others: othersAroundBody,
+  },
+  ownerActiveSince: (scopeKey, since) => showing.ownerActiveSince(scopeKey, since),
+  ownerLastActiveAt: scopeKey => showingStore.ownerLastActiveAt(scopeKey),
+  awaiting: scopeKey => {
+    const piece = service.study.overview(scopeKey).pieces.find(card => card.awaitingReaction && card.version !== null);
+    return piece ? { pieceId: piece.id, version: piece.version! } : null;
+  },
+  blocked: (scopeKey, at) => momentBlocked(scopeKey, at),
+  ownMessages: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), lastAt: reachOuts.lastSentAt(scopeKey) }),
+  emit: mindInbox?.emit ?? null,
+  log: line => console.log(`Shannon moments: ${line}`),
+});
 const model = configuredAutonomyTextModel(process.env, undefined, line => console.log(line));
 const planningMode = configuredPlanningMode(process.env, { path: databasePath, ownerScope: loopConfig.scopeKey, model,
   fallbackPlanning: scope => resolveAutonomyModel('planning', store.modelPreferences(scope), id => model.canUse(id)) });
@@ -204,6 +230,7 @@ const loop = new ShannonAutonomyLoop({
   // ADR-0008 §14: her next thought is told what a rule stopped lately, apart from a rest she chose; never with anyone else present.
   ...(withheldActions ? { withheldFacts: withheldFactsReader(withheldActions.withheld, observer.body, at => clock(at, config.timeZone)) } : {}),
   ...(mindInbox ? { emitMindEvent: mindInbox.emit } : {}),
+  ...(moments ? { moments: moments.moments } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -223,6 +250,8 @@ try {
     try {
       let observationAudience: 'owner' | 'others' = 'others';
       try { observationAudience = observer.body(loopConfig.scopeKey, now()).others ? 'others' : 'owner'; } catch { /* unknown audience: record nothing */ }
+      // A moment she perceived is decided before her step, so a moment she wanted can be her next cycle. It never throws.
+      if (moments) await moments.moments.consider(loopConfig.scopeKey, now(), shutdown.signal);
       tick = await withObserverRun({ scopeKey: loopConfig.scopeKey, surface: 'autonomy', audience: observationAudience }, () =>
         observeAsync('autonomy', { operation: 'tick' }, () => loop.tick(shutdown.signal), status => ({ status })));
     } catch (error) {
@@ -249,6 +278,7 @@ try {
   predictionLedger?.close();
   withheldActions?.close();
   mindInbox?.close();
+  moments?.close();
   proactiveGate?.close();
   skillCopies?.close();
   ownerContext?.close();
@@ -264,10 +294,35 @@ try {
   lookHand.close();
   lookStore.close();
   bodyStore.close();
-  showing.close();
+  showingStore.close();
   announcer.close();
   observation?.close();
   store.close();
+}
+
+/**
+ * The free checks before a moment is decided (`proactiveMomentDesk.ts`), as closed codes: her loop is ready and not paused, the
+ * budget is not used up, she may still speak up today, the reach-out spacing has passed, he has not written or spoken within the
+ * owner-active hold, and no cycle of hers is open. Any error says no.
+ */
+function momentBlocked(scopeKey: string, at: string): string | null {
+  try {
+    if (loop.readiness() !== 'ready') return 'not_ready';
+    if (store.control(scopeKey).paused) return 'paused';
+    if (service.overview(scopeKey).budget.exhausted) return 'budget';
+    if (config.maximumReachOutsPerDay < 1) return 'switched_off';
+    if (reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)) >= config.maximumReachOutsPerDay) return 'daily_limit';
+    const last = reachOuts.lastSentAt(scopeKey);
+    if (last && Date.parse(at) - Date.parse(last) < loopConfig.reachOutSpacingMilliseconds) return 'spacing';
+    const hold = Math.max(loopConfig.ownerActiveMilliseconds, 10 * 60_000);
+    if (showing.ownerActiveSince(scopeKey, new Date(Date.parse(at) - hold).toISOString())) return 'owner_active';
+    // Infrastructure privacy guard, not a persona rule: nothing of a moment while anyone else may see or hear her (a stream included).
+    if (othersAroundBody(scopeKey, at)) return 'others_present';
+    // A voice call with her body is under way (its newest call event of the last three hours started one).
+    const callSince = new Date(Date.parse(at) - 3 * 60 * 60_000).toISOString();
+    if (bodyStore.latestOfTypes(scopeKey, ['callStarted', 'callEnded'], callSince, at)?.type === 'callStarted') return 'in_call';
+    return store.loop.openCycle(scopeKey) ? 'cycle_open' : null;
+  } catch { return 'error'; }
 }
 
 function boundedInteger(value: string | undefined, minimum: number, maximum: number, fallback: number): number {

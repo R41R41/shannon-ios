@@ -37,6 +37,11 @@ const SURFACE_LABEL: Readonly<Record<MindSurface, string>> = Object.freeze({
   text: 'アプリの文字', voice: '声の会話', body: '体', minecraft: 'マイクラ', platform: 'メッセージの場', outreach: 'ボクからの連絡', own_time: 'ボクの時間',
 });
 const SPEAKER_LABEL = Object.freeze({ owner: 'ライ氏', person: 'ほかの人', unknown: '誰か', shannon: 'ボク', system: '' });
+/** A moment her own time perceived of the owner through her body (owner decision 2026-10-14): what it was, as a fact. */
+const MOMENT_WORD: Readonly<Record<string, string | undefined>> = Object.freeze({
+  owner_returned: 'ライ氏が席に戻ってきた', long_quiet: 'ライ氏がそばで長く静かにしている', morning: '朝で、ライ氏がそばにいる',
+  late_night: '夜更けに、ライ氏がまだそばにいる', awaiting_reaction: 'ボクの物語が、ライ氏に読まれるのを待っている',
+});
 const TOUCH_WORD: Readonly<Record<string, string>> = Object.freeze({
   pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '持ち上げられた', holdHand: '手をにぎられた',
 });
@@ -48,6 +53,8 @@ const NOT_STARTED_WORD: Readonly<Record<string, string>> = Object.freeze({
   'lifecycle_not_started.not_allowed': '実行の条件がそろわなかった',
   'lifecycle_not_started.error': '思わぬ理由',
 });
+/** An accepted Minecraft lifecycle operation whose body never confirmed it, closed at the unknown exit. */
+const RESULT_UNKNOWN_LINE = '体から完了の返事がないまま、結果を確かめられずに閉じた';
 
 export interface LayoutTurn {
   surface: 'text' | 'voice';
@@ -95,6 +102,8 @@ function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null
   if (closedVoiceItem(item)) return `${head}${CLOSED_VOICE_LINE}`;
   if (SPEECH_KINDS.has(item.kind)) return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}が話した${excerpt ? `「${excerpt}」` : ''}`;
   if (item.kind === 'own_time_step') return `${head}${item.detail?.tool ? `〈${item.detail.tool}〉を` : ''}${item.detail?.code === 'failed' ? 'しようとして、できなかった' : 'した'}`;
+  const moment = item.kind === 'presence' ? MOMENT_WORD[item.detail?.code ?? ''] : undefined;
+  if (moment) return `${head}${moment}`;
   if (item.kind === 'presence') return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}の様子が変わった`;
   return `${head}できごと`;
 }
@@ -104,6 +113,7 @@ function taskOutcomeLine(item: WorkspaceItem, ago: string): string {
   const tool = item.detail?.tool ?? '作業';
   const notStarted = NOT_STARTED_WORD[item.detail?.reason ?? ''];
   if (notStarted) return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉を始められなかった（${notStarted}）`;
+  if (item.detail?.reason === 'lifecycle_result_unknown') return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉は${RESULT_UNKNOWN_LINE}`;
   return `${NOTICE_MARKERS.task_outcome}${ago}、〈${tool}〉が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
 }
 

@@ -143,6 +143,10 @@ export function validatedBodyReachOutReport(body: Record<string, unknown>): { ou
   return outcome ? { outcome } : `outcome must be one of ${BODY_REACH_OUT_DELIVERY_OUTCOMES.join(', ')}`;
 }
 
+/**
+ * The scenes of the retired fixed lines (owner decision 2026-10-14). `GET /v1/body/nudges` keeps its shape for bodies that still
+ * ask and answers no line; the scenes are moments she perceives (`mind/attention/proactiveMoments.ts`).
+ */
 export const BODY_NUDGE_SCENES = ['ownerReturned', 'longQuiet', 'morning', 'lateNight', 'awaitingReaction'] as const;
 export type BodyNudgeScene = typeof BODY_NUDGE_SCENES[number];
 

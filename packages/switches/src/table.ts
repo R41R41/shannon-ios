@@ -212,6 +212,18 @@ export const SWITCHES = [
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },
   {
+    name: 'SHANNON_PROACTIVE_MOMENTS', default: 'on', kind: 'default_on', owner: 'autonomy', requires: ['SHANNON_AUTONOMY_ENABLED', 'SHANNON_PROACTIVE_GATE'],
+    doc: 'Owner 2026-10-14: moments she perceives (he came back, a long quiet, morning, late night, a story waiting) may lead her to speak in her own words.',
+  },
+  {
+    name: 'SHANNON_STUDY_SHOWING_LINE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: [],
+    doc: 'Owner 2026-10-14: off, telling him a piece writes no fixed line (the piece is readable; a story waiting is a moment of hers).',
+  },
+  {
+    name: 'SHANNON_BODY_INITIATIVE_FRESHNESS', default: 'on', kind: 'default_on', owner: 'outreach', requires: [],
+    doc: 'A body is handed an initiative to say aloud only while it is fresh (morning brief in its hours; topics within the gate\'s intent expiry).',
+  },
+  {
     name: 'SHANNON_EXECUTIVE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: ['SHANNON_AUTONOMY_ENABLED'],
     doc: 'ADR-0009 stage 2: the Executive decides her own time (one deliberation, one capability); off, the old own-time loop thinks.',
   },

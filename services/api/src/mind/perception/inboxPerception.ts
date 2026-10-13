@@ -14,12 +14,15 @@ export const INBOX_PRESENT: Readonly<Record<MindInboxAudience, MemoryAudience>> 
 
 const KIND: Readonly<Record<MindInboxDraft['kind'], MindEventKind>> = Object.freeze({
   own_time_step: 'own_time_step', task_outcome: 'task_outcome', promise_due: 'promise_due', notice: 'notice',
+  // A moment of the owner's presence her own time perceived through her body (owner decision 2026-10-14).
+  moment: 'presence',
 });
 
 const SURFACE: Readonly<Record<MindInboxDraft['source'], MindSurface>> = Object.freeze({ own_time: 'own_time', worker: 'own_time', api: 'outreach' });
 
 function salienceOf(draft: Required<MindInboxDraft>): SalienceInputs {
   if (draft.kind === 'promise_due') return { promiseDeltaMinutes: draft.deltaMinutes ?? 0 };
+  // A moment of his presence weighs like one of her outcomes: it just enters attention, and fades as an ambient item.
   // Her own step's end, a task's end and a rule that stopped her are all outcomes of her own doing.
   return { ownTaskOutcome: true };
 }
@@ -37,9 +40,11 @@ export function inboxPerception(input: { draft: MindInboxDraft; at: string; seq?
   try { draft = checkedMindInboxDraft(input.draft); } catch { return null; }
   const alone = draft.audience === 'owner';
   return perceived({
-    id: input.seq === undefined ? perceivedId('inbox') : `inbox:${input.seq}`, kind: KIND[draft.kind], surface: SURFACE[draft.source], time: input.at,
+    id: input.seq === undefined ? perceivedId('inbox') : `inbox:${input.seq}`, kind: KIND[draft.kind], time: input.at,
+    surface: draft.kind === 'moment' ? 'body' : SURFACE[draft.source],
     audience: INBOX_PRESENT[draft.audience], presence: { ownerOnlyHears: alone, othersMayHear: !alone },
-    speaker: { kind: draft.source === 'own_time' ? 'shannon' : 'system' },
+    // A moment is about the owner, perceived by her body: its speaker is the system that reported it, never the owner himself.
+    speaker: { kind: draft.source === 'own_time' && draft.kind !== 'moment' ? 'shannon' : 'system' },
     salienceInputs: salienceOf(draft),
     provenance: { source: draft.kind, sourceId: closedId(draft.sourceId), trust: 'system' },
     content: draft.ref ? { ref: draft.ref } : null,

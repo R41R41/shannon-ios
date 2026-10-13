@@ -350,6 +350,8 @@ export function reachOutPrompt(input: {
   ownerContext?: string;
   /** Her notes may be about the owner and the people he knows: with someone else present each carries the marker. */
   notesPrivate?: boolean;
+  /** A moment she perceived and wanted to speak of (owner decision 2026-10-14): one fact line, and the rules it is written under. */
+  moment?: { line: string; rules: readonly string[] };
 }): AutonomyPrompt {
   const marker = input.others?.marker ?? '';
   const noteMarker = input.notesPrivate ? marker : '';
@@ -359,9 +361,13 @@ export function reachOutPrompt(input: {
     section('[書いているもの]', (input.stories ?? []).slice(0, 3).map(item => `- ${noteMarker}「${oneLine(item.title, 60)}」 ${oneLine(item.statusLabel, 20)}`)),
   ] : input.reason === 'upcoming' ? [section(UPCOMING_HEADER, upcomingLines(input.upcoming ?? [], marker))]
     : input.reason === 'saw' ? [`[さっき体のカメラで見たこと]\n- ${marker}${oneLine(input.seen ?? '', 300)}`] : [];
+  // A moment's rules go with the others, before the line that asks for JSON.
+  const rules = input.moment ? REACH_OUT_RULES(input.reason, Boolean(ownerContext))
+    .replace('\nJSONだけを返す:', `\n${input.moment.rules.map(rule => `- ${rule}`).join('\n')}\nJSONだけを返す:`) : REACH_OUT_RULES(input.reason, Boolean(ownerContext));
+  const moment = input.moment ? [`[いま気づいたこと]\n- ${oneLine(input.moment.line, 120)}`] : [];
   return {
-    system: [system(withRule(REACH_OUT_RULES(input.reason, Boolean(ownerContext)), ownerPrivateRule('message', Boolean(ownerContext)))), ...(input.others ? [input.others.instructions] : [])].join('\n\n'),
-    prompt: [QUOTED, `[いま] ${input.localTime}`, ...materials, ...(ownerContext ? [ownerContext] : [])].join('\n\n'),
+    system: [system(withRule(rules, ownerPrivateRule('message', Boolean(ownerContext)))), ...(input.others ? [input.others.instructions] : [])].join('\n\n'),
+    prompt: [QUOTED, `[いま] ${input.localTime}`, ...moment, ...materials, ...(ownerContext ? [ownerContext] : [])].join('\n\n'),
   };
 }
 

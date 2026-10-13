@@ -82,6 +82,18 @@ describe('bounded original tool evidence (Q02 / Q07)', () => {
     expect(verifyWriteClaims('マイクラのサーバー「home」を起動しました。', [write('minecraft.start', lifecycle())])).toBe('ok');
     expect(verifyWriteClaims('マイクラのサーバー「other」を起動しました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
     expect(verifyWriteClaims('マイクラのサーバー「home」をログインしました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
+    // `minecraft.set_day` (2026-10-14): a claim of daytime matches only its own receipt.
+    expect(verifyWriteClaims('マイクラのサーバー「home」を昼にしました。', [write('minecraft.set_day', lifecycle('set_day'))])).toBe('ok');
+    expect(verifyWriteClaims('マイクラのサーバー「home」を昼にしました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
+    expect(verifyWriteClaims('ワールドを昼にしました。', [write('minecraft.set_day', lifecycle('set_day'))])).toBe('ok');
+    expect(verifyWriteClaims('ワールドを昼にしました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
+    // 「ワールド」 alone is no Minecraft object: ordinary write reports keep their own check (delta review).
+    expect(verifyWriteClaims('物語のワールド設定をノートに保存しました。', [write('folder.update', folder('a.txt'))])).toBe('ok');
+    expect(verifyWriteClaims('ワールドカップの記事をメモに保存しました。', [write('folder.update', folder('a.txt'))])).toBe('ok');
+    expect(verifyWriteClaims('ワールドの時刻を昼にしました。', [write('minecraft.set_day', lifecycle('set_day'))])).toBe('ok');
+    // Review P3-3: a start or stop verb wins over 「昼」.
+    expect(verifyWriteClaims('昼にサーバーを起動しました。', [write('minecraft.start', lifecycle())])).toBe('ok');
+    expect(verifyWriteClaims('昼にサーバーを起動しました。', [write('minecraft.set_day', lifecycle('set_day'))])).toBe('claim_without_write');
     const missing = lifecycle(); delete missing.receiptId;
     expect(verifyWriteClaims('マイクラのサーバーを起動しました。', [write('minecraft.start', missing)])).toBe('claim_without_write');
   });

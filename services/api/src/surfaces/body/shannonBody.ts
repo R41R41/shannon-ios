@@ -9,7 +9,6 @@ import { APP_LOOK_TOOL } from '../../mind/perception/appLookLines.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from '../../contracts/bodyLookContract.js';
 import { noteBodyLookSpeaker } from './store/bodyLookDelivery.js';
-import { bodyNudgeCandidates } from './bodyNudges.js';
 import { BodyReactions, type BodyReactionDependencies } from './bodyReaction.js';
 import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from '../../contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
@@ -392,20 +391,21 @@ export class ShannonBody {
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
   }
 
-  nudges(scopeKey: string): BodyNudges {
-    const at = this.dependencies.now();
-    const lastTurn = this.dependencies.conversationStore.listThreads(scopeKey)
-      .reduce((latest, thread) => Math.max(latest, Date.parse(thread.updatedAt) || 0), 0);
-    const quietEnd = lastTurn + BODY_LIMITS.nudgeQuietAfterConversationMinutes * 60_000;
-    const quiet = lastTurn > 0 && quietEnd > Date.parse(at);
+  /**
+   * The body's fixed lines are retired (owner decision 2026-10-14: 「全てやめる代わりに、それらが本心からシャノンから自発的に発言され得る
+   * ようにしておきたい」). The route keeps its shape for bodies that still ask, and answers no line, ever: the situations behind the old
+   * lines are moments she perceives in her own time (`mind/attention/proactiveMoments.ts`), and what she says of one is a message
+   * of hers in her own words, delivered as any other.
+   */
+  nudges(_scopeKey: string): BodyNudges {
     return {
-      schemaVersion: BODY_SCHEMA_VERSION, generatedAt: at,
+      schemaVersion: BODY_SCHEMA_VERSION, generatedAt: this.dependencies.now(),
       limits: {
         notDuringConversation: true, quietAfterConversationMinutes: BODY_LIMITS.nudgeQuietAfterConversationMinutes,
         maximumPerHour: BODY_LIMITS.nudgeMaximumPerHour, maximumPerDay: BODY_LIMITS.nudgeMaximumPerDay,
       },
-      quietUntil: quiet ? new Date(quietEnd).toISOString() : null,
-      nudges: quiet ? [] : bodyNudgeCandidates(at, this.awaitingReaction(scopeKey)),
+      quietUntil: null,
+      nudges: [],
     };
   }
 

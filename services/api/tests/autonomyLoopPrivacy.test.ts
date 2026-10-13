@@ -699,7 +699,9 @@ describe('what reaches the prompts of her own activity', () => {
     const showing = ['autonomyShowing.ts', 'studyShowingStore.ts', 'studyShowingWiring.ts'].map(read).join('\n');
     expect(showing).not.toMatch(/SELECT\s+(?:content|\*)[^`]*FROM conversation_messages/u);
     expect([...showing.matchAll(/SELECT ([^`']*?) FROM (conversation_messages|companion_states)/gu)].map(match => `${match[2]}:${match[1]!.trim()}`).sort())
-      .toEqual(['companion_states:snapshot_json', 'conversation_messages:1 AS found', 'conversation_messages:MIN(observed_at) AS first_at']);
+      // Timestamps only: the last one is when a quiet began, for her moments (owner decision 2026-10-14, `proactiveMoments.ts`).
+      .toEqual(['companion_states:snapshot_json', 'conversation_messages:1 AS found', 'conversation_messages:MAX(observed_at) AS last_at',
+        'conversation_messages:MIN(observed_at) AS first_at']);
   });
 
   it('builds each prompt from her ledger, her study, public reading and reader feedback, and marks every material as quoted', () => {
