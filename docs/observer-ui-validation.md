@@ -1,5 +1,14 @@
 # Mind Observer UI validation
 
+## No zoom on click and recent calls (2026-10-14)
+
+Same fixture and CDP method; two `turn` commands were sent before pairing and one after. At 1600×900: a block click at 塊
+and a box click at 処理 left the `viewBox` unchanged, highlighted/selected and opened the drawer; Haiku listed six calls
+newest first, including the four sent before the page connected (the server's retained window), with 「表示中」 and
+「この一回」; an expanded call stayed open across re-renders; 共有 SQLite said it has no observation events. At 390×844
+(touch) a tap on 道具の関門 kept the view, listed three calls, and the page had no horizontal overflow. No console exceptions.
+[1600 Haiku history](observer-evidence/history-1600-haiku.jpg), [390 道具の関門 history](observer-evidence/history-390-gate.jpg)
+
 ## Landscape placement and drag and drop (2026-10-14)
 
 Branch `observer-dnd-landscape` from `2d3820fe`. Headless Chrome driven over CDP against `scripts/observer-ui-smoke.ts`

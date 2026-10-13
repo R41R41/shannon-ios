@@ -58,3 +58,5 @@ export function createObserverSession(getStorage: () => Pick<Storage, 'getItem' 
 };
 export function createReceiptGate(): { accept(envelope: ObserverBatch): boolean; reset(): void };
 export function viewPrefs(value: unknown): { hidden: boolean; hint: boolean; level: 1 | 2 | 3 | null };
+export interface HistoryCall { key: string; span: ObservedSpan; state: ObservationState; inWindow: boolean }
+export function createNodeHistory(limit?: number): { observe(state: ObserverState): void; list(view: string, state: ObserverState): HistoryCall[]; clear(): void };

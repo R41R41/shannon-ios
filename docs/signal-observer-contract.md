@@ -2,6 +2,11 @@
 
 Status: the original Observer is deployed. The common-FCA map and timing revision is implemented on `codex/shannon/fca-observer`, based on accepted main `eaf6b84f`; production reflection is a separate gate. The foreground stable-cache change is included from `codex/shannon/stable-foreground-cache`.
 
+## No zoom on click, recent calls in the detail (owner feedback, 2026-10-14)
+
+- 「各部品をクリックした際に拡大されるのはやめてほしい」: clicking (or tapping, or Enter on) a box selects it, opens the detail and highlights it; the view does not zoom or move. At 塊 a click on a block toggles its highlight (other blocks fade) without moving the view. The block chips in the corner, 全体, ＋/− and the wheel/pinch remain the ways to move the view.
+- 「右に出てくる入力と出力は直近数回の履歴も見れてほしい」: the detail lists the box's last 8 calls across runs, newest first (time, measured duration, state, 「表示中」/「この一回」), each expandable to its error kind, model, and the same projected input and output rows. The list is built in the page's memory from the events the viewer already reads (`createNodeHistory`, a per-box ring buffer of 8): no new endpoint, request or field, so it works unchanged through the Windows read bridge. The viewer's first read starts at cursor 0, so the server's retained window (up to 15 minutes, 2000 events) fills the history on open; after that it grows with live events. Each box keeps its own newest 8 even when busy boxes push a quiet one out of the page's 1600-event window; such an entry says it left the window, and one that never closed there is shown as 不明, not running. It is cleared with every other private view (disconnect, pause, hidden page, held audience, loss, gap, server restart). Display-only boxes say they have no events; an observed box with no call yet says so.
+
 ## Landscape map, movable boxes, no target view (owner feedback, 2026-10-14)
 
 - **目指す姿 retired.** 「目指す姿の切り替えはもう廃止でいい」: the 現状/目指す姿 switch, its controls and the ADR-0009 dummy model and animation (`TARGET_*`, `dummyFields`, `mergeFields`) are removed. The viewer shows only observed events of the current architecture.

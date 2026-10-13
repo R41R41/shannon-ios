@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObserverBatch, ObserverEvent } from '../src/contracts/observerContract.js';
 import {
-  MAX_EVENTS, createObserverClient, createObserverState, createObserverSession, createReceiptGate, linkedRunView, nodeState, observerBasePath,
+  MAX_EVENTS, createNodeHistory, createObserverClient, createObserverState, createObserverSession, createReceiptGate, linkedRunView, nodeState, observerBasePath,
   reduceObserverEnvelope, runToolEvidence, spanState, validEnvelope,
   type ObserverRequest,
 } from '../src/infra/observer/web/observer.js';
@@ -366,5 +366,38 @@ describe('desktop observer uses the existing main-process connection', () => {
     expect(onCredential).not.toHaveBeenCalled(); refused=false;
     await vi.advanceTimersByTimeAsync(800); expect(onConnection).toHaveBeenLastCalledWith('live');
     client.disconnect();
+  });
+});
+
+describe('recent calls of a box (owner, 2026-10-14)', () => {
+  const call = (sequence: number, run: string, values: Partial<ObserverEvent> = {}) => [
+    event(sequence, { runId: run, spanId: `s${sequence}`, kind: 'span.started', input: { round: sequence }, ...values }),
+    event(sequence + 1, { runId: run, spanId: `s${sequence}`, kind: 'span.completed', elapsedMs: sequence, output: { stop: 'end_turn' }, ...values }),
+  ];
+  it('keeps the newest calls of each box across runs, newest first, with the projected input and output', () => {
+    const history = createNodeHistory(3);
+    const events = [1, 3, 5, 7].flatMap(n => call(n, `run-${n}`, { model: 'claude-haiku-5-5' }));
+    events.push(...call(20, 'run-j', { input: { provider: 'jev' } }));
+    const state = reduceObserverEnvelope(createObserverState(), batch(events));
+    history.observe(state);
+    const calls = history.list('haiku', state);
+    expect(calls.map(item => item.span.id)).toEqual(['s7', 's5', 's3']);
+    expect(calls[0]).toMatchObject({ state: 'completed', inWindow: true });
+    expect(calls[0].span.input).toEqual({ round: 7 }); expect(calls[0].span.output).toEqual({ stop: 'end_turn' });
+    expect(history.list('jevModel', state).map(item => item.span.id)).toEqual(['s20']);
+    expect(history.list('gate', state)).toEqual([]);
+  });
+  it('keeps a quiet box after the page window drops it, shows an unfinished one as unknown, and clears', () => {
+    const history = createNodeHistory(4);
+    let state = reduceObserverEnvelope(createObserverState(), batch([...call(1, 'run-a', { node: 'gate' }), event(3, { runId: 'run-b', spanId: 'open', node: 'tools' })]));
+    history.observe(state);
+    const flood = Array.from({ length: MAX_EVENTS }, (_, index) => event(10 + index, { runId: 'run-c', spanId: `f${index}`, node: 'store', kind: 'span.completed', elapsedMs: 1 }));
+    for (let index = 0; index < flood.length; index += 200) { state = reduceObserverEnvelope(state, batch(flood.slice(index, index + 200))); history.observe(state); }
+    expect(state.runs.has('run-a')).toBe(false);
+    expect(history.list('gate', state).map(item => [item.span.id, item.state, item.inWindow])).toEqual([['s1', 'completed', false]]);
+    expect(history.list('tools', state)[0].state).toBe('unknown');
+    expect(history.list('store', state)).toHaveLength(4);
+    history.clear();
+    expect(history.list('gate', state)).toEqual([]);
   });
 });

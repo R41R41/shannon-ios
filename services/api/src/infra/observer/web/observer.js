@@ -354,6 +354,36 @@ export function createObserverClient(options) {
   return { connect, connectExisting, pair, disconnect, pause, resume };
 }
 
+/** Recent calls of each map box (owner, 2026-10-14: 「直近数回の履歴も見れてほしい」). Kept only in this page's memory from the
+ * events it already reads (no new request): the viewer's first read returns the server's retained window, so history starts
+ * with what the server still holds. Each box keeps its newest `limit` spans, so a busy box cannot push a quiet one out of the
+ * page's event window. It holds the same projected spans the detail already shows, and it is cleared whenever the view is
+ * (disconnect, pause, hidden page, held audience, loss, gap or server restart). */
+export function createNodeHistory(limit = 8) {
+  let byView = new Map();
+  return {
+    observe(state) {
+      for (const run of state.runs.values()) for (const span of run.spans.values()) {
+        const view = viewNodeOf(span.node, span.input, span.output);
+        if (!view) continue;
+        const list = byView.get(view) ?? [], key = spanKey(span), index = list.findIndex(entry => entry.key === key);
+        if (index >= 0) { list[index] = { key, span }; continue; }
+        if (list.length >= limit && span.firstSequence < list[list.length - 1].span.firstSequence) continue;
+        list.push({ key, span }); list.sort((a, b) => b.span.firstSequence - a.span.firstSequence); list.length = Math.min(list.length, limit);
+        byView.set(view, list);
+      }
+    },
+    /** Newest first. A span no longer in the page's window that never closed is shown as unknown, not as still running. */
+    list(view, state) {
+      return (byView.get(view) ?? []).map(({ key, span }) => {
+        const live = state.runs.get(span.runId)?.spans.get(span.id);
+        return { key, span: live ?? span, state: live ? spanState(live, state.runs.get(span.runId), state.transport) : span.endedAt ? span.state : 'unknown', inWindow: Boolean(live) };
+      });
+    },
+    clear() { byView = new Map(); },
+  };
+}
+
 /** Per-tab view preferences only (never credentials or observations): overlay hidden, hint dismissed, picked detail level. */
 export function viewPrefs(value) {
   const saved = record(value) ? value : {};
@@ -400,6 +430,7 @@ function mountObserver() {
   const session = createObserverSession(() => window.sessionStorage, `shannon.observer.connection.v1:${observerBasePath(window.location.pathname)}`);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, priorCatalog = null;
+  const history = createNodeHistory(8), openHistory = new Set();
   let view = 'timeline', selectedTask = null, selectedStep = null, selectedKey = null, selectedView = null, focusBlock = null;
   // Owner feedback 2026-10-13: the canvas fills the viewport and every control floats above it. Only this view preference is kept per tab.
   const uiKey = `shannon.observer.ui.v1:${observerBasePath(window.location.pathname)}`;
@@ -561,6 +592,30 @@ function mountObserver() {
     const chips = el('div', 'chips', null, box);
     for (const other of others.slice(0, 24)) { const chip = el('button', 'chip', labelFor(model, other.view), chips); chip.type = 'button'; role(chip, roleFor(model, other.view)); chip.addEventListener('click', () => select(other.key, other.view)); }
   }
+  /** The box's recent calls, newest first, each expandable to the same projected input and output the detail shows. */
+  function recentCalls(parent, id, currentKey) {
+    const box = el('div', 'history', null, parent), calls = history.list(id, state);
+    el('h4', '', `直近の呼び出し（新しい順・最大 8 回）`, box);
+    if (!calls.length) { el('p', 'hint', model.index.get(id)?.[6]?.length === 0 ? 'この箱には観察イベントがありません。' : 'まだ届いていません。この画面を開いた時にサーバーが保持していた分（最大 15 分）と、その後に届いた分を記録します。', box); return; }
+    const list = el('ol', 'history-list', null, box);
+    for (const call of calls) {
+      const span = call.span, item = el('li', '', null, list), details = el('details', `call state-${call.state}`, null, item);
+      details.open = openHistory.has(call.key);
+      details.addEventListener('toggle', () => { if (details.open) openHistory.add(call.key); else openHistory.delete(call.key); });
+      const summary = el('summary', '', null, details);
+      el('span', 'num', timeValue(span.startedAt ?? span.endedAt), summary);
+      el('span', 'num', typeof span.elapsedMs === 'number' && span.endedAt ? `${span.elapsedMs < 10 ? span.elapsedMs.toFixed(1) : fmt(span.elapsedMs)} ms` : '—', summary);
+      el('span', `state state-${call.state}`, STATE_LABELS[call.state] ?? call.state, summary);
+      if (call.key === currentKey) el('span', 'here', '表示中', summary);
+      else if (span.runId === state.selectedRunId) el('span', 'here', 'この一回', summary);
+      const errorKind = record(span.output) && typeof span.output.errorKind === 'string' ? span.output.errorKind : null;
+      if (errorKind) el('p', 'failure', `失敗：${errorKind}`, details);
+      if (span.model) el('p', 'hint', `モデル ${span.model}`, details);
+      if (!call.inWindow) el('p', 'hint', 'この呼び出しはページの表示範囲から外れました（記録した時点の値）。', details);
+      const columns = el('div', 'columns', null, details); table('入力', fieldRows(span.input), columns);
+      table('出力', span.endedAt ? fieldRows(span.output) : [{ gloss: '', key: '', value: call.state === 'running' ? '出力イベント待ち' : '状態不明・完了は未確認' }], columns);
+    }
+  }
   function renderDetail() {
     const panel = $('detail'); panel.replaceChildren();
     const data = liveRows(), rows = data.rows;
@@ -584,6 +639,7 @@ function mountObserver() {
         : id === 'executive' ? 'Executive は作ってありますが、今は止まっています（観察イベントはありません）。' : id === 'sqlite' ? '共有 SQLite は処理として観察していません。保存や記憶の書き込みの行き先です。'
         : 'この一回では、この処理を観測していません。', panel);
       if (id === 'identity') { const rootSpan = [...(run?.spans.values() ?? [])].find(item => item.isRunRoot && record(item.output) && record(item.output.steps)); if (rootSpan) { const value = rootSpan.output.steps.identity; el('p', 'num', typeof value === 'number' ? `identity ${ms(value)}` : 'identity の段はこの一回で測っていません。', panel); } }
+      recentCalls(panel, id, null);
       if (definition) el('p', 'location', definition.location, panel);
       for (const item of coverage) if (item.reason) el('p', 'hint', item.reason, panel);
       return;
@@ -602,6 +658,7 @@ function mountObserver() {
     table('出力', span.endedAt ? fieldRows(span.output) : [{ gloss: '', key: '', value: span.state === 'running' ? '出力イベント待ち' : '状態不明・完了は未確認' }], columns);
     if (span.isRunRoot) stepsBlock(panel, span.output, span);
     if (id === 'base') baseSteps(panel, span, run);
+    recentCalls(panel, id, row.key);
     concurrent(panel, row, rows, model);
     if (TOOL_VIEWS.has(id)) tools(panel, run);
     if (definition) el('p', 'location', `実装：${definition.location}`, panel);
@@ -645,7 +702,8 @@ function mountObserver() {
       parts.subtitle = sv('text', { class: 'far-process', 'text-anchor': 'middle' }, far); parts.subtitle.textContent = process;
       parts.count = sv('text', { class: 'far-count', 'text-anchor': 'middle' }, far); counts.set(id, parts.count);
       blockElements.set(id, parts);
-      group.addEventListener('click', () => { const box = map.layout.blocks.get(id); if (map.level === 1 && box) zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.min(2.4, fitK(box.w + 40, box.h + 40))); });
+      // At 塊 a click on a block highlights it (others fade), without zooming or moving the view.
+      group.addEventListener('click', () => { if (map.level === 1) setFocus(focusBlock === id ? null : id, false); });
     }
     for (const spec of model.nodes) {
       const [id] = spec, box = model.layout.boxes.get(id), group = sv('g', { class: 'node', tabindex: 0, role: 'button', 'aria-label': spec[4], 'data-node': id }, nodes); role(group, roleFor(model, id));
@@ -657,7 +715,8 @@ function mountObserver() {
       const time = sv('text', { class: 'node-time', x: box.w - 7, y: 16, 'text-anchor': 'end' }, group); times.set(id, time);
       const fields = sv('g', { class: 'node-fields' }, group); fieldGroups.set(id, fields);
       nodeElements.set(id, group);
-      const pick = () => { const latest = [...liveRows().rows].reverse().find(row => row.view === id); select(latest?.key ?? null, id); const at = map.layout.boxes.get(id); zoomTo(at.x + at.w / 2, at.y + at.h / 2, Math.max(map.k, 3.4)); };
+      // Owner, 2026-10-14: 「各部品をクリックした際に拡大されるのはやめてほしい」 — a click selects and opens the detail; the view stays.
+      const pick = () => { const latest = [...liveRows().rows].reverse().find(row => row.view === id); select(latest?.key ?? null, id); };
       group.addEventListener('click', event => { event.stopPropagation(); pick(); });
       group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); } });
     }
@@ -902,15 +961,15 @@ function mountObserver() {
     const host = $('block-chips'); host.replaceChildren();
     for (const [id, label, , blockRole] of model.blocks) { const chip = el('button', 'chip block-chip', label, host); chip.type = 'button'; role(chip, blockRole); chip.setAttribute('aria-pressed', String(focusBlock === id)); chip.addEventListener('click', () => setFocus(focusBlock === id ? null : id)); }
   }
-  function setFocus(id) {
+  function setFocus(id, move = true) {
     focusBlock = id; chipSignature = ''; timelineSignature = '';
-    if (map && view === 'map') { const box = map.layout.blocks.get(id); if (box) zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.min(2.4, fitK(box.w + 40, box.h + 40))); else { map.frame = { width: map.layout.width, height: map.layout.height }; zoomTo(map.layout.width / 2, map.layout.height / 2, 1); } }
+    if (move && map && view === 'map') { const box = map.layout.blocks.get(id); if (box) zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.min(2.4, fitK(box.w + 40, box.h + 40))); else { map.frame = { width: map.layout.width, height: map.layout.height }; zoomTo(map.layout.width / 2, map.layout.height / 2, 1); } }
     render();
   }
   function setView(next) { if (next === view) return; view = next; timelineSignature = ''; render(); if (view === 'map') { buildMap(); render(); } }
 
   function clearPrivateView() {
-    state = createObserverState(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
+    state = createObserverState(); history.clear(); openHistory.clear(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
     runSignature = ''; taskSignature = ''; timelineSignature = ''; metricSignature = ''; viewRuns = null; linkedView = undefined;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
     if (map) { map.particles = []; map.packets.replaceChildren(); map.fieldSignature = new Map(); }
@@ -937,8 +996,9 @@ function mountObserver() {
     },
     onEnvelope: (envelope, delivery) => {
       const previous = state, seen = new Set(previous.events.map(event => event.sequence));
-      if (previous.instanceId !== envelope.instanceId || envelope.gap || (envelope.dropped ?? 0) > previous.dropped || envelope.availability === 'held') elapsedClock.clear();
+      if (previous.instanceId !== envelope.instanceId || envelope.gap || (envelope.dropped ?? 0) > previous.dropped || envelope.availability === 'held') { elapsedClock.clear(); history.clear(); openHistory.clear(); }
       state = reduceObserverEnvelope(previous, envelope, $('follow-runs').checked && !selectedTask);
+      if (state.availability === 'ready' && envelope.events.length) history.observe(state);
       elapsedClock.observe(effectiveObservedSpans(state, [...state.runs.values()].flatMap(run => [...run.spans.values()])), performance.now());
       if (!clockTimer && state.transport === 'live') clockTimer = setTimeout(tick, 250);
       if (previous.transport === 'lost' && state.transport === 'live' && !envelope.gap && previous.instanceId === state.instanceId) state.notice = '接続が回復しました。受信したイベントから表示を更新しました。';
