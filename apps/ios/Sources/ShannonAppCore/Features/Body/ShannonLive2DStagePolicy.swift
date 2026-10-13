@@ -59,9 +59,44 @@ enum ShannonLive2DStagePolicy {
 
     /// Low Power Mode halves the drawn frames; otherwise the display's own rate.
     static func frameRate(lowPower: Bool) -> Int { lowPower ? 30 : 0 }
-    /// With no screen showing her, the model is let go after this long. Its textures alone are about 150 MB of GPU memory
+    /// With no screen showing her, the model is let go after this long (the Mac; the iPhone keeps it, `keepSeconds`). Its textures alone are about 150 MB of GPU memory
     /// since the model of 2026-10-06 08:06 (two 4096 x 4096 and one 2048 x 2048, uncompressed RGBA; before it about 85 MB).
     static let releaseAfterSeconds: TimeInterval = 90
+    /// On the iPhone, with the Waterlight form chosen, a page loaded before is kept (paused, parked out of sight) this long,
+    /// so that switching back to the Live2D form (ボット → ガール) shows her at once instead of loading the page again.
+    static let keepInOtherFormSeconds: TimeInterval = 30 * 60
+
+    /// How long a loaded page is kept after the last screen showing her went away; nil keeps it until memory runs short
+    /// (a memory warning lets it go at once). `parks` is the iPhone, where a page waits paused in its parking place: there,
+    /// with the Live2D form chosen she is only out of sight (Talk's scroll display, reading the conversation, another tab),
+    /// and the next screen shows her from the page as it is. Elsewhere (the Mac) the page is let go as before.
+    static func keepSeconds(formIsLive2D: Bool, parks: Bool) -> TimeInterval? {
+        guard parks else { return releaseAfterSeconds }
+        return formIsLive2D ? nil : keepInOtherFormSeconds
+    }
+
+    /// Why the page would be loaded before a screen shows her.
+    enum Warming: Equatable, Sendable {
+        /// The app came up (or Talk appeared) with the Live2D form chosen.
+        case launch
+        /// The owner has just chosen the Live2D form (ボット → ガール): a screen will show her in a moment.
+        case chosen
+    }
+
+    /// Loading ahead is free of network (the page is bundled) but costs a second or two of work: on the owner's own
+    /// choice it is always done, at launch only outside Low Power Mode.
+    static func warms(_ reason: Warming, lowPower: Bool) -> Bool {
+        reason == .chosen || !lowPower
+    }
+
+    /// Whether the page is loaded now, ahead of a screen: only for the Live2D form, only when nothing is loaded or loading
+    /// (a failed page waits for the owner's もう一度読み込む), and only while no screen shows her (a screen loads it itself).
+    static func warmsAhead(form: ShannonForm, status: ShannonLive2DStage.Status, hasHosts: Bool, reason: Warming, lowPower: Bool) -> Bool {
+        form == .live2d && status == .unloaded && !hasHosts && warms(reason, lowPower: lowPower)
+    }
+
+    /// At launch the page waits this long, so that it does not compete with the conversation's first load.
+    static let launchWarmDelaySeconds: TimeInterval = 2
 
     /// The page to open: `embed.html`, with `?body=eyes` when she starts with her eyes alone.
     static func pageURL(in folder: URL, body: ShannonLive2DBody) -> URL {

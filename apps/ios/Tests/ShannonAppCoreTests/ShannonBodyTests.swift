@@ -620,6 +620,69 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(Policy.sendsMouthLevel(0, last: 0))
     }
 
+    /// Owner request 2026-10-14: ボット → ガール loaded the whole page every time. The iPhone keeps a loaded page
+    /// between screens and loads it ahead of the screen that will show her; the Mac lets it go as before.
+    func testTheIPhoneKeepsALoadedPageBetweenScreensAndTheMacLetsItGoAsBefore() {
+        typealias Policy = ShannonLive2DStagePolicy
+        // With the Live2D form chosen she is only out of sight (scroll display, reading, another tab): kept until memory runs short.
+        XCTAssertNil(Policy.keepSeconds(formIsLive2D: true, parks: true))
+        // With the Waterlight form chosen, long enough for a switch back to be instant, not for ever.
+        XCTAssertEqual(Policy.keepSeconds(formIsLive2D: false, parks: true), 30 * 60)
+        XCTAssertGreaterThan(Policy.keepInOtherFormSeconds, Policy.releaseAfterSeconds)
+        // The Mac: 90 s whatever the form, as before.
+        XCTAssertEqual(Policy.keepSeconds(formIsLive2D: true, parks: false), 90)
+        XCTAssertEqual(Policy.keepSeconds(formIsLive2D: false, parks: false), 90)
+        // A page nobody sees draws nothing, wherever it waits.
+        XCTAssertTrue(Policy.paused(hasHost: false, appActive: true, resting: false))
+    }
+
+    func testThePageIsLoadedAheadOnlyForTheLive2DFormAndAtLaunchNotInLowPowerMode() {
+        typealias Policy = ShannonLive2DStagePolicy
+        // The owner chose ガール: loaded at once, also in Low Power Mode (a screen will show her in a moment).
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .chosen, lowPower: false))
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .chosen, lowPower: true))
+        // At launch it is loaded ahead only outside Low Power Mode, and a little later.
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .launch, lowPower: false))
+        XCTAssertFalse(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .launch, lowPower: true))
+        XCTAssertGreaterThan(Policy.launchWarmDelaySeconds, 0)
+        // Never for the Waterlight form.
+        XCTAssertFalse(Policy.warmsAhead(form: .waterlight, status: .unloaded, hasHosts: false, reason: .chosen, lowPower: false))
+        XCTAssertFalse(Policy.warmsAhead(form: .waterlight, status: .unloaded, hasHosts: false, reason: .launch, lowPower: false))
+        // Never twice: a page loading, ready or failed (which waits for もう一度読み込む) is left as it is.
+        for status in [ShannonLive2DStage.Status.loading, .ready, .failed] {
+            XCTAssertFalse(Policy.warmsAhead(form: .live2d, status: status, hasHosts: false, reason: .chosen, lowPower: false), "\(status)")
+        }
+        // A screen that shows her loads the page itself.
+        XCTAssertFalse(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: true, reason: .chosen, lowPower: false))
+    }
+
+    func testTheGirlPresetIsTheLive2DFormTheStageFollows() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-body-keep-\(UUID().uuidString)"))
+        ShannonPersonaPreset.girl.select(defaults: defaults)
+        XCTAssertEqual(ShannonForm.current(defaults: defaults), .live2d)
+        XCTAssertEqual(Optional(ShannonLive2DStagePolicy.keepSeconds(formIsLive2D: ShannonForm.current(defaults: defaults) == .live2d, parks: true)), .some(nil))
+        ShannonPersonaPreset.bot.select(defaults: defaults)
+        XCTAssertEqual(ShannonForm.current(defaults: defaults), .waterlight)
+        XCTAssertEqual(ShannonLive2DStagePolicy.keepSeconds(formIsLive2D: ShannonForm.current(defaults: defaults) == .live2d, parks: true), 30 * 60)
+    }
+
+    func testTheOfflineRulesAreCompiledOncePerLaunch() async throws {
+        let first = try await ShannonLive2DBridge.offlineRuleList()
+        let second = try await ShannonLive2DBridge.offlineRuleList()
+        XCTAssertTrue(first === second)
+        XCTAssertEqual(first.identifier, ShannonLive2DBridge.offlineRulesIdentifier)
+    }
+
+    func testOnTheMacFollowingTheFormLoadsNothingAhead() {
+        // The Mac has no parking place: following the form neither loads nor keeps anything (the stage stays as it is).
+        let stage = ShannonLive2DStage.shared
+        let before = stage.status
+        stage.follow(form: .live2d, launching: false)
+        XCTAssertFalse(ShannonLive2DStage.parks)
+        XCTAssertEqual(stage.status, before)
+        XCTAssertNil(stage.keep.warmTask)
+    }
+
     // MARK: Driving
 
     func testPhaseDoingAndPresenceComeFromWhatTheAppAlreadyReads() {

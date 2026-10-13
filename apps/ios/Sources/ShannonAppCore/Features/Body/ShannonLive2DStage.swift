@@ -66,7 +66,7 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private(set) var loadStartedAt: Date?
     @ObservationIgnored var lastActivityAt = Date()
     @ObservationIgnored private var restTask: Task<Void, Never>?
-    @ObservationIgnored private var releaseTask: Task<Void, Never>?
+    @ObservationIgnored var releaseTask: Task<Void, Never>?
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
     @ObservationIgnored var mood: (valence: Double, arousal: Double, openness: Double)?
     @ObservationIgnored var presence: ShannonLive2DPresence?
@@ -78,6 +78,7 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var fingerDown = false
     @ObservationIgnored private var lastHeardAt = Date()
     @ObservationIgnored var bodyRequestWatch: Task<Void, Never>?
+    @ObservationIgnored var keep = ShannonLive2DKeep() // the iPhone's page kept between screens (`+Keep.swift`)
 
     private init() {}
 
@@ -131,20 +132,14 @@ public final class ShannonLive2DStage {
         guard hosts.contains(where: { $0.id == id }) else { return }
         hosts.removeAll { $0.id == id || $0.container == nil }
         mount()
-        guard hosts.isEmpty else { return }
-        releaseTask?.cancel()
-        releaseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(ShannonLive2DStagePolicy.releaseAfterSeconds))
-            guard !Task.isCancelled, let self, self.hosts.isEmpty else { return }
-            self.release()
-        }
+        scheduleRelease() // `ShannonLive2DStage+Keep.swift`: how long a page nobody sees is kept
     }
 
-    private func mount() {
+    func mount() {
         hosts.removeAll { $0.container == nil }
         guard let host = hosts.last, let container = host.container else {
             activeHost = nil
-            webView?.removeFromSuperview()
+            park() // the iPhone keeps it paused out of sight; elsewhere it leaves the screen
             refreshPaused()
             return
         }
@@ -163,6 +158,7 @@ public final class ShannonLive2DStage {
         refreshPaused()
     }
 
+    var hasHosts: Bool { !hosts.isEmpty }
     /// Where the screen in front wants her, and whether it lets her be touched.
     var frontHost: (layout: ShannonLive2DLayout, touchEnabled: Bool)? { hosts.last.map { ($0.layout, $0.touchEnabled) } }
     var frontContainer: ShannonLive2DPlatformView? { hosts.last?.container }
@@ -261,7 +257,7 @@ public final class ShannonLive2DStage {
 
     // MARK: Loading
 
-    private func load() {
+    func load() {
         guard let folder = Self.embedFolder else {
             status = .failed
             return
@@ -275,6 +271,7 @@ public final class ShannonLive2DStage {
         lastMouthLevel = 0
         loadStartedAt = Date()
         bodySwitch.chosen = wantedBody // the setting may have changed while no screen showed her
+        NSLog("[ShannonBody] loading the Live2D page")
 
         let bridge = ShannonLive2DBridge(stage: self, generation: generation, folder: folder)
         let configuration = WKWebViewConfiguration()
@@ -349,7 +346,7 @@ public final class ShannonLive2DStage {
     }
 
     /// Lets the web view and its model go. The next host loads it again.
-    private func release() {
+    func release() {
         generation += 1
         timeoutTask?.cancel()
         restTask?.cancel()
@@ -357,6 +354,7 @@ public final class ShannonLive2DStage {
         timeoutTask = nil
         restTask = nil
         releaseTask = nil
+        keep.warmTask?.cancel()
         if let webView {
             webView.stopLoading()
             webView.navigationDelegate = nil
@@ -417,6 +415,7 @@ public final class ShannonLive2DStage {
             self.expressions = expressions
             self.gestures = gestures
             lastLoadSeconds = loadStartedAt.map { Date().timeIntervalSince($0) }
+            NSLog("[ShannonBody] the Live2D page is ready after %.2f s (%@)", lastLoadSeconds ?? 0, hosts.isEmpty ? "ahead of a screen" : "shown")
             failuresWithoutReady = 0
             loadProgress = 1
             status = .ready
@@ -459,7 +458,7 @@ public final class ShannonLive2DStage {
 
     // MARK: The system
 
-    private func observeSystem() {
+    func observeSystem() {
         guard !observing else { return }
         observing = true
         observeChosenBody()

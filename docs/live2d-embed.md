@@ -47,8 +47,17 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   priority shows it (her desktop body on the Mac, roadmap A17, above all; then the Mac's body sheet, then the voice call, then Talk's dialogue display, then the small
   figure of an empty Talk; among equals the one that appeared last. On the iPhone her figure lives in the
   dialogue display since A6: the body screen was folded into it); every other place her figure stands shows the
-  Waterlight Eye meanwhile. With no screen showing her, the page is paused at once and the web view is
-  released after 90 seconds (the model holds its textures in GPU memory: about 150 MB since the model of 2026-10-06 08:06, which added a third 4096×4096 texture); a memory warning with no
+  Waterlight Eye meanwhile. With no screen showing her, the page is paused at once. On the Mac the web view is
+  released after 90 seconds (the model holds its textures in GPU memory: about 150 MB since the model of 2026-10-06 08:06, which added a third 4096×4096 texture). On the iPhone
+  (owner request 2026-10-14: ボット → ガール loaded the whole page every time; `ShannonLive2DStage+Keep.swift`) the
+  paused web view waits in a parking place behind the app's window (invisible, no touches, hidden from VoiceOver)
+  and is kept, with the Live2D form chosen, until memory runs short, and with the Waterlight form for 30 minutes,
+  so the next screen (a switch back to ガール, the end of 読む, another tab) shows her at once. When the owner
+  chooses the Live2D form, the page is loaded there ahead of her screen; when Talk appears or the app comes back
+  to the front with that form chosen and no page loaded, it is loaded 2 seconds later, except in Low Power Mode.
+  A load costs about 1.1–1.9 s with the same WebKit on an A18 Pro (parsing the 26 MB `assets.js`, decoding the
+  model and textures from base64 — about 0.2–0.3 s of it in `Uint8Array.from(atob(…), …)` — and decoding and
+  uploading the textures, about 0.5 s for the 4096×4096 one alone). A memory warning with no
   screen showing her releases it immediately. A visible figure is never released by the app.
 - The page is paused (`setPaused`) while the app is not active.
 - Reduce Motion: `setIdle({ gestures: false, sway: 0 })` — she starts no gesture by herself and does not

@@ -201,7 +201,7 @@ struct ShannonBodyAttachment: ViewModifier {
             .task(id: scenePhase) { await keepClock() }
             .onAppear {
                 bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date())
-                applyForm()
+                applyForm(launching: true)
             }
     }
 
@@ -294,7 +294,8 @@ struct ShannonBodyAttachment: ViewModifier {
         bodyModel.sceneIsActive = scenePhase == .active
         // Going to the background is the last sure moment before the app may be ended.
         holdAudience()
-        guard scenePhase != .active else { return }
+        // Back in front: a page the system ended in the background is loaded again ahead of her screen (as at launch).
+        guard scenePhase != .active else { return stage.follow(form: usesLive2D ? .live2d : .waterlight, launching: true) }
         bodyModel.stopVoice()
         ShannonSpeechLevelPublisher.shared.end()
     }
@@ -333,8 +334,10 @@ struct ShannonBodyAttachment: ViewModifier {
         }
     }
 
-    /// Her mouth follows the played speech only while the Live2D form is the one in use.
-    private func applyForm() {
+    /// Her mouth follows the played speech only while the Live2D form is the one in use. The stage loads the page ahead
+    /// of the screen that will show her, and keeps it between screens (`ShannonLive2DStage+Keep.swift`).
+    private func applyForm(launching: Bool = false) {
+        stage.follow(form: usesLive2D ? .live2d : .waterlight, launching: launching)
         if usesLive2D, ShannonLive2DStage.isAvailable {
             ShannonSpeechLevelPublisher.shared.setSink { level in ShannonLive2DStage.shared.setMouthLevel(level) }
             pushAll()
