@@ -1,5 +1,5 @@
 import type { ShannonModelToolSession, ToolCallOutcome } from '../../infra/models/chatModelTools.js';
-import { alwaysLoadedToolNames, providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
+import { ALWAYS_LOADED_TOOL_NAMES, providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
 
 /**
  * The tool menu applied to a turn's session (Syzygy ADR-0008 stage 2, §8 「道具は名前と短い説明だけを毎回渡し、使うときに定義を
@@ -15,6 +15,18 @@ import { alwaysLoadedToolNames, providerToolName, toolSummary, type ShannonToolD
  */
 export const TOOL_OPEN_NAME = 'tool.open';
 export const TOOL_OPEN_PROVIDER_NAME = providerToolName(TOOL_OPEN_NAME);
+
+/**
+ * The owner's voice turn (the only offer that holds `web.research`) also always loads her everyday lookups (2026-10-13: after
+ * 「博多の天気を調べて」 the follow-up 「うん、お願い」 had no weather tool, and an event question had no research tool, so she said
+ * she could not look). A follow-up without keywords keeps them.
+ */
+export const OWNER_VOICE_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['weather.forecast', 'web.research']);
+
+/** The always-loaded names for an offer (registry names). */
+export function alwaysLoadedToolNames(offered: readonly Pick<ShannonToolDefinition, 'name'>[]): readonly string[] {
+  return offered.some(tool => tool.name === 'web.research') ? [...ALWAYS_LOADED_TOOL_NAMES, ...OWNER_VOICE_LOADED_TOOL_NAMES] : ALWAYS_LOADED_TOOL_NAMES;
+}
 
 /** The meta-tool, its enum the provider names of the tools the turn offers. */
 export function toolOpenDefinition(offered: readonly ShannonToolDefinition[]): ShannonToolDefinition {
