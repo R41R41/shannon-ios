@@ -8,8 +8,9 @@ import { SQLiteWorkspaceJournal } from '../mind/workspace/store/workspaceJournal
 import { SQLiteMindInbox } from '../mind/workspace/store/mindInboxStore.js';
 import type { EmitMindEvent } from '../contracts/mindInboxContract.js';
 import type { CompanionStateSnapshot } from '@shannon/cognition';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import {
-  agentTaskOutcomeNotices, lateFolderOutcomeNotices, promiseDueNotices, type EndedTask, type LateFolderReport, type ProducedNotice,
+  agentTaskOutcomeNotices, lateFolderOutcomeNotices, lifecycleOutcomeNotices, promiseDueNotices, type EndedTask, type LateFolderReport, type ProducedNotice,
 } from '../mind/perception/noticeProducers.js';
 
 /**
@@ -115,6 +116,10 @@ function producedNotices(database: DatabaseSync, inbox: SQLiteMindInbox, sources
   safely('promises', () => { const state = sources.snapshot(scopeKey); return state ? promiseDueNotices(state, at) : []; });
   safely('tasks', () => agentTaskOutcomeNotices(sources.tasks(scopeKey), at));
   safely('folder', () => lateFolderOutcomeNotices(lateFolderReports(database, scopeKey, at), at));
+  const hourAgo = new Date(Date.parse(at) - 60 * 60_000).toISOString();
+  const since = Date.parse(hourAgo);
+  const lifecycleReports = () => new ActionLeaseReader(database).ownLifecycleReceipts(scopeKey).filter(row => Date.parse(row.observedAt) >= since);
+  safely('minecraft', () => lifecycleOutcomeNotices(lifecycleReports(), at));
   let written = 0;
   for (const notice of produced) {
     try {

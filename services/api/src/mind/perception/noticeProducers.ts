@@ -89,3 +89,22 @@ export function lateFolderOutcomeNotices(reports: readonly LateFolderReport[], a
     return id ? [{ at: iso(ended), draft: { kind: 'task_outcome', code: report.status === 'done' ? 'done' : 'failed', audience: 'owner', source: 'api', sourceId: id, tool } }] : [];
   });
 }
+
+export interface LifecycleReport { id: string; action: string; outcome: string; observedAt: string }
+
+/**
+ * The Minecraft lifecycle operations the owner asked for in a conversation and she answered with 「受け付けた」 (2026-10-13
+ * TI-REQ): their native receipt within the last hour, as `minecraft.<action>` done, failed or cancelled.
+ */
+export function lifecycleOutcomeNotices(reports: readonly LifecycleReport[], at: string): readonly ProducedNotice[] {
+  const now = Date.parse(at);
+  return reports.flatMap(report => {
+    const ended = Date.parse(report.observedAt);
+    if (!Number.isFinite(ended) || ended > now || now - ended > NOTICE_PRODUCER_LIMITS.outcomeWithinMinutes * MINUTE) return [];
+    if (!['start', 'stop', 'login', 'logout'].includes(report.action)) return [];
+    const code = report.outcome === 'completed' ? 'done' : report.outcome === 'cancelled' ? 'cancelled' : 'failed';
+    const id = sourceId('minecraft-', report.id, ended);
+    if (!id) return [];
+    return [{ at: iso(ended), draft: { kind: 'task_outcome', code, audience: 'owner', source: 'api', sourceId: id, tool: `minecraft.${report.action}` } }];
+  });
+}

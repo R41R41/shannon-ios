@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftLifecycleAuthority, MinecraftLifecycleCommand } from '../../../contracts/minecraftLifecycleContract.js';
 import type { OpsCommandRequest } from '../../../contracts/opsCommandContract.js';
-import { opsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
+import { opsActionKindMatches, opsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
 import { ActionLeaseReader } from '../../../mind/action/threads/store/actionLeaseReader.js';
 
 interface DispatchRow {
@@ -21,7 +21,7 @@ export function opsLifecycleAuthorityAllowed(db: DatabaseSync, authority: Minecr
     const action = row ? new ActionLeaseReader(db).get(authority.executionId) : null;
     const mapping = row && opsLifecycleMapping(row);
     return !!row && !!action && !!mapping && row.status === 'claimed' && !!row.requested_by_device_id
-      && (row.execution_kind === 'respond' || row.execution_kind === 'minecraft') && action.kind === row.execution_kind && action.origin === 'owner_request'
+      && opsActionKindMatches(row.execution_kind, action.kind) && action.origin === 'owner_request'
       && action.sourceId === `ops:${row.command_id}` && row.lifecycle_id === command.id && row.server_id === mapping.serverId
       && row.action === mapping.action && command.serverId === row.server_id && command.action === row.action
       && row.lease_generation === authority.lease.generation && row.lease_holder === authority.lease.holder

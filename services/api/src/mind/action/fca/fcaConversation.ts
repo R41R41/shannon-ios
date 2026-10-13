@@ -15,8 +15,9 @@ import { researchAdmitted, researchTaskInput } from './conversationWork.js';
  * The synchronous time one foreground turn may spend re-checking task provenance (the inbox, the children, task tools) before
  * its model call. Past it the turn goes on as an ordinary conversation: no task context and no task tools for the rest of the
  * turn (closed, never a guess), logged as `fca_context_budget`. 2026-10-12: these checks blocked the API's one thread for 27 s.
+ * 2026-10-13: 300 ms overran under the VM's load (394 ms) and closed the task tools of an ordinary Minecraft request; 800 ms.
  */
-export const FCA_TURN_BUDGET_MS = 300;
+export const FCA_TURN_BUDGET_MS = 800;
 /** What the inbox and the children's activity show at most; only these are checked, newest first (never all, then cut). */
 export const FCA_CONTEXT_ITEMS = 8;
 const ACTIVE_PHASES = ['ready', 'executing', 'waiting', 'stopping', 'unknown'];

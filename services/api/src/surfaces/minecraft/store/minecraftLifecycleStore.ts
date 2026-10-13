@@ -3,7 +3,8 @@ import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecy
 
 /** Durable operation identity. Delivered/unknown work is retained and never issued again after restart. */
 export class MinecraftLifecycleStore {
-  constructor(private readonly db: DatabaseSync) {
+  /** `exited`: whether the action that held a command left `unknown` at its one exit (the wiring reads it from the actions). */
+  constructor(private readonly db: DatabaseSync, private readonly exited: (executionId: string) => boolean = () => false) {
     db.exec(`CREATE TABLE IF NOT EXISTS minecraft_lifecycle_operations (
       id TEXT PRIMARY KEY, server_id TEXT NOT NULL, execution_id TEXT NOT NULL, command_json TEXT NOT NULL,
       delivered INTEGER NOT NULL DEFAULT 0, cancelled INTEGER NOT NULL DEFAULT 0, receipt_json TEXT);
@@ -38,8 +39,17 @@ export class MinecraftLifecycleStore {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
+  /**
+   * The one unknown exit (ADR-0009 D2), read from the action that held the command: once that action left `unknown` at its exit
+   * (by the action store's sweep), an operation without an accepted receipt no longer blocks the operator's serialization slot or
+   * a new operation. Its receipt can still arrive and settle it; nothing is resent.
+   */
+  private open(row: { execution_id?: unknown }): boolean {
+    return !this.exited(String(row.execution_id));
+  }
   pending(): Array<{ command: MinecraftLifecycleCommand; delivered: boolean; cancelled: boolean }> {
-    return this.db.prepare('SELECT command_json,delivered,cancelled FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL').all()
+    return this.db.prepare('SELECT execution_id,command_json,delivered,cancelled FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL').all()
+      .filter(row => this.open(row))
       .map(r => ({ command: JSON.parse(String(r.command_json)), delivered: r.delivered === 1, cancelled: r.cancelled === 1 }));
   }
   deliver(id: string): boolean { return this.db.prepare('UPDATE minecraft_lifecycle_operations SET delivered=1 WHERE id=? AND delivered=0 AND cancelled=0 AND receipt_json IS NULL').run(id).changes === 1; }
@@ -69,6 +79,7 @@ export class MinecraftLifecycleStore {
     return !this.db.prepare("SELECT 1 FROM minecraft_lifecycle_operations WHERE execution_id=? AND (receipt_json IS NULL OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1").get(executionId);
   }
   unresolved(): boolean {
-    return !!this.db.prepare("SELECT 1 FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1 LIMIT 1").get();
+    return this.db.prepare(`SELECT execution_id FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL
+      OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1`).all().some(row => this.open(row));
   }
 }

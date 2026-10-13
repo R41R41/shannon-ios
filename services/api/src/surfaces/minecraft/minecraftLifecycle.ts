@@ -97,7 +97,11 @@ export class MinecraftLifecycle {
         if (receipt.outcome === 'unknown' || !receipt.inputsReleased) throw new Error('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');
         return receipt;
       }
-      if (signal?.aborted || !this.available(request.authority.scopeKey) || !this.allowed(command)) {
+      // 2026-10-13 (Ops login): a delivered command is the operator's to finish; while it actuates (a start or a login takes
+      // tens of seconds) its frames may pause, and that pause alone revoked a login that then spawned. A stale frame stops
+      // only a command not yet delivered; the original authority, its deadline and the caller's signal still stop either.
+      const stale = !this.available(request.authority.scopeKey) && !this.store.delivered(command.id);
+      if (signal?.aborted || stale || !this.allowed(command)) {
         this.cancel(command.id); cancellingAt ??= this.options.now();
       }
       if (cancellingAt !== null && this.options.now() - cancellingAt >= (this.options.cancelWaitMilliseconds ?? 5000)) throw new Error('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');

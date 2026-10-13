@@ -19,7 +19,7 @@ export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:stri
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
  * through `reconcileResource`. Base or dispatch-added; `resources` is the action's whole set (`retainedResources.ts`).
  */
-export type ActionResourceRetained=(resource:string,resources:readonly string[])=>boolean;
+export type ActionResourceRetained=(resource:string,resources:readonly string[],action?:Pick<ActionView,'kind'|'sourceId'>)=>boolean;
 /** Whether an unknown action's original work is settled elsewhere (its Agent Host task ended), which releases its retained keys. */
 export type ActionRetainedReleaseProof=(action:ActionView)=>boolean;
 
@@ -390,10 +390,11 @@ export class SQLiteActionStore {
       if(!unknownDue(String(row.updated_at),at,link.taskKind))continue;
       const exit=unknownExit(actionEffectClass(link.taskKind),link.taskKind);
       const base=JSON.parse(String(row.base_resources_json)) as string[];
-      const kept=action.resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,action.resources));
+      const retained=(key:string)=>this.retainedAfterRelease(key,action.resources,action);
+      const kept=action.resources.filter(key=>base.includes(key)||retained(key));
       this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=1,resources_json=?,result=?,updated_at=? WHERE id=?").run(JSON.stringify(kept),exit.code,at,action.id);
       // The retained keys are recorded now: only a recorded key keeps excluding others (retainedResourceStore.ts).
-      recordRetained(this.db,action.id,kept.filter(key=>this.retainedAfterRelease(key,action.resources)),at);
+      recordRetained(this.db,action.id,kept.filter(retained),at);
       exited+=1;
     }
     return exited;

@@ -103,6 +103,29 @@ export class ActionLeaseReader {
     return { stepId: row.step_id, leaseJson: row.lease_json, stopRequested: row.stop_requested, action: leaseRecord(row) };
   }
 
+  /** Whether the action left `unknown` at its one exit (ADR-0009 D2, S5): its slot is free and nothing of it is resent. */
+  unknownExited(id: string): boolean {
+    const tables = this.db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='mind_actions'").get();
+    const row = tables ? this.db.prepare('SELECT state,result FROM mind_actions WHERE id=?').get(id) : undefined;
+    return row?.state === 'unknown' && ['outcome_unknown_closed', 'unknown_retired'].includes(String(row.result));
+  }
+
+  /**
+   * The lifecycle operations of the scope that ran under their own Minecraft action (the source is the operation's id) and have
+   * an accepted receipt, newest first, at most 50: closed values only (id, action, outcome, time). Nothing before both tables exist.
+   */
+  ownLifecycleReceipts(scopeKey: string): Array<{ id: string; action: string; outcome: string; observedAt: string }> {
+    const tables = this.db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
+      AND name IN ('mind_actions','minecraft_lifecycle_operations')`).get();
+    if (Number(tables?.count) !== 2) return [];
+    const rows = this.db.prepare(`SELECT o.id,json_extract(o.receipt_json,'$.action') AS action,
+      json_extract(o.receipt_json,'$.outcome') AS outcome,json_extract(o.receipt_json,'$.observedAt') AS observed_at
+      FROM minecraft_lifecycle_operations o JOIN mind_actions a ON a.id=o.execution_id
+      WHERE a.scope_key=? AND a.kind='minecraft' AND a.source_id=o.id AND o.receipt_json IS NOT NULL
+      AND json_extract(o.receipt_json,'$.outcome')!='unknown' ORDER BY o.rowid DESC LIMIT 50`).all(scopeKey);
+    return rows.map(row => ({ id: String(row.id), action: String(row.action), outcome: String(row.outcome), observedAt: String(row.observed_at) }));
+  }
+
   /**
    * One original lifecycle command per unknown action that still holds `resource` and whose command ran under the attempt
    * just before (the one the sweep closed), oldest first, at most 128.

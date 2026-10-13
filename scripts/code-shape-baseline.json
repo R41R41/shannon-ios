@@ -954,7 +954,7 @@
     "services/api/src/mind/action/respond/apiTextTurn.ts": {
       "multi-statement-line": 2,
       "complex-function": 1,
-      "long-line": 14
+      "long-line": 13
     },
     "services/api/src/mind/action/respond/cognitiveIntent.ts": {
       "complex-function": 1
@@ -1852,7 +1852,7 @@
     "services/api/src/surfaces/minecraft/store/minecraftLifecycleStore.ts": {
       "multi-statement-line": 6,
       "complex-function": 1,
-      "long-line": 7
+      "long-line": 6
     },
     "services/api/src/surfaces/minecraft/store/minecraftPrimaryModels.ts": {
       "multi-statement-line": 1,
@@ -2005,7 +2005,7 @@
     },
     "services/api/src/wiring/fcaMinecraftRequests.ts": {
       "multi-statement-line": 1,
-      "long-line": 4
+      "long-line": 3
     },
     "services/api/src/wiring/fcaMinecraftTools.ts": {
       "complex-function": 1,
@@ -2094,12 +2094,10 @@
     "services/api/src/wiring/minecraftLifecycleWiring.ts": {
       "complex-function": 2,
       "multi-statement-line": 4,
-      "long-line": 5
+      "long-line": 3
     },
     "services/api/src/wiring/opsMinecraftLifecycleWiring.ts": {
-      "multi-statement-line": 3,
-      "complex-function": 1,
-      "long-line": 1
+      "multi-statement-line": 2
     },
     "services/api/src/wiring/ownerUpcomingWiring.ts": {
       "multi-statement-line": 1,

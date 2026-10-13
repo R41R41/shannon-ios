@@ -15,3 +15,13 @@ export interface OpsMinecraftLifecyclePort {
   mapping(scopeKey: string, request: OpsCommandRequest): OpsLifecycleMapping | null;
   wake(): void;
 }
+
+/**
+ * The action an Ops mapping runs under. A mapping accepted by the current protocol (`execution_kind='respond'`, the name of the
+ * slot it was first accepted in) runs since 2026-10-13 under its own Minecraft action (ADR-0009 S7), and an attempt admitted in
+ * the foreground before that deploy keeps its authority; a pre-protocol `minecraft` mapping is never executed by this path.
+ */
+export function opsActionKindMatches(executionKind: string, actionKind: string): boolean {
+  if (executionKind === 'respond') return actionKind === 'minecraft' || actionKind === 'respond';
+  return executionKind === 'minecraft' && actionKind === 'minecraft';
+}

@@ -38,7 +38,18 @@ export function configuredRetainedResources(values: Readonly<Record<string, stri
     readAt = Date.now();
     return policy;
   };
-  return (resource: string, resources: readonly string[]): boolean => retainedResource(current(), resource, resources);
+  return (resource: string, resources: readonly string[], action?: { kind: string; sourceId: string }): boolean =>
+    !(resource === body && action && lifecycleHolder(action)) && retainedResource(current(), resource, resources);
+}
+
+/**
+ * An action that holds the Minecraft body only for a lifecycle operation (a conversation turn of before 2026-10-13, a
+ * conversation's or an Ops request's own Minecraft action): at the unknown exit it releases the body with its slot, the one
+ * standard exit (owner decision of 2026-10-13 through the Minebot lane); the operator's journal settles its own side. A body
+ * held for play (an FCA step, the legacy request) still waits for its release proof.
+ */
+function lifecycleHolder(action: { kind: string; sourceId: string }): boolean {
+  return action.kind === 'respond' || action.kind === 'minecraft' && /^(lifecycle|ops):/u.test(action.sourceId);
 }
 export function lifecycleResourceAcknowledgement(evidence: readonly unknown[]): string {
   return `lifecycle-release:${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`;
