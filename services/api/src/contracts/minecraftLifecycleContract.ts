@@ -2,7 +2,14 @@ import type { ActionLease } from '@shannon/mind';
 
 /** Always-on operator channel; independent of world-body presence and paid game planning. */
 export const MINECRAFT_LIFECYCLE_PATH = '/v1/body/minecraft/lifecycle';
-export const MINECRAFT_LIFECYCLE_ACTIONS = ['start', 'stop', 'login', 'logout'] as const;
+/**
+ * `set_day` (owner request via the Minebot lane, 2026-10-14; body ea1ef4ce): the operator runs exactly `time set day` over its private
+ * RCON on the running server, only after a fresh authority check and with no other player online. Accepted completion is
+ * `completed`/`changed` on a running server, with no stop guard; others online refuse it as `players_present`; an RCON error or
+ * an unexpected reply stays `unknown` with inputs not released. A body that predates it drops the command, which then leaves
+ * by the one unknown exit.
+ */
+export const MINECRAFT_LIFECYCLE_ACTIONS = ['start', 'stop', 'login', 'logout', 'set_day'] as const;
 export type MinecraftLifecycleAction = typeof MINECRAFT_LIFECYCLE_ACTIONS[number];
 export interface MinecraftLifecycleState {
   serverId: string; observedAt: string;

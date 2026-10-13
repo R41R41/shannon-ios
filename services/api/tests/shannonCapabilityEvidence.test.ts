@@ -134,7 +134,8 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   fca_progress: () => exists(createFcaProgressTools, createFcaTaskObservationMonitor) && FCA_PROGRESS_TOOLS.length === 3,
   minecraft_lifecycle: () => exists(configuredMinecraftLifecycle, ShannonToolRunner.prototype.useMinecraftLifecycle)
     && configuredMinecraftLifecycle({}, {} as never) === null
-    && ['start', 'stop', 'login', 'logout', 'lifecycle_status'].every(verb => SHANNON_TOOLS.some(tool => tool.name === `minecraft.${verb}`)),
+    && ['start', 'stop', 'login', 'logout', 'set_day', 'lifecycle_status'].every(verb => SHANNON_TOOLS.some(tool => tool.name === `minecraft.${verb}`))
+    && !SHANNON_TOOLS.some(tool => tool.name === 'minecraft.set_day' && tool.surfaces.includes('autonomy')),
   fca_shared_context: () => exists(createFcaSharedWiring, createFcaVoiceBridge, ShannonToolRunner.prototype.useMemory, fcaResearchTools, ShannonToolRunner.prototype.skillIndex, ShannonToolRunner.prototype.skillIndexSources)
     && ['memory.search', 'memory.read'].every(name => SHANNON_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_SHARED_CAPABILITY.text),

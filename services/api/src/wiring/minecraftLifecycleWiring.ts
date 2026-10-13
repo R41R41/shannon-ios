@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { stage4Enabled } from '../infra/config/stage4.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
-import type { MinecraftLifecycleAuthority, MinecraftLifecycleAction, MinecraftLifecycleCommand } from '../contracts/minecraftLifecycleContract.js';
+import { MINECRAFT_LIFECYCLE_ACTIONS, type MinecraftLifecycleAuthority, type MinecraftLifecycleAction, type MinecraftLifecycleCommand,
+  type MinecraftLifecycleState } from '../contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MinecraftLifecycleStore } from '../surfaces/minecraft/store/minecraftLifecycleStore.js';
 import { actionPermit, currentActionExecution } from '../infra/context/actionExecution.js';
@@ -37,6 +38,16 @@ const LIFECYCLE_SOURCE = /^lifecycle:[a-f0-9]{64}$/u;
  */
 function conversationOperation(row: { kind: string; origin: string; sourceId: string }, opsSource: boolean): boolean {
   return !opsSource && row.kind === 'minecraft' && row.origin === 'owner_request' && LIFECYCLE_SOURCE.test(row.sourceId);
+}
+
+/**
+ * Why `set_day` is refused before anything is admitted, or null. It is the owner's own request in a conversation with him alone
+ * (never her own time or a task step), on a running server with no other player; the operator checks the players again itself.
+ */
+function setDayRefusal(kind: string, origin: string, ownerAlone: boolean, state: MinecraftLifecycleState | undefined): string | null {
+  if (kind !== 'respond' || origin !== 'owner_request' || !ownerAlone) return '時刻の変更はライ氏と二人の会話で頼まれた時だけ行います。';
+  if (state?.running !== 'running') return 'サーバーが起動していないので、時刻は変えられません。';
+  return state.otherPlayers === 0 ? null : 'ほかの参加者がいるか、人数を確かめられないので、時刻は変えません。';
 }
 
 /** Same paired operator, original action lease and autonomy gate in API and own-time worker. */
@@ -132,7 +143,10 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
         sourceIds: sourcesOf(row?.kind, active.lease.id, context) };
       if (!row || !allowed(authority)) return failure('refused', '実行権・停止設定・現在の入力条件を確認できません。');
       const operation = name.slice('minecraft.'.length);
-      if (!['start', 'stop', 'login', 'logout'].includes(operation)) return failure('invalid_input', '登録されていないマイクラ管理操作です。');
+      if (!(MINECRAFT_LIFECYCLE_ACTIONS as readonly string[]).includes(operation)) return failure('invalid_input', '登録されていないマイクラ管理操作です。');
+      const refusedDay = operation === 'set_day'
+        ? setDayRefusal(row.kind, origin, parts.ownerAlone(), service.status(context.scopeKey).find(state => state.serverId === requested)) : null;
+      if (refusedDay) return failure('refused', refusedDay);
       const identity = context.memory.turnKey;
       if (!identity) return failure('refused', '操作の元IDを確認できません。');
       const id = `lifecycle:${createHash('sha256').update(JSON.stringify([active.lease.id, identity, name, requested])).digest('hex')}`;

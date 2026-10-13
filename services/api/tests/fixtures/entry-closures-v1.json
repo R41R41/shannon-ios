@@ -800,6 +800,7 @@
     "contracts/livenessNoticeContract.ts",
     "contracts/mindInboxContract.ts",
     "contracts/minecraftBodyContract.ts",
+    "contracts/minecraftLifecycleContract.ts",
     "contracts/moodHistoryContract.ts",
     "contracts/shannonNowContract.ts",
     "contracts/voiceDecisionContract.ts",

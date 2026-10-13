@@ -82,6 +82,9 @@ describe('bounded original tool evidence (Q02 / Q07)', () => {
     expect(verifyWriteClaims('マイクラのサーバー「home」を起動しました。', [write('minecraft.start', lifecycle())])).toBe('ok');
     expect(verifyWriteClaims('マイクラのサーバー「other」を起動しました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
     expect(verifyWriteClaims('マイクラのサーバー「home」をログインしました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
+    // `minecraft.set_day` (2026-10-14): a claim of daytime matches only its own receipt.
+    expect(verifyWriteClaims('マイクラのサーバー「home」を昼にしました。', [write('minecraft.set_day', lifecycle('set_day'))])).toBe('ok');
+    expect(verifyWriteClaims('マイクラのサーバー「home」を昼にしました。', [write('minecraft.start', lifecycle())])).toBe('claim_without_write');
     const missing = lifecycle(); delete missing.receiptId;
     expect(verifyWriteClaims('マイクラのサーバーを起動しました。', [write('minecraft.start', missing)])).toBe('claim_without_write');
   });

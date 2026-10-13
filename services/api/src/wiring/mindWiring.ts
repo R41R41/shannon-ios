@@ -152,5 +152,7 @@ function lifecycleReports(database: DatabaseSync, scopeKey: string, at: string):
     const [, action, reason] = row.result.split(':');
     return action && reason ? [{ id: row.id, action, outcome: 'failed', observedAt: row.at, notStarted: reason }] : [];
   });
-  return [...received, ...notStarted];
+  const unknown = leases.unknownExitedLifecycle(scopeKey).filter(row => Date.parse(row.at) >= since)
+    .map(row => ({ id: row.id, action: row.action, outcome: 'unknown', observedAt: row.at }));
+  return [...received, ...notStarted, ...unknown];
 }

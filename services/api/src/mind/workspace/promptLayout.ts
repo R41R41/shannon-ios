@@ -48,6 +48,8 @@ const NOT_STARTED_WORD: Readonly<Record<string, string>> = Object.freeze({
   'lifecycle_not_started.not_allowed': '実行の条件がそろわなかった',
   'lifecycle_not_started.error': '思わぬ理由',
 });
+/** An accepted Minecraft lifecycle operation whose body never confirmed it, closed at the unknown exit. */
+const RESULT_UNKNOWN_LINE = '体から完了の返事がないまま、結果を確かめられずに閉じた';
 
 export interface LayoutTurn {
   surface: 'text' | 'voice';
@@ -104,6 +106,7 @@ function taskOutcomeLine(item: WorkspaceItem, ago: string): string {
   const tool = item.detail?.tool ?? '作業';
   const notStarted = NOT_STARTED_WORD[item.detail?.reason ?? ''];
   if (notStarted) return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉を始められなかった（${notStarted}）`;
+  if (item.detail?.reason === 'lifecycle_result_unknown') return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉は${RESULT_UNKNOWN_LINE}`;
   return `${NOTICE_MARKERS.task_outcome}${ago}、〈${tool}〉が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
 }
 
