@@ -6,6 +6,12 @@ export interface FcaHistoryCodec {
   project(round: TaskHistoryRound): readonly CompactionMessage[] | null;
   /** Fresh provider messages for the immutable public bootstrap; old signed blocks never cross this boundary. */
   bootstrap(text: string): readonly unknown[];
+  /**
+   * Whether a native entry only restates tool definitions the runtime can rebuild from the current catalog (inline tool
+   * additions/removals). Such entries are still replayed byte for byte; they are measured against their own bound
+   * (`maximumToolDefinitionCharacters`), not against the conversational history budget.
+   */
+  reproducible?(entry: unknown): boolean;
 }
 export interface FcaHistorySummaryInput {
   previous: CompactionTemplate | null;
@@ -17,8 +23,14 @@ export interface FcaHistorySummarizer {
 export interface FcaHistoryPolicy {
   maximumNativeCharacters: number; maximumRounds: number; recentRounds: number;
   maximumSummaryCharacters: number; maximumBatches: number;
+  /** Replayed inline tool definitions (`FcaHistoryCodec.reproducible`), measured apart from the native history budget. */
+  maximumToolDefinitionCharacters: number;
 }
-export interface FcaHistoryReplay { history: readonly unknown[]; summary: CompactionTemplate | null; summaryText: string }
+export interface FcaHistoryReplay {
+  history: readonly unknown[]; summary: CompactionTemplate | null; summaryText: string;
+  /** Messages of a lone round too long by itself, shortened with a marker in a public replay built for this step only. */
+  clippedMessages?: number;
+}
 export type FcaHistoryPlan =
   | { kind: 'ready'; replay: FcaHistoryReplay }
   | { kind: 'compact'; input: FcaHistorySummaryInput; request: Omit<TaskHistoryCommit, 'template'> };

@@ -20,8 +20,9 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
-function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void } = {}) {
+function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean } = {}) {
   let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true;
+  let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   const now = () => new Date(clock).toISOString(), memory = memoryWorld(), harness = actionHarness(now, memory.path), store = new MinecraftControlStore(harness.db);
   const outcomes: FcaDurableOutcome[] = [];
   const evidence = new SQLiteFcaEvidenceStore({ db: harness.db, state: memory.store, now,
@@ -38,20 +39,21 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
   const commands: MinecraftControlCommand[] = [], choices: ReflexChoiceInput[] = [], cancelled: string[] = [], closedSessions = new Set<string>();
   const modelInputs: FcaModelInput[] = [], bodies: FcaBodyLifecycle[] = [], pending = new Map<string, MinecraftControlCommand>();
   let receipts: MinecraftControlReceipt[] = [], entryCalls = 0, afterCloseCommands = 0;
-  const receipt = (command: MinecraftControlCommand, outcome: MinecraftControlReceipt['outcome'] = 'completed'): MinecraftControlReceipt => ({ id: command.id, connectionId: command.connectionId,
+  // A body without a renderer answers a capture as a known failure without a picture (Minebot `BODY_CAPTURE_UNAVAILABLE`).
+  const receipt = (command: MinecraftControlCommand, outcome: MinecraftControlReceipt['outcome'] = command.kind === 'capture' && options.noImage ? 'failed' : 'completed'): MinecraftControlReceipt => ({ id: command.id, connectionId: command.connectionId,
     outcome, inputsReleased: outcome !== 'unknown', observedAt: now(), ...(command.stop ? { stop: { bodyId: command.context.bodyId,
       sessionId: command.context.sessionId, generation: command.context.generation, requestId: command.stop.requestId,
       state: outcome === 'unknown' ? 'unknown' : 'stopped', inputsReleased: outcome !== 'unknown', observedAt: now() } } : {}),
     ...(command.operation ? { action: { schemaVersion: 1, bodyId: command.context.bodyId, sessionId: command.context.sessionId,
       generation: command.context.generation, operationId: command.operation.operationId, outcome, inputsReleased: outcome !== 'unknown',
       observedAt: now(), evidenceId: `${command.operation.operationId}:receipt` } } : {}),
-    ...(command.kind === 'capture' ? { image: { dataUrl: 'data:image/jpeg;base64,/9j/', capturedAt: now() } } : {}) });
+    ...(command.kind === 'capture' && !options.noImage ? { image: { dataUrl: 'data:image/jpeg;base64,/9j/', capturedAt: now() } } : {}) });
   function pump() {
     clock += 1;
     const received = receipts; receipts = [];
     const response = control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world', connectionId: 'connection',
       observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: sequence++, stateAt: now(), receivedAt: now(), connected: true,
-        state: { health: danger ? 4 : 20, phase: 'current physical observation' }, facts: { danger, stuck: false, visualRequired: false, onGround: true } },
+        state: { health: danger ? 4 : 20, phase: 'current physical observation' }, facts: { danger, stuck: false, visualRequired: false, onGround: true, ...extraFacts } },
       skills: [{ name: 'move', description: 'bounded movement', readOnly: false, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } }],
       candidates: [{ kind: 'action', label: 'retreat one step', operation: 'move', arguments: { direction: 'back', durationMs: 100 },
         preconditions: [{ key: 'onGround', value: true }], maxDurationMs: 2000, expiresAt: new Date(clock + 3000).toISOString(), requiresImage: true }],
@@ -102,6 +104,7 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
   cleanups.push(async () => { const closing = driver.close(); await until(() => !store.pending('minecraft:world').length, 'cleanup ACKs'); await closing; harness.close(); memory.close(); });
   return { ...harness, driver, store, control, task, commands, choices, modelInputs, bodies, cancelled, outcomes, pump, until,
     danger(value: boolean) { danger = value; pump(); }, sourcesVisible(value: boolean) { sourcesVisible = value; },
+    facts(value: Record<string, boolean>) { extraFacts = value; pump(); }, advance(milliseconds: number) { clock += milliseconds; pump(); },
     entryCalls: () => entryCalls, afterCloseCommands: () => afterCloseCommands };
 }
 
@@ -204,6 +207,39 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     expect(f.entryCalls()).toBe(1);
     expect(f.commands).toEqual([]);
     answer.resolve(wait()); await f.driver.drain();
+  });
+
+  it('offers minecraft.reflex only while the body can give a picture, and gives each decision a summarized observation (Minebot lane 2026-10-14)', async () => {
+    const look = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: `look-${f.modelInputs.length}`, name: 'minecraft.reflex', input: {} }] }, history: [{ role: 'assistant', call: 'look' }] });
+    const f = fixture(input => input.tools.some(tool => tool.name === 'minecraft.reflex') ? look() : wait(), { noImage: true });
+    const offered = (index: number) => f.modelInputs[index]!.tools.some(tool => tool.name === 'minecraft.reflex');
+    const step = async (count: number) => { for (let i = 0; i < 500 && f.modelInputs.length < count; i++) { await f.driver.tick(); f.pump(); await delay(1); } await f.until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing', 'step settled'); };
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(false); // nothing tried yet on this connection
+    await step(1);
+    expect(offered(0)).toBe(true);
+    // The session's capture came back without a picture: the session ended observation_unavailable with no decision.
+    expect(f.commands.filter(command => command.kind === 'capture').length).toBeGreaterThan(0);
+    expect(f.choices).toEqual([]);
+    expect(f.store.session(f.commands[0]!.context.sessionId)?.receipt).toMatchObject({ reason: 'observation_unavailable', decisions: 0 });
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(true);
+    await step(2);
+    expect(offered(1)).toBe(false);
+    const observation = f.modelInputs[1]!.body!.observation!;
+    expect(observation.state).toMatchObject({ health: 20, detail: expect.stringContaining('minecraft.observe') });
+    expect(observation.facts).toMatchObject({ imageAvailable: false, onGround: true });
+    // Nothing more was sent to the body for a picture it cannot give.
+    const sent = f.commands.length;
+    // The body later reports a picture (or the retry window passes): offered again.
+    f.facts({ imageAvailable: true });
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(false);
+    f.facts({ imageAvailable: false });
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(true);
+    f.advance(10 * 60_000);
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(false);
+    // A body that says its renderer is not configured never offers it.
+    f.facts({ rendererConfigured: false, imageAvailable: false });
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(true);
+    expect(f.commands.length).toBe(sent);
   });
 
   it.each(['deadline', 'close'] as const)('unwinds a competing body resource wait on local %s without aborting the enclosing action', async mode => {

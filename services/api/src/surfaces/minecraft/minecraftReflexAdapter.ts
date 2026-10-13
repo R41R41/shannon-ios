@@ -12,6 +12,7 @@ import {
   type ReflexPorts, type ReflexSelector, type ReflexSessionReceipt, type ReflexSessionRequest,
 } from '../../mind/action/reflex/reflexPorts.js';
 import type { MinecraftControl } from './minecraftControl.js';
+import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
@@ -142,6 +143,8 @@ export function createMinecraftTaskBody(parts: {
   const tick = async () => {
     if (!live() || closed || active || !parts.entry || !parts.selector || attempts >= 4) return;
     const bodyId = bound(), observation = bodyId ? control.observe(bodyId) : null;
+    // Every session requires a picture; without one it could only end `observation_unavailable` after the entry call.
+    if (bodyId && control.imagesUnavailable(bodyId)) return;
     if (!observation || observation.sequence === lastSequence) return;
     lastSequence = observation.sequence;
     const facts = observation.facts, mode = facts.danger === true ? 'danger' : facts.stuck === true ? 'stuck' : facts.visualRequired === true ? 'visual' : null;
@@ -169,7 +172,11 @@ export function createMinecraftTaskBody(parts: {
       timer = setInterval(poll, parts.pollMilliseconds ?? 250); timer.unref(); poll();
     },
     revision: () => revision,
-    context: () => ({ revision, observation: live() && bound() ? control.observe(bound()!) : null }),
+    // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
+    context: () => {
+      const observation = live() && bound() ? control.observe(bound()!) : null;
+      return { revision, observation: observation ? minecraftObservationSummary(observation) : null };
+    },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
       if (!name.startsWith('mc.')) return parent;
@@ -198,12 +205,15 @@ export function createMinecraftTaskBody(parts: {
   const definition = { name: 'minecraft.reflex', description: '現在のタスクの目的で、一人称画像を更新しながら短い身体操作を選ぶ。最新状態と結果を返し、長期計画はここで立てない。',
     input: EMPTY, domain: 'minecraft_body' as const, effect: 'write' as const, cost: 'model' as const,
     audiences: ['owner_alone' as const], surfaces: ['text' as const] };
-  const tools: FcaExternalTools = { definitions: parts.selector && availableBody() && control.frame(availableBody()!) ? [definition] : [], async execute(call) {
+  // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
+  const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
+  const tools: FcaExternalTools = { definitions: offered ? [definition] : [], async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!parts.selector || call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !live()) throw new Error('FCA_BODY_LEASE_INVALID');
     if (!call.input || typeof call.input !== 'object' || Array.isArray(call.input) || Object.keys(call.input).length) return toolFailure('invalid_input', '引数は空のオブジェクトです。');
     const bodyId = availableBody(); if (!bodyId || !control.frame(bodyId) || !control.store.bind(step.taskId, bodyId)) return toolFailure('unavailable', '操作できる体が接続されていません。');
+    if (control.imagesUnavailable(bodyId)) return toolFailure('unavailable', '一人称画像が今は得られないため、短い視覚操作は使えません。minecraft.observe と mc.* の道具で進めます。');
     const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`);
     if (active) await active;
     const receipt = await startSession({ context: ctx, limits, requiresImage: true }, 'explicit', call.signal);
