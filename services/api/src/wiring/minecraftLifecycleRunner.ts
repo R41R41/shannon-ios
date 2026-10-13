@@ -49,10 +49,11 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
           receipt = await inActionExecution(active.execution, () => parts.service.execute(request, active.execution.signal));
           await active.finish(receipt.outcome === 'completed' ? 'completed' : receipt.outcome === 'cancelled' ? 'cancelled' : 'failed',
             'lifecycle_native_acknowledged').catch(() => {});
-        } catch {
+        } catch (error) {
           // The command may have arrived in the meantime; an accepted receipt is the outcome, anything else is unknown.
           receipt = accepted(parts.service.receipt(request.id));
-          const [state, code] = interrupted(receipt, !!parts.service.store.command(request.id));
+          const issued = !!parts.service.store.command(request.id);
+          const [state, code] = interrupted(receipt, issued, `${request.action}:${notStartedReason(error)}`);
           await active.finish(state, code).catch(() => {});
         } finally {
           active.stop();
@@ -77,8 +78,24 @@ function accepted(receipt: MinecraftLifecycleReceipt | null): MinecraftLifecycle
   return receipt && receipt.outcome !== 'unknown' && receipt.inputsReleased ? receipt : null;
 }
 
-/** How an operation whose wait was interrupted closes its action: by its receipt, unknown once issued, else never started. */
-function interrupted(receipt: MinecraftLifecycleReceipt | null, issued: boolean): ['completed' | 'failed' | 'unknown', string] {
+/**
+ * How an operation whose wait was interrupted closes its action: by its receipt, unknown once issued, else never started, with
+ * the operation and the closed reason in its result (`lifecycle_not_started:<action>:<reason>`), which the notice of a
+ * conversation's request reads: 「受け付けました」 was said, so 「始められなかった」 is told too.
+ */
+function interrupted(receipt: MinecraftLifecycleReceipt | null, issued: boolean, notStarted: string): ['completed' | 'failed' | 'unknown', string] {
   if (receipt) return [receipt.outcome === 'completed' ? 'completed' : 'failed', 'lifecycle_native_acknowledged'];
-  return issued ? ['unknown', 'lifecycle_result_unknown'] : ['failed', 'lifecycle_not_started'];
+  return issued ? ['unknown', 'lifecycle_result_unknown'] : ['failed', `${LIFECYCLE_NOT_STARTED}:${notStarted}`];
+}
+
+/** The result prefix of an operation that never started. */
+export const LIFECYCLE_NOT_STARTED = 'lifecycle_not_started';
+/** Why an accepted operation never started, as a closed reason. */
+export const NOT_STARTED_REASONS = ['busy', 'unavailable', 'not_allowed', 'error'] as const;
+
+function notStartedReason(error: unknown): typeof NOT_STARTED_REASONS[number] {
+  const code = error instanceof Error ? error.message : '';
+  if (code === 'MINECRAFT_LIFECYCLE_BUSY') return 'busy';
+  if (code === 'MINECRAFT_LIFECYCLE_UNAVAILABLE') return 'unavailable';
+  return code === 'MINECRAFT_LIFECYCLE_AUTHORITY_DENIED' ? 'not_allowed' : 'error';
 }

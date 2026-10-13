@@ -2,7 +2,7 @@ import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fca
 import type { TaskRecord, TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
-import type { MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
+import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 
@@ -43,7 +43,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       // 2026-10-13: the turn's task context closed after its menu was built (`fca_context_budget`), and the call threw. Whatever
       // closed it (the scope, the audience, the budget), the request is refused as a closed value she can say, and nothing starts.
       if (context.scopeKey !== parts.ownerScope || !parts.ownerAlone() || !parts.conversation.taskToolsAvailable(context.scopeKey)) {
-        return toolFailure('unavailable', 'いまはマイクラの依頼を受け付けられません。少しあとでもう一度頼んでください。', { retryable: false });
+        return minecraftTaskUnavailable(name);
       }
       const value = input as { goal?: string; id?: string };
       if (name === 'minecraft.request') {

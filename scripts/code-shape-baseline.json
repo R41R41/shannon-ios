@@ -1718,7 +1718,7 @@
     },
     "services/api/src/mind/workspace/promptLayout.ts": {
       "complex-function": 1,
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/mind/workspace/store/mindInboxStore.ts": {
       "long-line": 3

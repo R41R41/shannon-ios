@@ -90,7 +90,11 @@ export function lateFolderOutcomeNotices(reports: readonly LateFolderReport[], a
   });
 }
 
-export interface LifecycleReport { id: string; action: string; outcome: string; observedAt: string }
+export interface LifecycleReport {
+  id: string; action: string; outcome: string; observedAt: string;
+  /** Set when the accepted operation never started: busy, unavailable, not_allowed or error. */
+  notStarted?: string;
+}
 
 /**
  * The Minecraft lifecycle operations the owner asked for in a conversation and she answered with 「受け付けた」 (2026-10-13
@@ -105,6 +109,9 @@ export function lifecycleOutcomeNotices(reports: readonly LifecycleReport[], at:
     const code = report.outcome === 'completed' ? 'done' : report.outcome === 'cancelled' ? 'cancelled' : 'failed';
     const id = sourceId('minecraft-', report.id, ended);
     if (!id) return [];
-    return [{ at: iso(ended), draft: { kind: 'task_outcome', code, audience: 'owner', source: 'api', sourceId: id, tool: `minecraft.${report.action}` } }];
+    const reason = report.notStarted ? { reason: `lifecycle_not_started.${report.notStarted}` } : {};
+    const tool = `minecraft.${report.action}`;
+    const draft = { kind: 'task_outcome' as const, code, audience: 'owner' as const, source: 'api' as const, sourceId: id, tool, ...reason };
+    return [{ at: iso(ended), draft }];
   });
 }
