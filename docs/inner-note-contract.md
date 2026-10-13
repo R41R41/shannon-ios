@@ -18,12 +18,13 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   once per episode); when her day ends. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her — 「ごめん、ちょっと
   待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)
   are one reflection; reflections, the sweep and forgetting run one at a time on one queue, after the turn; at most 96 attempts a day,
-  failures and timeouts counted (a cost guard).
+  failures and timeouts counted, kept in the database (`shannon_inner_note_attempts`, step `emotion/003`) so a restart keeps the count.
 - **Gates (code, not prompt).** An event moves `intent` at most one step toward letting go. An ordinary sulk lasts at most an hour
   **from the start of its episode** (`episode_started_at`), however its notes rewrite `until`: a later `until` is cut to it, a note
   written past it ends the sulk (`capEnded`), and a sulk with no `until` stops showing at the hour. A `day` sulk needs a reason of a
-  kind (`intentional`, `repeated`, `big`) and ends with her day. A sulk whose time ran out is not active (no face, no `shown`) and
-  the sweep asks her to settle once. Marks for the Observer: `gateStopped`, `untilClamped`, `capEnded`, `dayDowngraded`,
+  kind (`intentional`, `repeated`, `big`) and ends with her day. A sulk whose time ran out is not active: no face, no `shown`, no
+  line for Jev, and the reply and touch prompts get it only as 「さっきまでの気持ち」 (past tense, without its hooks). The sweep asks her
+  to settle, again with backoff (2, 4, 8 minutes) while the reflection fails, and after three failures closes the note as it stands. Marks for the Observer: `gateStopped`, `untilClamped`, `capEnded`, `dayDowngraded`,
   `forgaveWhileHigh`, `apologyOnlyReason` (a heuristic of the words; the ADR's Jev question is deferred).
 - **Her day.** Ends at the earlier of 3:00 in the owner's time zone (0:00–3:00 belongs to the day before) and his goodnight to her
   (`goodnightIn`: the whole message is a goodnight). The nightly sleep job is **not** read: the common task runtime (ADR-0009 S9)
@@ -69,10 +70,12 @@ what prompted it, the core version and hash, the model, usage and cost, `created
 `closed_at`, `episode_started_at` (step `emotion/002_inner_note_episodes`). Opened through the one opener (`sqliteOpen.ts`, profile
 `innerNotes`).
 
-**Forgetting (D3).** Sources are a lineage: a note carries the sources of its own events (a turn `experience:<id>` — a voice turn's
-utterance is bound to its stored turn when the app stores it —, a touch `experience:<burst id>`), of the note it was written after,
-and of the day summary it read. A note is forgotten when a source of its lineage is, or when the words of a forgotten turn are among
-its events; it is then not read (the readers check before every read) and is deleted on the queue, with every note derived from it.
+**Forgetting (D3).** A note carries its sources: its own events (a turn `experience:<id>` — a voice turn's utterance is bound to its
+stored turn when the app stores it —, a touch `experience:<burst id>`), the conversation lines it read, the same day's note it was
+written after, and — for the first note of a day — the summary of the day before. A closing note keeps its own day's sources only, so
+nothing reaches back further than one day; at most 64 sources a note. A note is forgotten when one of its sources is, when the words of
+a forgotten turn are among its events, or when its own words quote one (a backstop); it is then not read and is deleted on the queue.
+Reads check against an index of the owner's forgetting built once per state; the sweep scans the stored notes only when that changed.
 A reflection whose events were forgotten while its call ran is discarded; queued events of a forgotten turn are dropped.
 
 **Retention.** Notes are kept as long as the touches they come from: `BODY_LIMITS.retentionDays` (30 days).

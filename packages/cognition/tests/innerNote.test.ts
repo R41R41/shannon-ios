@@ -126,6 +126,19 @@ describe('readers (ADR-0012 D2.5)', () => {
     expect(innerNoteTurnBlock(note(), 'owner', '2026-10-14T18:00:00.000Z')).toBe('');
   });
 
+  it('gives an expired sulk only as what she felt a while ago, never as now, and not to Jev (N1)', () => {
+    const expired = note({ until: '2026-10-14T13:25:00.000Z' });
+    const block = innerNoteTurnBlock(expired, 'owner', AT);
+    expect(block).toMatch(/^\[さっきまでの気持ち\]/u);
+    expect(block).not.toContain('いまの自分の気持ち');
+    expect(block).not.toContain('見せる気持ち');
+    expect(innerNoteTouchBlock(expired, 'owner', AT)).toMatch(/^\[さっきまでの気持ち\]/u);
+    expect(innerNoteTurnBlock(expired, 'others', AT)).toBe('');
+    expect(innerNoteRouteSummary(expired, AT)).toBeUndefined();
+    // A calm note is how she is now.
+    expect(innerNoteTurnBlock(note({ intent: 'none', until: null }), 'owner', AT)).toContain('いまの自分の気持ち');
+  });
+
   it('lists what happened after the note as facts', () => {
     const block = innerNoteTurnBlock(note({ intent: 'none', until: null }), 'owner', AT, [{ kind: 'apology', at: '2026-10-14T13:29:00.000Z', words: 'ごめん' }]);
     expect(block).toContain('このメモのあとに起きたこと');
@@ -205,7 +218,9 @@ describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
     expect(teasingIn('シャノンってほんとポンコツだよね（笑）')).toBe(true);
     expect(teasingIn('今日の天気は？')).toBe(false);
     // M2: words that are not about her.
-    for (const plain of ['バカみたいに暑い', 'アホほど忙しい', 'ばかうけ']) expect(teasingIn(plain)).toBe(false);
+    for (const plain of ['バカみたいに暑い', 'アホほど忙しい', 'ばかうけ', '俺ってバカだな', 'このアプリポンコツすぎ', 'シャノン、俺ってバカだな']) {
+      expect(teasingIn(plain)).toBe(false);
+    }
     for (const plain of ['ごめん、ちょっと待って', 'すみません、天気教えて']) expect(apologyIn(plain)).toBe(false);
     expect(apologyIn('ほんとにごめんって')).toBe(true);
     expect(apologyIn('ごめんごめん、言いすぎた')).toBe(true);

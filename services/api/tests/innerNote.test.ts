@@ -39,7 +39,8 @@ function draft(overrides: Partial<InnerNoteDraft> = {}): InnerNoteDraft {
 
 type Answer = InnerNoteDraft | null | Error | (() => InnerNoteDraft);
 
-function setup(answers: Answer[] = [], limits: Record<string, number> = {}) {
+function setup(answers: Answer[] = [], limits: Record<string, number> = {}, options: { database?: DatabaseSync;
+  recent?: () => { role: 'user' | 'assistant'; content: string; sourceId?: string }[] } = {}) {
   let now = T0;
   const facts: InnerNoteReflectionFacts[] = [];
   const reflector: InnerNoteReflector = {
@@ -52,11 +53,11 @@ function setup(answers: Answer[] = [], limits: Record<string, number> = {}) {
       return { draft: next, usage: { model: DEFAULT_HAIKU_MODEL, inputTokens: 900, outputTokens: 120, cacheReadTokens: 800, cacheWriteTokens: null, costUsd: 0.00015 } };
     },
   };
-  const database = new DatabaseSync(':memory:');
+  const database = options.database ?? new DatabaseSync(':memory:');
   const store = new SQLiteInnerNoteStore(database);
   let snapshot: CompanionStateSnapshot = createInitialCompanionState(OWNER, T0);
   const service = new InnerNoteService({ store, reflector, state: { snapshot: () => snapshot }, ownerScope: OWNER, timeZone: 'Asia/Tokyo', now: () => now,
-    manual: true, retentionDays: 30, limits });
+    manual: true, retentionDays: 30, limits, ...(options.recent ? { recent: options.recent } : {}) });
   return { service, store, facts, database, at: (value: string) => { now = value; }, setSnapshot: (value: CompanionStateSnapshot) => { snapshot = value; } };
 }
 
@@ -268,6 +269,63 @@ describe('the cap and the queue (H2, low)', () => {
     await capped.service.flush(OWNER);
     expect(capped.facts).toHaveLength(1);
     expect(capped.store.latest(OWNER)).toBeNull();
+  });
+});
+
+describe('the re-review (N1–N4)', () => {
+  it('retries an expired sulk\'s settling with backoff, then closes it as it stands (N1)', async () => {
+    const failing = () => new Error('INNER_NOTE_UPSTREAM_529');
+    const { service, store, at } = setup([draft({ untilMinutes: 10 }), failing(), failing(), failing()]);
+    service.touched(touch());
+    await service.flush(OWNER);
+    const minutes = (value: number) => new Date(Date.parse('2026-10-14T13:41:00.000Z') + value * 60_000).toISOString();
+    // Tries at +0, +2 and +6 minutes (backoff 2, 4, 8); at +14 the third failure closes it.
+    for (const offset of [0, 1, 2, 6, 14]) {
+      at(minutes(offset));
+      await service.sweep();
+      await service.flush(OWNER);
+      expect(store.latest(OWNER)!.closedAt, `at +${offset}`).toBe(offset === 14 ? minutes(14) : null);
+    }
+    expect(service.current(OWNER, minutes(15))).toBeNull();
+  });
+
+  it('records the conversation lines it read as sources, and forgets a note that quotes a forgotten turn (N2)', async () => {
+    const { service, store, setSnapshot } = setup([draft({ text: { ...draft().text, honne: '「来週の旅行の話」をされて、ちょっと嬉しかった。' } })], {},
+      { recent: () => [{ role: 'user', content: '来週の旅行の話なんだけど', sourceId: 'experience:e-trip' }] });
+    service.touched(touch());
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.sourceIds).toContain('experience:e-trip');
+    // Forgotten by its words only (no id): the note's own words quote it, so it goes too.
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('other-id', '来週の旅行の話')] });
+    await service.sweep();
+    expect(store.latest(OWNER)).toBeNull();
+  });
+
+  it('keeps a day\'s sources at its close and drops yesterday\'s, bounded (N3)', async () => {
+    const { service, store, at } = setup([draft(), draft({ summary: '一日目。' }), draft(), draft({ summary: '二日目。' })]);
+    service.touched(touch());
+    await service.flush(OWNER);
+    at('2026-10-14T18:01:00.000Z');
+    await service.sweep();
+    at('2026-10-15T13:00:00.000Z');
+    service.touched(touch('2026-10-15T13:00:00.000Z'));
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.sourceIds).toEqual([`experience:burst-${T0}`, 'experience:burst-2026-10-15T13:00:00.000Z']);
+    at('2026-10-15T18:01:00.000Z');
+    await service.sweep();
+    // The second day's closing note keeps its own moment only: forgetting the first day's touch would not reach it.
+    expect(store.latest(OWNER)!.sourceIds).toEqual(['experience:burst-2026-10-15T13:00:00.000Z']);
+  });
+
+  it('keeps the day\'s attempts in the database across a restart (N4)', async () => {
+    const database = new DatabaseSync(':memory:');
+    const first = setup([draft()], { reflectionsPerDay: 1 }, { database });
+    first.service.touched(touch());
+    await first.service.flush(OWNER);
+    const second = setup([draft()], { reflectionsPerDay: 1 }, { database });
+    second.service.touched(touch('2026-10-14T13:40:00.000Z'));
+    await second.service.flush(OWNER);
+    expect(second.facts).toHaveLength(0);
   });
 });
 

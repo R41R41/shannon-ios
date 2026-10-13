@@ -9,7 +9,7 @@ import { INNER_NOTE_SERVICE_LIMITS } from '../../contracts/innerNoteContract.js'
 import { emotionTiming } from './emotionTiming.js';
 import type { InnerNoteReflector } from './innerNoteReflection.js';
 import type { InnerNotePort, InnerNoteTouch, InnerNoteTurn } from './innerNotePorts.js';
-import { eventVisible, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
+import { eventVisible, forgetIndex, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
 import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteStore.js';
 
 /**
@@ -30,11 +30,15 @@ import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteSto
  * Owner scope only. Without a reflector (no Haiku key) nothing is written; the character core and the prompt cleanup still apply.
  */
 export interface InnerNoteServiceDependencies {
-  store: Pick<SQLiteInnerNoteStore, 'latest' | 'day' | 'since' | 'lastClosedSummary' | 'append' | 'forget' | 'markClosed' | 'rebindSource' | 'pruneBefore'>;
+  store: Pick<SQLiteInnerNoteStore, 'latest' | 'day' | 'since' | 'lastClosedSummary' | 'append' | 'forget' | 'markClosed' | 'rebindSource' | 'pruneBefore'
+    | 'attempt'>;
   reflector: InnerNoteReflector | null;
   state: { snapshot(scopeKey: string): CompanionStateSnapshot };
-  /** The last lines of a conversation in progress with the owner alone, oldest first (through the replay's forgetting filter). */
-  recent?(scopeKey: string, at: string): readonly { role: 'user' | 'assistant'; content: string }[];
+  /**
+   * The last lines of a conversation in progress with the owner alone, oldest first (through the replay's forgetting filter), each
+   * with its stored turn (`experience:<id>`): a note that read them carries them as sources (N2).
+   */
+  recent?(scopeKey: string, at: string): readonly { role: 'user' | 'assistant'; content: string; sourceId?: string }[];
   ownerScope: string;
   timeZone: string;
   now(): string;
@@ -47,6 +51,8 @@ export interface InnerNoteServiceDependencies {
 }
 
 interface Entry { event: InnerNoteEvent; source?: string }
+/** How often an expired sulk is asked to settle before it is closed as it stands (N1). */
+const SETTLE_TRIES = 3;
 interface Waiting { entries: Entry[]; timer: ReturnType<typeof setTimeout> | null; firstAt: number }
 
 export class InnerNoteService implements InnerNotePort {
@@ -54,9 +60,12 @@ export class InnerNoteService implements InnerNotePort {
   private readonly limits: typeof INNER_NOTE_SERVICE_LIMITS;
   private readonly waiting = new Map<string, Waiting>();
   private readonly reflecting = new Map<string, readonly Entry[]>();
-  /** Notes (and ordinary episodes) already asked to settle: once each. */
+  /** Ordinary episodes already asked to settle on their numbers (D2.4): once each. */
   private readonly settled = new Set<string>();
-  private readonly attempts = new Map<string, number>();
+  /** Expired notes asked to settle (N1): how often, and not before when again. */
+  private readonly settling = new Map<string, { tries: number; nextAt: number }>();
+  /** The forgetting the last sweep applied (`forgetIndex` key): the sweep deletes again only when it changed. */
+  private forgotKey: string | null = null;
   private latestCache = new Map<string, StoredInnerNote | null>();
   private chain: Promise<void> = Promise.resolve();
   private sweeper: ReturnType<typeof setInterval> | null = null;
@@ -85,7 +94,7 @@ export class InnerNoteService implements InnerNotePort {
     const note = this.latest(scopeKey);
     if (!note || !innerNoteCurrent(note, at)) return null;
     if (!noteForgotten(this.dependencies.state.snapshot(scopeKey), note)) return note;
-    void this.schedule(async () => this.forget(scopeKey));
+    void this.schedule(async () => this.forget(scopeKey, true));
     return null;
   }
 
@@ -141,16 +150,33 @@ export class InnerNoteService implements InnerNotePort {
       if (!note || note.closedAt) return;
       const at = this.dependencies.now();
       if (at >= note.dayEndsAt) return await this.closeDay(scopeKey, 'three');
-      if (this.wantsSettling(scopeKey, note, at)) this.enqueue(scopeKey, { kind: 'until', at }, undefined);
+      if (innerNoteExpired(note, at)) return this.settleExpired(scopeKey, note, at);
+      if (this.calmSettling(scopeKey, note, at)) this.enqueue(scopeKey, { kind: 'until', at }, undefined);
     });
+  }
+
+  /**
+   * N1: an expired sulk asks her to settle, again with backoff while the reflection fails (2, 4, 8 minutes); after
+   * `SETTLE_TRIES` failures the note is closed as it stands, so a sulk never lingers past its time.
+   */
+  private settleExpired(scopeKey: string, note: StoredInnerNote, at: string): void {
+    const state = this.settling.get(note.id) ?? { tries: 0, nextAt: 0 };
+    if (Date.parse(at) < state.nextAt) return;
+    if (state.tries >= SETTLE_TRIES) {
+      this.dependencies.log?.('inner_note_settle_gave_up');
+      this.settling.delete(note.id);
+      return this.markClosed(scopeKey, at);
+    }
+    if (this.settling.size >= 64) this.settling.clear();
+    this.settling.set(note.id, { tries: state.tries + 1, nextAt: Date.parse(at) + 2 ** (state.tries + 1) * 60_000 });
+    this.enqueue(scopeKey, { kind: 'until', at }, undefined);
   }
 
   /** Waits for everything queued so far (tests, shutdown). */
   idle(): Promise<void> { return this.chain; }
 
-  /** D2.4 and D4: a sulk whose time ran out, or an ordinary one without `until` whose numbers are back in their band: once each. */
-  private wantsSettling(scopeKey: string, note: StoredInnerNote, at: string): boolean {
-    if (innerNoteExpired(note, at)) return this.once(note.id);
+  /** D2.4: an ordinary sulk without `until` whose numbers are back in their usual band asks her to settle, once per episode. */
+  private calmSettling(scopeKey: string, note: StoredInnerNote, at: string): boolean {
     const calm = sulkingIntent(note.hooks.intent) && note.hooks.scale === 'ordinary' && note.hooks.until === null
       && holding(this.dependencies.state.snapshot(scopeKey), at) < SHANNON_EMOTION_CONTINUITY.visibleFrom;
     return calm && this.once(`episode:${note.episodeStartedAt ?? note.id}`);
@@ -212,7 +238,7 @@ export class InnerNoteService implements InnerNotePort {
     if (!closing && previousNote && !previousNote.closedAt && !innerNoteCurrent(previousNote, at)) await this.closeDay(scopeKey, 'three');
     const open = this.latest(scopeKey);
     const previous = open && !open.closedAt && (closing !== null || innerNoteCurrent(open, at)) ? open : null;
-    if (!closing && !this.attempt(previous?.dayKey ?? innerNoteDay(at, this.timeZone).dayKey)) return false;
+    if (!closing && !this.attempt(scopeKey, previous?.dayKey ?? innerNoteDay(at, this.timeZone).dayKey)) return false;
     this.reflecting.set(scopeKey, visible);
     try {
       return await withObserverRun({ scopeKey, surface: 'inner_note', runId: randomUUID() }, () =>
@@ -224,16 +250,11 @@ export class InnerNoteService implements InnerNotePort {
     }
   }
 
-  /** Counts an attempt against the day's cap, whatever becomes of it (a failure and a timeout cost too). */
-  private attempt(dayKey: string): boolean {
-    const used = this.attempts.get(dayKey) ?? 0;
-    if (used >= this.limits.reflectionsPerDay) {
-      this.dependencies.log?.('inner_note_daily_cap');
-      return false;
-    }
-    if (this.attempts.size > 8) this.attempts.clear();
-    this.attempts.set(dayKey, used + 1);
-    return true;
+  /** Counts an attempt against the day's cap in the database (a restart keeps it), whatever becomes of it: failures cost too. */
+  private attempt(scopeKey: string, dayKey: string): boolean {
+    if (this.dependencies.store.attempt(scopeKey, dayKey, this.limits.reflectionsPerDay)) return true;
+    this.dependencies.log?.('inner_note_daily_cap');
+    return false;
   }
 
   private async write(scopeKey: string, at: string, previous: StoredInnerNote | null, entries: readonly Entry[], closing: InnerNoteDayEnd | null) {
@@ -243,8 +264,9 @@ export class InnerNoteService implements InnerNotePort {
       : { dayId: null, dayKey: fresh.dayKey, dayEndsAt: fresh.endsAt };
     const snapshot = this.dependencies.state.snapshot(scopeKey);
     const events = entries.map(entry => entry.event);
-    const yesterday = previous ? null : this.dependencies.store.lastClosedSummary(scopeKey);
-    const facts = this.facts(scopeKey, at, previous, events, day.dayEndsAt, closing !== null, snapshot, yesterday?.summary ?? null);
+    const yesterday = previous && !closing ? null : this.dependencies.store.lastClosedSummary(scopeKey);
+    const recent = this.recent(scopeKey, at);
+    const facts = this.facts(scopeKey, at, previous, events, day.dayEndsAt, closing !== null, snapshot, previous ? null : yesterday?.summary ?? null, recent);
     const { draft, usage } = await this.dependencies.reflector!.reflect({ scopeKey, facts, signal: AbortSignal.timeout(this.limits.timeoutMilliseconds) });
     if (!draft) return this.unreadable();
     // Forgotten while the call ran: what it wrote is about a moment he took back, and is not kept.
@@ -253,7 +275,8 @@ export class InnerNoteService implements InnerNotePort {
     const settled = settleInnerNote({ draft, previous, triggers, at, dayEndsAt: day.dayEndsAt, holding: holding(snapshot, at),
       visibleFrom: SHANNON_EMOTION_CONTINUITY.visibleFrom });
     this.dependencies.store.append({ scopeKey, ...day, text: draft.text, hooks: settled.hooks, triggers, events,
-      sourceIds: lineage(entries.map(entry => entry.source), previous, yesterday), flags: settled.flags, changeReason: draft.changeReason,
+      sourceIds: lineage([...entries.map(entry => entry.source), ...recent.map(line => line.sourceId)], previous, previous ? null : yesterday,
+        closing && yesterday ? { yesterday: yesterday.sourceIds } : null), flags: settled.flags, changeReason: draft.changeReason,
       summary: closing ? draft.summary : null, coreVersion: CHARACTER_CORE.version, coreHash: CHARACTER_CORE.hash, episodeStartedAt: settled.episodeStartedAt,
       usage, elapsedMs: performance.now() - started, createdAt: at, closing: closing !== null });
     this.latestCache.delete(scopeKey);
@@ -261,7 +284,7 @@ export class InnerNoteService implements InnerNotePort {
   }
 
   private facts(scopeKey: string, at: string, previous: StoredInnerNote | null, events: readonly InnerNoteEvent[], dayEndsAt: string, closing: boolean,
-    snapshot: CompanionStateSnapshot, yesterday: string | null): InnerNoteReflectionFacts {
+    snapshot: CompanionStateSnapshot, yesterday: string | null, recent: readonly { role: 'user' | 'assistant'; content: string }[]): InnerNoteReflectionFacts {
     const before = previous ? this.dependencies.store.day(scopeKey, previous.dayId).flatMap(note => note.events) : [];
     const all = [...before, ...events];
     const timing = emotionTiming();
@@ -272,7 +295,7 @@ export class InnerNoteService implements InnerNotePort {
       kindnesses: all.filter(event => event.kind === 'kindness').map(event => event.at),
       feeling: { present: present.primary === 'neutral' ? null : { kind: present.primary, intensity: present.intensity },
         lingering: livingLingering(snapshot, at, timing).slice(0, 3).map(item => ({ kind: item.feeling.kind, strength: item.strength })) },
-      recent: this.recent(scopeKey, at),
+      recent: recent.map(line => ({ role: line.role, content: line.content })),
     };
   }
 
@@ -289,10 +312,14 @@ export class InnerNoteService implements InnerNotePort {
     return (!entry.source || sourceVisible(snapshot, entry.source)) && eventVisible(snapshot, entry.event);
   }
 
-  private forget(scopeKey: string): void {
+  /** Deletes what the owner had her forget; the stored notes are scanned only when his forgetting changed (N3). */
+  private forget(scopeKey: string, always = false): void {
     const snapshot = this.dependencies.state.snapshot(scopeKey);
     const waiting = this.waiting.get(scopeKey);
     if (waiting) waiting.entries = waiting.entries.filter(entry => this.entryVisible(snapshot, entry));
+    const key = forgetIndex(snapshot).key;
+    if (!always && key === this.forgotKey) return;
+    this.forgotKey = key;
     const removed = this.dependencies.store.forget(scopeKey, note => noteForgotten(snapshot, note));
     this.latestCache.delete(scopeKey);
     if (removed) this.dependencies.log?.(`inner_note_forgotten=${removed}`);
