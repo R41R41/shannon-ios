@@ -216,6 +216,19 @@ export function withReadToolsCapability(prompt: string): string {
   return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
 }
 
+/**
+ * With her read tools she looks things up herself, in text and in voice (2026-10-13: the fixed line 「テキストはそのメッセージで
+ * 検索をオンにした時だけ」 made her tell the owner, in a call, that searching needed a toggle in text). Applied by the Claude adapter
+ * to a prompt that carries the read-tools line; the fixed description (and the historical profile's pinned requests) keeps its words.
+ */
+export const SHANNON_TOOL_WEB_SEARCH_TEXT = 'Web検索: 今の情報が要る時は、テキストでも音声でも自分で調べる（音声では調べものとして任せ、わかった時に伝える）。オンにしてもらう必要はない。';
+
+export function withToolWebSearchLine(prompt: string): string {
+  if (!prompt.includes(`- ${SHANNON_READ_TOOLS_CAPABILITY.text}\n`)) return prompt;
+  const fixed = SHANNON_CAPABILITIES.find(item => item.id === 'web_search');
+  return fixed ? prompt.replace(`- ${fixed.text}\n`, `- ${SHANNON_TOOL_WEB_SEARCH_TEXT}\n`) : prompt;
+}
+
 /** The owner's description with the Aether line, after the line of Aether's shared notes; any other prompt unchanged. */
 export function withAetherAccessCapability(prompt: string): string {
   const line = `- ${SHANNON_AETHER_ACCESS_CAPABILITY.text}\n`;

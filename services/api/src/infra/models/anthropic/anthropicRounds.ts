@@ -10,9 +10,9 @@ import { sonnetTools } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 import { isAnthropicUsageEvidenceError } from './haikuCache.js';
 import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
-import { requestStrictTools, strictRequestFits, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
+import { nonStrictTool, strictGrammarFits, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
 import { bridgedAnthropicSession } from './anthropicToolBridge.js';
-import { bridgeOnlyUnacceptedTail } from './anthropicForegroundMenu.js';
+import { activeAnthropicToolNames, nonStrictUnacceptedTail } from './anthropicForegroundMenu.js';
 import { carriesOffer, offerRefusal, recoverableRefusal, reportOfferRefusal, reportRejection } from './anthropicRejection.js';
 
 /**
@@ -92,6 +92,10 @@ const MAXIMUM_PAUSES = 3;
  * The bounded read recovery is the owner's side of the turn: a user message after her end_turn (a mid-conversation system
  * message may not follow an assistant end_turn; ADR-0009 stage 1, quick fix 1).
  */
+/** The answer without tools after the provider refused the offered tools: no invented reason, no claim it cannot be done. */
+export const TOOLS_FAILED_NOTE = 'この返事では道具の呼び出しが一時的にうまくいかず、道具なしで答える。'
+  + '道具が使えない理由（テキストでないと使えない、設定やオンが要る等）を作らない。調べものや操作が要る依頼なら、もう一度やってみると短く伝える。';
+
 export const READ_RECOVERY_NOTE = '依頼されたWeb検索はまだ実行されていない。調べる約束だけでは完了しない。'
   + '必要な地域や対象が分かっているならweb_searchを使ってから答える。不明なら必要なことだけを短く聞く。';
 
@@ -102,7 +106,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   // Every offered schema is strict, including deferred ones, and the API accepts at most 20 strict tools per request.
   // The request already appended the initially selected schemas after its stable opener and history. Opening another
   // tool appends only its new definition, preserving signed tools/system/history and the original execution gate.
-  const visible = new Set(requestStrictTools(body).map(tool => tool.name));
+  const visible = new Set(activeAnthropicToolNames(body));
   const session = appendOnly && options.session?.menu && visible.has(TOOL_CALL_PROVIDER_NAME)
     ? bridgedAnthropicSession(options.session, visible) : options.session;
   const turn: ToolStepState = { used: 0, toolsOff: false };
@@ -111,7 +115,6 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   let readRecovery = false;
   let bridgeOnly = false;
   let acceptedLength = 0;
-  let acceptedVisible = new Set((body.tools ?? []).flatMap(tool => 'name' in tool ? [tool.name] : []));
   const callerStopped = () => options.signal?.aborted === true;
   // The one tool-less answer after a refusal of the offered schemas (ADR-0009 stage 1, quick fix 2, canary form).
   const plainRecovery = (error: unknown): boolean => {
@@ -127,12 +130,13 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     if (!appendOnly || !session?.menu || !visible.has(TOOL_CALL_PROVIDER_NAME) || bridgeOnly) return false;
     if (offerRefusal(error) !== 'strict_grammar_capacity') return false;
     const before = request();
-    const tail = bridgeOnlyUnacceptedTail(messages, acceptedLength);
+    const tail = nonStrictUnacceptedTail(messages, acceptedLength);
     if (JSON.stringify(tail) === JSON.stringify(messages)) return false;
     reportOfferRefusal(error, before, 'strict_grammar_capacity');
     options.onPlanEvent?.('grammar_bridge');
     messages.splice(0, messages.length, ...tail);
-    visible.clear(); for (const name of acceptedVisible) visible.add(name);
+    // The definitions stay native (non-strict), so every offered tool is still called by its own name.
+    visible.clear(); for (const name of activeAnthropicToolNames(request())) visible.add(name);
     bridgeOnly = true;
     return true;
   };
@@ -185,7 +189,8 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     if (retained) note(TOOLS_GONE_NOTE);
     try {
       const { tools: _tools, tool_choice: _choice, ...plainBody } = options.plainBody ?? body;
-      const plainRequest = turn.used === 0 ? plainBody : { ...plainBody, messages: [
+      // Never silently without tools: she is told they failed for this reply, so she does not invent a reason.
+      const plainRequest = turn.used === 0 ? { ...plainBody, messages: withNote(plainBody.messages, TOOLS_FAILED_NOTE) } : { ...plainBody, messages: [
         ...plainMessages(messages), { role: 'system' as const, content: TOOLS_GONE_NOTE },
       ] };
       const message = await options.send(plain && !retained ? plainRequest : request({ tool_choice: { type: 'none' } }), time(left), round++);
@@ -212,7 +217,6 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     try {
       message = await options.send(request(), time(step), round++);
       acceptedLength = messages.length;
-      acceptedVisible = new Set(visible);
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
@@ -255,14 +259,15 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     });
     messages.push({ role: 'user', content: results });
     observerHandoff('tools', 'llm', { resultCount: results.length, selectedTools: uses.map(use => observedToolName(use.name)) });
-    if (appendOnly && session.menu && !bridgeOnly) {
+    if (appendOnly && session.menu) {
       const admitted: Anthropic.Tool[] = [];
+      // An opened tool is strict while the grammar budget allows (never after a grammar refusal), otherwise native non-strict.
       const additions: BetaRequestToolAdditionBlock[] = sonnetTools(options.session).flatMap(tool => {
         if (visible.has(tool.name)) return [];
-        if (!strictRequestFits(request(), [...admitted, tool])) return [];
-        admitted.push(tool);
+        const strict = !bridgeOnly && strictGrammarFits(request(), [...admitted, tool]);
+        if (strict) admitted.push(tool);
         visible.add(tool.name);
-        return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: tool } }];
+        return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: strict ? tool : nonStrictTool(tool) } }];
       });
       // The stable Messages types do not yet include beta inline blocks. Keep their schema checked by the SDK's beta
       // type, then use the same native transport with its inline-tools header (no separate client/retry/session).
@@ -294,6 +299,13 @@ export const NOT_OFFERED_IN_TURN = JSON.stringify({ ok: false, text: 'この返�
 
 function failed(output: string | undefined): boolean {
   try { const value = JSON.parse(output ?? '{}') as { ok?: unknown; failure?: unknown }; return value.ok === false && value.failure !== 'not_offered'; } catch { return false; }
+}
+
+/** A note after the request's messages, joined to a closing system message of plain text. */
+function withNote(messages: readonly Anthropic.MessageParam[], text: string): Anthropic.MessageParam[] {
+  const last = messages.at(-1);
+  if (last?.role === 'system' && typeof last.content === 'string') return [...messages.slice(0, -1), { role: 'system', content: `${last.content}\n\n${text}` }];
+  return [...messages, { role: 'system', content: text }];
 }
 
 /** Keep original results as quoted data while removing tool references that a plain request cannot declare. */

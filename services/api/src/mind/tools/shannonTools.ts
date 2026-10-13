@@ -425,6 +425,18 @@ export function isReadToolDomain(domain: string): domain is ReadToolDomain {
 export const ALWAYS_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['minecraft.cancel', 'aether.propose', 'memory.search', 'memory.read']);
 
 /**
+ * The owner's voice turn (the only offer that holds `web.research`) also always loads her everyday lookups (2026-10-13: after
+ * 「博多の天気を調べて」 the follow-up 「うん、お願い」 had no weather tool, and an event question had no research tool, so she said
+ * she could not look). A follow-up without keywords keeps them.
+ */
+export const OWNER_VOICE_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['weather.forecast', 'web.research']);
+
+/** The always-loaded names for an offer (registry names). */
+export function alwaysLoadedToolNames(offered: readonly Pick<ShannonToolDefinition, 'name'>[]): readonly string[] {
+  return offered.some(tool => tool.name === 'web.research') ? [...ALWAYS_LOADED_TOOL_NAMES, ...OWNER_VOICE_LOADED_TOOL_NAMES] : ALWAYS_LOADED_TOOL_NAMES;
+}
+
+/**
  * Legacy provider search entry, used only when no real `web.search` read port is configured.
  * Native Anthropic uses the registry read tool, which remains recoverable through `tool_open`.
  */

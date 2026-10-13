@@ -1,7 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../chatModel.js';
-import { RICH_TEXT_BLOCK_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
+import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../chatModel.js';
+import {
+  RICH_TEXT_BLOCK_INSTRUCTIONS, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE, VOICE_NATURAL_INSTRUCTIONS,
+} from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -110,6 +112,11 @@ export function conversationEffort(settings: SonnetSettings): SonnetSettings['ef
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
+/** A voice turn answered through the structured text request keeps the spoken rules (`spokenReply`). */
+export function spokenReplyLines(request: Pick<ShannonChatModelRequest, 'spokenReply'>): string[] {
+  return request.spokenReply ? [SPOKEN_STRUCTURED_REPLY_LINE, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS] : [];
+}
+
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
@@ -127,7 +134,7 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     max_tokens: 16_000,
     // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
     system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
-      ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
+      ...spokenReplyLines(request), ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
@@ -144,7 +151,7 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
   const inline = stableForegroundMenu(settings.model, toolsOffered);
   const instructions = [
-    request.systemPrompt, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
+    request.systemPrompt, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), SONNET_VOICE_LINES, ...(request.useWebSearch ? [SONNET_WEB_LINE] : []),
   ].join('\n\n');

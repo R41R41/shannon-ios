@@ -403,7 +403,7 @@ async function completeLiveVoiceDelegation(
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
   const completion = await observeFcaConversation(fcaTurn, () => placeSkill || (!work && provisionalIntent) || requiresStructuredTaskDecision || confirmedImplementationRequest
-    ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
+    ? dependencies.chatModel.generate(spokenStructuredRequest(modelRequest))
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(
         { ...modelRequest, threadKey: threadId },
@@ -423,7 +423,7 @@ async function completeLiveVoiceDelegation(
       )
     : dependencies.chatModel.generateVoice
       ? dependencies.chatModel.generateVoice({ ...modelRequest, threadKey: threadId })
-      : dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false }));
+      : dependencies.chatModel.generate(spokenStructuredRequest(modelRequest)));
   observer?.signal?.throwIfAborted();
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
@@ -493,4 +493,12 @@ async function completeLiveVoiceDelegation(
     },
   }));
   } catch (error) { try { fcaTurn?.abort(); } catch { /* Pending source stays ineligible. */ } throw error; }
+}
+
+/**
+ * A voice turn answered through the structured text request (a stated goal, a place search, a task decision) is still spoken:
+ * the Claude adapter keeps the short spoken-reply rules (2026-10-13: such replies ran 110–174 characters by ear).
+ */
+function spokenStructuredRequest<T extends object>(request: T): T & { generateThreadTitle: false; spokenReply: true } {
+  return { ...request, generateThreadTitle: false, spokenReply: true };
 }

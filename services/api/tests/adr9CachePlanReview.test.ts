@@ -79,15 +79,16 @@ describe('F1: a refused plan request falls back to the shape without the plan, o
 });
 
 describe('a grammar refusal of a plan turn with tools (M4 grammar fix)', () => {
-  it('moves the inline definitions to quoted data and keeps the plan\'s prefix; a second refusal answers in the plan-off shape', async () => {
+  it('keeps the inline definitions native without strict decoding and the plan\'s prefix; a second refusal answers in the plan-off shape', async () => {
     const h = context([refused('The compiled grammar is too large'), answer(HAIKU.model, 0, 2_000)]);
     const turn = { ...request, tools: tools(['study.list', 'study.read']) };
     expect((await planChat(h.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');
     const [first, second] = h.recorder.requests.map(item => item.body as Body);
     for (const key of ['tools', 'tool_choice', 'system', 'output_config', 'thinking'] as const) expect(second![key]).toEqual(first![key]);
     expect(JSON.stringify(first!.messages)).toContain('"tool_addition"');
-    expect(JSON.stringify(second!.messages)).not.toContain('"tool_addition"');
-    expect(JSON.stringify(second!.messages)).toContain('[開いている道具の入力定義・データ]');
+    expect(JSON.stringify(first!.messages)).toContain('"strict":true');
+    expect(JSON.stringify(second!.messages)).toContain('"tool_addition"');
+    expect(JSON.stringify(second!.messages)).not.toContain('"strict":true');
     expect(events()).toMatchObject({ 'text:grammar_bridge': 1, 'text:recovered': 1 });
     const twice = context([refused('The compiled grammar is too large'), refused('The compiled grammar is too large'), answer(HAIKU.model)]);
     expect((await planChat(twice.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');

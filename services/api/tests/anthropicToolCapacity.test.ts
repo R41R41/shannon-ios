@@ -5,7 +5,8 @@ import { validToolInput } from '../src/mind/tools/shannonToolInput.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
-import { requestStrictTools, strictRequestFits, strictRequestUsage, TOOL_CALL_JSON_CHARACTERS } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { ANTHROPIC_GRAMMAR_BUDGET, requestStrictTools, strictRequestFits, strictRequestUsage, TOOL_CALL_JSON_CHARACTERS } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
 import { bridgedAnthropicSession } from '../src/infra/models/anthropic/anthropicToolBridge.js';
 import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
@@ -54,16 +55,17 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
     expect(t.calls.map(item => item.name)).toEqual(['minecraft_start']);
     expect(t.notes()).toBe(1);
     const initial = h.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming;
-    expect(strictRequestUsage(initial).optional).toBe(24);
+    expect(strictRequestUsage(initial).optional).toBeLessThanOrEqual(ANTHROPIC_GRAMMAR_BUDGET.optional);
     expect(requestStrictTools(initial).every(tool => tool.strict)).toBe(true);
-    expect(JSON.stringify(initial.messages)).toContain('minecraft_logout');
-    expect(JSON.stringify(initial.messages)).toContain('[開いている道具の入力定義・データ]');
+    // Past the grammar budget the selected tools stay native, non-strict, callable by name (2026-10-13).
+    expect(activeAnthropicToolNames(initial)).toContain('minecraft_logout');
+    expect(JSON.stringify(initial.messages)).not.toContain('[開いている道具の入力定義・データ]');
   });
   it('retains the actual 17:57:42 production selection and executes the start through its native name', async () => {
     const t = session(SHANNON_TOOLS, productionSelection);
     const h = provider(model, [call('original-start', 'minecraft_start', {}), anthropicFixture('structured-answer')]);
     await h.chat.generate({ ...request, tools: t.tools });
-    const names = requestStrictTools(h.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming).map(tool => tool.name);
+    const names = activeAnthropicToolNames(h.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming);
     for (const name of productionSelection) expect(names).toContain(providerToolName(name));
     expect(t.calls.map(item => item.name)).toEqual(['minecraft_start']);
   });
@@ -103,7 +105,7 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const transport = scriptedAnthropic((raw, index) => {
-        if (index === 0) return { ...call('open', 'tool_open', { name: 'study_search' }), model };
+        if (index === 0) return { ...call('open', 'tool_open', { name: 'study_read' }), model };
         if (index === 1) return grammarRejection();
         const initial = transport.bodies[0]!;
         expect(raw.tools).toEqual(initial.tools);
@@ -111,13 +113,15 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
         expect((raw.messages as unknown[]).slice(0, (initial.messages as unknown[]).length)).toEqual(initial.messages);
         expect((raw.messages as unknown[]).slice((initial.messages as unknown[]).length, (initial.messages as unknown[]).length + 2))
           .toEqual((transport.bodies[1]!.messages as unknown[]).slice((initial.messages as unknown[]).length, (initial.messages as unknown[]).length + 2));
-        expect(requestStrictTools(raw as unknown as Anthropic.MessageCreateParamsNonStreaming).map(tool => tool.name)).not.toContain('study_search');
-        return { ...(index === 2 ? call('search', 'tool_call', { name: 'study_search', argumentsJson: '{"query":"synthetic"}' }) : anthropicFixture('structured-answer')), model };
+        expect(requestStrictTools(raw as unknown as Anthropic.MessageCreateParamsNonStreaming).map(tool => tool.name)).not.toContain('study_read');
+        // After the grammar refusal the opened definition stays native, without strict decoding: called by its own name.
+        expect(activeAnthropicToolNames(raw as unknown as Anthropic.MessageCreateParamsNonStreaming)).toContain('study_read');
+        return { ...(index === 2 ? call('read', 'study_read', { id: 'synthetic' }) : anthropicFixture('structured-answer')), model };
       });
       const chat = new AnthropicChatModel({ apiKey: 'test-only', settings, fetch: transport.fetcher });
       await chat.generate({ ...request, tools: t.tools });
       expect(transport.bodies).toHaveLength(4);
-      expect(t.calls.map(item => item.name)).toEqual(['study_search']);
+      expect(t.calls.map(item => item.name)).toEqual(['study_read']);
       expect(t.notes()).toBe(1);
     } finally { log.mockRestore(); }
   });
@@ -140,8 +144,8 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
     const t = session([...filler, template], filler.map(tool => tool.name));
     const h = provider(model, [call('open', 'tool_open', { name: 'minecraft_start' }), call('start', 'tool_call', { name: 'minecraft_start', argumentsJson: '{}' }), anthropicFixture('structured-answer')]);
     await h.chat.generate({ ...request, tools: t.tools });
-    expect(strictRequestUsage(h.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming).tools).toBe(20);
-    expect(strictRequestUsage(h.bodies[1]! as unknown as Anthropic.MessageCreateParamsNonStreaming).tools).toBe(20);
+    expect(strictRequestUsage(h.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming).tools).toBe(ANTHROPIC_GRAMMAR_BUDGET.tools);
+    expect(strictRequestUsage(h.bodies[1]! as unknown as Anthropic.MessageCreateParamsNonStreaming).tools).toBe(ANTHROPIC_GRAMMAR_BUDGET.tools);
     expect(t.calls.map(item => item.name)).toEqual(['minecraft_start']);
   });
   it('counts final output unions together with strict tools and rejects capacity before any provider call', () => {
