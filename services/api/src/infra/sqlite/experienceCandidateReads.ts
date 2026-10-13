@@ -13,6 +13,8 @@ const reads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unkno
 
 /** `load()` once per scope while this connection's database is unchanged; afterwards read afresh. */
 export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, load: () => T): T {
+  // Inside a transaction a read may see rows a rollback takes back: it is neither kept nor reused.
+  if (database.isTransaction) return load();
   let byScope = reads.get(database);
   if (!byScope) reads.set(database, byScope = new Map());
   const mark = changeMark(database), known = byScope.get(scopeKey);

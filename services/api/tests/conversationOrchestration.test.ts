@@ -7,6 +7,8 @@ import {
   buildConversationOrchestrationPrompt,
   observeConversationTurn,
   recordConversationProposal,
+  recordVoiceTaskDecision,
+  settleVoiceTaskDecision,
   voiceTurnSetsImplementation,
 } from '../src/mind/action/respond/conversationOrchestration.js';
 import { SQLiteConversationOrchestrationStore } from '../src/mind/action/respond/store/conversationOrchestrationPersistence.js';
@@ -26,19 +28,44 @@ describe('conversation execution orchestration', () => {
   });
 
   it('asks for the structured voice reply only on the turn whose words set the request (2026-10-13: a stale 「…して」)', () => {
-    const turn = (previous: ReturnType<typeof observeConversationTurn>, message: string) => observeConversationTurn({ previous, scopeKey: 'owner',
-      threadId: 'thread', message, occurredAt: at, participantMode: 'owner', tasks: [] });
+    let clock = Date.parse(at);
+    const turn = (previous: ReturnType<typeof observeConversationTurn>, message: string) => {
+      const occurredAt = new Date(clock += 60_000).toISOString();
+      const state = observeConversationTurn({ previous, scopeKey: 'owner', threadId: 'thread', message, occurredAt, participantMode: 'owner', tasks: [] });
+      return { state, structured: voiceTurnSetsImplementation(state, message, occurredAt) };
+    };
     const set = turn(null, 'shannon-homeを起動して');
-    expect(set?.pendingAction).toMatchObject({ kind: 'implement', status: 'pending' });
-    expect(voiceTurnSetsImplementation(null, set, 'shannon-homeを起動して')).toBe(true);
-    const later = turn(set, '元気？');
-    expect(later?.pendingAction).toMatchObject({ kind: 'implement', status: 'pending' }); // Still pending in the Talk ...
-    expect(voiceTurnSetsImplementation(set, later, '元気？')).toBe(false); // ... but this turn did not set it: streamed.
-    const added = turn(later, 'あと、ログも出して');
-    expect(voiceTurnSetsImplementation(later, added, 'あと、ログも出して')).toBe(true);
-    const proposed = recordConversationProposal(added!, '起動の提案', at);
-    expect(voiceTurnSetsImplementation(added, proposed, 'それと設定も')).toBe(true);
-    expect(voiceTurnSetsImplementation(proposed, proposed, 'ありがとう')).toBe(false);
+    expect(set.state?.pendingAction).toMatchObject({ kind: 'implement', status: 'pending' });
+    expect(set.structured).toBe(true);
+    const later = turn(recordVoiceTaskDecision(set.state!, 'none'), '元気？');
+    expect(later.state?.pendingAction).toMatchObject({ kind: 'implement', status: 'pending' }); // Still pending in the Talk ...
+    expect(later.structured).toBe(false); // ... but this turn did not set it: streamed.
+    expect(turn(later.state, 'あと、ログも出して').structured).toBe(true);
+    const proposed = recordConversationProposal(later.state!, '起動の提案', at);
+    expect(voiceTurnSetsImplementation(proposed, 'それと設定も', at)).toBe(true);
+    expect(voiceTurnSetsImplementation(proposed, 'ありがとう', at)).toBe(false);
+  });
+
+  it('keeps the structured voice reply while she waits for his answer to her clarifying question (review B1)', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-orchestration-')); directories.push(directory);
+    const store = new SQLiteConversationOrchestrationStore(join(directory, 'state.sqlite'));
+    let clock = Date.parse(at);
+    const turn = (message: string) => {
+      const occurredAt = new Date(clock += 60_000).toISOString();
+      const state = store.save(observeConversationTurn({ previous: store.read('owner', 'thread'), scopeKey: 'owner', threadId: 'thread', message,
+        occurredAt, participantMode: 'owner', tasks: [] })!);
+      return { state, structured: voiceTurnSetsImplementation(state, message, occurredAt) };
+    };
+    const asked = turn('設定画面に〇〇を実装して');
+    expect(asked.structured).toBe(true);
+    settleVoiceTaskDecision({ conversationOrchestration: store }, asked.state, asked.structured, { disposition: 'clarify' }); // 「どの画面ですか？」
+    const answer = turn('ホーム画面で');
+    expect(answer.structured).toBe(true); // His answer can still bring the proposal.
+    const proposed = store.save(recordConversationProposal(settleVoiceTaskDecision({ conversationOrchestration: store }, answer.state, true, { disposition: 'propose' })!, '〇〇の実装', at));
+    expect(proposed.awaitingClarification).toBeUndefined();
+    const chat = turn('ありがとう');
+    expect(chat.structured).toBe(false);
+    store.close();
   });
 
   it('keeps additions and corrections on one durable proposal identity', () => {

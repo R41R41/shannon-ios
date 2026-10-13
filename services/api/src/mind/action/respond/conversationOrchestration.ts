@@ -26,6 +26,10 @@ export interface ConversationOrchestrationState {
   resumeToken?: string;
   sourceReferences: readonly string[];
   updatedAt: string;
+  /** When the owner's own words last made or changed `pendingAction` (a new request, an addition, a correction). */
+  pendingChangedAt?: string;
+  /** Her last structured reply to the pending request asked him to clarify: his answer is read in the same structured way. */
+  awaitingClarification?: true;
 }
 
 export interface ConversationOrchestrationStore {
@@ -79,12 +83,14 @@ export function observeConversationTurn(input: {
       ...next,
       corrections: appendBounded(base.corrections, message, 8),
       pendingAction: { ...base.pendingAction, summary: mergeSummary(base.pendingAction.summary, message) },
+      pendingChangedAt: input.occurredAt,
     };
   } else if (addition && base.pendingAction) {
     next = {
       ...next,
       addedRequirements: appendBounded(base.addedRequirements, message, 12),
       pendingAction: { ...base.pendingAction, summary: mergeSummary(base.pendingAction.summary, message) },
+      pendingChangedAt: input.occurredAt,
     };
   } else if (action) {
     next = {
@@ -92,6 +98,7 @@ export function observeConversationTurn(input: {
       pendingAction: { kind: action, summary: message, status: 'pending' },
       approvedScope: requiresExplicitExecution(message) ? [message] : [],
       resumeToken: randomUUID(),
+      pendingChangedAt: input.occurredAt,
     };
   }
   return freezeState({ ...next, revision: base.revision + 1 });
@@ -121,6 +128,7 @@ export function recordConversationProposal(
       status: 'proposed',
     },
     awaitingConfirmation: true,
+    awaitingClarification: undefined,
     resumeToken: state.resumeToken ?? randomUUID(),
     updatedAt: occurredAt,
   });
@@ -272,18 +280,26 @@ function key(scopeKey: string, threadId: string): string { return `${scopeKey}\u
 const ADDS_TO_PROPOSAL = /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u;
 
 /**
- * True when this voice turn's own words made (or changed) a pending implementation request, or added to a proposed one: only that
- * turn is answered through the structured (unstreamed) request that can carry a task proposal. 2026-10-13: a pending 「…して」
- * stayed in the Talk, every later voice turn of it (「元気？」) was answered unstreamed, its first word only after the whole reply
- * (7-12 s), and a Sonnet turn always ran past its first-token budget.
+ * True when this voice turn is answered through the structured (unstreamed) request that can carry a task proposal: his own words
+ * of this turn made or changed a pending implementation request (`pendingChangedAt`), his words add to a proposed one, or he is
+ * answering her clarifying question about it (`awaitingClarification`). Any other turn of the Talk is streamed. 2026-10-13: a
+ * pending 「…して」 stayed in the Talk, every later voice turn of it (「元気？」) was answered unstreamed, its first word only after
+ * the whole reply (7-12 s), and a Sonnet turn always ran past its first-token budget.
  */
-export function voiceTurnSetsImplementation(prior: ConversationOrchestrationState | null, state: ConversationOrchestrationState | null,
-  transcript: string): boolean {
+export function voiceTurnSetsImplementation(state: ConversationOrchestrationState | null, transcript: string, occurredAt: string): boolean {
   const pending = state?.pendingAction;
   if (pending?.kind !== 'implement') return false;
   if (pending.status === 'proposed') return ADDS_TO_PROPOSAL.test(transcript);
-  if (pending.status !== 'pending') return false;
-  const before = prior?.pendingAction;
-  return !before || before.kind !== pending.kind || before.status !== pending.status || before.summary !== pending.summary
-    || prior?.resumeToken !== state?.resumeToken;
+  return pending.status === 'pending' && (state!.pendingChangedAt === occurredAt || state!.awaitingClarification === true);
+}
+
+/** After a structured voice turn: whether she asked him to clarify the pending request (kept until another decision or a proposal). */
+export function recordVoiceTaskDecision(state: ConversationOrchestrationState, disposition: string | undefined): ConversationOrchestrationState {
+  return freezeState({ ...state, revision: state.revision + 1, awaitingClarification: disposition === 'clarify' ? true : undefined });
+}
+
+/** The voice turn's state after its reply: a structured turn records her decision (`recordVoiceTaskDecision`); any other is as it was. */
+export function settleVoiceTaskDecision(parts: { conversationOrchestration: ConversationOrchestrationStore }, state: ConversationOrchestrationState | null,
+  structured: boolean, decision: { disposition?: string } | undefined): ConversationOrchestrationState | null {
+  return state && structured ? parts.conversationOrchestration.save(recordVoiceTaskDecision(state, decision?.disposition)) : state;
 }

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { readWhileUnchanged } from '../src/infra/sqlite/experienceCandidateReads.js';
 
 /**
  * 2026-10-13: a text turn read and parsed every remembered turn about ten times before its model call, and the FCA report scan
@@ -46,5 +47,18 @@ describe('remembered turns read once while nothing changed', () => {
     const after = store.experienceCandidates('owner');
     expect(after).not.toBe(before);
     expect(after[0]!.userMessage).toBe('書き換えた');
+  });
+
+  it('neither keeps nor reuses a read made inside a transaction (a rollback takes its rows back)', () => {
+    const db = new DatabaseSync(':memory:'); cleanups.push(() => db.close());
+    let loads = 0;
+    const load = () => ++loads;
+    expect(readWhileUnchanged(db, 'owner', load)).toBe(1);
+    expect(readWhileUnchanged(db, 'owner', load)).toBe(1); // Unchanged: kept.
+    db.exec('BEGIN');
+    expect(readWhileUnchanged(db, 'owner', load)).toBe(2);
+    expect(readWhileUnchanged(db, 'owner', load)).toBe(3); // Inside the transaction: read every time.
+    db.exec('ROLLBACK');
+    expect(readWhileUnchanged(db, 'owner', load)).toBe(1); // The kept read from before it.
   });
 });

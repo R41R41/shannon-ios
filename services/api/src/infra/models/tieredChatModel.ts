@@ -68,7 +68,7 @@ export class TieredChatModel implements ShannonChatModel {
       if (signal?.aborted) throw error;
       const said = sent();
       const ran = safeCount(() => turnToolResults(request.tools).length);
-      const reason = `${error instanceof Error ? error.name : 'unknown'}${error instanceof Error && /^SONNET_REFUSAL/u.test(error.message) ? ` ${error.message}` : ''}`;
+      const reason = sonnetFailureClass(error);
       // Words went out, or a tool ran: luna would repeat them (or run a write twice). Her fixed line ends the turn.
       if (said || ran > 0) {
         this.log(`Shannon sonnet tier ended with the fixed line: ${reason} said=${said ? 1 : 0} tools=${ran}`);
@@ -84,4 +84,16 @@ export class TieredChatModel implements ShannonChatModel {
 /** A count that cannot be read counts as one: closed, no fallback. */
 function safeCount(read: () => number): number {
   try { return read(); } catch { return 1; }
+}
+
+/**
+ * The closed class of a Sonnet failure for the log: the error's class (the SDK's `RateLimitError`, `InternalServerError`,
+ * `APIConnectionError`, …, or `SonnetFirstTokenTimeout`), its HTTP status when there is one, and the refusal code. Never its message.
+ */
+export function sonnetFailureClass(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown';
+  const name = error.name === 'Error' && error.constructor.name !== 'Error' ? error.constructor.name : error.name;
+  const status = (error as { status?: unknown }).status;
+  const refusal = /^SONNET_REFUSAL(?::[A-Za-z0-9_-]{1,40})?/u.exec(error.message)?.[0];
+  return `${name}${typeof status === 'number' ? ` status=${status}` : ''}${refusal ? ` ${refusal}` : ''}`;
 }

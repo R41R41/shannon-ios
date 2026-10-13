@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
-import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
+import { AnthropicChatModel, SonnetFirstTokenTimeout } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { claudeToolLoop } from '../src/infra/models/claude/claudeToolLoop.js';
-import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
+import { TieredChatModel, sonnetFailureClass } from '../src/infra/models/tieredChatModel.js';
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { VOICE_SONNET_FIRST_TOKEN, tierRequest } from '../src/mind/action/respond/turnRouting.js';
@@ -123,6 +123,17 @@ describe('the voice first-token watchdog (H3)', () => {
     expect(luna.seen).toEqual([]);
     await model(recording).generate(base); // No budget: the request is as it was, unstreamed.
     expect(seen).toEqual([true, false]);
+  });
+
+  it('logs the closed class of a Sonnet failure (class, status, refusal code; never the message) and answers with luna at once', async () => {
+    const failing = (async () => new Response(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'private words' } }),
+      { status: 429, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
+    const lines: string[] = [], luna = new Luna();
+    const result = await new TieredChatModel(luna, model(failing), line => lines.push(line)).generate({ ...base, tier: 'sonnet' });
+    expect(result.reply).toBe('luna');
+    expect(lines).toEqual(['Shannon sonnet tier fell back to luna: RateLimitError status=429']);
+    expect(sonnetFailureClass(new SonnetFirstTokenTimeout())).toBe('SonnetFirstTokenTimeout');
+    expect(sonnetFailureClass(new Error('SONNET_REFUSAL:cyber and more private words'))).toBe('Error SONNET_REFUSAL:cyber');
   });
 
   it('keeps voice first-token samples apart from text ones', async () => {
