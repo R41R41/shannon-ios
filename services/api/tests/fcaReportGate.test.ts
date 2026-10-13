@@ -155,6 +155,11 @@ describe('a voice turn\'s research', () => {
     expect(late).toBe('');
     expect(await researchHeardInTurn(turn, { work: null, admittedAt: performance.now() }, { before: '', say })).toBe('');
     expect(said).toHaveLength(2);
+    // Owner test 2026-10-13: the acknowledgement already went out before the wait; the result is said as its own sentence.
+    said.length = 0;
+    expect(await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { before: 'ちょっと調べてみますね', say, flushed: true }))
+      .toBe('。大濠公園から福岡空港は地下鉄で16分ほどです。');
+    expect(said).toEqual(['大濠公園から福岡空港は地下鉄で16分ほどです。']);
     // Cut off while it was being said: not marked heard, so the card and the call still deliver it.
     const controller = new AbortController();
     heard.length = 0;

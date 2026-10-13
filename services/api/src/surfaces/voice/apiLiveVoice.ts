@@ -60,7 +60,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { askedToolNames, conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -75,6 +75,8 @@ import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
 import { admittedWorkContext, admitVoiceResearch, researchHeardInTurn, researchSaid, voiceTurnClock } from './voiceResearchTurn.js';
+import { unquotedSpokenLine } from './spokenSentences.js';
+import { answerFirstLine, spokenScheduleLine } from './voiceConversationInstructions.js';
 import { finishTurnTiming, TurnTiming, turnStages, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT, webForWeather, followUp } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -112,6 +114,11 @@ export interface LiveVoiceStreamObserver {
   onTextDelta(delta: string): void | Promise<void>;
   /** Whether the plan's waiting phrase has been heard yet (the stream route says it only after a silence); absent, it was said with the plan. */
   waitingSaid?(): boolean;
+  /**
+   * Says now what is held of an unfinished sentence: before a turn waits for its research, so the acknowledgement is heard at once
+   * (owner test 2026-10-13: 「「ちょっと調べてみますね」」 had no 。 and was held 20 s, until the wait ended).
+   */
+  flushSpoken?(): Promise<void>;
 }
 export function dispatchLiveVoiceRequest(
   request: ApiRequest,
@@ -350,6 +357,7 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
+    answerFirstLine(askedToolNames(transcript)), spokenScheduleLine(capabilityPrompt),
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
     alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
@@ -432,9 +440,13 @@ async function completeLiveVoiceDelegation(
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
   orchestrationState = settleVoiceTaskDecision(dependencies, orchestrationState, requiresStructuredTaskDecision, completion.taskDecision);
-  const heard = await researchHeardInTurn(fcaTurn, next.admitted, { before: completion.reply, say: observer?.onTextDelta.bind(observer) }, observer?.signal);
+  const acknowledged = unquotedSpokenLine(completion.reply);
+  const flushed = Boolean(next.admitted.work && observer?.flushSpoken);
+  if (flushed) await observer!.flushSpoken!();
+  const say = observer?.onTextDelta.bind(observer);
+  const heard = await researchHeardInTurn(fcaTurn, next.admitted, { before: acknowledged, say, flushed }, observer?.signal);
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
-  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(completion.reply, work)}${heard}`;
+  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(acknowledged, work)}${heard}`;
   let feedbackRecordId: string | undefined;
   const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, feedbackReplySuffix: placeReply('', placeSkill?.places ?? []), completion, tier, tools: toolOffer.tools, deadline, at: occurredAt, onFeedbackRecord: id=>{feedbackRecordId=id;} }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.

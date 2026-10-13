@@ -46,7 +46,7 @@ export function researchSaid(text: string, work: TaskView | null): string {
  * short sentences, the report's spoken form or a plain cut of it), and marked heard: its card stays, no call says it again. '' otherwise.
  */
 export async function researchHeardInTurn(turn: FcaConversationTurn | null, admitted: { work: TaskView | null; admittedAt: number },
-  said: { before: string; say: ((text: string) => Promise<void> | void) | undefined }, signal?: AbortSignal,
+  said: { before: string; say: ((text: string) => Promise<void> | void) | undefined; flushed?: boolean }, signal?: AbortSignal,
   waitMs = VOICE_RESEARCH_WAIT_MS): Promise<string> {
   if (!turn?.awaitWork || !admitted.work || !said.say) return '';
   const left = waitMs - (performance.now() - admitted.admittedAt);
@@ -55,8 +55,10 @@ export async function researchHeardInTurn(turn: FcaConversationTurn | null, admi
   if (!result || signal?.aborted) return '';
   const answer = result.report.spoken?.trim() || fallbackSpokenReport(result.report.text, result.title);
   // A whole sentence after a closed one: the stream sends it as its own segment at once, and the text reads as two sentences.
-  const text = `${SENTENCE_CLOSED.test(said.before) || !said.before.trim() ? '' : '。'}${answer}${SENTENCE_CLOSED.test(answer) ? '' : '。'}`;
-  try { await said.say(text); } catch { return ''; }
+  const spoken = `${answer}${SENTENCE_CLOSED.test(answer) ? '' : '。'}`;
+  const text = `${SENTENCE_CLOSED.test(said.before) || !said.before.trim() ? '' : '。'}${spoken}`;
+  // Her acknowledgement already went out (`flushSpoken`): the result is said as its own sentence, the stored text joined as before.
+  try { await said.say(said.flushed ? spoken : text); } catch { return ''; }
   // Heard only once it went out whole; a turn cut off leaves the result to the card and the call.
   if (signal?.aborted) return '';
   turn.hearWork?.(result.taskId, result.report.id, answer);

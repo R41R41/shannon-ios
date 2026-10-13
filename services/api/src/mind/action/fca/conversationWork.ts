@@ -57,7 +57,9 @@ export function researchAdmitted(result: ToolResult): ToolResult {
 export function admittedWorkContext(task: TaskView | null): string {
   return task ? `[Work admitted]\n${JSON.stringify({ id: task.id, phase: task.phase, goal: task.goal })}\n`
     + 'The requested research is admitted under this conversation\'s source and runs on its own; its result is told to the owner when it arrives. '
-    + 'Reply with one short, natural acknowledgement in your own voice that you will look into it (for example 「ちょっと調べてみますね」), worded freshly. '
+    // Owner test 2026-10-13: the example in brackets was copied with them (「「ちょっと調べてみますね」」).
+    + 'Reply with one short, natural acknowledgement in your own voice that you will look into it, worded freshly, as a plain spoken sentence '
+    + 'ending with 。 (in the manner of: ちょっと調べてみますね。) and never wrapped in quotation marks. '
     + 'Do not guess or pre-answer what the research will find, do not describe the process, and do not promise how or when the result comes '
     + '(no 「受け付けました」「結果がそろったら」「少しお待ちください」). Do not run that research again in this reply or claim results exist yet. '
     + 'Answer any other part of his message that needs no research. The owner can keep talking while the task runs.' : '';

@@ -115,6 +115,18 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_400`]);
   });
 
+  it('fails a step whose history cannot be made to fit, with its report, never leaving it unknown (owner test 2026-10-13)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    // `prepareFcaHistory` throws before the decision request: nothing of the step ran.
+    const model: FcaModel = { decide: async () => { throw new Error('FCA_HISTORY_RECENT_LIMIT'); }, toolResults: () => [] };
+    const { driver, parent, child } = runtime(model);
+    await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'failed');
+    expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'failed', summary: rejectedTaskReport('明日の天気') });
+    expect(driver.runtime.snapshot('owner', parent.id)!.messages).toEqual([expect.objectContaining({ sourceTaskId: child.id, text: rejectedTaskReport('明日の天気') })]);
+    const lines = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'));
+    expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_HISTORY_RECENT_LIMIT`]);
+  });
+
   it('runs a step the provider answered with a server error once more, then fails it with its report, logging closed facts (2026-10-13)', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

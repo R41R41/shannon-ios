@@ -155,8 +155,10 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       return;
     }
-    if (step && rejectedBeforeAnyEffect(code, execution) && failRejectedStep(step)) {
-      // The provider refused the request itself: nothing ran and nothing was charged, and an identical retry is refused again.
+    // The provider refused the request itself (nothing ran, nothing was charged, an identical retry is refused again), or her history
+    // could not be made to fit before the step's model call (a replay holds the same way; owner test 2026-10-13: FCA_HISTORY_RECENT_LIMIT
+    // left a research unknown until it was retired). A known failure with its notice.
+    if (step && failsBeforeAnyEffect(code, execution) && failRejectedStep(step)) {
       console.log(`Shannon FCA step failed task=${taskId} code=${code}`);
       await flushReceipts();
       return;
@@ -291,6 +293,12 @@ export function providerServerErrorCode(code: string, execution: Pick<ActionExec
 export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
   const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1];
   return !!status && !['408', '409', '429'].includes(status) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
+}
+
+/** The history limits `prepareFcaHistory` throws before the step's model call (`fcaHistory.ts`): deterministic, so a replay holds too. */
+const HISTORY_LIMITS: ReadonlySet<string> = new Set(['FCA_HISTORY_RECENT_LIMIT', 'FCA_HISTORY_ROUND_LIMIT', 'FCA_HISTORY_COMPACTION_LIMIT']);
+export function failsBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
+  return rejectedBeforeAnyEffect(code, execution) || (HISTORY_LIMITS.has(code) && execution.stepOutcome !== 'unknown');
 }
 
 export function rejectedTaskReport(title: string): string {

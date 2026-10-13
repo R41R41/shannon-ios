@@ -78,7 +78,9 @@ export function turnClockLine(clock: { at: string; timeZone: string }): string {
   const local = new Intl.DateTimeFormat('ja-JP', { timeZone: zone, dateStyle: 'full', timeStyle: 'short' }).format(at);
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zone, month: 'numeric', day: 'numeric', hour: 'numeric', hourCycle: 'h23' })
     .formatToParts(at).map(part => [part.type, part.value]));
-  const line = `[いま] ${local}（${zone}）。「今日」「明日」「今夜」はこの日付と時刻で数える。`;
+  // Owner test 2026-10-13: at 22:00, after he said he had come home, she closed with 「いってらっしゃい、よい夜を！」.
+  const line = `[いま] ${local}（${zone}）。「今日」「明日」「今夜」はこの日付と時刻で数える。`
+    + 'あいさつや締めのひと言は、この時刻と会話から分かる相手のいまの様子（帰ってきた・これから寝る など）に合わせる。出かけると聞いていなければ「いってらっしゃい」とは言わない。';
   if (Number(parts.hour) >= 4) return line;
   return `${line}いまは深夜なので、相手の「明日」は日付が変わったばかりの今日（${parts.month}月${parts.day}日）のことかもしれない。`
     + '「明日」の答えが日によって変わる時は、どちらの日かを短いひと言で確かめるか、手軽なら両方の日に答える。';

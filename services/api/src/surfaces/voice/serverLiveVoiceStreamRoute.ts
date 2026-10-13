@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
 import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { bindScope, readJson, sendJson } from '../../infra/http/serverHttp.js';
-import { SpokenSentenceSegmenter } from './spokenSentences.js';
+import { SpokenSentenceSegmenter, unquotedSpokenLine } from './spokenSentences.js';
 import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
 import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
@@ -64,6 +64,8 @@ export function createLiveVoiceStreamRoute(
     // arrived within WAITING_CUE_DELAY_MILLISECONDS of the plan, and never once they have. At most one per turn.
     let waitingTimer: ReturnType<typeof setTimeout> | null = null;
     let waitingSaid = false;
+    // Her first sentence wholly in quotation marks is said without them (an acknowledgement copied from its instruction's example).
+    const opening = (segment: string) => spokenReplySegments === 0 ? unquotedSpokenLine(segment) : segment;
     const cancelWaiting = () => {
       if (waitingTimer) clearTimeout(waitingTimer);
       waitingTimer = null;
@@ -104,8 +106,20 @@ export function createLiveVoiceStreamRoute(
             for (const segment of segmenter.append(delta)) {
               startStream(response);
               firstSegment();
+              const text = opening(segment);
               spokenReplySegments += 1;
-              await writeObservedVoiceSegment(response, segment, voicePlan, 'llm');
+              await writeObservedVoiceSegment(response, text, voicePlan, 'llm');
+            }
+          },
+          // Before a wait for research: what is held of her acknowledgement goes out now, not when the wait ends.
+          flushSpoken: async () => {
+            if (controller.signal.aborted) return;
+            for (const segment of segmenter.flush()) {
+              startStream(response);
+              firstSegment();
+              const text = opening(segment);
+              spokenReplySegments += 1;
+              await writeObservedVoiceSegment(response, text, voicePlan, 'llm');
             }
           },
         });
@@ -138,7 +152,7 @@ export function createLiveVoiceStreamRoute(
         for (const segment of segmenter.flush()) {
           startStream(response);
           firstSegment();
-          await writeObservedVoiceSegment(response, segment, voicePlan);
+          await writeObservedVoiceSegment(response, opening(segment), voicePlan);
         }
         startStream(response);
         await writeEvent(response, { type: 'completed', response: apiResponse.body });

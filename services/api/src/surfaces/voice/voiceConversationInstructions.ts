@@ -44,3 +44,25 @@ export function voiceConversationInstructions(
 }
 
 export { temporaryGuestVoiceInstructions } from './voiceIntroductionInstructions.js';
+
+/**
+ * Owner test 2026-10-13: 「明日って傘いる？」 was answered 「傘ですね、ライ氏。明日の天気をすぐ見ますね。明日は傘いらないと思います…」.
+ * Part of the turn's voice route (not the cached instructions above): the conclusion is the first sentence.
+ */
+export const ANSWER_FIRST_LINE = '[Answer first] When a lookup or tool gives the answer, call it before saying anything and make the conclusion your '
+  + 'first sentence (「明日は傘いらないと思います」): do not echo his question or announce that you will look.';
+/** Only in a turn whose words ask for a tool by name (`askedToolNames` in the API: the weather, a timer, an event, music); '' otherwise. */
+export function answerFirstLine(toolsAsked: readonly string[]): string {
+  return toolsAsked.length ? ANSWER_FIRST_LINE : '';
+}
+
+/**
+ * Owner test 2026-10-13: 「明日の予定は？」 was answered aloud as a list of five times and titles (198 characters). With the owner's
+ * upcoming items in the turn, a spoken reply summarizes them; '' for any other turn.
+ */
+export function spokenScheduleLine(capabilityPrompt: string): string {
+  return capabilityPrompt.includes('[Owner\'s upcoming items') ? SPOKEN_SCHEDULE_LINE : '';
+}
+export const SPOKEN_SCHEDULE_LINE = '[Spoken schedule] This reply is heard, not read: never read the items out as a list of times and titles. '
+  + 'In at most two short sentences say how many there are, the first one and any notable one (time and a short title), and when he is free '
+  + 'between them. The full list stays in his calendar; read it all only when he asks for every item.';

@@ -485,7 +485,7 @@
     },
     "services/api/src/infra/models/tieredChatModel.ts": {
       "multi-statement-line": 3,
-      "long-line": 6
+      "long-line": 5
     },
     "services/api/src/infra/models/turnChecker.ts": {
       "long-line": 1

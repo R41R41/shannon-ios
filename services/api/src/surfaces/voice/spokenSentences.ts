@@ -18,6 +18,19 @@ export function spokenSentenceEnd(text: string, from = 0): number {
   return -1;
 }
 
+const WRAPPED_LINE = /^\s*[「『“"]([^「」『』“”"]+?)[」』”"]\s*([。！？!?]?)\s*$/u;
+
+/**
+ * A line wholly wrapped in quotation marks (「「ちょっと調べてみますね」」, owner test 2026-10-13: an instruction's example copied with its
+ * brackets) without them, ending as a sentence; any other text unchanged.
+ */
+export function unquotedSpokenLine(text: string): string {
+  const match = WRAPPED_LINE.exec(text);
+  if (!match) return text;
+  const inner = match[1]!.trim();
+  return `${inner}${match[2] || (/[。！？!?…〜ー]$/u.test(inner) ? '' : '。')}`;
+}
+
 /**
  * The reply up to and including its last complete sentence, trimmed; empty when no
  * sentence was completed.

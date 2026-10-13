@@ -184,8 +184,32 @@ describe('exact complete-round FCA history compaction', () => {
     const f = fixture(); await f.append(10); const window = f.window();
     expect(() => planFcaHistory(window, { ...codec, project: () => null }, policy)).toThrow('FCA_HISTORY_INCOMPLETE_ROUND');
     expect(() => planFcaHistory(window, codec, { ...policy, maximumSummaryCharacters: 1 })).toThrow('FCA_HISTORY_ROUND_LIMIT');
-    expect(() => planFcaHistory({ ...window, rounds: window.rounds.slice(-3) }, codec, { ...policy, maximumNativeCharacters: 1 })).toThrow('FCA_HISTORY_RECENT_LIMIT');
+    expect(() => planFcaHistory({ ...window, rounds: window.rounds.slice(-1) }, codec, { ...policy, maximumNativeCharacters: 1 })).toThrow('FCA_HISTORY_RECENT_LIMIT');
     expect(f.window().summary).toBeNull();
+  });
+
+  it('keeps fewer recent rounds native when the recent ones alone are too long (owner test 2026-10-13: two research rounds)', async () => {
+    const f = fixture(); await f.append(3); const window = f.window();
+    const plan = planFcaHistory(window, codec, { ...policy, maximumNativeCharacters: 1 });
+    expect(plan.kind).toBe('compact');
+    if (plan.kind !== 'compact') return;
+    // Three rounds, all recent by the policy: the oldest is summarized, the two newest stay (the next batch goes on if needed).
+    expect(plan.input.rounds.map(round => round.sequence)).toEqual([window.rounds[0]!.sequence]);
+    expect(plan.request.retained.map(round => round.sequence)).toEqual(window.rounds.slice(1).map(round => round.sequence));
+  });
+
+  it('covers a round longer than the summary input whole, its longest texts shortened for the summary only', async () => {
+    const f = fixture(); await f.append(2); const window = f.window();
+    const long = '福岡のおすすめ。'.repeat(2_000);
+    const wide: FcaHistoryCodec = { ...codec, project: round => codec.project(round)!.map(message => message.role === 'tool_result' ? { ...message, content: long } : message) };
+    const plan = planFcaHistory(window, wide, { ...policy, maximumNativeCharacters: 1, maximumSummaryCharacters: 5_000 });
+    expect(plan.kind).toBe('compact');
+    if (plan.kind !== 'compact') return;
+    const [round] = plan.input.rounds;
+    expect(plan.input.rounds).toHaveLength(1);
+    expect(round!.messages.map(message => message.id)).toEqual([...wide.project(window.rounds[0]!)!.map(message => message.id), `fca-round:${window.rounds[0]!.sequence}:status`]);
+    expect(round!.messages.find(message => message.role === 'tool_result')!.content).toMatch(/^福岡のおすすめ。.*要約用に後略/su);
+    expect(JSON.stringify(plan.input).length).toBeLessThanOrEqual(5_000);
   });
 
   it('migrates old append-only history and records actual committed task status', async () => {

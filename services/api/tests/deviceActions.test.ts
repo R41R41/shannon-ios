@@ -189,6 +189,12 @@ describe('her device tools in a conversation', () => {
       expect(asksForDeviceAction(words), words).toBe(true);
     }
     for (const words of ['問題を起こしてごめん', '事故を起こしてしまった']) expect(asksForDeviceAction(words), words).toBe(false);
+    // Owner test 2026-10-13: a clock written 「9:20」 is a clock time too.
+    for (const words of ['明日の9:20に起こして。', '９：２０に教えて', '7時半ごろに起こして', '明日の9時20分に起こして']) {
+      expect(asksForDeviceAction(words), words).toBe(true);
+      expect(askedToolNames(words), words).toEqual(['timer.start', 'reminder.create']);
+    }
+    expect(asksForDeviceAction('9:20に着いたよ')).toBe(false);
   });
 });
 
@@ -203,6 +209,16 @@ describe('her device tools as the turn asks for them (2026-10-13 daily evals D1�
   it('offers a spoken turn without such words her everyday reads and device tools beside her task tools, not her other tools', () => {
     const names = turn('voice', '明日、傘いる？')?.definitions.map(tool => tool.name);
     expect(names).toEqual(['task.create', 'memory.search', 'weather.forecast', 'timer.start', 'reminder.create', 'calendar.create_event', 'music.play']);
+  });
+
+  it('offers a clock-time wake-up its device tools even when the common FCA closed its task tools (owner test 2026-10-13)', () => {
+    // 「FCA context skipped code=fca_context_budget」: the task tools were not offered, so the common offer gave nothing.
+    const closed = { offered: () => pick('weather.forecast', 'timer.start', 'reminder.create', 'study.list'), knownTool: () => null } as unknown as ShannonToolRunner;
+    const session = conversationTools({ tools: closed }, OWNER, 'voice', true, server, 'thread\n明日の9:20に起こして。', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    expect(withToolMenu(session, []).definitions.map(tool => tool.name)).toEqual(expect.arrayContaining(['timer.start', 'reminder.create']));
+    const promise = conversationCapabilityPrompt(OWNER, '明日の9:20に起こして。', {}, { aetherNotes: false, voyagerTasks: false }) as string;
+    expect(withToolCapabilityLines({ systemPrompt: shannonCapabilityPrompt('owner'), turnContext: promise, tools: withToolMenu(session, []) }).turnContext)
+      .toBe(DEVICE_REMINDER_BOUNDARY);
   });
 
   it('offers a weather question her weather tool also without the common FCA (an untrusted transcript has no FCA turn)', () => {

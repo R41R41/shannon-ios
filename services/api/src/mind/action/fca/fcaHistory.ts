@@ -1,7 +1,7 @@
 import { observeAsync, observeSync, observerHandoff } from '../../../infra/observer/observerContext.js';
 import { renderedCompaction, type CompactionMessage } from '@shannon/mind';
 import type { TaskHistoryWindow, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
-import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryReplay } from './fcaHistoryPorts.js';
+import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryReplay, FcaHistorySummaryInput } from './fcaHistoryPorts.js';
 
 export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   maximumNativeCharacters: 64_000, maximumRounds: 24, recentRounds: 6,
@@ -37,17 +37,53 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
     const summary = window.summary?.template ?? null;
     return { kind: 'ready', replay: { history, summary, summaryText: summary ? renderedCompaction(summary, 'text') : '' } };
   }
-  const eligible = projected.slice(0, -policy.recentRounds);
+  // The newest rounds stay native; when they alone are too long (a research round's web results are 30,000–40,000 characters:
+  // owner test 2026-10-13, two rounds of 41,554 and 33,778 left the task unknown with FCA_HISTORY_RECENT_LIMIT), fewer stay,
+  // down to the newest one. Only a newest round too long by itself still holds.
+  const recent = Math.min(policy.recentRounds, projected.length - 1);
+  const eligible = recent > 0 ? projected.slice(0, -recent) : [];
   if (!eligible.length) throw new Error('FCA_HISTORY_RECENT_LIMIT');
-  const input = { previous: window.summary?.template ?? null, rounds: [] as typeof projected };
-  for (const round of eligible) {
-    const candidate = { ...input, rounds: [...input.rounds, round] };
-    if (size(candidate) > policy.maximumSummaryCharacters) break;
-    input.rounds.push(round);
-  }
+  const input = summaryInput(eligible, window.summary?.template ?? null, policy.maximumSummaryCharacters);
   if (!input.rounds.length) throw new Error('FCA_HISTORY_ROUND_LIMIT');
   return { kind: 'compact', input, request: { baseRevision: window.revision, sourceRevision: window.sourceRevision,
     tailSequence: window.tailSequence, sequences: input.rounds.map(round => round.sequence), retained: projected.slice(input.rounds.length) } };
+}
+
+/** The shortest any message of a clipped round becomes: enough to say what it was. */
+const CLIPPED_MESSAGE_CHARACTERS = 400;
+type ProjectedRound = { sequence: number; stepId: string; messages: CompactionMessage[] };
+
+/**
+ * One round for the summary input with its longest texts cut (the end marked) until the input fits, or null when it cannot.
+ * Every message stays, with its id, role and call id.
+ */
+function clippedRound(round: ProjectedRound, previous: unknown, maximum: number): ProjectedRound | null {
+  const messages = round.messages.map(message => ({ ...message }));
+  const over = () => size({ previous, rounds: [{ ...round, messages }] }) - maximum;
+  for (let guard = 0; guard < messages.length * 4 && over() > 0; guard++) {
+    const longest = messages.reduce((best, message) => message.content.length > best.content.length ? message : best);
+    if (longest.content.length <= CLIPPED_MESSAGE_CHARACTERS) return null;
+    const keep = Math.max(CLIPPED_MESSAGE_CHARACTERS, longest.content.length - over() - 64);
+    longest.content = `${longest.content.slice(0, keep)}…（要約用に後略: ${longest.content.length - keep}字）`;
+  }
+  return over() > 0 ? null : { ...round, messages };
+}
+
+/** The oldest eligible rounds that fit the summary input, in order. */
+function summaryInput(eligible: readonly ProjectedRound[], previous: FcaHistorySummaryInput['previous'], maximum: number) {
+  const input = { previous, rounds: [] as ProjectedRound[] };
+  for (const round of eligible) {
+    if (size({ ...input, rounds: [...input.rounds, round] }) <= maximum) {
+      input.rounds.push(round);
+      continue;
+    }
+    // The oldest round alone is longer than the summary input: it is still covered whole (every message, in order), its longest
+    // texts shortened for the summary only. The native round itself is replaced by the summary, as any compacted round is.
+    const clipped = input.rounds.length ? null : clippedRound(round, previous, maximum);
+    if (clipped) input.rounds.push(clipped);
+    break;
+  }
+  return input;
 }
 
 /** Uses the current action permit; derived summary writes never enqueue work or retry a model call. */

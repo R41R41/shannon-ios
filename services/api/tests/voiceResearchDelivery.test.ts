@@ -9,6 +9,7 @@ import { SpokenReportModel } from '../src/infra/models/spokenReportModel.js';
 import { ownerLocalClock } from '../src/infra/time/localDate.js';
 import { createAnthropicFcaModel, type AnthropicFcaClient } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { admitConversationWork, admittedWorkContext } from '../src/mind/action/fca/conversationWork.js';
+import { unquotedSpokenLine } from '../src/surfaces/voice/spokenSentences.js';
 import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
 import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import type { TaskSpec, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
@@ -235,6 +236,12 @@ describe('natural words in a call', () => {
     expect(context).toContain('Do not guess or pre-answer');
     expect(context).not.toContain('answer anything already known');
     for (const phrase of ['受け付けました', '結果がそろったら', '少しお待ちください']) expect(context).toContain(phrase);
+    // Owner test 2026-10-13: the example was copied with its brackets (「「ちょっと調べてみますね」」).
+    expect(context).not.toContain('「ちょっと調べてみますね」');
+    expect(context).toContain('never wrapped in quotation marks');
+    expect(unquotedSpokenLine('「ちょっと調べてみますね」')).toBe('ちょっと調べてみますね。');
+    expect(unquotedSpokenLine('『調べますね！』')).toBe('調べますね！');
+    expect(unquotedSpokenLine('「はい」って言ってたよ。')).toBe('「はい」って言ってたよ。');
   });
 
   it('tells a spoken reply to drop status boilerplate and the habitual snippet disclaimer, and to answer a reaction as one', () => {

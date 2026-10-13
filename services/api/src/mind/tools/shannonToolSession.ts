@@ -290,7 +290,9 @@ function commonVoiceOffer(runner: ShannonToolRunner, scopeKey: string, words: st
 
 /** A music word (not 作曲・編曲) followed, within a short phrase, by what to do with it: play, stop, change or skip. */
 const MUSIC_REQUEST = /(?<![作編])(?:音楽|曲|BGM|プレイリスト|アルバム)[^。！？!?\n]{0,12}?(?:かけて|かけよう|流して|再生して|聴かせて|聞かせて|止めて|とめて|変えて|替えて|スキップ|飛ばして)|(?:次|前)の曲/iu;
-const REMINDER_REQUEST = /リマインド|リマインダー|忘れないように|[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?に(?:教えて|知らせて|声をかけて|声かけて|起こして)|通知して/u;
+// A clock time as 「9時20分」「9時半」 or 「9:20」 (owner test 2026-10-13: 「明日の9:20に起こして。」 matched neither, and she declined).
+const CLOCK_TIME = '(?:[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?|[0-9０-９]{1,2}[:：][0-9０-９]{2})(?:頃|ごろ)?';
+const REMINDER_REQUEST = new RegExp(`リマインド|リマインダー|忘れないように|${CLOCK_TIME}に(?:教えて|知らせて|声をかけて|声かけて|起こして)|通知して`, 'u');
 // 「1時間後に起こして」 and an alarm are a timer too (2026-10-13 daily evals D1: only minutes were read, and she had no timer).
 // 「起こして」 only with a time (「朝」「明日」「〜後」「〜時」): 「問題を起こして」 is no alarm.
 const TIMER_REQUEST = /タイマー|アラーム|目覚まし|[0-9０-９一二三四五六七八九十]+(?:分|時間|秒)半?(?:後に|後で|後、|たったら|経ったら)|(?:朝|明日|あした|あさって|後|時|分|半)[にはでも、]?\s*起こして/u;

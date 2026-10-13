@@ -70,6 +70,35 @@ describe('live voice sentence streaming', () => {
     });
   });
 
+  it('says a held acknowledgement before the research wait, without the brackets it was written in (owner test 2026-10-13)', async () => {
+    const order: string[] = [];
+    let output = '';
+    const kernel = {
+      streamLiveVoiceDelegation: async (_request: unknown, observer: { onPlan(plan: Record<string, unknown>): Promise<void>;
+        onTextDelta(delta: string): Promise<void>; flushSpoken?(): Promise<void> }) => {
+        await observer.onPlan({ shouldRespond: true });
+        await observer.onTextDelta('「ちょっと調べて');
+        await observer.onTextDelta('みますね」');
+        await observer.flushSpoken?.();
+        order.push(output.includes('"segment"') ? 'segment-before-wait' : 'no-segment-before-wait');
+        await observer.onTextDelta('福岡タワーがおすすめです。');
+        return { status: 200, body: { threadId: 'thread', reply: 'ちょっと調べてみますね。福岡タワーがおすすめです。' } };
+      },
+    } as unknown as ShannonApiKernel;
+    const request = Readable.from([JSON.stringify({ transcript: '福岡のおすすめを調べて' })]) as IncomingMessage;
+    request.method = 'POST';
+    const response = Object.assign(new EventEmitter(), {
+      headersSent: false,
+      writeHead() { this.headersSent = true; return this; },
+      write(value: string) { output += value; return true; },
+      end() {},
+    }) as unknown as ServerResponse;
+    await createLiveVoiceStreamRoute(kernel, () => true)(request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal);
+    const segments = output.trim().split('\n').map(line => JSON.parse(line) as { type: string; text?: string }).filter(event => event.type === 'segment');
+    expect(order).toEqual(['segment-before-wait']);
+    expect(segments.map(segment => segment.text)).toEqual(['ちょっと調べてみますね。', '福岡タワーがおすすめです。']);
+  });
+
   it('says no waiting line when her own words come first', async () => {
     const { segments, heardBeforeAnswer } = await waitingRun(WAITING_CUE_DELAY_MILLISECONDS - 500);
     expect(heardBeforeAnswer).toBe(false);

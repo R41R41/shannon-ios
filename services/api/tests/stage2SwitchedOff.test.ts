@@ -1,7 +1,13 @@
+// Owner test 2026-10-13 added two spoken-reply lines to a voice turn's context (a schedule summarized, the conclusion first); the
+// ca7cf519 digests pin the historical voice context, so they are left out here. Production and `turnClock.test.ts` cover them.
+vi.mock('../src/surfaces/voice/voiceConversationInstructions.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/surfaces/voice/voiceConversationInstructions.js')>(),
+  spokenScheduleLine: () => '', answerFirstLine: () => '',
+}));
 import { historicalSearchRequest } from './support/historicalSearchRequest.js';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
