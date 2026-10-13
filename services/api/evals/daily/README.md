@@ -36,7 +36,7 @@ Each trial is graded by (`graders/`):
    token ≤ 4 s, research result ≤ 60 s, Shannon's model spend ≤ ¥30 per task (from the recorded usage, `SHANNON_EVALS_YEN_PER_USD`
    default 150).
 3. **Rubric judge**: Claude Sonnet (`SHANNON_EVALS_JUDGE_MODEL`, default `claude-sonnet-5-5`) scores each criterion 0–2 from
-   the conversation and the observed state; pass at 70 % of the maximum unless the task says otherwise.
+   the conversation and the observed state; pass at two thirds of the maximum (0.66: 4 of 6) unless the task says otherwise.
 
 A trial passes when all three pass. **Each task runs once** (owner decision 2026-10-13: k=1 for every set, no pass^k): the
 result of a task is the PASS/FAIL of its single trial. Multi-turn tasks (R4, R5, D3) continue with a **user simulator** (`simulator.ts`): Sonnet playing the owner

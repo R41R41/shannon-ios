@@ -2,6 +2,12 @@ import { firstJsonObject, type EvalClaude } from '../claude.js';
 import type { TrialObservation } from '../harness/trial.js';
 import type { DailyEvalTask } from '../types.js';
 
+/**
+ * The default pass line: two thirds of the maximum, so that 4 of 6 passes (the first live runs of 2026-10-13: at 0.7, a trial
+ * whose transcript read as acceptable failed with 4/6). A task may set its own `passRatio`.
+ */
+export const RUBRIC_PASS_RATIO = 0.66;
+
 /** The rubric judge's verdict (HealthBench style: each criterion 0–2, pass at a ratio of the maximum). */
 export interface RubricResult {
   scores: { criterion: string; score: number; reason: string }[];
@@ -47,7 +53,7 @@ export function judgeInput(task: DailyEvalTask, observation: TrialObservation): 
 }
 
 export async function judgeTrial(judge: EvalClaude | null, task: DailyEvalTask, observation: TrialObservation): Promise<RubricResult> {
-  const maximum = task.rubric.criteria.length * 2, passRatio = task.rubric.passRatio ?? 0.7;
+  const maximum = task.rubric.criteria.length * 2, passRatio = task.rubric.passRatio ?? RUBRIC_PASS_RATIO;
   const skipped = (reason: string): RubricResult => ({ scores: [], total: 0, maximum, ratio: 0, passed: false, skipped: reason });
   if (!judge) return skipped('no judge (not live)');
   let text: string;

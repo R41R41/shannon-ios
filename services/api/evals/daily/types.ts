@@ -163,7 +163,7 @@ export interface Budgets {
 export interface Rubric {
   /** What a good answer does, item by item; the judge scores each 0–2. */
   criteria: readonly string[];
-  /** Fraction of the maximum score needed to pass (default 0.7). */
+  /** Fraction of the maximum score needed to pass (default `RUBRIC_PASS_RATIO`, 0.66: 4 of 6). */
   passRatio?: number;
 }
 

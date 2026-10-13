@@ -12,7 +12,7 @@ import { ShannonAutonomyService } from '../../../src/mind/action/ownTime/autonom
 import { SQLiteActionStore } from '../../../src/mind/action/threads/store/actionStore.js';
 import { configuredAutonomy } from '../../../src/mind/inhibition/autonomyBudget.js';
 import { createConfiguredTurnMemoryRecall } from '../../../src/mind/recall/turnMemoryRecall.js';
-import { createConfiguredVoiceDecisionGateway } from '../../../src/mind/selectors/voiceDecision.js';
+import { configuredVoiceDecision } from '../../../src/wiring/cognitionLedgerWiring.js';
 import { DurableBackgroundDispatcher } from '../../../src/mind/sleep/backgroundUpdates.js';
 import { foregroundRunner } from '../../../src/wiring/actionExecutionWiring.js';
 import { createLocalApiKernel, type ShannonApiKernel } from '../../../src/wiring/apiKernelWiring.js';
@@ -196,7 +196,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     readSources: { upcoming: ownerUpcoming.upcoming, voyagerAvailable: () => true, aetherAvailable: () => false, notionAvailable: () => false },
   }) : null;
   kernel = createLocalApiKernel(now, {
-    chatModel: model, auxiliaryChatModel: modelModes ? chat : model, voiceDecision: createConfiguredVoiceDecisionGateway(options.live ? environment : {}, usage),
+    chatModel: model, auxiliaryChatModel: modelModes ? chat : model, voiceDecision: configuredVoiceDecision(options.live ? environment : {}, usage, null), // As `server.ts` builds it (no traces in a trial).
     stateStore: store, conversationStore: store, background: new DurableBackgroundDispatcher(store, store), knowledgeStore: store,
     agentTasks, voyagerCatalog, upcoming: ownerUpcoming.upcoming, memoryRecall, autonomy,
     minecraftRequests: deviceActions.reports(null), ...(readTools ? { readTools } : {}), ...(memoryPorts ? { memory: memoryPorts } : {}),
