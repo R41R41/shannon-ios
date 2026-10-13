@@ -113,6 +113,19 @@ written for it.
 that is no task is `not_found`, a finished or stopping one `not_running`. It uses the owner's stop path, audits `stopped`, writes
 the activity record and notes the Talk. `--latest` takes the newest accepted request of the last two days that is still running.
 
+A stopped task stays `paused` with `pauseReason = 'fca_stopped'`: that is the common runtime's finished `stopped` phase (resumable
+only by an explicit resume), not a stop still in flight. A task that was waiting holds no step, so its stop needs no body
+acknowledgement and is `stopped` at once, body or no body (Minebot lane run 1, 2026-10-14: the task had waited since before the VM
+was evicted). `stop_requested = 1` stays on the checkpoint as the mark of that stop. A stopped task counts toward nothing: the
+admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as finished, and it holds no lease.
+
+## Waiting
+
+Nobody can answer a task the operator handed over: the CLI only starts and stops. Such a task (`operatorRequester` = `operator`)
+with no unfinished child is told so in each decision (`waiting`, closed values, `fcaWaitGate.ts`); a wait it proposes anyway is
+turned away and the step continues, at most `FCA_WAIT_REFUSALS` (2) times; a wait after that is committed with her own summary and
+the task is stopped (`wait_without_counterpart`). Nothing is written or said for her. The owner's own requests are not affected.
+
 ## Audit
 
 `operator_audit` (schema step `execution/012_operator_audit`): one row per event (`invoked`, `accepted`, `refused`, `settled`,

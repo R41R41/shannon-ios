@@ -30,7 +30,8 @@ export interface TaskRuntimeWiringOptions {
   budget?: FcaBudget;
   /** The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`); tests give 0. */
   providerRetryDelayMs?(): number;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'>>;
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
+    | 'waitCounterpart'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {

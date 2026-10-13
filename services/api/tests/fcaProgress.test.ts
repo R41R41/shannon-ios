@@ -36,6 +36,27 @@ describe('domain-generic common FCA verification and bounded recovery', () => {
     const result = await tools.progress.verifyCompletion(call('goal.verify'), async () => {});
     expect(result.status).toBe('not_verified'); expect(result.suggestedChecks[0]!.passed).toBe(true); expect(result.checks[0]!.passed).toBe(false);
   });
+  it('takes a read tool by the name the model sees (Minebot lane run 1: mc_goal-evidence) and says what was wrong when it refuses', async () => {
+    const reads: string[] = [];
+    const base: FcaExternalTools = { definitions: [tool('mc.goal-evidence'), tool('minecraft.observe'), tool('mc.move-to', 'write'), tool('web.search', 'read', 'model')],
+      async execute(request) { reads.push(request.name); return toolOk(JSON.stringify({ connected: true })); } };
+    const tools = createFcaProgressTools(base, { permit: async () => {} });
+    const accepted = await tools.execute(call('goal.set_conditions', { conditions: [{ ...condition('mc_goal-evidence', 'connected', true), id: 'connected-body' }] }));
+    expect(accepted.ok).toBe(true);
+    expect(tools.progress.context().conditions).toEqual([{ ...condition('mc.goal-evidence', 'connected', true), id: 'connected-body' }]);
+    expect((await tools.progress.verifyCompletion(call('goal.verify'), async () => {})).suggestedChecks[0]).toMatchObject({ tool: 'mc.goal-evidence', passed: true });
+    expect(reads).toEqual(['mc.goal-evidence']);
+    for (const name of ['mc_move-to', 'web_search', 'mc_unknown']) {
+      const refused = await tools.execute(call('goal.set_conditions', { conditions: [{ ...condition(name, '', true), id: 'bad' }] }));
+      expect(refused).toMatchObject({ ok: false, failure: 'invalid_input' });
+      expect(refused.text).toContain('条件 bad の tool');
+      expect(refused.text).toContain('mc_goal-evidence, minecraft_observe');
+      expect(refused.text).not.toContain('mc_move-to,');
+    }
+    const malformed = await tools.execute(call('goal.set_conditions', { conditions: [{ id: 'no-expected', tool: 'minecraft_observe', input: {}, path: 'a', operator: 'eq' }] }));
+    expect(malformed.text).toContain('条件の形が合いません');
+    expect(tools.progress.context().conditions).toHaveLength(1);
+  });
   it('labels unbound completion self_reported and suggested check evidence separately', async () => {
     const tools = createFcaProgressTools({ definitions: [tool('document.read')], async execute() { return toolOk('{"version":7}'); } }, { permit: async () => {} });
     await tools.execute(call('goal.set_conditions', { conditions: [condition('document.read', 'version', 7)] }));

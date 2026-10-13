@@ -1,3 +1,4 @@
+import type { FcaWaitFact } from './fcaWaitGate.js';
 import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from './fcaEvidencePorts.js';
 import type { TaskRecallPacket } from '../../recall/taskRecallPorts.js';
@@ -28,6 +29,8 @@ export interface FcaModelInput {
   skillIndex?: string;
   progress?: FcaProgress;
   observations?: readonly { revision: number; observation: FcaObservation | null }[];
+  /** Present only when nobody can answer this task: a wait is turned away (`fcaWaitGate.ts`). Closed values only. */
+  waiting?: FcaWaitFact;
 }
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
 export interface FcaBodyLifecycle {

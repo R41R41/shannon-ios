@@ -58,6 +58,10 @@ const CONTROL_TOOLS: Anthropic.Tool[] = [
 }));
 const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this clock, in the owner\'s time zone, never in UTC. '
   + 'Write explicit dates in searches and reports.';
+/** With `waiting` (`fcaWaitGate.ts`): nobody can answer the task, so a wait waits for nothing. Data for the decision, never her words. */
+const WAIT_RULE = 'Nobody can send this task a message or answer a question: it has no unfinished child task and whoever handed it over '
+  + 'cannot reply. fca_wait is turned away until refusedWaits reaches refusalLimit; a wait after that stops the task. '
+  + 'Continue toward the goal with the offered tools, or use fca_complete once the completion criteria are met.';
 /** Rich chat (owner decision 2026-10-13): a report is shown as a card in his Talk, its form chosen by its content. */
 const REPORT_FORM_RULE = [
   'A report for the owner (a task.send to your parent, or the fca_complete summary when you send none) is shown in his app as Markdown,',
@@ -112,7 +116,8 @@ export class AnthropicFcaModel implements FcaModel {
       const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
         ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
         ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-        ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) }) };
+        ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
+        ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) }) };
       // A system message holding tool changes may not open the conversation (a live 400, 2026-10-12): on a task's first
       // decision the inline definitions follow its first user message instead of preceding it.
       const turn = history.some(message => message.role === 'user') ? [...menu.appended, current] : [current, ...menu.appended];
@@ -231,8 +236,12 @@ function observedFcaResponse(message: Anthropic.Message) {
  * unnoticed (review P3-1): characters of the replayed history, of its inline tool definitions, and of the whole request.
  */
 function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming): void {
-  const definitions = history.filter(message => isFcaToolChangeMessage(message as unknown as Record<string, unknown>));
+  const definitional = (message: Anthropic.MessageParam) => isFcaToolChangeMessage(message as unknown as Record<string, unknown>);
+  const definitions = history.filter(definitional);
+  // `historyCharacters` is the whole replay, its inline definitions included; `nativeHistoryCharacters` is the part the 64k
+  // history budget measures (`FCA_HISTORY_POLICY`), the definitions having their own bound (Minebot lane run 1, 2026-10-14).
   console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
+    nativeHistoryCharacters: JSON.stringify(history.filter(message => !definitional(message))).length,
     toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length }));
 }
 

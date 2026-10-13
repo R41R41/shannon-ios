@@ -11,6 +11,7 @@ import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel } from './fcaPorts.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
+import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
@@ -40,6 +41,11 @@ export interface FcaStepPorts {
   safeToAcknowledgeStop?(): boolean;
   body?: FcaBodyLifecycle;
   observations?: readonly FcaObservationLifecycle[];
+  /**
+   * Whether whoever handed this task over can send it a message (`fcaWaitGate.ts`). False only where the wiring knows nobody can
+   * (an operator's hand-over); absent means a wait is never questioned.
+   */
+  waitCounterpart?(): boolean;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -110,10 +116,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const observationFresh = async () => (await Promise.all((ports.observations ?? []).map((observation, index) => observation.guard(observationRevisions[index]!)))).every(Boolean);
   const bodyRevision = ports.body?.revision() ?? 0;
   const skillIndex = ports.tools?.skillIndex?.();
+  const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
+  const waiting = waitGate.fact();
   await checked();
   observerHandoff('context', 'native', provenance);
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
-  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal).catch(error => { progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' }); throw error; });
+  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal).catch(error => { progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' }); throw error; });
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'received' });
   await checked();
   let bodyStale = (ports.body ? !await ports.body.guard(bodyRevision) : false) || !await observationFresh();
@@ -183,6 +191,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     (runtime.get(step.scopeKey, step.taskId)?.childIds ?? []).some(id => {
       const child = runtime.get(step.scopeKey, id); return child && !['completed', 'failed'].includes(child.phase);
     }))) disposition = 'wait';
+  // A wait nobody can answer is turned away a bounded number of times, then committed and the task stopped (below).
+  const gated = waitGate.apply(disposition);
+  disposition = gated.disposition;
   await checked();
   if (disposition === 'complete' && !bodyStale && ports.tools?.progress) {
     // Final native evidence must not race a new reflex using this same enclosing lease.
@@ -204,7 +215,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (saved.task.phase === 'waiting') {
@@ -214,6 +225,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.
   try { ports.evidence?.committed(step); } catch { /* Retried by the existing maintenance tick. */ }
   if (saved.task.phase === 'completed' || saved.task.phase === 'failed') ports.recall?.cancel(step.scopeKey, step.taskId);
+  if (gated.stop && saved.task.phase === 'waiting') {
+    runtime.stop(step.scopeKey, step.taskId, FCA_WAIT_WITHOUT_COUNTERPART);
+    return runtime.snapshot(step.scopeKey, step.taskId)!;
+  }
   if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
     runtime.stop(step.scopeKey, step.taskId, 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;

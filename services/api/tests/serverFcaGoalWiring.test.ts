@@ -94,6 +94,8 @@ describe('configuredServerFca original-goal verification wiring', () => {
     const f = fixture('石の入手方法を調べて'); const result = await f.run();
     expect(result.task.phase).toBe('completed'); expect(f.ports.tools?.progress?.context().binding).toBeUndefined();
     expect(f.ports.tools?.progress?.context().verification?.status).toBe('self_reported');
+    // Without an operator audit every task is his own request: its waits are never questioned (`fcaWaitGate.ts`).
+    expect(f.ports.waitCounterpart?.()).toBe(true);
   });
   it('uses exact native task context and the existing body lease for fresh evidence before permitting completion', async () => {
     const f = fixture('エンダードラゴンを討伐してください', true, true);
