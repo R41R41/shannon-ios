@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  lifecycleOutcomeMessage, lifecycleOutcomeRequest, lifecyclePhrase, neutralLifecycleOutcomeLine, type LifecycleOutcomeFacts, type LifecycleOutcomeKind,
+  LIFECYCLE_PHRASES_V1, lifecycleOutcomeMessage, lifecycleOutcomeRequest, lifecyclePhraseChoices, lifecyclePhraseSchema, neutralLifecycleOutcomeLine,
+  type LifecycleOutcomeFacts, type LifecycleOutcomeKind,
 } from '../src/mind/action/respond/lifecycleOutcomeLine.js';
 import { lifecycleOutcomeTeller, type LifecycleOutcomeReport } from '../src/wiring/lifecycleOutcomeTellingWiring.js';
 import { SQLiteLifecycleOutcomeSpeaker } from '../src/surfaces/outreach/store/lifecycleOutcomeSpeaker.js';
@@ -43,7 +44,7 @@ const report = (patch: Partial<LifecycleOutcomeReport> = {}): LifecycleOutcomeRe
   scopeKey: 'owner', threadId: 'asked', operationId: OPERATION, action: 'login', outcome: 'completed', ...patch,
 });
 
-describe('the message: the fact word for word, and her phrase', () => {
+describe('the message: the fact word for word, and a phrase of hers from the list', () => {
   const facts = (patch: Partial<LifecycleOutcomeFacts> = {}): LifecycleOutcomeFacts => ({ action: 'login', outcome: 'completed', others: false, ...patch });
   const OUTCOMES: LifecycleOutcomeKind[] = ['completed', 'refused', 'cancelled', 'not_started', 'unknown'];
 
@@ -82,59 +83,58 @@ describe('the message: the fact word for word, and her phrase', () => {
     [{}, '…ごめんね、駄目だった'],
   ];
 
-  it('never lets the 25 misstated sentences of the review stand beside the fact, in either place', () => {
-    expect(FAILURE_AS_SUCCESS).toHaveLength(14);
-    expect(SUCCESS_AS_FAILURE).toHaveLength(11);
-    for (const [patch, phrase] of [...FAILURE_AS_SUCCESS, ...SUCCESS_AS_FAILURE]) for (const position of ['before', 'after']) {
-      const given = facts(patch);
-      expect(lifecyclePhrase(phrase, given), phrase).toBeNull();
-      expect(lifecycleOutcomeMessage({ phrase, position }, given), phrase).toBe(neutralLifecycleOutcomeLine(given));
-    }
-  });
+  /** The re-review of 0ac5d742: free phrases that undercut the fact passed a filter (negating it, emoji, the wrong feeling). */
+  const UNDERCUTTING = ['嘘だよ', 'なーんて', '冗談', '今のなし', '🎉', '😭', '次は頑張る', 'おめでとう', 'やったね！🎉', 'ふふん', 'ふふん、 ', ' ライ氏、'];
 
-  it('keeps a short feeling or address that fits the end, before or after the fact', () => {
-    expect(lifecycleOutcomeMessage({ phrase: 'ふふん、', position: 'before' }, facts())).toBe('ふふん、マイクラにログインしました。');
-    expect(lifecycleOutcomeMessage({ phrase: 'やったね！', position: 'after' }, facts())).toBe('マイクラにログインしました。やったね！');
-    expect(lifecycleOutcomeMessage({ phrase: 'ライ氏', position: 'before' }, facts())).toBe('ライ氏、マイクラにログインしました。');
-    expect(lifecycleOutcomeMessage({ phrase: '…ごめんね', position: 'after' }, facts({ outcome: 'refused' })))
+  it('says, for every operation and end, every listed phrase in every place it takes, around the fact word for word', () => {
+    for (const action of MINECRAFT_LIFECYCLE_ACTIONS) for (const outcome of OUTCOMES) {
+      const given = facts({ action, outcome }), fact = neutralLifecycleOutcomeLine(given);
+      const family = LIFECYCLE_PHRASES_V1[outcome === 'completed' ? 'done' : 'not_done'];
+      expect(lifecyclePhraseChoices(outcome)).toEqual(family.map(entry => entry.text));
+      for (const entry of family) for (const position of ['before', 'after'] as const) {
+        const message = lifecycleOutcomeMessage({ phrase: entry.text, position }, given);
+        // A place the phrase does not take is its first place instead.
+        const place = entry.positions.includes(position) ? position : entry.positions[0];
+        expect(message, `${action} ${outcome} ${entry.text} ${position}`).toBe(place === 'before' ? `${entry.text}${fact}` : `${fact}${entry.text}`);
+      }
+      expect(lifecycleOutcomeMessage({ phrase: '', position: 'before' }, given)).toBe(fact);
+    }
+    // Where each phrase reads well: an address and an opening go before, a trailing apology after.
+    expect(lifecycleOutcomeMessage({ phrase: 'ライ氏、', position: 'after' }, facts())).toBe('ライ氏、マイクラにログインしました。');
+    expect(lifecycleOutcomeMessage({ phrase: '…ごめんね', position: 'before' }, facts({ outcome: 'refused' })))
       .toBe('マイクラのログインは、体に断られてできませんでした。…ごめんね');
-    expect(lifecycleOutcomeMessage({ phrase: 'ちょっと待ってて', position: 'after' }, facts({ outcome: 'unknown' })))
-      .toBe('マイクラのログインは、結果を確かめられませんでした。ちょっと待ってて');
   });
 
-  it('drops a phrase that names what, says how, hedges, carries a number, or whose feeling does not fit the end', () => {
-    const dropped: Array<[Partial<LifecycleOutcomeFacts>, unknown]> = [
-      [{}, 'マイクラ楽しみ！'], [{}, 'ログインばっちり'], [{}, 'サーバー元気'], [{}, '体が軽い！'], [{}, '完了！'], [{}, '無事に！'],
-      [{}, '大丈夫！'], [{}, 'オッケー！'], [{}, 'あと3分'], [{}, 'ちゃんとね'], [{}, 'たぶんね？'], [{}, 'もう平気'],
-      [{}, 'できたよ'], [{}, '済んだよ'], [{}, 'しておいたよ'], [{}, 'だけど、ね'], [{}, '「やったね」'], [{}, 'ふふん、'.repeat(6)],
-      [{}, '…ごめんね'], [{}, 'うう、悔しい'], // regret for a done one
-      [{ outcome: 'refused' }, 'やったね！'], [{ outcome: 'cancelled' }, 'よかった！'], [{ outcome: 'unknown' }, 'ふふん、'],
-      [{ outcome: 'not_started' }, 'わーい'], [{ outcome: 'refused' }, '任せてね'],
-      [{}, 42], [{}, ''], [{}, null],
+  it('drops every phrase not on the list for the end, the reviews\' examples among them, and says the fact alone', () => {
+    const notListed: Array<[Partial<LifecycleOutcomeFacts>, unknown]> = [
+      ...UNDERCUTTING.flatMap(phrase => OUTCOMES.map(outcome => [{ outcome }, phrase] as [Partial<LifecycleOutcomeFacts>, unknown])),
+      ...[...FAILURE_AS_SUCCESS, ...SUCCESS_AS_FAILURE].map(([patch, phrase]) => [patch, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
+      // A phrase of the other family: no celebration for an end that is not done, no apology for a done one.
+      ...['やったね！', 'ふふん、', 'えへへ、', 'じゃーん、', 'お待たせ！'].map(phrase => [{ outcome: 'refused' }, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
+      ...['…ごめんね', 'ごめんね、', 'えっと、', 'お待たせ。'].map(phrase => [{}, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
+      [{}, 42], [{}, null], [{}, { text: 'ふふ、' }],
     ];
-    for (const [patch, phrase] of dropped) {
+    expect(FAILURE_AS_SUCCESS.length + SUCCESS_AS_FAILURE.length).toBe(25);
+    for (const [patch, phrase] of notListed) for (const position of ['before', 'after']) {
       const given = facts(patch);
-      expect(lifecyclePhrase(phrase, given), String(phrase)).toBeNull();
-      expect(lifecycleOutcomeMessage({ phrase, position: 'after' }, given)).toBe(neutralLifecycleOutcomeLine(given));
+      expect(lifecycleOutcomeMessage({ phrase, position }, given), `${given.outcome} ${String(phrase)}`).toBe(neutralLifecycleOutcomeLine(given));
     }
-    // An answer that is not one, and anyone else there: the fact (the private-safe one) alone.
+    // No answer, and anyone else there: the fact (the private-safe one) alone.
     expect(lifecycleOutcomeMessage(null, facts())).toBe('マイクラにログインしました。');
     expect(lifecycleOutcomeMessage({ phrase: 'やったね！', position: 'after' }, facts({ others: true })))
       .toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
   });
 
-  it('says the fact of every operation and end word for word, whatever phrase stands beside it', () => {
-    for (const action of MINECRAFT_LIFECYCLE_ACTIONS) for (const outcome of OUTCOMES) for (const phrase of ['やったね！', '…ごめんね', 'ねえ', 'ログインできなかった']) {
-      const given = facts({ action, outcome }), fact = neutralLifecycleOutcomeLine(given);
-      const message = lifecycleOutcomeMessage({ phrase, position: 'after' }, given);
-      expect(message.startsWith(fact), `${action} ${outcome} ${phrase}`).toBe(true);
-      const added = message.slice(fact.length);
-      if (added) expect(lifecyclePhrase(added, given)).toBe(added);
-      expect(neutralLifecycleOutcomeLine({ action, outcome, others: true })).toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
+  it('holds the model to the list in its schema, and gives it the end and the list only', () => {
+    for (const outcome of OUTCOMES) {
+      const schema = lifecyclePhraseSchema({ outcome }) as { properties: { phrase: { enum: string[] }; position: { enum: string[] } } };
+      expect(schema.properties.phrase.enum).toEqual(['', ...lifecyclePhraseChoices(outcome)]);
+      expect(schema.properties.position.enum).toEqual(['before', 'after']);
     }
+    expect(JSON.parse(lifecycleOutcomeRequest(facts()))).toEqual({ ended: 'done', phrases: lifecyclePhraseChoices('completed') });
+    for (const outcome of OUTCOMES) expect(neutralLifecycleOutcomeLine(facts({ outcome, others: true })))
+      .toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
     expect(neutralLifecycleOutcomeLine(facts())).toBe('マイクラにログインしました。');
-    // The writer is given the end only, for the feeling: nothing of an audience or an operation to restate.
-    expect(JSON.parse(lifecycleOutcomeRequest(facts()))).toEqual({ ended: 'done' });
   });
 });
 
