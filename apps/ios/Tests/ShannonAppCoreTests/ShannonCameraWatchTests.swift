@@ -50,7 +50,7 @@ final class ShannonCameraWatchTests: XCTestCase {
     }
 
     func testTheServerAllowsOnlyWithoutStopAndBelowDegradeTwo() {
-        let limits = ShannonVisionStatus.Limits(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 200_000, ttlMs: 4000)
+        let limits = ShannonVisionStatus.Limits(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 160_000, ttlMs: 4000)
         XCTAssertEqual(ShannonCameraWatchPolicy.serverVerdict(.init(watchAllowed: true, reason: nil, degrade: 0, limits: limits)), .allowed)
         XCTAssertEqual(ShannonCameraWatchPolicy.serverVerdict(.init(watchAllowed: true, reason: nil, degrade: 1, limits: limits)), .allowed)
         XCTAssertEqual(ShannonCameraWatchPolicy.serverVerdict(.init(watchAllowed: true, reason: nil, degrade: 2, limits: limits)), .refused(.degraded))
@@ -111,10 +111,10 @@ final class ShannonCameraWatchTests: XCTestCase {
     func testTheServersNotBeforeIsKept() {
         var gate = ShannonCameraWatchGate()
         gate.restart(at: start)
-        _ = gate.decide(luma: grid(0), personCount: nil, at: at(1))
+        _ = gate.decide(luma: grid(0), personCount: 1, at: at(1))
         gate.settle(notBefore: at(10))
-        XCTAssertEqual(gate.decide(luma: grid(255), personCount: nil, at: at(5)), .skip)
-        guard case .send = gate.decide(luma: grid(0), personCount: nil, at: at(10)) else { return XCTFail("after notBefore") }
+        XCTAssertEqual(gate.decide(luma: grid(255), personCount: 1, at: at(5)), .skip)
+        guard case .send = gate.decide(luma: grid(0), personCount: 1, at: at(10)) else { return XCTFail("after notBefore") }
     }
 
     func testTwoOrMorePeopleStopWatching() {
@@ -126,13 +126,31 @@ final class ShannonCameraWatchTests: XCTestCase {
         guard case .send = gate.decide(luma: grid(0), personCount: 1, at: at(3)) else { return XCTFail("one person") }
     }
 
+    func testAFrameWhosePeopleCouldNotBeCountedIsNeverSentAndRepeatedFailuresStop() {
+        var gate = ShannonCameraWatchGate()
+        gate.restart(at: start)
+        // Fail closed: an uncounted first frame is not sent, nor is a changed one.
+        XCTAssertEqual(gate.decide(luma: grid(0), personCount: nil, at: at(1)), .skip)
+        XCTAssertEqual(gate.decide(luma: grid(255), personCount: nil, at: at(1.5)), .skip)
+        XCTAssertEqual(gate.decide(luma: grid(0), personCount: nil, at: at(2)), .stopUncounted)
+        // A counted frame in between resets the run.
+        var other = ShannonCameraWatchGate()
+        other.restart(at: start)
+        XCTAssertEqual(other.decide(luma: grid(0), personCount: nil, at: at(1)), .skip)
+        XCTAssertEqual(other.decide(luma: grid(0), personCount: nil, at: at(1.5)), .skip)
+        guard case .send = other.decide(luma: grid(0), personCount: 1, at: at(2)) else { return XCTFail("counted frame") }
+        other.settle(notBefore: nil)
+        XCTAssertEqual(other.decide(luma: grid(0), personCount: nil, at: at(2.5)), .skip)
+        XCTAssertEqual(other.decide(luma: grid(0), personCount: nil, at: at(3)), .skip)
+    }
+
     func testARestartMakesTheNextFrameAFirstFrameAgain() {
         var gate = ShannonCameraWatchGate()
         gate.restart(at: start)
-        _ = gate.decide(luma: grid(0), personCount: nil, at: at(1))
+        _ = gate.decide(luma: grid(0), personCount: 1, at: at(1))
         gate.settle(notBefore: nil)
         gate.restart(at: at(5))
-        XCTAssertEqual(gate.decide(luma: grid(0), personCount: nil, at: at(6.5)), .send(reason: .firstFrame, difference: nil))
+        XCTAssertEqual(gate.decide(luma: grid(0), personCount: 1, at: at(6.5)), .send(reason: .firstFrame, difference: nil))
     }
 
     func testTheServerCanOnlyTightenTheLimits() {
@@ -169,9 +187,9 @@ final class ShannonCameraWatchTests: XCTestCase {
     func testASentFrameHasALongSideOfAtMost512AndNoMetadata() throws {
         for (width, height) in [(1280, 720), (480, 640), (4000, 3000), (300, 200)] {
             let image = try XCTUnwrap(Self.image(width: width, height: height))
-            let frame = try XCTUnwrap(ShannonAppLookEncoder.frame(from: image, maximumSide: 512, maximumBytes: 200_000))
+            let frame = try XCTUnwrap(ShannonAppLookEncoder.frame(from: image, maximumSide: 512, maximumBytes: 160_000))
             XCTAssertLessThanOrEqual(max(frame.width, frame.height), 512)
-            XCTAssertLessThanOrEqual(frame.jpeg.count, 200_000)
+            XCTAssertLessThanOrEqual(frame.jpeg.count, 160_000)
             XCTAssertEqual(Array(frame.jpeg.prefix(3)), [0xFF, 0xD8, 0xFF], "a JPEG")
             let source = try XCTUnwrap(CGImageSourceCreateWithData(frame.jpeg as CFData, nil))
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]

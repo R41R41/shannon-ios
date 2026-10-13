@@ -69,6 +69,6 @@
     "watchAllowed": false,
     "reason": "audience",
     "degrade": 0,
-    "limits": { "judgeFramesPerSecond": 2, "sendIntervalMs": 2000, "longSide": 512, "frameBytes": 200000, "ttlMs": 4000 }
+    "limits": { "judgeFramesPerSecond": 2, "sendIntervalMs": 2000, "longSide": 512, "frameBytes": 160000, "ttlMs": 4000 }
   }
 }

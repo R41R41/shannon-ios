@@ -77,7 +77,7 @@ final class ShannonVisionContractTests: XCTestCase {
     "watchAllowed": false,
     "reason": "audience",
     "degrade": 0,
-    "limits": { "judgeFramesPerSecond": 2, "sendIntervalMs": 2000, "longSide": 512, "frameBytes": 200000, "ttlMs": 4000 }
+    "limits": { "judgeFramesPerSecond": 2, "sendIntervalMs": 2000, "longSide": 512, "frameBytes": 160000, "ttlMs": 4000 }
   }
 }
 """#
@@ -131,7 +131,7 @@ final class ShannonVisionContractTests: XCTestCase {
         let status = try roundTrip(ShannonVisionStatus.self, "status")
         XCTAssertFalse(status.watchAllowed)
         XCTAssertEqual(status.reason, .audience)
-        XCTAssertEqual(status.limits, .init(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 200000, ttlMs: 4000))
+        XCTAssertEqual(status.limits, .init(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 160000, ttlMs: 4000))
     }
 
     /// The closed vocabularies are the server's (`visionContract.ts`), word for word.
@@ -148,7 +148,7 @@ final class ShannonVisionContractTests: XCTestCase {
         XCTAssertEqual(ShannonVisionDecisionOutcome.allCases.map(\.rawValue), ["chosen", "quiet", "discarded", "refused", "failed", "skipped"])
         XCTAssertEqual(ShannonVisionDiscardReason.allCases.map(\.rawValue), [
             "stale_generation", "expired", "audience_changed", "below_gate", "low_confidence", "budget", "degraded", "busy", "disabled",
-            "repeated", "timeout", "http_error", "usage_unknown", "invalid_answer",
+            "repeated", "timeout", "http_error", "usage_unknown", "invalid_answer", "capped",
         ])
         XCTAssertEqual(ShannonVisionEndReason.allCases.map(\.rawValue), [
             "completed", "hazard_cleared", "target_lost", "no_progress", "no_candidates", "observation_unavailable", "cancelled", "deadline",

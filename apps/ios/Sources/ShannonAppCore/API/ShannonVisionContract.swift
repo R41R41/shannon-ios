@@ -99,6 +99,7 @@ public enum ShannonVisionDiscardReason: String, Codable, CaseIterable, Sendable 
     case httpError = "http_error"
     case usageUnknown = "usage_unknown"
     case invalidAnswer = "invalid_answer"
+    case capped
 }
 
 public enum ShannonVisionSessionGoal: String, Codable, CaseIterable, Sendable {

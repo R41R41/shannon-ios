@@ -9,7 +9,7 @@ public struct ShannonCameraWatchLimits: Equatable, Sendable {
     public var sendInterval: TimeInterval = 2
     /// The long side of a frame sent.
     public var longSide = 512
-    public var frameBytes = 200_000
+    public var frameBytes = 160_000
     public var ttlMs = 4_000
 
     public init() {}
@@ -35,6 +35,8 @@ public struct ShannonCameraWatchGate: Sendable {
     public static let warmUpSeconds: TimeInterval = 1
     /// From this many people on, the camera stops (§4.4: watching is for the owner alone).
     public static let othersFromPersonCount = 2
+    /// A frame whose people could not be counted is never sent; this many such frames in a row close the camera.
+    public static let detectionFailuresToStop = 3
 
     public enum Decision: Equatable, Sendable {
         /// Nothing changed enough, or a frame may not be sent now.
@@ -42,6 +44,8 @@ public struct ShannonCameraWatchGate: Sendable {
         case send(reason: ShannonVisionGateReason, difference: Double?)
         /// Two or more people: the camera stops and presence is reported.
         case stopForOthers(personCount: Int)
+        /// The people could not be counted several times in a row: the camera stops (unsure is not alone).
+        case stopUncounted
     }
 
     public var limits: ShannonCameraWatchLimits
@@ -51,6 +55,7 @@ public struct ShannonCameraWatchGate: Sendable {
     private var notBefore: Date?
     private var reference: [UInt8]?
     private var firstFramePending = true
+    private var uncounted = 0
     public private(set) var inFlight = false
 
     public init(limits: ShannonCameraWatchLimits = ShannonCameraWatchLimits()) {
@@ -63,6 +68,7 @@ public struct ShannonCameraWatchGate: Sendable {
         lastJudgedAt = nil
         reference = nil
         firstFramePending = true
+        uncounted = 0
         inFlight = false
     }
 
@@ -75,8 +81,14 @@ public struct ShannonCameraWatchGate: Sendable {
     }
 
     /// Decides about one judged frame from its 32 × 32 brightness and the number of people Apple Vision found in it.
+    /// A frame whose people could not be counted (`personCount == nil`) fails closed: it is never sent.
     public mutating func decide(luma: [UInt8], personCount: Int?, at now: Date) -> Decision {
-        if let personCount, personCount >= Self.othersFromPersonCount {
+        guard let personCount else {
+            uncounted += 1
+            return uncounted >= Self.detectionFailuresToStop ? .stopUncounted : .skip
+        }
+        uncounted = 0
+        if personCount >= Self.othersFromPersonCount {
             reference = nil
             return .stopForOthers(personCount: personCount)
         }

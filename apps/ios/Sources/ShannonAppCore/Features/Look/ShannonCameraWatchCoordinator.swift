@@ -66,8 +66,11 @@ public final class ShannonCameraWatchCoordinator {
     @ObservationIgnored private let environment: ShannonCameraWatchEnvironment
     @ObservationIgnored var maySend: @MainActor () -> Bool = { true }
     @ObservationIgnored private var signs: Set<UUID> = []
+    /// Presentations that cover every surface showing the sign (a sheet over the conversation): the camera closes meanwhile.
+    @ObservationIgnored private var coverings: Set<String> = []
     @ObservationIgnored private(set) var othersPresent = false
     @ObservationIgnored private(set) var othersSeen = false
+    @ObservationIgnored private(set) var peopleUncounted = false
     @ObservationIgnored private var lookInProgress = false
     @ObservationIgnored private var cameraBusy = false
     @ObservationIgnored private var lastSettingOn: Bool?
@@ -90,7 +93,7 @@ public final class ShannonCameraWatchCoordinator {
         let system = environment.system()
         var facts = ShannonCameraWatchConditions()
         facts.canSend = client != nil && maySend()
-        facts.hasSign = !signs.isEmpty
+        facts.hasSign = !signs.isEmpty && coverings.isEmpty
         facts.appInFront = system.appInFront
         facts.unlocked = system.unlocked
         facts.lowPowerMode = system.lowPowerMode
@@ -100,6 +103,7 @@ public final class ShannonCameraWatchCoordinator {
         facts.stoppedByOwner = stoppedByOwner
         facts.othersPresent = othersPresent
         facts.othersSeen = othersSeen
+        facts.peopleUncounted = peopleUncounted
         facts.lookInProgress = lookInProgress
         facts.cameraBusy = cameraBusy
         facts.server = server
@@ -116,6 +120,13 @@ public final class ShannonCameraWatchCoordinator {
             environment.startMonitoring({ [weak self] in self?.reevaluate() }, { [weak self] in self?.reopened() })
         }
         reevaluate()
+    }
+
+    /// A presentation covers the surfaces that show the sign (or no longer does). While one does, the sign cannot be seen, so the
+    /// camera stays closed; a presentation that shows the sign itself registers a sign of its own instead.
+    public func setCovered(_ covered: Bool, by source: String) {
+        let changed = covered ? coverings.insert(source).inserted : coverings.remove(source) != nil
+        if changed { reevaluate() }
     }
 
     public func unregister(sign id: UUID) {
@@ -154,6 +165,7 @@ public final class ShannonCameraWatchCoordinator {
     private func clearStops() {
         stoppedByOwner = false
         othersSeen = false
+        peopleUncounted = false
         cameraBusy = false
         server = .unknown
         sessionId = nil
@@ -245,6 +257,11 @@ public final class ShannonCameraWatchCoordinator {
             let client = client
             let at = environment.now()
             Task { try? await client?.reportVisionPresence(personCount: count, at: at) }
+        case .peopleUncounted:
+            // Unsure is not alone: closed until the app is opened again, like two people seen (nothing is reported).
+            peopleUncounted = true
+            sessionId = nil
+            reevaluate()
         case .interrupted:
             cameraBusy = true
             reevaluate()

@@ -38,6 +38,8 @@ public struct ShannonCameraWatchConditions: Equatable, Sendable {
     public var othersPresent = false
     /// The device itself saw two or more people since the app was last opened.
     public var othersSeen = false
+    /// The people in view could not be counted several times in a row (unsure is not alone).
+    public var peopleUncounted = false
     /// The owner pressed 「止める」 on the sign.
     public var stoppedByOwner = false
     /// A one-shot look holds the camera.
@@ -67,6 +69,7 @@ public enum ShannonCameraWatchHold: Equatable, Sendable {
     case hot
     case othersPresent
     case othersSeen
+    case peopleUncounted
     case lookInProgress
     case cameraBusy
     case server(ShannonVisionStopReason)
@@ -111,6 +114,7 @@ public enum ShannonCameraWatchPolicy {
             (!facts.thermalHeavy, .hot),
             (!facts.othersPresent, .othersPresent),
             (!facts.othersSeen, .othersSeen),
+            (!facts.peopleUncounted, .peopleUncounted),
             (!facts.lookInProgress, .lookInProgress),
             (!facts.cameraBusy, .cameraBusy),
         ]
@@ -159,6 +163,7 @@ public enum ShannonCameraWatchCopy {
     public static func stopped(_ hold: ShannonCameraWatchHold) -> String? {
         switch hold {
         case .othersSeen: "ほかの人が映ったので、見るのを止めました"
+        case .peopleUncounted: "映っている人の数を確かめられないので、見るのを止めました"
         case .server(.audience): "ほかの人がいるので、見るのを止めました"
         case .server(.budget): "今日の分を使い切ったので、見るのを止めました"
         case .server(.degraded), .serverUnreachable: "いまは見られないので、見るのを止めました"

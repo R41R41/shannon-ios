@@ -50,11 +50,14 @@ final class ShannonCameraWatchSystemMonitor {
 
 #if os(macOS)
     /// One of Shannon's windows is on screen: the app is not hidden, and a window that can be main is visible, not
-    /// minimised and not fully covered. Her desktop body's panel does not count (it cannot become main).
+    /// minimised, not fully covered, and shows no sheet (a sheet covers the top of the window, where the 「見ています」 sign is).
+    /// Her desktop body's panel does not count (it cannot become main).
     static func windowOnScreen() -> Bool {
         let app = NSApplication.shared
         guard !app.isHidden else { return false }
-        return app.windows.contains { $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) }
+        return app.windows.contains {
+            $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) && $0.attachedSheet == nil
+        }
     }
 #endif
 
@@ -73,7 +76,8 @@ final class ShannonCameraWatchSystemMonitor {
         watch(center, UIApplication.willEnterForegroundNotification, reopens: true)
 #elseif os(macOS)
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification,
-                     NSWindow.didMiniaturizeNotification, NSWindow.willCloseNotification, NSWindow.didChangeOcclusionStateNotification] {
+                     NSWindow.didMiniaturizeNotification, NSWindow.willCloseNotification, NSWindow.didChangeOcclusionStateNotification,
+                     NSWindow.willBeginSheetNotification, NSWindow.didEndSheetNotification] {
             watch(center, name)
         }
         watch(center, NSApplication.didHideNotification)

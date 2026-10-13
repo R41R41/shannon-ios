@@ -207,8 +207,14 @@ public struct ShannonConversationView: View {
         .tint(palette.action)
     }
 
+    /// A sheet or cover over the conversation hides the 「見ています」 sign, so watching closes the camera meanwhile (ADR-0011 §4.4).
+    private var coversWatchSign: Bool {
+        showsSettings || showsThreadList || agentTaskRoomIsPresented.wrappedValue
+    }
+
     private var workspaceWithPresentations: some View {
         workspaceShell
+        .onChange(of: coversWatchSign, initial: true) { _, covered in model.cameraWatch.setCovered(covered, by: "conversation") }
 #if os(iOS)
         .fullScreenCover(isPresented: $showsSettings) {
             settingsSheet

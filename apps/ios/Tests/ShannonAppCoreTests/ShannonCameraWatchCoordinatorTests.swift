@@ -150,6 +150,16 @@ final class ShannonCameraWatchCoordinatorTests: XCTestCase {
         XCTAssertFalse(watch.isWatching)
     }
 
+    func testPeopleThatCannotBeCountedStopWatchingWithoutReporting() async {
+        let watch = await watching()
+        camera.emit(.peopleUncounted)
+        await waitFor("stopped") { !watch.isWatching }
+        XCTAssertEqual(watch.notice, "映っている人の数を確かめられないので、見るのを止めました")
+        XCTAssertTrue(server.presences.isEmpty)
+        watch.reevaluate()
+        XCTAssertFalse(watch.isWatching)
+    }
+
     func testAFrameFromAClosedCameraIsNotSent() async {
         let watch = await watching()
         facts.system.appInFront = false
@@ -157,6 +167,14 @@ final class ShannonCameraWatchCoordinatorTests: XCTestCase {
         watch.reevaluate()
         try? await Task.sleep(for: .milliseconds(30))
         XCTAssertTrue(server.frames.isEmpty)
+    }
+
+    func testASheetOverTheSignClosesTheCameraUntilItCloses() async {
+        let watch = await watching()
+        watch.setCovered(true, by: "conversation")
+        XCTAssertFalse(watch.isWatching)
+        watch.setCovered(false, by: "conversation")
+        await waitFor("watching again") { watch.isWatching }
     }
 
     func testTheOwnersStopHoldsUntilResumeOrTheSettingIsSwitchedBackOn() async {
@@ -222,7 +240,7 @@ private final class WatchCamera: ShannonCameraWatchCapturing, @unchecked Sendabl
 }
 
 private final class WatchServer: ShannonVisionServing, @unchecked Sendable {
-    static let limits = ShannonVisionStatus.Limits(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 200_000, ttlMs: 4000)
+    static let limits = ShannonVisionStatus.Limits(judgeFramesPerSecond: 2, sendIntervalMs: 2000, longSide: 512, frameBytes: 160_000, ttlMs: 4000)
 
     static func reply(
         watch: ShannonVisionFrameReply.Watch = .continue, stopReason: ShannonVisionStopReason? = nil, reaction: ShannonVisionReaction? = nil

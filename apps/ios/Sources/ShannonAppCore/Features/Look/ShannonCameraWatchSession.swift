@@ -24,6 +24,8 @@ public enum ShannonCameraWatchEvent: Sendable {
     case shot(ShannonCameraWatchShot)
     /// Two or more people were seen: the camera has already closed.
     case othersSeen(personCount: Int)
+    /// The people in view could not be counted, several frames in a row: the camera has already closed.
+    case peopleUncounted
     /// The camera could not open, or the system took it away (another app, a call, a runtime error).
     case interrupted
 }
@@ -39,14 +41,21 @@ public protocol ShannonCameraWatchCapturing: AnyObject, Sendable {
     func settle(notBefore: Date?)
 }
 
-/// Counts people in a frame with Apple Vision's human rectangles. No face is detected, identified or recognised.
+/// Counts people in a frame with Apple Vision, conservatively: the most of three counts (upper bodies, whole bodies, face
+/// rectangles). An upper-body count alone misses a person seen from the side or far back, a whole-body count misses one close to
+/// the screen, and a face count misses one turned away; the largest wins. Faces are only counted: no landmark, no feature print,
+/// nothing that could tell who it is. Any request that fails makes the count unknown (nil), which the gate never sends.
 enum ShannonCameraWatchPeople {
     static func count(in buffer: CVPixelBuffer) -> Int? {
-        let request = VNDetectHumanRectanglesRequest()
-        request.upperBodyOnly = true
+        let upper = VNDetectHumanRectanglesRequest()
+        upper.upperBodyOnly = true
+        let whole = VNDetectHumanRectanglesRequest()
+        whole.upperBodyOnly = false
+        let faces = VNDetectFaceRectanglesRequest()
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
-        guard (try? handler.perform([request])) != nil else { return nil }
-        return request.results?.count ?? 0
+        guard (try? handler.perform([upper, whole, faces])) != nil,
+              let uppers = upper.results, let wholes = whole.results, let found = faces.results else { return nil }
+        return max(uppers.count, wholes.count, found.count)
     }
 }
 
@@ -120,6 +129,7 @@ final class ShannonCameraWatchSession: NSObject, ShannonCameraWatchCapturing, AV
             if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
         }
         session.commitConfiguration()
+        Self.limitFrameRate(device)
         self.session = session
         self.events = events
         gate.limits = limits
@@ -127,6 +137,15 @@ final class ShannonCameraWatchSession: NSObject, ShannonCameraWatchCapturing, AV
         observe(session)
         session.startRunning()
         if !session.isRunning { fail() }
+    }
+
+    /// About 5 frames a second is plenty for 2 judged a second: the sensor and the queue do a sixth of the work of 30.
+    private static func limitFrameRate(_ device: AVCaptureDevice) {
+        let duration = CMTime(value: 1, timescale: 5)
+        let supported = device.activeFormat.videoSupportedFrameRateRanges.contains { $0.minFrameDuration <= duration && duration <= $0.maxFrameDuration }
+        guard supported, (try? device.lockForConfiguration()) != nil else { return }
+        device.activeVideoMinFrameDuration = duration
+        device.unlockForConfiguration()
     }
 
     private func observe(_ session: AVCaptureSession) {
@@ -170,6 +189,9 @@ final class ShannonCameraWatchSession: NSObject, ShannonCameraWatchCapturing, AV
         case let .stopForOthers(count):
             close()
             events(.othersSeen(personCount: count))
+        case .stopUncounted:
+            close()
+            events(.peopleUncounted)
         case let .send(reason, difference):
             guard let frame = encode(buffer) else {
                 gate.settle(notBefore: nil)

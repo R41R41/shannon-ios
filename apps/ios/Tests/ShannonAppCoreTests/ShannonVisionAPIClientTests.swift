@@ -75,7 +75,7 @@ final class ShannonVisionAPIClientTests: XCTestCase {
     func testStatusAndPresence() async throws {
         let status = #"""
         {"schema":"vision.status.v1","watchAllowed":true,"reason":null,"degrade":1,
-         "limits":{"judgeFramesPerSecond":2,"sendIntervalMs":2000,"longSide":512,"frameBytes":200000,"ttlMs":4000}}
+         "limits":{"judgeFramesPerSecond":2,"sendIntervalMs":2000,"longSide":512,"frameBytes":160000,"ttlMs":4000}}
         """#
         VisionURLProtocol.fixture.reset { request in
             request.url?.path.hasSuffix("/status") == true ? (200, Data(status.utf8), [:]) : (204, Data(), [:])
