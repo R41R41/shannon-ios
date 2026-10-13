@@ -1106,6 +1106,33 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(model.mayHearTouchLine)
     }
 
+    /// The call screen's figure takes touch (owner decision 2026-10-14 「触れるようにする」): a finger that lands on her holds
+    /// the screen's scrolling until it lifts, and the scrolling always comes back.
+    func testAFingerOnHerInTheCallScreenHoldsItsScrollingUntilItLifts() {
+        var hold = ShannonFigureScrollHold()
+        XCTAssertEqual(hold.fingers(down: true, touchEnabled: true, inScroll: true), false)
+        // A second finger, or the same news again, changes nothing; the lift gives the scrolling back, once.
+        XCTAssertNil(hold.fingers(down: true, touchEnabled: true, inScroll: true))
+        XCTAssertEqual(hold.fingers(down: false, touchEnabled: true, inScroll: true), true)
+        XCTAssertNil(hold.fingers(down: false, touchEnabled: true, inScroll: true))
+        XCTAssertFalse(hold.holding)
+        // Touch switched off (or she left the window) while a finger was down: given back as well.
+        _ = hold.fingers(down: true, touchEnabled: true, inScroll: true)
+        XCTAssertEqual(hold.fingers(down: false, touchEnabled: false, inScroll: false), true)
+    }
+
+    func testAFigureThatTakesNoTouchOrStandsOutsideAScrollHoldsNothing() {
+        var hold = ShannonFigureScrollHold()
+        XCTAssertNil(hold.fingers(down: true, touchEnabled: false, inScroll: true))
+        XCTAssertNil(hold.fingers(down: true, touchEnabled: true, inScroll: false))
+        XCTAssertNil(hold.fingers(down: false, touchEnabled: true, inScroll: true))
+        // Only the call screen holds its scrolling: Talk, the hero and the desktop body keep every gesture as they were.
+        XCTAssertTrue(ShannonFigureScrollHold.applies(to: .voice))
+        for other in [ShannonLive2DHostPriority.hero, .dialogue, .bodyScreen, .desktop] {
+            XCTAssertFalse(ShannonFigureScrollHold.applies(to: other))
+        }
+    }
+
     func testAQuietAnswerShowsHerFaceAndNoLine() async {
         let client = FakeBodyClient()
         await client.setAnswer(.init(id: "t1", status: "quiet", message: nil, mood: .init(expression: "bashful", feeling: "flustered")))
