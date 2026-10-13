@@ -13,6 +13,10 @@ public struct ShannonCameraWatchEnvironment: Sendable {
     ) -> Void
     public var stopMonitoring: @MainActor @Sendable () -> Void
     public var now: @Sendable () -> Date = { Date() }
+    /// Whether the sign registered under this id can be seen now (`ShannonCameraWatchSignAnchors`): a presentation over it hides it.
+    public var signVisible: @MainActor @Sendable (UUID) -> Bool = { _ in true }
+    /// How often, while a sign is registered, the coordinator looks again whether one is visible (presentations post no notice).
+    public var signCheckInterval: Duration = .milliseconds(500)
 
     public init(
         system: @escaping @MainActor @Sendable () -> ShannonCameraWatchSystemFacts,
@@ -66,8 +70,9 @@ public final class ShannonCameraWatchCoordinator {
     @ObservationIgnored private let environment: ShannonCameraWatchEnvironment
     @ObservationIgnored var maySend: @MainActor () -> Bool = { true }
     @ObservationIgnored private var signs: Set<UUID> = []
-    /// Presentations that cover every surface showing the sign (a sheet over the conversation): the camera closes meanwhile.
-    @ObservationIgnored private var coverings: Set<String> = []
+    /// Whether a registered sign was visible at the last look (`signVisible`), and the task that looks again.
+    @ObservationIgnored private var signShown = false
+    @ObservationIgnored private var signCheck: Task<Void, Never>?
     @ObservationIgnored private(set) var othersPresent = false
     @ObservationIgnored private(set) var othersSeen = false
     @ObservationIgnored private(set) var peopleUncounted = false
@@ -93,7 +98,7 @@ public final class ShannonCameraWatchCoordinator {
         let system = environment.system()
         var facts = ShannonCameraWatchConditions()
         facts.canSend = client != nil && maySend()
-        facts.hasSign = !signs.isEmpty && coverings.isEmpty
+        facts.hasSign = anySignVisible()
         facts.appInFront = system.appInFront
         facts.unlocked = system.unlocked
         facts.lowPowerMode = system.lowPowerMode
@@ -118,20 +123,42 @@ public final class ShannonCameraWatchCoordinator {
         signs.insert(id)
         if first {
             environment.startMonitoring({ [weak self] in self?.reevaluate() }, { [weak self] in self?.reopened() })
+            followSignVisibility()
         }
         reevaluate()
     }
 
-    /// A presentation covers the surfaces that show the sign (or no longer does). While one does, the sign cannot be seen, so the
-    /// camera stays closed; a presentation that shows the sign itself registers a sign of its own instead.
-    public func setCovered(_ covered: Bool, by source: String) {
-        let changed = covered ? coverings.insert(source).inserted : coverings.remove(source) != nil
-        if changed { reevaluate() }
+    /// Whether any registered sign can be seen now. A sheet or cover over every surface with a sign closes the camera, whichever
+    /// sheet it is (one added later included); a presentation that shows the sign itself has its own anchor.
+    private func anySignVisible() -> Bool {
+        signs.contains { environment.signVisible($0) }
+    }
+
+    /// Looks again every `signCheckInterval` while a sign is registered, and reevaluates when visibility changed.
+    private func followSignVisibility() {
+        signCheck?.cancel()
+        signShown = anySignVisible()
+        let interval = environment.signCheckInterval
+        signCheck = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard let self, !Task.isCancelled else { return }
+                let shown = self.anySignVisible()
+                if shown != self.signShown {
+                    self.signShown = shown
+                    self.reevaluate()
+                }
+            }
+        }
     }
 
     public func unregister(sign id: UUID) {
         signs.remove(id)
-        if signs.isEmpty { environment.stopMonitoring() }
+        if signs.isEmpty {
+            environment.stopMonitoring()
+            signCheck?.cancel()
+            signCheck = nil
+        }
         reevaluate()
     }
 

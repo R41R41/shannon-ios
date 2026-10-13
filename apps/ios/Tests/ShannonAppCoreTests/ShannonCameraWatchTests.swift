@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import CoreMedia
 import XCTest
 @testable import ShannonAppCore
 
@@ -226,5 +227,14 @@ final class ShannonCameraWatchTests: XCTestCase {
         context.setFillColor(CGColor(red: 0.9, green: 0.3, blue: 0.1, alpha: 1))
         context.fill(CGRect(x: width / 4, y: height / 4, width: width / 2, height: height / 2))
         return context.makeImage()
+    }
+
+    func testTheFrameRateLimitIsSetOnlyInsideASupportedRange() {
+        let fifth = CMTime(value: 1, timescale: 5)
+        let thirtieth = CMTime(value: 1, timescale: 30), second = CMTime(value: 1, timescale: 1)
+        XCTAssertTrue(ShannonCameraWatchFrameRate.supported(fifth, ranges: [(minimum: thirtieth, maximum: second)]))
+        // A format that only runs between 30 and 15 frames a second never gets 5: the default stays (no exception).
+        XCTAssertFalse(ShannonCameraWatchFrameRate.supported(fifth, ranges: [(minimum: thirtieth, maximum: CMTime(value: 1, timescale: 15))]))
+        XCTAssertFalse(ShannonCameraWatchFrameRate.supported(fifth, ranges: []))
     }
 }

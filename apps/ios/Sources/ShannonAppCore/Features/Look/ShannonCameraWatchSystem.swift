@@ -114,7 +114,7 @@ extension ShannonCameraWatchEnvironment {
     /// The device as it is: the system monitor, the owner's switch, the system's camera answer and the watching camera.
     @MainActor public static var live: ShannonCameraWatchEnvironment {
         let monitor = ShannonCameraWatchSystemMonitor()
-        return ShannonCameraWatchEnvironment(
+        var environment = ShannonCameraWatchEnvironment(
             system: { monitor.facts },
             settingOn: { ShannonCameraWatchPreference.isEnabled() },
             // Only an answer the owner already gave: watching never asks for the camera.
@@ -131,5 +131,7 @@ extension ShannonCameraWatchEnvironment {
                 monitor.reopened = nil
             }
         )
+        environment.signVisible = { ShannonCameraWatchSignAnchors.visible($0) }
+        return environment
     }
 }

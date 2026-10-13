@@ -69,6 +69,8 @@ struct ShannonAppLookPresenter: ViewModifier {
                 .padding(.top, ShannonSpacing.small)
                 .padding(.horizontal, ShannonSpacing.large)
             }
+            // Where this surface's sign is: covered by a sheet, it is not visible and the camera closes (any sheet, now or later).
+            .background { if watch != nil { ShannonCameraWatchSignAnchorView(id: id) } }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: coordinator.cue?.id)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: watch?.showsSign)
             .onAppear {
@@ -81,6 +83,7 @@ struct ShannonAppLookPresenter: ViewModifier {
             .onDisappear {
                 coordinator.unregister(presenter: id)
                 watch?.unregister(sign: id)
+                ShannonCameraWatchSignAnchors.remove(id)
             }
 #if os(iOS)
             .sheet(isPresented: Binding(

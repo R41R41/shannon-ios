@@ -140,12 +140,18 @@ final class ShannonCameraWatchSession: NSObject, ShannonCameraWatchCapturing, AV
     }
 
     /// About 5 frames a second is plenty for 2 judged a second: the sensor and the queue do a sixth of the work of 30.
+    /// AVFoundation throws an Objective-C exception (which `try?` does not catch) when the minimum frame duration would exceed
+    /// the maximum, or when a duration is outside the active format's ranges. So: only when 1/5 s is inside one of the active
+    /// format's ranges, both bounds set to the same value, the maximum first (it may only grow toward 1/5 s while the minimum is
+    /// still the shorter default), inside one configuration lock. Otherwise the default rate stays.
     private static func limitFrameRate(_ device: AVCaptureDevice) {
         let duration = CMTime(value: 1, timescale: 5)
-        let supported = device.activeFormat.videoSupportedFrameRateRanges.contains { $0.minFrameDuration <= duration && duration <= $0.maxFrameDuration }
-        guard supported, (try? device.lockForConfiguration()) != nil else { return }
+        guard ShannonCameraWatchFrameRate.supported(duration, ranges: device.activeFormat.videoSupportedFrameRateRanges.map {
+            (minimum: $0.minFrameDuration, maximum: $0.maxFrameDuration)
+        }), (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+        device.activeVideoMaxFrameDuration = duration
         device.activeVideoMinFrameDuration = duration
-        device.unlockForConfiguration()
     }
 
     private func observe(_ session: AVCaptureSession) {
@@ -216,5 +222,12 @@ final class ShannonCameraWatchSession: NSObject, ShannonCameraWatchCapturing, AV
         let image = CIImage(cvPixelBuffer: buffer)
         guard let bitmap = imageContext.createCGImage(image, from: image.extent) else { return nil }
         return ShannonAppLookEncoder.frame(from: bitmap, maximumSide: gate.limits.longSide, maximumBytes: gate.limits.frameBytes)
+    }
+}
+
+/// The pure check of the frame-rate limit: a duration AVFoundation accepts for both bounds of the active format.
+enum ShannonCameraWatchFrameRate {
+    static func supported(_ duration: CMTime, ranges: [(minimum: CMTime, maximum: CMTime)]) -> Bool {
+        duration.isValid && ranges.contains { $0.minimum <= duration && duration <= $0.maximum }
     }
 }

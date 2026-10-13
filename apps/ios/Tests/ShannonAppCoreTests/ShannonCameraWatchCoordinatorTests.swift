@@ -13,9 +13,11 @@ final class ShannonCameraWatchCoordinatorTests: XCTestCase {
 
     private func makeWatch() -> ShannonCameraWatchCoordinator {
         let facts = facts
-        let environment = ShannonCameraWatchEnvironment(
+        var environment = ShannonCameraWatchEnvironment(
             system: { facts.system }, settingOn: { facts.settingOn }, permission: { facts.permission }, camera: camera,
             startMonitoring: { [weak self] _, _ in self?.monitoring += 1 }, stopMonitoring: { [weak self] in self?.monitoring -= 1 })
+        environment.signVisible = { _ in facts.signVisible }
+        environment.signCheckInterval = .milliseconds(10)
         return ShannonCameraWatchCoordinator(client: server, environment: environment)
     }
 
@@ -169,12 +171,23 @@ final class ShannonCameraWatchCoordinatorTests: XCTestCase {
         XCTAssertTrue(server.frames.isEmpty)
     }
 
-    func testASheetOverTheSignClosesTheCameraUntilItCloses() async {
+    func testAnyPresentationOverTheSignClosesTheCameraUntilItCloses() async {
         let watch = await watching()
-        watch.setCovered(true, by: "conversation")
-        XCTAssertFalse(watch.isWatching)
-        watch.setCovered(false, by: "conversation")
+        // A sheet the coordinator was never told about: only the sign's anchor knows it is covered.
+        facts.signVisible = false
+        await waitFor("closed while covered") { !watch.isWatching }
+        XCTAssertEqual(camera.stops > 0, true)
+        facts.signVisible = true
         await waitFor("watching again") { watch.isWatching }
+    }
+
+    func testAPresentationThatShowsTheSignItselfKeepsWatching() {
+        // The rule of the iPhone anchor: the sign's controller must be the topmost presented one, or inside it.
+        final class Node { let parent: Node?; init(_ parent: Node? = nil) { self.parent = parent } }
+        let root = Node(), child = Node(root), sheet = Node(), sheetChild = Node(sheet)
+        XCTAssertTrue(ShannonCameraWatchSignVisibility.isWithin(child, top: root, parent: { $0.parent }))
+        XCTAssertFalse(ShannonCameraWatchSignVisibility.isWithin(child, top: sheet, parent: { $0.parent }))
+        XCTAssertTrue(ShannonCameraWatchSignVisibility.isWithin(sheetChild, top: sheet, parent: { $0.parent }))
     }
 
     func testTheOwnersStopHoldsUntilResumeOrTheSettingIsSwitchedBackOn() async {
@@ -215,6 +228,7 @@ private final class WatchFacts: @unchecked Sendable {
     var system = ShannonCameraWatchSystemFacts(appInFront: true, unlocked: true, lowPowerMode: false, thermalHeavy: false)
     var settingOn = true
     var permission = ShannonMediaPermission.granted
+    var signVisible = true
 }
 
 private final class WatchCamera: ShannonCameraWatchCapturing, @unchecked Sendable {
