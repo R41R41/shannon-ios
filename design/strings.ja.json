@@ -2869,6 +2869,22 @@
       "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。ようす の切り替え。気持ちのカードと、そのすぐ下（Mac の広い画面では横）の気分の推移。"
     },
     {
+      "key": "yousu.tab.goals",
+      "text": "目標",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-13",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0009 第2段 §5 の案 A、2026-10-13）。ようす の切り替え（いま／目標／学び／気分／点検）。最近えらんだことと目標の一覧。所有者の端末で、ひとりの時だけ出す。"
+    },
+    {
+      "key": "yousu.tab.inspection",
+      "text": "点検",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-13",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0009 第2段 §5 の案 A、2026-10-13）。ようす の切り替え。毎日の回転数と能力の一覧（所有者の答え6）。所有者の端末で、ひとりの時だけ出す。"
+    },
+    {
       "key": "yousu.tab.label",
       "text": "ようすの表示",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
@@ -4378,6 +4394,517 @@
       "text": "結果不明",
       "only": "apple",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "executive.notReady",
+      "text": "準備中です。シャノンの中枢（Executive）が入ると、ここに出ます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標・点検の読み口がまだサーバーに無い時（404・403）。失敗ではなく準備中として出す。"
+    },
+    {
+      "key": "executive.unreadable",
+      "text": "読めませんでした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標・点検の読み込みに失敗した時。前に読めた内容は残す。"
+    },
+    {
+      "key": "executive.outcome.pending",
+      "text": "これから",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことの結果のチップ。まだ始まっていない。"
+    },
+    {
+      "key": "executive.outcome.running",
+      "text": "進行中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことの結果のチップ。作業中。"
+    },
+    {
+      "key": "executive.outcome.done",
+      "text": "できた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことの結果のチップ。終わった。"
+    },
+    {
+      "key": "executive.outcome.failed",
+      "text": "うまくいかなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことの結果のチップ。失敗した。"
+    },
+    {
+      "key": "executive.outcome.cancelled",
+      "text": "取りやめ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことの結果のチップ。止めた。"
+    },
+    {
+      "key": "executive.outcome.unknown",
+      "text": "不明",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "結果や状態が分からない時の言葉。"
+    },
+    {
+      "key": "executive.choices.title",
+      "text": "最近えらんだこと（7日）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標タブの上の区画。中枢が選んだことを、一行の理由つきで新しい順に。"
+    },
+    {
+      "key": "executive.choices.empty",
+      "text": "最近7日に、えらんだことはまだありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "最近えらんだことが無い時。"
+    },
+    {
+      "key": "executive.choices.goal",
+      "text": "目標「{title}」のため",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "えらんだことが目標のためだった時、その行の下に。"
+    },
+    {
+      "key": "executive.choices.offCandidates",
+      "text": "候補の外から選んだ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "コードが出した候補の外から選んだことの読み上げ。"
+    },
+    {
+      "key": "executive.goals.heading",
+      "text": "目標",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の区画の見出し（上限が分からない時）。"
+    },
+    {
+      "key": "executive.goals.title",
+      "text": "目標（進めている {active}/{limit}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の区画の見出し。同時に進める目標は8件まで。"
+    },
+    {
+      "key": "executive.goals.empty",
+      "text": "いま進めている目標はありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "進めている・休めている目標が無い時。"
+    },
+    {
+      "key": "executive.goals.untitled",
+      "text": "（名前の無い目標）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "題が届かなかった目標。"
+    },
+    {
+      "key": "executive.goals.condition",
+      "text": "完了の条件: {summary}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の完了の条件。条件の文はサーバーが平らな日本語で作る。"
+    },
+    {
+      "key": "executive.goals.conditionNone",
+      "text": "完了の条件は、まだ決まっていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "完了の条件が無い目標（最初の見直しで決める）。"
+    },
+    {
+      "key": "executive.goals.conditionMet",
+      "text": "条件を満たしたかもしれません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "証拠が完了の条件を満たしていそうな時。「完了を認める」を押すかはライ氏が決める。"
+    },
+    {
+      "key": "executive.goals.progress",
+      "text": "進み具合 {label}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の行の小さな字。"
+    },
+    {
+      "key": "executive.goals.review",
+      "text": "次の見直し {day}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の行の小さな字。"
+    },
+    {
+      "key": "executive.goals.evidence",
+      "text": "証拠 {count}件",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の行の小さな字。"
+    },
+    {
+      "key": "executive.goals.interest",
+      "text": "関心: {interest}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標が生まれた関心。"
+    },
+    {
+      "key": "executive.goals.closedTitle",
+      "text": "終えた・やめた目標（{count}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "終えた・やめた目標を畳んだ見出し。"
+    },
+    {
+      "key": "executive.goals.closedReason",
+      "text": "理由: {reason}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "休めた・終えた・やめた理由。"
+    },
+    {
+      "key": "executive.goals.footer",
+      "text": "目標はシャノンが作ります。完了になるのは、条件を証拠で満たした時か、ライ氏が認めた時だけです。はじめからの目標は変えられません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の区画の下の説明（ADR-0009 第2段、所有者の答え1）。"
+    },
+    {
+      "key": "executive.goals.confirm",
+      "text": "完了を認める",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の操作。押すと確かめてから送る。"
+    },
+    {
+      "key": "executive.goals.rest",
+      "text": "休める",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の操作。押すと確かめてから送る。"
+    },
+    {
+      "key": "executive.goals.drop",
+      "text": "やめる",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の操作。押すと確かめてから送る。"
+    },
+    {
+      "key": "executive.goals.controlHint",
+      "text": "「{title}」について、確かめてから伝えます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "目標の操作ボタンの読み上げのヒント。"
+    },
+    {
+      "key": "executive.goals.confirmTitle",
+      "text": "「{title}」を完了にしますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "完了を認める前の確認。"
+    },
+    {
+      "key": "executive.goals.confirmMessage",
+      "text": "この目標は「やり終えた」になります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "完了を認める前の確認の説明。"
+    },
+    {
+      "key": "executive.goals.restTitle",
+      "text": "「{title}」を休めますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "休める前の確認。"
+    },
+    {
+      "key": "executive.goals.restMessage",
+      "text": "シャノンは、この目標にしばらく取り組みません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "休める前の確認の説明。"
+    },
+    {
+      "key": "executive.goals.dropTitle",
+      "text": "「{title}」をやめますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "やめる前の確認。"
+    },
+    {
+      "key": "executive.goals.dropMessage",
+      "text": "シャノンは、この目標に取り組まなくなります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonGoalsView.swift",
+      "only": "apple",
+      "note": "やめる前の確認の説明。"
+    },
+    {
+      "key": "executive.goals.controlFailed",
+      "text": "変更できませんでした。最新の状態を読み直しました。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveModel.swift",
+      "only": "apple",
+      "note": "目標の操作がサーバーに断られた時。"
+    },
+    {
+      "key": "executive.goals.controlChecking",
+      "text": "届いたか確かめています…",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveModel.swift",
+      "only": "apple",
+      "note": "目標の操作の答えが途中で失われた時。読み直して確かめる。"
+    },
+    {
+      "key": "executive.goals.controlUnknown",
+      "text": "届いたか確かめられませんでした。引いて読み直してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveModel.swift",
+      "only": "apple",
+      "note": "読み直しもできなかった時。送り直しはしない。"
+    },
+    {
+      "key": "executive.inspection.title",
+      "text": "回転数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "点検タブの上の区画（所有者の答え6）。"
+    },
+    {
+      "key": "executive.inspection.titleDay",
+      "text": "回転数（{day}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "点検タブの上の区画。日付つき。"
+    },
+    {
+      "key": "executive.inspection.today",
+      "text": "今日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "回転数の列。"
+    },
+    {
+      "key": "executive.inspection.week",
+      "text": "7日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "回転数の列。"
+    },
+    {
+      "key": "executive.inspection.rowAccessibility",
+      "text": "{label}、今日 {today}、7日で {week}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "回転数の行の読み上げ。"
+    },
+    {
+      "key": "executive.inspection.deliberations",
+      "text": "考えた回数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行（計画 §6）。"
+    },
+    {
+      "key": "executive.inspection.choices",
+      "text": "選んだ回数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.topValue",
+      "text": "価値の一番高い候補を選んだ割合",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.offCandidates",
+      "text": "候補の外から選んだ回数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.capabilities",
+      "text": "使った能力の種類",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.goalsCompleted",
+      "text": "目標を終えた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.goalsRested",
+      "text": "目標を休めた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.goalsDropped",
+      "text": "目標をやめた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.noticesSent",
+      "text": "知らせた回数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.noticesAnswered",
+      "text": "知らせて返事があった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.skillUses",
+      "text": "スキルを使った回数",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.predictions",
+      "text": "予測が当たった割合",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.sleepRuns",
+      "text": "睡眠",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.unknown",
+      "text": "不明のまま",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.spent",
+      "text": "使った費用",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "回転数の行。"
+    },
+    {
+      "key": "executive.inspection.share",
+      "text": "{percent}%（{part}/{total}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "割合の数字。数字には必ず中身を添える。"
+    },
+    {
+      "key": "executive.inspection.yen",
+      "text": "{yen}円",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "費用の数字。"
+    },
+    {
+      "key": "executive.inspection.footer",
+      "text": "数字は中枢が毎日数えたものです。「—」は、まだ数えていないものです。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "回転数の区画の下の説明。"
+    },
+    {
+      "key": "executive.capabilities.title",
+      "text": "できること",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "点検タブの能力の一覧の見出し（所有者の答え6）。"
+    },
+    {
+      "key": "executive.capabilities.empty",
+      "text": "能力の一覧は、まだありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "能力の一覧が空の時。"
+    },
+    {
+      "key": "executive.capabilities.toolsTitle",
+      "text": "道具（作業の中で使う部品・{count}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "道具の段を畳んだ見出し。"
+    },
+    {
+      "key": "executive.capabilities.policy.ownTime",
+      "text": "自分の時間に使える",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力の方針のチップ。"
+    },
+    {
+      "key": "executive.capabilities.policy.ownerOnly",
+      "text": "頼まれた時だけ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力の方針のチップ。"
+    },
+    {
+      "key": "executive.capabilities.policy.off",
+      "text": "使わない",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力の方針のチップ。"
+    },
+    {
+      "key": "executive.capabilities.value",
+      "text": "手応え {value}±{sd}（{count}回）・{word}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力の価値。平均±ばらつきと件数、言葉を添える。"
+    },
+    {
+      "key": "executive.capabilities.valueNone",
+      "text": "手応え まだなし",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "価値表にまだ無い能力。"
+    },
+    {
+      "key": "executive.capabilities.uses",
+      "text": "7日で{week}回・これまで{total}回",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力を使った回数。"
+    },
+    {
+      "key": "executive.capabilities.usesWeek",
+      "text": "7日で{count}回",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonExecutiveText.swift",
+      "only": "apple",
+      "note": "能力を使った回数（合計が無い時）。"
+    },
+    {
+      "key": "executive.capabilities.footer",
+      "text": "手応えは、選んだことがどれだけうまくいったかの平均とばらつきです（−1〜+1）。3回未満は「まだ少ない」と出します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonInspectionView.swift",
+      "only": "apple",
+      "note": "能力の一覧の下の説明。"
     }
   ]
 }

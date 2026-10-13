@@ -11,6 +11,8 @@ extension ShannonYousuModel {
             let model = ShannonYousuModel(scopeKey: conversation.scopeKey, client: ShannonYousuFixtureClient(stale: variant == "opsStale"))
             if variant == "learning" { model.tab = .learning }
             if variant == "mood" { model.tab = .mood }
+            if variant == "goals" { model.tab = .goals }
+            if variant == "inspection" { model.tab = .inspection }
             return model
         }
 #endif
@@ -59,7 +61,7 @@ extension ShannonConversationView {
                 switch variant {
                 case "tile": showsThreadList = true
                 case "hub": settleWorkspace(on: .shannon)
-                case "now", "learning", "mood": openLink(.yousu)
+                case "now", "learning", "mood", "goals", "inspection": openLink(.yousu)
                 case "admin": openSettings()
                 default: openLink(.ops)
                 }

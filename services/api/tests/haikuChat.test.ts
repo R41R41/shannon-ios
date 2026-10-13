@@ -83,15 +83,15 @@ describe('native Haiku conversation migration', () => {
     } });
     expect(answer.escalated).toBeUndefined();
     expect(calls).toBe(2);
-    expect(h.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium', 'medium', 'medium']);
+    expect(h.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low', 'low', 'low']);
     expect(h.usage).toHaveLength(3);
     expect(JSON.stringify(h.bodies[1]!.messages)).toContain('tool_result');
   });
 
-  it('serves an explicitly selected plus lane at medium effort', async () => {
+  it('serves an explicitly selected plus lane at the fixed low conversation effort', async () => {
     const h = model([haikuMessage(anthropicFixture('structured-answer'))]);
     await h.chat.generate({ ...base, tier: 'luna_plus', escalation: true });
-    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'medium' });
+    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'low' });
   });
 
   it('keeps web citations and voice text without exposing thinking or cache metadata', async () => {
@@ -111,7 +111,7 @@ describe('native Haiku conversation migration', () => {
     const tiered = new TieredChatModel(h.chat, strong.chat, () => {});
     const answer = await tiered.generate({ ...base, tier: 'sonnet' });
     expect(answer).toMatchObject({ mode: 'anthropic', model: settings.model, servedTier: 'luna' });
-    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'medium' });
+    expect(h.bodies[0]!.output_config).toMatchObject({ effort: 'low' });
   });
 
   it('does not retry a caller-cancelled voice turn', async () => {

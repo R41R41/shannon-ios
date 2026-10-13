@@ -403,7 +403,7 @@ async function completeLiveVoiceDelegation(
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
   const completion = await observeFcaConversation(fcaTurn, () => placeSkill || (!work && provisionalIntent) || requiresStructuredTaskDecision || confirmedImplementationRequest
-    ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
+    ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false, spokenReply: true })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(
         { ...modelRequest, threadKey: threadId },
@@ -423,7 +423,7 @@ async function completeLiveVoiceDelegation(
       )
     : dependencies.chatModel.generateVoice
       ? dependencies.chatModel.generateVoice({ ...modelRequest, threadKey: threadId })
-      : dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false }));
+      : dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false, spokenReply: true }));
   observer?.signal?.throwIfAborted();
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;

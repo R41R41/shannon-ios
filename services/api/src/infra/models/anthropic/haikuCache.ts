@@ -139,7 +139,7 @@ export function cacheHaikuRequest<T extends Anthropic.MessageCreateParamsNonStre
 }
 
 /**
- * A background one-shot request (the Responses shim): one 1h breakpoint on the fixed protocol prefix, and no automatic marker,
+ * A background one-shot request (the background route, `claudeStructured.ts`): one 1h breakpoint on the fixed protocol prefix, and no automatic marker,
  * which would write the unique task tail at the one-hour write price on every call (ADR-0009 stage 1, quick fix 5). The prefix
  * alone is above the 512-token cache minimum of the native 5.5 models, so every call still reports a cache write or read.
  */

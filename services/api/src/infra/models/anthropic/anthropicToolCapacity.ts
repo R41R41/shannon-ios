@@ -48,8 +48,27 @@ export function strictRequestUsage(body: Anthropic.MessageCreateParamsNonStreami
   const format = body.output_config?.format;
   return { tools: tools.length, ...schemaComplexity([format && 'schema' in format ? format.schema : undefined, ...tools.map(tool => tool.input_schema)]) };
 }
-export function strictRequestFits(body: Anthropic.MessageCreateParamsNonStreaming, extra: readonly Anthropic.Tool[] = []): boolean {
+export function strictRequestFits(body: Anthropic.MessageCreateParamsNonStreaming, extra: readonly Anthropic.Tool[] = [],
+  limits: { tools: number; optional: number; unions: number } = ANTHROPIC_STRICT_LIMITS): boolean {
   const used = strictRequestUsage(body), added = schemaComplexity(extra.filter(tool => tool.strict).map(tool => tool.input_schema));
-  return used.tools + extra.filter(tool => tool.strict).length <= ANTHROPIC_STRICT_LIMITS.tools
-    && used.optional + added.optional <= ANTHROPIC_STRICT_LIMITS.optional && used.unions + added.unions <= ANTHROPIC_STRICT_LIMITS.unions;
+  return used.tools + extra.filter(tool => tool.strict).length <= limits.tools
+    && used.optional + added.optional <= limits.optional && used.unions + added.unions <= limits.unions;
+}
+
+/**
+ * The provider's compiled-grammar limit is unpublished and lower than the counted limits: on 2026-10-13 a voice turn with 10
+ * strict tools, 19 optional and 10 union parameters was refused ("compiled grammar is too large"), while 6/11/9 is accepted.
+ * A conversation turn makes a definition strict only within this budget; any other offered definition goes as a native
+ * non-strict tool (callable by its own name; the original executor still validates every input), never only as data.
+ */
+export const ANTHROPIC_GRAMMAR_BUDGET = Object.freeze({ tools: 8, optional: 12, unions: 12 });
+
+/** Whether these strict definitions keep the request within the grammar budget (and the provider's counted limits). */
+export function strictGrammarFits(body: Anthropic.MessageCreateParamsNonStreaming, extra: readonly Anthropic.Tool[] = []): boolean {
+  return strictRequestFits(body, extra) && strictRequestFits(body, extra, ANTHROPIC_GRAMMAR_BUDGET);
+}
+
+/** The same definition, offered without strict decoding. */
+export function nonStrictTool(tool: Anthropic.Tool): Anthropic.Tool {
+  return { ...tool, strict: false };
 }

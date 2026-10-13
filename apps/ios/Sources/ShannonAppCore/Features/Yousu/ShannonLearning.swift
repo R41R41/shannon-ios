@@ -1,8 +1,9 @@
 import Foundation
 
-/// The three pages of 「ようす」 (Syzygy ADR-0008 §13, option A, owner 2026-10-07): いま／学び／気分.
+/// The pages of 「ようす」 (Syzygy ADR-0008 §13, option A, owner 2026-10-07): いま／学び／気分, with 目標 and 点検 beside them
+/// (Syzygy ADR-0009 stage 2, E7; owner 2026-10-13, comparison page §5 option A): いま／目標／学び／気分／点検.
 public enum ShannonYousuTab: String, CaseIterable, Identifiable, Sendable {
-    case now, learning, mood
+    case now, goals, learning, mood, inspection
 
     public var id: String { rawValue }
 
@@ -11,6 +12,8 @@ public enum ShannonYousuTab: String, CaseIterable, Identifiable, Sendable {
         case .now: ShannonGeneratedStrings.yousuTabNow
         case .learning: ShannonGeneratedStrings.yousuTabLearning
         case .mood: ShannonGeneratedStrings.yousuTabMood
+        case .goals: ShannonGeneratedStrings.yousuTabGoals
+        case .inspection: ShannonGeneratedStrings.yousuTabInspection
         }
     }
 }

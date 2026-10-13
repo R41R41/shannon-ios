@@ -4,7 +4,7 @@ import { recordCacheReceipt, type CacheRoute } from '../anthropic/cacheReceipts.
 
 /**
  * One request of a one-shot caller (Syzygy ADR-0009 stage 1, M3): the FCA step, the Sonnet skill proposer and the background
- * bridge (`haikuResponses.ts`). The caller builds the request and reads the answer; this sends it as handed, inside the
+ * route (`claudeStructured.ts`). The caller builds the request and reads the answer; this sends it as handed, inside the
  * observer's `llm` span when the caller has one, and leaves a cache receipt when the caller names its route. It imports
  * nothing of the conversation, so a worker that loads it loads no turn deadline, stream decoder or voice bound.
  */

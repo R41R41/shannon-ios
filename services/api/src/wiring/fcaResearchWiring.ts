@@ -31,11 +31,14 @@ export function fcaResearchTools(parts: {
     ? !['task_runtime', 'memory_read', 'minecraft_body', 'vm_workspace', 'owner_documents_read'].includes(tool.domain)
     : tool.name === 'web.search' || tool.name === 'web.read';
   const definitions = [...parts.tools.offered('text', 'owner_alone', parts.scopeKey).filter(eligible), ...(parts.observeMemory ? MEMORY_TOOLS : [])];
+  // An own-time task (ADR-0009 stage 2, E4) reads public pages only and inherits nothing of a conversation: who is present does not hold it.
+  const ownTime = parts.task?.origin === 'own_time';
   const live = () => {
-    if (!parts.ownerAlone() || parts.sourcesVisible?.() === false) throw new Error('FCA_SOURCE_WITHHELD');
+    if ((!ownTime && !parts.ownerAlone()) || parts.sourcesVisible?.() === false) throw new Error('FCA_SOURCE_WITHHELD');
     if (parts.task) {
       const action = currentActionExecution();
-      if (parts.task.origin !== 'owner_request' || !action || action.lease.id !== parts.task.leaseId) throw new Error('FCA_TOOL_AUTHORITY_INVALID');
+      const authorized = parts.task.origin === 'owner_request' || ownTime;
+      if (!authorized || !action || action.lease.id !== parts.task.leaseId) throw new Error('FCA_TOOL_AUTHORITY_INVALID');
       action.signal.throwIfAborted();
     }
   };

@@ -7,6 +7,7 @@ import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './pursuitLedger.js';
+import { DeliberationLedger } from './deliberationLedger.js';
 import { secureDatabaseFiles } from '../../../../infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
@@ -68,6 +69,8 @@ export class SQLiteAutonomyStore {
   readonly activity: AutonomyActivityRecord;
   readonly pursuits: AutonomyPursuitLedger;
   readonly proposals: AutonomyProposalLedger;
+  /** The Executive's deliberations (Syzygy ADR-0009 stage 2, E5); its table is made on the first deliberation. */
+  readonly deliberations: DeliberationLedger;
   /** Her study and the activity loop's journal share this connection, so a step and its record commit together. */
   readonly study: StudyStore;
   readonly loop: AutonomyLoopState;
@@ -132,11 +135,14 @@ export class SQLiteAutonomyStore {
     this.activity = parts.activity(this.database);
     this.pursuits = new AutonomyPursuitLedger(this.database);
     this.proposals = new AutonomyProposalLedger(this.database);
+    this.deliberations = new DeliberationLedger(this.database);
     this.study = new StudyStore(this.database);
     this.loop = new AutonomyLoopState(this.database);
     this.informed = parts.informed(this.database);
     this.hostSteps = new AutonomyHostFolderSteps(this.database);
     this.hostOperations = new HostFolderOperationsStore(this.database);
+    // After the study's and the loop's tables exist: once per database, her pursuits become goals (Syzygy ADR-0009 stage 2, E2).
+    this.pursuits.migrateGoals(new Date().toISOString());
     secureDatabaseFiles(path);
   }
 

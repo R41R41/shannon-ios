@@ -57,7 +57,7 @@ export interface TaskAuthority {
   list(scopeKey: string, query?: TaskQuery): TaskRecord[];
   root(scopeKey: string): TaskRecord | null;
   byRequest(scopeKey: string, requestKey: string): TaskRecord | null;
-  create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string }): TaskRecord;
+  create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord;
   event(scopeKey: string, id: string, type: string, at: string,
     change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean }, payload?: Record<string, unknown>): TaskRecord;
   /** Writes the state a task's checkpoint now means after a change without an event (ADR-0009 stage 1, S4). */

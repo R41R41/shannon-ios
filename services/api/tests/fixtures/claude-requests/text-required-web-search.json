@@ -208,7 +208,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium",
+     "effort": "low",
      "format": {
       "type": "json_schema",
       "schema": {
@@ -657,7 +657,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium",
+     "effort": "low",
      "format": {
       "type": "json_schema",
       "schema": {
@@ -1125,7 +1125,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium",
+     "effort": "low",
      "format": {
       "type": "json_schema",
       "schema": {
@@ -1391,7 +1391,7 @@
     "tools": "de57fa82",
     "system": "739fb8b9",
     "schema": "71c60342",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "7407db90"
    }
   },
@@ -1408,7 +1408,7 @@
     "tools": "de57fa82",
     "system": "739fb8b9",
     "schema": "71c60342",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "7407db90"
    }
   },
@@ -1425,7 +1425,7 @@
     "tools": "de57fa82",
     "system": "739fb8b9",
     "schema": "71c60342",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "7407db90"
    }
   }

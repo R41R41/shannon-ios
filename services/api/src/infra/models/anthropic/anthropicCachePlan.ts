@@ -11,12 +11,13 @@ import { toolOpenDefinition } from '../../../mind/tools/shannonToolMenu.js';
 import type { ShannonChatModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import {
-  chatTurnRequestBody, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
+  chatTurnInstructions, chatTurnSchema, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
 } from '../chatModelTurn.js';
-import type { SonnetSettings } from './anthropicConfig.js';
+import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu, stableOpener } from './anthropicForegroundMenu.js';
 import {
-  conversationEffort, SONNET_TEXT_LINES, sonnetChatBody, sonnetMessages, sonnetTool, sonnetTools, WEB_ANSWER_LINE,
+  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, spokenReplyLines, textTurnConversation,
+  WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
@@ -50,8 +51,6 @@ export function cachePlanApplies(model: string, environment: PlanEnvironment = s
 
 export const PLAN_NO_TOOLS_LINE = '[ボクの道具] この返事では道具を出していない。tool_open と tool_call は呼ばずに、そのまま答える。';
 
-type Schema = Record<string, unknown> & { properties: Record<string, Record<string, unknown>>; required: string[] };
-
 /**
  * The common schema: exactly the one an owner turn that offers only her feeling has without the plan (the base fields and
  * `feeling`). A turn that does not offer her feeling uses it too, with `feeling` null. M4 grammar fix: one schema with every
@@ -60,8 +59,7 @@ type Schema = Record<string, unknown> & { properties: Record<string, Record<stri
  * 2026-10-12), so the rare fields are not in it.
  */
 function commonSchema(): Record<string, unknown> {
-  const body = chatTurnRequestBody('', withCommonOffers({ scopeKey: '', systemPrompt: '', history: [], message: '' }), undefined);
-  return structuredSchema((body.text as { format: { schema: Schema } }).format.schema) as Record<string, unknown>;
+  return structuredSchema(chatTurnSchema(withCommonOffers({ scopeKey: '', systemPrompt: '', history: [], message: '' }))) as Record<string, unknown>;
 }
 
 /**
@@ -83,7 +81,7 @@ export function planOutputSchema(): Record<string, unknown> {
 
 /** The fixed tool pair, the same bytes `appendForegroundMenu` leaves for a turn with tools. */
 export function planToolPair(): Anthropic.Tool[] {
-  pairOnce ??= Object.freeze([stableOpener(sonnetTool(toolOpenDefinition([]))), TOOL_CALL_SCHEMA]);
+  pairOnce ??= Object.freeze([stableOpener(claudeTool(toolOpenDefinition([]))), TOOL_CALL_SCHEMA]);
   return structuredClone([...pairOnce]);
 }
 
@@ -198,9 +196,9 @@ export function planned(body: Anthropic.MessageCreateParamsNonStreaming, schema:
 }
 
 /** The output format of a plan turn: the common schema, or for an exception turn the format it has without the plan. */
-function planFormat(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined) {
+function planFormat(settings: ClaudeChatSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined) {
   if (!exceptionTurn(request)) return { type: 'json_schema' as const, schema: planOutputSchema() };
-  const own = sonnetChatBody(settings, { ...request, tools: undefined }, agentHostHint).output_config?.format;
+  const own = claudeTextBody(settings, { ...request, tools: undefined }, agentHostHint).output_config?.format;
   return own as { type: 'json_schema'; schema: Record<string, unknown> };
 }
 
@@ -209,17 +207,18 @@ export function cachedSystem(text: string): Anthropic.TextBlockParam[] {
 }
 
 /** The text turn's request under the plan (non-streaming shape; the stream sends the same body). */
-export function plannedChatBody(settings: SonnetSettings, request: ShannonChatModelRequest,
+export function plannedChatBody(settings: ClaudeChatSettings, request: ShannonChatModelRequest,
   agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const layers = stableLayers(request);
   const fixed = { ...withoutTurnInstructions(request), systemPrompt: layers.systemPrompt, profilePrompt: layers.profilePrompt };
-  const luna = chatTurnRequestBody(settings.model, fixed, agentHostHint);
+  const instructions = chatTurnInstructions(fixed, agentHostHint);
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
     // Rich chat's lines depend on the surface, not the turn (the app's Talk always, other surfaces never): they stay in the system.
-    system: cachedSystem([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : [])].join('\n\n')),
-    messages: withTurnLines(sonnetMessages(luna.input as unknown[]), planTurnLines(request, layers)),
+    system: cachedSystem([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
+      ...spokenReplyLines(request)].join('\n\n')),
+    messages: withTurnLines(claudeTurnMessages(textTurnConversation(fixed)), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
@@ -228,5 +227,5 @@ export function plannedChatBody(settings: SonnetSettings, request: ShannonChatMo
   const schema: PlanSchema = exceptionTurn(request) ? 'exception' : 'common';
   if (!offersTools(request)) return planned(body, schema);
   // A native 5.5 session always carries the menu here (`boundedToolMenu`); without its opener this throws, as before.
-  return planned(appendForegroundMenu({ ...body, tools: sonnetTools(request.tools) }, toolInstructions(request.tools!, false)), schema);
+  return planned(appendForegroundMenu({ ...body, tools: claudeTools(request.tools) }, toolInstructions(request.tools!, false)), schema);
 }

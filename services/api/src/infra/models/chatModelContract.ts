@@ -40,6 +40,8 @@ export interface ShannonPrecedingReply {
 
 export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {
   generateThreadTitle?: boolean;
+  /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
+  spokenReply?: boolean;
   priorThreadSummary?: string;
   scopeKey: string;
   history: readonly ShannonConversationItem[];

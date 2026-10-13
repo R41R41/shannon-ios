@@ -12,6 +12,18 @@ final class ShannonComposerSendTests: XCTestCase {
         XCTAssertFalse(ShannonConversationView.isReturnKeySubmit(old: "a\n", new: "a"))
     }
 
+    @MainActor
+    func testTextWrittenBackAfterASendIsTheSentText() {
+        // An IME commits its marked text into the cleared field: all of it, or only its end.
+        XCTAssertTrue(ShannonConversationModel.isDraftWriteBack("元気？", sent: "元気？"))
+        XCTAssertTrue(ShannonConversationModel.isDraftWriteBack("天気は？", sent: "明日の東京の天気は？"))
+        XCTAssertTrue(ShannonConversationModel.isDraftWriteBack("今の気分は？\n", sent: "今の気分は？"))
+        // New typing, and an empty field, are left alone.
+        XCTAssertFalse(ShannonConversationModel.isDraftWriteBack("", sent: "元気？"))
+        XCTAssertFalse(ShannonConversationModel.isDraftWriteBack("明日", sent: "明日の東京の天気は？"))
+        XCTAssertFalse(ShannonConversationModel.isDraftWriteBack("ありがとう", sent: "元気？"))
+    }
+
     func testAHeldBackSendSaysWhy() {
         XCTAssertNil(ShannonConversationView.sendBlockReason(hasContent: false, photoIsLoading: true, isSending: true, isLoadingHistory: true))
         XCTAssertNil(ShannonConversationView.sendBlockReason(hasContent: true, photoIsLoading: false, isSending: false, isLoadingHistory: false))

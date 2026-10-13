@@ -1,6 +1,6 @@
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { configuredResponseModel, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { createHash } from 'node:crypto';
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import type {
@@ -50,58 +50,20 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
   readonly mode: 'openai' | 'anthropic';
   readonly model: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
   constructor(private readonly options: { apiKey: string; model: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore; }) {
     this.model = options.model;
     this.mode = isHaikuModel(this.model) ? 'anthropic' : 'openai';
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
   async extract(scopeKey: string, messages: readonly ShannonConversationItem[]): Promise<OrganizeTaskDraft[]> {
     if (!messages.length) return [];
     const explicitUpdate = explicitVoyagerUpdateDraft(messages);
     if (explicitUpdate) return [explicitUpdate];
-    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: this.model,
-        instructions: `会話から、ユーザーが実際に行いたい未完了の行動だけをVoyager Task案へ変換する。\n
-各案は単独で着手できる粒度にする。単なる話題、完了済み事項、Shannonの相槌、内部推論はTaskにしない。\n
-新規Taskはoperation=create、targetQuery=""、updateFields=[]、projectSelectionRequired=falseとする。titleは動詞で終わる短い日本語、detailsは具体的な実行内容にする。\n
-既存Taskの更新依頼はoperation=updateとし、targetQueryへ対象Taskを検索できる元の名前、updateFieldsへユーザーが変更を求めたフィールドだけを入れる。変更を求められていないtitleを絶対にupdateFieldsへ入れず、更新操作の説明をtitleやdetailsとして生成しない。title/detailsには変更後の値を入れ、変更しないフィールドは空文字にする。Projectを選びたい依頼はupdateFieldsへprojectIdsを入れ、projectSelectionRequired=trueにする。会話全文を複製しない。最大12件。`,
-        input: messages.slice(-100).map(message => ({ role: message.role, content: message.content.slice(0, 4_000) })),
-        reasoning: { effort: 'none' },
-        text: { verbosity: 'low', format: {
-          type: 'json_schema', name: 'shannon_organize_voyager_tasks', strict: true,
-          schema: {
-            type: 'object', additionalProperties: false,
-            properties: { tasks: { type: 'array', maxItems: 12, items: {
-              type: 'object', additionalProperties: false,
-              properties: {
-                operation: { type: 'string', enum: ['create', 'update'] },
-                targetQuery: { type: 'string' },
-                title: { type: 'string' },
-                details: { type: 'string' },
-                updateFields: { type: 'array', maxItems: 3, items: { type: 'string', enum: ['title', 'details', 'projectIds'] } },
-                projectSelectionRequired: { type: 'boolean' },
-              },
-              required: ['operation', 'targetQuery', 'title', 'details', 'updateFields', 'projectSelectionRequired'],
-            } } }, required: ['tasks'],
-          },
-        } },
-        max_output_tokens: 2_000, store: false,
-        prompt_cache_key: `shannon_organize_${createHash('sha256').update(scopeKey).digest('hex').slice(0, 32)}`,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const envelope = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) throw new OrganizeError('EXTRACTION_UNAVAILABLE', 502, true);
-    const usage = responseUsage(envelope);
-    this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'chat', model: this.model, ...usage,
-      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
-    validateResponseModelUsage(this.model, envelope);
-    const direct = typeof envelope.output_text === 'string' ? envelope.output_text : extractResponseText(envelope.output);
-    let decoded: unknown;
-    try { decoded = JSON.parse(direct); } catch { throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502); }
+    const input = messages.slice(-100).map(message => ({ role: message.role, content: message.content.slice(0, 4_000) }));
+    const decoded = this.claude ? await this.claudeTasks(this.claude, scopeKey, input) : await this.openAITasks(scopeKey, input);
     if (!decoded || typeof decoded !== 'object' || !Array.isArray((decoded as { tasks?: unknown }).tasks)) throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
     return (decoded as { tasks: unknown[] }).tasks.map(value => {
       if (!value || typeof value !== 'object') throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
@@ -129,6 +91,64 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
       };
     });
   }
+
+  private async claudeTasks(claude: ClaudeBackground, scopeKey: string, input: readonly ShannonConversationItem[]): Promise<unknown> {
+    const answer = await completeStructured('organize', ORGANIZE_INSTRUCTIONS, input, ORGANIZE_SCHEMA,
+      { claude, scopeKey, maximumOutputTokens: 2_000, effort: 'none', signal: AbortSignal.timeout(30_000), read: decodedTasks });
+    if (!answer.ok) throw new OrganizeError('EXTRACTION_UNAVAILABLE', 502, true);
+    return answer.value;
+  }
+
+  private async openAITasks(scopeKey: string, input: readonly ShannonConversationItem[]): Promise<unknown> {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: this.model,
+        instructions: ORGANIZE_INSTRUCTIONS,
+        input,
+        reasoning: { effort: 'none' },
+        text: { verbosity: 'low', format: {
+          type: 'json_schema', name: 'shannon_organize_voyager_tasks', strict: true,
+          schema: ORGANIZE_SCHEMA,
+        } },
+        max_output_tokens: 2_000, store: false,
+        prompt_cache_key: `shannon_organize_${createHash('sha256').update(scopeKey).digest('hex').slice(0, 32)}`,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const envelope = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) throw new OrganizeError('EXTRACTION_UNAVAILABLE', 502, true);
+    const usage = responseUsage(envelope);
+    this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'chat', model: this.model, ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    return decodedTasks(typeof envelope.output_text === 'string' ? envelope.output_text : extractResponseText(envelope.output));
+  }
+}
+
+const ORGANIZE_INSTRUCTIONS = `会話から、ユーザーが実際に行いたい未完了の行動だけをVoyager Task案へ変換する。\n
+各案は単独で着手できる粒度にする。単なる話題、完了済み事項、Shannonの相槌、内部推論はTaskにしない。\n
+新規Taskはoperation=create、targetQuery=""、updateFields=[]、projectSelectionRequired=falseとする。titleは動詞で終わる短い日本語、detailsは具体的な実行内容にする。\n
+既存Taskの更新依頼はoperation=updateとし、targetQueryへ対象Taskを検索できる元の名前、updateFieldsへユーザーが変更を求めたフィールドだけを入れる。変更を求められていないtitleを絶対にupdateFieldsへ入れず、更新操作の説明をtitleやdetailsとして生成しない。title/detailsには変更後の値を入れ、変更しないフィールドは空文字にする。Projectを選びたい依頼はupdateFieldsへprojectIdsを入れ、projectSelectionRequired=trueにする。会話全文を複製しない。最大12件。`;
+
+const ORGANIZE_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { tasks: { type: 'array', maxItems: 12, items: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      operation: { type: 'string', enum: ['create', 'update'] },
+      targetQuery: { type: 'string' },
+      title: { type: 'string' },
+      details: { type: 'string' },
+      updateFields: { type: 'array', maxItems: 3, items: { type: 'string', enum: ['title', 'details', 'projectIds'] } },
+      projectSelectionRequired: { type: 'boolean' },
+    },
+    required: ['operation', 'targetQuery', 'title', 'details', 'updateFields', 'projectSelectionRequired'],
+  } } }, required: ['tasks'],
+};
+
+function decodedTasks(text: string): unknown {
+  try { return JSON.parse(text); } catch { throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502); }
 }
 
 export function createConfiguredOrganizeExtractor(environment: Readonly<Record<string, string | undefined>> = serverEnvironment(), usageStore?: LlmUsageStore): OrganizeExtractor {

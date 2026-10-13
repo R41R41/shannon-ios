@@ -50,6 +50,18 @@ public protocol ShannonYousuServing: Sendable {
     func loadShannonSkill(scopeKey: String, id: String) async throws -> ShannonSkillDetailDTO
     /// `POST /v1/autonomy/skills/{id}/pin` or `/unpin`: the skill as it now is.
     func setShannonSkillPinned(scopeKey: String, id: String, pinned: Bool) async throws -> ShannonSkillDTO
+    /// 目標 (Syzygy ADR-0009 E7, `docs/executive-ui-contract.md`): `GET /v1/autonomy/goals`, owner only.
+    func loadShannonGoals(scopeKey: String) async throws -> ShannonGoalsDTO
+    /// `GET /v1/autonomy/choices?days=`, owner only.
+    func loadShannonChoices(scopeKey: String, days: Int) async throws -> ShannonChoicesDTO
+    /// `POST /v1/autonomy/pursuits/{id}/confirm`: the owner confirms a goal is done. One call per confirmed press, never retried.
+    func confirmShannonGoal(scopeKey: String, id: String) async throws -> ShannonGoalsDTO
+    /// `POST /v1/autonomy/pursuits/{id}/status` with `resting` or `dropped`. One call per confirmed press, never retried.
+    func setShannonGoalStatus(scopeKey: String, id: String, status: String) async throws
+    /// 点検: `GET /v1/autonomy/capabilities`, owner only.
+    func loadShannonCapabilities(scopeKey: String) async throws -> ShannonCapabilitiesDTO
+    /// `GET /v1/autonomy/inspection?day=` (nil: today on the server), owner only.
+    func loadShannonInspection(scopeKey: String, day: String?) async throws -> ShannonInspectionDTO
     /// Whose 運用 a reading is: the server, the connection's scope and this pairing. Nil while this app has no
     /// way to be let in (not paired and no developer token): then nothing about 運用 is remembered or marked.
     func opsReportScope(scopeKey: String) -> String?
@@ -68,6 +80,14 @@ extension ShannonYousuServing {
     public func loadShannonSkills(scopeKey: String) async throws -> ShannonSkillsDTO { throw ShannonAPIError.rejected(status: 404) }
     public func loadShannonSkill(scopeKey: String, id: String) async throws -> ShannonSkillDetailDTO { throw ShannonAPIError.rejected(status: 404) }
     public func setShannonSkillPinned(scopeKey: String, id: String, pinned: Bool) async throws -> ShannonSkillDTO { throw ShannonAPIError.rejected(status: 404) }
+
+    /// A reader without 目標 and 点検 answers as a server before them does: the tabs say 「準備中」.
+    public func loadShannonGoals(scopeKey: String) async throws -> ShannonGoalsDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func loadShannonChoices(scopeKey: String, days: Int) async throws -> ShannonChoicesDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func confirmShannonGoal(scopeKey: String, id: String) async throws -> ShannonGoalsDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func setShannonGoalStatus(scopeKey: String, id: String, status: String) async throws { throw ShannonAPIError.rejected(status: 404) }
+    public func loadShannonCapabilities(scopeKey: String) async throws -> ShannonCapabilitiesDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func loadShannonInspection(scopeKey: String, day: String?) async throws -> ShannonInspectionDTO { throw ShannonAPIError.rejected(status: 404) }
 }
 
 extension ShannonAPIClient: ShannonYousuServing {

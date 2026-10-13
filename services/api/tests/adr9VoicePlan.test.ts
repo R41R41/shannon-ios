@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { planToolPair, planSchemaOf, plannedChatBody } from '../src/infra/models/anthropic/anthropicCachePlan.js';
 import { plannedVoiceBody, voicePlanApplies, voicePlanCovers, voiceStableSystem } from '../src/infra/models/anthropic/anthropicVoicePlan.js';
 import { cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers.js';
-import { SONNET_VOICE_LINES, sonnetVoiceBody } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { CLAUDE_VOICE_LINES, claudeVoiceBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { cacheReceiptsView, recordCacheReceipt, resetCacheReceipts } from '../src/infra/models/anthropic/cacheReceipts.js';
 import { warmDayLine } from '../src/infra/models/anthropic/cacheWarmTurns.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
-import { VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
+import type { ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../src/mind/action/respond/respondInstructions.js';
 import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { SKILL_INDEX_HEADER } from '../src/mind/memory/skillDocument.js';
 import { VOICE_PLAN_TALK_SCENARIO } from './support/claudeVoicePlanScenarios.js';
@@ -90,12 +90,12 @@ describe('the stable voice prefix', () => {
 
   it('keeps the voice instructions whole and in the order the request without the plan has them', () => {
     const planned = systemText(sent(base));
-    const off = systemText(cachePlanRequest(sonnetVoiceBody(HAIKU, base, 300) as never));
-    for (const line of [VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, SONNET_VOICE_LINES]) {
+    const off = systemText(cachePlanRequest(claudeVoiceBody(HAIKU, base, 300) as never));
+    for (const line of [SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES]) {
       expect(planned).toContain(line);
       expect(off).toContain(line);
     }
-    const order = (text: string) => [VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, SONNET_VOICE_LINES].map(line => text.indexOf(line));
+    const order = (text: string) => [SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].map(line => text.indexOf(line));
     expect(order(planned)).toEqual([...order(planned)].sort((a, b) => a - b));
     expect(voiceStableSystem(variants.tools!.systemPrompt)).toBe(voiceStableSystem(identity));
   });
@@ -157,7 +157,7 @@ describe('voice latency under the plan', () => {
       return (performance.now() - started) / 400;
     };
     const planned = time(() => cachePlanRequest(plannedVoiceBody(HAIKU, variants.tools!, 300)));
-    const off = time(() => sonnetVoiceBody(HAIKU, variants.tools!, 300));
+    const off = time(() => claudeVoiceBody(HAIKU, variants.tools!, 300));
     expect(planned).toBeLessThan(Math.max(2, off * 3));
   });
 });
@@ -174,7 +174,7 @@ describe('the voice lanes of GET /v1/ops', () => {
     recordCacheReceipt('voice', voice, usage(2_000, 900), 0, at('01:00'), turn('v', 0));
     recordCacheReceipt('voice', voice, usage(3_000, 200), 0, at('01:05'), turn('v', 2));
     recordCacheReceipt('text', cachePlanRequest(plannedChatBody(HAIKU, { ...base, history: [] }, undefined)), usage(2_000, 900), 0, at('01:06'), turn('v', 4));
-    recordCacheReceipt('voice', sonnetVoiceBody(HAIKU, base, 300), usage(0, 3_000), 0, at('01:10'), turn('w', 0, false));
+    recordCacheReceipt('voice', claudeVoiceBody(HAIKU, base, 300), usage(0, 3_000), 0, at('01:10'), turn('w', 0, false));
     const day = cacheReceiptsView().foregroundText.days['2026-10-13']!;
     expect(day.voice_plan).toMatchObject({ turns: 2, warmTurns: 1, warmTurnsWithHistoryRead: 1, historyReadRate: 1 });
     expect(day.plan).toMatchObject({ turns: 1, warmTurns: 0 });

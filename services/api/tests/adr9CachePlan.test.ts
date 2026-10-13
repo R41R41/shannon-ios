@@ -10,7 +10,7 @@ import {
   stableLayers,
 } from '../src/infra/models/anthropic/anthropicCachePlan.js';
 import { CACHE_PLAN_BREAKPOINTS, cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers.js';
-import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { cacheReceiptsView, recordCacheReceipt, resetCacheReceipts } from '../src/infra/models/anthropic/cacheReceipts.js';
 import { warmDayLine } from '../src/infra/models/anthropic/cacheWarmTurns.js';
 import { ANTHROPIC_STRICT_LIMITS, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
@@ -97,7 +97,7 @@ describe('the stable prefix', () => {
   });
 
   it.each([['Haiku', HAIKU], ['Sonnet', SONNET]] as const)('sends the common schema, an owner turn\'s, unless a rarer field makes the turn an exception (%s)', (_name, settings) => {
-    const off = (request: ShannonChatModelRequest) => sonnetChatBody(settings, { ...request, tools: undefined }, undefined).output_config;
+    const off = (request: ShannonChatModelRequest) => claudeTextBody(settings, { ...request, tools: undefined }, undefined).output_config;
     const common = off({ ...base, offerReplyFeeling: true });
     for (const [name, request] of Object.entries(variants)) {
       const body = sent(request, settings);
@@ -153,7 +153,7 @@ describe('the stable prefix', () => {
     }
     // No union beyond the base's nine and her feeling's own: the same as a turn without the plan that offers her feeling.
     expect(strictRequestUsage(sent(base))).toEqual({ tools: 2, optional: 0, unions: 10 });
-    expect(strictRequestUsage(sent(variants.tools!)).unions).toBe(strictRequestUsage(sonnetChatBody(HAIKU, { ...variants.tools!,
+    expect(strictRequestUsage(sent(variants.tools!)).unions).toBe(strictRequestUsage(claudeTextBody(HAIKU, { ...variants.tools!,
       offerReplyFeeling: true }, undefined)).unions);
   });
 });

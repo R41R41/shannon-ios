@@ -1,5 +1,5 @@
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { base64Image, claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
 import { BODY_LOOK_LIMITS, type BodyLookImage } from '../../contracts/bodyLookContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
@@ -70,16 +70,39 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
   private readonly endpoint: string;
   private readonly timeoutMilliseconds: number;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: OpenAIRoomLookViewerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 20_000;
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async see(request: RoomLookViewRequest): Promise<string> {
+    const text = boundedLookMessage(this.claude ? await this.claudeLook(this.claude, request) : await this.openAILook(request));
+    if (!text) throw new Error('ROOM_LOOK_EMPTY');
+    return text;
+  }
+
+  private async claudeLook(claude: ClaudeBackground, request: RoomLookViewRequest): Promise<string> {
+    // The cause may quote the request; only the fact of the failure leaves this function.
+    const failed = () => new Error('ROOM_LOOK_UPSTREAM_FAILED');
+    const image = base64Image(request.image.mediaType, request.image.base64);
+    if (!image) throw failed();
+    const input = [{ role: 'user' as const, content: [{ type: 'text' as const, text: lookCaption(request) }, image] }];
+    const answer = await completeStructured<string>('room_look', roomLookInstructions(request.context, request.app), input, null, {
+      claude, scopeKey: request.scopeKey, maximumOutputTokens: 320, effort: 'none', signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      unsent: failed,
+    });
+    if (!answer.ok) throw new Error(`ROOM_LOOK_UPSTREAM_${answer.status}`);
+    return answer.value;
+  }
+
+  private async openAILook(request: RoomLookViewRequest): Promise<string> {
     let response: Response;
     try {
       response = await this.fetcher(this.endpoint, {
@@ -91,7 +114,7 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
           input: [{
             role: 'user',
             content: [
-              { type: 'input_text', text: request.app ? 'いまカメラに写ったものです。' : 'いま見えた部屋です。' },
+              { type: 'input_text', text: lookCaption(request) },
               { type: 'input_image', image_url: `data:${request.image.mediaType};base64,${request.image.base64}`, detail: 'low' },
             ],
           }],
@@ -116,11 +139,12 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
-    validateResponseModelUsage(this.model, json);
-    const text = boundedLookMessage(extractOutputText(json));
-    if (!text) throw new Error('ROOM_LOOK_EMPTY');
-    return text;
+    return extractOutputText(json);
   }
+}
+
+function lookCaption(request: RoomLookViewRequest): string {
+  return request.app ? 'いまカメラに写ったものです。' : 'いま見えた部屋です。';
 }
 
 /** Uses the conversation model and its key. Without a key there is no viewer and a look is never offered. */

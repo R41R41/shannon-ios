@@ -32,6 +32,14 @@ extension ShannonConversationView {
         .padding(.top, ShannonSpacing.small)
         .padding(.bottom, ShannonSpacing.small)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: composerIsExpanded)
+        .onChange(of: model.draftResetToken) {
+            // The rebuilt field takes the keyboard back when the old one had it at the send.
+            guard composerKeepsFocus else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                composerIsFocused = true
+            }
+        }
         .fileImporter(
             isPresented: $composerIsImporting,
             allowedContentTypes: [.plainText, .sourceCode, .json, .commaSeparatedText],
@@ -58,13 +66,17 @@ extension ShannonConversationView {
             // typed at the end of the draft is the send key, so it sends; a newline typed mid-text stays.
             .onChange(of: model.draft) { oldValue, newValue in
                 guard Self.isReturnKeySubmit(old: oldValue, new: newValue) else { return }
-                model.draft = oldValue
-                sendDraft()
+                // The text before the newline is sent as is; the field is not written back to first. Only a send
+                // that was held back takes the newline out again.
+                if !sendDraft(text: oldValue), model.draft == newValue { model.draft = oldValue }
             }
-            .onSubmit { sendDraft() }
+            .onSubmit { _ = sendDraft() }
             .submitLabel(.send)
             .accessibilityIdentifier("shannon.composer.field")
             .accessibilityHint("複数行入力できます")
+            // A new field after each send: the old text view's state (marked IME text, a value it did not take
+            // from the binding while editing) cannot keep the sent text on screen.
+            .id(model.draftResetToken)
     }
 
     @ViewBuilder

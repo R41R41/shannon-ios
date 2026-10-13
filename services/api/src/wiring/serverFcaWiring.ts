@@ -31,6 +31,9 @@ import { JevFcaToolSelector, type FcaToolSelector } from '../mind/selectors/sele
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
 import { configuredJevChooser } from './skillRoutingWiring.js';
 import { fcaResearchTools } from './fcaResearchWiring.js';
+import { ownTimeBudgetPort, ownTimeStepPorts, ownTimeTaskAllowed, type OwnTimeFcaParts } from './fcaOwnTimeWiring.js';
+import { fcaBudget } from './fcaBudgetWiring.js';
+import { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudgetStore.js';
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
 import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
@@ -58,6 +61,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   minecraftLifecycle?: MinecraftLifecycle | null; minecraftConfiguration?: MinecraftBodyConfiguration | null; touchAllowed?(scope: string, device: string, gesture?: string): boolean;
   trace?: DecisionTraceWriter | null; traceSalt?: string;
   readSources?: Omit<FcaReadSourcesOptions, 'ownerScope' | 'ownerAlone' | 'state' | 'conversations'>;
+  /** Her own time's store and settings: own-time tasks and their budget (ADR-0009 stage 2, E3/E4); absent, none run. */
+  ownTime?: OwnTimeFcaParts;
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
@@ -75,7 +80,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   let sleep: ReturnType<typeof createFcaSleepWiring> | null = null;
   try {
     sleep = sleepEnabled ? createFcaSleepWiring({ values, store: parts.sleepStore!, ownerScope: parts.ownerScope }) : null;
+    const ownTimeBudget = parts.ownTime ? ownTimeBudgetPort(parts.ownTime, provider.model) : null;
+    const budgetStore = new TaskBudgetStore(db);
+    const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget });
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
+      budget.recordUsage(usage.estimatedCostUsd);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
         inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });
@@ -90,10 +99,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     const runtime = createTaskRuntimeWiring({ db, actions, model,
-      scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone,
+      scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
-      canRunTask: (_runtime, id) => { const task = _runtime.get(parts.ownerScope, id); return task?.kind === 'sleep' ? Boolean(sleep?.visible(_runtime, task)) : visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0; }, stepPorts: (_runtime, step) => {
+      canRunTask: (_runtime, id) => { const task = _runtime.get(parts.ownerScope, id); return task?.origin === 'own_time' ? _runtime.taskSources(parts.ownerScope, id).length === 0 : task?.kind === 'sleep' ? Boolean(sleep?.visible(_runtime, task)) : visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0; }, stepPorts: (_runtime, step) => {
         if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
+        const history = { codec: anthropicFcaHistoryCodec, summarizer };
+        if (step.snapshot.task.origin === 'own_time') return ownTimeStepPorts(step, { ...parts, runtime: _runtime, selector, history });
         const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;

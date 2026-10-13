@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SHANNON_TOOL_WEB_SEARCH_TEXT, withReadToolsCapability, withToolWebSearchLine } from '../src/capabilities.js';
 import {
   SHANNON_CAPABILITIES,
   SHANNON_CORE_AREA_LABELS,
@@ -210,5 +211,16 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('owner')).toContain(`- ${study.text}`);
     expect(shannonCapabilityPrompt('guest')).not.toContain('自分のフォルダ');
     expect(shannonCapabilityPrompt('guest')).not.toContain('自分の書斎');
+  });
+});
+
+describe('the web-search line beside her read tools (2026-10-13)', () => {
+  it('drops the toggle wording only where the read tools are described', () => {
+    const owner = shannonCapabilityPrompt('owner');
+    expect(withToolWebSearchLine(owner)).toBe(owner);
+    const withReads = withReadToolsCapability(owner);
+    expect(withReads).toContain('検索をオンにした時だけ');
+    expect(withToolWebSearchLine(withReads)).toContain(SHANNON_TOOL_WEB_SEARCH_TEXT);
+    expect(withToolWebSearchLine(withReads)).not.toContain('検索をオンにした時だけ');
   });
 });

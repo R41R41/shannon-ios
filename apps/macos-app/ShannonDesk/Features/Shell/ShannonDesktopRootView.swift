@@ -117,6 +117,7 @@ public struct ShannonDesktopRootView: View {
             .modifier(ShannonFeedbackContext(conversation: conversation, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening, interests: memory.interests))
             .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
             .modifier(ShannonNowPolling(model: now, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
+            .modifier(ShannonYousuAudience(model: yousu, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
             .modifier(ShannonReportCardRefresh(activity: now, conversation: conversation))
             .modifier(ShannonActivityVoiceReporting(activity: now, session: voiceCall.session, threadID: voiceCall.threadID))
             .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)

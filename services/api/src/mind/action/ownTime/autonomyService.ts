@@ -261,7 +261,7 @@ export class ShannonAutonomyService {
     const result = this.store.pursuits.update(scopeKey, pursuitId, change, this.now());
     if (typeof result === 'string') return { decision, rejection: result };
     this.record(scopeKey, {
-      kind: 'pursuit', actor: 'shannon', summary: `やりたいこと「${clip(result.title, 60)}」を${pursuitStatusPhrase(result.status)}。`,
+      kind: 'pursuit', actor: 'shannon', summary: `やりたいこと「${clip(result.title, 60)}」を${pursuitStatusPhrase(result.status, change.status)}。`,
       domain: 'thinking', outcome: 'recorded', approval: 'not_needed', relatedId: decision.activityId,
       ...(result.links[0] ? { link: result.links[0].url } : {}),
     });
@@ -409,7 +409,8 @@ export class ShannonAutonomyService {
 
   /** The owner may tell her to rest or drop one of her own non-seed pursuits; nothing else is editable. */
   setPursuitStatusByOwner(scopeKey: string, pursuitId: string, status: 'resting' | 'dropped'): AutonomyOverview | AutonomyOwnerError {
-    const result = this.store.pursuits.update(scopeKey, pursuitId, { status }, this.now());
+    if (this.store.pursuits.get(scopeKey, pursuitId)?.status === status) return this.overview(scopeKey); // Sent once, answered alike (E2).
+    const result = this.store.pursuits.update(scopeKey, pursuitId, { status }, this.now(), 'owner');
     if (typeof result === 'string') return result;
     this.record(scopeKey, {
       kind: 'pursuit', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id,

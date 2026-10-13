@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicFcaModel, createAnthropicFcaModel, type AnthropicFcaClient, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
-import { sonnetTool } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { claudeTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import type { ShannonToolDefinition } from '../src/mind/tools/toolRegistryPorts.js';
 import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
@@ -67,7 +67,7 @@ describe('native one-step FCA model', () => {
     expect(result.decision).toEqual({ kind: 'tools', calls: [
       { id: 'new-list', name: 'task.list', input: {} }, { id: 'new-get', name: 'task.get', input: { value: 'child-1' } },
     ] });
-    expect(fixture.bodies[0]!.tools).toEqual([...tools.map(tool => ({ ...sonnetTool(tool), strict: false })),
+    expect(fixture.bodies[0]!.tools).toEqual([...tools.map(tool => ({ ...claudeTool(tool), strict: false })),
       expect.objectContaining({ name: 'fca_wait', strict: true }), expect.objectContaining({ name: 'fca_complete', strict: true })]);
     expect(fixture.bodies[0]!.messages).toEqual([...previous, { role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) }]);
     expect(result.history).toEqual([{ role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) },

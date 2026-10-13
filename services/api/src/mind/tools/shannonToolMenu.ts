@@ -16,6 +16,18 @@ import { ALWAYS_LOADED_TOOL_NAMES, providerToolName, toolSummary, type ShannonTo
 export const TOOL_OPEN_NAME = 'tool.open';
 export const TOOL_OPEN_PROVIDER_NAME = providerToolName(TOOL_OPEN_NAME);
 
+/**
+ * The owner's voice turn (the only offer that holds `web.research`) also always loads her everyday lookups (2026-10-13: after
+ * 「博多の天気を調べて」 the follow-up 「うん、お願い」 had no weather tool, and an event question had no research tool, so she said
+ * she could not look). A follow-up without keywords keeps them.
+ */
+export const OWNER_VOICE_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['weather.forecast', 'web.research']);
+
+/** The always-loaded names for an offer (registry names). */
+export function alwaysLoadedToolNames(offered: readonly Pick<ShannonToolDefinition, 'name'>[]): readonly string[] {
+  return offered.some(tool => tool.name === 'web.research') ? [...ALWAYS_LOADED_TOOL_NAMES, ...OWNER_VOICE_LOADED_TOOL_NAMES] : ALWAYS_LOADED_TOOL_NAMES;
+}
+
 /** The meta-tool, its enum the provider names of the tools the turn offers. */
 export function toolOpenDefinition(offered: readonly ShannonToolDefinition[]): ShannonToolDefinition {
   const input: ToolInputSchema = Object.freeze({
@@ -52,8 +64,9 @@ const NOT_OPENABLE = JSON.stringify({ ok: false, text: 'その名前の道具は
  */
 export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[], options?: { deferMemoryReads?: boolean }): ShannonModelToolSession {
   const offered = base.definitions;
-  // What Jev chose, and always the ways to stop and to ask for approval (`ALWAYS_LOADED_TOOL_NAMES`) when the turn offers them.
-  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (ALWAYS_LOADED_TOOL_NAMES.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
+  // What Jev chose, and always the ways to stop and to ask for approval (`alwaysLoadedToolNames`) when the turn offers them.
+  const loaded = alwaysLoadedToolNames(offered);
+  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (loaded.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
   const open = toolOpenDefinition(offered);
   const current = () => [...offered.filter(tool => visible.has(tool.name)), open];
   const session = { maximumCalls: base.maximumCalls } as Record<string, unknown>;

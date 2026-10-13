@@ -54,6 +54,8 @@ public struct ShannonConversationView: View {
     @State var composerUsesWebSearch = false
     @State var composerIsImporting = false
     @State var composerIsSubmitting = false
+    /// The composer had the keyboard when the last send was accepted; its rebuilt field takes it back.
+    @State var composerKeepsFocus = false
     @State var composerAttachmentError: String?
 #if os(iOS)
     @State var voiceWorkspace = ShannonVoiceCallHost.shared.workspace
@@ -101,6 +103,7 @@ public struct ShannonConversationView: View {
         .modifier(ShannonFeedbackContext(conversation: model, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening, interests: memoryModel.interests))
         .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
         .modifier(ShannonNowPolling(model: now, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
+        .modifier(ShannonYousuAudience(model: yousu, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
         .modifier(ShannonReportCardRefresh(activity: now, conversation: model))
 #if os(iOS)
         .modifier(ShannonActivityVoiceReporting(activity: now, session: geminiLiveVoiceModel, threadID: voiceWorkspace.threadContext?.threadID))

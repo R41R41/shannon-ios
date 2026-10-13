@@ -1,5 +1,5 @@
 import { DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type BackgroundRoute, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { createHash } from 'node:crypto';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageLane, type LlmUsageStore } from '../../infra/models/llmUsage.js';
@@ -40,6 +40,8 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
   private readonly dimensions: number;
   private readonly fetcher: typeof fetch;
   private readonly reasoningFetcher: typeof fetch | null;
+  /** The background route of a Claude reasoning model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: OpenAIMemoryModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
@@ -50,7 +52,9 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
     const apiKey = options.reasoningApiKey === undefined
       ? isHaikuModel(this.reasoningModel) ? null : options.apiKey
       : options.reasoningApiKey;
-    this.reasoningFetcher = apiKey ? responseModelFetcher({ model: this.reasoningModel, apiKey, fetcher: options.fetcher, endpoint: options.responsesEndpoint }) : null;
+    const { fetcher, responsesEndpoint: endpoint, usageStore, now } = options;
+    this.claude = apiKey ? claudeBackground(this.reasoningModel, { apiKey, fetcher, endpoint, usageStore, now }) : null;
+    this.reasoningFetcher = apiKey && !this.claude ? options.fetcher ?? fetch : null;
   }
 
   async embed(scopeKey: string, texts: readonly string[], lane: LlmUsageLane, signal?: AbortSignal): Promise<readonly Float32Array[]> {
@@ -78,7 +82,7 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
   }
 
   async rewriteQuery(scopeKey: string, query: string, signal?: AbortSignal): Promise<readonly string[]> {
-    const output = await this.structured(scopeKey, 'shannon_memory_query_rewrite', [
+    const output = await this.structured(scopeKey, 'shannon_memory_query_rewrite', 'memory_rewrite', [
       'Rewrite the owner\'s Japanese message into up to three short standalone search queries for Shannon\'s private conversation memory.',
       'Resolve pronouns and ellipsis only from the message itself. Include likely paraphrases and the underlying topic. Do not answer the message.',
       untrusted,
@@ -94,7 +98,7 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
   async rerank(scopeKey: string, query: string, candidates: readonly { id: string; text: string }[], signal?: AbortSignal) {
     if (!candidates.length) return [];
     const aliases = candidates.map((candidate, index) => ({ key: `c${index + 1}`, ...candidate }));
-    const output = await this.structured(scopeKey, 'shannon_memory_rerank', [
+    const output = await this.structured(scopeKey, 'shannon_memory_rerank', 'memory_rerank', [
       'Score how useful each remembered item is for answering the owner\'s current message, from 0 (irrelevant) to 1 (directly needed).',
       'Prefer items that contain the decision, reason, preference, or experience the message asks about. Score each item independently.',
       untrusted,
@@ -115,7 +119,7 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
 
   async selectSections(scopeKey: string, query: string, outline: readonly { id: string; path: string; preview: string }[], signal?: AbortSignal) {
     if (!outline.length) return [];
-    const output = await this.structured(scopeKey, 'shannon_knowledge_navigation', [
+    const output = await this.structured(scopeKey, 'shannon_knowledge_navigation', 'memory_sections', [
       'You navigate the heading tree of one of Shannon\'s long internal notes. Pick at most three node ids whose sections are needed to help with the owner\'s current message.',
       'Prefer the most specific heading that contains the needed procedure or lesson. Return an empty list if none is needed.',
       untrusted,
@@ -127,7 +131,14 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
     return Array.isArray(output.nodeIds) ? output.nodeIds.filter((id): id is string => typeof id === 'string' && known.has(id)).slice(0, 3) : [];
   }
 
-  private async structured(scopeKey: string, name: string, instructions: string, input: unknown, schema: unknown, signal?: AbortSignal): Promise<unknown> {
+  private async structured(scopeKey: string, name: string, route: BackgroundRoute, instructions: string, input: unknown, schema: Record<string, unknown>,
+    signal?: AbortSignal): Promise<unknown> {
+    if (this.claude) {
+      const answer = await completeStructured(route, instructions, JSON.stringify(input), schema,
+        { claude: this.claude, scopeKey, maximumOutputTokens: 600, effort: 'none', ...(signal ? { signal } : {}) });
+      if (!answer.ok) throw new Error(`OPENAI_MEMORY_${answer.status}`);
+      return answer.value;
+    }
     if (!this.reasoningFetcher) throw new Error('MEMORY_REASONING_NOT_CONFIGURED');
     const response = await this.reasoningFetcher(this.options.responsesEndpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -144,7 +155,6 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
     const envelope = parseJson(await response.text());
     if (!response.ok) throw new Error(`OPENAI_MEMORY_${response.status}`);
     this.record(scopeKey, 'memory', this.reasoningModel, responseUsage(envelope));
-    validateResponseModelUsage(this.reasoningModel, envelope);
     return parseJson(extractOutputText(envelope));
   }
 

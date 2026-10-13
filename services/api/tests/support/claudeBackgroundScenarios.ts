@@ -26,7 +26,7 @@ import { cached, SCENARIO_TIME, type ClaudeScenario, type ScenarioContext } from
 
 /**
  * Background scenarios of the request goldens (Syzygy ADR-0009 stage 1, M2): the FCA step, her own time's text model, the
- * Sonnet skill proposer, and every caller of the background bridge (`responseModelFetcher`, `haikuResponses.ts`). Synthetic
+ * Sonnet skill proposer, and every caller of the background route (`completeStructured`, `claudeStructured.ts`; until M8 the Responses shim). Synthetic
  * data only.
  */
 const HAIKU = 'claude-haiku-5-5';

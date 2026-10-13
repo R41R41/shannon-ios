@@ -103,7 +103,7 @@
      "type": "adaptive"
     },
     "output_config": {
-     "effort": "medium",
+     "effort": "low",
      "format": {
       "type": "json_schema",
       "schema": {
@@ -444,7 +444,7 @@
     "tools": "de57fa82",
     "system": "3476417d",
     "schema": "954aaf9c",
-    "effort": "3a66f5bc",
+    "effort": "8a3bb108",
     "history": "3c12e10e"
    },
    "thread": "a5f7fbd8",

@@ -332,7 +332,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: task.origin === 'maintenance' ? this.maintenance.summary(task) : commit.summary },
         { stepId: step.id, actionId: step.lease.id, generation: step.lease.generation, disposition: commit.disposition });
       if (terminal({ ...task, status }) && task.origin === 'maintenance') this.maintenance.report(task, status, step.id);
-      else if (terminal({ ...task, status }) && task.parentId) {
+      else if (terminal({ ...task, status }) && task.parentId && task.origin !== 'own_time') {
         const parent = this.required(step.scopeKey, task.parentId);
         if (!terminal(parent)) this.sendInTransaction(step.scopeKey, step.taskId, task.parentId,
           commit.summary || `${task.title}: ${status}`, `result:${step.id}`);

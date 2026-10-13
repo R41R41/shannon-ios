@@ -1,6 +1,6 @@
 import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import {
   OWNER_AUDIENCE, SHANNON_EMOTION_KINDS, UNKNOWN_GUEST_PRESENCE, classifySensitivity, isMemoryEvidenceVisible, mayDisclose, memoryControlFor, ownerSpoke,
   peopleAudience, resolveDisclosure, visibleMemoryText,
@@ -347,14 +347,36 @@ const IMPRESSION_SCHEMA = {
 export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
   private readonly model: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore }) {
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async analyze(scopeKey: string, input: ImpressionAnalysisInput, signal?: AbortSignal): Promise<ImpressionAnalysisOutput | null> {
     return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 800, signal }, async accounted => {
+    const timeout = AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]);
+    const output = (this.claude ? await this.claudeImpressions(this.claude, scopeKey, input, { signal, timeout, accounted })
+      : await this.openAIImpressions(scopeKey, input, { signal, timeout, accounted })) as ImpressionAnalysisOutput | null;
+    return output && typeof output === 'object' ? output : null;
+    });
+  }
+
+  private async claudeImpressions(claude: ClaudeBackground, scopeKey: string, input: ImpressionAnalysisInput, call: ImpressionCall): Promise<unknown> {
+    const answer = await completeStructured<string>('impressions', IMPRESSION_INSTRUCTIONS, JSON.stringify(input), IMPRESSION_SCHEMA, {
+      claude, scopeKey, maximumOutputTokens: 800, effort: 'none', signal: call.timeout,
+      onBooked: call.accounted, requireUsage: Boolean(call.signal), read: text => text,
+    });
+    if (!answer.ok) throw Object.assign(new Error(`OPENAI_IMPRESSIONS_${answer.status}`), { status: answer.status });
+    call.signal?.throwIfAborted();
+    return parseJson(answer.value);
+  }
+
+  private async openAIImpressions(scopeKey: string, input: ImpressionAnalysisInput, call: ImpressionCall): Promise<unknown> {
+    const { signal, accounted } = call;
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -365,7 +387,7 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
         max_output_tokens: 800, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
+      signal: call.timeout,
     });
     const envelope = parseJson(await response.text());
     if (!response.ok) throw Object.assign(new Error(`OPENAI_IMPRESSIONS_${response.status}`), { status: response.status });
@@ -375,12 +397,15 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
     if (usage.unknownCostUpperBoundUsd) accounted();
     requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
     accounted();
-    validateResponseModelUsage(this.model, envelope);
     signal?.throwIfAborted();
-    const output = parseJson(extractOutputText(envelope)) as ImpressionAnalysisOutput | null;
-    return output && typeof output === 'object' ? output : null;
-    });
+    return parseJson(extractOutputText(envelope));
   }
+}
+
+interface ImpressionCall {
+  signal?: AbortSignal;
+  timeout: AbortSignal;
+  accounted: () => void;
 }
 
 /** `SHANNON_IMPRESSIONS_MODEL` (default Claude Haiku 5.5); no analyzer without an API key or while impressions are off. */

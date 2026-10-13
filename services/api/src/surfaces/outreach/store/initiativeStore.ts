@@ -153,7 +153,16 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     let repeatedSuppressed = 0;
     let lastStop: InitiativeLoopResult['stopped'] = null;
     for (const scope of scopes) {
-      const dayKey = `${local.year}-${pad(local.month)}-${pad(local.day)}`;
+      const dayKey = `${local.year}-${pad(local.month)}-${pad(local.day)}`, briefKey = `${dayKey}:morning-brief`;
+      const state = parseState(scope.snapshot_json);
+      const delivered = (itemId: string) => Boolean(this.database
+        .prepare('SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?').get(scope.scope_key, itemId));
+      // Syzygy ADR-0008 stage 3 (review M4): a candidate the gate held today is passed over, and a hold moves on to the next one.
+      const fresh = <T extends CandidateRow>(candidate: T) => !this.gate?.heldToday(scope.scope_key, 'initiative', initiativeIntent(candidate, at), at);
+      // SHANNON_MORNING_BRIEF, every morning as asked (2026-10-13): its own daily key, so neither the day's slot nor a due promise blocks it.
+      const brief = morningBriefs.get(scope.scope_key), briefOpen = brief !== undefined && !delivered(brief.item_id) && fresh(brief);
+      if (briefOpen) considered += 1;
+      if (briefOpen && this.persistMessage(scope.scope_key, state, brief, null, null, briefKey, at) === 'sent') sent += 1;
       if (this.sentOnDay(scope.scope_key, dayKey)) {
         lastStop = 'today-is-enough';
         continue;
@@ -162,14 +171,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'recent-conversation';
         continue;
       }
-      const state = parseState(scope.snapshot_json);
       const promises = dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
       considered += promises.length;
-      const delivered = (itemId: string) => Boolean(this.database.prepare(
-        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
-      ).get(scope.scope_key, itemId));
-      // Syzygy ADR-0008 stage 3 (review M4): a candidate the gate held today is passed over, and a hold moves on to the next one.
-      const fresh = <T extends CandidateRow>(candidate: T) => !this.gate?.heldToday(scope.scope_key, 'initiative', initiativeIntent(candidate, at), at);
       const open = promises.filter(candidate => !delivered(candidate.item_id));
       if (open.length) {
         if (firstWritten(open.filter(fresh), candidate => this.persistMessage(scope.scope_key, state, candidate, null, null, dayKey, at)) === 'sent') sent += 1;
@@ -180,11 +183,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'reserved-for-commitment';
         continue;
       }
-      // SHANNON_MORNING_BRIEF: the brief takes the day's one slot after a due or reserved promise, before anything else.
-      const brief = morningBriefs.get(scope.scope_key), briefOpen = brief !== undefined && !delivered(brief.item_id) && fresh(brief);
-      if (briefOpen && this.persistMessage(scope.scope_key, state, brief, null, null, dayKey, at) === 'sent') {
-        considered += 1;
-        sent += 1;
+      if (this.sentOnDay(scope.scope_key, briefKey)) { // The brief stands for the day's spontaneous topic.
+        lastStop = 'today-is-enough';
         continue;
       }
       const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
