@@ -88,7 +88,7 @@ export const JEV_QUESTION_SETS = Object.freeze({
   retry: 'retry_or_correction.v1',
   recallBeam: 'recall_beam.v1',
   /** Whether she would want to say something at a moment she perceived (owner decision 2026-10-14, `proactiveMoments.ts`). */
-  proactiveMoment: 'proactive_moment.v1',
+  proactiveMoment: 'proactive_moment.v2',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';

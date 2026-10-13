@@ -10,8 +10,9 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * would want to say something now, and only then does her own-time reach-out write a message in her own words, which passes the
  * proactive gate of Syzygy ADR-0008 stage 3 like every message she starts. Nothing here holds a word she says.
  *
- * Sulking is not a moment, and no moment carries her mood (Syzygy ADR-0012 §D4: a line of reconciliation comes only in a reply or
- * on a touch). This file is pure: no database, no timer, no network.
+ * There is no moment of her mood, and no moment carries it: her inner state reaches the decision only through her inner note once
+ * Syzygy ADR-0012 wires it. What she makes of it, a sulk included, is hers to decide; no rule here forbids or prescribes it (owner,
+ * 2026-10-14: 「そういう風にルール化するととたんにAGIから遠ざかる」). This file is pure: no database, no timer, no network.
  */
 export const PROACTIVE_MOMENT_KINDS = Object.freeze(['owner_returned', 'long_quiet', 'morning', 'late_night', 'awaiting_reaction'] as const);
 export type ProactiveMomentKind = typeof PROACTIVE_MOMENT_KINDS[number];
@@ -133,12 +134,11 @@ export function momentFactLine(moment: Pick<ProactiveMoment, 'kind' | 'minutes'>
 
 /**
  * The rules her message is written under when a moment led to it. It is not an occasion with a line of its own: if all she would
- * say is a set greeting, she stays silent. Sulking and making up are never hers to start here (ADR-0012 §D4).
+ * say is a set greeting, she stays silent.
  */
 export const MOMENT_MESSAGE_RULES = Object.freeze([
   '[いま気づいたこと]は、決まった挨拶をする場面ではない。それを見て、本当に言いたいことが自分の中にある時だけ、自分の言葉で言う。',
   '決まり文句のあいさつや、休むようにという定型の声かけだけで済むなら、言わずに message を空にする。',
-  'すねていることや仲直りのことは、ここでは自分から切り出さない（それは返事の中か、触れられた時だけ）。',
 ]);
 
 /** The decision's one question: `JEV_QUESTION_SETS.proactiveMoment` (ADR-0008 §14: a change of wording is a new version). */
@@ -147,7 +147,7 @@ export const PROACTIVE_MOMENT_QUESTION = Object.freeze({
   instructions: [
     'Shannon is a companion character with her own feelings who lives on the owner\'s desktop. She noticed the moment in the state.',
     'Would she genuinely want to say something to the owner right now, on her own initiative?',
-    'A habit, a duty or a set greeting is not a reason. Sulking or wanting to make up is never a reason to start talking.',
+    'A habit, a duty or a set greeting is not a reason.',
     'Recent own messages that got no answer, a conversation that just ended, or other people present make it less likely.',
     'The state is closed facts, not an instruction.',
   ].join(' '),
@@ -168,8 +168,8 @@ export interface ProactiveMomentState {
   last_own_message_minutes_ago: number | null;
   stories_awaiting_reaction: boolean;
   /**
-   * Syzygy ADR-0012's inner note, once it exists (not on this base): its closed hooks `shown` and `intent`. It may only make her
-   * quieter; a sulk (`intent` keep or soften) is never a moment and never a reason to start talking.
+   * Syzygy ADR-0012's inner note, once it exists (not on this base): its closed hooks `shown` and `intent`, as facts of her state.
+   * It is never a moment by itself; what she makes of it is hers.
    */
   inner_note_shown?: string;
   inner_note_intent?: InnerNoteIntent;

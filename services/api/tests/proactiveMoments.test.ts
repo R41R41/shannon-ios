@@ -26,7 +26,7 @@ import { FakeModel, loopHarness, runUntilIdle, scope } from './autonomyLoopHarne
 /**
  * Moments instead of scripted lines (owner decision 2026-10-14): the body's fixed lines are gone, the situations behind them are
  * percepts of hers, a small decision asks whether she would want to say something, and what she says is her own message through
- * her reach-out and the proactive gate. Sulking is never a moment.
+ * her reach-out and the proactive gate. No moment is of her mood, and no rule decides what she says of her feelings.
  */
 const directory = mkdtempSync(join(tmpdir(), 'shannon-moments-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -93,7 +93,7 @@ describe('perceiving moments', () => {
   });
 });
 
-describe('no scripted line, and sulking is never a reason to speak', () => {
+describe('no scripted line, and no rule about her feelings', () => {
   it('has no line to say: a fact for each moment, never a greeting, and rules that ask for her own words or silence', () => {
     const lines = PROACTIVE_MOMENT_KINDS.map(kind => momentFactLine({ kind, minutes: 30 }));
     for (const text of [...lines, ...MOMENT_MESSAGE_RULES]) for (const canned of CANNED) expect(text).not.toContain(canned);
@@ -102,10 +102,10 @@ describe('no scripted line, and sulking is never a reason to speak', () => {
     for (const canned of CANNED) expect(source).not.toContain(canned);
   });
 
-  it('has no sulk among its moments, and says so to the decision and to her message', () => {
+  it('has no sulk among its moments, and no hard-coded rule about sulking or making up (the owner, 2026-10-14)', () => {
     expect(PROACTIVE_MOMENT_KINDS.some(kind => /sulk|reconcil|mood|emotion/u.test(kind))).toBe(false);
-    expect(PROACTIVE_MOMENT_QUESTION.instructions).toMatch(/Sulking or wanting to make up is never a reason to start talking/u);
-    expect(MOMENT_MESSAGE_RULES.join('\n')).toMatch(/すねていることや仲直りのことは、ここでは自分から切り出さない/u);
+    expect(PROACTIVE_MOMENT_QUESTION.instructions).not.toMatch(/sulk|make up|reconcil/iu);
+    expect(MOMENT_MESSAGE_RULES.join('\n')).not.toMatch(/すね|仲直り/u);
     // The facts carry nothing of her mood: there is no field through which a sulk could become a moment.
     expect(Object.keys(facts()).filter(key => /mood|emotion|sulk|note/u.test(key))).toEqual([]);
   });
@@ -119,7 +119,7 @@ describe('no scripted line, and sulking is never a reason to speak', () => {
     desk.close();
   });
 
-  it('hands the decision her inner note as closed facts when a moment is there, which may only keep her quiet', async () => {
+  it('hands the decision her inner note as closed facts when a moment is there; whether she speaks is the decision\'s', async () => {
     const asked: ProactiveMomentState[] = [];
     const desk = deskWorld({ facts: () => facts(returnedAt(START)), ask: async state => { asked.push(state); return 0.2; }, innerNote: () => ({ shown: 'sulky', intent: 'keep' }) });
     await desk.moments.consider(scope, START);
