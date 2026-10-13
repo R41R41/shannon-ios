@@ -5,6 +5,7 @@ import {
   explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
 } from '../../contracts/voiceDecisionContract.js';
+import { carriedOffer } from './voiceOfferCarry.js';
 
 export function applyMandatorySkillFloors(
   scores: Record<VoiceSkill, number>,
@@ -19,6 +20,8 @@ export function applyMandatorySkillFloors(
   // Aether/Voyager/Shannon status lives in the owner's own notes, tasks and agent work, not on
   // the public web. A freshness word next to a product name must not send the turn to web search.
   if (asksInternalSuiteStatus(input.transcript)) scores.current_web = 0;
+  // A short yes to her own offer to look something up carries the offer's capabilities (`voiceOfferCarry.ts`).
+  for (const skill of carriedOffer(input)?.skills ?? []) scores[skill] = 1;
   if (input.requestedLocation) scores.device_context = 1;
   if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {

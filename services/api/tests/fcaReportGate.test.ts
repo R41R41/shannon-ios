@@ -1,0 +1,120 @@
+import { describe, expect, it } from 'vitest';
+import { gatedProgress, reportGateDecision, type ReportGateParts } from '../src/mind/action/fca/fcaReportGate.js';
+import type { TaskProgress } from '../src/mind/action/taskRuntime/taskProgressPorts.js';
+import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
+import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
+import { admitVoiceResearch, researchHeardInTurn, researchSaid } from '../src/surfaces/voice/voiceResearchTurn.js';
+import { RESEARCH_UNDER_WAY_LINE, TURN_OUT_OF_TIME_LINE } from '../src/mind/action/respond/turnDeadline.js';
+
+const noon = Date.parse('2026-10-13T03:00:00.000Z'); // 12:00 in Tokyo.
+const night = Date.parse('2026-10-12T20:20:00.000Z'); // 5:20 in Tokyo.
+const minutes = (value: number) => value * 60_000;
+const iso = (value: number) => new Date(value).toISOString();
+
+function task(id: string, goal: string, createdAt: number, phase = 'completed', extra: Partial<TaskView> = {}): TaskView {
+  return { id, scopeKey: 'owner', parentId: 'conversation', kind: 'research', origin: 'owner_request', title: goal, goal, completionCriteria: '',
+    status: phase === 'completed' ? 'completed' : 'active', pauseReason: null, summary: '', revision: 1, createdAt: iso(createdAt),
+    updatedAt: iso(createdAt + minutes(1)), phase, childIds: [], ...extra } as TaskView;
+}
+function progress(text: string, updatedAt: number, status: TaskProgress['status'] = 'received', extra: Partial<NonNullable<TaskProgress['report']>> = {}): TaskProgress {
+  return { currentStep: 'fca.result', status, startedAt: iso(updatedAt), updatedAt: iso(updatedAt), findings: [],
+    report: { id: `r-${text.length}-${updatedAt}`, text, updatedAt: iso(updatedAt), ...extra } };
+}
+function world(at: number, tasks: Array<[TaskView, TaskProgress | null]>, history: Array<{ role: 'user' | 'assistant'; content: string; observedAt: string }> = []) {
+  const parts: ReportGateParts = {
+    ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => at, history: () => history,
+    runtime: {
+      get: (_scope, id) => tasks.find(([item]) => item.id === id)?.[0] ?? null,
+      list: (_scope, options) => tasks.map(([item]) => item).filter(item => !options?.parentId || item.parentId === options.parentId),
+      progress: (_scope, id) => tasks.find(([item]) => item.id === id)?.[1] ?? null,
+      taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(at), recalledMemoryIds: [] }],
+    } as ReportGateParts['runtime'],
+  };
+  const decide = (id: string) => { const [item, seen] = tasks.find(([entry]) => entry.id === id)!; return reportGateDecision(parts, item, seen!); };
+  return { parts, decide };
+}
+
+describe('which report reaches him (owner decision 2026-10-13)', () => {
+  it('sends no 「調べきれなかった」 for a request a sibling answered or still works on, and one notice for two failures', () => {
+    const asked = noon - minutes(15);
+    const answered = world(noon, [
+      [task('a', '17時に博多空港にいるには何時に出ればいい？', asked), progress('地下鉄で16分です。', asked + minutes(1))],
+      [task('b', '大濠公園から博多空港の出発時刻', asked + 10_000, 'failed'), progress('調べきれませんでした。', asked + minutes(11), 'failed')],
+    ]);
+    expect(answered.decide('b')).toBe('drop');
+    expect(answered.decide('a')).toBe('deliver');
+    const running = world(noon, [
+      [task('a', '明日の天気', asked, 'executing'), null],
+      [task('b', '明日の天気', asked + minutes(30), 'failed'), progress('止まりました。', asked + minutes(31), 'failed')],
+    ]);
+    expect(running.decide('b')).toBe('drop');
+    const twice = world(noon, [
+      [task('a', '明日の天気', asked, 'failed'), progress('止まりました。', asked + minutes(5), 'failed')],
+      [task('b', '明日の天気', asked + minutes(1), 'failed'), progress('止まりました。', asked + minutes(6), 'failed')],
+    ]);
+    expect([twice.decide('a'), twice.decide('b')]).toEqual(['drop', 'deliver']);
+  });
+
+  it('gives one answer for one request: the first one, or none after it was said in its turn', () => {
+    const asked = noon - minutes(10);
+    const two = world(noon, [
+      [task('a', '明日の天気は？', asked), progress('晴れです。', asked + minutes(1))],
+      [task('b', '明日の天気は?', asked + minutes(5)), progress('晴れの予報です。', asked + minutes(6))],
+    ]);
+    expect([two.decide('a'), two.decide('b')]).toEqual(['deliver', 'drop']);
+    const heard = world(noon, [[task('a', '明日の天気', asked), progress('晴れです。', asked + minutes(1), 'received', { heard: true })]]);
+    expect(heard.decide('a')).toBe('drop');
+  });
+
+  it('drops a failure an hour late, and a late result once he has talked about the same thing since', () => {
+    const asked = noon - minutes(400);
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked, 'failed'), progress('止まりました。', noon, 'failed')]]).decide('a')).toBe('drop');
+    const later = [{ role: 'user' as const, content: '太宰府の由来ってなんだっけ', observedAt: iso(asked + minutes(200)) }];
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', noon)]], later).decide('a')).toBe('drop');
+    const other = [{ role: 'user' as const, content: 'お腹すいた', observedAt: iso(asked + minutes(200)) }];
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', noon)]], other).decide('a')).toBe('deliver');
+  });
+
+  it('holds a result in his quiet hours until morning, unless he is talking in that Talk right now', () => {
+    const asked = night - minutes(30);
+    const quiet = world(night, [[task('a', 'アベンジャーズの最新作の公開日', asked), progress('12月18日公開です。', night)]]);
+    expect(quiet.decide('a')).toBe('hold');
+    const talking = world(night, [[task('a', 'アベンジャーズの最新作の公開日', asked), progress('12月18日公開です。', night)]],
+      [{ role: 'user', content: 'まだ起きてるよ', observedAt: iso(night - minutes(2)) }]);
+    expect(talking.decide('a')).toBe('deliver');
+    // The card waits; the call (only spoken while he is in it) does not hold, it only drops.
+    const card = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), true)('a');
+    const call = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), false)('a');
+    expect(card?.report).toBeUndefined();
+    expect(call?.report?.text).toBe('12月18日公開です。');
+  });
+});
+
+describe('a voice turn\'s research', () => {
+  it('asks the research what her offer was about when he only said yes to it', () => {
+    let goal = '';
+    const turn = { delegate: (spec: { goal: string }) => { goal = spec.goal; return { id: 'w' } as TaskView; } } as unknown as FcaConversationTurn;
+    admitVoiceResearch(turn, { transcript: 'うん、お願い', research: true, places: undefined, at: iso(noon), timeZone: 'Asia/Tokyo',
+      route: { transcript: 'うん、お願い', participantMode: 'owner', context: [{ role: 'user', content: '博多の天気は？' }, { role: 'assistant', content: '晴れです。東京の天気も見ますか？' }] } });
+    expect(goal).toBe('ライ氏「博多の天気は？」 → ボク「東京の天気も見ますか？」 → ライ氏「うん、お願い」');
+  });
+
+  it('says a result that arrives within the wait in the same turn and marks it heard; nothing otherwise', async () => {
+    const said: string[] = [], heard: string[] = [];
+    const report = { id: 'r1', text: '## 経路\n- 大濠公園から福岡空港は地下鉄で16分ほどです。\n出典: https://example.com', updatedAt: iso(noon) };
+    const turn = { awaitWork: async () => ({ taskId: 'w', title: '空港まで', report }), hearWork: (id: string, reportId: string) => { heard.push(`${id}:${reportId}`); return true; } } as unknown as FcaConversationTurn;
+    const spoken = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, text => { said.push(text); });
+    expect(spoken).toBe('大濠公園から福岡空港は地下鉄で16分ほどです。');
+    expect(said).toEqual([spoken]);
+    expect(heard).toEqual(['w:r1']);
+    const late = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() - 30_000 }, text => { said.push(text); });
+    expect(late).toBe('');
+    expect(await researchHeardInTurn(turn, { work: null, admittedAt: performance.now() }, text => { said.push(text); })).toBe('');
+    expect(said).toHaveLength(1);
+  });
+
+  it('never ends a turn whose research runs on with 「時間が足りなかった」', () => {
+    expect(researchSaid(TURN_OUT_OF_TIME_LINE, { id: 'w' } as TaskView)).toBe(RESEARCH_UNDER_WAY_LINE);
+    expect(researchSaid(TURN_OUT_OF_TIME_LINE, null)).toBe(TURN_OUT_OF_TIME_LINE);
+  });
+});

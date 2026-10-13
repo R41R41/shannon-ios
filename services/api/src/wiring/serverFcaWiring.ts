@@ -1,3 +1,4 @@
+import { reportGates } from '../mind/action/fca/fcaReportGate.js';
 import { minecraftGoalBinding } from './fcaMinecraftGoalBinding.js';
 import { createFcaProgressTools } from '../mind/action/fca/fcaProgressTools.js';
 import { createFcaTaskObservationMonitor } from './fcaTaskObservationWiring.js';
@@ -173,15 +174,17 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
-    const progressShown = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
-      parts.ownerAlone);
+    // Which report reaches him now (`fcaReportGate.ts`): the card waits out quiet hours; neither repeats an answered request.
+    const shown = reportGates({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, now: Date.now, conversations: parts.conversations },
+      progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
+      parts.ownerAlone));
     // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
     const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
-      conversations: parts.conversations, shown: progressShown, now: Date.now, log: line => console.warn(line) }) : null;
+      conversations: parts.conversations, shown: shown.card, now: Date.now, log: line => console.warn(line) }) : null;
     const cardTimer = reportCards ? setInterval(() => { reportCards.tick(); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
-      progress: progressShown, spokenReports: true });
+      progress: shown.call, spokenReports: true });
     const lifecycleTask = (executionId: string) => {
       const taskId = new ActionLeaseReader(db).fcaTaskOf(executionId, parts.ownerScope);
       return taskId && visible?.(parts.ownerScope, taskId) ? runtime.runtime.taskSources(parts.ownerScope, taskId) : null;

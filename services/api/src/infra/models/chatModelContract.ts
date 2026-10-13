@@ -67,6 +67,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   toolsWithheld?: true;
   /** The Talk of the turn, for content-free cache receipts only (kept there as a short hash); never sent to a model. */
   threadKey?: string;
+  /** The owner's clock for this turn (`turnClockLine`): the Claude requests say it in the turn's context; the historical GPT profile does not. */
+  clock?: { at: string; timeZone: string };
 }
 
 export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {
@@ -86,6 +88,8 @@ export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPr
    * speaks the phrase only after a silence). Never sent to a model.
    */
   waitingSaid?: true | (() => boolean);
+  /** The owner's clock for this turn (`turnClockLine`): the Claude requests say it in the turn's context; the historical GPT profile does not. */
+  clock?: { at: string; timeZone: string };
 }
 
 export interface ShannonWebSource {

@@ -9,7 +9,7 @@ import { appendForegroundMenu } from './anthropicForegroundMenu.js';
 import {
   cachedSystem, PLAN_NO_TOOLS_LINE, planned, planToolPair, splitCapabilityLines, splitSkillIndex, withTurnLines, type PlanEnvironment,
 } from './anthropicCachePlan.js';
-import { claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_VOICE_LINES } from './anthropicRequest.js';
+import { claudeTools, claudeTurnMessages, clockContext, conversationEffort, CLAUDE_VOICE_LINES } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 
 /**
@@ -62,7 +62,7 @@ export function spokenWords(message: string): string {
 export function plannedVoiceBody(
   settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number,
 ): Anthropic.MessageCreateParamsNonStreaming {
-  const context = request.turnContext ? [request.turnContext] : [];
+  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request)];
   const conversation = { history: request.history, context, precedingReply: request.precedingReply, words: spokenWords(request.message) };
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,

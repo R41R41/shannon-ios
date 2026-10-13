@@ -35,6 +35,13 @@ export interface FcaConversationTurn {
   stageDelivery?(): void;
   /** No fallback model call; unbound descendants remain ineligible for execution. */
   abort(): void;
+  /**
+   * The research this turn admitted, once it completed with a report within `milliseconds` (polled; never waits longer, and
+   * returns null when it failed, stopped, the signal aborted, or the owner is no longer alone).
+   */
+  awaitWork?(milliseconds: number, signal?: AbortSignal): Promise<{ taskId: string; title: string; report: NonNullable<TaskProgress['report']> } | null>;
+  /** The report was said in this turn: it is not delivered again (no card, no call report). */
+  hearWork?(taskId: string, reportId: string, spoken: string): boolean;
 }
 
 /** Pending references may be shown only inside the exact foreground segment that just created them. */

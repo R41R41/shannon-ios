@@ -73,7 +73,7 @@ import { conversationFcaProvenance, observeFcaConversation } from '../../mind/ac
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
-import { admitConversationWork, admittedWorkContext } from '../../mind/action/fca/conversationWork.js';
+import { admittedWorkContext, admitVoiceResearch, researchHeardInTurn, researchSaid, voiceTurnClock } from './voiceResearchTurn.js';
 import { finishTurnTiming, TurnTiming, turnStages, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -369,8 +369,8 @@ async function completeLiveVoiceDelegation(
     readSourceIds: capability.readSourceIds, ownerAlone: () => dependencies.toolServer?.audience.othersKnown(scopeKey) === false }) : null;
   try {
   const placeContext = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript) ? { ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? { latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude } : {}), spoken: true } : undefined;
-  const work = admitConversationWork(fcaTurn, { message: transcript, research: selectedSkills.has('current_web') || Boolean(placeContext), places: placeContext,
-    at: occurredAt, ...(deviceContext?.timeZoneIdentifier ? { timeZone: deviceContext.timeZoneIdentifier } : {}) });
+  const admitted = admitVoiceResearch(fcaTurn, { transcript, route: routeInput, research: selectedSkills.has('current_web') || Boolean(placeContext),
+    places: placeContext, at: occurredAt, timeZone: deviceContext?.timeZoneIdentifier }), work = admitted.work;
   const placeSkill = !work && placeContext ? await bounded('places_timeout', runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: placeContext }), () => null) : null;
   observer?.signal?.throwIfAborted();
   const directHint = Boolean(fcaTurn) && plainVoiceHint(decision, transcript, uncertainTranscript);
@@ -391,6 +391,7 @@ async function completeLiveVoiceDelegation(
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
+    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier), // His clock: 今日 and 明日 are his days (`turnClockLine`).
     useWebSearch: !work && !placeSkill && selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,
@@ -415,7 +416,7 @@ async function completeLiveVoiceDelegation(
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
           timing.mark('firstToken');
           streamedReplyPrefix = `${streamedReplyPrefix}${delta}`.slice(0, 2_000);
-          await observer.onTextDelta(delta);
+          await observer.onTextDelta(researchSaid(delta, work));
           if (!streamedEmotionUpdated && /[。！？!?\n]/u.test(streamedReplyPrefix)) {
             streamedEmotionUpdated = true;
             expressiveEmotion = emotionWith(streamedReplyPrefix);
@@ -432,10 +433,9 @@ async function completeLiveVoiceDelegation(
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
-  const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? {
-    title: '依頼された機能の実装', goal: confirmedImplementationRequest,
-  } : undefined);
-  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  const heard = await researchHeardInTurn(fcaTurn, admitted, observer && (text => observer.onTextDelta(text)), observer?.signal); // Said if within 20 s.
+  const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
+  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(completion.reply, work)}${heard}`;
   let feedbackRecordId: string | undefined;
   const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, feedbackReplySuffix: placeReply('', placeSkill?.places ?? []), completion, tier, tools: toolOffer.tools, deadline, at: occurredAt, onFeedbackRecord: id=>{feedbackRecordId=id;} }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.

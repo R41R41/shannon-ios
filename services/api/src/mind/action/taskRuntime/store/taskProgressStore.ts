@@ -64,6 +64,18 @@ export class TaskProgressStore {
       return true;
     });
   }
+  /** The current report was said in the turn that asked for it: its spoken form (kept if already written) and the mark. */
+  hear(scopeKey: string, taskId: string, reportId: string, spoken: string): boolean {
+    return this.authority.transaction(() => {
+      if (!this.authority.get(scopeKey, taskId)) return false;
+      const prior = this.read(taskId);
+      if (!prior?.report || prior.report.id !== reportId || !spoken.trim()) return false;
+      const row = this.db.prepare('SELECT step_id,operation_id FROM fca_task_progress WHERE task_id=?').get(taskId)!;
+      const report = { ...prior.report, spoken: prior.report.spoken ?? spoken.slice(0, 400), heard: true as const };
+      this.write(taskId, String(row.step_id), String(row.operation_id), { ...prior, report });
+      return true;
+    });
+  }
   record(step: TaskStep, event: TaskProgressEvent, valid: () => boolean): boolean {
     return this.authority.transaction(() => {
       if (!valid()) return false;

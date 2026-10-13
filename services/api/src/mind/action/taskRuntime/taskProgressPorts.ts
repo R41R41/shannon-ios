@@ -8,7 +8,9 @@ export interface TaskProgress {
   findings: Array<{ id: string; text: string; status: 'unconfirmed'; sources: ShannonWebSource[]; updatedAt: string }>;
   places?: ShannonPlace[];
   /** `text` is the full report for the screen; `spoken`, once written, the short form a call says aloud (`fcaSpokenReport.ts`). */
-  report?: { id: string; text: string; updatedAt: string; spoken?: string };
+  report?: { id: string; text: string; updatedAt: string; spoken?: string;
+    /** Said in the voice turn that asked for it (`researchHeardInTurn`): delivered, so no card and no call report follow. */
+    heard?: true };
 }
 export interface TaskProgressEvent {
   operationId: string; tool: string; status: TaskProgress['status'];
