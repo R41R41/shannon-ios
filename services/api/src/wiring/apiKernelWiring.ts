@@ -13,3 +13,5 @@ export class ShannonApiKernel extends Kernel {
 export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString(), options: ShannonApiKernelOptions = {}): ShannonApiKernel {
   return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now, emotionTiming()), now, options);
 }
+// The read of how her accepted lifecycle operations ended, handed to the kernel's tool traces (`operationOutcomeWiring.ts`).
+export { configuredOperationOutcomes } from './operationOutcomeWiring.js';

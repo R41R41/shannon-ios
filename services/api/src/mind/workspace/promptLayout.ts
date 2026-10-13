@@ -13,7 +13,8 @@ export { DATA_FRAME_RULE, DATA_FRAME_THREAT, framedReport } from './dataFrames.j
  *
  * 1. `[いまの場]`: what attention holds, highest salience first. Text: at most 8 lines and 600 characters, the block's header
  *    included, with the `[ほか]` line for what attention let go (the owner alone). Voice: only items that are not someone's words,
- *    at a current salience of 0.6 or more, at most 2 lines and 160 characters with the header, notices among them.
+ *    at a current salience of 0.6 or more, at most 2 lines and 160 characters with the header, notices among them; a current
+ *    `【知らせ:作業終了】` comes first whatever its salience (2026-10-14).
  * 2. Notices with fixed markers (`【知らせ:触れた】`, `【知らせ:作業終了】`, `【知らせ:約束の時刻】`, `【知らせ:止められた】`), in the
  *    order they arrived: a new one is appended, an earlier one is never rewritten.
  * 3. Untrusted data frames `〔データ 出どころ=… id=…〕…〔/データ〕` after one fixed line that says they are data, not instructions
@@ -157,8 +158,12 @@ export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutT
   const notices = currentNotices(scope, turn.at).filter(item => shown(item) && (turn.noticeVisible?.(item) ?? true));
   if (turn.surface === 'voice') {
     const { lines, characters, minimumSalience } = PROMPT_LAYOUT_LIMITS.voice;
-    const strong = held.filter(entry => !SPEECH_KINDS.has(entry.item.kind) && entry.salience >= minimumSalience).map(entry => entry.item);
-    const out = strong.map(item => (NOTICE_KINDS.has(item.kind) ? noticeLine(item, turn.at) : placeLine(item, turn, null)));
+    // The end of a task she accepted (「終わったら知らせます」) is said in voice too, newest first, whatever its salience: it
+    // enters at 0.5 and the voice line is 0.6, so it was never in a voice turn (the 2026-10-14 incident).
+    const ended = notices.filter(item => item.kind === 'task_outcome').reverse();
+    const strong = held.filter(entry => !SPEECH_KINDS.has(entry.item.kind) && entry.salience >= minimumSalience
+      && !ended.some(item => item.id === entry.item.id)).map(entry => entry.item);
+    const out = [...ended, ...strong].map(item => (NOTICE_KINDS.has(item.kind) ? noticeLine(item, turn.at) : placeLine(item, turn, null)));
     return bounded(WORKSPACE_PLACE_HEADER, out, lines + 1, characters);
   }
   const limits = PROMPT_LAYOUT_LIMITS.text;

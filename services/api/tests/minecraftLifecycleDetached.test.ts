@@ -13,6 +13,12 @@ import { ActionLeaseReader } from '../src/mind/action/threads/store/actionLeaseR
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
 import { noticeLine } from '../src/mind/workspace/promptLayout.js';
 import { offeredTools } from '../src/mind/tools/shannonTools.js';
+import { toolTraceCall, toolTracePrompt, traceLabel, supersededFailuresDropped } from '../src/mind/tools/shannonToolTrace.js';
+import { InMemoryToolTraces, ToolTurnLog } from '../src/mind/tools/shannonToolTurns.js';
+import { inboxPerception } from '../src/mind/perception/perceptionPorts.js';
+import { applyOp, emptyScope, initialSalience } from '../src/mind/workspace/workspaceState.js';
+import { NOTICE_MARKERS, PROMPT_LAYOUT_LIMITS, workspaceBlocks } from '../src/mind/workspace/workspacePorts.js';
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -58,11 +64,22 @@ function fixture() {
     t.controller.abort(); await h.actions.finish(t.execution.lease, 'completed', 'turn_finished');
     return { ...t, result, resources };
   };
+  /** Several calls in one turn, as a model makes them (a first try, then a retry): their inputs and results. */
+  const calls = async (name: string, identity: string, inputs: readonly Record<string, unknown>[]) => {
+    const t = await turn();
+    const results = [];
+    for (const input of inputs) {
+      results.push(await inActionExecution(t.execution, () => autonomy.tools.call(name, input, { scopeKey: 'owner', surface: 'voice', audience: 'owner_alone',
+        threadId: 'thread', memory: { ...toolSessionMemory(), turnKey: identity }, acknowledgementOwner: 'fca' }, t.execution.signal)));
+    }
+    t.controller.abort(); await h.actions.finish(t.execution.lease, 'completed', 'turn_finished');
+    return results;
+  };
   const receipt = (command: MinecraftLifecycleCommand, patch: Partial<MinecraftLifecycleReceipt> = {}): MinecraftLifecycleReceipt => ({ id: command.id,
     connectionId: command.connectionId, serverId: command.serverId, action: command.action, outcome: 'completed', code: 'changed', observedAt: at,
     inputsReleased: true, state: state({ bot: 'joined' }), ...patch });
   const command = async () => { await until(() => configured.service.store.pending().length === 1); return poll().commands[0]!; };
-  return { ...h, configured, principal, poll, call, receipt, command, at: () => at,
+  return { ...h, configured, principal, poll, call, calls, receipt, command, at: () => at,
     advance(ms: number) { at = new Date(Date.parse(at) + ms).toISOString(); }, alone(value: boolean) { alone = value; } };
 }
 
@@ -243,3 +260,91 @@ describe('minecraft.set_day: the owner alone in a conversation, under its own li
   });
 });
 
+
+/**
+ * The 2026-10-14 incident (production 75a2364c): 「シャノン、マイクラにログインして」 in a voice turn. The first `minecraft.login`
+ * failed its input check (invalid_input), the retry in the same turn was accepted, and the body's receipt (completed/changed)
+ * came two seconds later. Her next voice turn read the trace 「minecraft.login → できなかった」 beside 「できた」, no
+ * 【知らせ:作業終了】 (it enters at 0.5, the voice line was 0.6), and she said she had not got in. Logout did the same at 20:56.
+ */
+describe('a lifecycle operation retried after a failed first try reaches her next turn as its latest outcome', () => {
+  const ACTIONS = ['login', 'logout', 'start', 'stop', 'set_day'] as const;
+
+  it.each(ACTIONS)('minecraft.%s: an invalid first try, an accepted retry, one completed receipt: one done notice, and success in the next turn', async action => {
+    const f = fixture(), name = `minecraft.${action}`;
+    const inputs = [{ server: 'home' }, {}];
+    const [first, second] = await f.calls(name, `incident-${action}`, inputs);
+    expect(first).toMatchObject({ ok: false, failure: 'invalid_input' });
+    expect(second).toMatchObject({ ok: true, evidence: { outcome: 'queued', action } });
+    // Only the retry made an operation and its own action.
+    const command = await f.command();
+    expect(f.db.prepare("SELECT COUNT(*) AS count FROM mind_actions WHERE kind='minecraft'").get()?.count).toBe(1);
+
+    // Her trace of that turn, as the next turn of the same Talk replays it, with the outcome read at that moment.
+    const leases = new ActionLeaseReader(f.db);
+    const log = new ToolTurnLog(new InMemoryToolTraces(), f.at, (scopeKey, ids) => leases.lifecycleOutcomes(scopeKey, ids));
+    const opened = log.open('owner', 'thread', 'シャノン、マイクラのことお願い', false, `utterance-${action}`);
+    [first, second].forEach((result, index) => opened.called(toolTraceCall(name, JSON.stringify(inputs[index]), result!, undefined)));
+    log.turnStored('owner', 'thread', 'turn-1', 'シャノン、マイクラのことお願い', true, `utterance-${action}`);
+    const replayed = () => toolTracePrompt(log.traces('owner', 'thread', ['turn-1']).map(record => ({ record, label: traceLabel(1) })));
+    expect(replayed()).toContain(`${name} → 受け付けた。まだ結果は届いていない`);
+    expect(replayed()).not.toContain('できなかった');
+
+    // The state the body reports with its receipt: after a logout she is gone, after a stop the server is down.
+    const after = action === 'logout' ? { bot: 'absent' as const } : action === 'stop' ? { running: 'stopped' as const, bot: 'absent' as const } : { bot: 'joined' as const };
+    const done = f.receipt(command, { state: { serverId: 'home', observedAt: f.at(), running: 'running', otherPlayers: 0, ...after },
+      ...(action === 'stop' ? { stopGuard: { admissionClosed: true as const, otherPlayers: 0 as const, checkedAt: f.at() } } : {}) });
+    expect(f.poll({ receipts: [done] }).acknowledged).toEqual([command.id]);
+    await until(() => f.store.get(command.authority.executionId)!.state === 'completed');
+    expect(replayed()).toContain(`${name} → 受け付けた。そのあと体から完了の返事が届いた（終わった）`);
+    expect(replayed()).not.toContain('できなかった');
+
+    // Exactly one notice, done, from the one receipt (the failed first try made none).
+    const reports = [...leases.ownLifecycleReceipts('owner'),
+      ...leases.notStartedLifecycle('owner').map(row => ({ id: row.id, action, outcome: 'failed', observedAt: row.at })),
+      ...leases.unknownExitedLifecycle('owner').map(row => ({ id: row.id, action: row.action, outcome: 'unknown', observedAt: row.at }))];
+    const notices = lifecycleOutcomeNotices(reports, f.at());
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.draft).toMatchObject({ kind: 'task_outcome', code: 'done', tool: name });
+    expect(notices[0]!.draft).not.toHaveProperty('reason');
+
+    // The next turn is voice (as at 20:46:44): the notice is said there although it entered below the voice line.
+    const event = inboxPerception({ draft: notices[0]!.draft, at: notices[0]!.at, seq: 1 })!;
+    const scope = emptyScope();
+    const initial = initialSalience(event, []);
+    expect(initial).toBeLessThan(PROMPT_LAYOUT_LIMITS.voice.minimumSalience);
+    applyOp(scope, { op: 'perceive', event, initial, detail: { code: 'done', tool: name, reason: null }, at: event.time });
+    const later = new Date(Date.parse(f.at()) + 150_000).toISOString();
+    const voice = workspaceBlocks(scope, { surface: 'voice', present: OWNER_AUDIENCE, at: later, currentItemId: null, current: null, dataFrames: false, text: () => null });
+    expect(voice).toContain(`${NOTICE_MARKERS.task_outcome}2分前、〈${name}〉が終わった`);
+    expect(voice).not.toContain('うまくいかず');
+  });
+
+  it.each(ACTIONS)('minecraft.%s: an empty serverId (what a model writes for a value it does not know) is absent, and runs at once', async action => {
+    const f = fixture(), name = `minecraft.${action}`;
+    const [result] = await f.calls(name, `empty-${action}`, [{ serverId: '' }]);
+    expect(result).toMatchObject({ ok: true, evidence: { outcome: 'queued', action, target: { kind: 'minecraft_server', id: 'home' } } });
+    // An unknown id is still refused by the executor, and a field that is not in the schema by the input check.
+    const g = fixture();
+    expect((await g.calls(name, `unknown-${action}`, [{ serverId: 'elsewhere' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
+    expect((await g.calls(name, `field-${action}`, [{ reason: 'ライ氏に頼まれた' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
+  });
+
+  it('tells the other ends of an accepted operation as they are, and keeps a failure that was never followed by a success', async () => {
+    const f = fixture(), [accepted] = await f.calls('minecraft.login', 'refused-login', [{}]);
+    const command = await f.command();
+    f.poll({ receipts: [f.receipt(command, { outcome: 'refused', code: 'players_present' })] });
+    await until(() => f.store.get(command.authority.executionId)!.state === 'failed');
+    const leases = new ActionLeaseReader(f.db);
+    expect(leases.lifecycleOutcomes('owner', [command.id, `lifecycle:${'c'.repeat(64)}`, 'not-an-operation'])).toEqual(new Map([[command.id, 'refused']]));
+    const call = toolTraceCall('minecraft.login', '{}', accepted!, undefined);
+    expect(call).toMatchObject({ ok: true, operation: command.id });
+    const line = toolTracePrompt([{ record: { turnId: 't', threadId: 'thread', recordedAt: f.at(), asked: false, calls: [{ ...call, latest: 'refused' }] }, label: traceLabel(1) }]);
+    expect(line).toContain('minecraft.login → 受け付けた。そのあと体が断った（できなかった）');
+    // A failure stays when nothing after it in the turn succeeded with the same tool and target.
+    const failed = { tool: 'minecraft.login', ok: false, failure: 'invalid_input' };
+    expect(supersededFailuresDropped([failed, { tool: 'minecraft.status', ok: true }])).toEqual([failed, { tool: 'minecraft.status', ok: true }]);
+    expect(supersededFailuresDropped([{ tool: 'folder.read', target: 'a', ok: false, failure: 'refused' }, { tool: 'folder.read', target: 'b', ok: true }])).toHaveLength(2);
+    expect(supersededFailuresDropped([{ tool: 'minecraft.login', ok: true }, failed])).toHaveLength(2);
+  });
+});

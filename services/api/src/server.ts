@@ -14,7 +14,7 @@ import { handleRetiredVoiceRoute } from './surfaces/voice/retiredVoiceRoutes.js'
 import { createGeminiSpeechRoute } from './surfaces/voice/serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './surfaces/voice/serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './surfaces/voice/serverLiveVoiceStreamRoute.js';
-import { createLocalApiKernel } from './wiring/apiKernelWiring.js';
+import { configuredOperationOutcomes, createLocalApiKernel } from './wiring/apiKernelWiring.js';
 import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
@@ -194,6 +194,7 @@ const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new File
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
+const operationOutcomes = configuredOperationOutcomes(configuredDatabasePath()); // How her accepted lifecycle operations ended, for later turns' tool traces.
 const kernel = createLocalApiKernel(now, {
   conversationExtras: () => stage5.conversationExtras.ports, ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
@@ -235,7 +236,7 @@ const kernel = createLocalApiKernel(now, {
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
-  ...(mind ? { mind: mind.mind } : {}),
+  ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
@@ -490,7 +491,7 @@ function shutdown(): void {
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();
-    autonomyStore.close(); modelModes.close();
+    autonomyStore.close(); modelModes.close(); operationOutcomes.close();
     persistentStore.close();
     process.exitCode = 0;
   });

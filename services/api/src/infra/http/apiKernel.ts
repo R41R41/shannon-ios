@@ -38,7 +38,7 @@ import { InMemoryAgentTaskStore, type AgentCommandType, type AgentPlanItem, type
 import { validatedPlaceSearchOptions } from '../../integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import { validChatStream } from '../../surfaces/text/chatSentenceStream.js';
-import { conversationToolServer, turnToolResults, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
+import { conversationToolServer, turnToolResults, type ConversationToolServer, type TracedOperationOutcomes } from '../../mind/tools/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { type NotionTurnReader } from '../../mind/action/respond/conversationCapabilities.js';
@@ -150,6 +150,7 @@ export interface ShannonApiKernelOptions {
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
    */
   mind?: MindTurnPorts;
+  operationOutcomes?: TracedOperationOutcomes; // How her accepted lifecycle operations ended, for later tool traces (2026-10-14).
   /** Explicit opt-in; the normal text model/stream remains the foreground conversation executor. */
   fcaConversation?: () => FcaConversationPort | null;
   fcaVoice?: () => FcaVoicePort | null;
@@ -227,7 +228,7 @@ export class ShannonApiKernel {
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, ...(this.mind ? { reactions: { ...options.body?.reactions, mind: this.mind } } : {}), stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
-    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
+    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now, options.operationOutcomes); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
     this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); // Stage 2, step 6: skill.read.
@@ -280,7 +281,6 @@ export class ShannonApiKernel {
     }
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
     if (testFlightResponse) return testFlightResponse;
-
     if (request.path.startsWith('/v1/organize/') || request.path.startsWith('/v1/integrations/voyager/')) {
       const organizeResponse = await dispatchOrganizeRequest(request, {
         organizeStore: this.organizeStore,

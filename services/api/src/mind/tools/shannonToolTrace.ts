@@ -27,7 +27,21 @@ export interface ToolTraceCall {
   more?: true;
   /** For a read or a write: a size or an id, never content. */
   note?: string;
+  /**
+   * A Minecraft lifecycle operation she accepted and that runs on after the turn (`lifecycle:<sha256>`): its own id, so that a
+   * later turn reads how it ended (`latest`) instead of the 「受け付けた」 of that moment.
+   */
+  operation?: string;
+  /** How that operation ended, as known when the trace is read (`ToolTurnLog.traces`); never stored. Absent: not ended yet. */
+  latest?: TracedOperationOutcome;
 }
+
+/** How an accepted lifecycle operation ended (`ActionLeaseReader.lifecycleOutcomes`). */
+export type TracedOperationOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
+/** Reads how these accepted operations of the scope ended; an operation not ended yet is absent. Wired from the lease reader. */
+export type TracedOperationOutcomes = (scopeKey: string, operationIds: readonly string[]) => ReadonlyMap<string, TracedOperationOutcome>;
+const LIFECYCLE_OPERATION = /^lifecycle:[a-f0-9]{64}$/u;
+const TRACED_OUTCOMES: ReadonlySet<string> = new Set(['completed', 'refused', 'cancelled', 'not_started', 'unknown']);
 
 export interface ToolTraceRecord {
   /** The stored turn (experience id) whose reply the calls were made for. */
@@ -88,6 +102,13 @@ function namesOf(tool: string, resultText: string): string[] {
   return names;
 }
 
+/** The id of a Minecraft lifecycle operation this result accepted and left running, or undefined. */
+function acceptedOperation(result: ToolResult): string | undefined {
+  const evidence = result.evidence;
+  const id = evidence?.outcome === 'queued' && evidence.target.kind === 'minecraft_server' ? evidence.operationId : undefined;
+  return id && LIFECYCLE_OPERATION.test(id) ? id : undefined;
+}
+
 /**
  * One call as the trace keeps it. `secrets`: the conversation's check of what must reach nobody but the owner; a name
  * or target that repeats it is hidden, and when the check could not be read (`null`) no free text is kept at all.
@@ -105,6 +126,8 @@ export function toolTraceCall(tool: string, argumentsJson: string, result: ToolR
   const target = keep(about && moved ? `${about} → ${moved}` : about, TARGET_CHARACTERS);
   const call: ToolTraceCall = { tool: clip(tool, 40), ...(target ? { target } : {}), ok: result.ok, ...(result.failure ? { failure: result.failure } : {}) };
   if (!result.ok) return call;
+  const operation = acceptedOperation(result);
+  if (operation) return { ...call, operation };
   if (/\.(?:list|search)$/u.test(tool)) {
     const found = namesOf(tool, result.text);
     const names = found.slice(0, TRACE_NAMES).map(name => keep(name, tool.startsWith('study.') ? STUDY_NAME_CHARACTERS : NAME_CHARACTERS)!);
@@ -145,13 +168,57 @@ export function boundedTraceCalls(value: unknown): ToolTraceCall[] {
       ...(typeof call.failure === 'string' ? { failure: clip(call.failure, 20) } : {}),
       ...(names ? { names } : {}), ...(call.more === true ? { more: true as const } : {}),
       ...(typeof call.note === 'string' ? { note: clip(call.note, 100) } : {}),
+      ...operationFields(call),
     }];
   });
 }
 
+/** A stored call's accepted operation and its outcome, when they have their closed shapes. */
+function operationFields(call: Record<string, unknown>): Pick<ToolTraceCall, 'operation' | 'latest'> {
+  const operation = typeof call.operation === 'string' && LIFECYCLE_OPERATION.test(call.operation) ? call.operation : undefined;
+  const latest = typeof call.latest === 'string' && TRACED_OUTCOMES.has(call.latest) ? call.latest as TracedOperationOutcome : undefined;
+  return { ...(operation ? { operation } : {}), ...(latest ? { latest } : {}) };
+}
+
+/** The operation ids of accepted lifecycle operations in these traces, to be read once for all of them. */
+export function tracedOperations(records: readonly ToolTraceRecord[]): string[] {
+  return [...new Set(records.flatMap(record => record.calls.flatMap(call => (call.operation ? [call.operation] : []))))];
+}
+
+/** The records with each accepted lifecycle operation's latest outcome, as `outcomes` read it now. */
+export function withLatestOutcomes(records: readonly ToolTraceRecord[], outcomes: ReadonlyMap<string, TracedOperationOutcome>): readonly ToolTraceRecord[] {
+  if (!outcomes.size) return records;
+  return records.map(record => record.calls.some(call => call.operation && outcomes.has(call.operation))
+    ? { ...record, calls: record.calls.map(call => {
+      const latest = call.operation ? outcomes.get(call.operation) : undefined;
+      return latest ? { ...call, latest } : call;
+    }) } : record);
+}
+
+/**
+ * The calls of one turn as she should remember them: a call that failed before anything ran (`invalid_input`, `not_offered`,
+ * `unavailable`, a refusal) and that she made again in the same turn with the same tool and target, successfully, is left out.
+ * The retry is what happened; the first try changed nothing (the 2026-10-14 incident: 「minecraft.login → できなかった」 beside
+ * the accepted retry read as 「入れなかった」). A failure that was not followed by a success of the same call stays.
+ */
+export function supersededFailuresDropped(calls: readonly ToolTraceCall[]): ToolTraceCall[] {
+  return calls.filter((call, index) => call.ok || !calls.slice(index + 1)
+    .some(later => later.ok && later.tool === call.tool && (later.target ?? '') === (call.target ?? '')));
+}
+
+/** What became of an accepted lifecycle operation, as a fixed neutral phrase. */
+const LATEST_WORD: Readonly<Record<TracedOperationOutcome, string>> = Object.freeze({
+  completed: 'そのあと体から完了の返事が届いた（終わった）',
+  refused: 'そのあと体が断った（できなかった）',
+  cancelled: 'そのあと取りやめになった',
+  not_started: 'そのあと始められずに閉じた',
+  unknown: 'そのあと結果を確かめられずに閉じた',
+});
+
 function callLine(call: ToolTraceCall): string {
   const head = `${call.tool}${call.target ? `「${call.target}」` : ''}`;
   if (!call.ok) return `${head} → できなかった（${call.failure ?? 'failed'}）`;
+  if (call.operation) return `${head} → 受け付けた。${call.latest ? LATEST_WORD[call.latest] : 'まだ結果は届いていない'}`;
   const found = call.names ? (call.names.length ? `。あったもの: ${call.names.join('、')}${call.more ? '、ほかにもある' : ''}` : '。何もなかった') : '';
   return `${head} → できた${found}${call.note ? `（${call.note}）` : ''}`;
 }
@@ -174,8 +241,9 @@ export function toolTracePrompt(turns: readonly { record: ToolTraceRecord; label
   const lines: string[] = [];
   let length = TRACE_HEADER.length;
   for (const { record, label } of turns) {
-    if (!record.calls.length) continue;
-    const turn = record.calls.map(call => `- ${label}: ${callLine(call)}`);
+    const calls = supersededFailuresDropped(record.calls);
+    if (!calls.length) continue;
+    const turn = calls.map(call => `- ${label}: ${callLine(call)}`);
     const added = turn.reduce((sum, line) => sum + line.length + 1, 0);
     const room = Math.min(maximum, TRACE_PROMPT_CHARACTERS);
     if (length + added > room) {
