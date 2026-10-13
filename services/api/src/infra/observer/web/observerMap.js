@@ -284,3 +284,37 @@ export function blockRoutes(layout, links) {
   }
   return routes;
 }
+
+/* ---------- Detail level (owner, 2026-10-13): what is drawn is independent of how far the map is zoomed ---------- */
+/** 1 = blocks, 2 = boxes, 3 = boxes with their inputs/outputs. A picked level always wins; only "auto" follows the zoom. */
+export function detailLevel(picked, zoom) {
+  if (picked === 1 || picked === 2 || picked === 3) return picked;
+  return zoom < 1.7 ? 1 : zoom < 3 ? 2 : 3;
+}
+/** Rough SVG text width: monospace Latin is .6 em, Japanese is 1 em. Used only to keep text inside its box. */
+export function textWidth(text, size) { return [...String(text)].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .6 : 1), 0) * size; }
+export function fitText(text, size, width) {
+  if (textWidth(text, size) <= width) return String(text);
+  // Pre-trim to what could fit at the narrowest glyph, so the loop below stays short for long values.
+  const chars = [...String(text)].slice(0, Math.max(0, Math.ceil(width / (size * .6))) + 1);
+  while (chars.length && textWidth(`${chars.join('')}…`, size) > width) chars.pop();
+  return chars.length ? `${chars.join('')}…` : '';
+}
+export const IO_FONT = 6.8, IO_PITCH = 8.5;
+/** Input/output rows laid out inside a box: at most as many rows as fit its height, every row cut to its width. */
+export function ioRows(box, input, output) {
+  const top = box.y + 28, bottom = box.y + box.h - 3, budget = Math.max(0, Math.floor((bottom - top - 2) / IO_PITCH) + 1);
+  const inputs = Math.min(budget, input.length, output.length ? Math.max(1, budget - Math.min(output.length, budget - 1)) : budget);
+  const outputs = Math.max(0, Math.min(output.length, budget - inputs));
+  const rows = [], width = box.w - 17 - 6;
+  let y = top;
+  for (const [mark, list] of [['入', input.slice(0, inputs)], ['出', output.slice(0, outputs)]]) {
+    list.forEach((field, index) => {
+      const name = fitText(field.gloss || field.key, IO_FONT, width * .55);
+      rows.push({ mark: index === 0 ? mark : '', name, value: fitText(field.value, IO_FONT, Math.max(0, width - textWidth(`${name} `, IO_FONT))), y });
+      y += IO_PITCH;
+    });
+    if (list.length) y += 2;
+  }
+  return rows.filter(row => row.y <= bottom);
+}

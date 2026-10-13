@@ -114,6 +114,7 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 .levels button { border: 0; background: var(--surface); padding: 3px 10px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
 .levels button + button { border-left: 1px solid var(--line); }
 .levels button[aria-current="true"] { background: var(--ink); color: var(--surface); }
+.levels button.effective { box-shadow: inset 0 -3px 0 var(--accent); color: var(--ink); }
 .map { background: var(--sunk); }
 .map svg { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; cursor: grab; }
 #map text { fill: var(--ink); }
@@ -121,7 +122,7 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 [data-level="1"] .block-box { fill: color-mix(in srgb, var(--c) 13%, var(--surface)); cursor: pointer; }
 .block.active .block-box { stroke: var(--c); stroke-width: 2.4; }
 .block.dim, .node.dim { opacity: .3; }
-.block-head { font-size: 12px; font-weight: 700; }
+.block-head { font-weight: 700; }
 #map .block-process { font-size: 9px; fill: var(--muted); }
 .far-title { font-weight: 700; }
 #map .far-process { fill: var(--muted); }
@@ -129,7 +130,7 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 .edge { fill: none; stroke: color-mix(in srgb, var(--c) 55%, var(--line)); stroke-width: 1.2; stroke-linejoin: round; opacity: .28; transition: opacity .2s; }
 .edge.background { stroke-dasharray: 4 4; opacity: .12; }
 .edge.hot { opacity: 1; stroke: var(--c); stroke-width: 2.2; }
-.block-edge { fill: none; stroke: color-mix(in srgb, var(--c) 75%, var(--ink)); stroke-width: 5; stroke-linecap: round; opacity: .55; }
+.block-edge { fill: none; stroke: color-mix(in srgb, var(--c) 75%, var(--ink)); stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linecap: round; opacity: .55; }
 .node { cursor: pointer; }
 .node rect { fill: var(--surface); stroke: color-mix(in srgb, var(--c) 45%, var(--line)); stroke-width: 1.2; }
 .node[data-state="running"] rect { fill: color-mix(in srgb, var(--c) 18%, var(--surface)); stroke: var(--c); stroke-width: 2.4; }
@@ -139,13 +140,14 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 .node.selected rect { stroke: var(--accent); stroke-width: 3; }
 .node.receipt rect { animation: receipt 3s linear; }
 @keyframes receipt { from { fill: color-mix(in srgb, var(--c) 40%, var(--surface)); } to { fill: var(--surface); } }
-.node-label { font-size: 12.5px; font-weight: 700; }
+.node-label { font-weight: 700; }
 #map .node-role { font-size: 9.5px; fill: var(--muted); }
 #map .node-time { font-size: 8px; font-family: var(--mono); fill: var(--c); }
 .field { font-size: 6.8px; font-family: var(--mono); }
 #map .field-key { fill: var(--muted); }
 #map .io-mark { font-size: 6px; font-weight: 700; fill: var(--c); }
 .packet { fill: var(--c); stroke: var(--surface); stroke-width: 1.5; }
+/* At 塊 each block is named once, in its centre. */
 [data-level="1"] .node, [data-level="1"] .edge, [data-level="1"] .block-head, [data-level="1"] .block-process { display: none; }
 [data-level="2"] .far, [data-level="3"] .far, [data-level="2"] .block-edge, [data-level="3"] .block-edge { display: none; }
 [data-level="2"] .node-fields, [data-level="1"] .node-time, [data-level="2"] .node-time { display: none; }

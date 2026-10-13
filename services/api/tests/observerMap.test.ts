@@ -86,3 +86,40 @@ describe('target architecture (ADR-0009) dummy model', () => {
     expect(TARGET_NODES.find(spec => spec[0] === 'reward')![5]).toBe('完了35・反応35・予測20・自己10');
   });
 });
+
+describe('detail level is independent of zoom (owner, 2026-10-13)', () => {
+  it('keeps a picked level at every zoom, and only "auto" follows the zoom', async () => {
+    const { detailLevel } = await import('../src/infra/observer/web/observerMap.js');
+    for (const picked of [1, 2, 3] as const) for (const zoom of [1, 1.5, 2.2, 3.6, 5]) expect(detailLevel(picked, zoom)).toBe(picked);
+    expect([1, 2.2, 3.6].map(zoom => detailLevel(null, zoom))).toEqual([1, 2, 3]);
+  });
+  it('remembers only the overlay, hint and picked level, and rejects anything else', async () => {
+    const { viewPrefs } = await import('../src/infra/observer/web/observer.js');
+    expect(viewPrefs({ hidden: true, hint: false, level: 3, token: 'x' })).toEqual({ hidden: true, hint: false, level: 3 });
+    expect(viewPrefs({ level: 7 })).toEqual({ hidden: false, hint: false, level: null });
+    expect(viewPrefs('nope')).toEqual({ hidden: false, hint: false, level: null });
+  });
+  it('lays the input/output rows of every box inside the box', async () => {
+    const { ioRows, textWidth, IO_FONT } = await import('../src/infra/observer/web/observerMap.js');
+    const many = (prefix: string) => Array.from({ length: 6 }, (_, index) => ({ gloss: `${prefix}の長い意味の名前${index}`, key: `veryLongKeyName${index}`, value: 'x'.repeat(120) }));
+    for (const box of CURRENT_LAYOUT.boxes.values()) for (const [input, output] of [[many('入'), many('出')], [many('入'), []], [[], many('出')]] as Array<[ReturnType<typeof many>, ReturnType<typeof many>]>) {
+      const rows = ioRows(box, input, output);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.y + 2).toBeLessThanOrEqual(box.y + box.h);
+        expect(textWidth(`${row.name} ${row.value}`, IO_FONT)).toBeLessThanOrEqual(box.w - 17 - 6 + 1);
+      }
+      if (input.length && output.length) expect(rows.some(row => row.mark === '出')).toBe(true);
+    }
+  });
+});
+
+describe('I/O rows edge cases', () => {
+  it('draws nothing in a box too short for a row, and cuts a very long value quickly', async () => {
+    const { ioRows, fitText, textWidth } = await import('../src/infra/observer/web/observerMap.js');
+    const field = { gloss: '意味', key: 'key', value: 'v' };
+    expect(ioRows({ x: 0, y: 0, w: 134, h: 20 }, [field], [field])).toEqual([]);
+    const long = 'x'.repeat(200_000), cut = fitText(long, 6.8, 100);
+    expect(cut.endsWith('…')).toBe(true); expect(textWidth(cut, 6.8)).toBeLessThanOrEqual(100);
+  });
+});

@@ -37,3 +37,8 @@ export function routePath(route: Route): string;
 export function routePoint(route: Route, t: number): [number, number];
 export function routeTable(layout: GridLayout, links: LinkSpec[]): Map<string, Route & { from: string; to: string; background: boolean }>;
 export function blockRoutes(layout: GridLayout, links: LinkSpec[]): Map<string, Route & { from: string; to: string }>;
+export function detailLevel(picked: 1 | 2 | 3 | null | undefined, zoom: number): 1 | 2 | 3;
+export function textWidth(text: string, size: number): number;
+export function fitText(text: string, size: number, width: number): string;
+export const IO_FONT: number; export const IO_PITCH: number;
+export function ioRows(box: Box, input: { gloss: string; key: string; value: string }[], output: { gloss: string; key: string; value: string }[]): { mark: string; name: string; value: string; y: number }[];

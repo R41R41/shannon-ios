@@ -57,3 +57,4 @@ export function createObserverSession(getStorage: () => Pick<Storage, 'getItem' 
   clear(): void;
 };
 export function createReceiptGate(): { accept(envelope: ObserverBatch): boolean; reset(): void };
+export function viewPrefs(value: unknown): { hidden: boolean; hint: boolean; level: 1 | 2 | 3 | null };
