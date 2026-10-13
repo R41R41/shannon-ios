@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
-import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mind/action/respond/commitmentInitiative.js';
+import { commitmentAwaitingTodaySlot, dueCommitmentCandidate, neutralCommitmentLine } from '../../../mind/action/respond/commitmentInitiative.js';
 import { bodyLookIdOfSource } from '../../../contracts/bodyLookContract.js';
 import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
@@ -90,6 +90,8 @@ export interface InitiativeEvaluationReader {
 
 export class SQLiteInitiativeStore implements InitiativeInbox {
   private readonly database: DatabaseSync;
+  /** Her lines for promises due now (owner 2026-10-14, `commitmentLine.ts`), by item id, for this run; else the neutral factual line. */
+  private commitmentLines: ReadonlyMap<string, string> = new Map();
 
   // gate: Syzygy ADR-0008 stage 3, the proactive gate every message she starts passes where it is written; absent (switched off), as before.
   constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString(), private readonly gate: ProactiveDeliveryGate | null = null) {
@@ -134,7 +136,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     dailyFocuses: ReadonlyMap<string, DailyMindFocus> = new Map(),
     /** `SHANNON_MORNING_BRIEF` (`wiring/dailyReadWiring.ts`): today's brief by scope, handed in only in the owner's morning. */
     morningBriefs: ReadonlyMap<string, InitiativeCandidate> = new Map(),
+    commitmentLines: ReadonlyMap<string, string> = new Map(),
   ): InitiativeLoopResult {
+    this.commitmentLines = commitmentLines;
     const local = localDateParts(new Date(at), timeZone);
     if (local.hour >= QUIET_START_HOUR || local.hour < QUIET_END_HOUR) {
       return this.finish({ considered: 0, sent: 0, stopped: 'quiet-hours' }, at);
@@ -331,11 +335,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いからです。` : 'ボクが気になったからです。';
     const spoken = dailyFocus?.openingLine ? authoredWorldOpening(dailyFocus.openingLine, candidate.title, interest) : null;
     const content = candidate.source_id === 'commitment'
-      ? `「${truncate(candidate.title, 240)}」という約束が残っています。今、続けますか？ もう済んでいたら、完了にできますよ。`
-      : candidate.source_id === 'morning-brief'
-      ? (candidate.summary ?? candidate.title).slice(0, 2_000)
-      : candidate.source_id === 'intent'
-      ? truncate(candidate.summary ?? `「${candidate.title}」`, 500)
+      ? this.commitmentLines.get(candidate.item_id) ?? neutralCommitmentLine({ title: candidate.title, when: null, others: false })
+      : candidate.source_id === 'morning-brief' ? (candidate.summary ?? candidate.title).slice(0, 2_000)
+      : candidate.source_id === 'intent' ? truncate(candidate.summary ?? `「${candidate.title}」`, 500)
       // A topic of the world in her own words or none (owner 2026-10-14): the daily mind's grounded line, else its title and address only.
       : `${spoken ? `${spoken}\n\n` : ''}${truncate(candidate.title, 180)}\n${candidate.url}`;
     const metadata = JSON.stringify({

@@ -30,6 +30,13 @@ export class SQLiteInitiativeSources {
     return found;
   }
 
+  /** Whether an initiative from this source was already written (a promise's notice is written once). */
+  delivered(scopeKey: string, sourceItemId: string): boolean {
+    if (!this.tableExists('initiative_messages')) return false;
+    const sql = 'SELECT 1 AS found FROM initiative_messages WHERE scope_key = ? AND source_item_id = ? LIMIT 1';
+    return Boolean(this.database.prepare(sql).get(scopeKey, sourceItemId));
+  }
+
   close(): void {
     if (this.database.isOpen) this.database.close();
   }
