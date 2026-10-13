@@ -54,6 +54,8 @@ public struct ShannonConversationView: View {
     /// The owner scrolled back to read the conversation in the Live2D dialogue display: she waits in the corner
     /// (`ShannonDialogueStage.read`).
     @State var dialogueReads = false
+    /// The conversation is scrolled to its end: her reply as it is written is followed only then.
+    @State var conversationIsAtBottom = true
     @State var selectedAgentTaskID: UUID?
     @State var composerAttachments: [ShannonChatAttachmentDTO] = []
     @State var composerUsesWebSearch = false

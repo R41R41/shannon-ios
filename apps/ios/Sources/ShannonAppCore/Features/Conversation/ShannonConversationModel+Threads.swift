@@ -179,10 +179,26 @@ extension ShannonConversationModel {
     }
 
     public func retryLastFailed() async {
-        guard !isSending,
+        guard !isSending, !isCheckingUncertainTurn,
               let message = messages.last(where: { $0.role == .user && $0.deliveryState == .failed })
         else { return }
 
+        if uncertainTurns[message.id] != nil {
+            // Idempotent 再送: a turn the server finished without this device is shown, never made a second time.
+            switch await confirmUncertainTurnBeforeResend(message.id) {
+            case .recovered:
+                return
+            case .unknown:
+                // The Talk could not be read: the next 再送 sends, so a broken read never blocks sending for good.
+                uncertainTurns.removeValue(forKey: message.id)
+                errorMessage = ShannonFailureCopy.streamUnconfirmed
+                return
+            case .absent:
+                uncertainTurns.removeValue(forKey: message.id)
+            }
+            guard !isSending, messages.contains(where: { $0.id == message.id && $0.deliveryState == .failed }) else { return }
+        }
+        discardInterruptedReply(for: message.id)
         updateDeliveryState(for: message.id, to: .sending)
         await send(
             text: message.text,

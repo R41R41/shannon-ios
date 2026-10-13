@@ -7,14 +7,23 @@ extension ShannonConversationModel {
         client is any ShannonAppLookServing ? appLook.clientState() : nil
     }
 
-    /// One text turn, saying what the camera can do when the server can ask for a look.
+    /// One text turn, saying what the camera can do when the server can ask for a look. A client that can read
+    /// the reply as it is written does so and reports each sentence through `onProgress`
+    /// (docs/chat-stream-contract.md); any other client sends the turn whole, as before.
     func sendChatTurn(
         message: String,
         threadId: String?,
         attachments: [ShannonChatAttachmentDTO],
         webSearch: Bool,
-        placeLocation: ShannonVoiceDeviceLocationDTO?
+        placeLocation: ShannonVoiceDeviceLocationDTO?,
+        onProgress: ShannonChatStreamProgressHandler? = nil
     ) async throws -> ChatResponseDTO {
+        if let onProgress, let streaming = client as? any ShannonChatStreamServing {
+            return try await streaming.sendStreaming(
+                message: message, scopeKey: scopeKey, threadId: threadId, attachments: attachments,
+                webSearch: webSearch, placeLocation: placeLocation, appLook: appLookClientState(),
+                onProgress: onProgress)
+        }
         guard let server = client as? any ShannonAppLookServing else {
             return try await client.send(
                 message: message, scopeKey: scopeKey, threadId: threadId,

@@ -181,7 +181,7 @@ extension ShannonConversationView {
                 if let errorMessage = model.errorMessage {
                     ShannonSnackbar(
                         message: errorMessage,
-                        showsRetry: model.hasFailedMessage,
+                        showsRetry: model.hasFailedMessage && !model.isConfirmingFailedSend,
                         retry: { Task { await model.retryLastFailed() } },
                         dismiss: model.dismissError
                     )

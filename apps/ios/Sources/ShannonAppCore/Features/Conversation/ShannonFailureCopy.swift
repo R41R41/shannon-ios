@@ -80,6 +80,15 @@ public enum ShannonFailureCopy {
         }
     }
 
+    /// The server took back a reply it had begun to show (docs/chat-stream-contract.md): the words are gone.
+    public static let streamRetracted = "シャノンの返事が途中で取り消されました。少し待って「再送」してください。"
+
+    /// The reply stopped arriving partway. The server may still finish it; the app looks for it before 再送 sends again.
+    public static let streamInterrupted = "返事が途中で途切れました。届いていれば自動で表示します。表示されなければ「再送」してください。"
+
+    /// 再送 could not read the Talk to see whether the cut-off turn was finished; the next 再送 sends it.
+    public static let streamUnconfirmed = "前の返事が届いたか確かめられませんでした。接続を確認して、もう一度「再送」してください。"
+
     public static func agentTaskStart(_ error: Error) -> String {
         switch ShannonFailureCause(error) {
         case .offline:
