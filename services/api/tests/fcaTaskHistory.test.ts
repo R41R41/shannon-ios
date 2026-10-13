@@ -234,6 +234,9 @@ describe('exact complete-round FCA history compaction', () => {
     expect(planFcaHistory(widened, codec, { ...policy, maximumNativeCharacters: 20_000 })).toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
     expect(planFcaHistory(widened, reproducible, { ...policy, maximumNativeCharacters: 20_000, maximumToolDefinitionCharacters: 40_000 }))
       .toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
+    // Review P3-1: both together have their own bound too.
+    expect(planFcaHistory(widened, reproducible, { ...policy, maximumNativeCharacters: 20_000, maximumReplayCharacters: 40_000 }))
+      .toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
   });
 
   it('replays a newest round too long by itself as a clipped public epoch for this step only (Minebot lane 2026-10-14)', async () => {
@@ -257,7 +260,7 @@ describe('exact complete-round FCA history compaction', () => {
     // Every message stays in order with its call id; only the longest text is cut, with a marker.
     expect(messages.map(message => message.role)).toEqual(['user', 'tool_call', 'tool_result', 'assistant']);
     expect(messages.filter(message => message.callId).map(message => message.callId)).toEqual(['call-1', 'call-1']);
-    expect(messages[0]!.content).toMatch(/^エンドの観測。.*…（履歴の上限により後略: \d+字。元の記録は保存済み）$/su);
+    expect(messages[0]!.content).toMatch(/^エンドの観測。.*…（長いため後略: \d+字）$/su);
     // Deterministic while the round stays the newest, so the prefix it starts is reused; nothing is stored.
     expect(planFcaHistory(widen(f.window()), wide, { ...policy, maximumNativeCharacters: 20_000 })).toEqual(plan);
     expect(f.window().summary).toBeNull();

@@ -25,7 +25,7 @@ const OBJECT = /(?:メモ|ノート|物語|お話|下書き|原稿|書斎|ファ
 /** A past-tense claim of having written, saved, made or sent it, not asked as a question. */
 const CLAIM = /(?:保存|書き込み|書き換え|作成|追記|記録|追加|更新|送信)(?:しました|しておきました|済みです|完了しました)|(?:書き|書いて|残し|残して|作り|作って|置き|置いて|メモし|直し|直して|送り|送って)(?:ました|おきました)/u;
 const QUESTION = /(?:か|かな|でしょうか)[。？?]?$|[？?]$/u;
-const MINECRAFT_OBJECT = /(?:マイクラ|Minecraft|マインクラフト|サーバー)/iu;
+const MINECRAFT_OBJECT = /(?:マイクラ|Minecraft|マインクラフト|サーバー|ワールド)/iu;
 const ACTION_CLAIM = /(?:起動|停止|ログイン|ログアウト|完了|終了|採掘|キャンセル|討伐)(?:しました|済みです)|(?:集め|建て|終わり|止め|倒し|取り消し)(?:ました|ておきました)|昼に(?:しました|しておきました)/u;
 const NEGATED = /(?:ませんでした|できなかった|できませんでした|ていません|まだ終わっていません)/u;
 
@@ -60,8 +60,9 @@ function explicitTargets(claim: string): string[] {
 function actionMatches(claim: string, evidence: ToolExecutionEvidence): boolean {
   if (evidence.target.kind === 'minecraft_server') {
     if (!evidence.receiptId || evidence.receiptId !== evidence.operationId || !evidence.target.id) return false;
-    const wanted = /ログアウト/u.test(claim) ? 'logout' : /ログイン/u.test(claim) ? 'login' : /昼|時刻/u.test(claim) ? 'set_day'
-      : /起動/u.test(claim) ? 'start' : /停止|止め/u.test(claim) ? 'stop' : null;
+    // A start or stop verb wins over 「昼」 (「昼にサーバーを起動しました」 is a start; review P3-3).
+    const wanted = /ログアウト/u.test(claim) ? 'logout' : /ログイン/u.test(claim) ? 'login' : /起動/u.test(claim) ? 'start'
+      : /停止|止め/u.test(claim) ? 'stop' : /昼|時刻/u.test(claim) ? 'set_day' : null;
     return wanted !== null && wanted === evidence.action;
   }
   if (evidence.target.kind === 'minecraft_request') return evidence.action === 'cancel'

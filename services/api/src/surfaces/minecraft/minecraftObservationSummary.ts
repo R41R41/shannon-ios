@@ -13,7 +13,12 @@ const SMALL_VALUE = 600, LIST = 8, INVENTORY = 36, FACTS = 2_500, TEXT = 200;
 const size = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 const scalar = (value: BodyValue | undefined): value is BodyFact => value === null || ['string', 'number', 'boolean'].includes(typeof value);
 const record = (value: BodyValue | undefined): value is { readonly [key: string]: BodyValue } => !!value && typeof value === 'object' && !Array.isArray(value);
-const text = (value: BodyFact): BodyFact => typeof value === 'string' && value.length > TEXT ? `${value.slice(0, TEXT)}…` : value;
+/** A long text cut at `TEXT`, never between the halves of a surrogate pair: a lone half is refused by the provider (review P2-1). */
+const text = (value: BodyFact): BodyFact => {
+  if (typeof value !== 'string' || value.length <= TEXT) return value;
+  const keep = /[\uD800-\uDBFF]/u.test(value[TEXT - 1] ?? '') ? TEXT - 1 : TEXT;
+  return `${value.slice(0, keep)}…`;
+};
 
 /** A list's first few entries, each reduced to the named scalar fields, with how many were left out. */
 function listed(value: BodyValue | undefined, fields: readonly string[], limit: number): BodyValue | undefined {

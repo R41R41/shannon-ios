@@ -95,6 +95,7 @@ const length = (value: unknown) => JSON.stringify(value).length;
 describe('a Minecraft task whose first round alone exceeds the history budget takes its second step (Minebot lane 2026-10-14)', () => {
   it('replays the first round byte for byte: inline tool definitions are measured apart from the history budget', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const run = minecraftRun({ observation: 25_000, result: 7_400 });
     await run.settle(() => run.fixture.bodies.length >= 2);
     const [first, second] = run.fixture.bodies;
@@ -116,6 +117,14 @@ describe('a Minecraft task whose first round alone exceeds the history budget ta
     expect(current.task).toMatchObject({ goal: GOAL, completionCriteria: CRITERIA });
     expect(run.driver.runtime.get('owner', run.task.id)?.phase).not.toBe('failed');
     expect(log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'))).toEqual([]);
+    // Review P3-1: every request logs its sizes, content-free.
+    const sizes = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size')).map(line => JSON.parse(line));
+    expect(sizes).toHaveLength(2);
+    expect(sizes[1]).toEqual({ event: 'fca_request_size', model: expect.any(String), historyCharacters: expect.any(Number),
+      toolDefinitionCharacters: expect.any(Number), requestCharacters: expect.any(Number) });
+    expect(sizes[1].toolDefinitionCharacters).toBeGreaterThan(43_000);
+    expect(sizes[1].requestCharacters).toBeGreaterThan(sizes[1].historyCharacters);
+    expect(info.mock.calls.join('\n')).not.toContain(GOAL);
   });
 
   it('replays a lone round too long by itself as a clipped public epoch, its call and result paired and the goal stated again', async () => {
@@ -134,13 +143,13 @@ describe('a Minecraft task whose first round alone exceeds the history budget ta
     const public_ = bootstrap.rounds[0]!.messages;
     expect(public_.filter(entry => entry.role === 'tool_call').map(entry => entry.callId)).toEqual(['toolu_reflex_1']);
     expect(public_.filter(entry => entry.role === 'tool_result').map(entry => entry.callId)).toEqual(['toolu_reflex_1']);
-    expect(public_.find(entry => entry.role === 'tool_result')!.content).toMatch(/履歴の上限により後略: \d+字。元の記録は保存済み/u);
+    expect(public_.find(entry => entry.role === 'tool_result')!.content).toMatch(/…（長いため後略: \d+字）/u);
     const current = JSON.parse(String(sent.at(-1)!.content)) as { task: { goal: string; completionCriteria: string } };
     expect(current.task).toMatchObject({ goal: GOAL, completionCriteria: CRITERIA });
     // The stored round is untouched.
     const stored = run.driver.runtime.snapshot('owner', run.task.id)!.history;
     expect(JSON.stringify(stored)).toContain('signed-round-1');
-    expect(JSON.stringify(stored)).not.toContain('履歴の上限により後略');
+    expect(JSON.stringify(stored)).not.toContain('長いため後略');
     expect(log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'))).toEqual([]);
   });
 });
@@ -158,6 +167,19 @@ describe('the body observation of a Minecraft decision is a bounded summary (Min
     expect(summary.state.detail).toBe(MINECRAFT_OBSERVATION_DETAIL);
     expect(summary.state.omitted).toContain('world.landmarks');
     expect(frame.state.world).toHaveProperty('landmarks'); // the original is not changed
+  });
+
+  it('never cuts a long text between the halves of a surrogate pair (review P2-1: a lone half is a provider 400)', () => {
+    const sign = 'a' + '😀'.repeat(150);
+    const frame = worldFrame(5_000);
+    const summary = minecraftObservationSummary({ ...frame, state: { ...frame.state, world: { ...(frame.state.world as Record<string, BodyValue>), heldItem: sign } },
+      facts: { ...frame.facts, sign } });
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
+    const held = (summary.state.world as Record<string, string>).heldItem!;
+    expect(held.length).toBeLessThan(sign.length);
+    expect(held).not.toMatch(lone);
+    expect(String(summary.facts.sign)).not.toMatch(lone);
+    expect(JSON.stringify(summary)).not.toMatch(/\\ud[89ab][0-9a-f]{2}/iu);
   });
 
   it('stays within its bound for an unusual frame by dropping the largest parts, naming each', () => {

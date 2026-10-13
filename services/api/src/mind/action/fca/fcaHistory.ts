@@ -10,6 +10,8 @@ export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   // about 46,000 characters (Minebot lane 2026-10-14, task ecf64b3e failed its second step on them). Their own bound keeps
   // repeated selection changes from growing the request without limit; past it the round is compacted like any other.
   maximumToolDefinitionCharacters: 160_000,
+  // Both together stay below about 100k tokens, Haiku's next price step (review P3-1).
+  maximumReplayCharacters: 200_000,
 });
 function policyOf(overrides: Partial<FcaHistoryPolicy>): FcaHistoryPolicy {
   const policy = { ...FCA_HISTORY_POLICY, ...overrides };
@@ -41,10 +43,7 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
     ...window.summary ? codec.bootstrap(window.summary.bootstrapText) : [],
     ...window.rounds.filter(round => round.sequence > (window.summary?.resetThroughSequence ?? 0)).flatMap(round => [...round.entries]),
   ];
-  // The history is replayed byte for byte either way; only what it is measured against differs (see `reproducible`).
-  const definitional = (entry: unknown) => codec.reproducible?.(entry) === true;
-  if (window.rounds.length <= policy.maximumRounds && size(history.filter(entry => !definitional(entry))) <= policy.maximumNativeCharacters
-    && size(history.filter(definitional)) <= policy.maximumToolDefinitionCharacters) {
+  if (window.rounds.length <= policy.maximumRounds && replayFits(history, codec, policy)) {
     const summary = window.summary?.template ?? null;
     return { kind: 'ready', replay: { history, summary, summaryText: summary ? renderedCompaction(summary, 'text') : '' } };
   }
@@ -60,11 +59,22 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
     tailSequence: window.tailSequence, sequences: input.rounds.map(round => round.sequence), retained: projected.slice(input.rounds.length) } };
 }
 
+/**
+ * Whether the replay fits its bounds. It is replayed byte for byte either way; only what each part is measured against differs:
+ * inline tool definitions (`reproducible`) apart from the rest, and both together (review P3-1).
+ */
+function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy: FcaHistoryPolicy): boolean {
+  const definitional = (entry: unknown) => codec.reproducible?.(entry) === true;
+  const native = size(history.filter(entry => !definitional(entry))), definitions = size(history.filter(definitional));
+  return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
+    && native + definitions <= policy.maximumReplayCharacters;
+}
+
 /** The shortest any message of a clipped round becomes: enough to say what it was. */
 const CLIPPED_MESSAGE_CHARACTERS = 400;
 type ProjectedRound = { sequence: number; stepId: string; messages: CompactionMessage[] };
 const SUMMARY_CUT = (omitted: number) => `…（要約用に後略: ${omitted}字）`;
-const REPLAY_CUT = (omitted: number) => `…（履歴の上限により後略: ${omitted}字。元の記録は保存済み）`;
+const REPLAY_CUT = (omitted: number) => `…（長いため後略: ${omitted}字）`;
 
 /**
  * One round with its longest texts cut (the end marked) until `measure` fits `maximum`, or null when it cannot.

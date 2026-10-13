@@ -25,6 +25,8 @@ export interface FcaHistoryPolicy {
   maximumSummaryCharacters: number; maximumBatches: number;
   /** Replayed inline tool definitions (`FcaHistoryCodec.reproducible`), measured apart from the native history budget. */
   maximumToolDefinitionCharacters: number;
+  /** The replayed history and its tool definitions together: past it the history is compacted like any other. */
+  maximumReplayCharacters: number;
 }
 export interface FcaHistoryReplay {
   history: readonly unknown[]; summary: CompactionTemplate | null; summaryText: string;
