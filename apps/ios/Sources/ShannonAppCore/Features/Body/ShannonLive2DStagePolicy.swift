@@ -59,7 +59,7 @@ enum ShannonLive2DStagePolicy {
 
     /// Low Power Mode halves the drawn frames; otherwise the display's own rate.
     static func frameRate(lowPower: Bool) -> Int { lowPower ? 30 : 0 }
-    /// With no screen showing her, the model is let go after this long. Its textures alone are about 150 MB of GPU memory
+    /// With no screen showing her, the model is let go after this long (the Mac; the iPhone keeps it, `ShannonLive2DStagePolicy+Keep.swift`). Its textures alone are about 150 MB of GPU memory
     /// since the model of 2026-10-06 08:06 (two 4096 x 4096 and one 2048 x 2048, uncompressed RGBA; before it about 85 MB).
     static let releaseAfterSeconds: TimeInterval = 90
 

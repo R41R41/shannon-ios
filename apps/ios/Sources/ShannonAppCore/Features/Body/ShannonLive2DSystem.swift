@@ -6,7 +6,7 @@ import AppKit
 #endif
 
 /// What the system tells the Live2D stage: Reduce Motion, Low Power Mode, whether the app is in
-/// front, and a memory warning. Observed once, for the life of the app (the stage is a singleton).
+/// front (and on the iPhone in the background), and a memory warning. Observed once, for the life of the app (the stage is a singleton).
 @MainActor
 enum ShannonLive2DSystem {
     enum Change: Sendable {
@@ -14,6 +14,8 @@ enum ShannonLive2DSystem {
         case lowPower(Bool)
         case active(Bool)
         case memoryWarning
+        /// The app went to the background (true) or is coming back to the front (false); the iPhone only.
+        case background(Bool)
     }
 
     static var current: (reduceMotion: Bool, lowPower: Bool, appActive: Bool) {
@@ -40,6 +42,8 @@ enum ShannonLive2DSystem {
         watch(UIApplication.willResignActiveNotification) { .active(false) }
         watch(UIApplication.didBecomeActiveNotification) { .active(true) }
         watch(UIApplication.didReceiveMemoryWarningNotification) { .memoryWarning }
+        watch(UIApplication.didEnterBackgroundNotification) { .background(true) }
+        watch(UIApplication.willEnterForegroundNotification) { .background(false) }
 #elseif canImport(AppKit)
         watch(NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, in: NSWorkspace.shared.notificationCenter) {
             .reduceMotion(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)

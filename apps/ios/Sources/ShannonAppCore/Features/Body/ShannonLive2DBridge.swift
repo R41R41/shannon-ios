@@ -14,14 +14,19 @@ final class ShannonLive2DBridge: NSObject, WKScriptMessageHandler, WKNavigationD
     """#
     static let offlineRulesIdentifier = "shannon-live2d-offline-v2"
 
-    /// The compiled block list. The page is not loaded without it.
+    /// The compiled block list. The page is not loaded without it. Compiled once per launch: the rules never change
+    /// while the app runs, and a page loaded again (after a release or a failure) need not wait for them.
     static func offlineRuleList() async throws -> WKContentRuleList {
+        if let compiledRules { return compiledRules }
         guard let rules = try await WKContentRuleListStore.default().compileContentRuleList(
             forIdentifier: offlineRulesIdentifier, encodedContentRuleList: offlineRules) else {
             throw CocoaError(.featureUnsupported)
         }
+        compiledRules = rules
         return rules
     }
+
+    private static var compiledRules: WKContentRuleList?
 
     private weak var stage: ShannonLive2DStage?
     private let generation: Int
