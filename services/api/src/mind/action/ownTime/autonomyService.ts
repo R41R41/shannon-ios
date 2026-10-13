@@ -24,7 +24,6 @@ import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
 import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/toolRunnerPorts.js';
 import { StudyAether } from './studyAether.js';
-import type { MinecraftRequestPort } from '../../tools/toolRunnerPorts.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyReadPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/selfPorts.js';
@@ -60,8 +59,6 @@ export interface AutonomyServiceDependencies {
   calls?: (scopeKey: string, at: string) => { available: boolean } | null;
   /** When the owner first wrote or spoke after an instant, or null: a timestamp, for what followed a message of hers. */
   ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
-  /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
-  minecraftBody?: MinecraftRequestPort | null;
   /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
   aether?: Pick<ToolAetherPorts, 'access' | 'proposals' | 'ownerDocuments'> & { studyScopeKey?: string };
   /** Syzygy ADR-0008 stage 1: told the reaction (the enum only) after the owner reacted to a story; absent, nothing is told. */
@@ -122,7 +119,7 @@ export class ShannonAutonomyService {
       this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether, dependencies.storyReacted ?? null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
-    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null,
+    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined,
       { access: dependencies.aether?.access ?? null, study: this.studyAether, proposals: dependencies.aether?.proposals ?? null, ownerDocuments: dependencies.aether?.ownerDocuments === true });
   }
 

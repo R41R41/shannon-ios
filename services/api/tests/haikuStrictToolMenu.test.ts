@@ -11,7 +11,7 @@ import { countedJevFetch } from '../src/infra/models/jev/jevClient.js';
 import { offeredTools, providerToolName, toolResultForModel } from '../src/mind/tools/shannonTools.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
-import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
+import { toolOk } from '../src/mind/tools/shannonTools.js';
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
@@ -58,11 +58,17 @@ afterEach(() => { vi.restoreAllMocks(); for (const close of closed.splice(0)) cl
 
 async function session(chosen?: string[]) {
   const now = () => '2026-10-08T12:00:00.000Z';
-  const requests = new MinecraftBodyRequests(':memory:', { deviceId: 'synthetic-body', ownerScopeKey: 'owner' }, now);
+  // Her body's requests enter the common task tree (`fcaMinecraftRequests.ts`); this port records what reached it.
+  const queued: Array<{ goal: string; state: 'queued'; origin: { surface: string; threadId?: string } }> = [];
+  const requests = { recent: (_scopeKey: string) => queued };
   const store = new SQLiteAutonomyStore(':memory:');
-  const autonomy = createInMemoryAutonomyService(now, { store, minecraftBody: requests });
-  closed.push(() => { requests.close(); store.close(); });
-  await requests.claim('owner', 'synthetic-body', { waitSeconds: 0, holding: [] });
+  const autonomy = createInMemoryAutonomyService(now, { store });
+  autonomy.tools.useMinecraftTasks({ available: scopeKey => scopeKey === 'owner', async execute(name, input, context) {
+    if (name !== 'minecraft.request') return toolOk('[]');
+    queued.push({ goal: (input as { goal: string }).goal, state: 'queued', origin: { surface: context.surface, ...(context.threadId ? { threadId: context.threadId } : {}) } });
+    return toolOk('共通タスクとして受け付けた。まだ達成していない。');
+  } });
+  closed.push(() => { store.close(); });
   const definitions = offeredTools('text', 'owner_alone');
   const calls: string[] = [];
   const raw = { definitions, maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),

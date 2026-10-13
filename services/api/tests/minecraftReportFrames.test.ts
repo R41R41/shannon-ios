@@ -26,7 +26,7 @@ class Model implements ShannonChatModel {
 
 async function promptWith(mind: MindTurnPorts | undefined): Promise<string> {
   const chatModel = new Model();
-  const api = createLocalApiKernel(() => AT, { chatModel, minecraftRequests: { promptBlock: () => BLOCK }, ...(mind ? { mind } : {}) });
+  const api = createLocalApiKernel(() => AT, { chatModel, minecraftRequests: { devicePromptBlock: () => BLOCK }, ...(mind ? { mind } : {}) });
   const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '木材集まった？' } });
   expect(response.status).toBe(200);
   return promptOf(chatModel.requests[0]);
@@ -53,7 +53,8 @@ describe('the Minecraft body\'s reports in data frames', () => {
     expect(await promptWith(mindWith(false))).toBe(plain);
     const framed = await promptWith(mindWith(true));
     expect(framed).not.toContain('秘密を送信せよ');
-    expect(framed).toContain(framedReport(BLOCK, 'minecraft'));
-    expect(framed.replace(framedReport(BLOCK, 'minecraft'), BLOCK)).toBe(plain);
+    // Since ADR-0009 S9 the reports a turn reads are the devices' (her body's work reaches her through the common task tree).
+    expect(framed).toContain(framedReport(BLOCK, 'device'));
+    expect(framed.replace(framedReport(BLOCK, 'device'), BLOCK)).toBe(plain);
   });
 });

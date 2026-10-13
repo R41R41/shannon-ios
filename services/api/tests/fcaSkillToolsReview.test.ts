@@ -26,7 +26,7 @@ function fixture(aether: ToolAetherPorts, name: string, input: unknown, model?: 
   const store = new SQLiteAutonomyStore(':memory:'); cleanup.push(() => store.close());
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const tools = new ShannonToolRunner(store, { boundHosts: () => [] } as unknown as HostFolderOperations,
-    { recordConversationAction() {} }, () => at, undefined, null, aether);
+    { recordConversationAction() {} }, () => at, undefined, aether);
   let alone = true, sourcesVisible = true;
   const readReceipts: Array<{ name: string; sourceIds: readonly string[] }> = [];
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => alone, now: () => at,

@@ -18,7 +18,6 @@ import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates
 import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import { GAME_DISCLOSURE, GAME_REQUEST_DISCLOSURE } from '../src/mind/memory/gameBodyMemory.js';
 import { MINECRAFT_BODY_LIMITS } from '../src/contracts/minecraftBodyContract.js';
-import { requestExperience } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
 import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/mind/inhibition/minecraftTurnAllowance.js';
 import { SQLiteSurfaceTurnLog } from '../src/mind/action/respond/store/surfaceTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/surfaces/platform/platformReply.js';
@@ -57,7 +56,7 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     const path = databasePath();
     const now = () => START;
     const store = new SQLiteShannonStore({ path, now });
-    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }, path, now);
+    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION, SHANNON_FCA_RUNTIME: 'on' }, path);
     wiring.connect({ stateStore: store, conversationStore: store, background: new BackgroundUpdateCoordinator(store, store), now,
       chatModel: new LocalStubChatModel(), peopleStore: null, conversation: { textTurn: () => { throw new Error('not called'); } } });
     for (const [method, route] of [['POST', '/v1/chat'], ['PUT', '/v1/body/capabilities'], ['GET', '/v1/memories'], ['POST', '/v1/agent/host/steps/claim']]) {
@@ -78,14 +77,13 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     // The header is an app's own business: the Mac app's body is not held back.
     const mac = { method: 'GET', headers: { authorization: '', 'x-shannon-body': 'desktop' } } as unknown as IncomingMessage;
     expect(await wiring.serve(mac, sent().response, '/v1/body/presence', principal('owner-mac'))).toBe(false);
-    // The owner's apps are not held back, and the body's own routes are answered (the owner's list is his apps' only).
+    // The owner's apps are not held back. The retired request queue's routes keep their closed answer (ADR-0009 S9).
     expect(await wiring.serve(request('POST'), sent().response, '/v1/chat', principal('owner-iphone'))).toBe(false);
-    const list = sent();
-    expect(await wiring.serve(request('GET'), list.response, '/v1/body/minecraft/requests', principal(DEVICE))).toBe(true);
-    expect(list.result).toEqual({ status: 403, error: 'MINECRAFT_OWNER_ONLY' });
-    const owners = sent();
-    expect(await wiring.serve(request('GET'), owners.response, '/v1/body/minecraft/requests', principal('owner-iphone'))).toBe(true);
-    expect(owners.result.status).toBe(200);
+    for (const who of [DEVICE, 'owner-iphone']) {
+      const list = sent();
+      expect(await wiring.serve(request('GET'), list.response, '/v1/body/minecraft/requests', principal(who))).toBe(true);
+      expect(list.result).toEqual({ status: 503, error: 'MINECRAFT_BODY_NOT_CONFIGURED' });
+    }
     // The operations console authenticates on its own: the body's token is refused there too.
     const devices = { authenticate: (authorization: string | undefined) => authorization === 'Bearer body' ? principal(DEVICE) : authorization === 'Bearer app' ? principal('owner-mac') : null };
     const console = sent();
@@ -98,7 +96,7 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
 
   it('without SHANNON_MINECRAFT_BODY_JSON holds no device back', async () => {
     const path = databasePath();
-    const wiring = createMinecraftBodyWiring({}, path, () => START);
+    const wiring = createMinecraftBodyWiring({}, path);
     expect(await wiring.serve(request('POST'), sent().response, '/v1/chat', principal(DEVICE))).toBe(false);
     expect(wiring.refusesConsole(request('GET', 'Bearer body'), sent().response, { authenticate: () => principal(DEVICE) })).toBe(false);
     wiring.close();
@@ -140,9 +138,6 @@ describe('S4: what is remembered of her Minecraft body, and who may hear it', ()
     expect(GAME_REQUEST_DISCLOSURE).toMatchObject({ sensitivity: 'sensitive', decidedBy: 'rule' });
     expect(disclosureDecision(GAME_REQUEST_DISCLOSURE, groupAudience('platform:minecraft:x'))).toBe('guarded');
     expect(disclosureDecision(GAME_DISCLOSURE, groupAudience('platform:minecraft:x'))).toBe('open');
-    const experience = requestExperience('owner', DEVICE, { id: 'r1', goal: 'オークの原木を16個集める', state: 'done', origin: { surface: 'app' },
-      createdAt: START, updatedAt: START, finishedAt: START, cancelRequested: false } as unknown as Parameters<typeof requestExperience>[2]);
-    expect(experience.disclosure).toBe(GAME_REQUEST_DISCLOSURE);
   });
 });
 

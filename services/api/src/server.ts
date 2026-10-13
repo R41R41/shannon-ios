@@ -129,9 +129,8 @@ const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
 const haiku = createConfiguredChatModel(process.env, persistentStore), sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now, webSearch: haiku.searchWeb?.bind(haiku) });
-const modelModes = createModelModeWiring(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), haiku, sonnet,
-  minecraftReady: (scope, model) => minecraft.requests?.primaryModelAvailable(scope, model) === true });
-const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now, modelModes.primarySelection); // Original requests pin the owner's mode; the body still needs its own capability and execution rights.
+const modelModes = createModelModeWiring(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), haiku, sonnet });
+const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath());
 const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy ADR-0007): unset SHANNON_AETHER_API_URL/_SHANNON_TOKEN, none of it.
 // Syzygy ADR-0008 stage 1 (docs/cognition-ledger-contract.md): the prediction and choice ledgers; each null while switched off.
 const predictionLedger = persistentStore.predictionLedger();
@@ -141,7 +140,7 @@ const withheldActions = configuredWithheldActions(process.env, { databasePath: c
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
-  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
+  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, aether: aetherPorts,
   ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}),
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, autonomyConfig) } : {}) });
 if (withheldActions) autonomy.tools.observeWithheld(withheldActions.withheld.sink, now);
@@ -190,7 +189,7 @@ const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming:
 // ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
 const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
-const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
+const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
@@ -232,7 +231,7 @@ const kernel = createLocalApiKernel(now, {
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
     ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },
-  notion, minecraftRequests: deviceActions.reports(minecraft.requests), // Reminders, timers, events and music (docs/device-actions-contract.md).
+  notion, minecraftRequests: deviceActions.reports(), // Reminders, timers, events and music (docs/device-actions-contract.md).
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),

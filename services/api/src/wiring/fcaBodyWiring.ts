@@ -1,5 +1,4 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { switchOn } from '@shannon/switches';
 import type { MinecraftBodyConfiguration } from '../contracts/minecraftBodyContract.js';
 import { actionResource, type ActionLease } from '../contracts/actionThreadContract.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
@@ -15,7 +14,8 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
   db: DatabaseSync; configuration?: MinecraftBodyConfiguration | null; ownerScope: string; ownerAlone(): boolean;
   jev: JevChooser | null; usage: LlmUsageStore;
 }) {
-  if (!switchOn(values, 'SHANNON_FCA_MINECRAFT')) return null;
+  // Since Syzygy ADR-0009 S9 a configured body always takes the common path (the phase-4 request queue is retired).
+  if (!parts.configuration) return null;
   if (!parts.configuration || !parts.jev || !values.OPENAI_API_KEY?.trim()) throw new Error('FCA_MINECRAFT_REQUIRES_BODY_JEV_DECISIONS');
   const leases = new ActionLeaseReader(parts.db);
   const body = actionResource(parts.configuration.deviceId, 'minecraft-body');

@@ -52,9 +52,11 @@ import { framedReport, type MindTurnPorts } from '../../workspace/workspacePorts
  * body, `minecraftBody.ts`, and the platform reply route, `platformReply.ts`) passes its audience policy and a `surface`
  * that adds its prompt blocks and keeps the turn where that surface keeps it. Split from `apiKernel.ts` for its size.
  */
-/** Reports of what she asked to be done (`minecraftBodyRequests.ts`; the device-action outbox, `docs/device-actions-contract.md`). */
+/**
+ * Reports of what she asked the owner's devices to do (the device-action outbox, `docs/device-actions-contract.md`). Her
+ * Minecraft body's work reaches her through the common task tree since Syzygy ADR-0009 S9.
+ */
 export interface ReportedWork {
-  promptBlock(scopeKey: string, at: string): string;
   devicePromptBlock?(scopeKey: string, at: string): string;
 }
 
@@ -301,11 +303,11 @@ export interface TextTurnPrompt {
   turnContext: string;
 }
 
-/** The Minecraft body's reports; with data frames on (stage 3), its reported lines framed as data (`framedReport`). */
-function minecraftReport(dependencies: TextTurnDependencies, scopeKey: string, at: string): string {
+/** The devices' reports; with data frames on (stage 3), their reported lines framed as data (`framedReport`). */
+function deviceReport(dependencies: TextTurnDependencies, scopeKey: string, at: string): string {
   const framed = (block: string, source: string) => block && dependencies.mind?.dataFrames ? framedReport(block, source) : block;
   const device = dependencies.minecraftRequests?.devicePromptBlock?.(scopeKey, at) ?? '';
-  return [framed(dependencies.minecraftRequests?.promptBlock(scopeKey, at) ?? '', 'minecraft'), framed(device, 'device')].filter(Boolean).join('\n\n');
+  return framed(device, 'device');
 }
 
 export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, parts: {
@@ -318,7 +320,7 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const dailyMindPrompt = [audience.ownFocus(dependencies.dailyMind?.promptFor(body.scopeKey, dependencies.now()) ?? '', dependencies.autonomy.pursuitPrompt(body.scopeKey), captured, dependencies.conversationStore, body.scopeKey),
     surface ? '' : dependencies.body.ownerContext(body.scopeKey, occurredAt, audience.audience), roomLook.prompt,
     // What her Minecraft body did with what it was asked: his matter, given only while he alone reads the reply (also in his whisper in the game).
-    audience.alone ? minecraftReport(dependencies, body.scopeKey, occurredAt) : ''].filter(Boolean).join('\n\n');
+    audience.alone ? deviceReport(dependencies, body.scopeKey, occurredAt) : ''].filter(Boolean).join('\n\n');
   // Where nobody may release a protected line (a turn someone other than the owner wrote), none is given.
   const memory = (text: string) => surface?.openOnly ? withoutGuardedEntries(text) : text;
   // Her work with the owner is his: on another surface it is given only while he alone reads the reply.

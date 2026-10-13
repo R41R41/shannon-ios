@@ -136,7 +136,7 @@ export interface ShannonApiKernelOptions {
   memory?: PeopleMemoryParts | null;
   autonomy?: ShannonAutonomyService;
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
-  /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
+  /** What the owner's devices reported about what she asked them (`devicePromptBlock`), for a turn the owner alone reads. */
   minecraftRequests?: ReportedWork | null;
   /**
    * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what

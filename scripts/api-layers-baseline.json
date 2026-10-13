@@ -78,8 +78,6 @@
       "surfaces/device/store/deviceActionStore.ts -> ddl x6",
       "surfaces/minecraft/store/minecraftControlStore.ts -> ddl x4",
       "surfaces/minecraft/store/minecraftLifecycleStore.ts -> ddl x4",
-      "surfaces/minecraft/store/minecraftPrimaryModels.ts -> ddl x1",
-      "surfaces/minecraft/store/minecraftRequestsStore.ts -> ddl x6",
       "surfaces/outreach/store/initiativeStore.ts -> ddl x5",
       "surfaces/outreach/store/pushNotificationStore.ts -> ddl x5",
       "surfaces/voice/store/voiceIdentityStore.ts -> ddl x2"
@@ -153,8 +151,6 @@
       "surfaces/body/store/bodyReactionStore.ts -> PRAGMA x3",
       "surfaces/body/store/bodyStore.ts -> PRAGMA x4",
       "surfaces/device/store/deviceActionStore.ts -> PRAGMA x3",
-      "surfaces/minecraft/store/minecraftPrimaryModels.ts -> PRAGMA x1",
-      "surfaces/minecraft/store/minecraftRequestsStore.ts -> PRAGMA x3",
       "surfaces/outreach/store/initiativeStore.ts -> PRAGMA x4",
       "surfaces/outreach/store/ownOutreachStore.ts -> PRAGMA x1",
       "surfaces/outreach/store/pushNotificationStore.ts -> PRAGMA x4",

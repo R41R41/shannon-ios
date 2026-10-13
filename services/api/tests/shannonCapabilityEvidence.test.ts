@@ -75,8 +75,8 @@ import { prepareToolStep } from '../src/mind/action/ownTime/autonomyLoopToolStep
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { asksAboutOwnThings, conversationTools } from '../src/mind/tools/shannonToolSession.js';
 import { offeredTools } from '../src/mind/tools/shannonTools.js';
-import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
-import { minecraftExecutors, withMinecraftBodyLine } from '../src/mind/tools/shannonMinecraftTools.js';
+import { withMinecraftToolLine } from '../src/mind/tools/shannonMinecraftTools.js';
+import { fcaMinecraftRequests } from '../src/wiring/fcaMinecraftRequests.js';
 import { FileAetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { BodyLooks } from '../src/surfaces/body/bodyLook.js';
 import { BodyReactions } from '../src/surfaces/body/bodyReaction.js';
@@ -197,12 +197,11 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `folder.${verb}`))
     && offeredTools('autonomy', 'owner_alone').some(tool => tool.name === 'folder.create')
     && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0,
-  // Phase 4 of her Minecraft body: the tool queues a request, the body claims it, reports progress and a result, and the
-  // result reaches her turns with the owner. Only in a conversation with the owner alone (never in her own time, never with others),
-  // and the runner offers it only while the configured body is claiming (the line says 「入っている時」). The line itself is
-  // conditional: it is in the owner's description only while the configured body is in the game (`withMinecraftBodyLine`).
-  minecraft_body: () => exists(MinecraftBodyRequests.prototype.enqueue, MinecraftBodyRequests.prototype.claim, MinecraftBodyRequests.prototype.report,
-    MinecraftBodyRequests.prototype.promptBlock, minecraftExecutors)
+  // Her Minecraft body: the tool enters a common task bound to the body, which works on it under the task's lease, and its
+  // result reaches her through the task tree (Syzygy ADR-0009 S9: the phase-4 request queue is retired). Only in a conversation
+  // with the owner alone (never in her own time, never with others), and the runner offers it only while the turn's task context
+  // is open. The line itself is conditional: it is in the owner's description only when the turn offers the tool (`withMinecraftToolLine`).
+  minecraft_body: () => exists(fcaMinecraftRequests, ShannonToolRunner.prototype.useMinecraftTasks, withMinecraftToolLine)
     && offeredTools('text', 'owner_alone').some(tool => tool.name === 'minecraft.request')
     && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').every(tool => tool.domain !== 'minecraft_body')
     && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'owner_alone', 'owner').every(tool => tool.domain !== 'minecraft_body'),
@@ -296,17 +295,15 @@ describe('Shannon capability description', () => {
     // The fixed description (and so every recorded prompt hash and length limit) never has it.
     expect(owner).not.toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
     expect((SHANNON_CAPABILITIES as readonly { id: string }[]).some(item => item.id === SHANNON_MINECRAFT_BODY_CAPABILITY.id)).toBe(false);
-    // No body, a body that is away, or a reader that fails: the prompt is exactly what it is without one.
-    expect(withMinecraftBodyLine(null, 'owner', owner)).toBe(owner);
-    expect(withMinecraftBodyLine({ present: () => false }, 'owner', owner)).toBe(owner);
-    expect(withMinecraftBodyLine({ present: () => { throw new Error('locked'); } }, 'owner', owner)).toBe(owner);
-    // In the game: one line, right after her folder's, and adding it twice changes nothing.
-    const present = withMinecraftBodyLine({ present: scopeKey => scopeKey === 'owner' }, 'owner', owner);
+    // A turn not offered minecraft.request: the prompt is exactly what it is without a body.
+    const asked = (systemPrompt: string, names: string[]) => ({ systemPrompt, tools: { definitions: names.map(name => ({ name })) } });
+    expect(withMinecraftToolLine({ systemPrompt: owner }).systemPrompt).toBe(owner);
+    expect(withMinecraftToolLine(asked(owner, ['memory.search'])).systemPrompt).toBe(owner);
+    // Offered: one line, right after her folder's, and adding it twice changes nothing.
+    const present = withMinecraftToolLine(asked(owner, ['minecraft.request'])).systemPrompt;
     expect(present.split('\n').filter(item => item === line)).toHaveLength(1);
     expect(present.replace(`${line}\n`, '')).toBe(owner);
-    expect(withMinecraftBodyLine({ present: () => true }, 'owner', present)).toBe(present);
-    // A guest's description has no owner capabilities, and gets no Minecraft line either.
-    expect(withMinecraftBodyLine({ present: () => true }, 'owner', shannonCapabilityPrompt('guest'))).toBe(shannonCapabilityPrompt('guest'));
+    expect(withMinecraftToolLine(asked(present, ['minecraft.request'])).systemPrompt).toBe(present);
   });
 
   it('keeps the stated limitations true', () => {

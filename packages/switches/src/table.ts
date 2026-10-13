@@ -167,10 +167,6 @@ export const SWITCHES = [
     doc: 'Touch reflexes run under the FCA runtime.',
   },
   {
-    name: 'SHANNON_FCA_MINECRAFT', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
-    doc: 'Minecraft requests run as FCA tasks (needs the body configuration).',
-  },
-  {
     name: 'SHANNON_MINECRAFT_LIFECYCLE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [STAGE4],
     doc: 'Registered Minecraft start and stop tools under the action gate.',
   },

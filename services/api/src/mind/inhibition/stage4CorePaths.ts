@@ -14,7 +14,6 @@ export const STAGE4_CORE_PATHS = Object.freeze([
     'services/api/src/wiring/actionExecutionWiring.ts',
     'services/api/src/wiring/actionThreadsWiring.ts',
     'services/api/src/wiring/externalActionWiring.ts',
-    'services/api/src/wiring/minecraftActionWiring.ts',
     'services/api/src/wiring/serverActionThreadsWiring.ts',
     'services/api/src/wiring/mindWorkerWiring.ts',
     'services/api/src/wiring/remoteMindWiring.ts',
