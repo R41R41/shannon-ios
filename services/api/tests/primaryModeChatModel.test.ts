@@ -72,10 +72,10 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
         call: async () => JSON.stringify({ ok: false, failure: 'failed', retryable: true, text: '合成失敗' }) } });
     expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna' });
     expect(result).not.toHaveProperty('escalated');
-    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium', 'medium']);
+    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low', 'low']);
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true); store.close();
   });
-  it('answers a turn routed to Sonnet at medium effort from its first Haiku request (stabilization 2026-10-12)', async () => {
+  it('answers a turn routed to Sonnet at the fixed low conversation effort from its first Haiku request (2026-10-13)', async () => {
     const fixture = scriptedAnthropic([answer()]);
     const store = new SQLiteModelModeStore(path());
     const haiku = new AnthropicChatModel({ apiKey: 'synthetic-primary', fetch: fixture.fetcher,
@@ -83,7 +83,7 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
     const primary = new PrimaryModeChatModel(store, haiku, null);
     const result = await primary.generate({ ...request, tier: 'sonnet' });
     expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna_plus' });
-    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium']);
+    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low']);
     store.close();
   });
   it('pins before text recall and before voice routing, then observes the next committed preference', async () => {
