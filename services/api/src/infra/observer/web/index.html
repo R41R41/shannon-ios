@@ -10,12 +10,13 @@
   <script type="module" src="observer/observer.js"></script>
 </head>
 <body>
-<main id="observer" data-connection="disconnected" data-view="timeline" data-ui="shown" data-drawer="closed">
+<main id="observer" data-connection="disconnected" data-view="timeline" data-ui="shown" data-drawer="closed" data-more="closed">
   <!-- The canvas fills the viewport; every control floats above it and can be hidden together (H / Esc). -->
   <section id="timeline-view" class="timeline canvas" aria-label="一回の時間割">
     <div id="run-head" class="run-head"></div>
     <div id="lanes" class="lanes"></div>
     <div id="axis" class="axis" aria-hidden="true"></div>
+    <p id="crit-hint" class="hint crit-hint" hidden>太い棒＝この一回を終わらせるまで続いた段（観測した開始・所要と親子だけで決めています）。</p>
     <p id="timeline-empty" class="hint empty"></p>
   </section>
   <section id="map-view" class="map canvas" aria-label="作りの地図" hidden>
@@ -28,6 +29,7 @@
       <div class="connection"><span class="connection-light" aria-hidden="true"></span><span id="connection-state" role="status">未接続</span></div>
       <div class="seg" id="view-seg" role="group" aria-label="表示の形"><button type="button" data-view="timeline" aria-pressed="true">時間割</button><button type="button" data-view="map" aria-pressed="false">地図</button></div>
       <span class="spacer"></span>
+      <button id="more-toggle" type="button" class="button more-toggle" aria-controls="live-controls" aria-expanded="false" aria-label="ほかの操作">⋯</button>
       <button id="disconnect" type="button" class="button" hidden>接続を切る</button>
       <button id="ui-hide" type="button" class="button" title="操作の表示を隠す（H / Esc）" aria-keyshortcuts="H Escape">隠す <kbd>H</kbd></button>
     </div>
@@ -37,7 +39,11 @@
       <button id="failure-jump" type="button" class="button failure" hidden>失敗</button>
       <button id="tasks-toggle" type="button" class="button" aria-controls="tasks" aria-expanded="false">タスク<span class="long">の木</span> <span id="task-count" class="count">0</span></button>
       <button id="metrics-toggle" type="button" class="button" aria-controls="metrics" aria-expanded="false"><span class="long">所要時間の</span>集計</button>
+      <label class="tool-filter" for="tool-filter"><span class="eyebrow">道具</span><select id="tool-filter" aria-label="道具の名前で絞り込む"><option value="">すべて</option></select></label>
+      <button id="legend-toggle" type="button" class="button" aria-controls="legend" aria-expanded="false">凡例</button>
     </div>
+    <div class="bar-row flow-row" id="flow" role="group" aria-label="この一回の流れ（押すとその箱を選ぶ）"></div>
+    <div class="bar-row now-row" id="now" role="group" aria-label="いま動いているもの"></div>
     <p id="run-summary" class="summary"></p>
   </header>
 
@@ -57,9 +63,23 @@
     <div class="table-wrap"><table class="metrics"><thead><tr><th>処理</th><th>実測 n / 全</th><th>中央値</th><th>p95</th><th>失敗 / 処理中 / 不明</th><th>最初の表示</th></tr></thead><tbody id="metric-rows"></tbody></table></div>
   </section>
 
+  <section id="legend" class="overlay floating" aria-label="凡例" hidden>
+    <div class="floating-head"><h2>凡例</h2><button type="button" class="button close" data-close="legend" aria-label="凡例を閉じる">×</button></div>
+    <ul class="legend-list">
+      <li><i class="swatch r-input"></i>入力・端末</li><li><i class="swatch r-judgment"></i>判断（Jev・モデル・文脈）</li><li><i class="swatch r-action"></i>実行（FCA・道具）</li>
+      <li><i class="swatch r-output"></i>声の出力</li><li><i class="swatch r-memory"></i>記憶・心の後処理</li><li><i class="swatch r-own"></i>自分の時間・外の体</li><li><i class="swatch r-store"></i>共有 SQLite</li>
+    </ul>
+    <ul class="legend-list">
+      <li><i class="mark-solid"></i>処理どうしのつながり</li><li><i class="mark-dashed"></i>裏のつながり（いつもは通らない）</li>
+      <li><i class="box-dashed"></i>観察イベントのない箱（表示だけ）</li><li><i class="box-running"></i>処理中</li><li><i class="box-failed"></i>失敗</li>
+      <li><i class="dot"></i>届いた受け渡し（3 秒光る）</li><li><i class="bar-crit"></i>時間割：この一回を終わらせるまで続いた段</li>
+      <li><span class="badge-sample bad">失敗 1</span> <span class="badge-sample run">● 2</span> <span class="badge-sample unk">不明 1</span> 塊の印（保持している全部の一回から数える。押すと一覧）</li>
+    </ul>
+  </section>
+
   <div id="block-chips" class="overlay chips corner-left" role="group" aria-label="塊を選んで強調"></div>
   <div id="map-tools" class="overlay corner-right" hidden>
-    <p id="map-hint" class="map-hint"><span>塊・処理・入出力は拡大とは別に選べます。ホイール・ピンチで拡大、空いた所のドラッグで移動。箱や塊の名前をドラッグすると動かせ、配置はこのブラウザに残ります。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
+    <p id="map-hint" class="map-hint"><span>塊・処理・入出力は拡大とは別に選べます。ホイール・ピンチで拡大、空いた所のドラッグで移動。箱や塊の名前をドラッグすると動かせ、配置はこのブラウザに残ります。箱を選んで矢印キーで隣の箱へ。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
     <div class="map-buttons">
       <div id="zoom-levels" class="levels" role="group" aria-label="表示の細かさ（拡大とは別）"><button type="button" data-level="auto" aria-current="true" title="拡大に合わせて切り替える">自動</button><button type="button" data-level="1" aria-current="false">塊</button><button type="button" data-level="2" aria-current="false">処理</button><button type="button" data-level="3" aria-current="false">入出力</button></div>
       <button type="button" class="button square" data-zoom="-1" aria-label="縮小">−</button><button type="button" class="button square" data-zoom="1" aria-label="拡大">＋</button><button type="button" class="button" data-zoom="0">全体</button><button type="button" class="button" id="layout-reset" title="動かした箱と塊を初期配置に戻す" disabled>初期配置に戻す</button>

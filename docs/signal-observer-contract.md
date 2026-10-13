@@ -2,6 +2,17 @@
 
 Status: the original Observer is deployed. The common-FCA map and timing revision is implemented on `codex/shannon/fca-observer`, based on accepted main `eaf6b84f`; production reflection is a separate gate. The foreground stable-cache change is included from `codex/shannon/stable-foreground-cache`.
 
+## Why, where the time went, what is wrong or running (owner picks, 2026-10-14)
+
+After a needs audit (Syzygy `notes/observer-ux-audit.md`) the owner picked from side-by-side mocks (Syzygy `artifacts/observer-ux/options.html`): 1B and 1C, 2A, 3C and P. Everything below is read from fields the server already projects; no event, field, request or storage was added.
+
+- **1B, the turn in one line.** Under the run controls: 受付 (surface) → Jev (difficulty, tools offered) → 想起 (count) → Haiku ×N → each executed tool ✓/✗ → 返事 (characters, total time) (`turnFlow`). Only observed stages appear; a stage selects its box; it hides with the other overlays (H/Esc).
+- **2A, a waterfall instead of block lanes.** One row per span in start order, server and device clocks on separate scales as before. Thick bars are the critical path (`criticalPath`): from the end backwards, the child that finished last, then the one that finished last before it started, descending into each, using only observed start, measured duration and explicit parent links; open or unmeasured spans never join it. Others are faded. The 「モデルへ」 marker, running lower bounds, unplaced spans and focus dimming are unchanged.
+- **1C, notes on bars.** Only a few: the router's difficulty and tool count, FCA's chosen count, recall counts, Haiku's 道具へ/返事, each tool's ✓/✗ and name, and the duration of path steps of 5 ms or more. One bar per row, so notes do not overlap; near the right edge they sit before the bar.
+- **3C, marks per block across every run the page holds** (`blockAlerts`): 失敗 N (red), ● N running (green), 不明 N (amber) on the block's title on the map and next to the block chips in both views. A mark opens the block's list in the detail (newest first, up to 30 per kind); an item opens its run and span. A line 「いま」 under the flow lists the blocks with something running.
+- **P, portrait phone.** One line of controls (connection, 時間割/地図, ⋯, 隠す); ⋯ opens the run picker and the rest. The flow and 「いま」 come first; the map is one tap on 地図.
+- **Smaller items.** Each run in the picker shows tools run (✓/✗) and, when reported, input/output tokens and cache read/write summed over its model calls (`runUsage`: an unreported count stays absent, not zero). 道具 filters the run picker to runs that offered, chose or ran that tool, marks matching rows, and filters recent calls. 凡例 explains role colours, lines, box states, the critical path and the marks. On the map, arrow keys move the selection to the nearest box in that direction without moving the view. The camera waits for a vision node (adr11-vision).
+
 ## No zoom on click, recent calls in the detail (owner feedback, 2026-10-14)
 
 - 「各部品をクリックした際に拡大されるのはやめてほしい」: clicking (or tapping, or Enter on) a box selects it, opens the detail and highlights it; the view does not zoom or move. At 塊 a click on a block toggles its highlight (other blocks fade) without moving the view. The block chips in the corner, 全体, ＋/− and the wheel/pinch remain the ways to move the view.

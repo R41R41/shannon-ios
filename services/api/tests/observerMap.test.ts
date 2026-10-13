@@ -175,3 +175,20 @@ describe('I/O rows edge cases', () => {
     expect(cut.endsWith('…')).toBe(true); expect(textWidth(cut, 6.8)).toBeLessThanOrEqual(100);
   });
 });
+
+describe('critical path from observed timing and parent links only (owner, 2026-10-14, 2A)', () => {
+  it('follows the last-finishing child back to the start, descending into it, and skips parallel waits', async () => {
+    const { criticalPath } = await import('../src/infra/observer/web/observerAnalysis.js');
+    const items = [
+      { key: 'root', parent: null, start: 0, end: 1000 },
+      { key: 'jev', parent: 'root', start: 10, end: 200 }, { key: 'recall', parent: 'root', start: 10, end: 340 },
+      { key: 'model1', parent: 'root', start: 340, end: 600 }, { key: 'tool', parent: 'root', start: 600, end: 700 },
+      { key: 'model2', parent: 'root', start: 700, end: 990 }, { key: 'inner', parent: 'recall', start: 100, end: 330 },
+      { key: 'sidecar', parent: 'root', start: 200, end: 250 },
+    ];
+    expect([...criticalPath(items)].sort()).toEqual(['inner', 'model1', 'model2', 'recall', 'root', 'tool']);
+    // Nothing invented from missing data: a span without an end is left out, and an empty list gives an empty path.
+    expect(criticalPath([{ key: 'a', parent: null, start: 0, end: Number.NaN }]).size).toBe(0);
+    expect(criticalPath([]).size).toBe(0);
+  });
+});

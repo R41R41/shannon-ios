@@ -1,5 +1,5 @@
 import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, LAYOUT_ID, viewNodeOf, viewHandoff, gridLayout, movedPositions, customPositions, savedPositions, routeTable, blockRoutes, edgeCurve, routePath, routePoint, detailLevel, ioRows, fitText, textWidth } from './observerMap.js';
-import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
+import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey, criticalPath } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
 const KINDS = new Set(['run.started', 'run.completed', 'span.started', 'span.completed', 'span.failed', 'span.cancelled', 'handoff']);
@@ -354,6 +354,81 @@ export function createObserverClient(options) {
   return { connect, connectExisting, pair, disconnect, pause, resume };
 }
 
+/* ---------- Owner picks of 2026-10-14 (1B, 1C, 2A, 3C, P): facts read from fields the server already projects ---------- */
+const num = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const firstNum = (...values) => values.map(num).find(value => value !== null) ?? null;
+const listLength = value => Array.isArray(value) ? value.length : null;
+/** The tool a tools/gate span names, if any (registry symbols only, as projected). */
+export function spanToolName(span) {
+  const input = record(span?.input) ? span.input : {};
+  for (const key of ['name', 'tool', 'toolName']) if (typeof input[key] === 'string' && input[key]) return input[key];
+  return null;
+}
+/** Tokens and cache of a run's model calls. A count no call reported stays absent (null), never zero. */
+export function runUsage(run) {
+  const sums = { inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null };
+  const add = (key, value) => { if (value !== null) sums[key] = (sums[key] ?? 0) + value; };
+  for (const span of run?.spans.values() ?? []) {
+    if (span.node !== 'llm' || !record(span.output)) continue;
+    const usage = record(span.output.usage) ? span.output.usage : {}, output = span.output;
+    add('inputTokens', firstNum(usage.inputTokens, output.inputTokens));
+    add('outputTokens', firstNum(usage.outputTokens, output.outputTokens));
+    add('cacheReadTokens', firstNum(usage.cacheReadTokens, output.cacheReadInputTokens, output.cacheReadTokens));
+    add('cacheWriteTokens', firstNum(usage.cacheCreationTokens, output.cacheCreationInputTokens, output.cacheCreationTokens));
+  }
+  return sums;
+}
+/** Tools a run actually executed, in order, with whether each failed. */
+export function runToolCalls(run) {
+  return [...(run?.spans.values() ?? [])].filter(span => span.node === 'tools').sort((a, b) => a.firstSequence - b.firstSequence)
+    .map(span => ({ name: spanToolName(span) ?? '道具', failed: span.state === 'failed', open: !span.endedAt, key: spanKey(span) }));
+}
+/** The one-line flow of a turn (1B): 受付 → Jev → 想起 → Haiku ×N → 道具 ✓✗ → 返事. Only stages that were observed appear;
+ * each names the box (and span) it came from so a tap can select it. */
+export function turnFlow(run) {
+  if (!run) return [];
+  const spans = [...run.spans.values()].sort((a, b) => a.firstSequence - b.firstSequence), stages = [];
+  const of = view => spans.filter(span => viewNodeOf(span.node, span.input, span.output) === view);
+  const field = (span, ...keys) => { for (const source of [span?.output, span?.input]) if (record(source)) for (const key of keys) if (source[key] !== undefined && source[key] !== null) return source[key]; return undefined; };
+  const root = spans.find(span => span.isRunRoot && span.node === 'turn') ?? spans.find(span => span.isRunRoot);
+  if (root) { const surface = field(root, 'surface'); stages.push({ view: viewNodeOf(root.node, root.input, root.output) ?? 'admit', key: spanKey(root), text: `受付${typeof surface === 'string' ? ` ${surface}` : ''}` }); }
+  const router = of('router').at(-1);
+  if (router) {
+    const difficulty = field(router, 'difficulty'), offered = firstNum(field(router, 'offeredCount'), field(router, 'toolMenu')) ?? listLength(field(router, 'offeredTools'));
+    stages.push({ view: 'router', key: spanKey(router), text: `Jev${typeof difficulty === 'string' ? ` ${difficulty}` : ''}${offered !== null ? `・道具${offered}` : ''}`, failed: router.state === 'failed' });
+  }
+  const recalls = of('recall');
+  if (recalls.length) {
+    const counts = recalls.map(span => firstNum(field(span, 'recalledCount'), field(span, 'itemCount'), field(span, 'memoryCount'))).filter(value => value !== null);
+    stages.push({ view: 'recall', key: spanKey(recalls.at(-1)), text: `想起${counts.length ? ` ${counts.reduce((a, b) => a + b, 0)}` : ''}`, failed: recalls.some(span => span.state === 'failed') });
+  }
+  const haiku = of('haiku');
+  if (haiku.length) stages.push({ view: 'haiku', key: spanKey(haiku.at(-1)), text: `Haiku ×${haiku.length}`, failed: haiku.some(span => span.state === 'failed') });
+  for (const call of runToolCalls(run)) stages.push({ view: 'tools', key: call.key, text: `${call.name} ${call.failed ? '✗' : call.open ? '…' : '✓'}`, failed: call.failed, tool: true });
+  const decode = of('decode').at(-1);
+  if (decode || root?.endedAt) {
+    const chars = firstNum(field(decode, 'replyChars'), field(decode, 'characterCount'), field(decode, 'textCharacters'));
+    const total = root?.endedAt ? num(root.elapsedMs) : null;
+    stages.push({ view: decode ? 'decode' : 'admit', key: decode ? spanKey(decode) : spanKey(root), text: `返事${chars !== null ? ` ${chars}字` : ''}${total !== null ? ` · ${total >= 1000 ? `${(total / 1000).toFixed(1)} s` : `${Math.round(total)} ms`}` : ''}`, failed: root?.state === 'failed' });
+  }
+  return stages;
+}
+/** Per block, across every run the page holds (3C): failed, running and unknown spans, newest first. */
+export function blockAlerts(state) {
+  const result = new Map();
+  for (const run of state.runs.values()) for (const span of effectiveObservedSpans(state, run.spans.values())) {
+    const view = viewNodeOf(span.node, span.input, span.output), block = VIEW_INDEX.get(view)?.[1];
+    if (!block) continue;
+    const status = spanState(span, run, state.transport);
+    if (!['failed', 'running', 'unknown'].includes(status)) continue;
+    const entry = result.get(block) ?? { failed: [], running: [], unknown: [] };
+    entry[status].push({ span, view, status, key: spanKey(span) });
+    result.set(block, entry);
+  }
+  for (const entry of result.values()) for (const list of Object.values(entry)) list.sort((a, b) => b.span.lastSequence - a.span.lastSequence);
+  return result;
+}
+
 /** Recent calls of each map box (owner, 2026-10-14: 「直近数回の履歴も見れてほしい」). Kept only in this page's memory from the
  * events it already reads (no new request): the viewer's first read returns the server's retained window, so history starts
  * with what the server still holds. Each box keeps its newest `limit` spans, so a busy box cannot push a quiet one out of the
@@ -436,8 +511,8 @@ function mountObserver() {
   const uiKey = `shannon.observer.ui.v1:${observerBasePath(window.location.pathname)}`;
   const readUi = () => { try { const value = JSON.parse(window.sessionStorage.getItem(uiKey) ?? 'null'); return record(value) ? value : {}; } catch { return {}; } };
   const writeUi = value => { try { window.sessionStorage.setItem(uiKey, JSON.stringify(viewPrefs(value))); } catch { /* storage may be unavailable */ } };
-  const ui = viewPrefs(readUi()), panels = { tasks: false, metrics: false };
-  let drawerOpen = false, topPad = 120;
+  const ui = viewPrefs(readUi()), panels = { tasks: false, metrics: false, legend: false };
+  let drawerOpen = false, topPad = 120, toolNameFilter = '', blockListId = null, alerts = new Map();
   const elapsedClock = createElapsedClock(); let clockTimer = null;
   let viewRuns = null, viewId = null, linkedView;
   const currentRun = () => {
@@ -473,7 +548,7 @@ function mountObserver() {
     }
     return { rows, run };
   }
-  /* ---------- Timeline (案B) ---------- */
+  /* ---------- Timeline: a waterfall since the owner's pick of 2026-10-14 (2A, with 1C notes) ---------- */
   let timelineSignature = '', barElements = new Map();
   function renderTimeline() {
     const data = liveRows(), rows = data.rows;
@@ -482,7 +557,7 @@ function mountObserver() {
     const domains = { server: placed.filter(row => row.origin === 'server'), client: placed.filter(row => row.origin === 'client') };
     const extent = list => Math.max(1, ...list.map(row => row.offset + (row.duration ?? 0)));
     const scale = { server: extent(domains.server), client: extent(domains.client) };
-    const signature = JSON.stringify([focusBlock, rows.map(row => [row.key, row.state, row.offset, row.duration === null]), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
+    const signature = JSON.stringify([focusBlock, toolNameFilter, rows.map(row => [row.key, row.state, row.offset, row.duration === null, row.open ? 0 : Math.round(row.duration ?? -1)]), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
     $('timeline-empty').hidden = rows.length > 0;
     $('timeline-empty').textContent = state.transport === 'live' ? 'この一回の処理をまだ観測していません。会話や作業が始まると、ここに時間割が出ます。' : '接続すると、届いた処理を時間割で表示します。';
     if (signature !== timelineSignature) {
@@ -497,22 +572,31 @@ function mountObserver() {
         const rootRow = roots.find(row => record(row.span?.output) && typeof row.span.output.modelStartMs === 'number');
         if (steps && rootRow && rootRow.offset !== null) marker(host, (rootRow.offset + steps.modelStartMs) / scale.server, `モデルへ ${fmt(steps.modelStartMs)} ms`);
       }
-      for (const [blockId, label, process, blockRole] of model.blocks) {
-        const lane = rows.filter(row => !row.root && row.offset !== null && blockOf(model, row.view) === blockId);
-        if (!lane.length) continue;
-        const client = lane.every(row => row.origin === 'client');
-        const laneElement = el('div', 'lane', null, host); role(laneElement, blockRole); laneElement.dataset.block = blockId;
-        if (focusBlock && focusBlock !== blockId) laneElement.classList.add('dim');
-        const name = el('button', 'lane-name', label, laneElement); name.type = 'button'; name.title = `${label}（${process}）${client ? ' · 端末の時計で別の目盛り' : ''}`;
-        name.addEventListener('click', () => setFocus(focusBlock === blockId ? null : blockId));
-        if (client) el('small', '', '端末の時計', name);
-        const track = el('div', 'track', null, laneElement), ends = [];
-        for (const row of lane.sort((a, b) => a.offset - b.offset)) {
-          const total = client ? scale.client : scale.server, end = row.offset + Math.max(row.duration ?? 0, total * .03);
-          let slot = ends.findIndex(value => value <= row.offset); if (slot < 0) { slot = ends.length; ends.push(0); } ends[slot] = end;
-          bar(row, track, total, slot, model);
+      // Waterfall (owner, 2026-10-14, 2A): one row per span in start order. The critical path is taken from observed start,
+      // measured duration and explicit parent links only (`criticalPath`); open or unmeasured spans never join it.
+      const measured = placed.filter(row => row.origin === 'server' && row.measured && !row.open && row.duration !== null);
+      const crit = criticalPath(measured.map(row => ({ key: row.key, parent: row.span?.parentSpanId ? `${row.span.runId}/${row.span.parentSpanId}` : null, start: row.offset, end: row.offset + row.duration })));
+      $('crit-hint').hidden = !crit.size;
+      for (const origin of ['server', 'client']) {
+        const list = placed.filter(row => !row.root && row.origin === origin).sort((a, b) => a.offset - b.offset || a.span.firstSequence - b.span.firstSequence);
+        if (!list.length) continue;
+        if (origin === 'client') el('p', 'hint', '端末の時計（サーバーとは別の目盛り）', host);
+        const total = scale[origin];
+        for (const row of list) {
+          const blockId = blockOf(model, row.view), spec = blockSpec(model, blockId), onPath = crit.has(row.key);
+          const line = el('div', `lane${onPath ? ' crit' : crit.size && origin === 'server' ? ' off-path' : ''}`, null, host); role(line, roleFor(model, row.view)); line.dataset.block = blockId ?? '';
+          if (focusBlock && focusBlock !== blockId) line.classList.add('dim');
+          if (toolNameFilter && rowMentions(row, toolNameFilter)) line.classList.add('match');
+          const name = el('button', 'lane-name', labelFor(model, row.view), line); name.type = 'button'; name.title = `${labelFor(model, row.view)}（${spec?.[1] ?? ''}）`;
+          name.addEventListener('click', () => select(row.key, row.view));
+          const track = el('div', 'track', null, line);
+          bar(row, track, total, 0, model);
+          const text = barNote(row, onPath);
+          if (text && row.duration !== null && !row.open) {
+            const start = row.offset / total * 100, end = (row.offset + row.duration) / total * 100, note = el('span', 'bar-note', text, track);
+            if (end > 70) { note.classList.add('before'); note.style.setProperty('right', `${Math.max(0, 100 - start + .6)}%`); } else note.style.setProperty('left', `${end + .6}%`);
+          }
         }
-        track.style.setProperty('--rows', String(Math.max(1, ends.length)));
       }
       if (unplaced.length) {
         const line = el('p', 'unplaced', '開始を観測していない処理：', host);
@@ -530,6 +614,27 @@ function mountObserver() {
     }
     $('run-summary').textContent = runSummary(data.run, rows);
     return rows;
+  }
+  /** The few annotations worth reading on a bar (1C): the decision a box made, and how long a step on the critical path took. */
+  function barNote(row, onPath) {
+    const span = row.span, field = (...keys) => { for (const source of [span?.output, span?.input]) if (record(source)) for (const key of keys) if (source[key] !== undefined && source[key] !== null) return source[key]; return undefined; };
+    let text = null;
+    if (row.view === 'router' || row.view === 'fcaTool') {
+      const difficulty = field('difficulty'), chosen = field('chosenTools'), offered = field('offeredCount', 'toolMenu') ?? (Array.isArray(field('offeredTools')) ? field('offeredTools').length : undefined);
+      text = [typeof difficulty === 'string' ? difficulty : null, Array.isArray(chosen) ? `選択 ${chosen.length}` : typeof offered === 'number' ? `道具 ${offered}` : null].filter(Boolean).join('・') || null;
+    } else if (row.view === 'recall' || row.view === 'base') { const count = field('recalledCount', 'itemCount', 'memoryCount'); text = typeof count === 'number' ? `${count} 件` : null; }
+    else if (row.view === 'haiku') { const stop = field('stopReason', 'stop'); text = stop === 'tool_use' ? '道具へ' : stop === 'end_turn' ? '返事' : typeof stop === 'string' ? stop : null; }
+    else if (row.view === 'tools') text = `${row.state === 'failed' ? '✗' : '✓'} ${spanToolName(span) ?? ''}`.trim();
+    // A step of a few milliseconds is on the path but says nothing worth reading.
+    if (onPath && row.duration >= 5) text = text ? `${text} · ${fmt(row.duration)} ms` : `${fmt(row.duration)} ms`;
+    return text;
+  }
+  /** Whether a span names the filtered tool (its own name, or a list of offered/chosen tools). */
+  function rowMentions(row, tool) {
+    const span = row.span; if (!span) return false;
+    if (spanToolName(span) === tool) return true;
+    for (const source of [span.input, span.output]) if (record(source)) for (const key of ['offeredTools', 'chosenTools', 'selectedTools']) if (Array.isArray(source[key]) && source[key].some(item => item === tool || item?.name === tool)) return true;
+    return false;
   }
   function marker(host, fraction, text) {
     const mark = el('div', 'mark', null, host); mark.style.setProperty('left', `calc(var(--lane-w) + (100% - var(--lane-w)) * ${Math.min(1, fraction)})`); el('b', '', text, mark);
@@ -554,7 +659,7 @@ function mountObserver() {
   }
 
   /* ---------- Detail (shared by both views) ---------- */
-  function select(key, id) { selectedKey = key; selectedView = id; setDrawer(true); for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
+  function select(key, id) { blockListId = null; selectedKey = key; selectedView = id; setDrawer(true); for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
   function table(title, rows, parent) {
     const box = el('div', 'io', null, parent); el('h4', '', title, box);
     if (!rows.length) { el('p', 'hint', 'なし', box); return; }
@@ -594,8 +699,8 @@ function mountObserver() {
   }
   /** The box's recent calls, newest first, each expandable to the same projected input and output the detail shows. */
   function recentCalls(parent, id, currentKey) {
-    const box = el('div', 'history', null, parent), calls = history.list(id, state);
-    el('h4', '', `直近の呼び出し（新しい順・最大 8 回）`, box);
+    const box = el('div', 'history', null, parent), calls = history.list(id, state).filter(call => !toolNameFilter || rowMentions({ span: call.span }, toolNameFilter));
+    el('h4', '', `直近の呼び出し（新しい順・最大 8 回${toolNameFilter ? `・${toolNameFilter} を含むものだけ` : ''}）`, box);
     if (!calls.length) { el('p', 'hint', model.index.get(id)?.[6]?.length === 0 ? 'この箱には観察イベントがありません。' : 'まだ届いていません。この画面を開いた時にサーバーが保持していた分（最大 15 分）と、その後に届いた分を記録します。', box); return; }
     const list = el('ol', 'history-list', null, box);
     for (const call of calls) {
@@ -616,8 +721,30 @@ function mountObserver() {
       table('出力', span.endedAt ? fieldRows(span.output) : [{ gloss: '', key: '', value: call.state === 'running' ? '出力イベント待ち' : '状態不明・完了は未確認' }], columns);
     }
   }
+  /** A block's failures, running and unknown spans across every run the page holds (3C); a press opens that run and span. */
+  function openBlockList(id) { blockListId = id; selectedKey = null; selectedView = null; setDrawer(true); renderDetail(); }
+  function renderBlockList(panel) {
+    const spec = blockSpec(model, blockListId), entry = alerts.get(blockListId) ?? { failed: [], running: [], unknown: [] };
+    role(panel, spec?.[3] ?? 'own');
+    const title = el('h3', '', spec?.[1] ?? blockListId, panel); el('small', '', spec?.[2] ?? '', title);
+    el('p', 'hint', '保持している全部の一回から数えています（選んでいる一回だけではありません）。押すとその一回とその処理を開きます。', panel);
+    for (const [kind, name] of [['failed', '失敗'], ['running', '処理中'], ['unknown', '不明']]) {
+      const box = el('div', 'history', null, panel); el('h4', '', `${name} ${entry[kind].length}`, box);
+      if (!entry[kind].length) { el('p', 'hint', 'なし', box); continue; }
+      const list = el('ol', 'history-list', null, box);
+      for (const item of entry[kind].slice(0, 30)) {
+        const button = el('button', `call-link state-${item.status}`, null, el('li', '', null, list)); button.type = 'button';
+        el('span', 'num', timeValue(item.span.startedAt ?? item.span.endedAt), button); el('b', '', labelFor(model, item.view), button);
+        const errorKind = record(item.span.output) && typeof item.span.output.errorKind === 'string' ? item.span.output.errorKind : null;
+        if (errorKind) el('span', 'failure', errorKind, button);
+        el('span', 'hint', item.span.runId === state.selectedRunId ? 'この一回' : `run ${item.span.runId.slice(0, 8)}`, button);
+        button.addEventListener('click', () => { selectedTask = null; selectedStep = null; $('follow-runs').checked = false; state = { ...state, selectedRunId: item.span.runId }; blockListId = null; render(); select(item.key, item.view); });
+      }
+    }
+  }
   function renderDetail() {
     const panel = $('detail'); panel.replaceChildren();
+    if (blockListId) { renderBlockList(panel); return; }
     const data = liveRows(), rows = data.rows;
     let row = rows.find(item => item.key === selectedKey);
     if (!row && selectedView) row = [...rows].reverse().find(item => item.view === selectedView);
@@ -701,6 +828,8 @@ function mountObserver() {
       parts.title = sv('text', { class: 'far-title', 'text-anchor': 'middle' }, far); parts.title.textContent = label;
       parts.subtitle = sv('text', { class: 'far-process', 'text-anchor': 'middle' }, far); parts.subtitle.textContent = process;
       parts.count = sv('text', { class: 'far-count', 'text-anchor': 'middle' }, far); counts.set(id, parts.count);
+      parts.badges = sv('g', { class: 'block-badges' }, group); parts.badgeSignature = '';
+      parts.badges.addEventListener('click', event => { event.stopPropagation(); openBlockList(id); });
       blockElements.set(id, parts);
       // At 塊 a click on a block highlights it (others fade), without zooming or moving the view.
       group.addEventListener('click', () => { if (map.level === 1) setFocus(focusBlock === id ? null : id, false); });
@@ -718,7 +847,21 @@ function mountObserver() {
       // Owner, 2026-10-14: 「各部品をクリックした際に拡大されるのはやめてほしい」 — a click selects and opens the detail; the view stays.
       const pick = () => { const latest = [...liveRows().rows].reverse().find(row => row.view === id); select(latest?.key ?? null, id); };
       group.addEventListener('click', event => { event.stopPropagation(); pick(); });
-      group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); } });
+      group.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); return; }
+        // Arrow keys move to the nearest box in that direction and select it (the view does not move).
+        const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key]; if (!direction) return;
+        event.preventDefault();
+        const here = map.layout.boxes.get(id), cx = here.x + here.w / 2, cy = here.y + here.h / 2;
+        let best = null, bestScore = Infinity;
+        for (const [other, box] of map.layout.boxes) {
+          if (other === id) continue;
+          const dx = box.x + box.w / 2 - cx, dy = box.y + box.h / 2 - cy, along = dx * direction[0] + dy * direction[1], across = Math.abs(dx * direction[1]) + Math.abs(dy * direction[0]);
+          if (along <= 1) continue;
+          const score = along + across * 2; if (score < bestScore) { bestScore = score; best = other; }
+        }
+        if (best) { const next = map.nodeElements.get(best); next.focus({ preventScroll: true }); next.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false })); }
+      });
     }
     map = { svg, groups, layout: model.layout, frame: { width: model.layout.width, height: model.layout.height }, routes: new Map(), blockLines: new Map(), blockEdges, edges, packets, edgeElements: [], nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: model.layout.width / 2, cy: model.layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
     placeMap();
@@ -737,6 +880,7 @@ function mountObserver() {
       const label = parts.head.textContent, process = parts.process.textContent, cx = box.w / 2, cy = box.h / 2;
       parts.head.setAttribute('font-size', Math.min(12, (box.w - 24) / wordWidth(label)).toFixed(1));
       parts.process.setAttribute('x', String(box.w - 10)); parts.process.setAttribute('y', String(box.h - 4));
+      parts.badges.setAttribute('transform', `translate(${box.w - 8} 5)`);
       for (const [element, y, size, text] of [[parts.title, cy - 12, 26, label], [parts.subtitle, cy + 10, 17, process], [parts.count, cy + 32, 0, '']]) {
         element.setAttribute('x', String(cx)); element.setAttribute('y', String(y));
         if (size) element.setAttribute('font-size', Math.min(size, (box.w - 16) / wordWidth(text)).toFixed(1));
@@ -808,6 +952,20 @@ function mountObserver() {
     requestFrame();
   }
   function highlightMapSelection() { if (!map) return; for (const [id, group] of map.nodeElements) group.classList.toggle('selected', id === selectedView); }
+  /** 3C: the block's marks, right-aligned in its title strip: 失敗 N (red), ● N running (green), 不明 N (amber). */
+  function drawBadges(parts, entry) {
+    const items = entry ? [['failed', `失敗 ${entry.failed.length}`, entry.failed.length], ['running', `● ${entry.running.length}`, entry.running.length], ['unknown', `不明 ${entry.unknown.length}`, entry.unknown.length]].filter(item => item[2]) : [];
+    const signature = items.map(item => item[1]).join('|'); if (signature === parts.badgeSignature) return; parts.badgeSignature = signature;
+    parts.badges.replaceChildren();
+    let x = 0;
+    for (const [kind, text] of items.reverse()) {
+      const width = textWidth(text, 10) + 12; x -= width;
+      const badge = sv('g', { class: `block-badge ${kind}`, role: 'button', tabindex: 0, 'aria-label': `${text}、一覧を開く` }, parts.badges);
+      sv('rect', { x, y: 0, width, height: 16, rx: 8 }, badge); sv('text', { x: x + width / 2, y: 12, 'text-anchor': 'middle' }, badge).textContent = text;
+      badge.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); badge.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+      x -= 4;
+    }
+  }
   function renderMap(rows) {
     if (!map || view !== 'map') return;
     const active = new Map(), latest = new Map();
@@ -835,6 +993,7 @@ function mountObserver() {
     // Faded wiring; the selected box and the boxes now running keep their routes emphasised.
     const hot = new Set([...active.keys(), ...(selectedView ? [selectedView] : [])]);
     for (const [from, to, path] of map.edgeElements) path.classList.toggle('hot', hot.has(from) || hot.has(to));
+    for (const [id, parts] of map.blockElements) drawBadges(parts, alerts.get(id));
     for (const [id, count] of map.counts) {
       const value = blockActive.get(id) ?? 0, nodes = model.nodes.filter(spec => spec[1] === id).length, text = value ? `● 処理中 ${value}` : `${nodes} 処理`;
       if (count.textContent !== text) count.textContent = text;
@@ -883,8 +1042,10 @@ function mountObserver() {
   /* ---------- Runs, tasks, failures ---------- */
   let runSignature = '', taskSignature = '';
   function renderRuns() {
-    const runs = [...state.runs.values()].sort((a, b) => b.firstSequence - a.firstSequence);
-    const signature = runs.map(run => `${run.id}:${run.state}`).join('|') + state.selectedRunId + state.transport;
+    const all = [...state.runs.values()].sort((a, b) => b.firstSequence - a.firstSequence);
+    const usesTool = run => { const evidence = runToolEvidence(run); return evidence.called.has(toolNameFilter) || evidence.chosen.has(toolNameFilter) || evidence.offered.has(toolNameFilter); };
+    const runs = toolNameFilter ? all.filter(run => run.id === state.selectedRunId || usesTool(run)) : all;
+    const signature = runs.map(run => `${run.id}:${run.state}:${run.lastSequence}`).join('|') + state.selectedRunId + state.transport + toolNameFilter;
     if (signature === runSignature) return;
     runSignature = signature;
     const picker = $('run-picker'); picker.replaceChildren();
@@ -892,11 +1053,19 @@ function mountObserver() {
     for (const run of runs) {
       const rootSpan = run.rootSpanId ? run.spans.get(run.rootSpanId) : null, surface = record(rootSpan?.input) && typeof rootSpan.input.surface === 'string' ? rootSpan.input.surface : '—';
       const mark = run.state === 'failed' ? '!' : run.endedAt ? '✓' : state.transport === 'live' && !run.incomplete ? '●' : '?';
-      picker.append(new Option(`${mark} ${timeValue(run.startedAt ?? run.events[0]?.at)} · ${surface} · ${run.spans.size} 処理`, run.id));
+      picker.append(new Option(`${mark} ${timeValue(run.startedAt ?? run.events[0]?.at)} · ${surface} · ${run.spans.size} 処理${runMarks(run)}`, run.id));
     }
     picker.value = state.selectedRunId ?? ''; picker.disabled = !runs.length;
-    const failures = runs.flatMap(run => [...run.spans.values()].filter(span => span.state === 'failed'));
+    const failures = all.flatMap(run => [...run.spans.values()].filter(span => span.state === 'failed'));
     $('failure-jump').hidden = !failures.length; $('failure-jump').textContent = `失敗 ${failures.length}`;
+  }
+  /** Per-run marks in the picker: tools run (✓ ok, ✗ failed), model tokens and cache, only when reported. */
+  function runMarks(run) {
+    const calls = runToolCalls(run), usage = runUsage(run), compact = value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value), parts = [];
+    if (calls.length) parts.push(`道具 ${calls.filter(call => !call.failed).length}✓${calls.some(call => call.failed) ? `${calls.filter(call => call.failed).length}✗` : ''}`);
+    if (usage.inputTokens !== null || usage.outputTokens !== null) parts.push(`入${usage.inputTokens !== null ? compact(usage.inputTokens) : '—'}/出${usage.outputTokens !== null ? compact(usage.outputTokens) : '—'}`);
+    if (usage.cacheReadTokens !== null || usage.cacheWriteTokens !== null) parts.push(`cache 読${usage.cacheReadTokens !== null ? compact(usage.cacheReadTokens) : '—'} 書${usage.cacheWriteTokens !== null ? compact(usage.cacheWriteTokens) : '—'}`);
+    return parts.length ? ` · ${parts.join(' · ')}` : '';
   }
   function renderTasks() {
     const tasks = observedTasks(state);
@@ -955,21 +1124,55 @@ function mountObserver() {
   /* ---------- Render and modes ---------- */
   function render() {
     root.dataset.view = view;
-    $('tasks').hidden = !panels.tasks; $('metrics').hidden = !panels.metrics;
-    $('tasks-toggle').setAttribute('aria-expanded', String(!$('tasks').hidden)); $('metrics-toggle').setAttribute('aria-expanded', String(!$('metrics').hidden));
+    alerts = blockAlerts(state);
+    $('tasks').hidden = !panels.tasks; $('metrics').hidden = !panels.metrics; $('legend').hidden = !panels.legend;
+    $('tasks-toggle').setAttribute('aria-expanded', String(!$('tasks').hidden)); $('metrics-toggle').setAttribute('aria-expanded', String(!$('metrics').hidden)); $('legend-toggle').setAttribute('aria-expanded', String(!$('legend').hidden));
     $('timeline-view').hidden = view !== 'timeline'; $('map-view').hidden = view !== 'map'; $('map-tools').hidden = view !== 'map'; $('map-hint').hidden = ui.hint;
     $('drawer').hidden = !drawerOpen; root.dataset.drawer = drawerOpen ? 'open' : 'closed'; root.dataset.ui = ui.hidden ? 'hidden' : 'shown';
     for (const button of document.querySelectorAll('#view-seg button')) button.setAttribute('aria-pressed', String(button.dataset.view === view));
-    renderTasks(); renderRuns(); renderMetrics();
-    renderBlockChips();
+    renderTasks(); renderRuns(); renderMetrics(); renderToolFilter();
+    renderBlockChips(); renderFlow(); renderNow();
     const rows = renderTimeline(); renderMap(rows); renderDetail();
     $('notice').textContent = state.notice; $('notice').hidden = !state.notice;
   }
+  let flowSignature = '', nowSignature = '', toolSignature = '';
+  /** 1B: the turn's one-line flow; a press on a stage selects its box. */
+  function renderFlow() {
+    const stages = state.transport === 'live' ? turnFlow(currentRun()) : [], signature = JSON.stringify(stages);
+    $('flow').hidden = !stages.length; if (signature === flowSignature) return; flowSignature = signature;
+    const host = $('flow'); host.replaceChildren(); el('span', 'eyebrow', 'この一回', host);
+    stages.forEach((stage, index) => {
+      if (index) el('span', 'arrow', '→', host).setAttribute('aria-hidden', 'true');
+      const button = el('button', `step${stage.failed ? ' bad' : ''}`, stage.text, host); button.type = 'button'; role(button, roleFor(model, stage.view));
+      button.addEventListener('click', () => select(stage.key, stage.view));
+    });
+  }
+  /** What is running now in any run the page holds, by block (shown first on a phone). */
+  function renderNow() {
+    const running = [...alerts].filter(([, entry]) => entry.running.length), signature = JSON.stringify([state.transport, running.map(([id, entry]) => [id, entry.running.length])]);
+    $('now').hidden = state.transport !== 'live'; if (signature === nowSignature) return; nowSignature = signature;
+    const host = $('now'); host.replaceChildren(); el('span', 'eyebrow', 'いま', host);
+    if (!running.length) { el('span', 'hint', '動いているものはありません', host); return; }
+    for (const [id, entry] of running) { const button = el('button', 'chip now-chip', `${blockSpec(model, id)?.[1] ?? id} ● ${entry.running.length}`, host); button.type = 'button'; role(button, blockSpec(model, id)?.[3] ?? 'own'); button.addEventListener('click', () => openBlockList(id)); }
+  }
+  /** Tool names seen in the runs the page holds; picking one filters the run list, marks rows and filters recent calls. */
+  function renderToolFilter() {
+    const names = new Set();
+    for (const run of state.runs.values()) { const evidence = runToolEvidence(run); for (const name of [...evidence.called, ...evidence.chosen]) names.add(name); }
+    const sorted = [...names].sort(), signature = JSON.stringify([sorted, toolNameFilter]); if (signature === toolSignature) return; toolSignature = signature;
+    const select = $('tool-filter'); select.replaceChildren(new Option('すべて', ''));
+    for (const name of sorted) select.append(new Option(name, name));
+    if (toolNameFilter && !names.has(toolNameFilter)) select.append(new Option(toolNameFilter, toolNameFilter));
+    select.value = toolNameFilter;
+  }
   let chipSignature = '';
   function renderBlockChips() {
-    const signature = String(focusBlock); if (signature === chipSignature) return; chipSignature = signature;
+    const signature = JSON.stringify([focusBlock, [...alerts].map(([id, entry]) => [id, entry.failed.length, entry.running.length, entry.unknown.length])]); if (signature === chipSignature) return; chipSignature = signature;
     const host = $('block-chips'); host.replaceChildren();
-    for (const [id, label, , blockRole] of model.blocks) { const chip = el('button', 'chip block-chip', label, host); chip.type = 'button'; role(chip, blockRole); chip.setAttribute('aria-pressed', String(focusBlock === id)); chip.addEventListener('click', () => setFocus(focusBlock === id ? null : id)); }
+    // 3C on the timeline: each block's chip carries the same marks as the map, and the marks open the block's list.
+    const marks = id => { const entry = alerts.get(id); if (!entry) return; const text = [entry.failed.length ? `失敗${entry.failed.length}` : '', entry.running.length ? `●${entry.running.length}` : '', entry.unknown.length ? `不明${entry.unknown.length}` : ''].filter(Boolean).join(' '); if (!text) return;
+      const button = el('button', `chip-alert${entry.failed.length ? ' bad' : entry.unknown.length ? ' unk' : ' run'}`, text, host); button.type = 'button'; button.setAttribute('aria-label', `${blockSpec(model, id)?.[1]}：${text}、一覧を開く`); button.addEventListener('click', () => openBlockList(id)); };
+    for (const [id, label, , blockRole] of model.blocks) { const chip = el('button', 'chip block-chip', label, host); chip.type = 'button'; role(chip, blockRole); chip.setAttribute('aria-pressed', String(focusBlock === id)); chip.addEventListener('click', () => setFocus(focusBlock === id ? null : id)); marks(id); }
   }
   function setFocus(id, move = true) {
     focusBlock = id; chipSignature = ''; timelineSignature = '';
@@ -979,7 +1182,7 @@ function mountObserver() {
   function setView(next) { if (next === view) return; view = next; timelineSignature = ''; render(); if (view === 'map') { buildMap(); render(); } }
 
   function clearPrivateView() {
-    state = createObserverState(); history.clear(); openHistory.clear(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
+    state = createObserverState(); history.clear(); openHistory.clear(); blockListId = null; alerts = new Map(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
     runSignature = ''; taskSignature = ''; timelineSignature = ''; metricSignature = ''; viewRuns = null; linkedView = undefined;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
     if (map) { map.particles = []; map.packets.replaceChildren(); map.fieldSignature = new Map(); }
@@ -1044,6 +1247,10 @@ function mountObserver() {
   $('drawer-close').addEventListener('click', () => setDrawer(false));
   $('tasks-toggle').addEventListener('click', () => togglePanel('tasks'));
   $('metrics-toggle').addEventListener('click', () => togglePanel('metrics'));
+  $('legend-toggle').addEventListener('click', () => togglePanel('legend'));
+  $('tool-filter').addEventListener('change', () => { toolNameFilter = $('tool-filter').value; runSignature = ''; timelineSignature = ''; toolSignature = ''; render(); });
+  // P (owner, 2026-10-14): on a portrait phone the bar is one line; the rest of the controls open from ⋯.
+  $('more-toggle').addEventListener('click', () => { const open = root.dataset.more !== 'open'; root.dataset.more = open ? 'open' : 'closed'; $('more-toggle').setAttribute('aria-expanded', String(open)); requestAnimationFrame(measureTop); });
   for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => { panels[button.dataset.close] = false; render(); });
   $('map-hint-close').addEventListener('click', () => { ui.hint = true; writeUi(ui); $('map-hint').hidden = true; applyView(); });
   document.addEventListener('keydown', event => {

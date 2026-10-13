@@ -1,5 +1,20 @@
 # Mind Observer UI validation
 
+## Flow, waterfall, marks and phone bar (2026-10-14)
+
+Same fixture and CDP method; `fca-run` (held FCA tasks, so running marks), then two `turn` commands, before pairing. At
+1600×900 and 1280×800 (dark): the flow read 受付 text → Jev normal・道具3 → 想起 4 → Haiku ×2 → memory.search ✓ →
+web.search ✗ → 返事 86字 · 2.5 s, and its Haiku stage selected the Haiku box; the waterfall had 17 rows, 10 on the
+critical path, notes only on the decision boxes and path steps of 5 ms or more, all inside the view; 「いま」 listed
+会話の経路 ● 4 and 共通 FCA の実行 ● 2; the block chips and map blocks carried ●4 and 失敗2 ●2, and a mark opened the
+block's list; the picker showed 「道具 1✓1✗ · cache 読12.8k 書0」; picking web.search cut the run list from 7 to 2 and marked
+5 rows; 凡例 opened with 15 entries; ArrowDown from Haiku selected 返事を読む with the view unchanged. At 390×844 (light,
+touch) the bar was one 32 px line (95 px with flow and 「いま」), ⋯ opened the controls, 地図 opened the map. No page
+overflow and no console exceptions at any size.
+
+- 1600: [waterfall and flow](observer-evidence/ux-1600-timeline.jpg), [block list](observer-evidence/ux-1600-block-list.jpg), [tool filter](observer-evidence/ux-1600-tool-filter.jpg), [legend](observer-evidence/ux-1600-legend.jpg), [map marks](observer-evidence/ux-1600-map-badges.jpg)
+- 1280: [waterfall](observer-evidence/ux-1280-timeline.jpg), [map](observer-evidence/ux-1280-map.jpg); 390: [start](observer-evidence/ux-390-start.jpg), [⋯ open](observer-evidence/ux-390-more.jpg), [map](observer-evidence/ux-390-map.jpg)
+
 ## Review fixes for drag and drop (2026-10-14)
 
 Same fixture and CDP method at 1600×900, after the review of `1d2f337`. Minecraft dragged next to 声の計画 stretched the
