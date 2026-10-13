@@ -1,5 +1,68 @@
 # Mind Observer UI validation
 
+## Re-review follow-ups (2026-10-14)
+
+Same fixture and CDP method at 1600×900. A finished turn's hint names the path as what finished the run; the held FCA run
+(root open) says 「ここまで」 and that the run has not finished. In that open run, 10 of 12 row elements were reused after the
+fixture's next step (20 rows after). A block mark focused and opened with Enter right after a box drag opened its list.
+After three zoom-in steps, eight ArrowRight presses from 受付 reached 声の計画, each selected box stayed inside the view
+outside the detail, and the zoom stayed the same. No console exceptions.
+
+## Flow, waterfall, marks and phone bar (2026-10-14)
+
+Same fixture and CDP method; `fca-run` (held FCA tasks, so running marks), then two `turn` commands, before pairing. At
+1600×900 and 1280×800 (dark): the flow read 受付 text → Jev normal・道具3 → 想起 4 → Haiku ×2 → memory.search ✓ →
+web.search ✗ → 返事 86字 · 2.5 s, and its Haiku stage selected the Haiku box; the waterfall had 17 rows, 10 on the
+critical path, notes only on the decision boxes and path steps of 5 ms or more, all inside the view; 「いま」 listed
+会話の経路 ● 4 and 共通 FCA の実行 ● 2; the block chips and map blocks carried ●4 and 失敗2 ●2, and a mark opened the
+block's list; the picker showed 「道具 1✓1✗ · cache 読12.8k 書0」; picking web.search cut the run list from 7 to 2 and marked
+5 rows; 凡例 opened with 15 entries; ArrowDown from Haiku selected 返事を読む with the view unchanged. At 390×844 (light,
+touch) the bar was one 32 px line (95 px with flow and 「いま」), ⋯ opened the controls, 地図 opened the map. No page
+overflow and no console exceptions at any size.
+
+- 1600: [waterfall and flow](observer-evidence/ux-1600-timeline.jpg), [block list](observer-evidence/ux-1600-block-list.jpg), [tool filter](observer-evidence/ux-1600-tool-filter.jpg), [legend](observer-evidence/ux-1600-legend.jpg), [map marks](observer-evidence/ux-1600-map-badges.jpg)
+- 1280: [waterfall](observer-evidence/ux-1280-timeline.jpg), [map](observer-evidence/ux-1280-map.jpg); 390: [start](observer-evidence/ux-390-start.jpg), [⋯ open](observer-evidence/ux-390-more.jpg), [map](observer-evidence/ux-390-map.jpg)
+
+## Review fixes for drag and drop (2026-10-14)
+
+Same fixture and CDP method at 1600×900, after the review of `1d2f337`. Minecraft dragged next to 声の計画 stretched the
+外の体と反射 frame to 1248×512 px; that frame is now drawn first (block order world, conv, mind, …), translucent, and not
+hit-tested, so the point under 会話の経路's title still hit `conv:block-head` and dragging it moved conv by (30, 20)
+([capture](observer-evidence/dnd-1600-stretched-frame.jpg)). A box pressed and moved by (50, 25), then hovered with no button
+held (the release happened outside the page), did not move further. A wheel zoom in the middle of a drag kept the box under
+the pointer (pointer 880,491; box centre 880,492). During 40 rapid moves, route paths stayed 45 elements, and only the
+changed `d` attributes were rewritten (334 writes, against 2067 before the unchanged ones were skipped). No console
+exceptions.
+
+## No zoom on click and recent calls (2026-10-14)
+
+Same fixture and CDP method; two `turn` commands were sent before pairing and one after. At 1600×900: a block click at 塊
+and a box click at 処理 left the `viewBox` unchanged, highlighted/selected and opened the drawer; Haiku listed six calls
+newest first, including the four sent before the page connected (the server's retained window), with 「表示中」 and
+「この一回」; an expanded call stayed open across re-renders; 共有 SQLite said it has no observation events. At 390×844
+(touch) a tap on 道具の関門 kept the view, listed three calls, and the page had no horizontal overflow. No console exceptions.
+[1600 Haiku history](observer-evidence/history-1600-haiku.jpg), [390 道具の関門 history](observer-evidence/history-390-gate.jpg)
+
+## Landscape placement and drag and drop (2026-10-14)
+
+Branch `observer-dnd-landscape` from `2d3820fe`. Headless Chrome driven over CDP against `scripts/observer-ui-smoke.ts`
+(`turn` and `fca-run` fixture commands; controlled values only), dark at 1600×900 and 1280×800, light at 390×844 with
+touch emulation (`Input.dispatchTouchEvent`). `scrollWidth`/`scrollHeight` equal the viewport at every size; no console
+exceptions; the 現状/目指す姿 switch and every 「目指す姿」/「ダミー」 text are gone.
+
+- Fit: the map fills 1248×602 px at 1600×900 and 1049×506 px at 1280×800 (the old tall placement was height-bound).
+- Mouse: a box dragged by (120, 260) px moved by (119, 260) without opening the drawer; the 声の出力 block dragged by its title
+  moved (40, 200) with its four boxes and the same size; a drag on empty canvas panned; after two zoom steps a box still
+  followed the pointer (49, 30 for 50, 30); every route stayed finite; 5 moved boxes were saved, survived a reload (reset
+  enabled, picked level kept), and 「初期配置に戻す」 removed the saved entry and disabled itself. `H` hid and `Esc` showed the
+  overlay.
+- Touch (390): the 心の後処理 block moved (−30, 60) by its centre name band at 塊, a box moved (40, 50) at 処理, a drag on
+  empty canvas panned, and a tap selected a box and opened the bottom sheet. Synthetic two-pointer pinch zoomed (pane check).
+- 1600: [timeline](observer-evidence/dnd-1600-timeline.jpg), [塊](observer-evidence/dnd-1600-level1.jpg), [処理](observer-evidence/dnd-1600-level2.jpg), [入出力](observer-evidence/dnd-1600-level3.jpg), [boxes and a block moved](observer-evidence/dnd-1600-moved.jpg), [zoomed, moved](observer-evidence/dnd-1600-zoomed-moved.jpg), [after 初期配置に戻す](observer-evidence/dnd-1600-reset.jpg)
+- 1280: [処理](observer-evidence/dnd-1280-level2.jpg); 390: [塊](observer-evidence/dnd-390-level1.jpg), [tap → detail](observer-evidence/dnd-390-level2-touch.jpg), [入出力 zoomed](observer-evidence/dnd-390-level3-zoomed.jpg)
+
+Physical iPhone, production and the Windows app are not verified for this branch.
+
 ## Detail level independent of zoom (2026-10-13)
 
 Branch `observer-detail-level` from `bf511d16`, same fixture method. At 1440×900 and 390×844 each level was picked and
@@ -31,7 +94,7 @@ latency. No console exceptions; `scrollWidth` equals the viewport at 1440 and 39
 
 - [Timeline, base-step detail and FCA task tree (1440)](observer-evidence/redesign-desktop-timeline.jpg)
 - [Map, block level (1440)](observer-evidence/redesign-desktop-map-l1.jpg) and [box level](observer-evidence/redesign-desktop-map.jpg)
-- [目指す姿 map, dummy (1440)](observer-evidence/redesign-desktop-target-map.jpg)
+- [目指す姿 map, dummy (1440)](observer-evidence/redesign-desktop-target-map.jpg) (view retired 2026-10-14)
 - [Timeline and failed-tool detail (390)](observer-evidence/redesign-phone-timeline.jpg), [map (390)](observer-evidence/redesign-phone-map.jpg)
 
 Production, device and Windows-app rendering of this branch are not yet verified.

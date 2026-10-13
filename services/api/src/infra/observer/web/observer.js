@@ -1,5 +1,5 @@
-import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, viewNodeOf, viewHandoff, CURRENT_LAYOUT, TARGET_LAYOUT, TARGET_BLOCKS, TARGET_NODES, TARGET_LINKS, TARGET_RUNS, dummyFields, mergeFields, routeTable, blockRoutes, edgeCurve, routePath, routePoint, detailLevel, ioRows, fitText, textWidth } from './observerMap.js';
-import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
+import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, LAYOUT_ID, viewNodeOf, viewHandoff, gridLayout, movedPositions, customPositions, savedPositions, routeTable, blockRoutes, edgeCurve, routePath, routePoint, detailLevel, ioRows, fitText, textWidth } from './observerMap.js';
+import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey, criticalPath } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
 const KINDS = new Set(['run.started', 'run.completed', 'span.started', 'span.completed', 'span.failed', 'span.cancelled', 'handoff']);
@@ -354,6 +354,111 @@ export function createObserverClient(options) {
   return { connect, connectExisting, pair, disconnect, pause, resume };
 }
 
+/* ---------- Owner picks of 2026-10-14 (1B, 1C, 2A, 3C, P): facts read from fields the server already projects ---------- */
+const num = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const firstNum = (...values) => values.map(num).find(value => value !== null) ?? null;
+const listLength = value => Array.isArray(value) ? value.length : null;
+/** The tool a tools/gate span names, if any (registry symbols only, as projected). */
+export function spanToolName(span) {
+  const input = record(span?.input) ? span.input : {};
+  for (const key of ['name', 'tool', 'toolName']) if (typeof input[key] === 'string' && input[key]) return input[key];
+  return null;
+}
+/** Tokens and cache of a run's model calls. A count no call reported stays absent (null), never zero. */
+export function runUsage(run) {
+  const sums = { inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null };
+  const add = (key, value) => { if (value !== null) sums[key] = (sums[key] ?? 0) + value; };
+  for (const span of run?.spans.values() ?? []) {
+    if (span.node !== 'llm' || !record(span.output)) continue;
+    const usage = record(span.output.usage) ? span.output.usage : {}, output = span.output;
+    add('inputTokens', firstNum(usage.inputTokens, output.inputTokens));
+    add('outputTokens', firstNum(usage.outputTokens, output.outputTokens));
+    add('cacheReadTokens', firstNum(usage.cacheReadTokens, output.cacheReadInputTokens, output.cacheReadTokens));
+    add('cacheWriteTokens', firstNum(usage.cacheCreationTokens, output.cacheCreationInputTokens, output.cacheCreationTokens));
+  }
+  return sums;
+}
+/** Tools a run actually executed, in order, with whether each failed. */
+export function runToolCalls(run) {
+  return [...(run?.spans.values() ?? [])].filter(span => span.node === 'tools').sort((a, b) => a.firstSequence - b.firstSequence)
+    .map(span => ({ name: spanToolName(span) ?? '道具', failed: span.state === 'failed', open: !span.endedAt, key: spanKey(span) }));
+}
+/** The one-line flow of a turn (1B): 受付 → Jev → 想起 → Haiku ×N → 道具 ✓✗ → 返事. Only stages that were observed appear;
+ * each names the box (and span) it came from so a tap can select it. */
+export function turnFlow(run) {
+  if (!run) return [];
+  const spans = [...run.spans.values()].sort((a, b) => a.firstSequence - b.firstSequence), stages = [];
+  const of = view => spans.filter(span => viewNodeOf(span.node, span.input, span.output) === view);
+  const field = (span, ...keys) => { for (const source of [span?.output, span?.input]) if (record(source)) for (const key of keys) if (source[key] !== undefined && source[key] !== null) return source[key]; return undefined; };
+  const root = spans.find(span => span.isRunRoot && span.node === 'turn') ?? spans.find(span => span.isRunRoot);
+  if (root) { const surface = field(root, 'surface'); stages.push({ view: viewNodeOf(root.node, root.input, root.output) ?? 'admit', key: spanKey(root), text: `受付${typeof surface === 'string' ? ` ${surface}` : ''}` }); }
+  const router = of('router').at(-1);
+  if (router) {
+    const difficulty = field(router, 'difficulty'), offered = firstNum(field(router, 'offeredCount'), field(router, 'toolMenu')) ?? listLength(field(router, 'offeredTools'));
+    stages.push({ view: 'router', key: spanKey(router), text: `Jev${typeof difficulty === 'string' ? ` ${difficulty}` : ''}${offered !== null ? `・道具${offered}` : ''}`, failed: router.state === 'failed' });
+  }
+  const recalls = of('recall');
+  if (recalls.length) {
+    const counts = recalls.map(span => firstNum(field(span, 'recalledCount'), field(span, 'itemCount'), field(span, 'memoryCount'))).filter(value => value !== null);
+    stages.push({ view: 'recall', key: spanKey(recalls.at(-1)), text: `想起${counts.length ? ` ${counts.reduce((a, b) => a + b, 0)}` : ''}`, failed: recalls.some(span => span.state === 'failed') });
+  }
+  const haiku = of('haiku');
+  if (haiku.length) stages.push({ view: 'haiku', key: spanKey(haiku.at(-1)), text: `Haiku ×${haiku.length}`, failed: haiku.some(span => span.state === 'failed') });
+  for (const call of runToolCalls(run)) stages.push({ view: 'tools', key: call.key, text: `${call.name} ${call.failed ? '✗' : call.open ? '…' : '✓'}`, failed: call.failed, tool: true });
+  const decode = of('decode').at(-1);
+  if (decode || root?.endedAt) {
+    const chars = firstNum(field(decode, 'replyChars'), field(decode, 'characterCount'), field(decode, 'textCharacters'));
+    const total = root?.endedAt ? num(root.elapsedMs) : null;
+    stages.push({ view: decode ? 'decode' : 'admit', key: decode ? spanKey(decode) : spanKey(root), text: `返事${chars !== null ? ` ${chars}字` : ''}${total !== null ? ` · ${total >= 1000 ? `${(total / 1000).toFixed(1)} s` : `${Math.round(total)} ms`}` : ''}`, failed: root?.state === 'failed' });
+  }
+  return stages;
+}
+/** Per block, across every run the page holds (3C): failed, running and unknown spans, newest first. */
+export function blockAlerts(state) {
+  const result = new Map();
+  for (const run of state.runs.values()) for (const span of effectiveObservedSpans(state, run.spans.values())) {
+    const view = viewNodeOf(span.node, span.input, span.output), block = VIEW_INDEX.get(view)?.[1];
+    if (!block) continue;
+    const status = spanState(span, run, state.transport);
+    if (!['failed', 'running', 'unknown'].includes(status)) continue;
+    const entry = result.get(block) ?? { failed: [], running: [], unknown: [] };
+    entry[status].push({ span, view, status, key: spanKey(span) });
+    result.set(block, entry);
+  }
+  for (const entry of result.values()) for (const list of Object.values(entry)) list.sort((a, b) => b.span.lastSequence - a.span.lastSequence);
+  return result;
+}
+
+/** Recent calls of each map box (owner, 2026-10-14: 「直近数回の履歴も見れてほしい」). Kept only in this page's memory from the
+ * events it already reads (no new request): the viewer's first read returns the server's retained window, so history starts
+ * with what the server still holds. Each box keeps its newest `limit` spans, so a busy box cannot push a quiet one out of the
+ * page's event window. It holds the same projected spans the detail already shows, and it is cleared whenever the view is
+ * (disconnect, pause, hidden page, held audience, loss, gap or server restart). */
+export function createNodeHistory(limit = 8) {
+  let byView = new Map();
+  return {
+    observe(state) {
+      for (const run of state.runs.values()) for (const span of run.spans.values()) {
+        const view = viewNodeOf(span.node, span.input, span.output);
+        if (!view) continue;
+        const list = byView.get(view) ?? [], key = spanKey(span), index = list.findIndex(entry => entry.key === key);
+        if (index >= 0) { list[index] = { key, span }; continue; }
+        if (list.length >= limit && span.firstSequence < list[list.length - 1].span.firstSequence) continue;
+        list.push({ key, span }); list.sort((a, b) => b.span.firstSequence - a.span.firstSequence); list.length = Math.min(list.length, limit);
+        byView.set(view, list);
+      }
+    },
+    /** Newest first. A span no longer in the page's window that never closed is shown as unknown, not as still running. */
+    list(view, state) {
+      return (byView.get(view) ?? []).map(({ key, span }) => {
+        const live = state.runs.get(span.runId)?.spans.get(span.id);
+        return { key, span: live ?? span, state: live ? spanState(live, state.runs.get(span.runId), state.transport) : span.endedAt ? span.state : 'unknown', inWindow: Boolean(live) };
+      });
+    },
+    clear() { byView = new Map(); },
+  };
+}
+
 /** Per-tab view preferences only (never credentials or observations): overlay hidden, hint dismissed, picked detail level. */
 export function viewPrefs(value) {
   const saved = record(value) ? value : {};
@@ -400,13 +505,14 @@ function mountObserver() {
   const session = createObserverSession(() => window.sessionStorage, `shannon.observer.connection.v1:${observerBasePath(window.location.pathname)}`);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, priorCatalog = null;
-  let mode = 'cur', view = 'timeline', selectedTask = null, selectedStep = null, selectedKey = null, selectedView = null, focusBlock = null;
+  const history = createNodeHistory(8), openHistory = new Set();
+  let view = 'timeline', selectedTask = null, selectedStep = null, selectedKey = null, selectedView = null, focusBlock = null;
   // Owner feedback 2026-10-13: the canvas fills the viewport and every control floats above it. Only this view preference is kept per tab.
   const uiKey = `shannon.observer.ui.v1:${observerBasePath(window.location.pathname)}`;
   const readUi = () => { try { const value = JSON.parse(window.sessionStorage.getItem(uiKey) ?? 'null'); return record(value) ? value : {}; } catch { return {}; } };
   const writeUi = value => { try { window.sessionStorage.setItem(uiKey, JSON.stringify(viewPrefs(value))); } catch { /* storage may be unavailable */ } };
-  const ui = viewPrefs(readUi()), panels = { tasks: false, metrics: false };
-  let drawerOpen = false, topPad = 120;
+  const ui = viewPrefs(readUi()), panels = { tasks: false, metrics: false, legend: false };
+  let drawerOpen = false, topPad = 120, toolNameFilter = '', blockListId = null, alerts = new Map();
   const elapsedClock = createElapsedClock(); let clockTimer = null;
   let viewRuns = null, viewId = null, linkedView;
   const currentRun = () => {
@@ -414,15 +520,19 @@ function mountObserver() {
     if (viewRuns !== state.runs || viewId !== state.selectedRunId) { viewRuns = state.runs; viewId = state.selectedRunId; linkedView = linkedRunView(state, state.selectedRunId); }
     return linkedView;
   };
-  const viewModel = () => mode === 'cur'
-    ? { blocks: BLOCKS, nodes: VIEW_NODES, index: VIEW_INDEX, layout: CURRENT_LAYOUT, links: VIEW_LINKS }
-    : { blocks: TARGET_BLOCKS, nodes: TARGET_NODES, index: new Map(TARGET_NODES.map(spec => [spec[0], spec])), layout: TARGET_LAYOUT, links: TARGET_LINKS };
+  // The owner's own arrangement of the map (owner, 2026-10-14): only box positions, kept in this browser's localStorage for this
+  // viewer, never observations or credentials. 「初期配置に戻す」 deletes it.
+  const layoutKey = `shannon.observer.layout.v1:${observerBasePath(window.location.pathname)}`;
+  const readLayout = () => { try { return savedPositions(JSON.parse(window.localStorage.getItem(layoutKey) ?? 'null')); } catch { return {}; } };
+  const writeLayout = positions => { try { if (Object.keys(positions).length) window.localStorage.setItem(layoutKey, JSON.stringify({ layout: LAYOUT_ID, nodes: positions })); else window.localStorage.removeItem(layoutKey); } catch { /* storage may be unavailable; the arrangement then lasts until reload */ } };
+  const model = { blocks: BLOCKS, nodes: VIEW_NODES, index: VIEW_INDEX, links: VIEW_LINKS, layout: gridLayout(BLOCKS, VIEW_NODES, readLayout()) };
+  const viewModel = () => model;
   const blockOf = (model, id) => model.index.get(id)?.[1];
   const blockSpec = (model, id) => model.blocks.find(block => block[0] === id);
   const roleFor = (model, id) => blockSpec(model, blockOf(model, id))?.[3] ?? 'own';
   const labelFor = (model, id) => model.index.get(id)?.[4] ?? id;
 
-  /* ---------- Rows: one normalized shape for live spans and the dummy target ---------- */
+  /* ---------- Rows: one normalized shape for live spans ---------- */
   function liveRows() {
     const run = currentRun();
     if (!run) return { rows: [], run };
@@ -438,62 +548,48 @@ function mountObserver() {
     }
     return { rows, run };
   }
-  const target = { run: 0, t: 0, playing: !reduceMotion.matches, last: 0, seen: new Set(), frame: null, hold: 0 };
-  function dummyRows() {
-    const model = viewModel(), run = TARGET_RUNS[target.run], rows = [];
-    run.spans.forEach(([id, start, duration, override, kids], index) => {
-      if (start > target.t) { rows.push({ key: `dummy/${index}`, view: id, offset: start, duration, future: true, state: 'unobserved', origin: 'server', dummy: true, index, kids, override }); return; }
-      const end = start + duration, open = target.t < end;
-      rows.push({ key: `dummy/${index}`, view: id, offset: start, duration: open ? target.t - start : duration, full: duration, open, measured: true, state: open ? 'running' : 'completed', origin: 'server', dummy: true, index, kids, override });
-    });
-    return { rows, run: null, total: Math.max(...run.spans.map(([, start, duration]) => start + duration)) + 200, model };
-  }
-  function dummyFieldsOf(row) {
-    const spec = viewModel().index.get(row.view), [inputOverride, outputOverride] = (row.override || '|').split('|');
-    return { input: mergeFields(dummyFields(spec?.[6]), inputOverride), output: mergeFields(dummyFields(spec?.[7]), outputOverride) };
-  }
-
-  /* ---------- Timeline (案B) ---------- */
+  /* ---------- Timeline: a waterfall since the owner's pick of 2026-10-14 (2A, with 1C notes) ---------- */
   let timelineSignature = '', barElements = new Map();
   function renderTimeline() {
-    const model = viewModel(), data = mode === 'cur' ? liveRows() : dummyRows(), rows = data.rows;
+    const data = liveRows(), rows = data.rows;
     const host = $('lanes'); const axis = $('axis'); const head = $('run-head');
     const placed = rows.filter(row => row.offset !== null), unplaced = rows.filter(row => row.offset === null);
     const domains = { server: placed.filter(row => row.origin === 'server'), client: placed.filter(row => row.origin === 'client') };
-    const extent = list => Math.max(1, ...list.map(row => row.offset + (row.full ?? row.duration ?? 0)));
-    const scale = { server: data.total ?? extent(domains.server), client: extent(domains.client) };
-    const signature = JSON.stringify([mode, focusBlock, rows.map(row => [row.key, row.state, row.offset, row.future ?? false, row.duration === null]), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
+    const extent = list => Math.max(1, ...list.map(row => row.offset + (row.duration ?? 0)));
+    const scale = { server: extent(domains.server), client: extent(domains.client) };
+    const signature = JSON.stringify([focusBlock, toolNameFilter, rows.length, rows.map(row => `${row.key}:${row.state}:${row.offset}:${row.open ? 'o' : Math.round(row.duration ?? -1)}`).join('|'), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
     $('timeline-empty').hidden = rows.length > 0;
-    $('timeline-empty').textContent = mode === 'cur' ? (state.transport === 'live' ? 'この一回の処理をまだ観測していません。会話や作業が始まると、ここに時間割が出ます。' : '接続すると、届いた処理を時間割で表示します。') : '';
+    $('timeline-empty').textContent = state.transport === 'live' ? 'この一回の処理をまだ観測していません。会話や作業が始まると、ここに時間割が出ます。' : '接続すると、届いた処理を時間割で表示します。';
     if (signature !== timelineSignature) {
-      timelineSignature = signature; barElements = new Map();
-      host.replaceChildren(); head.replaceChildren(); axis.replaceChildren();
+      timelineSignature = signature;
+      // The row containers stay attached; only the small pieces around them (marker, notes, unplaced list) are redrawn.
+      for (const child of [...host.children]) if (child !== rowsHost.server && child !== rowsHost.client) child.remove();
+      if (host.firstElementChild !== rowsHost.server) host.prepend(rowsHost.server);
+      if (rowsHost.server.nextElementSibling !== rowsHost.client) rowsHost.server.after(rowsHost.client);
+      head.replaceChildren(); axis.replaceChildren();
+      for (const [key, item] of [...barElements]) if (item.root) barElements.delete(key);
       const roots = rows.filter(row => row.root);
       if (roots.length) {
         el('span', 'lane-name', '一回', head).title = 'run（ターンや作業の一回）';
         const track = el('div', 'track run-track', null, head);
-        for (const row of roots) bar(row, track, scale.server, 0, model);
+        for (const row of roots) { bar(row, track, scale.server, 0, model); barElements.get(row.key).root = true; }
         const steps = roots.map(row => row.span?.output).find(output => record(output) && typeof output.modelStartMs === 'number');
         const rootRow = roots.find(row => record(row.span?.output) && typeof row.span.output.modelStartMs === 'number');
         if (steps && rootRow && rootRow.offset !== null) marker(host, (rootRow.offset + steps.modelStartMs) / scale.server, `モデルへ ${fmt(steps.modelStartMs)} ms`);
       }
-      if (mode === 'tgt' && TARGET_RUNS[target.run].spans.some(([id]) => id === 'haikuLow')) marker(host, 350 / scale.server, 'モデルへ 350 ms');
-      for (const [blockId, label, process, blockRole] of model.blocks) {
-        const lane = rows.filter(row => !row.root && row.offset !== null && blockOf(model, row.view) === blockId);
-        if (!lane.length) continue;
-        const client = lane.every(row => row.origin === 'client');
-        const laneElement = el('div', 'lane', null, host); role(laneElement, blockRole); laneElement.dataset.block = blockId;
-        if (focusBlock && focusBlock !== blockId) laneElement.classList.add('dim');
-        const name = el('button', 'lane-name', label, laneElement); name.type = 'button'; name.title = `${label}（${process}）${client ? ' · 端末の時計で別の目盛り' : ''}`;
-        name.addEventListener('click', () => setFocus(focusBlock === blockId ? null : blockId));
-        if (client) el('small', '', '端末の時計', name);
-        const track = el('div', 'track', null, laneElement), ends = [];
-        for (const row of lane.sort((a, b) => a.offset - b.offset)) {
-          const total = client ? scale.client : scale.server, end = row.offset + Math.max(row.full ?? row.duration ?? 0, total * .03);
-          let slot = ends.findIndex(value => value <= row.offset); if (slot < 0) { slot = ends.length; ends.push(0); } ends[slot] = end;
-          bar(row, track, total, slot, model);
-        }
-        track.style.setProperty('--rows', String(Math.max(1, ends.length)));
+      // Waterfall (owner, 2026-10-14, 2A): one row per span in start order. The critical path is taken from observed start,
+      // measured duration and explicit parent links only (`criticalPath`); open or unmeasured spans never join it. While the
+      // run has not closed (its root open or unmeasured), the path is only the path so far, and says so.
+      const measured = placed.filter(row => row.origin === 'server' && row.measured && !row.open && row.duration !== null);
+      const crit = criticalPath(measured.map(row => ({ key: row.key, parent: row.span?.parentSpanId ? `${row.span.runId}/${row.span.parentSpanId}` : null, start: row.offset, end: row.offset + row.duration })));
+      const finished = roots.length ? roots.every(row => row.span?.endedAt && row.measured && !row.open) : placed.length > 0 && placed.every(row => row.span?.endedAt && !row.open);
+      $('crit-hint').hidden = !crit.size;
+      $('crit-hint').textContent = finished ? '太い棒＝この一回を終わらせるまで続いた段（観測した開始・所要と親子だけで決めています）。' : '太い棒＝ここまでに終わった段のつながり（この一回はまだ終わっていません。観測した開始・所要と親子だけで決めています）。';
+      // Rows are kept by span and rebuilt only when what they show changed; a moved scale only re-places them.
+      for (const origin of ['server', 'client']) {
+        const list = placed.filter(row => !row.root && row.origin === origin).sort((a, b) => a.offset - b.offset || a.span.firstSequence - b.span.firstSequence);
+        if (origin === 'client' && list.length) host.insertBefore(el('p', 'hint', '端末の時計（サーバーとは別の目盛り）'), rowsHost.client);
+        syncRows(rowsHost[origin], list, scale[origin], crit, origin);
       }
       if (unplaced.length) {
         const line = el('p', 'unplaced', '開始を観測していない処理：', host);
@@ -501,30 +597,83 @@ function mountObserver() {
       }
       const step = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000].find(value => scale.server / value <= 7) ?? 120000;
       for (let value = 0; value <= scale.server; value += step) { const tick = el('span', '', value >= 1000 ? `${value / 1000}s` : `${value}`, axis); tick.style.setProperty('left', `${value / scale.server * 100}%`); }
-      if (mode === 'tgt') { const playhead = el('div', 'playhead', null, host); playhead.id = 'playhead'; }
     }
     for (const [key, item] of barElements) {
       const row = rows.find(value => value.key === key); if (!row) continue;
-      const width = row.future ? (row.full ?? row.duration) : row.duration;
+      const width = row.duration;
       item.element.style.setProperty('width', `${width === null || width === undefined ? 0 : width / item.total * 100}%`);
       item.element.classList.toggle('open', Boolean(row.open));
-      if (row.open && !row.dummy) item.element.title = `${labelFor(model, row.view)} ≥ ${fmt(row.duration)} ms · 受信後（下限）`;
+      if (row.open) item.element.title = `${labelFor(model, row.view)} ≥ ${fmt(row.duration)} ms · 受信後（下限）`;
     }
-    const playhead = $('playhead');
-    if (playhead) playhead.style.setProperty('left', `calc(var(--lane-w) + (100% - var(--lane-w)) * ${Math.min(1, target.t / scale.server)})`);
-    $('run-summary').textContent = mode === 'cur' ? runSummary(data.run, rows) : `${TARGET_RUNS[target.run].name} · ${fmt(target.t)} / ${fmt(scale.server)} ms · ダミー`;
+    $('run-summary').textContent = runSummary(data.run, rows);
     return rows;
+  }
+  const rowsHost = { server: document.createElement('div'), client: document.createElement('div') }, rowCache = new Map();
+  rowsHost.server.className = 'waterfall'; rowsHost.client.className = 'waterfall';
+  /** One waterfall row per span, reused while its look is unchanged (long FCA runs have hundreds of spans). */
+  function syncRows(container, list, total, crit, origin) {
+    const keep = new Set(), elements = [];
+    for (const row of list) {
+      const onPath = crit.has(row.key), offPath = !onPath && crit.size > 0 && origin === 'server', blockId = blockOf(model, row.view);
+      const look = [row.state, row.offset, row.open ? 'o' : row.duration, onPath, offPath, Boolean(focusBlock && focusBlock !== blockId), Boolean(toolNameFilter && rowMentions(row, toolNameFilter)), row.linked].join(':');
+      let entry = rowCache.get(row.key);
+      if (!entry || entry.look !== look) {
+        const spec = blockSpec(model, blockId), line = document.createElement('div');
+        line.className = `lane${onPath ? ' crit' : offPath ? ' off-path' : ''}`; role(line, roleFor(model, row.view)); line.dataset.block = blockId ?? '';
+        if (focusBlock && focusBlock !== blockId) line.classList.add('dim');
+        if (toolNameFilter && rowMentions(row, toolNameFilter)) line.classList.add('match');
+        const name = el('button', 'lane-name', labelFor(model, row.view), line); name.type = 'button'; name.title = `${labelFor(model, row.view)}（${spec?.[1] ?? ''}）`;
+        name.addEventListener('click', () => select(row.key, row.view));
+        const track = el('div', 'track', null, line);
+        bar(row, track, total, 0, model);
+        const text = barNote(row, onPath), note = text && row.duration !== null && !row.open ? el('span', 'bar-note', text, track) : null;
+        entry = { look, line, note, total: null, origin };
+        rowCache.set(row.key, entry);
+      }
+      if (entry.total !== total) { placeRow(entry, row, total); entry.total = total; }
+      keep.add(row.key); elements.push(entry.line);
+    }
+    for (const [key, entry] of rowCache) if (!keep.has(key) && entry.origin === origin) { rowCache.delete(key); barElements.delete(key); }
+    const current = container.children;
+    if (current.length !== elements.length || elements.some((line, index) => current[index] !== line)) container.replaceChildren(...elements);
+  }
+  function placeRow(entry, row, total) {
+    const item = barElements.get(row.key); if (item) { item.total = total; item.element.style.setProperty('left', `${row.offset / total * 100}%`); }
+    if (!entry.note) return;
+    const start = row.offset / total * 100, end = (row.offset + (row.duration ?? 0)) / total * 100;
+    entry.note.classList.toggle('before', end > 70); entry.note.style.removeProperty('left'); entry.note.style.removeProperty('right');
+    if (end > 70) entry.note.style.setProperty('right', `${Math.max(0, 100 - start + .6)}%`); else entry.note.style.setProperty('left', `${end + .6}%`);
+  }
+  /** The few annotations worth reading on a bar (1C): the decision a box made, and how long a step on the critical path took. */
+  function barNote(row, onPath) {
+    const span = row.span, field = (...keys) => { for (const source of [span?.output, span?.input]) if (record(source)) for (const key of keys) if (source[key] !== undefined && source[key] !== null) return source[key]; return undefined; };
+    let text = null;
+    if (row.view === 'router' || row.view === 'fcaTool') {
+      const difficulty = field('difficulty'), chosen = field('chosenTools'), offered = field('offeredCount', 'toolMenu') ?? (Array.isArray(field('offeredTools')) ? field('offeredTools').length : undefined);
+      text = [typeof difficulty === 'string' ? difficulty : null, Array.isArray(chosen) ? `選択 ${chosen.length}` : typeof offered === 'number' ? `道具 ${offered}` : null].filter(Boolean).join('・') || null;
+    } else if (row.view === 'recall' || row.view === 'base') { const count = field('recalledCount', 'itemCount', 'memoryCount'); text = typeof count === 'number' ? `${count} 件` : null; }
+    else if (row.view === 'haiku') { const stop = field('stopReason', 'stop'); text = stop === 'tool_use' ? '道具へ' : stop === 'end_turn' ? '返事' : typeof stop === 'string' ? stop : null; }
+    else if (row.view === 'tools') text = `${row.state === 'failed' ? '✗' : '✓'} ${spanToolName(span) ?? ''}`.trim();
+    // A step of a few milliseconds is on the path but says nothing worth reading.
+    if (onPath && row.duration >= 5) text = text ? `${text} · ${fmt(row.duration)} ms` : `${fmt(row.duration)} ms`;
+    return text;
+  }
+  /** Whether a span names the filtered tool (its own name, or a list of offered/chosen tools). */
+  function rowMentions(row, tool) {
+    const span = row.span; if (!span) return false;
+    if (spanToolName(span) === tool) return true;
+    for (const source of [span.input, span.output]) if (record(source)) for (const key of ['offeredTools', 'chosenTools', 'selectedTools']) if (Array.isArray(source[key]) && source[key].some(item => item === tool || item?.name === tool)) return true;
+    return false;
   }
   function marker(host, fraction, text) {
     const mark = el('div', 'mark', null, host); mark.style.setProperty('left', `calc(var(--lane-w) + (100% - var(--lane-w)) * ${Math.min(1, fraction)})`); el('b', '', text, mark);
   }
   function bar(row, track, total, slot, model) {
-    const button = el('button', `bar state-${row.state}${row.future ? ' future' : ''}${row.linked ? ' linked' : ''}${row.duration === null ? ' unmeasured' : ''}`, null, track);
+    const button = el('button', `bar state-${row.state}${row.linked ? ' linked' : ''}${row.duration === null ? ' unmeasured' : ''}`, null, track);
     button.type = 'button'; role(button, roleFor(model, row.view)); button.dataset.key = row.key;
     button.style.setProperty('left', `${row.offset / total * 100}%`); button.style.setProperty('--slot', String(slot));
     const label = labelFor(model, row.view), errorKind = record(row.span?.output) && typeof row.span.output.errorKind === 'string' ? row.span.output.errorKind : null;
     el('span', 'bar-label', `${row.state === 'failed' ? '! ' : ''}${label}`, button);
-    if (row.kids) for (const [name, start, duration] of row.kids) { const kid = el('i', 'kid', null, button); kid.style.setProperty('left', `${(start - row.offset) / (row.full ?? row.duration) * 100}%`); kid.style.setProperty('width', `${duration / (row.full ?? row.duration) * 100}%`); kid.title = name; }
     button.title = `${label} · ${row.duration === null ? '所要は未計測' : ms(row.duration)}${errorKind ? ` · 失敗: ${errorKind}` : ''}`;
     button.setAttribute('aria-label', `${label}、${STATE_LABELS[row.state] ?? ''}、${row.duration === null ? '所要は未計測' : `${fmt(row.duration)}ミリ秒`}`);
     button.setAttribute('aria-pressed', String(row.key === selectedKey));
@@ -539,7 +688,7 @@ function mountObserver() {
   }
 
   /* ---------- Detail (shared by both views) ---------- */
-  function select(key, id) { selectedKey = key; selectedView = id; setDrawer(true); for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
+  function select(key, id) { blockListId = null; selectedKey = key; selectedView = id; setDrawer(true); for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
   function table(title, rows, parent) {
     const box = el('div', 'io', null, parent); el('h4', '', title, box);
     if (!rows.length) { el('p', 'hint', 'なし', box); return; }
@@ -569,39 +718,74 @@ function mountObserver() {
     if (typeof span.elapsedMs === 'number') { const item = el('li', 'gap', '測っていない隙間 ', list); el('span', 'num', ms(Math.max(0, span.elapsedMs - sum)), item); }
   }
   function concurrent(parent, row, rows, model) {
-    if (row.offset === null || row.future) return;
-    const end = row.offset + (row.full ?? row.duration ?? 0);
-    const others = rows.filter(other => other !== row && !other.root && !other.future && other.offset !== null && other.origin === row.origin && other.offset < end && other.offset + (other.full ?? other.duration ?? 0) > row.offset);
+    if (row.offset === null) return;
+    const end = row.offset + (row.duration ?? 0);
+    const others = rows.filter(other => other !== row && !other.root && other.offset !== null && other.origin === row.origin && other.offset < end && other.offset + (other.duration ?? 0) > row.offset);
     const box = el('div', 'concurrent', null, parent); el('h4', '', '同時に動いていたもの', box);
     if (!others.length) { el('p', 'hint', 'なし', box); return; }
     const chips = el('div', 'chips', null, box);
     for (const other of others.slice(0, 24)) { const chip = el('button', 'chip', labelFor(model, other.view), chips); chip.type = 'button'; role(chip, roleFor(model, other.view)); chip.addEventListener('click', () => select(other.key, other.view)); }
   }
+  /** The box's recent calls, newest first, each expandable to the same projected input and output the detail shows. */
+  function recentCalls(parent, id, currentKey) {
+    const box = el('div', 'history', null, parent), calls = history.list(id, state).filter(call => !toolNameFilter || rowMentions({ span: call.span }, toolNameFilter));
+    el('h4', '', `直近の呼び出し（新しい順・最大 8 回${toolNameFilter ? `・${toolNameFilter} を含むものだけ` : ''}）`, box);
+    if (!calls.length) { el('p', 'hint', model.index.get(id)?.[6]?.length === 0 ? 'この箱には観察イベントがありません。' : 'まだ届いていません。この画面を開いた時にサーバーが保持していた分（最大 15 分）と、その後に届いた分を記録します。', box); return; }
+    const list = el('ol', 'history-list', null, box);
+    for (const call of calls) {
+      const span = call.span, item = el('li', '', null, list), details = el('details', `call state-${call.state}`, null, item);
+      details.open = openHistory.has(call.key);
+      details.addEventListener('toggle', () => { if (details.open) openHistory.add(call.key); else openHistory.delete(call.key); });
+      const summary = el('summary', '', null, details);
+      el('span', 'num', timeValue(span.startedAt ?? span.endedAt), summary);
+      el('span', 'num', typeof span.elapsedMs === 'number' && span.endedAt ? `${span.elapsedMs < 10 ? span.elapsedMs.toFixed(1) : fmt(span.elapsedMs)} ms` : '—', summary);
+      el('span', `state state-${call.state}`, STATE_LABELS[call.state] ?? call.state, summary);
+      if (call.key === currentKey) el('span', 'here', '表示中', summary);
+      else if (span.runId === state.selectedRunId) el('span', 'here', 'この一回', summary);
+      const errorKind = record(span.output) && typeof span.output.errorKind === 'string' ? span.output.errorKind : null;
+      if (errorKind) el('p', 'failure', `失敗：${errorKind}`, details);
+      if (span.model) el('p', 'hint', `モデル ${span.model}`, details);
+      if (!call.inWindow) el('p', 'hint', 'この呼び出しはページの表示範囲から外れました（記録した時点の値）。', details);
+      const columns = el('div', 'columns', null, details); table('入力', fieldRows(span.input), columns);
+      table('出力', span.endedAt ? fieldRows(span.output) : [{ gloss: '', key: '', value: call.state === 'running' ? '出力イベント待ち' : '状態不明・完了は未確認' }], columns);
+    }
+  }
+  /** A block's failures, running and unknown spans across every run the page holds (3C); a press opens that run and span. */
+  function openBlockList(id) { blockListId = id; selectedKey = null; selectedView = null; setDrawer(true); renderDetail(); }
+  function renderBlockList(panel) {
+    const spec = blockSpec(model, blockListId), entry = alerts.get(blockListId) ?? { failed: [], running: [], unknown: [] };
+    role(panel, spec?.[3] ?? 'own');
+    const title = el('h3', '', spec?.[1] ?? blockListId, panel); el('small', '', spec?.[2] ?? '', title);
+    el('p', 'hint', '保持している全部の一回から数えています（選んでいる一回だけではありません）。押すとその一回とその処理を開きます。', panel);
+    for (const [kind, name] of [['failed', '失敗'], ['running', '処理中'], ['unknown', '不明']]) {
+      const box = el('div', 'history', null, panel); el('h4', '', `${name} ${entry[kind].length}`, box);
+      if (!entry[kind].length) { el('p', 'hint', 'なし', box); continue; }
+      const list = el('ol', 'history-list', null, box);
+      for (const item of entry[kind].slice(0, 30)) {
+        const button = el('button', `call-link state-${item.status}`, null, el('li', '', null, list)); button.type = 'button';
+        el('span', 'num', timeValue(item.span.startedAt ?? item.span.endedAt), button); el('b', '', labelFor(model, item.view), button);
+        const errorKind = record(item.span.output) && typeof item.span.output.errorKind === 'string' ? item.span.output.errorKind : null;
+        if (errorKind) el('span', 'failure', errorKind, button);
+        el('span', 'hint', item.span.runId === state.selectedRunId ? 'この一回' : `run ${item.span.runId.slice(0, 8)}`, button);
+        button.addEventListener('click', () => { selectedTask = null; selectedStep = null; $('follow-runs').checked = false; state = { ...state, selectedRunId: item.span.runId }; blockListId = null; render(); select(item.key, item.view); });
+      }
+    }
+  }
   function renderDetail() {
-    const panel = $('detail'), model = viewModel(); panel.replaceChildren();
-    const data = mode === 'cur' ? liveRows() : dummyRows(), rows = data.rows;
+    const panel = $('detail'); panel.replaceChildren();
+    if (blockListId) { renderBlockList(panel); return; }
+    const data = liveRows(), rows = data.rows;
     let row = rows.find(item => item.key === selectedKey);
-    if (!row && selectedView) row = [...rows].reverse().find(item => item.view === selectedView && !item.future);
-    if (!row && !selectedView) row = rows.find(item => item.state === 'failed') ?? [...rows].reverse().find(item => !item.future && (item.view === 'haiku' || item.view === 'executive')) ?? rows.find(item => !item.root && !item.future);
+    if (!row && selectedView) row = [...rows].reverse().find(item => item.view === selectedView);
+    if (!row && !selectedView) row = rows.find(item => item.state === 'failed') ?? [...rows].reverse().find(item => item.view === 'haiku') ?? rows.find(item => !item.root);
     const id = row?.view ?? selectedView;
-    if (!id) { el('p', 'hint', mode === 'cur' ? '時間割の棒か地図の箱を押すと、ここに入力・出力と所要時間が出ます。' : 'ダミーの棒か箱を押すと、ここに入出力が出ます。', panel); return; }
+    if (!id) { el('p', 'hint', '時間割の棒か地図の箱を押すと、ここに入力・出力と所要時間が出ます。', panel); return; }
     const spec = model.index.get(id), block = blockSpec(model, spec?.[1]);
     role(panel, roleFor(model, id));
     const title = el('h3', '', labelFor(model, id), panel); el('small', '', block ? `${block[1]} · ${block[2]}` : '', title);
-    const status = row ? (row.future ? '未開始' : STATE_LABELS[row.state] ?? row.state) : '未観測';
+    const status = row ? STATE_LABELS[row.state] ?? row.state : '未観測';
     el('span', `state state-${row?.state ?? 'unobserved'}`, status, title);
     el('p', 'role', spec?.[5] ?? '', panel);
-    if (mode === 'tgt') {
-      el('p', 'dummy-note', '目指す姿（ADR-0009）のダミーの値です。本番のイベントではありません。', panel);
-      if (row) {
-        el('p', 'hint', `開始 +${fmt(row.offset)} ms · 所要 ${fmt(row.full ?? row.duration)} ms`, panel);
-        const fields = dummyFieldsOf(row), columns = el('div', 'columns', null, panel); table('入力', fields.input, columns); table('出力', fields.output, columns);
-        if (row.kids) { const box = el('div', 'steps', null, panel); el('h4', '', '中の段', box); const list = el('ul', '', null, box); for (const [name, , duration] of row.kids) { const item = el('li', '', `${name} `, list); el('span', 'num', ms(duration), item); } }
-        if (id === 'reward') weights(panel);
-        concurrent(panel, row, rows, model);
-      }
-      return;
-    }
     const span = row?.span, run = data.run;
     const sources = spec?.[6] ?? [];
     const coverage = sources.map(node => catalog?.coverage?.find(item => item.node === node)).filter(Boolean);
@@ -611,6 +795,7 @@ function mountObserver() {
         : id === 'executive' ? 'Executive は作ってありますが、今は止まっています（観察イベントはありません）。' : id === 'sqlite' ? '共有 SQLite は処理として観察していません。保存や記憶の書き込みの行き先です。'
         : 'この一回では、この処理を観測していません。', panel);
       if (id === 'identity') { const rootSpan = [...(run?.spans.values() ?? [])].find(item => item.isRunRoot && record(item.output) && record(item.output.steps)); if (rootSpan) { const value = rootSpan.output.steps.identity; el('p', 'num', typeof value === 'number' ? `identity ${ms(value)}` : 'identity の段はこの一回で測っていません。', panel); } }
+      recentCalls(panel, id, null);
       if (definition) el('p', 'location', definition.location, panel);
       for (const item of coverage) if (item.reason) el('p', 'hint', item.reason, panel);
       return;
@@ -629,18 +814,11 @@ function mountObserver() {
     table('出力', span.endedAt ? fieldRows(span.output) : [{ gloss: '', key: '', value: span.state === 'running' ? '出力イベント待ち' : '状態不明・完了は未確認' }], columns);
     if (span.isRunRoot) stepsBlock(panel, span.output, span);
     if (id === 'base') baseSteps(panel, span, run);
+    recentCalls(panel, id, row.key);
     concurrent(panel, row, rows, model);
     if (TOOL_VIEWS.has(id)) tools(panel, run);
     if (definition) el('p', 'location', `実装：${definition.location}`, panel);
     for (const item of coverage) if (item.reason) el('p', 'hint', item.reason, panel);
-  }
-  function weights(parent) {
-    const box = el('div', 'steps', null, parent); el('h4', '', '報酬 r2 の重み', box);
-    const stack = el('div', 'stack', null, box);
-    for (const [name, value, part] of [['完了の判定', 35, 'memory'], ['所有者の反応', 35, 'output'], ['予測が当たった', 20, 'judgment'], ['自分の評価', 10, 'own']]) {
-      const piece = el('i', '', null, stack); piece.style.setProperty('width', `${value}%`); role(piece, part); piece.title = `${name} ${value}%`;
-      const legend = el('span', 'legend-item', `${name} ${value}%`, box); role(legend, part);
-    }
   }
   let toolFilter = 'all', selectedTool = null;
   function tools(parent, run) {
@@ -664,43 +842,111 @@ function mountObserver() {
 
   /* ---------- Layered map (案A) ---------- */
   let map = null;
+  const wordWidth = text => [...text].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .58 : 1), 0);
+  /** Builds the map once; boxes and blocks are drawn at their own origin and placed by a transform, so moving them
+   * (owner, 2026-10-14) only rewrites positions and routes, never the drawn content. */
   function buildMap() {
-    const svg = $('map'), model = viewModel(), layout = model.layout; svg.replaceChildren();
-    const routes = routeTable(layout, model.links), blockLines = blockRoutes(layout, model.links);
+    const svg = $('map'); svg.replaceChildren();
     const groups = sv('g', {}, svg), blockEdges = sv('g', {}, svg), edges = sv('g', {}, svg), nodes = sv('g', {}, svg), packets = sv('g', {}, svg);
     const nodeElements = new Map(), blockElements = new Map(), counts = new Map(), times = new Map(), fieldGroups = new Map();
     for (const [id, label, process, blockRole] of model.blocks) {
-      const box = layout.blocks.get(id); if (!box) continue;
-      const group = sv('g', { class: 'block' }, groups); role(group, blockRole); blockElements.set(id, group);
-      sv('rect', { class: 'block-box', x: box.x, y: box.y, width: box.w, height: box.h, rx: 10 }, group);
-      sv('text', { class: 'block-head', x: box.x + 12, y: box.y + 19, 'font-size': Math.min(12, (box.w - 24) / [...label].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .58 : 1), 0)).toFixed(1) }, group).textContent = label;
-      sv('text', { class: 'block-process', x: box.x + box.w - 10, y: box.y + box.h - 4, 'text-anchor': 'end' }, group).textContent = process;
-      const far = sv('g', { class: 'far' }, group), cx = box.x + box.w / 2, cy = box.y + box.h / 2;
-      const width = text => [...text].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .58 : 1), 0);
-      sv('text', { class: 'far-title', x: cx, y: cy - 12, 'text-anchor': 'middle', 'font-size': Math.min(26, (box.w - 16) / width(label)).toFixed(1) }, far).textContent = label;
-      sv('text', { class: 'far-process', x: cx, y: cy + 10, 'text-anchor': 'middle', 'font-size': Math.min(17, (box.w - 16) / width(process)).toFixed(1) }, far).textContent = process;
-      const count = sv('text', { class: 'far-count', x: cx, y: cy + 32, 'text-anchor': 'middle' }, far); counts.set(id, count);
-      group.addEventListener('click', () => { if (map.level === 1) zoomTo(cx, cy, Math.min(2.4, fitK(box.w + 40, box.h + 40))); });
+      const group = sv('g', { class: 'block', 'data-block': id }, groups); role(group, blockRole);
+      const parts = { group, rect: sv('rect', { class: 'block-box', rx: 10 }, group), handle: sv('rect', { class: 'block-handle', x: 0, y: 0, height: 28, rx: 10 }, group), head: sv('text', { class: 'block-head', x: 12, y: 19 }, group), process: sv('text', { class: 'block-process', 'text-anchor': 'end' }, group) };
+      parts.head.textContent = label; parts.process.textContent = process;
+      const far = sv('g', { class: 'far' }, group); parts.farHandle = sv('rect', { class: 'far-handle', x: 8, height: 80, rx: 8 }, far);
+      parts.title = sv('text', { class: 'far-title', 'text-anchor': 'middle' }, far); parts.title.textContent = label;
+      parts.subtitle = sv('text', { class: 'far-process', 'text-anchor': 'middle' }, far); parts.subtitle.textContent = process;
+      parts.count = sv('text', { class: 'far-count', 'text-anchor': 'middle' }, far); counts.set(id, parts.count);
+      parts.badges = sv('g', { class: 'block-badges' }, group); parts.badgeSignature = '';
+      parts.badges.addEventListener('click', event => { event.stopPropagation(); openBlockList(id); });
+      blockElements.set(id, parts);
+      // At 塊 a click on a block highlights it (others fade), without zooming or moving the view.
+      group.addEventListener('click', () => { if (map.level === 1) setFocus(focusBlock === id ? null : id, false); });
     }
-    for (const route of blockLines.values()) { const path = sv('path', { class: 'block-edge', d: routePath(route) }, blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); }
-    const edgeElements = [];
-    for (const route of routes.values()) { const path = sv('path', { class: `edge${route.background ? ' background' : ''}`, d: routePath(route) }, edges); edgeElements.push([route.from, route.to, path]); role(path, roleFor(model, route.from)); }
     for (const spec of model.nodes) {
-      const [id] = spec, box = layout.boxes.get(id), group = sv('g', { class: 'node', tabindex: 0, role: 'button', 'aria-label': spec[4] }, nodes); role(group, roleFor(model, id));
-      if (mode === 'cur' && (id === 'executive' || id === 'sqlite' || id === 'identity')) group.classList.add('static');
-      sv('rect', { x: box.x, y: box.y, width: box.w, height: box.h, rx: 7 }, group);
+      const [id] = spec, box = model.layout.boxes.get(id), group = sv('g', { class: 'node', tabindex: 0, role: 'button', 'aria-label': spec[4], 'data-node': id }, nodes); role(group, roleFor(model, id));
+      if (id === 'executive' || id === 'sqlite' || id === 'identity') group.classList.add('static');
+      sv('rect', { x: 0, y: 0, width: box.w, height: box.h, rx: 7 }, group);
       const labelSize = Math.max(8, Math.min(12.5, (box.w - 52) / textWidth(spec[4], 1)));
-      sv('text', { class: 'node-label', x: box.x + 8, y: box.y + 17, 'font-size': labelSize.toFixed(1) }, group).textContent = fitText(spec[4], labelSize, box.w - 52);
-      sv('text', { class: 'node-role', x: box.x + 8, y: box.y + 34 }, group).textContent = spec[5];
-      const time = sv('text', { class: 'node-time', x: box.x + box.w - 7, y: box.y + 16, 'text-anchor': 'end' }, group); times.set(id, time);
+      sv('text', { class: 'node-label', x: 8, y: 17, 'font-size': labelSize.toFixed(1) }, group).textContent = fitText(spec[4], labelSize, box.w - 52);
+      sv('text', { class: 'node-role', x: 8, y: 34 }, group).textContent = spec[5];
+      const time = sv('text', { class: 'node-time', x: box.w - 7, y: 16, 'text-anchor': 'end' }, group); times.set(id, time);
       const fields = sv('g', { class: 'node-fields' }, group); fieldGroups.set(id, fields);
       nodeElements.set(id, group);
-      const pick = () => { const rows = mode === 'cur' ? liveRows().rows : dummyRows().rows; const latest = [...rows].reverse().find(row => row.view === id && !row.future); select(latest?.key ?? null, id); zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.max(map.k, 3.4)); };
+      // Owner, 2026-10-14: 「各部品をクリックした際に拡大されるのはやめてほしい」 — a click selects and opens the detail; the view stays.
+      const pick = () => { const latest = [...liveRows().rows].reverse().find(row => row.view === id); select(latest?.key ?? null, id); };
       group.addEventListener('click', event => { event.stopPropagation(); pick(); });
-      group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); } });
+      group.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); return; }
+        // Arrow keys move to the nearest box in that direction and select it (the view does not move).
+        const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key]; if (!direction) return;
+        event.preventDefault();
+        const here = map.layout.boxes.get(id), cx = here.x + here.w / 2, cy = here.y + here.h / 2;
+        let best = null, bestScore = Infinity;
+        for (const [other, box] of map.layout.boxes) {
+          if (other === id) continue;
+          const dx = box.x + box.w / 2 - cx, dy = box.y + box.h / 2 - cy, along = dx * direction[0] + dy * direction[1], across = Math.abs(dx * direction[1]) + Math.abs(dy * direction[0]);
+          if (along <= 1) continue;
+          const score = along + across * 2; if (score < bestScore) { bestScore = score; best = other; }
+        }
+        if (best) { const next = map.nodeElements.get(best); next.focus({ preventScroll: true }); next.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false })); revealBox(best); }
+      });
     }
-    map = { svg, model, layout, routes, blockLines, packets, edgeElements, nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: layout.width / 2, cy: layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
+    map = { svg, groups, layout: model.layout, frame: { width: model.layout.width, height: model.layout.height }, routes: new Map(), blockLines: new Map(), blockEdges, edges, packets, edgeElements: [], nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: model.layout.width / 2, cy: model.layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
+    placeMap();
     applyView(); highlightMapSelection();
+  }
+  /** Puts every box and block where the current layout says, and redraws the wiring between them. */
+  function placeMap() {
+    if (!map) return;
+    const layout = map.layout = model.layout;
+    for (const [id, group] of map.nodeElements) { const box = layout.boxes.get(id); group.setAttribute('transform', `translate(${box.x} ${box.y})`); }
+    for (const [id, parts] of map.blockElements) {
+      const box = layout.blocks.get(id); if (!box) continue;
+      parts.group.setAttribute('transform', `translate(${box.x} ${box.y})`);
+      for (const [key, value] of Object.entries({ width: box.w, height: box.h })) parts.rect.setAttribute(key, String(value));
+      parts.handle.setAttribute('width', String(box.w)); parts.farHandle.setAttribute('width', String(Math.max(0, box.w - 16))); parts.farHandle.setAttribute('y', String(box.h / 2 - 40));
+      const label = parts.head.textContent, process = parts.process.textContent, cx = box.w / 2, cy = box.h / 2;
+      parts.head.setAttribute('font-size', Math.min(12, (box.w - 24) / wordWidth(label)).toFixed(1));
+      parts.process.setAttribute('x', String(box.w - 10)); parts.process.setAttribute('y', String(box.h - 4));
+      parts.badges.setAttribute('transform', `translate(${box.w - 8} 5)`);
+      for (const [element, y, size, text] of [[parts.title, cy - 12, 26, label], [parts.subtitle, cy + 10, 17, process], [parts.count, cy + 32, 0, '']]) {
+        element.setAttribute('x', String(cx)); element.setAttribute('y', String(y));
+        if (size) element.setAttribute('font-size', Math.min(size, (box.w - 16) / wordWidth(text)).toFixed(1));
+      }
+    }
+    // A block frame always surrounds its own boxes, so a box moved far away stretches it. Larger frames are drawn first
+    // (underneath), frames are translucent, and only a block's name catches the pointer, so a stretched frame never hides
+    // or steals the press from another block (review of 1d2f337).
+    const order = [...map.blockElements].sort(([a], [b]) => { const one = layout.blocks.get(a), two = layout.blocks.get(b); return two.w * two.h - one.w * one.h; });
+    if (order.some(([, parts], index) => map.groups.children[index] !== parts.group)) for (const [, parts] of order) map.groups.append(parts.group);
+    // The links never change, only their geometry: paths are created once and their `d` is rewritten in place.
+    map.routes = routeTable(layout, model.links); map.blockLines = blockRoutes(layout, model.links);
+    map.blockPaths ??= new Map();
+    for (const [key, route] of map.blockLines) {
+      let path = map.blockPaths.get(key);
+      if (!path) { path = sv('path', { class: 'block-edge' }, map.blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); map.blockPaths.set(key, path); }
+      const d = routePath(route); if (path.getAttribute('d') !== d) path.setAttribute('d', d);
+    }
+    map.edgePaths ??= new Map();
+    for (const [key, route] of map.routes) {
+      let path = map.edgePaths.get(key);
+      if (!path) { path = sv('path', { class: `edge${route.background ? ' background' : ''}` }, map.edges); role(path, roleFor(model, route.from)); map.edgePaths.set(key, path); map.edgeElements.push([route.from, route.to, path]); }
+      const d = routePath(route); if (path.getAttribute('d') !== d) path.setAttribute('d', d);
+    }
+    $('layout-reset').disabled = !Object.keys(customPositions(layout)).length;
+  }
+  /** Moves boxes to new positions (or back to the default grid with `null`), redraws and remembers the arrangement. */
+  function setPositions(positions, save) {
+    const next = positions === null ? {} : { ...customPositions(model.layout), ...positions };
+    model.layout = gridLayout(BLOCKS, VIEW_NODES, next);
+    placeMap();
+    if (save) writeLayout(customPositions(model.layout));
+  }
+  function resetLayout() {
+    setPositions(null, true); writeLayout({});
+    if (map) { map.frame = { width: map.layout.width, height: map.layout.height }; zoomTo(map.layout.width / 2, map.layout.height / 2, 1); }
+    $('announcement').textContent = '地図を初期配置に戻しました。';
   }
   const mapSize = () => { const rect = map.svg.getBoundingClientRect(); return [rect.width || 360, rect.height || 420]; };
   /** The part of the viewport not covered by the overlay controls; fitting and centring use it. */
@@ -710,13 +956,16 @@ function mountObserver() {
     return { t: topPad + 8, b: Math.max(12, height - Math.min(tools.top || height, chips.top || height) + 8), l: 12, r: 12 };
   };
   const inner = () => { const [width, height] = mapSize(), edge = insets(); return { width, height, edge, w: Math.max(80, width - edge.l - edge.r), h: Math.max(80, height - edge.t - edge.b) }; };
-  const baseScale = () => { const area = inner(); return Math.min(area.w / map.layout.width, area.h / map.layout.height); };
+  // The scale is taken from the fitted frame, not from the live layout, so dragging a box past the edge never rescales the view.
+  const baseScale = () => { const area = inner(); return Math.min(area.w / map.frame.width, area.h / map.frame.height); };
   const fitK = (width, height) => { const area = inner(); return Math.min(area.w / width, area.h / height) / baseScale(); };
   const viewOrigin = (scale, area = inner()) => [map.cx - (area.edge.l + area.w / 2) / scale, map.cy - (area.edge.t + area.h / 2) / scale];
+  /** Fits the whole current arrangement (全体, load, resize at the fitted zoom). */
+  function fitFrame() { if (!map) return; map.frame = { width: map.layout.width, height: map.layout.height }; Object.assign(map, { k: 1, cx: map.layout.width / 2, cy: map.layout.height / 2 }); }
   function applyView() {
     if (!map) return;
     const area = inner(), scale = baseScale() * map.k;
-    map.cx = Math.max(0, Math.min(map.layout.width, map.cx)); map.cy = Math.max(0, Math.min(map.layout.height, map.cy));
+    map.cx = Math.max(0, Math.min(Math.max(map.frame.width, map.layout.width), map.cx)); map.cy = Math.max(0, Math.min(Math.max(map.frame.height, map.layout.height), map.cy));
     const [x, y] = viewOrigin(scale, area);
     map.svg.setAttribute('viewBox', `${x} ${y} ${area.width / scale} ${area.height / scale}`);
     const level = detailLevel(ui.level, map.k);
@@ -731,46 +980,72 @@ function mountObserver() {
       Object.assign(map, { k: from.k + (k - from.k) * e, cx: from.cx + (cx - from.cx) * e, cy: from.cy + (cy - from.cy) * e }); applyView(); if (t >= 1) map.animation = null; };
     requestFrame();
   }
+  /** Pans (never zooms) just enough to bring a box into the part of the view not covered by the overlays or the detail. */
+  function revealBox(id) {
+    const box = map?.layout.boxes.get(id); if (!box) return;
+    const area = inner(), scale = baseScale() * map.k, [ox, oy] = viewOrigin(scale, area), edge = { ...area.edge };
+    const drawer = $('drawer'); if (drawerOpen && !drawer.hidden) { const rect = drawer.getBoundingClientRect(), svg = map.svg.getBoundingClientRect(); if (rect.top > svg.top + svg.height / 2) edge.b = Math.max(edge.b, svg.bottom - rect.top + 8); else edge.r = Math.max(edge.r, svg.right - rect.left + 8); }
+    const margin = 16 / scale, left = ox + edge.l / scale + margin, right = ox + (area.width - edge.r) / scale - margin, top = oy + edge.t / scale + margin, bottom = oy + (area.height - edge.b) / scale - margin;
+    const dx = box.x < left ? box.x - left : box.x + box.w > right ? Math.min(box.x - left, box.x + box.w - right) : 0;
+    const dy = box.y < top ? box.y - top : box.y + box.h > bottom ? Math.min(box.y - top, box.y + box.h - bottom) : 0;
+    if (dx || dy) zoomTo(map.cx + dx, map.cy + dy, map.k);
+  }
   function highlightMapSelection() { if (!map) return; for (const [id, group] of map.nodeElements) group.classList.toggle('selected', id === selectedView); }
+  /** 3C: the block's marks, right-aligned in its title strip: 失敗 N (red), ● N running (green), 不明 N (amber). */
+  function drawBadges(parts, entry) {
+    const items = entry ? [['failed', `失敗 ${entry.failed.length}`, entry.failed.length], ['running', `● ${entry.running.length}`, entry.running.length], ['unknown', `不明 ${entry.unknown.length}`, entry.unknown.length]].filter(item => item[2]) : [];
+    const signature = items.map(item => item[1]).join('|'); if (signature === parts.badgeSignature) return; parts.badgeSignature = signature;
+    parts.badges.replaceChildren();
+    let x = 0;
+    for (const [kind, text] of items.reverse()) {
+      const width = textWidth(text, 10) + 12; x -= width;
+      const badge = sv('g', { class: `block-badge ${kind}`, role: 'button', tabindex: 0, 'aria-label': `${text}、一覧を開く` }, parts.badges);
+      sv('rect', { x, y: 0, width, height: 16, rx: 8 }, badge); sv('text', { x: x + width / 2, y: 12, 'text-anchor': 'middle' }, badge).textContent = text;
+      badge.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); moved = 0; badge.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+      x -= 4;
+    }
+  }
   function renderMap(rows) {
     if (!map || view !== 'map') return;
     const active = new Map(), latest = new Map();
-    for (const row of rows) { if (row.future) continue; latest.set(row.view, row); if (row.state === 'running') active.set(row.view, (active.get(row.view) ?? 0) + 1); }
+    for (const row of rows) { latest.set(row.view, row); if (row.state === 'running') active.set(row.view, (active.get(row.view) ?? 0) + 1); }
     const blockActive = new Map();
     for (const [id, group] of map.nodeElements) {
       const row = latest.get(id), status = active.has(id) ? 'running' : row?.state ?? 'unobserved';
       if (group.dataset.state !== status) group.dataset.state = status;
-      group.classList.toggle('dim', Boolean(focusBlock) && blockOf(map.model, id) !== focusBlock);
-      const text = active.has(id) ? `処理中${active.get(id) > 1 ? ` ×${active.get(id)}` : ''}` : row ? row.duration === null ? '未計測' : ms(row.full ?? row.duration) : '';
+      group.classList.toggle('dim', Boolean(focusBlock) && blockOf(model, id) !== focusBlock);
+      const text = active.has(id) ? `処理中${active.get(id) > 1 ? ` ×${active.get(id)}` : ''}` : row ? row.duration === null ? '未計測' : ms(row.duration) : '';
       const time = map.times.get(id); if (time.textContent !== text) time.textContent = text;
-      if (active.has(id)) { const block = blockOf(map.model, id); blockActive.set(block, (blockActive.get(block) ?? 0) + 1); }
+      if (active.has(id)) { const block = blockOf(model, id); blockActive.set(block, (blockActive.get(block) ?? 0) + 1); }
       const fields = map.fieldGroups.get(id), signature = row ? `${row.key}:${row.state}` : '';
       if (map.fieldSignature.get(id) !== signature) {
         map.fieldSignature.set(id, signature); fields.replaceChildren();
-        const box = map.layout.boxes.get(id), parts = row ? (row.dummy ? dummyFieldsOf(row) : { input: fieldRows(row.span?.input), output: row.span?.endedAt ? fieldRows(row.span.output) : [] }) : { input: [], output: [] };
+        // Fields are drawn in the box's own coordinates; the box group carries its position.
+        const at = map.layout.boxes.get(id), box = { x: 0, y: 0, w: at.w, h: at.h }, parts = row ? { input: fieldRows(row.span?.input), output: row.span?.endedAt ? fieldRows(row.span.output) : [] } : { input: [], output: [] };
         for (const item of ioRows(box, parts.input, parts.output)) {
-          if (item.mark) sv('text', { class: 'io-mark', x: box.x + 8, y: item.y }, fields).textContent = item.mark;
-          const line = sv('text', { class: 'field', x: box.x + 17, y: item.y }, fields); sv('tspan', { class: 'field-key' }, line).textContent = `${item.name} `; sv('tspan', {}, line).textContent = item.value;
+          if (item.mark) sv('text', { class: 'io-mark', x: 8, y: item.y }, fields).textContent = item.mark;
+          const line = sv('text', { class: 'field', x: 17, y: item.y }, fields); sv('tspan', { class: 'field-key' }, line).textContent = `${item.name} `; sv('tspan', {}, line).textContent = item.value;
         }
-        if (!row) sv('text', { class: 'field field-key', x: box.x + 8, y: box.y + 32 }, fields).textContent = mode === 'cur' && map.model.index.get(id)?.[6]?.length === 0 ? '観察イベントなし' : 'この一回では未観測';
+        if (!row) sv('text', { class: 'field field-key', x: 8, y: 32 }, fields).textContent = model.index.get(id)?.[6]?.length === 0 ? '観察イベントなし' : 'この一回では未観測';
       }
     }
     // Faded wiring; the selected box and the boxes now running keep their routes emphasised.
     const hot = new Set([...active.keys(), ...(selectedView ? [selectedView] : [])]);
     for (const [from, to, path] of map.edgeElements) path.classList.toggle('hot', hot.has(from) || hot.has(to));
+    for (const [id, parts] of map.blockElements) drawBadges(parts, alerts.get(id));
     for (const [id, count] of map.counts) {
-      const value = blockActive.get(id) ?? 0, nodes = map.model.nodes.filter(spec => spec[1] === id).length, text = value ? `● 処理中 ${value}` : `${nodes} 処理`;
+      const value = blockActive.get(id) ?? 0, nodes = model.nodes.filter(spec => spec[1] === id).length, text = value ? `● 処理中 ${value}` : `${nodes} 処理`;
       if (count.textContent !== text) count.textContent = text;
-      map.blockElements.get(id)?.classList.toggle('active', value > 0);
-      map.blockElements.get(id)?.classList.toggle('dim', Boolean(focusBlock) && focusBlock !== id);
+      map.blockElements.get(id)?.group.classList.toggle('active', value > 0);
+      map.blockElements.get(id)?.group.classList.toggle('dim', Boolean(focusBlock) && focusBlock !== id);
     }
   }
-  /** A moving dot depicts the receipt of an explicit handoff (or a dummy start); never transport speed. */
+  /** A moving dot depicts the receipt of an explicit handoff; never transport speed. */
   function packet(from, to) {
     if (!map || view !== 'map' || reduceMotion.matches || document.hidden || map.particles.length >= 24) return;
     const a = map.layout.boxes.get(from), b = map.layout.boxes.get(to);
     if (!a || !b || from === to) return;
-    map.particles.push({ from, to, started: performance.now(), route: map.routes.get(`${from}>${to}`) ?? { kind: 'curve', points: edgeCurve(a, b) } });
+    map.particles.push({ from, to, started: performance.now() });
     requestFrame();
   }
   function glow(id) {
@@ -783,10 +1058,11 @@ function mountObserver() {
     map.packets.replaceChildren();
     map.particles = map.particles.filter(item => now - item.started < 650);
     for (const item of map.particles) {
+      // The route is looked up each frame, so a dot follows a box the owner is moving.
       const t = (now - item.started) / 650, a = map.layout.boxes.get(item.from), b = map.layout.boxes.get(item.to);
-      let route = item.route, radius = 4.5;
+      let route = map.routes.get(`${item.from}>${item.to}`) ?? { kind: 'curve', points: edgeCurve(a, b) }, radius = 4.5;
       if (map.level === 1) { if (a.block === b.block) continue; route = map.blockLines.get(`${a.block}>${b.block}`); if (!route) continue; radius = 7; }
-      const [x, y] = routePoint(route, t), dot = sv('circle', { class: 'packet', cx: x, cy: y, r: radius }, map.packets); role(dot, roleFor(map.model, item.from));
+      const [x, y] = routePoint(route, t), dot = sv('circle', { class: 'packet', cx: x, cy: y, r: radius }, map.packets); role(dot, roleFor(model, item.from));
     }
     return map.particles.length > 0;
   }
@@ -798,35 +1074,17 @@ function mountObserver() {
     frameRequested = false;
     let again = false;
     if (map?.animation) { map.animation(now); again = true; }
-    if (mode === 'tgt' && target.playing && !document.hidden) { advanceTarget(now); again = true; }
     if (drawPackets(now)) again = true;
     if (again) requestFrame();
-  }
-  let lastTargetRender = 0;
-  function advanceTarget(now) {
-    const delta = target.last ? Math.min(100, now - target.last) : 0; target.last = now;
-    const run = TARGET_RUNS[target.run], total = Math.max(...run.spans.map(([, start, duration]) => start + duration)) + 200, speed = Math.max(.28, total / 9000);
-    if (target.hold > 0) { target.hold -= delta; if (target.hold <= 0) { target.run = (target.run + 1) % TARGET_RUNS.length; target.t = 0; target.seen = new Set(); selectedKey = null; renderTargetRuns(); } return; }
-    const before = target.t; target.t = Math.min(total, target.t + delta * speed);
-    for (const [id, start] of run.spans) if (start > before && start <= target.t || before === 0 && start === 0 && !target.seen.has(id)) {
-      for (const [from, to] of TARGET_LINKS) if (to === id && target.seen.has(from)) packet(from, to);
-      target.seen.add(id); glow(id);
-    }
-    if (target.t >= total) target.hold = 1400;
-    if (now - lastTargetRender > 90) { lastTargetRender = now; const rows = renderTimeline(); renderMap(rows); if (selectedKey?.startsWith('dummy/')) renderDetail(); }
-  }
-  function renderTargetRuns() {
-    const host = $('target-runs'); host.replaceChildren();
-    TARGET_RUNS.forEach((run, index) => { const button = el('button', 'chip', run.name, host); button.type = 'button'; button.setAttribute('aria-pressed', String(index === target.run));
-      button.addEventListener('click', () => { target.run = index; target.t = 0; target.hold = 0; target.seen = new Set(); selectedKey = null; renderTargetRuns(); render(); }); });
-    $('target-play').textContent = target.playing ? '一時停止' : '再生';
   }
 
   /* ---------- Runs, tasks, failures ---------- */
   let runSignature = '', taskSignature = '';
   function renderRuns() {
-    const runs = [...state.runs.values()].sort((a, b) => b.firstSequence - a.firstSequence);
-    const signature = runs.map(run => `${run.id}:${run.state}`).join('|') + state.selectedRunId + state.transport;
+    const all = [...state.runs.values()].sort((a, b) => b.firstSequence - a.firstSequence);
+    const usesTool = run => { const evidence = runToolEvidence(run); return evidence.called.has(toolNameFilter) || evidence.chosen.has(toolNameFilter) || evidence.offered.has(toolNameFilter); };
+    const runs = toolNameFilter ? all.filter(run => run.id === state.selectedRunId || usesTool(run)) : all;
+    const signature = runs.map(run => `${run.id}:${run.state}:${run.lastSequence}`).join('|') + state.selectedRunId + state.transport + toolNameFilter;
     if (signature === runSignature) return;
     runSignature = signature;
     const picker = $('run-picker'); picker.replaceChildren();
@@ -834,11 +1092,19 @@ function mountObserver() {
     for (const run of runs) {
       const rootSpan = run.rootSpanId ? run.spans.get(run.rootSpanId) : null, surface = record(rootSpan?.input) && typeof rootSpan.input.surface === 'string' ? rootSpan.input.surface : '—';
       const mark = run.state === 'failed' ? '!' : run.endedAt ? '✓' : state.transport === 'live' && !run.incomplete ? '●' : '?';
-      picker.append(new Option(`${mark} ${timeValue(run.startedAt ?? run.events[0]?.at)} · ${surface} · ${run.spans.size} 処理`, run.id));
+      picker.append(new Option(`${mark} ${timeValue(run.startedAt ?? run.events[0]?.at)} · ${surface} · ${run.spans.size} 処理${runMarks(run)}`, run.id));
     }
     picker.value = state.selectedRunId ?? ''; picker.disabled = !runs.length;
-    const failures = runs.flatMap(run => [...run.spans.values()].filter(span => span.state === 'failed'));
+    const failures = all.flatMap(run => [...run.spans.values()].filter(span => span.state === 'failed'));
     $('failure-jump').hidden = !failures.length; $('failure-jump').textContent = `失敗 ${failures.length}`;
+  }
+  /** Per-run marks in the picker: tools run (✓ ok, ✗ failed), model tokens and cache, only when reported. */
+  function runMarks(run) {
+    const calls = runToolCalls(run), usage = runUsage(run), compact = value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value), parts = [];
+    if (calls.length) parts.push(`道具 ${calls.filter(call => !call.failed).length}✓${calls.some(call => call.failed) ? `${calls.filter(call => call.failed).length}✗` : ''}`);
+    if (usage.inputTokens !== null || usage.outputTokens !== null) parts.push(`入${usage.inputTokens !== null ? compact(usage.inputTokens) : '—'}/出${usage.outputTokens !== null ? compact(usage.outputTokens) : '—'}`);
+    if (usage.cacheReadTokens !== null || usage.cacheWriteTokens !== null) parts.push(`cache 読${usage.cacheReadTokens !== null ? compact(usage.cacheReadTokens) : '—'} 書${usage.cacheWriteTokens !== null ? compact(usage.cacheWriteTokens) : '—'}`);
+    return parts.length ? ` · ${parts.join(' · ')}` : '';
   }
   function renderTasks() {
     const tasks = observedTasks(state);
@@ -889,48 +1155,74 @@ function mountObserver() {
   function setUi(hidden) {
     ui.hidden = hidden; writeUi(ui); root.dataset.ui = hidden ? 'hidden' : 'shown';
     if (!hidden) requestAnimationFrame(measureTop);
-    if (map && map.k <= 1.01) Object.assign(map, { cx: map.layout.width / 2, cy: map.layout.height / 2 });
+    if (map && map.k <= 1.01) fitFrame();
     applyView(); (hidden ? $('ui-show') : $('ui-hide')).focus({ preventScroll: true });
   }
   function togglePanel(name) { panels[name] = !panels[name]; if (panels[name]) { for (const other of Object.keys(panels)) if (other !== name) panels[other] = false; } metricSignature = ''; render(); }
 
   /* ---------- Render and modes ---------- */
   function render() {
-    root.dataset.mode = mode; root.dataset.view = view;
-    $('live-controls').hidden = mode !== 'cur'; $('target-controls').hidden = mode !== 'tgt';
-    $('tasks').hidden = mode !== 'cur' || !panels.tasks; $('metrics').hidden = mode !== 'cur' || !panels.metrics;
-    $('tasks-toggle').setAttribute('aria-expanded', String(!$('tasks').hidden)); $('metrics-toggle').setAttribute('aria-expanded', String(!$('metrics').hidden));
+    root.dataset.view = view;
+    alerts = blockAlerts(state);
+    $('tasks').hidden = !panels.tasks; $('metrics').hidden = !panels.metrics; $('legend').hidden = !panels.legend;
+    $('tasks-toggle').setAttribute('aria-expanded', String(!$('tasks').hidden)); $('metrics-toggle').setAttribute('aria-expanded', String(!$('metrics').hidden)); $('legend-toggle').setAttribute('aria-expanded', String(!$('legend').hidden));
     $('timeline-view').hidden = view !== 'timeline'; $('map-view').hidden = view !== 'map'; $('map-tools').hidden = view !== 'map'; $('map-hint').hidden = ui.hint;
     $('drawer').hidden = !drawerOpen; root.dataset.drawer = drawerOpen ? 'open' : 'closed'; root.dataset.ui = ui.hidden ? 'hidden' : 'shown';
-    for (const button of document.querySelectorAll('#mode-seg button')) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
     for (const button of document.querySelectorAll('#view-seg button')) button.setAttribute('aria-pressed', String(button.dataset.view === view));
-    if (mode === 'cur') { renderTasks(); renderRuns(); renderMetrics(); }
-    renderBlockChips();
+    renderTasks(); renderRuns(); renderMetrics(); renderToolFilter();
+    renderBlockChips(); renderFlow(); renderNow();
     const rows = renderTimeline(); renderMap(rows); renderDetail();
-    $('notice').textContent = state.notice; $('notice').hidden = !state.notice || mode !== 'cur';
+    $('notice').textContent = state.notice; $('notice').hidden = !state.notice;
+  }
+  let flowSignature = '', nowSignature = '', toolSignature = '';
+  /** 1B: the turn's one-line flow; a press on a stage selects its box. */
+  function renderFlow() {
+    const stages = state.transport === 'live' ? turnFlow(currentRun()) : [], signature = JSON.stringify(stages);
+    $('flow').hidden = !stages.length; if (signature === flowSignature) return; flowSignature = signature;
+    const host = $('flow'); host.replaceChildren(); el('span', 'eyebrow', 'この一回', host);
+    stages.forEach((stage, index) => {
+      if (index) el('span', 'arrow', '→', host).setAttribute('aria-hidden', 'true');
+      const button = el('button', `step${stage.failed ? ' bad' : ''}`, stage.text, host); button.type = 'button'; role(button, roleFor(model, stage.view));
+      button.addEventListener('click', () => select(stage.key, stage.view));
+    });
+  }
+  /** What is running now in any run the page holds, by block (shown first on a phone). */
+  function renderNow() {
+    const running = [...alerts].filter(([, entry]) => entry.running.length), signature = JSON.stringify([state.transport, running.map(([id, entry]) => [id, entry.running.length])]);
+    $('now').hidden = state.transport !== 'live'; if (signature === nowSignature) return; nowSignature = signature;
+    const host = $('now'); host.replaceChildren(); el('span', 'eyebrow', 'いま', host);
+    if (!running.length) { el('span', 'hint', '動いているものはありません', host); return; }
+    for (const [id, entry] of running) { const button = el('button', 'chip now-chip', `${blockSpec(model, id)?.[1] ?? id} ● ${entry.running.length}`, host); button.type = 'button'; role(button, blockSpec(model, id)?.[3] ?? 'own'); button.addEventListener('click', () => openBlockList(id)); }
+  }
+  /** Tool names seen in the runs the page holds; picking one filters the run list, marks rows and filters recent calls. */
+  function renderToolFilter() {
+    const names = new Set();
+    for (const run of state.runs.values()) { const evidence = runToolEvidence(run); for (const name of [...evidence.called, ...evidence.chosen]) names.add(name); }
+    const sorted = [...names].sort(), signature = JSON.stringify([sorted, toolNameFilter]); if (signature === toolSignature) return; toolSignature = signature;
+    const select = $('tool-filter'); select.replaceChildren(new Option('すべて', ''));
+    for (const name of sorted) select.append(new Option(name, name));
+    if (toolNameFilter && !names.has(toolNameFilter)) select.append(new Option(toolNameFilter, toolNameFilter));
+    select.value = toolNameFilter;
   }
   let chipSignature = '';
   function renderBlockChips() {
-    const model = viewModel(), signature = `${mode}:${focusBlock}`; if (signature === chipSignature) return; chipSignature = signature;
+    const signature = JSON.stringify([focusBlock, [...alerts].map(([id, entry]) => [id, entry.failed.length, entry.running.length, entry.unknown.length])]); if (signature === chipSignature) return; chipSignature = signature;
     const host = $('block-chips'); host.replaceChildren();
-    for (const [id, label, , blockRole] of model.blocks) { const chip = el('button', 'chip block-chip', label, host); chip.type = 'button'; role(chip, blockRole); chip.setAttribute('aria-pressed', String(focusBlock === id)); chip.addEventListener('click', () => setFocus(focusBlock === id ? null : id)); }
+    // 3C on the timeline: each block's chip carries the same marks as the map, and the marks open the block's list.
+    const marks = id => { const entry = alerts.get(id); if (!entry) return; const text = [entry.failed.length ? `失敗${entry.failed.length}` : '', entry.running.length ? `●${entry.running.length}` : '', entry.unknown.length ? `不明${entry.unknown.length}` : ''].filter(Boolean).join(' '); if (!text) return;
+      const button = el('button', `chip-alert${entry.failed.length ? ' bad' : entry.unknown.length ? ' unk' : ' run'}`, text, host); button.type = 'button'; button.setAttribute('aria-label', `${blockSpec(model, id)?.[1]}：${text}、一覧を開く`); button.addEventListener('click', () => openBlockList(id)); };
+    for (const [id, label, , blockRole] of model.blocks) { const chip = el('button', 'chip block-chip', label, host); chip.type = 'button'; role(chip, blockRole); chip.setAttribute('aria-pressed', String(focusBlock === id)); chip.addEventListener('click', () => setFocus(focusBlock === id ? null : id)); marks(id); }
   }
-  function setFocus(id) {
+  function setFocus(id, move = true) {
     focusBlock = id; chipSignature = ''; timelineSignature = '';
-    if (map && view === 'map') { const box = map.layout.blocks.get(id); if (box) zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.min(2.4, fitK(box.w + 40, box.h + 40))); else zoomTo(map.layout.width / 2, map.layout.height / 2, 1); }
-    render();
-  }
-  function setMode(next) {
-    if (next === mode) return;
-    mode = next; selectedKey = null; selectedView = null; focusBlock = null; timelineSignature = ''; chipSignature = ''; map = null;
-    if (mode === 'tgt') { target.t = 0; target.hold = 0; target.seen = new Set(); target.last = 0; renderTargetRuns(); requestFrame(); }
-    if (view === 'map') buildMap();
+    if (move && map && view === 'map') { const box = map.layout.blocks.get(id); if (box) zoomTo(box.x + box.w / 2, box.y + box.h / 2, Math.min(2.4, fitK(box.w + 40, box.h + 40))); else { map.frame = { width: map.layout.width, height: map.layout.height }; zoomTo(map.layout.width / 2, map.layout.height / 2, 1); } }
     render();
   }
   function setView(next) { if (next === view) return; view = next; timelineSignature = ''; render(); if (view === 'map') { buildMap(); render(); } }
 
   function clearPrivateView() {
-    state = createObserverState(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
+    state = createObserverState(); history.clear(); openHistory.clear(); blockListId = null; alerts = new Map();
+    rowCache.clear(); barElements = new Map(); rowsHost.server.replaceChildren(); rowsHost.client.replaceChildren(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
     runSignature = ''; taskSignature = ''; timelineSignature = ''; metricSignature = ''; viewRuns = null; linkedView = undefined;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
     if (map) { map.particles = []; map.packets.replaceChildren(); map.fieldSignature = new Map(); }
@@ -939,7 +1231,7 @@ function mountObserver() {
   }
   function tick() {
     clockTimer = null;
-    if (document.hidden || state.transport !== 'live' || mode !== 'cur') return;
+    if (document.hidden || state.transport !== 'live') return;
     const rows = renderTimeline(); renderMap(rows);
     if (effectiveObservedSpans(state, [...state.runs.values()].flatMap(run => [...run.spans.values()])).some(span => span.state === 'running')) clockTimer = setTimeout(tick, 250);
   }
@@ -957,8 +1249,9 @@ function mountObserver() {
     },
     onEnvelope: (envelope, delivery) => {
       const previous = state, seen = new Set(previous.events.map(event => event.sequence));
-      if (previous.instanceId !== envelope.instanceId || envelope.gap || (envelope.dropped ?? 0) > previous.dropped || envelope.availability === 'held') elapsedClock.clear();
+      if (previous.instanceId !== envelope.instanceId || envelope.gap || (envelope.dropped ?? 0) > previous.dropped || envelope.availability === 'held') { elapsedClock.clear(); history.clear(); openHistory.clear(); }
       state = reduceObserverEnvelope(previous, envelope, $('follow-runs').checked && !selectedTask);
+      if (state.availability === 'ready' && envelope.events.length) history.observe(state);
       elapsedClock.observe(effectiveObservedSpans(state, [...state.runs.values()].flatMap(run => [...run.spans.values()])), performance.now());
       if (!clockTimer && state.transport === 'live') clockTimer = setTimeout(tick, 250);
       if (previous.transport === 'lost' && state.transport === 'live' && !envelope.gap && previous.instanceId === state.instanceId) state.notice = '接続が回復しました。受信したイベントから表示を更新しました。';
@@ -967,7 +1260,7 @@ function mountObserver() {
       const changed = envelope.events.some(event => !seen.has(event.sequence)) || previous.transport !== state.transport || previous.availability !== state.availability || previous.notice !== state.notice || state.instanceId !== previous.instanceId || envelope.gap;
       if (changed) render();
       // Initial history, a gap and a server restart stay still. Only a new live receipt glows or moves.
-      if (mode === 'cur' && delivery?.liveReceipts && previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) {
+      if (delivery?.liveReceipts && previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) {
         for (const event of envelope.events) if (!seen.has(event.sequence) && eventInView(event)) {
           if (event.kind === 'handoff') { const [from, to] = viewHandoff(event); if (from) glow(from); if (to) glow(to); if (from && to) packet(from, to); }
           else { const id = viewNodeOf(event.node, event.input, event.output); if (id) glow(id); }
@@ -988,13 +1281,16 @@ function mountObserver() {
   });
 
   // Controls.
-  for (const button of document.querySelectorAll('#mode-seg button')) button.addEventListener('click', () => setMode(button.dataset.mode));
   for (const button of document.querySelectorAll('#view-seg button')) button.addEventListener('click', () => setView(button.dataset.view));
   $('ui-hide').addEventListener('click', () => setUi(true));
   $('ui-show').addEventListener('click', () => setUi(false));
   $('drawer-close').addEventListener('click', () => setDrawer(false));
   $('tasks-toggle').addEventListener('click', () => togglePanel('tasks'));
   $('metrics-toggle').addEventListener('click', () => togglePanel('metrics'));
+  $('legend-toggle').addEventListener('click', () => togglePanel('legend'));
+  $('tool-filter').addEventListener('change', () => { toolNameFilter = $('tool-filter').value; runSignature = ''; timelineSignature = ''; toolSignature = ''; render(); });
+  // P (owner, 2026-10-14): on a portrait phone the bar is one line; the rest of the controls open from ⋯.
+  $('more-toggle').addEventListener('click', () => { const open = root.dataset.more !== 'open'; root.dataset.more = open ? 'open' : 'closed'; $('more-toggle').setAttribute('aria-expanded', String(open)); requestAnimationFrame(measureTop); });
   for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => { panels[button.dataset.close] = false; render(); });
   $('map-hint-close').addEventListener('click', () => { ui.hint = true; writeUi(ui); $('map-hint').hidden = true; applyView(); });
   document.addEventListener('keydown', event => {
@@ -1007,23 +1303,68 @@ function mountObserver() {
       else setUi(!ui.hidden);
     }
   });
-  $('target-play').addEventListener('click', () => { target.playing = !target.playing; target.last = 0; renderTargetRuns(); if (target.playing) requestFrame(); });
   // A picked level sticks across zoom, pan and resize until changed; 自動 returns to following the zoom.
   for (const button of document.querySelectorAll('#zoom-levels button')) button.addEventListener('click', () => { ui.level = button.dataset.level === 'auto' ? null : Number(button.dataset.level); writeUi(ui); if (map) map.fieldSignature = new Map(); applyView(); render(); });
-  for (const button of document.querySelectorAll('[data-zoom]')) button.addEventListener('click', () => { if (!map) return; const step = Number(button.dataset.zoom); if (!step) zoomTo(map.layout.width / 2, map.layout.height / 2, 1); else zoomTo(map.cx, map.cy, map.k * (step > 0 ? 1.5 : 1 / 1.5)); });
-  const svgMap = $('map'), pointers = new Map(); let pinch = null, moved = 0;
+  for (const button of document.querySelectorAll('[data-zoom]')) button.addEventListener('click', () => { if (!map) return; const step = Number(button.dataset.zoom); if (!step) { map.frame = { width: map.layout.width, height: map.layout.height }; zoomTo(map.layout.width / 2, map.layout.height / 2, 1); } else zoomTo(map.cx, map.cy, map.k * (step > 0 ? 1.5 : 1 / 1.5)); });
+  $('layout-reset').addEventListener('click', resetLayout);
+  /* Pointer gestures (owner, 2026-10-14): a drag that starts on a box moves the box, one that starts on a block's name (its
+   * title strip; at 塊 the band with its name in the middle) moves the block with all its boxes, and one that starts anywhere
+   * else (empty canvas, or inside a block between its boxes) pans; two fingers pinch-zoom. Mouse, pen and touch share these pointer events (the SVG has touch-action: none). A press that moves less
+   * than 4 px stays a click (select a box, open a block). The arrangement is saved when the drag ends. */
+  const svgMap = $('map'), pointers = new Map(); let pinch = null, moved = 0, drag = null;
+  const grabTarget = event => {
+    if (!map || !(event.target instanceof Element)) return null;
+    const node = event.target.closest('.node'), block = event.target.closest('.block'), handle = event.target.closest('.block-handle, .block-head, .far');
+    if (node && map.level !== 1) return { ids: [node.dataset.node], element: node };
+    if (block && handle) return { ids: model.nodes.filter(spec => spec[1] === block.dataset.block).map(spec => spec[0]), element: block };
+    return null;
+  };
+  /** The pointer in map coordinates, whatever the zoom: a drag measured this way stays under the pointer even if the view
+   * zooms or pans while it is held. */
+  const mapPoint = event => { const matrix = svgMap.getScreenCTM(); if (!matrix) return null; const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()); return [point.x, point.y]; };
+  // Pointer moves are applied once per frame.
+  const applyDrag = () => { if (!drag?.next) return; const [dx, dy] = drag.next; drag.next = null; setPositions(movedPositions(drag.base, drag.ids, dx, dy), false); };
+  const endDrag = save => {
+    if (!drag) return;
+    if (drag.raf) cancelAnimationFrame(drag.raf); applyDrag();
+    drag.element.classList.remove('dragging'); svgMap.classList.remove('dragging');
+    if (save && drag.moved) { writeLayout(customPositions(model.layout)); $('announcement').textContent = '地図の配置を保存しました。「初期配置に戻す」で元に戻せます。'; }
+    drag = null;
+  };
   svgMap.addEventListener('wheel', event => { if (!map) return; event.preventDefault(); const rect = svgMap.getBoundingClientRect(), scale = baseScale() * map.k, px = event.clientX - rect.left, py = event.clientY - rect.top;
     const area = inner(), [ox, oy] = viewOrigin(scale, area), wx = ox + px / scale, wy = oy + py / scale, k = Math.max(1, Math.min(5, map.k * Math.exp(-event.deltaY * .0018))), next = baseScale() * k;
     Object.assign(map, { k, cx: wx - px / next + (area.edge.l + area.w / 2) / next, cy: wy - py / next + (area.edge.t + area.h / 2) / next }); applyView(); }, { passive: false });
-  svgMap.addEventListener('pointerdown', event => { pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); moved = 0; if (pointers.size === 2 && map) { const [a, b] = [...pointers.values()]; pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y), k: map.k }; } });
-  svgMap.addEventListener('pointermove', event => { const point = pointers.get(event.pointerId); if (!point || !map) return; const dx = event.clientX - point.x, dy = event.clientY - point.y; point.x = event.clientX; point.y = event.clientY; moved += Math.abs(dx) + Math.abs(dy);
+  svgMap.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); moved = 0;
+    if (pointers.size === 1) { const target = grabTarget(event), start = target && mapPoint(event); drag = target && start ? { ...target, pointerId: event.pointerId, start, base: model.layout, moved: false, next: null, raf: 0 } : null; }
+    // A second finger turns the gesture into a pinch; a box already moved stays where it was put.
+    if (pointers.size === 2 && map) { endDrag(true); const [a, b] = [...pointers.values()]; pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: map.k }; }
+  });
+  svgMap.addEventListener('pointermove', event => { const point = pointers.get(event.pointerId); if (!point || !map) return;
+    // A mouse released outside the page (no pointerup reached us) is a release, not a drag that continues on hover.
+    if (event.pointerType === 'mouse' && event.buttons === 0) { release(event); return; }
+    const dx = event.clientX - point.x, dy = event.clientY - point.y; point.x = event.clientX; point.y = event.clientY; moved += Math.abs(dx) + Math.abs(dy);
     if (pointers.size === 2 && pinch) { const [a, b] = [...pointers.values()]; map.k = Math.max(1, Math.min(5, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.distance)); applyView(); return; }
-    if (moved > 4) { if (!svgMap.hasPointerCapture(event.pointerId)) svgMap.setPointerCapture(event.pointerId); const scale = baseScale() * map.k; map.cx -= dx / scale; map.cy -= dy / scale; applyView(); } });
-  const release = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; };
-  svgMap.addEventListener('pointerup', release); svgMap.addEventListener('pointercancel', release);
+    if (moved <= 4) return;
+    try { if (!svgMap.hasPointerCapture(event.pointerId)) svgMap.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks keeps working without capture */ }
+    const scale = baseScale() * map.k;
+    if (drag && drag.pointerId === event.pointerId) {
+      if (!drag.moved) { drag.moved = true; drag.element.classList.add('dragging'); svgMap.classList.add('dragging'); }
+      // Measured in map coordinates from where the press began, so the box stays under the pointer (the first 4 px included).
+      const now = mapPoint(event); if (!now) return;
+      drag.next = [now[0] - drag.start[0], now[1] - drag.start[1]];
+      if (!drag.raf) drag.raf = requestAnimationFrame(() => { if (drag) { drag.raf = 0; applyDrag(); } });
+      return;
+    }
+    map.cx -= dx / scale; map.cy -= dy / scale; applyView(); });
+  function release(event) { if (!pointers.has(event.pointerId)) return; pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; if (drag?.pointerId === event.pointerId) endDrag(true); }
+  svgMap.addEventListener('pointerup', release); svgMap.addEventListener('pointercancel', release); svgMap.addEventListener('lostpointercapture', release);
+  // A press that ends outside the map before capture began must still end there.
+  window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release);
   svgMap.addEventListener('click', event => { if (moved > 4) { event.stopPropagation(); event.preventDefault(); } }, true);
   // Fit to the viewport on load and on resize unless the owner has zoomed in.
-  const refit = () => { if (!map) return; if (map.k <= 1.01) Object.assign(map, { k: 1, cx: map.layout.width / 2, cy: map.layout.height / 2 }); applyView(); };
+  const refit = () => { if (!map) return; if (map.k <= 1.01) fitFrame(); applyView(); };
   if (typeof ResizeObserver === 'function') { new ResizeObserver(refit).observe(svgMap); new ResizeObserver(measureTop).observe($('topbar')); } else window.addEventListener('resize', () => { measureTop(); refit(); });
   $('clear-task').addEventListener('click', () => { selectedTask = null; selectedStep = null; selectedKey = null; render(); });
   $('step-picker').addEventListener('change', () => { selectedStep = $('step-picker').value || null; selectedKey = null; render(); });
@@ -1039,7 +1380,7 @@ function mountObserver() {
   $('disconnect').addEventListener('click', () => client.disconnect());
   $('run-picker').addEventListener('change', () => { selectedTask = null; selectedStep = null; state = { ...state, selectedRunId: $('run-picker').value }; $('follow-runs').checked = false; selectedKey = null; selectedView = null; render(); });
   $('follow-runs').addEventListener('change', () => { if ($('follow-runs').checked) { selectedTask = null; selectedStep = null; const latest = [...state.runs.values()].sort((a, b) => b.firstSequence - a.firstSequence)[0]; state = { ...state, selectedRunId: latest?.id ?? null }; selectedKey = null; render(); } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) client.pause(); else { client.resume(); target.last = 0; requestFrame(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) client.pause(); else { client.resume(); requestFrame(); } });
   window.addEventListener('pagehide', () => client.pause());
   window.addEventListener('pageshow', event => { if (event.persisted && !document.hidden) client.resume(); });
   reduceMotion.addEventListener('change', () => { if (map) map.particles = []; });
