@@ -10,7 +10,7 @@
   <script type="module" src="observer/observer.js"></script>
 </head>
 <body>
-<main id="observer" data-connection="disconnected" data-mode="cur" data-view="timeline" data-ui="shown" data-drawer="closed">
+<main id="observer" data-connection="disconnected" data-view="timeline" data-ui="shown" data-drawer="closed">
   <!-- The canvas fills the viewport; every control floats above it and can be hidden together (H / Esc). -->
   <section id="timeline-view" class="timeline canvas" aria-label="一回の時間割">
     <div id="run-head" class="run-head"></div>
@@ -19,16 +19,14 @@
     <p id="timeline-empty" class="hint empty"></p>
   </section>
   <section id="map-view" class="map canvas" aria-label="作りの地図" hidden>
-    <svg id="map" role="img" aria-label="シャノンの処理の地図。縮小で塊、拡大で処理、さらに拡大で入力と出力。"></svg>
+    <svg id="map" role="img" aria-label="シャノンの処理の地図。縮小で塊、拡大で処理、さらに拡大で入力と出力。箱と塊はドラッグで動かせます。"></svg>
   </section>
 
   <header id="topbar" class="overlay topbar">
     <div class="bar-row">
       <h1>観察画面</h1>
       <div class="connection"><span class="connection-light" aria-hidden="true"></span><span id="connection-state" role="status">未接続</span></div>
-      <div class="seg" id="mode-seg" role="group" aria-label="表示する作り"><button type="button" data-mode="cur" aria-pressed="true">現状</button><button type="button" data-mode="tgt" aria-pressed="false">目指す姿</button></div>
       <div class="seg" id="view-seg" role="group" aria-label="表示の形"><button type="button" data-view="timeline" aria-pressed="true">時間割</button><button type="button" data-view="map" aria-pressed="false">地図</button></div>
-      <span class="dummy-tag">目指す姿（ADR-0009）・ダミーの動き</span>
       <span class="spacer"></span>
       <button id="disconnect" type="button" class="button" hidden>接続を切る</button>
       <button id="ui-hide" type="button" class="button" title="操作の表示を隠す（H / Esc）" aria-keyshortcuts="H Escape">隠す <kbd>H</kbd></button>
@@ -39,10 +37,6 @@
       <button id="failure-jump" type="button" class="button failure" hidden>失敗</button>
       <button id="tasks-toggle" type="button" class="button" aria-controls="tasks" aria-expanded="false">タスク<span class="long">の木</span> <span id="task-count" class="count">0</span></button>
       <button id="metrics-toggle" type="button" class="button" aria-controls="metrics" aria-expanded="false"><span class="long">所要時間の</span>集計</button>
-    </div>
-    <div class="bar-row" id="target-controls" aria-label="ダミーの一回" hidden>
-      <div id="target-runs" class="chips"></div>
-      <button id="target-play" type="button" class="button">一時停止</button>
     </div>
     <p id="run-summary" class="summary"></p>
   </header>
@@ -65,10 +59,10 @@
 
   <div id="block-chips" class="overlay chips corner-left" role="group" aria-label="塊を選んで強調"></div>
   <div id="map-tools" class="overlay corner-right" hidden>
-    <p id="map-hint" class="map-hint"><span>塊・処理・入出力は拡大とは別に選べます。ホイール・ピンチで拡大、ドラッグで移動。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
+    <p id="map-hint" class="map-hint"><span>塊・処理・入出力は拡大とは別に選べます。ホイール・ピンチで拡大、空いた所のドラッグで移動。箱や塊の名前をドラッグすると動かせ、配置はこのブラウザに残ります。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
     <div class="map-buttons">
       <div id="zoom-levels" class="levels" role="group" aria-label="表示の細かさ（拡大とは別）"><button type="button" data-level="auto" aria-current="true" title="拡大に合わせて切り替える">自動</button><button type="button" data-level="1" aria-current="false">塊</button><button type="button" data-level="2" aria-current="false">処理</button><button type="button" data-level="3" aria-current="false">入出力</button></div>
-      <button type="button" class="button square" data-zoom="-1" aria-label="縮小">−</button><button type="button" class="button square" data-zoom="1" aria-label="拡大">＋</button><button type="button" class="button" data-zoom="0">全体</button>
+      <button type="button" class="button square" data-zoom="-1" aria-label="縮小">−</button><button type="button" class="button square" data-zoom="1" aria-label="拡大">＋</button><button type="button" class="button" data-zoom="0">全体</button><button type="button" class="button" id="layout-reset" title="動かした箱と塊を初期配置に戻す" disabled>初期配置に戻す</button>
     </div>
   </div>
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVER_NODES } from '../src/contracts/observerContract.js';
 import {
-  BLOCKS, CURRENT_LAYOUT, TARGET_BLOCKS, TARGET_LAYOUT, TARGET_LINKS, TARGET_NODES, TARGET_RUNS, VIEW_LINKS, VIEW_NODES,
-  blockRoutes, dummyFields, routePath, routePoint, mergeFields, routeTable, viewHandoff, viewNodeOf, type GridLayout,
+  BLOCKS, CURRENT_LAYOUT, DEFAULT_PLACEMENT, LAYOUT_ID, VIEW_BOXES, VIEW_LINKS, VIEW_NODES,
+  blockRoutes, customPositions, gridLayout, movedPositions, parsePlacement, routePath, routePoint, routeTable, savedPositions, viewHandoff, viewNodeOf, type GridLayout,
 } from '../src/infra/observer/web/observerMap.js';
 
 function noOverlap(layout: GridLayout) {
@@ -48,8 +48,8 @@ describe('current-architecture view of observed events', () => {
   });
 
   it('lays out blocks and boxes without overlap and routes every structural link', () => {
-    for (const layout of [CURRENT_LAYOUT, TARGET_LAYOUT]) noOverlap(layout);
-    for (const [layout, links] of [[CURRENT_LAYOUT, VIEW_LINKS], [TARGET_LAYOUT, TARGET_LINKS]] as const) {
+    noOverlap(CURRENT_LAYOUT);
+    for (const [layout, links] of [[CURRENT_LAYOUT, VIEW_LINKS]] as const) {
       const routes = routeTable(layout, links);
       expect(routes.size).toBe(links.length);
       for (const route of routes.values()) expect(routePath(route)).not.toMatch(/NaN|undefined|Infinity/);
@@ -75,15 +75,64 @@ describe('current-architecture view of observed events', () => {
   });
 });
 
-describe('target architecture (ADR-0009) dummy model', () => {
-  it('uses only its own boxes, closed dummy fields and overrides', () => {
-    const ids = new Set(TARGET_NODES.map(spec => spec[0]));
-    for (const [from, to] of TARGET_LINKS) { expect(ids.has(from)).toBe(true); expect(ids.has(to)).toBe(true); }
-    for (const run of TARGET_RUNS) for (const [id] of run.spans) expect(ids.has(id), id).toBe(true);
-    for (const spec of TARGET_NODES) expect(TARGET_BLOCKS.map(block => block[0])).toContain(spec[1]);
-    expect(dummyFields('完了 completion=1.0; 反応 owner=0.8')).toEqual([{ gloss: '完了', key: 'completion', value: '1.0' }, { gloss: '反応', key: 'owner', value: '0.8' }]);
-    expect(mergeFields(dummyFields('候補 candidates=7'), '候補 candidates=6; 理由 reason=1行').map(field => field.value)).toEqual(['6', '1行']);
-    expect(TARGET_NODES.find(spec => spec[0] === 'reward')![5]).toBe('完了35・反応35・予測20・自己10');
+describe('landscape default placement (owner, 2026-10-14)', () => {
+  it('places every box exactly once from the placement text, and reports anything it cannot place', () => {
+    const { cells, problems } = parsePlacement(DEFAULT_PLACEMENT);
+    expect(problems).toEqual([]);
+    expect([...cells.keys()].sort()).toEqual(VIEW_BOXES.map(spec => spec[0]).sort());
+    expect(cells.get('sqlite')![2]).toBe(2);
+    expect(parsePlacement('pcm nope\npcm', ['pcm', 'stt']).problems).toEqual(['unknown nope', 'repeated pcm', 'missing stt']);
+    expect(parsePlacement('a a . b', ['a', 'b']).cells.get('a')).toEqual([0, 0, 2]);
+  });
+  it('fits a 16:9 or 16:10 screen instead of being tall, with every block a rectangle of its own', () => {
+    expect(CURRENT_LAYOUT.width / CURRENT_LAYOUT.height).toBeGreaterThan(1.6);
+    const columns = Math.max(...VIEW_NODES.map(spec => spec[2] + (spec[7] ?? 1)));
+    const rows = Math.max(...VIEW_NODES.map(spec => spec[3])) + 1;
+    expect(columns).toBeGreaterThan(rows);
+    // A block's frame holds only its own boxes (blocks never overlap, see above), so no box of another block sits inside it.
+    for (const [id, frame] of CURRENT_LAYOUT.blocks) for (const box of CURRENT_LAYOUT.boxes.values()) {
+      if (box.block === id) continue;
+      expect(box.x + box.w <= frame.x || frame.x + frame.w <= box.x || box.y + box.h <= frame.y || frame.y + frame.h <= box.y, `${id} holds a box of ${box.block}`).toBe(true);
+    }
+  });
+});
+
+describe('the owner moves boxes and blocks (owner, 2026-10-14)', () => {
+  it('moves one box, grows its block around it, and joins a moved box by a curve', () => {
+    const moved = movedPositions(CURRENT_LAYOUT, ['haiku'], 400, 260);
+    const layout = gridLayout(BLOCKS, VIEW_NODES, moved), box = layout.boxes.get('haiku')!, before = CURRENT_LAYOUT.boxes.get('haiku')!;
+    expect([box.x, box.y]).toEqual([before.x + 400, before.y + 260]);
+    expect(box.shift).toEqual([400, 260]);
+    const frame = layout.blocks.get('conv')!;
+    expect(frame.x <= box.x && frame.y <= box.y && frame.x + frame.w >= box.x + box.w && frame.y + frame.h >= box.y + box.h).toBe(true);
+    const routes = routeTable(layout, VIEW_LINKS);
+    expect(routes.size).toBe(VIEW_LINKS.length);
+    for (const route of routes.values()) expect(routePath(route)).not.toMatch(/NaN|undefined|Infinity/);
+    for (const [key, route] of routes) if (key.includes('haiku')) expect(route.kind, key).toBe('curve');
+    expect(customPositions(layout)).toEqual({ haiku: [box.x, box.y] });
+  });
+  it('moves a block with all its boxes, keeping its shape and the routes inside it', () => {
+    const ids = VIEW_NODES.filter(spec => spec[1] === 'fca').map(spec => spec[0]);
+    const layout = gridLayout(BLOCKS, VIEW_NODES, movedPositions(CURRENT_LAYOUT, ids, 300, -40));
+    const before = CURRENT_LAYOUT.blocks.get('fca')!, after = layout.blocks.get('fca')!;
+    expect([after.x - before.x, after.y - before.y, after.w, after.h]).toEqual([300, -40, before.w, before.h]);
+    for (const [key, route] of routeTable(CURRENT_LAYOUT, VIEW_LINKS)) {
+      const [from, to] = key.split('>');
+      if (ids.includes(from) && ids.includes(to)) expect(routeTable(layout, VIEW_LINKS).get(key)!.kind).toBe(route.kind);
+    }
+    for (const route of blockRoutes(layout, VIEW_LINKS).values()) expect(routePath(route)).not.toMatch(/NaN|undefined|Infinity/);
+  });
+  it('never moves a block frame off the top-left of the map', () => {
+    const ids = VIEW_NODES.filter(spec => spec[1] === 'client').map(spec => spec[0]);
+    const layout = gridLayout(BLOCKS, VIEW_NODES, movedPositions(CURRENT_LAYOUT, ids, -5000, -5000)), frame = layout.blocks.get('client')!;
+    expect(frame.x).toBe(0); expect(frame.y).toBe(0);
+    expect(layout.blocks.get('client')!.w).toBe(CURRENT_LAYOUT.blocks.get('client')!.w);
+  });
+  it('restores only known boxes with bounded numbers, and only for the same default placement', () => {
+    expect(savedPositions({ layout: LAYOUT_ID, nodes: { haiku: [500.4, 90], ghost: [1, 2], tools: ['x', 1], gate: [1e9, -5], store: [1, 2, 3] } })).toEqual({ haiku: [500, 90], gate: [20000, 0] });
+    expect(savedPositions({ layout: 'older-placement', nodes: { haiku: [1, 2] } })).toEqual({});
+    for (const value of [null, 'x', [], { layout: LAYOUT_ID }, { layout: LAYOUT_ID, nodes: [] }]) expect(savedPositions(value)).toEqual({});
+    expect(customPositions(CURRENT_LAYOUT)).toEqual({});
   });
 });
 

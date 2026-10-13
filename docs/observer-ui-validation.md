@@ -1,5 +1,25 @@
 # Mind Observer UI validation
 
+## Landscape placement and drag and drop (2026-10-14)
+
+Branch `observer-dnd-landscape` from `2d3820fe`. Headless Chrome driven over CDP against `scripts/observer-ui-smoke.ts`
+(`turn` and `fca-run` fixture commands; controlled values only), dark at 1600×900 and 1280×800, light at 390×844 with
+touch emulation (`Input.dispatchTouchEvent`). `scrollWidth`/`scrollHeight` equal the viewport at every size; no console
+exceptions; the 現状/目指す姿 switch and every 「目指す姿」/「ダミー」 text are gone.
+
+- Fit: the map fills 1248×602 px at 1600×900 and 1049×506 px at 1280×800 (the old tall placement was height-bound).
+- Mouse: a box dragged by (120, 260) px moved by (119, 260) without opening the drawer; the 声の出力 block dragged by its title
+  moved (40, 200) with its four boxes and the same size; a drag on empty canvas panned; after two zoom steps a box still
+  followed the pointer (49, 30 for 50, 30); every route stayed finite; 5 moved boxes were saved, survived a reload (reset
+  enabled, picked level kept), and 「初期配置に戻す」 removed the saved entry and disabled itself. `H` hid and `Esc` showed the
+  overlay.
+- Touch (390): the 心の後処理 block moved (−30, 60) by its centre name band at 塊, a box moved (40, 50) at 処理, a drag on
+  empty canvas panned, and a tap selected a box and opened the bottom sheet. Synthetic two-pointer pinch zoomed (pane check).
+- 1600: [timeline](observer-evidence/dnd-1600-timeline.jpg), [塊](observer-evidence/dnd-1600-level1.jpg), [処理](observer-evidence/dnd-1600-level2.jpg), [入出力](observer-evidence/dnd-1600-level3.jpg), [boxes and a block moved](observer-evidence/dnd-1600-moved.jpg), [zoomed, moved](observer-evidence/dnd-1600-zoomed-moved.jpg), [after 初期配置に戻す](observer-evidence/dnd-1600-reset.jpg)
+- 1280: [処理](observer-evidence/dnd-1280-level2.jpg); 390: [塊](observer-evidence/dnd-390-level1.jpg), [tap → detail](observer-evidence/dnd-390-level2-touch.jpg), [入出力 zoomed](observer-evidence/dnd-390-level3-zoomed.jpg)
+
+Physical iPhone, production and the Windows app are not verified for this branch.
+
 ## Detail level independent of zoom (2026-10-13)
 
 Branch `observer-detail-level` from `bf511d16`, same fixture method. At 1440×900 and 390×844 each level was picked and
@@ -31,7 +51,7 @@ latency. No console exceptions; `scrollWidth` equals the viewport at 1440 and 39
 
 - [Timeline, base-step detail and FCA task tree (1440)](observer-evidence/redesign-desktop-timeline.jpg)
 - [Map, block level (1440)](observer-evidence/redesign-desktop-map-l1.jpg) and [box level](observer-evidence/redesign-desktop-map.jpg)
-- [目指す姿 map, dummy (1440)](observer-evidence/redesign-desktop-target-map.jpg)
+- [目指す姿 map, dummy (1440)](observer-evidence/redesign-desktop-target-map.jpg) (view retired 2026-10-14)
 - [Timeline and failed-tool detail (390)](observer-evidence/redesign-phone-timeline.jpg), [map (390)](observer-evidence/redesign-phone-map.jpg)
 
 Production, device and Windows-app rendering of this branch are not yet verified.
