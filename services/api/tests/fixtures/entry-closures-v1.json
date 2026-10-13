@@ -775,6 +775,7 @@
     "wiring/minecraftLifecycleRunner.ts",
     "wiring/minecraftLifecycleWiring.ts",
     "wiring/modelModeWiring.ts",
+    "wiring/operationOutcomeWiring.ts",
     "wiring/opsMinecraftLifecycleWiring.ts",
     "wiring/opsServerWiring.ts",
     "wiring/ownerUpcomingWiring.ts",
