@@ -92,7 +92,7 @@ export interface OwnerTurn {
   say: string;
   /**
    * Speech-recognition variants of the same utterance (voice only). Trial `n` uses `[say, ...asrVariants][n % (1 + length)]`,
-   * so pass^k with k ≥ 2 also runs the noisy forms.
+   * so only a repeated run (`--k` > 1, investigation only) uses the noisy forms; the default single trial sends `say`.
    */
   asrVariants?: readonly string[];
   /** Real seconds to wait before this turn (after the previous reply). */

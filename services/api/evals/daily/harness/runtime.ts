@@ -22,6 +22,8 @@ import { configuredDeviceActions } from '../../../src/wiring/deviceActionWiring.
 import { memoryPortsOf } from '../../../src/wiring/memoryOutboxWiring.js';
 import { configuredOwnerUpcoming } from '../../../src/wiring/ownerUpcomingWiring.js';
 import { configuredServerFca } from '../../../src/wiring/serverFcaWiring.js';
+import { createModelModeWiring } from '../../../src/wiring/modelModeWiring.js';
+import { configuredSonnet } from '../../../src/wiring/sonnetWiring.js';
 import { readToolPorts, skillRoutingParts } from '../../../src/wiring/skillRoutingWiring.js';
 import { stage5MemoryStoreOptions } from '../../../src/wiring/stage5MemoryWiring.js';
 import type { DailyEvalTask, InitialState } from '../types.js';
@@ -59,7 +61,8 @@ export function evalEnvironment(source: Readonly<Record<string, string | undefin
     SHANNON_AUTONOMY_TIMEZONE: initial.timeZone ?? 'Asia/Tokyo',
     SHANNON_OWNER_HOME_LOCATION: `${initial.home.latitude},${initial.home.longitude},${initial.home.label}`,
     SHANNON_FCA_RUNTIME: 'on', SHANNON_ADR8_STAGE4: 'on', SHANNON_FCA_SLEEP: 'off', SHANNON_FCA_TOUCH: 'off', SHANNON_FCA_MINECRAFT: 'off',
-    SHANNON_DEVICE_ACTIONS: 'on', SHANNON_AUTONOMY_ENABLED: 'off', SHANNON_MORNING_BRIEF: 'off', SHANNON_SONNET_ROUTING: 'off',
+    // Sonnet routing as production (`SHANNON_SONNET_ROUTING=on`): the owner's model mode decides which tier answers.
+    SHANNON_DEVICE_ACTIONS: 'on', SHANNON_AUTONOMY_ENABLED: 'off', SHANNON_MORNING_BRIEF: 'off', SHANNON_SONNET_ROUTING: 'on',
     SHANNON_CALENDAR_INGEST: 'on',
     // The voice router's Haiku fallback (used without Jev, or when Jev fails) gets production's 3 s (deploy env); the code default
     // of 1.2 s times out on almost every turn and routes by keywords only, which offers no tools (first live smoke, 2026-10-13).
@@ -138,6 +141,11 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
   live: boolean; log: (line: string) => void;
   /** A scripted model in place of the configured one (harness tests); the recorded web is still installed on it. */
   model?: ShannonChatModel;
+  /**
+   * The owner's model mode, as the app's switch sets it (`/v1/model-mode`, `primary_model_preferences`): `haiku` (default; every
+   * turn at medium, `luna_plus`) or `sonnet` (the tiered model: Sonnet answers, luna when Sonnet fails before anything happened).
+   */
+  modelMode?: 'haiku' | 'sonnet';
 }): Promise<EvalRuntime> {
   const initial = task.initial;
   const directory = mkdtempSync(join(tmpdir(), 'shannon-evals-daily-'));
@@ -157,7 +165,14 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
   Object.defineProperty(chat, 'searchWeb', { value: web.search, configurable: true, writable: true });
   Object.defineProperty(chat, 'readWeb', { value: web.read, configurable: true, writable: true });
   const probe: TokenProbe = { firstTokenAt: null };
-  const model = observedModel(chat, probe);
+  // Live: the kernel's model is production's (`server.ts`): the primary-mode model over Haiku and the Sonnet tier, with the
+  // owner's mode stored in this trial's database. The scripted test model stays as it is.
+  const sonnet = options.live && !options.model ? configuredSonnet(environment, { usageStore: usage, now, webSearch: web.search }) : null;
+  const modelModes = options.live && !options.model ? createModelModeWiring(environment, { path, ownerScope: OWNER_SCOPE, haiku: chat, sonnet }) : null;
+  if (modelModes && (options.modelMode ?? 'haiku') !== 'haiku') {
+    if (!sonnet || !modelModes.store.compareAndSet(OWNER_SCOPE, 0, options.modelMode!)) throw new Error(`MODEL_MODE_UNAVAILABLE ${options.modelMode}`);
+  }
+  const model = observedModel(modelModes?.chatModel ?? chat, probe);
   const autonomyStore = new SQLiteAutonomyStore(path);
   const autonomyConfig = configuredAutonomy(environment, { databasePath: path });
   const agentTasks = new SQLiteAgentTaskStore(path);
@@ -181,7 +196,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     readSources: { upcoming: ownerUpcoming.upcoming, voyagerAvailable: () => true, aetherAvailable: () => false, notionAvailable: () => false },
   }) : null;
   kernel = createLocalApiKernel(now, {
-    chatModel: model, auxiliaryChatModel: model, voiceDecision: createConfiguredVoiceDecisionGateway(options.live ? environment : {}, usage),
+    chatModel: model, auxiliaryChatModel: modelModes ? chat : model, voiceDecision: createConfiguredVoiceDecisionGateway(options.live ? environment : {}, usage),
     stateStore: store, conversationStore: store, background: new DurableBackgroundDispatcher(store, store), knowledgeStore: store,
     agentTasks, voyagerCatalog, upcoming: ownerUpcoming.upcoming, memoryRecall, autonomy,
     minecraftRequests: deviceActions.reports(null), ...(readTools ? { readTools } : {}), ...(memoryPorts ? { memory: memoryPorts } : {}),
@@ -210,7 +225,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
       await fake?.stop();
       await fca?.close();
       try { await kernel.waitForBackground(OWNER_SCOPE); } catch { /* nothing waits on it */ }
-      deviceActions.close(); ownerUpcoming.close(); autonomyStore.close(); actionDb.close(); store.close();
+      deviceActions.close(); ownerUpcoming.close(); autonomyStore.close(); modelModes?.close(); actionDb.close(); store.close();
       rmSync(directory, { recursive: true, force: true });
     },
   };

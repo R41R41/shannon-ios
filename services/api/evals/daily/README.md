@@ -9,7 +9,8 @@ One trial runs Shannon **in this process, through the real turn paths**, from a 
 
 - **Voice**: `kernel.streamLiveVoiceDelegation` with the body the iPhone sends (transcript, `deviceContext` with the utterance
   receipt and the one-time GPS), then `POST /v1/voice/gemini/cascade/turns` as the app does after speaking. ASR-noise variants
-  (`asrVariants`, e.g. 「東京都 博多の天気」) are cycled across trials, so pass^k also covers the noisy forms.
+  (`asrVariants`, e.g. 「東京都 博多の天気」) are used only by a repeated run (`--k` > 1, investigation only); the default
+  single trial sends `say`.
 - **Text**: `POST /v1/chat` with the sentence stream.
 - **State**: a temporary SQLite database per trial, composed like `server.ts` (store, autonomy tools, device-action outbox,
   owner upcoming, memory recall, background dispatcher, the common FCA with research tasks). The FCA uses an in-process SQLite
@@ -37,8 +38,8 @@ Each trial is graded by (`graders/`):
 3. **Rubric judge**: Claude Sonnet (`SHANNON_EVALS_JUDGE_MODEL`, default `claude-sonnet-5-5`) scores each criterion 0–2 from
    the conversation and the observed state; pass at 70 % of the maximum unless the task says otherwise.
 
-A trial passes when all three pass. A task passes the set when **every** trial passes (pass^k; k defaults to 3 for the
-regression set). Multi-turn tasks (R4, R5, D3) continue with a **user simulator** (`simulator.ts`): Sonnet playing the owner
+A trial passes when all three pass. **Each task runs once** (owner decision 2026-10-13: k=1 for every set, no pass^k): the
+result of a task is the PASS/FAIL of its single trial. Multi-turn tasks (R4, R5, D3) continue with a **user simulator** (`simulator.ts`): Sonnet playing the owner
 with a hidden goal and a knowledge boundary; live only.
 
 ## Running
@@ -50,15 +51,24 @@ pnpm -C services/api exec tsx evals/daily/run.ts --set regression --validate
 # Live (paid): needs SHANNON_EVALS_LIVE=1 and an Anthropic key in the environment
 # (SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY; never printed). Add TYPESAFE_API_KEY
 # (and any SHANNON_JEV_*) for Jev; the first summary line says whether Jev is on.
-SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --k 3
-SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --k 1 --task E3 --task D2
+SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression
+SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --task E3 --task D2
 # The package script also loads the repository's ignored .env:
-SHANNON_EVALS_LIVE=1 pnpm -C services/api eval:daily --set regression --k 1 --task A1
+SHANNON_EVALS_LIVE=1 pnpm -C services/api eval:daily --set regression --task A1
 ```
 
-Options: `--task` (repeatable or comma-separated), `--k`, `--no-judge` (checks and budgets only; the summary says so),
-`--out <dir>`, `--quiet`. `SHANNON_EVALS_MODEL` overrides Shannon's model (default: the production Haiku). Without
-`SHANNON_EVALS_LIVE=1` the runner refuses to start a trial. Exit code 0 only when every selected task passed pass^k.
+Options: `--task` (repeatable or comma-separated), `--k` (default 1; more only to investigate a flaky task, not as a gate),
+`--no-judge` (checks and budgets only; the summary says so),
+`--out <dir>`, `--quiet`, `--model-mode haiku|sonnet` (default `haiku`). `SHANNON_EVALS_MODEL` overrides Shannon's model
+(default: the production Haiku).
+
+**Model mode.** The kernel's model is production's (`server.ts`, `modelModeWiring.ts`): the primary-mode model over Haiku and
+the Sonnet tier, with `SHANNON_SONNET_ROUTING=on` as in production. `haiku` is the app's normal mode (every turn at medium,
+`luna_plus`); `--model-mode sonnet` stores the owner's mode as the app's switch does (`primary_model_preferences`), so Sonnet
+answers each turn and Haiku (luna) answers only when Sonnet fails before anything of the turn happened (on voice, past its
+first-token budget: `SonnetFirstTokenTimeout`). Each trial records the calls per model (`modelCalls`) and those fallbacks
+(`sonnetFallbacks`: to luna, or her fixed line, with the reason); the summary counts them per task. Without
+`SHANNON_EVALS_LIVE=1` the runner refuses to start a trial. Exit code 0 only when every selected task passed.
 
 Results go to `evals/daily/results/<UTC time>-<set>/` (gitignored): `results.json`, a short `summary.md`, and one transcript
 per trial under `transcripts/` (turns, latencies, tool calls, research tasks, device state, fixture reads, server log lines).
@@ -68,8 +78,8 @@ database and its FCA timers only while it runs.
 ### Cost estimate
 
 Shannon's turns are Haiku 5.5 (about ¥1–3 per task including FCA research steps; cached prefixes make repeats cheaper). The
-judge is about ¥1 per trial and the simulator about ¥0.3 per simulated turn. Roughly ¥40–90 for `--k 1` over the whole set and
-¥100–250 for `--k 3`. A single task at `--k 1` is a few yen. The summary reports the actual spend of Shannon, the judge and the
+judge is about ¥1 per trial and the simulator about ¥0.3 per simulated turn. Roughly ¥25–90 for the whole set (measured
+2026-10-13: ¥27–30). A single task is a few yen. The summary reports the actual spend of Shannon, the judge and the
 simulator separately.
 
 ## Tasks

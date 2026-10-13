@@ -16,6 +16,10 @@ export interface TrialResult {
   shannonCostYen: number;
   firstAudioMs: (number | null)[];
   replies: string[];
+  /** Shannon's model calls by model name. */
+  modelCalls?: Record<string, number>;
+  /** Sonnet mode: turns Sonnet did not finish (fell back to luna, or ended with her fixed line), with the reasons. */
+  sonnetFallbacks?: { toLuna: number; fixedLine: number; reasons: string[] };
   error?: string;
 }
 
@@ -24,7 +28,7 @@ export interface TaskResult {
   title: string;
   surface: string;
   trials: TrialResult[];
-  /** pass^k: every trial passed. */
+  /** Every trial passed (with the default single trial: that trial passed). */
   passAll: boolean;
   /** pass@1 estimate: the fraction of trials that passed. */
   passRate: number;
@@ -38,6 +42,8 @@ export interface RunResult {
   k: number;
   judge: string | null;
   shannonModel: string;
+  /** The owner's model mode the run used (`--model-mode`). */
+  modelMode?: 'haiku' | 'sonnet';
   tasks: TaskResult[];
   totals: { passed: number; tasks: number; shannonCostYen: number; judgeCostYen: number; simulatorCostYen: number };
 }
@@ -64,13 +70,15 @@ export function writeResults(directory: string, run: RunResult, observations: re
 const seconds = (value: number | null | undefined) => value === null || value === undefined ? '—' : `${(value / 1_000).toFixed(1)}s`;
 
 export function summaryMarkdown(run: RunResult): string {
+  const single = run.k === 1, sonnet = run.modelMode === 'sonnet';
   const lines = [
-    `# Shannon daily evals — ${run.set} (k=${run.k})`, '',
+    `# Shannon daily evals — ${run.set}${single ? '' : ` (k=${run.k})`}`, '',
     `- Started ${run.startedAt}, finished ${run.finishedAt}`,
-    `- Shannon model: ${run.shannonModel}; judge: ${run.judge ?? 'none'}`,
-    `- pass^${run.k}: **${run.totals.passed}/${run.totals.tasks}**`,
+    `- Shannon model: ${run.shannonModel} (mode ${run.modelMode ?? 'haiku'}); judge: ${run.judge ?? 'none'}`,
+    `- Passed: **${run.totals.passed}/${run.totals.tasks}**${run.k > 1 ? ` (every one of ${run.k} trials)` : ''}`,
     `- Spend: Shannon ¥${run.totals.shannonCostYen.toFixed(2)}, judge ¥${run.totals.judgeCostYen.toFixed(2)}, simulator ¥${run.totals.simulatorCostYen.toFixed(2)}`,
-    '', '| Task | pass^k | trials | first audio (worst) | research | ¥/trial | failed checks / budgets |', '|---|---|---|---|---|---|---|',
+    '', `| Task | result |${single ? '' : ' trials |'} first audio${single ? '' : ' (worst)'} | research | ¥${single ? '' : '/trial'} |${sonnet ? ' Sonnet fallbacks |' : ''} failed checks / budgets |`,
+    `|---|---|${single ? '' : '---|'}---|---|---|${sonnet ? '---|' : ''}---|`,
   ];
   for (const task of run.tasks) {
     const worstAudio = Math.max(...task.trials.flatMap(trial => trial.firstAudioMs.map(value => value ?? Number.POSITIVE_INFINITY)));
@@ -82,8 +90,9 @@ export function summaryMarkdown(run: RunResult): string {
       ...(trial.rubric.passed ? [] : [trial.rubric.skipped ? `rubric(${trial.rubric.skipped})` : `rubric ${trial.rubric.total}/${trial.rubric.maximum}`]),
       ...(trial.error ? ['error'] : []),
     ]))];
-    lines.push(`| ${task.id} ${task.title} | ${task.passAll ? 'PASS' : 'FAIL'} | ${task.trials.filter(trial => trial.passed).length}/${task.trials.length} | `
-      + `${Number.isFinite(worstAudio) ? seconds(worstAudio) : '—'} | ${research.join(', ') || '—'} | ${cost.toFixed(2)} | ${failures.join(', ') || '—'} |`);
+    lines.push(`| ${task.id} ${task.title} | ${task.passAll ? 'PASS' : 'FAIL'} |${single ? '' : ` ${task.trials.filter(trial => trial.passed).length}/${task.trials.length} |`} `
+      + `${Number.isFinite(worstAudio) ? seconds(worstAudio) : '—'} | ${research.join(', ') || '—'} | ${cost.toFixed(2)} |`
+      + `${sonnet ? ` ${task.trials.reduce((sum, trial) => sum + (trial.sonnetFallbacks ? trial.sonnetFallbacks.toLuna + trial.sonnetFallbacks.fixedLine : 0), 0)} |` : ''} ${failures.join(', ') || '—'} |`);
   }
   lines.push('', 'Per-trial transcripts are in `transcripts/` (synthetic fixtures only; never commit this directory).', '');
   return lines.join('\n');

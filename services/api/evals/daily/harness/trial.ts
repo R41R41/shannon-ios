@@ -42,6 +42,10 @@ export interface TrialObservation {
   fcaComposed: boolean;
   harnessLog: string[];
   durationMs: number;
+  /** Shannon's model calls by model name (from the recorded usage): whether Sonnet actually answered. */
+  modelCallsByModel?: Record<string, number>;
+  /** Sonnet-mode turns that Sonnet did not finish (`TieredChatModel`): fell back to luna, or ended with her fixed line. Set by the runner. */
+  sonnetFallbacks?: { toLuna: number; fixedLine: number; reasons: string[] };
   /** Requests that asked Anthropic for its own server-side web tools (set by the runner; they bypass the fixtures). */
   nativeWebRequests?: number;
   error?: string;
@@ -82,7 +86,7 @@ function utteranceOf(task: DailyEvalTask, turnIndex: number, trial: number): { t
 
 /** Runs one trial of a task from a fresh state and returns everything the graders read. */
 export async function runTrial(task: DailyEvalTask, trial: number, options: {
-  live: boolean; simulator: EvalClaude | null; log?: (line: string) => void; model?: ShannonChatModel;
+  live: boolean; simulator: EvalClaude | null; log?: (line: string) => void; model?: ShannonChatModel; modelMode?: 'haiku' | 'sonnet';
 }): Promise<TrialObservation> {
   const harnessLog: string[] = [];
   const log = (line: string) => { harnessLog.push(line); options.log?.(line); };
@@ -90,7 +94,8 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
   applyEnvironment(environment);
   setEvalClock(task.initial.clock, task.initial.timeZone);
   const origin = performance.now();
-  const runtime = await createEvalRuntime(task, environment, { live: options.live, log, ...(options.model ? { model: options.model } : {}) });
+  const runtime = await createEvalRuntime(task, environment, { live: options.live, log, ...(options.model ? { model: options.model } : {}),
+    ...(options.modelMode ? { modelMode: options.modelMode } : {}) });
   const turnStarts: number[] = [];
   const watcher = watchResearch(runtime, origin, turnStarts, log);
   const turns: TurnRecord[] = [];
@@ -130,6 +135,7 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
     toolCalls: runtime.toolCalls.map(call => ({ tool: call.tool, surface: call.surface, ok: call.ok, atMs: Math.round(call.at - origin) })),
     research, device: structuredClone(runtime.device), fixtures: structuredClone(runtime.fixtures), messages,
     shannonCostUsd: runtime.usage.reduce((sum, event) => sum + event.estimatedCostUsd, 0), modelCalls: runtime.usage.length,
+    modelCallsByModel: runtime.usage.reduce<Record<string, number>>((counts, event) => ({ ...counts, [event.model]: (counts[event.model] ?? 0) + 1 }), {}),
     fcaComposed: runtime.fcaComposed, harnessLog, durationMs: Math.round(performance.now() - origin), ...(error ? { error } : {}),
   };
   try { await runtime.close(); } catch (caught) { log(`close failed: ${caught instanceof Error ? caught.message : 'unknown'}`); }
