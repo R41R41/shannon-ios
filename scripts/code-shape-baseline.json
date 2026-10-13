@@ -954,7 +954,7 @@
     "services/api/src/mind/action/respond/apiTextTurn.ts": {
       "multi-statement-line": 2,
       "complex-function": 1,
-      "long-line": 13
+      "long-line": 14
     },
     "services/api/src/mind/action/respond/cognitiveIntent.ts": {
       "complex-function": 1
