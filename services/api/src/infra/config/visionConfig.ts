@@ -1,4 +1,5 @@
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { switchOn, type SwitchValues } from '@shannon/switches';
 
 /**
@@ -26,4 +27,19 @@ export function visionWorkerPort(values: SwitchValues): number {
   const port = Number(values.SHANNON_VISION_PORT?.trim() || VISION_DEFAULT_PORT);
   if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) throw new Error('SHANNON_VISION_PORT is invalid');
   return port;
+}
+
+/** The shared database file, as `configuredDatabasePath` reads it, without loading the conversation store's modules. */
+export function visionDatabasePath(values: SwitchValues): string {
+  return values.SHANNON_DATABASE_PATH?.trim() || resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
+}
+
+/** Her Minecraft body's device id (`SHANNON_MINECRAFT_BODY_JSON`), never served by the vision worker; null when unset or unreadable. */
+export function visionGameDeviceId(values: SwitchValues): string | null {
+  try {
+    const decoded = JSON.parse(values.SHANNON_MINECRAFT_BODY_JSON?.trim() || 'null') as { deviceId?: unknown } | null;
+    return typeof decoded?.deviceId === 'string' ? decoded.deviceId : null;
+  } catch {
+    return null;
+  }
 }

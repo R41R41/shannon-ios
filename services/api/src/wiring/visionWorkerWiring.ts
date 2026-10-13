@@ -1,8 +1,7 @@
 import { createServer, type Server } from 'node:http';
-import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
-import { shannonNowOwnerScope } from '../contracts/shannonNowContract.js';
+import { configuredOwnerScope } from '../infra/config/ownerScope.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from '../infra/auth/deviceAuth.js';
-import { visionBridgeSocketPath, visionSwitches, visionWorkerPort } from '../infra/config/visionConfig.js';
+import { visionBridgeSocketPath, visionGameDeviceId, visionSwitches, visionWorkerPort } from '../infra/config/visionConfig.js';
 import { sendJson } from '../infra/http/serverHttp.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
 import { OpenAIVisionDecisions, type VisionDecisionsClient } from '../infra/models/openAIVisionDecisions.js';
@@ -54,18 +53,18 @@ export async function configuredVisionWorker(values: Readonly<Record<string, str
   const decisions = options.decisions !== undefined ? options.decisions
     : apiKey ? new OpenAIVisionDecisions({ apiKey, timeoutMilliseconds: 2_500, unknownCostUpperBoundUsd }) : null;
   const frames = new VisionFrameHolder(now);
-  const ownerScope = shannonNowOwnerScope(values);
+  const ownerScope = configuredOwnerScope(values);
   const watch = new VisionWatch({ ownerScope, budget, decisions, frames, bridge: bridgeOver(client), now,
     cameraWatch: () => visionSwitches(values).camera, escalate: () => visionSwitches(values).escalate });
   // Stage 1: the reflex loop lives here with no source registered; nothing of it runs until stage 2 adds the Minecraft adapter.
   const reflex = createVisionReflexHost([], { providers: () => ({ entry: null, image: null, text: null }), event: () => undefined, now });
   const auth = new SQLiteDeviceAuthStore({ path: databasePath, pepper: configuredAuthPepper(values) });
-  const game = configuredMinecraftBody(values);
+  const gameDeviceId = visionGameDeviceId(values);
   const server: Server = createServer((request, response) => {
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
     serveVisionRoute(request, response, pathname, {
       watch, now, authenticate: authorization => auth.authenticate(authorization),
-      allowed: principal => principal.scopeKey === ownerScope && principal.deviceId !== game?.deviceId,
+      allowed: principal => principal.scopeKey === ownerScope && principal.deviceId !== gameDeviceId,
     }).then(served => { if (!served) sendJson(response, 404, { error: 'NOT_FOUND' }); })
       .catch(() => { if (!response.headersSent) sendJson(response, 500, { error: 'VISION_FAILED' }); else response.destroy(); });
   });

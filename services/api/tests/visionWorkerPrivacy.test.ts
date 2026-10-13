@@ -109,3 +109,11 @@ describe('vision worker over HTTP and the bridge', () => {
     for (const needle of needles) expect(said.includes(needle), `${needle} in logs or notes`).toBe(false);
   }, 10_000);
 });
+
+describe('what the vision worker process loads', () => {
+  it('loads no conversation store, memory, workspace, perception or model of the conversation', async () => {
+    const { runtimeClosure } = await import('./support/runtimeClosure.js');
+    const closure = runtimeClosure('visionWorker.ts');
+    expect(closure.filter(file => /^(mind\/(memory|recall|workspace|perception|emotion)\/|infra\/sqlite\/sqliteStore|infra\/models\/(chatModel|anthropic))/u.test(file))).toEqual([]);
+  });
+});

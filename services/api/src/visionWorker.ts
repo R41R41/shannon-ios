@@ -1,7 +1,6 @@
-import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { startObserverPublisher } from './infra/observer/store/observerStore.js';
 import { isSqliteBusy, throttledLog } from './infra/sqlite/sqliteBusy.js';
-import { visionWorkerEnabled } from './infra/config/visionConfig.js';
+import { visionDatabasePath, visionWorkerEnabled } from './infra/config/visionConfig.js';
 import { configuredVisionWorker } from './wiring/visionWorkerWiring.js';
 
 // Syzygy ADR-0011 stage 1: the vision worker (option C). Its own process, so that no frame, decision or reflex loop runs on the
@@ -23,7 +22,7 @@ if (!visionWorkerEnabled(process.env)) {
   console.log('Shannon vision worker off (SHANNON_VISION_WORKER)');
   process.exit(0);
 }
-const databasePath = configuredDatabasePath();
+const databasePath = visionDatabasePath(process.env);
 const observation = startObserverPublisher(databasePath);
 const worker = await configuredVisionWorker(process.env, databasePath, { log: line => console.log(line) });
 let stopping = false;

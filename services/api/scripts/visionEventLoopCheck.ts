@@ -29,10 +29,33 @@ if (process.env.VISION_CHECK_CHILD) {
       usage: { usageComplete: true, inputTokens: 602, estimatedCostUsd: 0.00006 }, elapsedMs: 250 };
   } };
   const worker = await configuredVisionWorker(values, process.env.VISION_CHECK_DB!, { port: 0, decisions });
+  // The devices' frames come from this process too, so that the API's process carries only what it carries in production.
+  const timers = (JSON.parse(process.env.VISION_CHECK_TOKENS ?? '[]') as string[]).map((token, device) => setInterval(() => {
+    void postFrame(worker.port, token, device).catch(() => undefined);
+  }, 2_050));
   process.send?.({ port: worker.port });
-  process.on('message', async () => { await worker.close(); process.exit(0); });
+  process.on('message', async () => {
+    timers.forEach(clearInterval);
+    process.send?.({ frames: frameCodes });
+    await worker.close();
+    process.exit(0);
+  });
 } else {
   await main();
+}
+
+const frameCodes: Record<string, number> = {};
+
+async function postFrame(port: number, token: string, device: number): Promise<void> {
+  const bytes = syntheticJpeg(40_000);
+  const meta = { schema: 'vision.frame.v1', frameId: `frame-${device}-${Date.now()}`, capturedAt: new Date().toISOString(), receivedAt: null,
+    source: { kind: 'app_camera', bodyId: null, deviceId: null }, sessionId: `watch-${device}`, generation: 1, privacy: 'owner_private',
+    audienceAtCapture: 'owner_alone', ttlMs: 4_000, encoding: { width: 512, height: 384, format: 'jpeg', byteLength: bytes.length },
+    gate: { reason: 'difference', difference: 0.3, personCount: 1 }, state: null };
+  const response = await fetch(`http://127.0.0.1:${port}/v1/vision/frames`, { method: 'POST', body: bytes,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'image/jpeg', 'x-shannon-vision-frame': JSON.stringify(meta) } });
+  frameCodes[response.status] = (frameCodes[response.status] ?? 0) + 1;
+  await response.text();
 }
 
 function percentile(values: number[], q: number): number {
@@ -63,12 +86,13 @@ async function phase(label: string, withWorker: boolean, databasePath: string, t
   let child: ReturnType<typeof fork> | null = null;
   let workerPort = 0;
   if (withWorker) {
-    child = fork(new URL(import.meta.url).pathname, [], { env: { ...process.env, VISION_CHECK_CHILD: '1', VISION_CHECK_DB: databasePath }, execArgv: ['--import', 'tsx'] });
+    const env = { ...process.env, VISION_CHECK_CHILD: '1', VISION_CHECK_DB: databasePath, VISION_CHECK_TOKENS: JSON.stringify(tokens) };
+    child = fork(new URL(import.meta.url).pathname, [], { env, execArgv: ['--import', 'tsx'] });
     workerPort = await new Promise<number>(resolve => child!.once('message', message => resolve((message as { port: number }).port)));
   }
   histogram.enable();
   const latencies: number[] = [];
-  const frameCodes: Record<string, number> = {};
+  let frames: Record<string, number> = {};
   const history = Array.from({ length: 40 }, (_, index) => `turn ${index} `.repeat(30));
   const until = Date.now() + seconds * 1_000;
   const timers: NodeJS.Timeout[] = [];
@@ -77,33 +101,19 @@ async function phase(label: string, withWorker: boolean, databasePath: string, t
     void fetch(`http://127.0.0.1:${port}/first-response`, { method: 'POST', body: JSON.stringify({ history }) })
       .then(response => response.text()).then(() => { latencies.push(performance.now() - started); });
   }, 50));
-  if (withWorker) {
-    tokens.forEach((token, device) => {
-      const generation = 1;
-      timers.push(setInterval(() => {
-        const bytes = syntheticJpeg(40_000);
-        const meta = { schema: 'vision.frame.v1', frameId: `frame-${device}-${Date.now()}`, capturedAt: new Date().toISOString(), receivedAt: null,
-          source: { kind: 'app_camera', bodyId: null, deviceId: null }, sessionId: `watch-${device}`, generation, privacy: 'owner_private',
-          audienceAtCapture: 'owner_alone', ttlMs: 4_000, encoding: { width: 512, height: 384, format: 'jpeg', byteLength: bytes.length },
-          gate: { reason: 'difference', difference: 0.3, personCount: 1 }, state: null };
-        void fetch(`http://127.0.0.1:${workerPort}/v1/vision/frames`, { method: 'POST', body: bytes,
-          headers: { authorization: `Bearer ${token}`, 'content-type': 'image/jpeg', 'x-shannon-vision-frame': JSON.stringify(meta) } })
-          .then(response => { frameCodes[response.status] = (frameCodes[response.status] ?? 0) + 1; return response.text(); }).catch(() => undefined);
-      }, 2_050));
-    });
-  }
   await new Promise(resolve => setTimeout(resolve, Math.max(0, until - Date.now())));
   timers.forEach(clearInterval);
   histogram.disable();
   await new Promise(resolve => setTimeout(resolve, 500));
   if (child) {
+    child.on('message', message => { frames = (message as { frames?: Record<string, number> }).frames ?? frames; });
     child.send('stop');
     await new Promise(resolve => child!.once('exit', resolve));
   }
   await new Promise<void>(resolve => api.close(() => resolve()));
   return { label, requests: latencies.length, firstResponseP50Ms: percentile(latencies, 0.5), firstResponseP95Ms: percentile(latencies, 0.95),
     loopDelayP50Ms: Math.round(histogram.percentile(50) / 1e4) / 100, loopDelayP99Ms: Math.round(histogram.percentile(99) / 1e4) / 100,
-    loopDelayMaxMs: Math.round(histogram.max / 1e4) / 100, frames: frameCodes };
+    loopDelayMaxMs: Math.round(histogram.max / 1e4) / 100, frames };
 }
 
 async function main() {
