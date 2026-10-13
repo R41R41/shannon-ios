@@ -71,8 +71,8 @@ export class TaskRuntimeRecovery {
     const retired: TaskView[] = [];
     for (const task of this.parts.all(scopeKey)) {
       if (task.pauseReason !== 'fca_unknown' || terminal(task) || receipted.has(task.id)) continue;
-      if (!unknownDue(this.unknownSince(scopeKey, task.id), at)) continue;
       const kind = deriveTaskKind(task.kind);
+      if (!unknownDue(this.unknownSince(scopeKey, task.id), at, kind)) continue;
       this.retire(task, unknownExit(kind ? effectClassOf(kind) : 'none', kind).code);
       retired.push(this.parts.get(scopeKey, task.id)!);
     }

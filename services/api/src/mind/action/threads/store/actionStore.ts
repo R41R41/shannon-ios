@@ -385,9 +385,9 @@ export class SQLiteActionStore {
   private exitUnknown(at:string):number {
     let exited=0;
     for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND sent=1").all()){
-      if(!unknownDue(String(row.updated_at),at))continue;
       const action=view(row);
       const link=actionTaskLink(this.db,action);
+      if(!unknownDue(String(row.updated_at),at,link.taskKind))continue;
       const exit=unknownExit(actionEffectClass(link.taskKind),link.taskKind);
       const base=JSON.parse(String(row.base_resources_json)) as string[];
       const kept=action.resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,action.resources));

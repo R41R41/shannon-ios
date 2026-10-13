@@ -84,3 +84,29 @@ export function reportOfferRefusal(error: unknown, body: Anthropic.MessageCreate
 export function rejectionCounts(): Readonly<Record<string, number>> {
   return Object.freeze(Object.fromEntries(counts));
 }
+
+const CAUSE_CODE = /^[A-Za-z][A-Za-z0-9_]{1,40}$/u;
+
+/**
+ * What a request that was dispatched failed with, in closed values only (2026-10-13: an FCA step's request failed in under a
+ * second with neither a 4xx nor an abort, and nothing said whether the provider answered 5xx or the connection broke):
+ * the SDK error class, the HTTP status when a response arrived, the provider's error type, and a network cause code.
+ */
+export function providerFailureFacts(error: unknown): { errorClass: string; status: number | null; type: string | null; cause: string | null } {
+  const errorClass = error instanceof Error && CAUSE_CODE.test(error.constructor?.name ?? '') ? error.constructor.name : 'unknown';
+  const api = error instanceof Anthropic.APIError ? error : null;
+  const nested = (error as { cause?: { code?: unknown; name?: unknown; cause?: { code?: unknown } } } | null)?.cause;
+  const rawCause = nested?.code ?? nested?.cause?.code ?? nested?.name;
+  return { errorClass, status: typeof api?.status === 'number' ? api.status : null, type: api ? providerErrorType(api) : null,
+    cause: typeof rawCause === 'string' && CAUSE_CODE.test(rawCause) ? rawCause : null };
+}
+
+/** Whether the provider answered the request with a server error (5xx, 529 overloaded): a received, unbilled outcome. */
+export function providerServerError(error: unknown): error is ApiError & { status: number } {
+  return error instanceof Anthropic.APIError && typeof error.status === 'number' && error.status >= 500 && error.status < 600;
+}
+
+/** Logs one failed dispatched request by its closed facts; never provider text or request content. */
+export function reportDispatchFailure(lane: string, error: unknown): void {
+  console.warn(JSON.stringify({ event: 'anthropic_request_failed', lane, ...providerFailureFacts(error) }));
+}

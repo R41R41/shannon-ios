@@ -21,7 +21,7 @@ const closes: Array<() => Promise<void> | void> = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 async function until(condition: () => boolean) { for (let i = 0; i < 300 && !condition(); i++) await Promise.resolve(); expect(condition()).toBe(true); }
-function fixture(place = false, finish?: string) {
+function fixture(place = false, finish?: string, onGenerate?: (bridge: ReturnType<typeof createFcaConversationBridge>) => void) {
   const h = actionHarness(() => at); closes.push(h.close);
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const service = createInMemoryAutonomyService(() => at);
@@ -49,7 +49,7 @@ function fixture(place = false, finish?: string) {
   const bridge = createFcaConversationBridge({ runtime: driver.runtime, ownerScope: 'owner', visible });
   const requests: ShannonChatModelRequest[] = [];
   const kernel = createLocalApiKernel(() => at, { stateStore: state, conversationStore: conversations, fcaConversation: () => bridge,
-    chatModel: { mode: 'local-stub', model: 'foreground', async generate(request) { requests.push(request); return { mode: 'local-stub', model: 'foreground', reply: '調べてみるね。話しながら待ってて。' }; } } });
+    chatModel: { mode: 'local-stub', model: 'foreground', async generate(request) { requests.push(request); onGenerate?.(bridge); return { mode: 'local-stub', model: 'foreground', reply: '調べてみるね。話しながら待ってて。' }; } } });
   const chat = async (message: string, extra: Record<string, unknown> = {}) => {
     const action = (await h.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: `turn-${++turns}` }))!;
     const lease = leaseOf(action);
@@ -91,6 +91,27 @@ describe('conversation plus ongoing work', () => {
     const source = f.driver.runtime.taskSources('owner', child.id)[0]!;
     f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: source.experienceId!, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' } });
     expect(f.now().tasks).toEqual([]);
+  });
+  it('lets a web.research of the same turn reuse the research already admitted for his words: one question, one task (2026-10-13)', async () => {
+    const results: Array<{ ok: boolean; text: string }> = [];
+    const f = fixture(false, undefined, bridge => {
+      results.push(bridge.executeTaskTool('web.research', { question: '大濠公園から博多空港まで17時着の出発時刻' }, { scopeKey: 'owner' }));
+      results.push(bridge.executeTaskTool('web.research', { question: '大濠公園から福岡空港への地下鉄の所要時間' }, { scopeKey: 'owner' }));
+    });
+    await f.chat('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？', { webSearch: true });
+    const tasks = f.driver.runtime.readyTasks('owner');
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.goal).toBe('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？');
+    expect(results.map(result => result.ok)).toEqual([true, true]);
+    for (const result of results) expect(result.text).toContain(`task: ${tasks[0]!.id}`);
+  });
+  it('still admits web.research on its own when the turn admitted no research', async () => {
+    const results: Array<{ ok: boolean; text: string }> = [];
+    const f = fixture(false, undefined, bridge => { results.push(bridge.executeTaskTool('web.research', { question: '福岡空港の今日の運航状況' }, { scopeKey: 'owner' })); });
+    await f.chat('ちょっと空港のこと気になる');
+    const tasks = f.driver.runtime.readyTasks('owner');
+    expect(tasks).toHaveLength(1); expect(tasks[0]!.goal).toBe('福岡空港の今日の運航状況');
+    expect(results[0]!.text).toContain(`task: ${tasks[0]!.id}`);
   });
   it('marks only the report on his screen as shown: a final result after an interim report is still news', async () => {
     const f = fixture(false, '最終結果：公開資料で事実を確認しました。');

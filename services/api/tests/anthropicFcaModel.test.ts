@@ -247,12 +247,12 @@ describe('FCA native transport boundary', () => {
     expect(() => createAnthropicFcaModel({ recordUsage() {} })).toThrow('ANTHROPIC_API_KEY_REQUIRED');
   });
 
-  it.each([400, 500])('never retries HTTP %s and keeps unknown server spend', async status => {
+  it.each([400, 500])('never retries HTTP %s; a server error keeps its unknown spend but is a known outcome', async status => {
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic-private-error' } }),
       { status, headers: { 'content-type': 'application/json' } }));
     const receipts: AnthropicFcaUsage[] = [];
     const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage: usage => { receipts.push(usage); } });
-    await expect(model.decide(input(), signal())).rejects.toThrow(status === 400 ? 'FCA_MODEL_HTTP_400' : 'FCA_MODEL_RESPONSE_UNKNOWN');
+    await expect(model.decide(input(), signal())).rejects.toThrow(`FCA_MODEL_HTTP_${status}`);
     expect(fixture.bodies).toHaveLength(1);
     expect(receipts).toHaveLength(status === 400 ? 0 : 1);
     if (status === 500) expect(receipts[0]).toMatchObject({ usageComplete: false });

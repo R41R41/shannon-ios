@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ACTION_LIMITS, UNKNOWN_EXIT_MS, classifyLease, leaseOutcome, type ActionLease } from '@shannon/mind';
+import { ACTION_LIMITS, UNKNOWN_EXIT_MODEL_ONLY_MS, UNKNOWN_EXIT_MS, classifyLease, leaseOutcome, type ActionLease } from '@shannon/mind';
 import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
@@ -172,11 +172,16 @@ describe('one unknown exit (S5)', () => {
     const stepLease = strand(`fca:${research.id}:1`, []);
     c.advance(ACTION_LIMITS.leaseMs + 1);
     actions.transaction(() => actions.sweep(c.now()));
-    c.advance(UNKNOWN_EXIT_MS - 1);
+    // The model-only step leaves at its shorter exit (2026-10-13), the Agent Host task at the full one.
+    c.advance(UNKNOWN_EXIT_MODEL_ONLY_MS - 1);
     expect(actions.transaction(() => actions.sweep(c.now()))).toBe(0);
     c.advance(1);
-    expect(actions.transaction(() => actions.sweep(c.now()))).toBe(2);
+    expect(actions.transaction(() => actions.sweep(c.now()))).toBe(1);
     expect(actions.get(stepLease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_retired' });
+    c.advance(UNKNOWN_EXIT_MS - UNKNOWN_EXIT_MODEL_ONLY_MS - 1);
+    expect(actions.transaction(() => actions.sweep(c.now()))).toBe(0);
+    c.advance(1);
+    expect(actions.transaction(() => actions.sweep(c.now()))).toBe(1);
     expect(actions.get(codexLease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'outcome_unknown_closed', resources: [hostLock] });
 
     const closedUnknown = (database: DatabaseSync) => new ActionLeaseReader(database).closedUnknownHostTasks();

@@ -13,6 +13,12 @@ export const ACTION_LIMITS = Object.freeze({
    * The same deadline retires an FCA task left in `fca_unknown`.
    */
   unknownReleaseMs: 600_000,
+  /**
+   * The same for the step of an FCA work task (research, generic; effect class `none`): its model request has its own 90 s
+   * deadline and its tools run inside the step, so nothing of it can still be running after this. 2026-10-13: two research
+   * steps left unknown held both research slots for ten minutes and the owner's next question never started.
+   */
+  unknownReleaseModelOnlyMs: 180_000,
   /** Consecutive failed lease renewals (transport or a busy database) tolerated while the lease itself is still valid. */
   renewFailuresTolerated: 2,
 });

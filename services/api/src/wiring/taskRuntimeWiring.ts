@@ -11,7 +11,9 @@ import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution, type ActionExecution } from '../infra/context/actionExecution.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
-import { UNKNOWN_EXIT_MS, classifyLease, deriveTaskKind, leaseOutcome, leaseUnsent, slotAdmissible, slotClassOf, type SlotClass } from '@shannon/mind';
+import {
+  UNKNOWN_EXIT_MODEL_ONLY_MS, classifyLease, deriveTaskKind, leaseOutcome, leaseUnsent, slotAdmissible, slotClassOf, type SlotClass,
+} from '@shannon/mind';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 import type { FcaBudget } from './fcaBudgetWiring.js';
@@ -204,7 +206,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       runtime.recover(scopeKey, classify);
       // An unknown step is never replayed, but after the deadline its task stops holding parents, limits and sleep.
       const retired = runtime.retireUnknown?.(scopeKey, now()) ?? [];
-      if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${UNKNOWN_EXIT_MS / 60_000} min`);
+      const minutes = UNKNOWN_EXIT_MODEL_ONLY_MS / 60_000;
+      if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${minutes} min or more`);
       for (const [taskId, job] of running) {
         const task = runtime.get(scopeKey, taskId);
         if (!task || task.phase === 'stopping' || !executionAllowed(task)) job.controller.abort();
@@ -245,9 +248,13 @@ export function fcaErrorCode(error: unknown): string {
   return error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? error.name : 'unknown';
 }
 
-/** Definitive provider refusals of the decision request (not throttling or timeouts), with no paid or tool outcome in doubt. */
+/**
+ * Definitive provider answers to the decision request with no paid or tool outcome in doubt: a refusal (4xx, not throttling or
+ * timeouts) or a server error (5xx, 529; 2026-10-13: a research step's server error sat unknown for ten minutes holding a slot
+ * while the owner waited). Nothing was generated or billed; the task fails with its report and he can ask again.
+ */
 export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  const status = /^FCA_MODEL_HTTP_(4\d\d)$/u.exec(code)?.[1];
+  const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1];
   return !!status && !['408', '409', '429'].includes(status) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
 }
 

@@ -100,12 +100,23 @@ export interface UnknownExit {
   readonly task: 'resume' | 'failed';
 }
 
+/** The exit of model-only work (`none`): `ACTION_LIMITS.unknownReleaseModelOnlyMs`. */
+export const UNKNOWN_EXIT_MODEL_ONLY_MS = ACTION_LIMITS.unknownReleaseModelOnlyMs;
+
+/**
+ * How long an unknown of this task kind waits for its exit: the step of an FCA work task (research, generic; effect class
+ * `none`) the shorter model-only time, anything else (Agent Host, own time, sleep, a kind not known) the full time.
+ */
+export function unknownExitMs(kind: TaskKind | null = null): number {
+  return kind === 'work' ? UNKNOWN_EXIT_MODEL_ONLY_MS : UNKNOWN_EXIT_MS;
+}
+
 /** Whether an unknown since `since` has reached its exit at `at` (instants; an unreadable time never does). */
-export function unknownDue(since: string | null, at: string): boolean {
+export function unknownDue(since: string | null, at: string, kind: TaskKind | null = null): boolean {
   if (!since) return false;
   const start = Date.parse(since);
   const now = Date.parse(at);
-  return Number.isFinite(start) && Number.isFinite(now) && start + UNKNOWN_EXIT_MS <= now;
+  return Number.isFinite(start) && Number.isFinite(now) && start + unknownExitMs(kind) <= now;
 }
 
 export function unknownExit(effectClass: EffectClass, kind: TaskKind | null): UnknownExit {
