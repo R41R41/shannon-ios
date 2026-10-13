@@ -102,7 +102,7 @@ export function createFcaTouchWiring(parts: {
       if (!usable(input) || Date.parse(now()) - Date.parse(input.observedAt) > 5_000 || Date.parse(input.observedAt) > Date.parse(now()) + 5_000) return;
       const existing = byTouch(input.scopeKey, input.touchId); if (existing) return;
       const id = `touch:${createHash('sha256').update(input.scopeKey).update('\0').update(input.touchId).digest('hex')}`;
-      const thread = parts.threadId(input.scopeKey), task = thread ? db.prepare("SELECT task_id FROM agent_tasks WHERE scope_key=? AND fca_kind='conversation' AND start_idempotency_key=?")
+      const thread = parts.threadId(input.scopeKey), task = thread ? db.prepare("SELECT task_id FROM agent_tasks WHERE scope_key=? AND task_kind='conversation' AND start_idempotency_key=?")
         .get(input.scopeKey, `fca:conversation:${thread}`) : null;
       const target = typeof task?.task_id === 'string' ? parts.runtime.get(input.scopeKey, task.task_id) : null;
       const targetId = target && !['stopped', 'stopping', 'completed', 'failed', 'unknown'].includes(target.phase) ? target.id : parts.runtime.ensureRoot(input.scopeKey).id;

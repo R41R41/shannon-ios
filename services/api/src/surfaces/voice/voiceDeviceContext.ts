@@ -35,6 +35,10 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     id: utterance.id, text: utterance.text,
     ...(utterance.source !== undefined ? { source: utterance.source } : {}),
     ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
+    ...clientConfidence(utterance.confidence),
+    // Windows, 2026-10-14: optional; anything malformed is dropped, never a refused turn.
+    ...(typeof utterance.trigger === 'string' && /^[a-z][a-z0-9_]{0,31}$/u.test(utterance.trigger) ? { trigger: utterance.trigger } : {}),
+    ...(validBoundedString(utterance.continues, 120) && utterance.continues !== utterance.id ? { continues: utterance.continues } : {}),
     ...(utterance.historyReceipt === 'utterance-id' ? { historyReceipt: 'utterance-id' as const } : {}),
   } as UserUtterance;
   if (value.companionPresent !== undefined && typeof value.companionPresent !== 'boolean') return false;
@@ -61,6 +65,14 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     ...companion,
     location: { latitude, longitude, accuracyMeters },
   };
+}
+
+/**
+ * The client's recognition confidence (Windows, 2026-10-14), kept only as a finite number in 0…1. Anything else is dropped, never a
+ * refused turn: an older or newer client that sends something else still talks.
+ */
+function clientConfidence(value: unknown): { confidence?: number } {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? { confidence: value } : {};
 }
 
 export function voiceDeviceContextPrompt(nowIso: string, context: VoiceDeviceContext | null): string {

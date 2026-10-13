@@ -264,7 +264,7 @@ describe('voice turn with a recall that never answers', () => {
     expect(warn).toHaveBeenCalledWith('Shannon turn stage timed out code=recall_timeout surface=voice ms=6000');
     const lines = info.mock.calls.map(([line]) => String(line)).filter(line => line.startsWith('Shannon turn timing surface=voice'));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^Shannon turn timing surface=voice id=[0-9a-f]{8} admit=\d+ms route=\d+ms recall=\d+ms .* outcome=responded timeouts=recall_timeout$/u);
+    expect(lines[0]).toMatch(/^Shannon turn timing surface=voice id=[0-9a-f]{8} admit=\d+ms route=\d+ms recall=\d+ms .* outcome=responded timeouts=recall_timeout chars=\d+$/u);
     expect(lines[0]).not.toContain('旅行');
   });
 });

@@ -2,7 +2,6 @@ import { ACTION_ID } from '@shannon/mind';
 import { actionResource, leaseOf, type ActionThreads, type ActionLease, type ActionView } from '../contracts/actionThreadContract.js';
 import type { ApiRequest, ApiResponse } from '../contracts/contracts.js';
 import type { AgentTaskStore, HostAgentEvent } from '../mind/action/agentTasks/agentTasksPorts.js';
-import type { MinecraftBodyRequests } from '../surfaces/minecraft/minecraftBodyRequests.js';
 
 const terminal = ['completed', 'failed', 'cancelled', 'unknown'];
 const id = (value: unknown): value is string => typeof value === 'string' && ACTION_ID.test(value);
@@ -13,8 +12,7 @@ export function checkedActionLease(value: unknown): ActionLease | null {
 }
 
 /** Existing task/body records remain authoritative. Only execution rights pass through the mind. */
-export function externalActionWiring(actions: ActionThreads | null, tasks: AgentTaskStore,
-  minecraft: MinecraftBodyRequests | null, ownerScope: string, now: () => string) {
+export function externalActionWiring(actions: ActionThreads | null, tasks: AgentTaskStore, ownerScope: string, now: () => string) {
   const find = async (kind: ActionView['kind'], sourceId: string) =>
     (await actions!.list(ownerScope)).find(view => view.kind === kind && view.sourceId === sourceId);
   const acknowledge = async (view: ActionView, lease: ActionLease, state: 'completed' | 'failed' | 'cancelled', code: string) => {
@@ -110,11 +108,11 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
     async stopOutside(views: readonly ActionView[], requestId: string): Promise<void> {
       for (const view of views) {
         if (!['stopping', 'cancelled'].includes(view.state)) continue;
-        if (view.kind === 'agentTask') {
-          const task = tasks.get(view.scopeKey, view.sourceId);
-          if (task && !['completed', 'failed', 'cancelled', 'paused'].includes(task.status)) tasks.enqueue(view.scopeKey, task.id,
-            { idempotencyKey: `action:${requestId}:${task.id}`, type: 'interrupt', payload: {} }, now());
-        } else if (view.kind === 'minecraft') minecraft?.cancel(view.scopeKey, view.sourceId);
+        // A Minecraft lifecycle action stops by its own lease (its renewal fails and its native command is cancelled).
+        if (view.kind !== 'agentTask') continue;
+        const task = tasks.get(view.scopeKey, view.sourceId);
+        if (task && !['completed', 'failed', 'cancelled', 'paused'].includes(task.status)) tasks.enqueue(view.scopeKey, task.id,
+          { idempotencyKey: `action:${requestId}:${task.id}`, type: 'interrupt', payload: {} }, now());
       }
     },
   };

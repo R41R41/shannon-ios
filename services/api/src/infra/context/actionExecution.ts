@@ -7,6 +7,12 @@ export interface ActionExecution {
   modelUsage?:{inputTokens:number;outputTokens:number};
   /** A bounded executor's acknowledgement, separate from a model call nested inside that step. */
   stepOutcome?:'unknown'|'acknowledged';
+  /** A write tool of a conversation turn ran and has not returned an acknowledged result: an interruption leaves its outcome unknown. */
+  writeInFlight?:boolean;
+  /** A sentence of the reply was handed to the device (a voice stream): an interruption closes the turn as interrupted after speech. */
+  spoken?:boolean;
+  /** The caller of a conversation turn went away (hung up, or spoke over her) while the turn ran. */
+  interrupted?:boolean;
   /** Rechecked immediately before an outside call. Never grants a tool permission. */
   permit(resources?:readonly string[], signal?:AbortSignal):Promise<boolean>;
   checkpoint?(code:string):Promise<boolean>;

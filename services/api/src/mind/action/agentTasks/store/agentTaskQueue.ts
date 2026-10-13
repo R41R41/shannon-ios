@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { AgentCommandType, AgentEventTone, AgentTask, ClaimedAgentCommand } from '../agentTaskStore.js';
 import { isTrue, projectedStatusForCommand } from './agentTaskPersistenceSupport.js';
-import { fcaHostPredicate } from './fcaHostPredicate.js';
+import { hostTaskPredicate } from './taskKinds.js';
 import { writeTaskState } from './taskStore.js';
 
 /**
@@ -89,14 +89,14 @@ export class AgentTaskQueue {
       SELECT c.command_id
       FROM agent_task_commands c
       JOIN agent_tasks t ON t.task_id = c.task_id
-      WHERE c.status = 'pending' AND c.available_at <= ? AND ${fcaHostPredicate(this.database, 't')}
+      WHERE c.status = 'pending' AND c.available_at <= ? AND ${hostTaskPredicate(this.database, 't')}
         AND (
           t.assigned_host_id = ?
           OR (
             c.command_type = 'start' AND t.assigned_host_id IS NULL
             AND NOT EXISTS (
               SELECT 1 FROM agent_tasks active
-              WHERE active.assigned_host_id = ? AND ${fcaHostPredicate(this.database, 'active')}
+              WHERE active.assigned_host_id = ? AND ${hostTaskPredicate(this.database, 'active')}
                 AND active.status IN ('queued','starting','running','waiting_approval','paused')
             )
           )
@@ -110,7 +110,7 @@ export class AgentTaskQueue {
           -- A queued task begins only when no other task holds the host.
           OR (t.status = 'queued' AND NOT EXISTS (
             SELECT 1 FROM agent_tasks holder
-            WHERE holder.assigned_host_id = ? AND holder.task_id != t.task_id AND ${fcaHostPredicate(this.database, 'holder')} AND (
+            WHERE holder.assigned_host_id = ? AND holder.task_id != t.task_id AND ${hostTaskPredicate(this.database, 'holder')} AND (
               holder.status IN ${WORKING}
               -- A task the owner just stopped is still running on the host until that command is applied.
               OR EXISTS (
@@ -154,7 +154,7 @@ export class AgentTaskQueue {
   private someoneAhead(hostId: string, taskId: string): boolean {
     return Boolean(this.database.prepare(`
       SELECT 1 AS found FROM agent_tasks
-      WHERE assigned_host_id = ? AND task_id != ? AND ${fcaHostPredicate(this.database)} AND status IN ${AHEAD} LIMIT 1
+      WHERE assigned_host_id = ? AND task_id != ? AND ${hostTaskPredicate(this.database)} AND status IN ${AHEAD} LIMIT 1
     `).get(hostId, taskId));
   }
 
@@ -171,7 +171,7 @@ export class AgentTaskQueue {
     const rows = this.database.prepare(`
       SELECT t.task_id, t.summary, h.host_kind FROM agent_tasks t
       JOIN agent_hosts h ON h.host_id = t.assigned_host_id
-      WHERE t.status = 'queued' AND ${fcaHostPredicate(this.database, 't')} AND h.last_seen_at <= ?
+      WHERE t.status = 'queued' AND ${hostTaskPredicate(this.database, 't')} AND h.last_seen_at <= ?
     `).all(new Date(nowMillis - OFFLINE_NOTICE_MS).toISOString()) as unknown as QueuedRow[];
     for (const row of rows) {
       const place = placeName(row.host_kind);
@@ -185,7 +185,7 @@ export class AgentTaskQueue {
     const rows = this.database.prepare(`
       SELECT t.task_id, t.summary, h.host_kind FROM agent_tasks t
       JOIN agent_hosts h ON h.host_id = t.assigned_host_id
-      WHERE t.status = 'queued' AND ${fcaHostPredicate(this.database, 't')} AND t.assigned_host_id = ? AND t.current_action = ?
+      WHERE t.status = 'queued' AND ${hostTaskPredicate(this.database, 't')} AND t.assigned_host_id = ? AND t.current_action = ?
     `).all(hostId, OFFLINE_ACTION) as unknown as QueuedRow[];
     for (const row of rows) {
       const place = placeName(row.host_kind);

@@ -13,20 +13,28 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 - **One writer.** Only the reflection writes a note (`mind/emotion/innerNoteService.ts`, `innerNoteReflection.ts`). A reply reads
   it and never rewrites it.
 - **When she reflects.** After a touch of the owner alone (her stance, her reflex, her line), his apology or kind word
-  (`soothingIn`, or `apologyIn` for an apology anywhere in a short message), a tease (`teasingIn`), a reply she felt at moderate or
-  stronger; when her `until` comes; when her day ends. Events within 1.2 s (at most 5 s) are one reflection; reflections run one at
-  a time, after the turn; at most 96 a day (a cost guard).
-- **Gates (code, not prompt).** An event moves `intent` at most one step toward letting go; `until` is at most an hour for
-  `ordinary`, and `day` needs a reason of a kind (`intentional`, `repeated`, `big`) and ends with her day. Marks for the Observer:
-  `gateStopped`, `untilClamped`, `dayDowngraded`, `forgaveWhileHigh` (the numbers still high), `apologyOnlyReason` (a heuristic of
-  the words; the ADR's Jev question is deferred).
-- **Her day.** Ends at the earliest of 3:00 in the owner's time zone (0:00–3:00 belongs to the day before), the nightly sleep job
-  for that day completing, or his goodnight (`goodnightIn`). She then reflects once more and the note is **closed** (intent `none`,
-  with a one-sentence summary of the day). A failed closing reflection still closes the newest note. A closed note is never read
-  as her present attitude; the next day's first reflection is told the summary as something that happened.
+  (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a reply she felt at moderate or stronger; when her sulk's time runs out
+  (its `until`, or an ordinary sulk's hour); when an ordinary sulk without `until` finds the numbers back in their usual band (D2.4,
+  once per episode); when her day ends. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her — 「ごめん、ちょっと
+  待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)
+  are one reflection; reflections, the sweep and forgetting run one at a time on one queue, after the turn; at most 96 attempts a day,
+  failures and timeouts counted (a cost guard).
+- **Gates (code, not prompt).** An event moves `intent` at most one step toward letting go. An ordinary sulk lasts at most an hour
+  **from the start of its episode** (`episode_started_at`), however its notes rewrite `until`: a later `until` is cut to it, a note
+  written past it ends the sulk (`capEnded`), and a sulk with no `until` stops showing at the hour. A `day` sulk needs a reason of a
+  kind (`intentional`, `repeated`, `big`) and ends with her day. A sulk whose time ran out is not active (no face, no `shown`) and
+  the sweep asks her to settle once. Marks for the Observer: `gateStopped`, `untilClamped`, `capEnded`, `dayDowngraded`,
+  `forgaveWhileHigh`, `apologyOnlyReason` (a heuristic of the words; the ADR's Jev question is deferred).
+- **Her day.** Ends at the earlier of 3:00 in the owner's time zone (0:00–3:00 belongs to the day before) and his goodnight to her
+  (`goodnightIn`: the whole message is a goodnight). The nightly sleep job is **not** read: the common task runtime (ADR-0009 S9)
+  changed how its completion is recorded, so the day relies on 3:00 and goodnight only. She then reflects once more and the note is
+  **closed** (intent `none`, with a one-sentence summary of the day); events after the day's end stay queued for the next day. A
+  failed closing reflection still closes the newest note. A closed note is never read as her present attitude; the next day's first
+  reflection is told the summary as something that happened.
 - **No rules of behavior in her prompt** (owner, 2026-10-14). The character core and the note describe who she is and how she
   feels. What must hold whatever her mood is held by code: his alarms, reminders and timers are device actions that fire
-  regardless; no tool is withheld because of a note; with anyone else present only `shown` is given, never the reason.
+  regardless; no tool is withheld because of a note; with anyone else present only `shown` is given, never the reason; an override
+  of her present feeling (safety, grief, an emergency) keeps its face on her body over any sulk.
 
 ## Readers
 
@@ -39,20 +47,35 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 | Body presence and the reaction's `mood` | face of `shown`, `tell`, `until` while the note is active | the same (no text) | the same |
 | Her identity (cached prefix) | the character core in place of the persona's identity, address, character and temperament lines (an AGI, not a maid; he made her, he is not her 持ち主) | the same | the same |
 
-D5.2: while a note is active, a feeling named `apologetic` by a cue word of her own reply or by the router does not take her face;
-`shown` does. An apology she decided herself (a text reply's feeling at moderate or above) and the overrides stay.
+D5.2: while a note is active, a feeling named `apologetic` by a cue word of her own reply or by the router does not take her **face**
+(the message face, the voice plan's performance); `shown` does. The feeling stored for the turn stays the true one, so the note
+never reads its own face back. An apology she decided herself (a text reply's feeling at moderate or above), one in a turn where a
+tool failed (an alarm she could not set), and the overrides stay.
 
 D5.1 prompt cleanup behind the switch: the reply-feeling block without 「すでに謝ってもらった…」「今回の発言そのもの…」「ふだんの会話は
-nullかsubtle」; the lingering line without easing by apology; the expressive-emotion line without "must stay light"; the voice route's
-"Prioritize emotional presence…" replaced so she does not take his feeling as hers; the voice instructions' "lively maid personality"
-without "maid".
+nullかsubtle」; the lingering line without easing by apology (and without 「責めたり罪悪感を誘ったりはしない」: no rules, owner 2026-10-14);
+the expressive-emotion block without "must stay light", and its falsehood rule replaced by her honesty value (playful lies and hidden
+feelings are hers; no lies about facts he relies on: a task done, a tool's result, what she perceived, safety, health, money); the
+voice route's "Prioritize emotional presence…" replaced so she does not take his feeling as hers; the voice instructions without
+their fixed tone ("Sound bright and self-assured…", "lively maid personality"); her one-line voice (touch, the day's focus, a look's
+note, the self-description) is the core's; 「持ち主」 becomes ライ氏 (the pursuits header, the guest's capability line); Jev's affect
+question reads her state rather than prescribing an outcome.
 
 ## Storage
 
 `shannon_inner_notes` (schema step `emotion/001_inner_notes`, applied only when the switch is on). One row per note: the five
 fields, the hooks, triggers and closed event facts (the owner's words and her reply clipped, as already in the Talk), the ids of
 what prompted it, the core version and hash, the model, usage and cost, `created_at`, `replaced_at` (set by the next note) and
-`closed_at`. A note whose source turn the owner had her forget is deleted on the next sweep (every minute).
+`closed_at`, `episode_started_at` (step `emotion/002_inner_note_episodes`). Opened through the one opener (`sqliteOpen.ts`, profile
+`innerNotes`).
+
+**Forgetting (D3).** Sources are a lineage: a note carries the sources of its own events (a turn `experience:<id>` — a voice turn's
+utterance is bound to its stored turn when the app stores it —, a touch `experience:<burst id>`), of the note it was written after,
+and of the day summary it read. A note is forgotten when a source of its lineage is, or when the words of a forgotten turn are among
+its events; it is then not read (the readers check before every read) and is deleted on the queue, with every note derived from it.
+A reflection whose events were forgotten while its call ran is discarded; queued events of a forgotten turn are dropped.
+
+**Retention.** Notes are kept as long as the touches they come from: `BODY_LIMITS.retentionDays` (30 days).
 
 ## `GET /v1/shannon/inner-notes`
 
@@ -74,11 +97,12 @@ and after, `shown`, `tell`, `scale`, `until`, closed, the marks, cost, cache rea
 - The reply-feeling block (switch on) is fixed: one more write when switched on.
 - The note itself is in the turn context after the history, never in the cached prefix: a new note costs no cache write.
 - The reflection has its own second one-hour breakpoint after the protocol prefix: core, form and questions (about 3k tokens) are
-  read from the cache; only the facts of the call are uncached.
+  read from the cache; only the facts of the call are uncached. Its output ceiling is 2,400 tokens (adaptive thinking shares it).
 
 ## Canary
 
 Set `SHANNON_INNER_NOTE=on` in the API environment (`~/.config/shannon-ios/api.env` on the VM) and restart the API (`shannon-ios.service`); the owner's devices all talk to that
-one server and only the owner's scope (`SHANNON_OWNER_SCOPE_KEY`) has notes. It needs the regular Haiku key
-(`SHANNON_HAIKU_API_KEY` or the shared Anthropic key); without one nothing is written and nothing else changes. Off again: the next
-restart reads nothing of the table (the rows stay for reading afterwards).
+one server and only the owner's scope (`SHANNON_OWNER_SCOPE_KEY`) has notes. The character core and the prompt cleanup apply as soon
+as the switch is on, with or without a key; writing notes needs the regular Haiku key (`SHANNON_HAIKU_API_KEY` or the shared
+Anthropic key) — without one no note is written and the readers find none. Off again: the next restart reads nothing of the table
+(the rows stay for reading afterwards).

@@ -12,7 +12,8 @@ import type { ShannonEmotionTiming } from './emotionTime.js';
  * first section of every response prompt so the provider can cache it across turns.
  */
 export function shannonIdentityPrompt(audience: ShannonAudience = 'owner', options: ShannonPersonaOptions = {}): string {
-  return [shannonPersonaPrompt(audience, options), shannonSuitePrompt(), shannonCapabilityPrompt(audience)].join('\n\n');
+  const capability = shannonCapabilityPrompt(audience, options.characterCore ? { characterCore: true } : {});
+  return [shannonPersonaPrompt(audience, options), shannonSuitePrompt(), capability].join('\n\n');
 }
 
 export const SHANNON_CORE_PROMPT = shannonIdentityPrompt('owner');

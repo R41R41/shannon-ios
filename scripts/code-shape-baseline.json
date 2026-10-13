@@ -219,10 +219,6 @@
       "complex-function": 2,
       "long-line": 3
     },
-    "services/api/src/contracts/minecraftBodyRequestContract.ts": {
-      "complex-function": 2,
-      "long-line": 2
-    },
     "services/api/src/contracts/minecraftControlContract.ts": {
       "long-line": 1
     },
@@ -286,7 +282,7 @@
       "complex-function": 3,
       "multi-statement-line": 11,
       "long-function": 1,
-      "long-line": 47
+      "long-line": 46
     },
     "services/api/src/infra/http/apiOrganizeRoutes.ts": {
       "long-function": 1,
@@ -568,7 +564,7 @@
     "services/api/src/infra/sqlite/sqliteStore.ts": {
       "complex-function": 1,
       "multi-statement-line": 1,
-      "long-line": 38
+      "long-line": 37
     },
     "services/api/src/infra/sqlite/sqliteStoreCodecs.ts": {
       "complex-function": 1,
@@ -954,7 +950,7 @@
     "services/api/src/mind/action/respond/apiTextTurn.ts": {
       "multi-statement-line": 2,
       "complex-function": 1,
-      "long-line": 14
+      "long-line": 12
     },
     "services/api/src/mind/action/respond/cognitiveIntent.ts": {
       "complex-function": 1
@@ -1645,7 +1641,7 @@
       "long-line": 16
     },
     "services/api/src/mind/tools/shannonMinecraftTools.ts": {
-      "long-line": 4
+      "long-line": 1
     },
     "services/api/src/mind/tools/shannonOwnerDocumentTools.ts": {
       "long-line": 2
@@ -1679,7 +1675,7 @@
     "services/api/src/mind/tools/shannonToolRunner.ts": {
       "multi-statement-line": 1,
       "complex-function": 4,
-      "long-line": 25
+      "long-line": 24
     },
     "services/api/src/mind/tools/shannonToolSession.ts": {
       "complex-function": 2,
@@ -1744,7 +1740,7 @@
       "multi-statement-line": 17,
       "long-function": 1,
       "complex-function": 1,
-      "long-line": 30,
+      "long-line": 29,
       "long-file": 1
     },
     "services/api/src/surfaces/body/apiBodyRoutes.ts": {
@@ -1810,8 +1806,8 @@
     },
     "services/api/src/surfaces/minecraft/minecraftBody.ts": {
       "complex-function": 1,
-      "multi-statement-line": 2,
-      "long-line": 11
+      "multi-statement-line": 1,
+      "long-line": 10
     },
     "services/api/src/surfaces/minecraft/minecraftBodyState.ts": {
       "complex-function": 1,
@@ -1836,14 +1832,9 @@
       "complex-function": 2,
       "long-line": 15
     },
-    "services/api/src/surfaces/minecraft/minecraftRequestLines.ts": {
-      "complex-function": 1,
-      "long-line": 4
-    },
     "services/api/src/surfaces/minecraft/serverMinecraftBodyRoute.ts": {
       "multi-statement-line": 2,
-      "complex-function": 1,
-      "long-line": 4
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/store/minecraftControlStore.ts": {
       "multi-statement-line": 6,
@@ -1853,15 +1844,6 @@
       "multi-statement-line": 6,
       "complex-function": 1,
       "long-line": 6
-    },
-    "services/api/src/surfaces/minecraft/store/minecraftPrimaryModels.ts": {
-      "multi-statement-line": 1,
-      "long-line": 1
-    },
-    "services/api/src/surfaces/minecraft/store/minecraftRequestsStore.ts": {
-      "complex-function": 3,
-      "multi-statement-line": 1,
-      "long-line": 24
     },
     "services/api/src/surfaces/outreach/initiativeIntent.ts": {
       "long-line": 2
@@ -1909,7 +1891,7 @@
       "complex-function": 2,
       "long-function": 1,
       "multi-statement-line": 2,
-      "long-line": 34
+      "long-line": 32
     },
     "services/api/src/surfaces/voice/apiVoiceCallSummary.ts": {
       "long-line": 1
@@ -1969,7 +1951,7 @@
       "long-line": 7
     },
     "services/api/src/surfaces/voice/voiceTranscriptContext.ts": {
-      "long-line": 5
+      "long-line": 4
     },
     "services/api/src/surfaces/voice/voiceWaitingCue.ts": {
       "complex-function": 1,
@@ -2081,9 +2063,6 @@
       "complex-function": 1,
       "long-line": 2
     },
-    "services/api/src/wiring/minecraftActionWiring.ts": {
-      "long-line": 1
-    },
     "services/api/src/wiring/minecraftBodyRouteWiring.ts": {
       "long-line": 1
     },
@@ -2136,7 +2115,7 @@
     },
     "services/api/src/wiring/serverMinecraftBodyWiring.ts": {
       "complex-function": 1,
-      "long-line": 4
+      "long-line": 2
     },
     "services/api/src/wiring/serverObserverWiring.ts": {
       "long-line": 2
@@ -2187,7 +2166,7 @@
       "long-line": 2
     },
     "services/api/src/worker.ts": {
-      "long-line": 4
+      "long-line": 1
     },
     "services/api/src/worldWorker.ts": {
       "multi-statement-line": 5,

@@ -72,7 +72,8 @@ describe('FCA tasks retain their canonical authority across legacy Host paths', 
       expect(host.get(scope, task.id)).toMatchObject({ id: task.id, status: 'queued', latestSequence: task.revision });
       expect(host.get(scope, task.id)?.taskTree).toBeUndefined();
     }
-    expect(host.list(scope).map(task => task.id)).toEqual(expect.arrayContaining([existing.id, root.id, child.id]));
+    // The Host's list is its own tasks (ADR-0009 S9: common tasks are left out before its limit); they stay readable by id.
+    expect(host.list(scope).map(task => task.id)).toEqual([existing.id]);
     expect([snapshot(root.id), snapshot(child.id)]).toEqual(before);
     expect(host.claim(hostId, at)?.taskId).toBe(existing.id);
   });

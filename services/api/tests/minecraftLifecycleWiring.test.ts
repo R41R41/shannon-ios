@@ -49,7 +49,8 @@ async function until(condition: () => boolean) { for (let index = 0; index < 100
 
 describe('configured Minecraft lifecycle through real registry, autonomy gate and original SQLite lease', () => {
   it.each(['owner_request', 'own_time'] as const)('offers offline status and performs start/login under %s original authority', async origin => {
-    const f = fixture(), own = origin === 'own_time', a = await f.active(own ? 'ownTime' : 'respond'), surface = own ? 'autonomy' as const : 'text' as const;
+    // An owner request's command runs under its own action: here an FCA task step (a conversation's: minecraftLifecycleDetached.test.ts).
+    const f = fixture(), own = origin === 'own_time', a = await f.active(own ? 'ownTime' : 'agentTask'), surface = own ? 'autonomy' as const : 'text' as const;
     if (own) expect(f.autonomy.inspectAuthorization('owner', { domain: 'minecraft_lifecycle', summary: 'Start the registered server' })).toMatchObject({ decision: 'allow' });
     const names = f.autonomy.tools.offered(surface, 'owner_alone', 'owner').map(tool => tool.name);
     expect(names).toContain('minecraft.start'); expect(names).toContain('minecraft.login');
@@ -69,8 +70,8 @@ describe('configured Minecraft lifecycle through real registry, autonomy gate an
     }
     expect(f.configured.service.safe(a.execution.lease.id)).toBe(true);
   });
-  it('assigns distinct native lifecycle command identities to start → stop → start in one actual conversation session', async () => {
-    const f = fixture(), a = await f.active();
+  it('assigns distinct native lifecycle command identities to start → stop → start in one actual tool session', async () => {
+    const f = fixture(), a = await f.active('agentTask');
     const session = conversationTools(f.autonomy, 'owner', 'text', true, { audience: { othersKnown: () => false, noteOthers() {} }, secrets: () => ({ carries: () => false }) },
       'thread\nマイクラを起動し、停止し、もう一度起動して', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
     const ids: string[] = [];
@@ -126,7 +127,7 @@ describe('configured Minecraft lifecycle through real registry, autonomy gate an
     f.poll(); expect(f.autonomy.tools.offered('autonomy', 'owner_alone', 'owner').map(tool => tool.name)).toContain('minecraft.start');
   });
   it('requires atomic native empty-player guard for stop and holds the original operation until acknowledgement', async () => {
-    const f = fixture(), a = await f.active();
+    const f = fixture(), a = await f.active('agentTask');
     const result = inActionExecution(a.execution, () => f.autonomy.tools.call('minecraft.stop', {}, f.context(), a.execution.signal));
     await until(() => f.configured.service.store.pending().length === 1); const command = f.poll().commands[0]!;
     const stop = f.receipt(command, { state: f.state({ running: 'stopped' }) });
@@ -135,7 +136,7 @@ describe('configured Minecraft lifecycle through real registry, autonomy gate an
     expect((await result).ok).toBe(true); expect(f.configured.service.safe(a.execution.lease.id)).toBe(true);
   });
   it('returns a known players-present refusal without reporting a stop or holding an unresolved effect', async () => {
-    const f = fixture(), a = await f.active();
+    const f = fixture(), a = await f.active('agentTask');
     const outcome = inActionExecution(a.execution, () => f.autonomy.tools.call('minecraft.stop', {}, f.context(), a.execution.signal));
     await until(() => f.configured.service.store.pending().length === 1); const command = f.poll().commands[0]!;
     f.poll({ receipts: [f.receipt(command, { outcome: 'refused', code: 'players_present', state: f.state({ running: 'running', otherPlayers: 1 }) })] });
@@ -143,24 +144,15 @@ describe('configured Minecraft lifecycle through real registry, autonomy gate an
     expect(JSON.parse(result.text)).toMatchObject({ code: 'players_present', state: { running: 'running', otherPlayers: 1 } });
     expect(f.configured.service.safe(a.execution.lease.id)).toBe(true); expect(a.execution.stepOutcome).toBe('acknowledged');
   });
-  it('keeps ordinary text unknown work and its body resource held while later conversation stays available', async () => {
+  it('never issues a command under a conversation turn: without its own Minecraft action the request is refused, the body untouched', async () => {
     const f = fixture(), run = foregroundRunner(f.actions);
     const { acknowledgementOwner: _fca, ...ordinary } = f.context();
-    const response = run('owner', async () => {
-      const initial = await f.autonomy.tools.call('minecraft.login', {}, ordinary);
-      const status = await f.autonomy.tools.call('minecraft.lifecycle_status', {}, ordinary);
-      const refusedRetry = await f.autonomy.tools.call('minecraft.start', {}, { ...ordinary, memory: { ...ordinary.memory, turnKey: 'fresh-retry' } });
-      return { initial, status, refusedRetry };
-    });
-    await until(() => f.configured.service.store.pending().length === 1); const command = f.poll().commands[0]!;
-    f.poll({ receipts: [f.receipt(command, { outcome: 'unknown', code: 'error', inputsReleased: false })] });
-    expect(await response).toMatchObject({ initial: { ok: false, failure: 'unavailable', retryable: false }, status: { ok: true }, refusedRetry: { ok: false, failure: 'conflict', retryable: false } });
-    const original = f.store.get(command.authority.executionId)!;
-    // Original resource stays reserved under canonical action unknown, preventing a new physical operation.
-    expect(original).toMatchObject({ state: 'unknown', sent: true }); expect(original.resources.length).toBeGreaterThan(0);
-    expect(f.configured.service.safe(original.id)).toBe(false);
+    const response = await run('owner', async () => ({ login: await f.autonomy.tools.call('minecraft.login', {}, ordinary),
+      status: await f.autonomy.tools.call('minecraft.lifecycle_status', {}, ordinary) }));
+    expect(response).toMatchObject({ login: { ok: false, failure: 'unavailable', retryable: false }, status: { ok: true } });
+    expect(f.configured.service.store.pending()).toEqual([]);
+    expect(f.db.prepare("SELECT COUNT(*) AS n FROM mind_actions WHERE kind='respond' AND resources_json!='[]'").get()!.n).toBe(0);
     expect(await run('owner', async () => 'Ordinary chat still works')).toBe('Ordinary chat still works');
-    expect(f.db.prepare("SELECT count(*) AS count FROM mind_actions WHERE state='completed' AND kind='respond'").get()!.count).toBe(1);
   });
   it('revokes original owner action after a canonical stop and requires the native cancellation release', async () => {
     const f = fixture(), a = await f.active('agentTask');

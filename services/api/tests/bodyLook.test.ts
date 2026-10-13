@@ -706,7 +706,8 @@ describe('the frame is never kept', () => {
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
-    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'claudeStructured.ts', 'haikuConfig.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
+    // `@shannon/switches`: her one-line voice is her character core's while SHANNON_INNER_NOTE is on (Syzygy ADR-0012); a pure package.
+    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', '@shannon/switches', 'bodyLookContract.ts', 'chatModelSupport.ts', 'claudeStructured.ts', 'haikuConfig.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
@@ -732,9 +733,9 @@ describe('the frame is never kept', () => {
     const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice|jevVoice|openAIVoice|localVoice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
     expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
-      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
+      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']);
     // The voice side handles words and a probability: it has no room for a frame either.
-    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.

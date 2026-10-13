@@ -70,7 +70,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       if (row.kind === 'minecraft' || opsSource) return parts.ownerAlone() && !!parts.ops?.enabled()
         && opsLifecycleAuthorityAllowed(db, authority, command);
       const taskSources = row.kind === 'agentTask' ? parts.taskSources?.(authority.executionId) : undefined;
-      return parts.ownerAlone() && (row.kind === 'respond' || row.kind === 'agentTask' && parts.taskAllowed(authority.executionId)
+      // A turn only admits a request (no command yet): every command runs under its own action or an own-time/FCA step (S7).
+      return parts.ownerAlone() && (row.kind === 'respond' && !command || row.kind === 'agentTask' && parts.taskAllowed(authority.executionId)
         && (!parts.taskSources || taskSources !== null && authority.sourceIds.every(id => taskSources?.includes(id))));
     } catch { return false; }
   };
@@ -123,7 +124,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       const turn = leases.get(active.lease.id);
       // A conversation's request is accepted at once and carried out under its own action (`detached` below); the turn never
       // holds the body, so its time limit cannot revoke the operation half way.
-      if (turn?.kind !== 'respond' || !runner) await actionPermit([actionResource(configuration.deviceId, 'minecraft-body')]);
+      if (turn?.kind !== 'respond') await actionPermit([actionResource(configuration.deviceId, 'minecraft-body')]);
       signal?.throwIfAborted(); active.signal.throwIfAborted(); context.beforeExecution?.();
       const row = leases.get(active.lease.id);
       const origin = context.surface === 'autonomy' ? 'own_time' : 'owner_request';
@@ -136,7 +137,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       if (!identity) return failure('refused', '操作の元IDを確認できません。');
       const id = `lifecycle:${createHash('sha256').update(JSON.stringify([active.lease.id, identity, name, requested])).digest('hex')}`;
       const action = operation as MinecraftLifecycleAction;
-      if (row.kind === 'respond' && runner) return detached({ id, serverId: requested, action, sourceIds: authority.sourceIds }, failure);
+      if (row.kind === 'respond') return runner ? detached({ id, serverId: requested, action, sourceIds: authority.sourceIds }, failure)
+        : failure('unavailable', 'マイクラ管理操作の作業枠を確かめられないので、受け付けられません。');
       const priorUnknown = active.stepOutcome === 'unknown';
       active.stepOutcome = 'unknown';
       try {

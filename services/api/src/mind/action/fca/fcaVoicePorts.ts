@@ -4,7 +4,8 @@ import type { FcaConversationPort, FcaConversationTurn } from './fcaConversation
 export interface FcaVoiceInput {
   scopeKey: string; threadId: string; deviceId: string; utteranceId: string; userTranscript: string;
 }
-export interface FcaVoiceHistoryInput extends FcaVoiceInput { companionPresent: boolean }
+/** `shannonReply`: her words the client stored; a bound receipt with another reply is a new utterance under a reused id. */
+export interface FcaVoiceHistoryInput extends FcaVoiceInput { companionPresent: boolean; shannonReply?: string }
 export interface FcaVoicePort {
   inspect(input: FcaVoiceInput): 'new' | 'duplicate' | 'conflict';
   begin(input: Parameters<FcaConversationPort['begin']>[0] & FcaVoiceInput): FcaConversationTurn | null;

@@ -31,8 +31,8 @@ export interface JevVoiceDecisionOptions {
  * `voice_route.v3` (Syzygy ADR-0012 D5.4): with `shannon_inner` in the state, her performance comes from how she is inside, not from
  * the speaker's feeling (2026-10-14: his apology made her sound apologetic three times in fifteen minutes).
  */
-export const INNER_AFFECT_INSTRUCTIONS = 'Choose the primary emotional performance for Shannon\'s spoken reply from shannon_inner, her own present '
-  + 'feeling and intent. Do not mirror the speaker\'s emotion: an apology or a complaint from the speaker is not a reason for Shannon to sound apologetic.';
+export const INNER_AFFECT_INSTRUCTIONS = 'Choose the primary emotional performance for Shannon\'s spoken reply from her own state in shannon_inner, '
+  + 'rather than by mirroring the speaker\'s emotion.';
 
 /** Room the model fallback needs inside the 2.5 s route bound. */
 export const JEV_FALLBACK_START_MILLISECONDS = 1_000;

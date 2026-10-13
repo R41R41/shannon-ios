@@ -69,7 +69,7 @@ export function createGeminiLiveRoute(
     try {
       const result = transcriptionProvider === 'openai' && openAIGateway
         ? {
-          ...await openAIGateway.createSession(),
+          ...await openAIGateway.createSession({ ...clientPlatform(requestBody.clientPlatform) }),
           voice: speechVoice,
           threadId: session.threadId,
           instructions: session.instructions,
@@ -120,4 +120,13 @@ function configuredSpeechVoice(value: string | undefined): string {
 function configuredNumber(value: string | undefined, minimum: number, maximum: number, fallback: number): number {
   const number = value?.trim() ? Number(value) : Number.NaN;
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
+}
+
+/**
+ * The client's platform at session mint (`clientPlatform`: `windows`, `ios`, `macos`, …), which decides its turn detection
+ * (`OpenAITranscriptionGateway.settingsFor`). Optional and never refused: an older client, or a value that is not a short word,
+ * is minted as one that said nothing (`server_vad`).
+ */
+function clientPlatform(value: unknown): { platform?: string } {
+  return typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/u.test(value.trim().toLowerCase()) ? { platform: value.trim().toLowerCase() } : {};
 }

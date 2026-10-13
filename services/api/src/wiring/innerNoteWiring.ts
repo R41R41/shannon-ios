@@ -11,6 +11,7 @@ import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../mind/memory/memoryVisibility.js';
 import { configuredDatabasePath } from '../infra/sqlite/sqliteStore.js';
 import { configuredOwnerScope } from '../infra/config/ownerScope.js';
+import { BODY_LIMITS } from '../contracts/bodyContract.js';
 
 export interface ConfiguredInnerNote {
   port: InnerNotePort;
@@ -52,7 +53,7 @@ export function composedInnerNote(environment: Readonly<Record<string, string | 
     store, reflector: configuredInnerNoteReflector(environment, parts.usageStore), state: parts.state, ownerScope: parts.ownerScope,
     timeZone: parts.timeZone, now: parts.now, ...(parts.log ? { log: parts.log } : {}),
     recent: (scopeKey, at) => recentLines(parts, scopeKey, at),
-    sleptAfter: (scopeKey, since, dayKey) => store.sleepCompletedAfter(scopeKey, since, dayKey),
+    retentionDays: BODY_LIMITS.retentionDays,
   });
   const stop = service.start();
   const route = createInnerNoteRoute({ store, ownerScopeKey: parts.ownerScope, now: parts.now });

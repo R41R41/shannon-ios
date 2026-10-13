@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CHARACTER_CORE, SHANNON_CORE_PROMPT, SHANNON_CURRENT_GOAL, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock,
-  characterCoreHashInput, shannonIdentityPrompt, shannonPersonaPrompt,
+  characterCoreHashInput, shannonIdentityPrompt, shannonOneLineVoice, shannonPersonaPrompt,
 } from '../src/index.js';
 
 describe('character core (Syzygy ADR-0012 D6)', () => {
@@ -54,7 +54,12 @@ describe('character core (Syzygy ADR-0012 D6)', () => {
   it('has a one-line voice without 「からかいに寄せず」 for the touch prompt, beside the unchanged one', () => {
     expect(SHANNON_ONE_LINE_VOICE).toContain('からかいに寄せず');
     expect(SHANNON_ONE_LINE_VOICE_INNER).not.toContain('からかい');
-    expect(SHANNON_ONE_LINE_VOICE_INNER).toContain('「ボク」');
-    expect(SHANNON_ONE_LINE_VOICE_INNER).not.toContain('です・ます');
+    expect(SHANNON_ONE_LINE_VOICE_INNER).toContain(CHARACTER_CORE.summary);
+    expect(SHANNON_ONE_LINE_VOICE_INNER).not.toMatch(/です・ます|呼びかけ|決め台詞/u);
+    expect(shannonOneLineVoice(false)).toBe(SHANNON_ONE_LINE_VOICE);
+    expect(shannonOneLineVoice(true)).toBe(SHANNON_ONE_LINE_VOICE_INNER);
+    // The guest's capability line names him, not 持ち主, only with the core.
+    expect(shannonIdentityPrompt('guest', { characterCore: characterCoreBlock() })).not.toMatch(/持ち主の個人的|持ち主が通話/u);
+    expect(shannonIdentityPrompt('guest')).toContain('持ち主の個人的なこと');
   });
 });

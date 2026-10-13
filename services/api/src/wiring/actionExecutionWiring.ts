@@ -66,6 +66,20 @@ async function settledWithin(previous:Promise<void>,milliseconds:number):Promise
     clearTimeout(timer);
   }
 }
+/**
+ * How a turn that threw is closed. Interrupted by its caller (the call hung up or he spoke over her) with nothing of uncertain
+ * outcome (no model or step outcome unknown, no write tool that did not return acknowledged), it is closed at once as cancelled,
+ * `response_interrupted_spoken` when a sentence had reached the device (what was said is in his history) or `response_interrupted`;
+ * the owner's Windows call of 2026-10-14 showed such turns left `unknown` for the ten minutes of the unknown exit. Anything else
+ * stays `unknown` as before: an outcome nobody knows is never closed by a guess.
+ */
+export function interruptedTurn(active:Pick<RunningAction,'execution'>,error:unknown):['cancelled'|'unknown',string]{
+  const execution=active.execution;
+  const aborted=(execution.interrupted===true||error instanceof Error&&error.name==='AbortError')&&!execution.signal.aborted;
+  const known=execution.modelOutcome!=='unknown'&&execution.stepOutcome!=='unknown'&&!execution.writeInFlight;
+  if(!aborted||!known)return ['unknown','response_interrupted'];
+  return ['cancelled',execution.spoken?'response_interrupted_spoken':'response_interrupted'];
+}
 /** Foreground serialization is scope-wide, including text/voice/platform. A queued turn has no side effects. */
 export function foregroundRunner(actions:ActionThreads,options:{queueWaitMs?:number}={}){
   const turns=new Map<string,Promise<void>>();
@@ -94,7 +108,7 @@ export function foregroundRunner(actions:ActionThreads,options:{queueWaitMs?:num
       const value=await inActionExecution(active.execution,work);
       const unknown = active.execution.modelOutcome === 'unknown' || active.execution.stepOutcome === 'unknown';
       await active.finish(unknown ? 'unknown' : 'completed', unknown ? 'tool_outcome_unknown' : 'responded').catch(()=>{});return value;
-    }catch(error){await active.finish('unknown','response_interrupted').catch(()=>{});throw error;}
+    }catch(error){await active.finish(...interruptedTurn(active,error)).catch(()=>{});throw error;}
     finally{active.execution.signal.removeEventListener('abort',leaseLost);}
   };
   return async<T>(scopeKey:string,work:()=>Promise<T>):Promise<T>=>{

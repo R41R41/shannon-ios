@@ -35,6 +35,8 @@ export const SQLITE_PROFILES = Object.freeze({
   minecraftLifecycle: profile({ wal: true }),
   /** The liveness monitor (`wiring/livenessWiring.ts`): its episode is its one write. */
   liveness: profile({}),
+  /** Her inner notes (Syzygy ADR-0012, `mind/emotion/store/innerNoteStore.ts`): written after a turn, never inside one. */
+  innerNotes: profile({ wal: true }),
   /**
    * The S3 backfill of the execution columns at each start of the API (`wiring/executionBackfillWiring.ts`): a short wait, since
    * the API's event loop waits with it; a busy batch is tried again later.
@@ -65,6 +67,11 @@ export function openDatabase(path: string, name: SqliteProfileName): DatabaseSyn
     database.close();
     throw error;
   }
+}
+
+/** SQLite's `data_version` of this connection: it moves with every commit by any other connection. */
+export function dataVersion(database: DatabaseSync): number {
+  return Number((database.prepare('PRAGMA data_version').get() as { data_version: number }).data_version);
 }
 
 /** The names of a table's columns (empty when the table does not exist). */

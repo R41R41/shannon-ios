@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHARACTER_CORE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE, innerNoteExpressiveEmotionPrompt, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
+  CHARACTER_CORE, FALSEHOOD_LINE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
+  innerNoteExpired, innerNoteExpressiveEmotionPrompt, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
   boundedUntil, buildExpressiveEmotionPrompt, gatedIntent, goodnightIn, innerNoteActive, innerNoteDay, innerNoteFace,
   innerNoteReflectionInput, innerNoteReflectionInstructions, innerNoteRouteSummary, innerNoteTouchBlock, innerNoteTurnBlock,
   apologyIn, lingeringFeelingLine, parsedInnerNoteReflection, settleInnerNote, teasingIn, withoutOwnApology,
@@ -17,7 +18,7 @@ function note(overrides: Partial<InnerNote['hooks']> = {}, extra: Partial<InnerN
     hooks: { shown: 'sulky', tell: 'blush', until: '2026-10-14T14:00:00.000Z', scale: 'ordinary', dayReason: null, intent: 'keep',
       routeSummary: 'Shannon is acting a little sulky and cool, but is not truly hurt.', ...overrides },
     triggers: ['touch'], changeReason: null, summary: null, flags: {}, createdAt: '2026-10-14T13:20:00.000Z', replacedAt: null, closedAt: null,
-    coreVersion: CHARACTER_CORE.version, ...extra,
+    coreVersion: CHARACTER_CORE.version, episodeStartedAt: '2026-10-14T13:20:00.000Z', ...extra,
   };
 }
 
@@ -67,6 +68,34 @@ describe('inner note gates (ADR-0012 D2, D4)', () => {
     expect(high.flags.forgaveWhileHigh).toBe(true);
     const closing = settleInnerNote({ ...base, draft: draft({ intent: 'keep', untilMinutes: 30 }), previous: note(), triggers: ['day_end'] });
     expect(closing.hooks).toMatchObject({ intent: 'none', until: null, tell: 'none', scale: 'ordinary' });
+  });
+
+  it('caps an ordinary sulk at an hour from its episode start, whatever a rewrite says (H2)', () => {
+    const base = { dayEndsAt: '2026-10-14T18:00:00.000Z', holding: 0, visibleFrom: 0.3 };
+    // Started at 22:20; at 22:50 she rewrites until +60: it is cut to 23:20, the episode's hour.
+    const rewrite = settleInnerNote({ ...base, at: '2026-10-14T13:50:00.000Z', draft: draft({ untilMinutes: 60 }), previous: note(), triggers: ['until'] });
+    expect(rewrite.hooks.until).toBe('2026-10-14T14:20:00.000Z');
+    expect(rewrite.episodeStartedAt).toBe('2026-10-14T13:20:00.000Z');
+    expect(rewrite.flags.untilClamped).toBe(true);
+    // Past the hour, an ordinary sulk ends there.
+    const past = settleInnerNote({ ...base, at: '2026-10-14T14:21:00.000Z', draft: draft({ untilMinutes: 30 }), previous: note(), triggers: ['until'] });
+    expect(past.hooks).toMatchObject({ intent: 'none', until: null });
+    expect(past.flags.capEnded).toBe(true);
+    expect(past.episodeStartedAt).toBeNull();
+    // A day sulk with a reason is not capped at the hour.
+    const day = settleInnerNote({ ...base, at: '2026-10-14T14:21:00.000Z', draft: draft({ scale: 'day', dayReason: 'repeated', untilMinutes: 120 }), previous: note(), triggers: ['until'] });
+    expect(day.hooks.intent).toBe('keep');
+  });
+
+  it('expires a sulk: until passed, or an ordinary one an hour from its start even without until (H2)', () => {
+    const open = note({ until: null });
+    expect(innerNoteActive(open, '2026-10-14T14:19:00.000Z')).toBe(true);
+    expect(innerNoteActive(open, '2026-10-14T14:20:00.000Z')).toBe(false);
+    expect(innerNoteExpired(open, '2026-10-14T14:20:00.000Z')).toBe(true);
+    expect(innerNoteActive(note(), '2026-10-14T14:00:00.000Z')).toBe(false);
+    expect(innerNoteExpired(note(), '2026-10-14T14:00:00.000Z')).toBe(true);
+    expect(innerNoteActive(note({ scale: 'day', dayReason: 'intentional', until: null }), '2026-10-14T17:59:00.000Z')).toBe(true);
+    expect(innerNoteExpired(note({ intent: 'none', until: null }), '2026-10-14T14:20:00.000Z')).toBe(false);
   });
 });
 
@@ -120,6 +149,8 @@ describe('readers (ADR-0012 D2.5)', () => {
     expect(withoutOwnApology(sorry, note(), AT, { primary: 'apologetic', intensity: 0.6 })).toBe(sorry);
     expect(withoutOwnApology({ ...sorry, overrideReason: 'safety' }, note(), AT).primary).toBe('apologetic');
     expect(withoutOwnApology(sorry, null, AT)).toBe(sorry);
+    // A tool of the turn failed: the apology may be hers to make (M3).
+    expect(withoutOwnApology(sorry, note(), AT, undefined, true)).toBe(sorry);
   });
 });
 
@@ -160,7 +191,10 @@ describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
     expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain(LIGHT_SULKING_LINE);
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).toContain(INNER_NOTE_EXPRESSIVE_LINE);
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).not.toContain('must stay light');
-    expect(innerNoteExpressiveEmotionPrompt(emotion, 'others').replace(INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE)).toBe(buildExpressiveEmotionPrompt(emotion, 'others'));
+    expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain(FALSEHOOD_LINE);
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).toContain(INNER_NOTE_HONESTY_LINE);
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'others').replace(INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE)
+      .replace(INNER_NOTE_HONESTY_LINE, FALSEHOOD_LINE)).toBe(buildExpressiveEmotionPrompt(emotion, 'others'));
     expect(INNER_NOTE_UNPLEASANT_LINE).toContain('心のメモ');
     expect(INNER_NOTE_UNPLEASANT_LINE).not.toContain('謝罪');
     expect(lingeringFeelingLine({ emotionClock: undefined, lingering: [] } as never, AT, undefined, { innerNote: true })).toBe('');
@@ -168,7 +202,16 @@ describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
 
   it('reads a tease and a goodnight in short messages only', () => {
     expect(teasingIn('ほんとポンコツだなあ')).toBe(true);
+    expect(teasingIn('シャノンってほんとポンコツだよね（笑）')).toBe(true);
     expect(teasingIn('今日の天気は？')).toBe(false);
+    // M2: words that are not about her.
+    for (const plain of ['バカみたいに暑い', 'アホほど忙しい', 'ばかうけ']) expect(teasingIn(plain)).toBe(false);
+    for (const plain of ['ごめん、ちょっと待って', 'すみません、天気教えて']) expect(apologyIn(plain)).toBe(false);
+    expect(apologyIn('ほんとにごめんって')).toBe(true);
+    expect(apologyIn('ごめんごめん、言いすぎた')).toBe(true);
+    expect(apologyIn('ごめん、嫌だった?')).toBe(true);
+    for (const plain of ['寝る前に一個だけ聞いていい？', 'お休みの日って何してる？', 'おやすみモードにして']) expect(goodnightIn(plain)).toBe(false);
+    expect(goodnightIn('おやすみ、シャノン')).toBe(true);
     expect(apologyIn('ごめん、出来心で')).toBe(true);
     expect(apologyIn('出来心だったんです、ごめん')).toBe(true);
     expect(apologyIn('今日の予定は？')).toBe(false);

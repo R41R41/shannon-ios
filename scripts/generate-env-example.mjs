@@ -20,10 +20,11 @@ const READS = Object.freeze({
   true_only: 'off unless true',
 });
 
-/** The value written for a switch: its default, in the words its kind reads. */
+/** The value written for a switch: what a new installation sets (`setup`), else its default, in the words its kind reads. */
 export function exampleValue(entry) {
-  if (entry.kind === 'true_only') return entry.default === 'on' ? 'true' : 'false';
-  return entry.default;
+  const value = entry.setup ?? entry.default;
+  if (entry.kind === 'true_only') return value === 'on' ? 'true' : 'false';
+  return value;
 }
 
 /** The generated lines for one table entry: a comment and the assignment. */

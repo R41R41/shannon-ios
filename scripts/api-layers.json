@@ -141,8 +141,7 @@
       "id": "ddl-in-migrations",
       "kind": "count",
       "label": "ddl",
-      "reportOnly": true,
-      "description": "CREATE and ALTER live only in the migrations (Syzygy ADR-0009 stage 1 plan). Report only until the execution DDL is gathered (stage 1, S2).",
+      "description": "CREATE and ALTER live only in the migrations (Syzygy ADR-0009 stage 1 plan). Counted per file; a count may only fall (enforced since S9).",
       "pattern": "\\b(?:CREATE\\s+(?:UNIQUE\\s+)?(?:TABLE|INDEX|VIEW|TRIGGER)|ALTER\\s+TABLE)\\b",
       "allowIn": ["infra/sqlite/sqliteMigrations.ts", "**/*Migration.ts", "**/*Migrations.ts", "**/migrations/**"]
     },
@@ -150,8 +149,7 @@
       "id": "pragma-in-opener",
       "kind": "count",
       "label": "PRAGMA",
-      "reportOnly": true,
-      "description": "PRAGMA lives only in the one function that opens the database (Syzygy ADR-0009 stage 1 plan; infra/sqlite/sqliteOpen.ts once it exists). Report only.",
+      "description": "PRAGMA lives only in the one function that opens the database (infra/sqlite/sqliteOpen.ts; Syzygy ADR-0009 stage 1 plan). Counted per file; a count may only fall (enforced since S9).",
       "pattern": "\\bPRAGMA\\b",
       "allowIn": ["infra/sqlite/sqliteOpen.ts"]
     }

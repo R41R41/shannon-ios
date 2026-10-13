@@ -12,6 +12,10 @@ export interface OpenAITranscriptionSession {
   model: string;
   expiresAt: string;
   inputUsdPerMinute: number;
+  /** The session sends per-token log-probabilities with each transcript (the client's `userUtterance.confidence`). */
+  transcriptionLogprobs: boolean;
+  /** How the session ends an utterance: `semantic` (`semantic_vad`) or `server` (`server_vad`). */
+  turnDetection: 'semantic' | 'server';
 }
 
 export type OpenAITranscriptionFailureCode =
@@ -28,6 +32,26 @@ export class OpenAITranscriptionError extends Error {
   }
 }
 
+/**
+ * How the transcription session decides that he finished an utterance (owner's Windows call, 2026-10-14: a 360 ms silence split
+ * his sentences). `semantic`: OpenAI's `semantic_vad`, which waits while the words sound unfinished, at `eagerness`; `server`: the
+ * volume-based `server_vad` with `silenceDurationMilliseconds` (650 ms by default). Semantic detection is for the client platforms
+ * that ask for it at session mint (`clientPlatform`, `semanticPlatforms`: Windows by default); every other client, and one that
+ * says nothing (an older app), keeps `server_vad` until semantic detection is tested on it (review M4: the iPhone's barge-in).
+ */
+export type TranscriptionTurnDetection = 'semantic' | 'server';
+export type SemanticVadEagerness = 'low' | 'medium' | 'high' | 'auto';
+const EAGERNESS: readonly SemanticVadEagerness[] = ['low', 'medium', 'high', 'auto'];
+export const DEFAULT_TRANSCRIPTION_SILENCE_MILLISECONDS = 650;
+export const DEFAULT_SEMANTIC_PLATFORMS: readonly string[] = Object.freeze(['windows']);
+/** A setting the provider refused is not asked for again for this long (then it is tried once more). */
+const REFUSAL_MILLISECONDS = 3_600_000;
+const LOGPROBS_INCLUDE = 'item.input_audio_transcription.logprobs';
+
+/** What one mint asks for; each refusal of the provider names the part it drops. */
+interface SessionSettings { detection: TranscriptionTurnDetection; logprobs: boolean }
+type RefusedSetting = 'semantic' | 'logprobs';
+
 interface OpenAITranscriptionGatewayOptions {
   apiKey: string;
   model?: string;
@@ -37,6 +61,11 @@ interface OpenAITranscriptionGatewayOptions {
   secretLifetimeSeconds?: number;
   silenceDurationMilliseconds?: number;
   inputUsdPerMinute?: number;
+  /** `server`: no semantic detection for anyone (`SHANNON_VOICE_CALL_TURN_DETECTION=server`). */
+  turnDetection?: TranscriptionTurnDetection;
+  eagerness?: SemanticVadEagerness;
+  /** The client platforms minted with semantic detection (`SHANNON_VOICE_CALL_SEMANTIC_PLATFORMS`). */
+  semanticPlatforms?: readonly string[];
 }
 
 /// Mints a short-lived Realtime client secret whose session is fixed to Japanese
@@ -48,6 +77,14 @@ export class OpenAITranscriptionGateway {
   private readonly now: () => Date;
   private readonly secretLifetimeSeconds: number;
   private readonly silenceDurationMilliseconds: number;
+  private readonly eagerness: SemanticVadEagerness;
+  private readonly semanticPlatforms: ReadonlySet<string>;
+  /**
+   * The transcript's log-probabilities (`include`), from which the iOS and Windows clients compute `userUtterance.confidence`.
+   * They come with the transcript itself: no extra request and no price of their own. A setting the provider refused (its error
+   * names the parameter) is left out of new mints for `REFUSAL_MILLISECONDS`; an unrelated 400 drops nothing.
+   */
+  private readonly refusedUntil = new Map<RefusedSetting, number>();
   readonly inputUsdPerMinute: number;
 
   constructor(private readonly options: OpenAITranscriptionGatewayOptions) {
@@ -57,7 +94,9 @@ export class OpenAITranscriptionGateway {
     this.fetcher = options.fetcher ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.secretLifetimeSeconds = boundedNumber(options.secretLifetimeSeconds, 30, 3_600, 300);
-    this.silenceDurationMilliseconds = boundedNumber(options.silenceDurationMilliseconds, 200, 2_000, 360);
+    this.silenceDurationMilliseconds = boundedNumber(options.silenceDurationMilliseconds, 200, 2_000, DEFAULT_TRANSCRIPTION_SILENCE_MILLISECONDS);
+    this.eagerness = options.eagerness && EAGERNESS.includes(options.eagerness) ? options.eagerness : 'medium';
+    this.semanticPlatforms = new Set(options.turnDetection === 'server' ? [] : options.semanticPlatforms ?? DEFAULT_SEMANTIC_PLATFORMS);
     this.inputUsdPerMinute = boundedNumber(
       options.inputUsdPerMinute,
       0,
@@ -66,7 +105,58 @@ export class OpenAITranscriptionGateway {
     );
   }
 
-  async createSession(): Promise<OpenAITranscriptionSession> {
+  private refused(setting: RefusedSetting): boolean {
+    const until = this.refusedUntil.get(setting);
+    return until !== undefined && this.now().getTime() < until;
+  }
+
+  /** The settings of a mint for this client: semantic only for its platforms, logprobs unless refused. */
+  settingsFor(client: { platform?: string } = {}): SessionSettings {
+    const semantic = client.platform !== undefined && this.semanticPlatforms.has(client.platform) && !this.refused('semantic');
+    return { detection: semantic ? 'semantic' : 'server', logprobs: !this.refused('logprobs') };
+  }
+
+  private turnDetectionBody(settings: SessionSettings): Record<string, unknown> {
+    return settings.detection === 'semantic'
+      ? { type: 'semantic_vad', eagerness: this.eagerness }
+      : { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: this.silenceDurationMilliseconds };
+  }
+
+  async createSession(client: { platform?: string } = {}): Promise<OpenAITranscriptionSession> {
+    let settings = this.settingsFor(client);
+    let response = await this.requestSecret(settings);
+    // A refused mint is made again at once without exactly the part the provider named; each part is dropped at most once.
+    for (let attempt = 0; attempt < 2 && response.status === 400; attempt += 1) {
+      const dropped = refusedSetting(response.text, settings);
+      if (!dropped) break;
+      this.refusedUntil.set(dropped, this.now().getTime() + REFUSAL_MILLISECONDS);
+      console.warn(`Shannon transcription session: ${dropped} refused by the provider, minting without it`);
+      settings = dropped === 'semantic' ? { ...settings, detection: 'server' } : { ...settings, logprobs: false };
+      response = await this.requestSecret(settings);
+    }
+    return this.secretFrom(response, settings);
+  }
+
+  private secretFrom(response: { ok: boolean; status: number; text: string }, settings: SessionSettings): OpenAITranscriptionSession {
+    if (!response.ok) {
+      throw new OpenAITranscriptionError(
+        'OPENAI_TRANSCRIPTION_TOKEN_FAILED',
+        response.status,
+        safeUpstreamCode(response.text),
+      );
+    }
+    const secret = clientSecret(response.text, this.now(), this.secretLifetimeSeconds);
+    return Object.freeze({
+      token: secret.token,
+      model: this.model,
+      expiresAt: secret.expiresAt,
+      inputUsdPerMinute: this.inputUsdPerMinute,
+      transcriptionLogprobs: settings.logprobs,
+      turnDetection: settings.detection,
+    });
+  }
+
+  private async requestSecret(settings: SessionSettings): Promise<{ ok: boolean; status: number; text: string }> {
     let response: Response;
     try {
       response = await this.fetcher(this.endpoint, {
@@ -79,16 +169,12 @@ export class OpenAITranscriptionGateway {
           expires_after: { anchor: 'created_at', seconds: this.secretLifetimeSeconds },
           session: {
             type: 'transcription',
+            ...(settings.logprobs ? { include: [LOGPROBS_INCLUDE] } : {}),
             audio: {
               input: {
                 format: { type: 'audio/pcm', rate: 24_000 },
                 transcription: { model: this.model, language: 'ja', prompt: TRANSCRIPTION_PROMPT },
-                turn_detection: {
-                  type: 'server_vad',
-                  threshold: 0.5,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: this.silenceDurationMilliseconds,
-                },
+                turn_detection: this.turnDetectionBody(settings),
               },
             },
           },
@@ -97,22 +183,22 @@ export class OpenAITranscriptionGateway {
     } catch {
       throw new OpenAITranscriptionError('OPENAI_TRANSCRIPTION_TOKEN_FAILED');
     }
-    const responseText = await response.text();
-    if (!response.ok) {
-      throw new OpenAITranscriptionError(
-        'OPENAI_TRANSCRIPTION_TOKEN_FAILED',
-        response.status,
-        safeUpstreamCode(responseText),
-      );
-    }
-    const secret = clientSecret(responseText, this.now(), this.secretLifetimeSeconds);
-    return Object.freeze({
-      token: secret.token,
-      model: this.model,
-      expiresAt: secret.expiresAt,
-      inputUsdPerMinute: this.inputUsdPerMinute,
-    });
+    return { ok: response.ok, status: response.status, text: await response.text() };
   }
+}
+
+/** The part of the mint a 400 names (its `param`, else its message), when the mint asked for it; null for anything else. */
+function refusedSetting(text: string, settings: SessionSettings): RefusedSetting | null {
+  let named = '';
+  try {
+    const error = record(record(JSON.parse(text) as unknown)?.error);
+    named = [error?.param, error?.message].filter(value => typeof value === 'string').join(' ').toLowerCase();
+  } catch {
+    return null;
+  }
+  if (settings.detection === 'semantic' && /turn_detection|semantic|eagerness/u.test(named)) return 'semantic';
+  if (settings.logprobs && /include|logprob/u.test(named)) return 'logprobs';
+  return null;
 }
 
 export function createConfiguredOpenAITranscriptionGateway(
@@ -127,7 +213,17 @@ export function createConfiguredOpenAITranscriptionGateway(
     secretLifetimeSeconds: optionalNumber(environment.SHANNON_VOICE_CALL_SECRET_SECONDS),
     silenceDurationMilliseconds: optionalNumber(environment.SHANNON_VOICE_CALL_SILENCE_MS),
     inputUsdPerMinute: optionalNumber(environment.SHANNON_VOICE_CALL_USD_PER_MINUTE),
+    // `server` keeps the volume-based detection for every client; otherwise semantic for the listed platforms (Windows unset).
+    turnDetection: environment.SHANNON_VOICE_CALL_TURN_DETECTION?.trim().toLowerCase() === 'server' ? 'server' : 'semantic',
+    eagerness: environment.SHANNON_VOICE_CALL_VAD_EAGERNESS?.trim().toLowerCase() as SemanticVadEagerness | undefined,
+    semanticPlatforms: platformList(environment.SHANNON_VOICE_CALL_SEMANTIC_PLATFORMS),
   });
+}
+
+/** `windows,macos`; unset, the default list; `none` (or empty) for no platform. */
+function platformList(value: string | undefined): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  return value.split(',').map(item => item.trim().toLowerCase()).filter(item => item && item !== 'none');
 }
 
 function validModel(value: string): string {

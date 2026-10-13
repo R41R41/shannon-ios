@@ -174,96 +174,11 @@ Sent through the existing `POST /v1/body/events` of `docs/body-contract.md`, wit
 - A stored death becomes one experience (`experience_events`, source `body.game`) in the server's own words, from a closed table of causes: 「ゲームの記憶: 10月5日の夜、マイクラで死んだ（溶岩）。」 An unknown cause is remembered without one. Like a touch, it has no conversation message and no words of the owner (`speaker: unknown`); recall, search, the Memory screen and forgetting treat it like any other experience. A repeated `id` answers `duplicate` and writes nothing again.
 - Phase 1 moves no feeling.
 
-## Requests (phase 4)
+## Requests (phase 4, retired)
 
-「木材集めといて」 said to her anywhere reaches her Minecraft body as a request, the body reports progress and a result, and she knows it. One queue on the server (`minecraft_body_requests`, `minecraftBodyRequests.ts`), modelled on her folder's operations (`docs/host-folder-contract.md`): two entrances fill it, the one configured body device empties it.
+Retired by Syzygy ADR-0009 stage 1 S9 (owner answer of 2026-10-12: the old Minecraft request path is removed at the end of stage 1). The owner's requests to her body (her `minecraft.request`, `minecraft.status` and `minecraft.cancel` tools, and his game-chat task intents) enter the common task tree and run through `/v1/body/minecraft/control` (see the common FCA section below). The phase-4 routes `POST /v1/body/minecraft/claim`, `GET /v1/body/minecraft/requests` and `POST /v1/body/minecraft/requests/{id}/progress|report|cancel` answer `503 MINECRAFT_BODY_NOT_CONFIGURED`, as they did once the common path was on. Their tables (`minecraft_body_requests`, `minecraft_body_presence`, `minecraft_execution_acknowledgements`, `minecraft_experience_outbox`) are kept as they are and no longer written; requests already remembered as experiences stay readable under `GAME_REQUEST_DISCLOSURE`.
 
-- **Entrances.** Her tool `minecraft.request` in a conversation with the owner alone (app text chat and voice, and since phase 5a a platform conversation bound `owner-private` answered through `POST /v1/platform/reply`, such as his Discord DM), and the `intent` of the owner's own game-chat turn (see [Response](#response)). Nothing else queues: no friend's words, no shared Discord channel, no offline-mode game-chat identity, not her own time. A paired app-owner turn uses its own device/scope authentication; its request can reach the configured, present body in an offline-mode world without granting owner authority to offline game chat.
-- **Goal delegation.** A request to perform a game action uses `minecraft.request`, including long goals involving exploration, building or combat. The conversation passes the owner's original goal and success condition; the body chooses its preparation and intermediate steps. Giving strategy alone does not fulfill a request to act. Jev chooses the first tool to fulfill the request; if it chooses `none`, the offered menu and `tool_open` still allow the conversation model to open `minecraft_request`. Only tools offered by the current presence, scope and audience gates can be opened or called. A successful queue result means the goal was handed to the body, never that it was achieved; completion is stated only from a confirming result. Prompt and deterministic tests do not prove live model selection: verify that separately with an accepted owner turn, actual tool dispatch and the original request's result.
-- **Presence.** The body is present while its last claim (or progress) is at most 40 s old. `minecraft.request` is offered only while it is present and fails at once (`unavailable`) when it is not, so nothing waits to run later by surprise. `minecraft.status` and `minecraft.cancel` are offered while a body is configured.
-- **One at a time.** The body holds one request at a time; others wait queued, at most 5 open in all.
-- **Closed reports.** What the body sends is a phase and a short step label, an outcome, a reason code, and counts of items gained. No free narrative from the body becomes her words.
-
-### States
-
-| State | Meaning |
-| --- | --- |
-| `queued` | Waiting for the body. Closed as `expired` after 30 minutes unclaimed. |
-| `claimed` | Handed to the body (lease of 90 s, renewed by every claim that names it in `holding` and by every progress). |
-| `running` | The body reported progress. |
-| `done` | The body reported `done`. |
-| `failed` | The body reported `failed`, with a code. |
-| `cancelled` | Cancelled while queued, or the body reported `stopped` (or failed or lost it) after a cancel was asked. |
-| `expired` | Queued too long, the lease ran out, the body claimed without naming it in `holding` (it restarted or lost the claim's answer), or it stayed open longer than 120 minutes. Never handed out again. |
-
-### `POST /v1/body/minecraft/claim` (the body)
-
-Device token of the configured device, owner's scope (`403 MINECRAFT_BODY_DEVICE_DENIED` / `MINECRAFT_BODY_SCOPE_DENIED` otherwise).
-
-```json
-{ "scopeKey": "owner", "waitSeconds": 25, "holding": ["7d0c…"] }
-```
-
-| Field | Notes |
-| --- | --- |
-| `waitSeconds` | 0–25. A long-poll: the answer comes when there is something, or after this time. Optional, default 0. |
-| `holding` | Up to 4 request ids the body is still working on. Their leases are renewed; any other request handed to this device and not named is closed as `expired` (or `cancelled` if a cancel was asked). |
-
-Response `200`:
-
-```json
-{ "request": { "id": "7d0c…", "goal": "オークの原木を16個集める", "surface": "text", "createdAt": "…", "leaseExpiresAt": "…" }, "cancel": [] }
-```
-
-- `request` is null unless the body holds nothing and something is queued. `surface` is where it was asked (`text`, `voice`, `minecraft`); the Talk is never sent. `leaseExpiresAt`: the body must claim again (naming it in `holding`) or report progress before this.
-- `cancel`: held ids the body should stop (the owner or she cancelled them), and held ids already closed on the server (drop them). It answers at once when not empty. After stopping, the body reports `stopped` and stops naming the id.
-
-With ADR-0008 Stage 4 enabled, this existing authenticated `holding` handshake also acknowledges abandonment to the shared mind: a request this device was handed but no longer holds is closed in the canonical queue and its execution right is released. Mere silence or lease expiry does not acknowledge an outside result; an uncertain action retains the body resource until this handshake or a real terminal report. The acknowledgement contains only the request ID and a closed terminal state, is persisted beside the canonical queue, and retries IPC delivery after a restart or lost response. A duplicate report cannot replace the first acknowledged outcome. Previously handed requests awaiting this acknowledgement retain their canonical rows beyond the usual pruning window; after acknowledgement, the existing 30-day pruning applies. No new Minebot request field or automatic replay is introduced.
-- Every claim marks the body present, also one that returns nothing.
-
-### `POST /v1/body/minecraft/requests/{id}/progress` (the body)
-
-```json
-{ "scopeKey": "owner", "phase": "started", "step": "オークの木を探す" }
-```
-
-`phase`: `accepted` (in its own task list), `started` (working on it now), `working` (a later step). `step`: optional, the body's own short label, control characters become spaces, cut to 80 characters. Response `{ "id", "state", "cancel": true|false }`; `cancel: true` means stop. The first progress moves `claimed` to `running` and renews the lease. `404 MINECRAFT_REQUEST_NOT_FOUND`: no such request handed to this device.
-
-### `POST /v1/body/minecraft/requests/{id}/report` (the body)
-
-```json
-{ "scopeKey": "owner", "outcome": "done", "gained": [{ "item": "minecraft:oak_log", "count": 16 }] }
-```
-
-| Field | Notes |
-| --- | --- |
-| `outcome` | `done`, `failed`, or `stopped` (it stopped because it was asked to). |
-| `code` | For `failed`/`stopped`: `gave_up`, `died`, `error`, `timeout`, `queue_full`, `run_over`, `cancelled`, `unsupported`, `unknown`. Missing: `unknown` (`cancelled` for `stopped`). Dropped for `done`. |
-| `gained` | Up to 6 `{ item, count }`: items the body gained while working on it (`[a-z0-9_]` id, with or without `minecraft:`; count 1–100000). Common items are put in her words on the server (「オークの原木 16個」); others are named by their id. |
-
-Response `{ "id", "state", "recorded" }`. The first report of an open request closes it (`done`, `failed`, or `cancelled`); a repeated or late one answers the recorded state with `recorded: false` and changes nothing.
-
-### The owner's routes
-
-From any paired device of the owner's scope except the body (`403 MINECRAFT_OWNER_ONLY` from the body):
-
-- `GET /v1/body/minecraft/requests`: `{ "present": bool, "requests": [ … ] }`, the 20 newest, each with `id`, `goal`, `state`, `origin.surface`, timestamps, `cancelRequested`, `progress`, `result`.
-- `POST /v1/body/minecraft/requests/{id}/cancel` `{ "scopeKey": "owner" }`: a queued request closes as `cancelled`; a claimed or running one is asked to stop (its next claim or progress says so). `404 MINECRAFT_REQUEST_NOT_FOUND`, `409 MINECRAFT_REQUEST_FINISHED`.
-
-At most 240 calls a minute per device on these routes (`429 RATE_LIMITED`). Without `SHANNON_MINECRAFT_BODY_JSON` they answer `503 MINECRAFT_BODY_NOT_CONFIGURED`.
-
-### Her tools
-
-The capability line `minecraft_body` (「マイクラの体: …ワールドに入っている時…」) is not in her fixed description (`SHANNON_CAPABILITIES`): it is `SHANNON_MINECRAFT_BODY_CAPABILITY` in `capabilities.ts`, added to the owner's description by `withMinecraftBodyLine` (`shannonMinecraftTools.ts`) only while the configured body is present, that is, when `minecraft.request` is offered: the app's text chat and voice (turns and realtime sessions), and a platform reply the owner alone reads. Never in game chat (it asks through the `intent`), never for a guest. Without a configured body, or while it is away, every prompt is byte for byte the one without it, so the recorded prompt hashes and length limits do not change. Its evidence is in `shannonCapabilityEvidence.test.ts` with the fixed list.
-
-In the tool registry (`shannonTools.ts`, domain `minecraft_body`, surfaces text and voice, never her own time, owner alone): `minecraft.request` (`goal`, ≤120 characters; answers once queued, with the id, and says it is not done yet), `minecraft.status` (presence and the 5 newest requests in the server's words), `minecraft.cancel` (`id`, or the newest open one). A retry of the same turn asks once (the same turn and goal within 10 minutes is one request). Every call is one line in the activity record, without the goal. A voice turn whose words name Minecraft (「マイクラ」) is offered her tools; a voice turn that could not be trusted gets `minecraft.status` only. Game chat asks through the `intent`, so a game-chat turn is never offered these tools. A platform reply (`POST /v1/platform/reply`) in a conversation bound `owner-private` is offered them by the same owner-alone rule (surface `text`).
-
-### What she knows of the result
-
-- **`[マイクラの体で起きたこと]`**: in every turn the owner alone reads (the app's text chat, and his whisper in the game), the open requests and those that finished in the last 12 hours (at most 5), in the server's words: 「「オークの原木を16個集める」: 3分前にやり終えた（手に入れたもの: オークの原木 16個）」, 「…: 体が取り組んでいる（いま: オークの木を探す、1分前の報告）」, and whether the body is in the game now. Marked as the body's report, not an instruction. Never with anyone else present, never on a voice turn (there she uses `minecraft.status`).
-- **An experience**: when a request the body took closes, one experience (`experience_events`, source `body.game`, `game: { type: "request", requestId, state }`), in fixed words like her death: 「ゲームの記憶: 10月5日の夜、ライ氏に頼まれた「オークの原木を16個集める」をマイクラの体でやり終えた（オークの原木 16個）。」 The goal is her own wording of the owner's request; nothing the body sent becomes words except the closed fields. A request that never reached the body is not an experience. It is stored **sensitive** (`GAME_REQUEST_DISCLOSURE`, review S4, 2026-10-06): used freely with the owner alone, marked in his own turn in a shared chat, and left out of any turn someone else wrote. Her death stays **ordinary** (`GAME_DISCLOSURE`): the game itself tells everyone on the server that she died and of what.
-- **Durable memory delivery**: the request's first terminal result and a `minecraft_experience_outbox` reference commit together. The reference contains only the original request ID, scope and delivery bit; its private goal and result remain in the canonical request. After commit, at startup and on maintenance, the existing memory-owned game-experience writer receives the same experience ID derived from the original claimed device and request. An insert or an exact existing receipt confirms delivery. An unavailable table, write/read failure, or interruption after either commit keeps the reference pending; only memory delivery is retried, never the game action. Pending references protect their source requests from the usual 30-day pruning. The execution-ACK outbox remains separate, and both required acknowledgements must finish before the old request is pruned. The writer inserts by the original ID without updating an existing experience or its forgetting controls; a replay cannot restore a forgotten experience. This change does not backfill previously closed historical requests, expose new body fields, or give a body report new authority as a verified task, value-table outcome or learned skill.
-- She does not reach out by herself when a request finishes (left for later).
+The capability line `minecraft_body` (「マイクラの体: …ワールドに入っている時…」) is not in her fixed description (`SHANNON_CAPABILITIES`): it is `SHANNON_MINECRAFT_BODY_CAPABILITY` in `capabilities.ts`, added to the owner's description by `withMinecraftToolLine` (`shannonMinecraftTools.ts`) exactly when the turn offers `minecraft.request`, which the runner offers only while the turn's task context is open.
 
 ## Errors
 
@@ -308,9 +223,9 @@ Decided direction. Phase 4 is built ([Requests](#requests-phase-4)) and phase 5a
 5. **Discord and production.** 5a (built in dev, 2026-10-06): the Discord bot (Shannon-dev, behind its own default-off `SHANNON_CORE_PLATFORM_REPLY=true`) asks `POST /v1/platform/reply` (off unless `SHANNON_PLATFORM_REPLY=on`) for the reply to a bound conversation instead of its own model, falling back to its own path on any failure. The owner's DM bound `owner-private` is the owner alone, so 「マイクラで木材集めといて」 there is her `minecraft.request` into this queue while the body is present, and a later 「何頼んだっけ？」 there reads `[マイクラの体で起きたこと]`. A shared channel and friends get no tools but, while Aether is configured, her Aether reading tools inside 「シャノン用フォルダ」 (owner decisions 2026-10-06; her game chat itself offers none). 5b (not built): the production rollout behind the default-off flags (the absent `SHANNON_MINECRAFT_BODY_JSON` is off today), with a backup, a paired production device, bindings for the owner's real DM, and a smoke test on the lab server first; her reaching out on Discord when a request finishes.
 
 
-## Common-FCA execution adapter (opt-in, stage 4 migration)
+## Common-FCA execution adapter
 
-See [the common FCA contract](fca-runtime-contract.md#minecraft-and-touch-connection-stage-4) for the new execution path. `SHANNON_FCA_MINECRAFT=on` is frozen at API startup. It uses `/v1/body/minecraft/control`, a separate paired-body contract for world frames, skill catalogs, concrete candidates, commands and receipts; it does not extend the game-chat payload with images or exact coordinates. The Minebot adapter must separately opt into `MINEBOT_COMMON_FCA=on`. Both sides must agree; there is no fallback to the legacy campaign executor when the common control route is unavailable. The old request queue is not used for new work in common mode.
+See [the common FCA contract](fca-runtime-contract.md#minecraft-and-touch-connection-stage-4) for the new execution path. Since S9 a configured body always uses it (the `SHANNON_FCA_MINECRAFT` switch is retired); it runs in the common runtime, which is always on. It uses `/v1/body/minecraft/control`, a separate paired-body contract for world frames, skill catalogs, concrete candidates, commands and receipts; it does not extend the game-chat payload with images or exact coordinates. The Minebot adapter must separately opt into `MINEBOT_COMMON_FCA=on`. Both sides must agree; there is no fallback to the legacy campaign executor when the common control route is unavailable. The old request queue is not used for new work in common mode.
 
 The normal planner is the same Task Hub/FCA used by other work. Minebot executes registered physical skills and bounded primitive actions under its existing local ownership, returning actual stop/quiescence receipts. Delivered commands are never replayed after uncertain delivery or restart. See the VM adapter's own checked-in runbook for its isolated renderer preparation and verification; no live Minecraft benchmark is implied by deterministic integration tests.
 

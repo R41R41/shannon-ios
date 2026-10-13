@@ -26,22 +26,22 @@ const text = 'シャノン、この情報についてどう思う？', raw = '�
 const reply = 'まず資料を確認します。結果はあとで伝えます。';
 const spec = { title: 'Research', goal: 'Verify public source', completionCriteria: 'Verified public source' };
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
-function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>; reliability?: number; disabled?: boolean } = {}) {
+function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>; reliability?: number; disabled?: boolean; skills?: string[] } = {}) {
   const h = actionHarness(() => at); cleanup.push(h.close); migrateAgentTasks(h.db);
   const authority = new SQLiteFcaTaskAuthority(h.db);
   const makeRuntime = () => new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => false,
     conversationLeaseValid(scope, lease) { const action = h.store.check(lease, at); return action?.scopeKey === scope && action.kind === 'respond'; } });
-  let runtime = makeRuntime(), alone = true;
+  let runtime = makeRuntime(), alone = true, clock = at;
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const thread = conversations.threadId('owner'), service = createInMemoryAutonomyService(() => at), tools = service.tools;
   const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => alone });
   const bridge = createFcaConversationBridge({ runtime, ownerScope: 'owner', visible });
-  let voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone });
+  let voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone, now: () => clock });
   tools.useTaskRuntime({ available: scope => bridge.taskToolsAvailable(scope), execute: (name, input, context) => bridge.executeTaskTool(name, input, context),
     observeRead: (scope, receipt) => { bridge.observeRead(scope, receipt); } });
-  let calls = 0, decisions = 0, turns = 0, children: string[] = [], offered: string[][] = [], contexts: string[] = [];
+  let calls = 0, decisions = 0, turns = 0, children: string[] = [], offered: string[][] = [], contexts: string[] = [], webSearch: boolean[] = [];
   const generate = async (request: ShannonChatModelRequest | ShannonVoiceModelRequest, delta?: (text: string) => void | Promise<void>) => {
-    calls++; offered.push(request.tools?.definitions.map(tool => tool.name) ?? []); contexts.push(request.turnContext ?? '');
+    calls++; offered.push(request.tools?.definitions.map(tool => tool.name) ?? []); contexts.push(request.turnContext ?? ''); webSearch.push(request.useWebSearch === true);
     if (request.tools?.definitions.some(tool => tool.name === 'task.create')) {
       const result = JSON.parse(await request.tools.call('task_create', JSON.stringify(spec))) as { ok: boolean; text: string };
       expect(result.ok).toBe(true); children.push(JSON.parse(result.text).id);
@@ -57,7 +57,8 @@ function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>;
   const local = new LocalVoiceDecisionGateway();
   const kernel = createLocalApiKernel(() => at, { stateStore: state, conversationStore: conversations, autonomy: service, chatModel: model,
     ...(options.disabled ? {} : { fcaVoice: () => voice }), voiceDecision: { mode: 'fallback', model: 'fixture', async decide(input) {
-      decisions++; return { ...await local.decide(input), transcriptReliabilityProbability: options.reliability ?? 1 };
+      decisions++; const decided = await local.decide(input);
+      return { ...decided, transcriptReliabilityProbability: options.reliability ?? 1, ...(options.skills ? { selectedSkills: options.skills as typeof decided.selectedSkills } : {}) };
     } } });
   const foreground = async <T>(work: () => Promise<T>) => {
     const action = (await h.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: `voice-${++turns}` }))!;
@@ -73,8 +74,9 @@ function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>;
     body: { scopeKey: 'owner', threadId: thread, utteranceId: 'utterance-1', userTranscript: raw, shannonTranscript: reply, ...overrides } });
   cleanup.push(() => kernel.waitForBackground('owner'));
   return { ...h, runtime: () => runtime, state, conversations, thread, bridge, visible, kernel, body, turn, stored, foreground,
-    calls: () => calls, decisions: () => decisions, children: () => children, offered: () => offered, contexts: () => contexts,
-    alone(value: boolean) { alone = value; }, restart() { runtime = makeRuntime(); voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone }); } };
+    calls: () => calls, decisions: () => decisions, children: () => children, offered: () => offered, contexts: () => contexts, webSearch: () => webSearch,
+    alone(value: boolean) { alone = value; }, restart() { runtime = makeRuntime(); voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone, now: () => clock }); },
+    advance(milliseconds: number) { clock = new Date(Date.parse(clock) + milliseconds).toISOString(); } };
 }
 
 describe('FCA voice uses existing sentence and visible-history delivery', () => {
@@ -106,6 +108,44 @@ describe('FCA voice uses existing sentence and visible-history delivery', () => 
     const first = await f.stored(), second = await f.stored();
     expect((first.body as { turnId: string }).turnId).toBe((second.body as { turnId: string }).turnId);
     expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(2);
+  });
+
+  it('takes a reused utterance id for a new utterance once the earlier one is settled or the words differ (Windows, 2026-10-14)', async () => {
+    const f = fixture(); expect((await f.turn()).status).toBe(200); await f.stored();
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1')?.state).toBe('bound');
+    // The same id and words again after the first was stored: a new utterance, not a 409 and not dropped.
+    expect((await f.turn()).status).toBe(200); expect(f.calls()).toBe(2);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('staged');
+    const second = await f.stored({ shannonTranscript: '二回目の返事です。' });
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('bound');
+    expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(4);
+    // A retry of its history receipt is still a duplicate.
+    const retried = await f.stored({ shannonTranscript: '二回目の返事です。' });
+    expect((retried.body as { turnId: string }).turnId).toBe((second.body as { turnId: string }).turnId);
+    expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(4);
+  });
+
+  it('admits no research task from words trusted only to talk: the web is searched inline instead (review M2)', async () => {
+    const f = fixture({ reliability: 0.7, skills: ['current_web'] });
+    expect((await f.turn()).status).toBe(200);
+    expect(f.runtime().list('owner').filter(task => task.kind === 'research')).toEqual([]);
+    expect(f.webSearch()).toEqual([true]);
+  });
+
+  it('delivers different words under a reused id at once, and settles a stale in-flight id after two minutes', async () => {
+    const f = fixture(); expect((await f.turn()).status).toBe(200);
+    const other = 'シャノン、今日はどんな一日だった？';
+    const reused = f.body('utterance-1', {});
+    reused.transcript = other;
+    reused.deviceContext.userUtterance = { ...reused.deviceContext.userUtterance, text: other, rawText: other };
+    expect((await f.foreground(() => f.kernel.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', deviceId: 'device-1', body: reused }))).status).toBe(200);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('staged');
+    // The first is still staged: the same words again within two minutes are its retry...
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1')?.state).toBe('staged');
+    f.advance(30_000); expect((await f.turn('utterance-2')).status).toBe(200); expect((await f.turn('utterance-2')).status).toBe(409);
+    // ...and after two minutes with no history receipt, a new utterance.
+    f.advance(121_000); expect((await f.turn('utterance-2')).status).toBe(200);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-2#2')).not.toBeNull();
   });
 
   it('reserves only rendered inbox reports while history is pending and never clears a newer active turn when binding', async () => {

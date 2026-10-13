@@ -12,7 +12,6 @@ Environment=NODE_ENV=production
 Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
 Environment=SHANNON_SLEEP_TIMEZONE=Asia/Tokyo
 Environment=SHANNON_SLEEP_HOUR=3
-Environment=SHANNON_SLEEP_MIN_MESSAGES=3
 Environment=SHANNON_BACKGROUND_LLM_MONTHLY_BUDGET_USD=0.5
 EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
 ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/worker.ts

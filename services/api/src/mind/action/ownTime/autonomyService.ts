@@ -24,7 +24,6 @@ import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
 import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/toolRunnerPorts.js';
 import { StudyAether } from './studyAether.js';
-import type { MinecraftRequestPort } from '../../tools/toolRunnerPorts.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyReadPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/selfPorts.js';
@@ -33,6 +32,8 @@ import { autonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './store/autonomyStore.js';
 import { StudyDesk, type StudyReactionTap } from './studyDesk.js';
 import { clip, pursuitStatusPhrase, type AutonomyOverview } from './autonomyServiceParts.js';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
 /**
  * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current stop switch and budget, writes every
@@ -60,8 +61,6 @@ export interface AutonomyServiceDependencies {
   calls?: (scopeKey: string, at: string) => { available: boolean } | null;
   /** When the owner first wrote or spoke after an instant, or null: a timestamp, for what followed a message of hers. */
   ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
-  /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
-  minecraftBody?: MinecraftRequestPort | null;
   /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
   aether?: Pick<ToolAetherPorts, 'access' | 'proposals' | 'ownerDocuments'> & { studyScopeKey?: string };
   /** Syzygy ADR-0008 stage 1: told the reaction (the enum only) after the owner reacted to a story; absent, nothing is told. */
@@ -122,7 +121,7 @@ export class ShannonAutonomyService {
       this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether, dependencies.storyReacted ?? null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
-    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null,
+    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined,
       { access: dependencies.aether?.access ?? null, study: this.studyAether, proposals: dependencies.aether?.proposals ?? null, ownerDocuments: dependencies.aether?.ownerDocuments === true });
   }
 
@@ -464,7 +463,8 @@ export class ShannonAutonomyService {
   pursuitPrompt(scopeKey: string): string {
     try {
       const at = this.now();
-      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at)), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
+      const core = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? { characterCore: true } : {}; // ADR-0012: ライ氏, not 持ち主.
+      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at), core), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
         buildShannonSeenPrompt(this.study.seen(scopeKey, at))].filter(Boolean).join('\n\n');
     } catch { return ''; }
   }

@@ -1,4 +1,4 @@
-import { reportGates } from '../mind/action/fca/fcaReportGate.js';
+import { fcaReportWiring } from './fcaReportWiring.js';
 import { timedTick } from '../infra/observer/eventLoopWatch.js';
 import { minecraftGoalBinding } from './fcaMinecraftGoalBinding.js';
 import { createFcaProgressTools } from '../mind/action/fca/fcaProgressTools.js';
@@ -41,7 +41,7 @@ import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
-import { configuredResponseModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
+import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
 import { stage4Enabled, mindSocketPath } from '../infra/config/stage4.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
@@ -52,7 +52,6 @@ import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
-import { createReportCards } from '../mind/action/fca/fcaReportCards.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
 
@@ -74,14 +73,15 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
-  if (!switchOn(values, 'SHANNON_FCA_RUNTIME')) return null;
-  if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED');
+  // Syzygy ADR-0009 S9: the common runtime is always on (`SHANNON_FCA_RUNTIME` is retired). What it needs is checked here, at
+  // start, and a missing part stops the API at once with what to set.
+  if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED: the common task runtime needs the mind worker; set SHANNON_ADR8_STAGE4=on');
   const modelName = replacementModel(values.SHANNON_FCA_MODEL);
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
   const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
-  if (!provider) throw new Error('FCA_PROVIDER_REQUIRED');
-  const sleepEnabled = switchOn(values, 'SHANNON_FCA_SLEEP');
-  if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
+  if (!provider) throw new Error(`FCA_PROVIDER_REQUIRED: no key for the task model ${modelName}; set ${fcaKeyNames(modelName)}`);
+  // Sleep always takes the common runtime (S9 retired `SHANNON_FCA_SLEEP`); the API hands its store, the worker its owner night.
+  const sleepEnabled = Boolean(parts.sleepStore);
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
   const client = parts.actionThreads ? null : new MindSocketClient(mindSocketPath(values, parts.path));
@@ -164,7 +164,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
     if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible });
     if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
-    const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone }) : null;
+    const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, ...(parts.now ? { now: parts.now } : {}) }) : null;
     if (conversation && parts.tools) parts.tools.useTaskRuntime({ available: scope => conversation.taskToolsAvailable(scope),
       execute: (name, input, context) => conversation.executeTaskTool(name, input, context),
       observeRead: (scope, receipt) => conversation.observeRead(scope, receipt) });
@@ -184,17 +184,17 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
-    // Which report reaches him now (`fcaReportGate.ts`): the card waits out quiet hours; neither repeats an answered request.
-    const shown = reportGates({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, now: Date.now, conversations: parts.conversations },
-      progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
-      parts.ownerAlone));
-    // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
-    const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
-      conversations: parts.conversations, shown: shown.card, ownerAlone: parts.ownerAlone, now: Date.now, log: line => console.warn(line) }) : null;
+    // Which report reaches him now (`fcaReportWiring.ts`): the card waits out quiet hours; neither repeats an answered request. Rich
+    // chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
+    const seen = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
+      parts.ownerAlone);
+    const reports = fcaReportWiring({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, conversations: parts.conversations, seen,
+      ownerAlone: parts.ownerAlone, log: line => console.warn(line) });
+    const reportCards = reports.cards;
     const cardTimer = reportCards ? setInterval(() => { timedTick('report_cards', () => reportCards.tick()); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
-      progress: shown.call, spokenReports: true });
+      progress: reports.call, spokenReports: true });
     const lifecycleTask = (executionId: string) => {
       const taskId = new ActionLeaseReader(db).fcaTaskOf(executionId, parts.ownerScope);
       return taskId && visible?.(parts.ownerScope, taskId) ? runtime.runtime.taskSources(parts.ownerScope, taskId) : null;
@@ -218,4 +218,10 @@ export async function serveFcaTaskRoute(service: ReturnType<typeof configuredSer
   if (!service) sendJson(response, 503, { error: 'FCA_NOT_ENABLED' });
   else await service.route(request, response, principal, url);
   return true;
+}
+
+/** The environment names that give the task model its key (names only, never a value). */
+function fcaKeyNames(model: string): string {
+  if (model === 'claude-sonnet-5-5') return 'SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY';
+  return isHaikuModel(model) ? 'SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
 }

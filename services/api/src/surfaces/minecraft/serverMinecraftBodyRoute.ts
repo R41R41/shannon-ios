@@ -10,9 +10,6 @@ import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
-import { closedSignal } from '../../infra/http/apiAutonomyHostStepRoutes.js';
-import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
-import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from '../../contracts/minecraftBodyRequestContract.js';
 
 export interface MinecraftBodyRoute {
   configuration: MinecraftBodyConfiguration | null;
@@ -27,16 +24,14 @@ export interface MinecraftBodyRoute {
  * `SHANNON_MINECRAFT_BODY_JSON` unset: 503, and nothing is opened.
  */
 /** The route around a service, also for tests. */
-export function minecraftBodyRoute(service: MinecraftBody | null, configuration: MinecraftBodyConfiguration | null, close: () => void = () => {},
-  requests: MinecraftBodyRequests | null = null): MinecraftBodyRoute {
-  const requestUsage = new Map<string, { startedAt: number; count: number }>();
+export function minecraftBodyRoute(service: MinecraftBody | null, configuration: MinecraftBodyConfiguration | null, close: () => void = () => {}): MinecraftBodyRoute {
   const usage = new Map<string, { startedAt: number; count: number }>();
   return {
     configuration,
     close,
     async handle(request, response, path, body, principal) {
       if (isRequestPath(path)) {
-        await handleRequests(request, response, path, body, principal, configuration, requests, requestUsage);
+        sendJson(response, 503, { error: 'MINECRAFT_BODY_NOT_CONFIGURED', message: 'Her Minecraft body takes requests through the common task tree.' });
         return true;
       }
       if (path !== MINECRAFT_BODY_TURN_PATH) return false;
@@ -64,72 +59,12 @@ export function minecraftBodyRoute(service: MinecraftBody | null, configuration:
   };
 }
 
-function isRequestPath(path: string): boolean {
-  return path === MINECRAFT_REQUEST_PATHS.claim || path === MINECRAFT_REQUEST_PATHS.list
-    || MINECRAFT_REQUEST_PATHS.progress.test(path) || MINECRAFT_REQUEST_PATHS.report.test(path) || MINECRAFT_REQUEST_PATHS.cancel.test(path);
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-
 /**
- * Phase 4 (`docs/minecraft-body-contract.md`, "Requests"). The body's routes (claim, progress, report) take the
- * configured device only; the owner's routes (list, cancel) take any other paired device of the owner's scope. The
- * device is its token, never the body.
+ * The request queue of phase 4 (claim, list, progress, report, cancel) is retired (Syzygy ADR-0009 S9): her body takes the
+ * owner's requests through the common task tree (`/v1/body/minecraft/control`). Its paths keep the closed answer they gave
+ * since the common path was switched on, never a silent 404.
  */
-async function handleRequests(
-  request: IncomingMessage, response: ServerResponse, path: string, body: unknown, principal: ShannonDevicePrincipal | null,
-  configuration: MinecraftBodyConfiguration | null, requests: MinecraftBodyRequests | null, usage: Map<string, { startedAt: number; count: number }>,
-): Promise<void> {
-  const deny = (status: number, error: string, message: string) => sendJson(response, status, { error, message });
-  if (!configuration || !requests) return deny(503, 'MINECRAFT_BODY_NOT_CONFIGURED', 'Her Minecraft body is not configured.');
-  if (!principal) return deny(403, 'MINECRAFT_BODY_DEVICE_DENIED', 'A paired device token is required.');
-  if (principal.scopeKey !== configuration.ownerScopeKey) return deny(403, 'MINECRAFT_BODY_SCOPE_DENIED', 'Her Minecraft body is the owner\'s.');
-  if (!consumeDeviceAllowance(usage, principal.deviceId, MINECRAFT_REQUEST_LIMITS.requestsPerMinute)) return deny(429, 'RATE_LIMITED', 'Too many requests; retry after a minute.');
-  const isBody = principal.deviceId === configuration.deviceId;
-  const scopeKey = principal.scopeKey;
-
-  // The owner's side: his apps read and cancel; the body itself does neither.
-  if (path === MINECRAFT_REQUEST_PATHS.list) {
-    if (request.method !== 'GET') return deny(405, 'METHOD_NOT_ALLOWED', 'GET only.');
-    if (isBody) return deny(403, 'MINECRAFT_OWNER_ONLY', 'The body does not read the owner\'s list.');
-    return sendJson(response, 200, { present: requests.present(scopeKey), requests: requests.recent(scopeKey, 20).map(item => ({ ...item, origin: { surface: item.origin.surface } })) });
-  }
-  if (request.method !== 'POST') return deny(405, 'METHOD_NOT_ALLOWED', 'POST only.');
-  if (!isRecord(body)) return deny(400, 'BAD_REQUEST', 'JSON object body is required');
-  const cancelMatch = path.match(MINECRAFT_REQUEST_PATHS.cancel);
-  if (cancelMatch) {
-    if (isBody) return deny(403, 'MINECRAFT_OWNER_ONLY', 'The body reports a stop; it does not cancel.');
-    const unknown = Object.keys(body).find(key => key !== 'scopeKey');
-    if (unknown) return deny(400, 'BAD_REQUEST', `${unknown.slice(0, 40)} is not allowed`);
-    const result = requests.cancel(scopeKey, cancelMatch[1]!);
-    if (result === 'NOT_FOUND') return deny(404, 'MINECRAFT_REQUEST_NOT_FOUND', 'No such request.');
-    if (result === 'FINISHED') return deny(409, 'MINECRAFT_REQUEST_FINISHED', 'The request has already finished.');
-    return sendJson(response, 200, { id: result.id, state: result.state, cancelRequested: result.cancelRequested });
-  }
-
-  // The body's side.
-  if (!isBody) return deny(403, 'MINECRAFT_BODY_DEVICE_DENIED', 'This device is not her Minecraft body.');
-  if (path === MINECRAFT_REQUEST_PATHS.claim) {
-    const claim = validClaim(body);
-    if (typeof claim === 'string') return deny(400, 'BAD_REQUEST', claim);
-    const answer = await requests.claim(scopeKey, principal.deviceId, claim, closedSignal(response));
-    if (answer === 'DEVICE_DENIED') return deny(403, 'MINECRAFT_BODY_DEVICE_DENIED', 'This device is not her Minecraft body.');
-    if (answer === 'SCOPE_DENIED') return deny(403, 'MINECRAFT_BODY_SCOPE_DENIED', 'Her Minecraft body is the owner\'s.');
-    if (!response.writableEnded && !response.destroyed) sendJson(response, 200, answer);
-    return;
-  }
-  const progressMatch = path.match(MINECRAFT_REQUEST_PATHS.progress);
-  if (progressMatch) {
-    const progress = validProgress(body);
-    if (typeof progress === 'string') return deny(400, 'BAD_REQUEST', progress);
-    if(!await requests.executionPresent(scopeKey,progressMatch[1]!))requests.cancel(scopeKey,progressMatch[1]!);
-    const answer = requests.progress(scopeKey, principal.deviceId, progressMatch[1]!, progress);
-    return answer === 'NOT_FOUND' ? deny(404, 'MINECRAFT_REQUEST_NOT_FOUND', 'No such request was handed to this device.') : sendJson(response, 200, answer);
-  }
-  const reportMatch = path.match(MINECRAFT_REQUEST_PATHS.report)!;
-  const report = validReport(body);
-  if (typeof report === 'string') return deny(400, 'BAD_REQUEST', report);
-  const answer = requests.report(scopeKey, principal.deviceId, reportMatch[1]!, report);
-  if(answer !== 'NOT_FOUND')await requests.acknowledgeExecution(scopeKey,reportMatch[1]!,report.outcome==='done'?'completed':report.outcome==='stopped'?'cancelled':'failed');
-  return answer === 'NOT_FOUND' ? deny(404, 'MINECRAFT_REQUEST_NOT_FOUND', 'No such request was handed to this device.') : sendJson(response, 200, answer);
+const RETIRED_REQUEST_PATH = /^\/v1\/body\/minecraft\/(?:claim|requests(?:\/[^/]+\/(?:progress|report|cancel))?)$/u;
+function isRequestPath(path: string): boolean {
+  return RETIRED_REQUEST_PATH.test(path);
 }

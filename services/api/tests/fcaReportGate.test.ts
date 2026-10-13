@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { gatedProgress, reportGateDecision, type ReportGateParts } from '../src/mind/action/fca/fcaReportGate.js';
+import { gatedProgress, reportGateDecision, reportGates, type ReportGateParts } from '../src/mind/action/fca/fcaReportGate.js';
+import { createReportCards, REPORT_CARD_RECHECK_MS, REPORT_CARD_SPOKEN_WAIT_MS, REPORT_CARD_WINDOW_MS } from '../src/mind/action/fca/fcaReportCards.js';
 import type { TaskProgress } from '../src/mind/action/taskRuntime/taskProgressPorts.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
@@ -205,5 +206,217 @@ describe('the card scan and a held report (review 2026-10-13)', () => {
     at += 2 * REPORT_CARD_RECHECK_MS; // A held report is looked at again after a recheck window, not every scan.
     expect(cards.tick()).toBe(1);
     expect(written).toHaveLength(1);
+  });
+});
+
+/**
+ * The card scan with the gate first (2026-10-13, after 2d3820fe: a held or dropped report's visibility walk still cost 160–1,300 ms
+ * a scan, every 60–120 s for a day). `shown` stands for the visibility walk: it is counted, and must not run for a report the gate
+ * holds or drops.
+ */
+function gateFirst(start: number, entries: Array<[TaskView, TaskProgress | null]>, walk?: (id: string) => TaskProgress | null) {
+  const clock = { at: start };
+  const messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; observedAt: string }> = [];
+  const parent = { ...task('conversation', '', start), kind: 'conversation', parentId: null } as TaskView;
+  const find = (id: string) => entries.find(([item]) => item.id === id);
+  const runtime = {
+    get: (_scope: string, id: string) => id === parent.id ? parent : find(id)?.[0] ?? null,
+    list: (_scope: string, options?: { parentId?: string }) => entries.map(([item]) => item).filter(item => !options?.parentId || item.parentId === options.parentId),
+    progress: (_scope: string, id: string) => find(id)?.[1] ?? null,
+    taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(start), recalledMemoryIds: [] }],
+  } as unknown as ReportGateParts['runtime'];
+  const recentThreadMessages = (_scope: string, _thread: string, limit: number) => messages.slice(-limit);
+  const gates = reportGates({ runtime, ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => clock.at,
+    conversations: { recentThreadMessages, conversationHistory: () => messages } }, id => runtime.progress!('owner', id));
+  const counts = { shown: 0, verdicts: 0 }, shown: string[] = [], written: string[] = [], lines: string[] = [];
+  const cards = createReportCards({ runtime: runtime as never, ownerScope: 'owner', now: () => clock.at, ownerAlone: () => true,
+    conversations: { assistantMessage: () => null, appendReportCardOnce: (_scope: string, _thread: string, _id: string, note: { card: { taskId: string } }) => {
+      written.push(note.card.taskId); return true; }, recentThreadMessages } as never,
+    shown: id => { counts.shown += 1; shown.push(id); return walk ? walk(id) : runtime.progress!('owner', id); },
+    gate: { verdict: (item, seen) => { counts.verdicts += 1; return gates.cardGate.verdict(item, seen); }, quiet: gates.cardGate.quiet },
+    log: line => lines.push(line) });
+  const scan = (scans: number, step = 5_000) => { for (let index = 0; index < scans; index++) { cards.tick(); clock.at += step; } };
+  return { clock, messages, counts, shown, written, lines, cards, scan, entries };
+}
+/** A distinct thing to ask about per index (two kanji of its own: no two share a topic piece, none contains another). */
+const about = (index: number) => `${String.fromCharCode(0x4e00 + index * 2)}${String.fromCharCode(0x4e01 + index * 2)}について`;
+const morning = Date.parse('2026-10-12T22:00:00.000Z'); // 7:00 in Tokyo, the morning after `night`.
+
+describe('the card scan asks the gate first (2026-10-13: 160–1,300 ms a scan for held and dropped reports)', () => {
+  it('walks no sources for a report it holds or drops, and asks the gate about them once while nothing changes', () => {
+    const asked = night - minutes(30);
+    const w = gateFirst(night, [
+      [task('stale', about(1), night - minutes(400), 'failed'), progress('止まりました。', night - minutes(390), 'failed')],
+      [task('held', about(2), asked), progress('12月18日公開です。', night - minutes(5), 'received', { spoken: '12月18日公開です。' })],
+      [task('first', '明日の天気は？', asked), progress('晴れです。', night - minutes(20), 'received', { spoken: '晴れです。' })],
+      [task('second', '明日の天気は?', asked + minutes(1)), progress('晴れの予報です。', night - minutes(10), 'received', { spoken: '晴れの予報です。' })],
+    ]);
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 4 }); // stale: drop; held and first: hold (night); second: drop (sibling)
+    w.scan(12 * 30); // Thirty minutes of scans, still night, nothing changed.
+    expect(w.counts).toEqual({ shown: 0, verdicts: 4 });
+    expect(w.written).toEqual([]);
+  });
+
+  it('asks again about a held report when the quiet hours end, and only then walks its sources and writes its card', () => {
+    const w = gateFirst(morning - minutes(10), [[task('held', about(3), night), progress('12月18日公開です。', night, 'received', { spoken: '公開は12月18日です。' })]]);
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 1 });
+    w.clock.at = morning - 1_000;
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 1 }); // 6:59:59: still held, not asked.
+    w.clock.at = morning;
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 1, verdicts: 2 });
+    expect(w.written).toEqual(['held']); // At the first scan of 7:00, as the gate decides.
+  });
+
+  it('asks again about a held report at once when something is said in its Talk (he is talking: delivered now)', () => {
+    const w = gateFirst(night, [[task('held', about(4), night - minutes(30)), progress('答えです。', night - minutes(1), 'received', { spoken: '答えです。' })]]);
+    w.scan(12);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 1 });
+    w.messages.push({ id: 'm1', role: 'user', content: 'まだ起きてるよ', observedAt: iso(w.clock.at) });
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 1, verdicts: 2 });
+    expect(w.written).toEqual(['held']);
+  });
+
+  it('waits for the spoken form of a report it held from the moment it lets it through, as for a new report', () => {
+    const entry: [TaskView, TaskProgress | null] = [task('held', about(5), night), progress('長い報告です。\n- 一つ目\n- 二つ目', night)];
+    const w = gateFirst(morning - minutes(1), [entry]);
+    w.scan(1);
+    w.clock.at = morning;
+    w.scan(1);
+    expect(w.counts.shown).toBe(1); // Walked (and its spoken form asked for) only now.
+    expect(w.written).toEqual([]); // Not a plain cut at once although the report is hours old.
+    w.clock.at = morning + REPORT_CARD_SPOKEN_WAIT_MS - 5_000;
+    w.scan(1);
+    expect(w.written).toEqual([]);
+    entry[1] = { ...entry[1]!, report: { ...entry[1]!.report!, spoken: '報告です。' } }; // The spoken form is written: the mark changes.
+    w.scan(1);
+    expect(w.written).toEqual(['held']);
+  });
+
+  it('settles a dropped report until it or its progress changes, or (for a sibling\'s drop) the siblings change', () => {
+    const asked = noon - minutes(10);
+    const entries: Array<[TaskView, TaskProgress | null]> = [
+      [task('stale', about(6), noon - minutes(400), 'failed'), progress('止まりました。', noon - minutes(390), 'failed')],
+      [task('running', '明日の天気', asked, 'executing'), null],
+      [task('failure', '明日の天気', asked + minutes(1), 'failed'), progress('止まりました。', asked + minutes(2), 'failed')],
+    ];
+    const w = gateFirst(noon, entries);
+    w.scan(12 * 10);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 2 });
+    // The stale failure's progress changes (a new report): asked again at once, dropped again.
+    entries[0]![1] = progress('まだ止まっています。', w.clock.at, 'failed');
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 3 });
+    // The sibling stops without an answer: the failure is no longer superseded and is delivered, as the gate would have before.
+    entries[1]![0] = { ...entries[1]![0], phase: 'failed', updatedAt: iso(w.clock.at) } as TaskView;
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 1, verdicts: 4 });
+    // Its spoken form is asked for only now (it was dropped until now): the card waits for it as for a new report.
+    expect(w.written).toEqual([]);
+    w.scan(REPORT_CARD_SPOKEN_WAIT_MS / 5_000);
+    expect(w.written).toEqual(['failure']);
+  });
+
+  it('counts: thirty finished reports at night cost one gate question each, and a walk only for those delivered', () => {
+    const entries: Array<[TaskView, TaskProgress | null]> = [];
+    for (let index = 0; index < 10; index++) {
+      entries.push([task(`stale-${index}`, about(10 + index), night - minutes(400), 'failed'), progress('止まりました。', night - minutes(390), 'failed')]);
+      entries.push([task(`held-${index}`, about(30 + index), night - minutes(30)), progress(`答え${index}。`, night - minutes(20), 'received', { spoken: `答え${index}。` })]);
+      entries.push([task(`heard-${index}`, about(50 + index), night - minutes(30)),
+        progress(`聞いた答え${index}。`, night - minutes(20), 'received', { spoken: `聞いた答え${index}。`, heard: true })]);
+    }
+    const w = gateFirst(night, entries);
+    w.scan(12 * 60); // An hour of scans (5:20 to 6:20).
+    expect(w.counts).toEqual({ shown: 10, verdicts: 30 }); // Before: every one walked, again every 60–120 s.
+    expect(w.written.sort()).toEqual(Array.from({ length: 10 }, (_, index) => `heard-${index}`).sort());
+    w.clock.at = morning;
+    w.scan(1); // The held ones, at the first scan of the morning.
+    expect(w.counts).toEqual({ shown: 20, verdicts: 40 });
+    expect(w.written).toHaveLength(20);
+    w.scan(12 * 60);
+    expect(w.counts).toEqual({ shown: 20, verdicts: 40 }); // Settled.
+  });
+
+  it('decides again every task it looks at: one never visible, one that throws, or one leaving the 24 h window never keeps a held one waiting', () => {
+    // Review 2026-10-13 (owner-test-fixes-1): a scan that skipped or failed a task without advancing it starved the held reports.
+    const heard = (text: string) => progress(text, night - minutes(25), 'received', { heard: true, spoken: text });
+    const entries: Array<[TaskView, TaskProgress | null]> = [
+      [task('hidden', about(70), night - minutes(30)), heard('見えない答え。')],
+      [task('broken', about(71), night - minutes(30)), heard('壊れた答え。')],
+      // Held too, but its 24 h window ends before the morning: it gets no card then (as before), and is no longer looked at.
+      [task('leaving', about(72), morning - REPORT_CARD_WINDOW_MS - minutes(60)), progress('古い答え。', night - minutes(20), 'received', { spoken: '古い答え。' })],
+      [task('held', about(73), night - minutes(30)), progress('朝の答え。', night - minutes(20), 'received', { spoken: '朝の答え。' })],
+    ];
+    const w = gateFirst(night, entries, id => {
+      if (id === 'broken') throw new Error('broken');
+      return id === 'hidden' ? null : entries.find(([item]) => item.id === id)![1];
+    });
+    w.scan(1);
+    // hidden and broken deliver (heard) and are walked; leaving and held are held without a walk.
+    expect(w.shown.sort()).toEqual(['broken', 'hidden']);
+    expect(w.written).toEqual([]);
+    expect(w.lines).toEqual(['Shannon report card skipped code=report_card_failed']);
+    // Hidden and broken are walked again once per recheck window (60–120 s), never on every scan.
+    w.shown.length = 0;
+    w.scan(12 * 20); // Twenty minutes.
+    const walks = (id: string) => w.shown.filter(walked => walked === id).length;
+    expect(walks('hidden')).toBeGreaterThanOrEqual(10);
+    expect(walks('hidden')).toBeLessThanOrEqual(20);
+    expect(walks('broken')).toBeGreaterThanOrEqual(10);
+    expect(walks('broken')).toBeLessThanOrEqual(20);
+    expect(walks('held') + walks('leaving')).toBe(0);
+    // In the morning: the held report is asked again and written at its first scan, whatever the others do.
+    w.clock.at = morning;
+    w.shown.length = 0;
+    w.scan(1);
+    expect(w.written).toEqual(['held']);
+    expect(w.shown).toContain('held');
+    expect(w.shown).not.toContain('leaving');
+    expect(Date.parse(entries[2]![0].updatedAt) + REPORT_CARD_WINDOW_MS).toBeLessThan(w.clock.at);
+    w.clock.at += 2 * REPORT_CARD_RECHECK_MS;
+    w.shown.length = 0;
+    w.scan(1);
+    expect(w.shown.sort()).toEqual(['broken', 'hidden']);
+  });
+
+  it('waits for the spoken form after a restart across 7:00 too, not a plain cut at once of a report written in the night', () => {
+    // Review of 90bffd77 (Low-1): the scan's memory of what it held is gone after a restart.
+    const entry: [TaskView, TaskProgress | null] = [task('held', about(80), night), progress('長い報告です。\n- 一つ目\n- 二つ目', night)];
+    const w = gateFirst(morning + minutes(1), [entry]); // A new scan, first run at 7:01.
+    w.scan(1);
+    expect(w.counts.shown).toBe(1);
+    expect(w.written).toEqual([]);
+    w.clock.at = morning + minutes(1) + REPORT_CARD_SPOKEN_WAIT_MS - 1_000;
+    w.scan(1);
+    expect(w.written).toEqual([]);
+    w.clock.at = morning + minutes(1) + REPORT_CARD_SPOKEN_WAIT_MS;
+    w.scan(1);
+    expect(w.written).toEqual(['held']); // No spoken form came: the plain cut, after the same wait as for a new report.
+    // A report met within its wait (the usual case) still waits from when it was written, as before.
+    const fresh: [TaskView, TaskProgress | null] = [task('fresh', about(81), noon - minutes(5)), progress('長い報告です。\n- 一つ目', noon - 10_000)];
+    const v = gateFirst(noon, [fresh]);
+    v.scan(1);
+    v.clock.at = noon - 10_000 + REPORT_CARD_SPOKEN_WAIT_MS;
+    v.scan(1);
+    expect(v.written).toEqual(['fresh']);
+  });
+
+  it('delivers nothing when the gate cannot read the stored progress (closed), and asks again after a while', () => {
+    // Review of 90bffd77 (Low-3): without `runtime.progress` the card's gate cannot judge.
+    let shown = 0, at = night;
+    const parent = { ...task('conversation', '', night), kind: 'conversation', parentId: null } as TaskView;
+    const held = task('held', about(82), night - minutes(30));
+    const cards = createReportCards({ ownerScope: 'owner', now: () => at, ownerAlone: () => true,
+      runtime: { list: () => [held], get: (_scope: string, id: string) => id === parent.id ? parent : held,
+        taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(night), recalledMemoryIds: [] }] } as never,
+      conversations: { assistantMessage: () => null, appendReportCardOnce: () => { throw new Error('no card may be written'); } } as never,
+      shown: () => { shown += 1; return progress('答え。', night, 'received', { spoken: '答え。' }); },
+      gate: { verdict: () => ({ decision: 'deliver', reason: 'deliver' }), quiet: () => true } });
+    for (let scan = 0; scan < 40; scan++) { expect(cards.tick()).toBe(0); at += 5_000; }
+    expect(shown).toBe(0);
   });
 });

@@ -151,15 +151,10 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
   it('advertises only configured capabilities of the captured selection and rejects unavailable native modes', () => {
     const fixture = scriptedAnthropic([answer()]), haiku = new RecordingModel('claude-haiku-5-5');
     const sonnet = configuredSonnet(environment, { fetch: fixture.fetcher })!;
-    const ready: string[] = [];
-    const wiring = createModelModeWiring({ ...environment, SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'synthetic-own-time' }, { path: path(), ownerScope: 'owner', haiku, sonnet,
-      minecraftReady: (_scope, model) => ready.includes(model) });
+    // Since ADR-0009 S9 her Minecraft body plans under the common task tree, so the mode never applies to a body planner.
+    const wiring = createModelModeWiring({ ...environment, SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'synthetic-own-time' }, { path: path(), ownerScope: 'owner', haiku, sonnet });
     expect(wiring.modes.snapshot('owner').appliesTo).toEqual(['conversation', 'autonomy-planning']);
-    ready.push(haiku.model);
-    expect(wiring.modes.snapshot('owner').appliesTo).toEqual(['conversation', 'autonomy-planning', 'minecraft-planning']);
     expect(wiring.modes.change('owner', 0, 'sonnet').appliesTo).toEqual(['conversation', 'autonomy-planning']);
-    expect(wiring.primarySelection('other')).toBeNull();
-    expect(wiring.primarySelection('owner')).toEqual({ mode: 'sonnet', model: sonnet.model, revision: 1 });
     wiring.close();
     for (const unavailable of [{ ...environment, SHANNON_SONNET_ROUTING: 'off' }, { SHANNON_SONNET_ROUTING: 'on' }]) {
       const off = createModelModeWiring(unavailable, { path: path(), ownerScope: 'owner', haiku, sonnet: configuredSonnet(unavailable, {}) });

@@ -1,5 +1,5 @@
 import {
-  CHARACTER_CORE, SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME, isShannonEmotionKind,
+  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME, isShannonEmotionKind,
   shannonTemperament,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
@@ -127,7 +127,7 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
   const others = input.sitting.filter(burst => burst.id !== input.burst.id);
   const conversation = input.audience === 'owner' ? input.conversation.slice(-BODY_REACTION_LIMITS.contextMessages) : [];
   return [
-    input.inner ? `${SHANNON_ONE_LINE_VOICE_INNER}\n[${SHANNON_FIRST_PERSON}のこと] ${CHARACTER_CORE.summary}` : SHANNON_ONE_LINE_VOICE,
+    input.inner ? SHANNON_ONE_LINE_VOICE_INNER : SHANNON_ONE_LINE_VOICE,
     ...(input.inner?.block ? [input.inner.block] : []),
     [
       '[体に触れられた]',

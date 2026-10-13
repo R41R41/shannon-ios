@@ -21,10 +21,13 @@ describe('OpenAI transcription gateway', () => {
         expect(body.expires_after).toEqual({ anchor: 'created_at', seconds: 300 });
         expect(body.session).toMatchObject({
           type: 'transcription',
+          // The transcript's log-probabilities, from which the iOS and Windows clients compute `userUtterance.confidence`.
+          include: ['item.input_audio_transcription.logprobs'],
           audio: { input: {
             format: { type: 'audio/pcm', rate: 24_000 },
             transcription: { model: 'gpt-4o-mini-transcribe', language: 'ja' },
-            turn_detection: { type: 'server_vad', silence_duration_ms: 360 },
+            // A client that names no platform (the iPhone today) keeps server_vad; 360 ms split sentences, so 650 ms.
+            turn_detection: { type: 'server_vad', silence_duration_ms: 650 },
           } },
         });
         expect(body.session.audio.input.transcription.prompt).toContain('Aether');
@@ -37,7 +40,89 @@ describe('OpenAI transcription gateway', () => {
       model: 'gpt-4o-mini-transcribe',
       expiresAt: new Date(1_790_816_000 * 1_000).toISOString(),
       inputUsdPerMinute: 0.003,
+      transcriptionLogprobs: true,
+      turnDetection: 'server',
     });
+  });
+
+  it('uses semantic_vad only for the platforms that ask for it at mint (Windows by default)', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const gateway = (options: Partial<ConstructorParameters<typeof OpenAITranscriptionGateway>[0]> = {}) => new OpenAITranscriptionGateway({
+      apiKey: 'k', ...options,
+      fetcher: async (_input, init) => {
+        seen.push(JSON.parse(String(init?.body)).session.audio.input.turn_detection);
+        return new Response(JSON.stringify({ value: secret }));
+      },
+    });
+    await expect(gateway().createSession({ platform: 'windows' })).resolves.toMatchObject({ turnDetection: 'semantic' });
+    await gateway().createSession({ platform: 'ios' });
+    await gateway({ semanticPlatforms: ['windows', 'macos'], eagerness: 'low' }).createSession({ platform: 'macos' });
+    await gateway({ turnDetection: 'server' }).createSession({ platform: 'windows' });
+    expect(seen.map(detection => detection.type)).toEqual(['semantic_vad', 'server_vad', 'semantic_vad', 'server_vad']);
+    expect(seen[0]).toEqual({ type: 'semantic_vad', eagerness: 'medium' });
+    expect(seen[2]).toEqual({ type: 'semantic_vad', eagerness: 'low' });
+  });
+
+  it('drops only the part a 400 names, for an hour, and nothing for an unrelated 400 (review L1)', async () => {
+    let clock = Date.parse('2026-10-14T00:00:00.000Z');
+    const bodies: Array<Record<string, any>> = [];
+    let refusals: Array<{ param?: string; message?: string }> = [];
+    const gateway = new OpenAITranscriptionGateway({
+      apiKey: 'k', now: () => new Date(clock),
+      fetcher: async (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        const refusal = refusals.shift();
+        return refusal ? new Response(JSON.stringify({ error: { code: 'invalid_value', ...refusal } }), { status: 400 })
+          : new Response(JSON.stringify({ value: secret }));
+      },
+    });
+    const kinds = () => bodies.map(body => `${body.session.audio.input.turn_detection.type}:${body.session.include ? 'logprobs' : '-'}`);
+    // A refused semantic detection: minted again at once with server_vad, logprobs kept.
+    refusals = [{ param: 'session.audio.input.turn_detection.type' }];
+    await expect(gateway.createSession({ platform: 'windows' })).resolves.toMatchObject({ turnDetection: 'server', transcriptionLogprobs: true });
+    expect(kinds()).toEqual(['semantic_vad:logprobs', 'server_vad:logprobs']);
+    expect(bodies[1]!.session.audio.input.turn_detection.silence_duration_ms).toBe(650);
+    // Remembered: the next Windows mint asks once, without semantic detection.
+    bodies.length = 0;
+    await gateway.createSession({ platform: 'windows' });
+    expect(kinds()).toEqual(['server_vad:logprobs']);
+    // Refused logprobs: only they are dropped.
+    bodies.length = 0;
+    refusals = [{ message: "Unknown value for 'include': item.input_audio_transcription.logprobs" }];
+    await expect(gateway.createSession({ platform: 'ios' })).resolves.toMatchObject({ transcriptionLogprobs: false });
+    expect(kinds()).toEqual(['server_vad:logprobs', 'server_vad:-']);
+    // After an hour both are asked for again.
+    clock += 3_600_001;
+    bodies.length = 0;
+    await gateway.createSession({ platform: 'windows' });
+    expect(kinds()).toEqual(['semantic_vad:logprobs']);
+    // An unrelated 400 drops nothing and is an ordinary failure.
+    bodies.length = 0;
+    refusals = [{ param: 'session.audio.input.transcription.model', message: 'model not available' }];
+    await expect(gateway.createSession({ platform: 'windows' })).rejects.toMatchObject({ code: 'OPENAI_TRANSCRIPTION_TOKEN_FAILED', upstreamStatus: 400 });
+    expect(kinds()).toEqual(['semantic_vad:logprobs']);
+    bodies.length = 0;
+    await gateway.createSession({ platform: 'windows' });
+    expect(kinds()).toEqual(['semantic_vad:logprobs']);
+  });
+
+  it('reads the configured turn detection, platforms and eagerness', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    vi.stubGlobal('fetch', (async (_input: unknown, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)).session.audio.input.turn_detection);
+      return new Response(JSON.stringify({ value: secret }));
+    }) as typeof fetch);
+    await createConfiguredOpenAITranscriptionGateway({ OPENAI_API_KEY: 'k', SHANNON_VOICE_CALL_TURN_DETECTION: 'server' })!.createSession({ platform: 'windows' });
+    await createConfiguredOpenAITranscriptionGateway({ OPENAI_API_KEY: 'k', SHANNON_VOICE_CALL_VAD_EAGERNESS: 'low' })!.createSession({ platform: 'windows' });
+    await createConfiguredOpenAITranscriptionGateway({ OPENAI_API_KEY: 'k', SHANNON_VOICE_CALL_VAD_EAGERNESS: 'eager' })!.createSession({ platform: 'windows' });
+    await createConfiguredOpenAITranscriptionGateway({ OPENAI_API_KEY: 'k', SHANNON_VOICE_CALL_SEMANTIC_PLATFORMS: 'ios' })!.createSession({ platform: 'ios' });
+    await createConfiguredOpenAITranscriptionGateway({ OPENAI_API_KEY: 'k', SHANNON_VOICE_CALL_SEMANTIC_PLATFORMS: 'none' })!.createSession({ platform: 'windows' });
+    vi.unstubAllGlobals();
+    expect(seen).toEqual([
+      { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 650 },
+      { type: 'semantic_vad', eagerness: 'low' }, { type: 'semantic_vad', eagerness: 'medium' }, { type: 'semantic_vad', eagerness: 'medium' },
+      { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 650 },
+    ]);
   });
 
   it('applies the configured model, silence window and bounded price', async () => {
@@ -113,7 +198,11 @@ describe('session route transcription provider', () => {
   }
 
   it('returns an OpenAI session carrying the same cascade fields for provider openai', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ value: secret, expires_at: 1_790_816_000 }))));
+    const minted: Array<Record<string, any>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+      minted.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ value: secret, expires_at: 1_790_816_000 }));
+    }));
     const { status, body } = await call(
       { OPENAI_API_KEY: 'k', SHANNON_GEMINI_TTS_VOICE: 'Kore' },
       { transcriptionProvider: 'openai', participantMode: 'owner' },
@@ -128,8 +217,19 @@ describe('session route transcription provider', () => {
       inputUsdPerMinute: 0.003,
       outputUsdPerMinute: 0.018,
       transcriptionProvider: 'openai',
+      // `/v1/voice/gemini/cascade/sessions` mints the session with logprobs and says so to the iOS and Windows clients.
+      transcriptionLogprobs: true,
     });
+    expect(minted[0]!.session.include).toEqual(['item.input_audio_transcription.logprobs']);
+    expect(minted[0]!.session.audio.input.turn_detection.type).toBe('server_vad');
+    expect(body.turnDetection).toBe('server');
     expect(JSON.stringify(body)).not.toContain('"k"');
+    // The Windows app names its platform at mint and gets semantic detection; a malformed value is a client that said nothing.
+    const windows = await call({ OPENAI_API_KEY: 'k' }, { transcriptionProvider: 'openai', participantMode: 'owner', clientPlatform: 'Windows' });
+    expect(windows.body.turnDetection).toBe('semantic');
+    expect(minted[1]!.session.audio.input.turn_detection).toEqual({ type: 'semantic_vad', eagerness: 'medium' });
+    const odd = await call({ OPENAI_API_KEY: 'k' }, { transcriptionProvider: 'openai', participantMode: 'owner', clientPlatform: { name: 'windows' } });
+    expect([odd.status, odd.body.turnDetection]).toEqual([200, 'server']);
   });
 
   it('keeps the Gemini session for clients that omit the provider', async () => {

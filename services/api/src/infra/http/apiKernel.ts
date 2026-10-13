@@ -38,7 +38,7 @@ import { InMemoryAgentTaskStore, type AgentCommandType, type AgentPlanItem, type
 import { validatedPlaceSearchOptions } from '../../integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import { validChatStream } from '../../surfaces/text/chatSentenceStream.js';
-import { conversationToolServer, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
+import { conversationToolServer, turnToolResults, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { type NotionTurnReader } from '../../mind/action/respond/conversationCapabilities.js';
@@ -136,7 +136,7 @@ export interface ShannonApiKernelOptions {
   memory?: PeopleMemoryParts | null;
   autonomy?: ShannonAutonomyService; innerNote?: import('../../mind/emotion/innerNotePorts.js').InnerNotePort; // ADR-0012; absent: as before.
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
-  /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
+  /** What the owner's devices reported about what she asked them (`devicePromptBlock`), for a turn the owner alone reads. */
   minecraftRequests?: ReportedWork | null;
   /**
    * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what
@@ -276,7 +276,7 @@ export class ShannonApiKernel {
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } };
+      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey) } };
     }
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
     if (testFlightResponse) return testFlightResponse;
@@ -320,7 +320,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.auxiliaryChatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}) });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}), innerNote: this.innerNote });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -422,7 +422,7 @@ export class ShannonApiKernel {
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
-    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone);
+    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone, turnToolResults(toolOffer.tools).some(call => !call.ok));
     const response: ChatResponse = {
       mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
       snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
@@ -455,7 +455,7 @@ export class ShannonApiKernel {
     if (completion.taskProposal && !suppressAgentTaskProposal) {
       if (orchestrationState) {
         orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
-          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
+          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey),
         ));
       }
       response.uiBlocks = [...(response.uiBlocks ?? []), {
