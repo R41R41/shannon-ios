@@ -1,5 +1,5 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
-import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
+import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
@@ -97,13 +97,15 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       if (!visible || withheld.withholdsReply({ text: visible, observedAt: parts.now(), recalledMemoryIds: [id] })) continue;
       if (memoryControlFor(state, id)?.overrideText) { evidence = ''; applicability = 'owner-corrected memory'; }
       items.push({ id, summary: visible.slice(0, 1200), observedAt: at, evidence: evidence.slice(0, 300), applicability,
-        confidence, conflicts: [], detailRef: id, provenance: { kind: provenanceKind, sourceIds: sources(scope, [id], experienceOf), readSourceIds } });
+        confidence, conflicts: [], detailRef: id, provenance: { kind: provenanceKind, sourceIds: sources(scope, [id], experienceOf, state), readSourceIds } });
     }
     return items;
     });
   };
-  const sources = (scope: string, ids: readonly string[], cachedExperience?: (id: string) => ShannonExperience | null) => {
-    const found = new Set<string>(), pending = [...ids], state = parts.state.snapshot(scope);
+  // Within one read, the read's own state (2026-10-13: a state read per recalled item, ~80 per report walk).
+  const sources = (scope: string, ids: readonly string[], cachedExperience?: (id: string) => ShannonExperience | null,
+    readState?: CompanionStateSnapshot) => {
+    const found = new Set<string>(), pending = [...ids], state = readState ?? parts.state.snapshot(scope);
     while (pending.length) {
       const id = pending.shift()!; if (found.has(id)) continue;
       found.add(id); if (found.size > 5000) throw new Error('TASK_MEMORY_LINEAGE_LIMIT');

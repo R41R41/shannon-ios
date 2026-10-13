@@ -178,12 +178,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       localTime: () => ownerLocalClock(new Date(), timeZone),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
     // Which report reaches him now (`fcaReportGate.ts`): the card waits out quiet hours; neither repeats an answered request.
-    const shown = reportGates({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, now: Date.now, conversations: parts.conversations },
-      progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
-      parts.ownerAlone));
-    // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
+    const seen = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
+      parts.ownerAlone);
+    const shown = reportGates({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, now: Date.now, conversations: parts.conversations }, seen);
+    // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk. The card's gate
+    // first, on the stored progress; the sources are walked (`seen`) only for a report it delivers.
     const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
-      conversations: parts.conversations, shown: shown.card, ownerAlone: parts.ownerAlone, now: Date.now, log: line => console.warn(line) }) : null;
+      conversations: parts.conversations, shown: seen, gate: shown.cardGate, ownerAlone: parts.ownerAlone, now: Date.now,
+      log: line => console.warn(line) }) : null;
     const cardTimer = reportCards ? setInterval(() => { timedTick('report_cards', () => reportCards.tick()); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
