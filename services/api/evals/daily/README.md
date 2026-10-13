@@ -44,6 +44,11 @@ with a hidden goal and a knowledge boundary; live only.
 
 ## Running
 
+**The standard run is Haiku, once per task** (owner decisions 2026-10-13): `--set regression` in the app's normal mode
+(Haiku at medium, `luna_plus`), k=1, with Jev. On the VM's separate checkout that is `./run-evals.sh --set regression`. Run
+Sonnet (`--model-mode sonnet`) only when it is explicitly asked for; it costs about ¥85–105 for the set from a cold cache,
+against about ¥30 for Haiku.
+
 ```sh
 # CI-safe: validate the definitions (no model, no network). Also part of the vitest suite (tests/dailyEvals.test.ts).
 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --validate
@@ -51,7 +56,7 @@ pnpm -C services/api exec tsx evals/daily/run.ts --set regression --validate
 # Live (paid): needs SHANNON_EVALS_LIVE=1 and an Anthropic key in the environment
 # (SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY; never printed). Add TYPESAFE_API_KEY
 # (and any SHANNON_JEV_*) for Jev; the first summary line says whether Jev is on.
-SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression
+SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression   # the standard run
 SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --task E3 --task D2
 # The package script also loads the repository's ignored .env:
 SHANNON_EVALS_LIVE=1 pnpm -C services/api eval:daily --set regression --task A1
@@ -59,7 +64,7 @@ SHANNON_EVALS_LIVE=1 pnpm -C services/api eval:daily --set regression --task A1
 
 Options: `--task` (repeatable or comma-separated), `--k` (default 1; more only to investigate a flaky task, not as a gate),
 `--no-judge` (checks and budgets only; the summary says so),
-`--out <dir>`, `--quiet`, `--model-mode haiku|sonnet` (default `haiku`). `SHANNON_EVALS_MODEL` overrides Shannon's model
+`--out <dir>`, `--quiet`, `--model-mode haiku|sonnet` (default `haiku`; `sonnet` only on request). `SHANNON_EVALS_MODEL` overrides Shannon's model
 (default: the production Haiku).
 
 **Model mode.** The kernel's model is production's (`server.ts`, `modelModeWiring.ts`): the primary-mode model over Haiku and
