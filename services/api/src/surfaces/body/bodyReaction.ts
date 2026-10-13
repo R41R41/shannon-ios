@@ -79,12 +79,17 @@ export class BodyReactions {
   private readonly inflight = new Map<string, { hash: string; answer: Promise<BodyReactionAnswer> }>();
   private readonly requests = new Map<string, number[]>();
   private readonly pruned = new Map<string, number>();
-  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note, read by the touch prompt and told of the touch. Null: as before. */
-  private innerNote: InnerNotePort | null = null;
+  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note, read by the touch prompt and told of the touch, and the face on presence. */
+  private port: InnerNotePort | null = null;
 
   constructor(private readonly dependencies: BodyReactionDependencies) {}
 
-  useInnerNote(port: InnerNotePort | null): void { this.innerNote = port; }
+  /** The kernel hands her inner note once, at composition; null (the switch off): every prompt and face as before. */
+  useInnerNote(port: InnerNotePort | null): void {
+    this.port = port;
+  }
+
+  get innerNote(): InnerNotePort | null { return this.port; }
 
   get enabled(): boolean { return this.dependencies.config.enabled && this.dependencies.ingestEnabled; }
 

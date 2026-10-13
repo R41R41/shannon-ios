@@ -180,11 +180,11 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null; private readonly innerNote: import('../../mind/emotion/innerNotePorts.js').InnerNotePort | null;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
-  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null;
+  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null; private readonly innerNote: import('../../mind/emotion/innerNotePorts.js').InnerNotePort | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -230,7 +230,7 @@ export class ShannonApiKernel {
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
-    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body, options.innerNote); // Stage 2, step 6: skill.read.
+    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); // Stage 2, step 6: skill.read.
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
