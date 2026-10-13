@@ -96,34 +96,6 @@ struct ShannonConversationDayDivider: View {
     }
 }
 
-struct ShannonContextReferenceCard: View {
-    let memory: ActiveMemoryDTO
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        let palette = ShannonPalette.resolve(colorScheme)
-        HStack(alignment: .top, spacing: ShannonSpacing.small) {
-            Image(systemName: "arrow.uturn.backward.circle.fill")
-                .foregroundStyle(palette.brandPresence)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("思い出したこと")
-                    .font(.shannon(.caption2).weight(.semibold))
-                    .foregroundStyle(palette.brandPresence)
-                Text(memory.summary)
-                    .font(.shannon(.caption))
-                    .foregroundStyle(palette.textSecondary)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, ShannonSpacing.medium)
-        .padding(.vertical, ShannonSpacing.small)
-        .background(palette.userMessage.opacity(0.42), in: RoundedRectangle(cornerRadius: ShannonShape.medium))
-        .padding(.leading, 62)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 struct ShannonMessageRow: View {
     let message: ConversationMessage
     let isSendingToAether: Bool
@@ -168,10 +140,8 @@ struct ShannonMessageRow: View {
     func shannonReply(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
-                ShannonChatAvatarView(
-                    face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral),
-                    size: 42
-                )
+                // Her eyes or face as this message felt (no tile); the name beside it is the same face.
+                ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: 30)
 
                 Text("シャノン")
                     .font(.shannon(.callout).weight(.semibold))

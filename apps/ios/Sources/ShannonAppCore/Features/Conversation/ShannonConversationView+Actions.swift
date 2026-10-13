@@ -121,10 +121,6 @@ extension ShannonConversationView {
         }
     }
 
-    var latestShannonMessageID: UUID? {
-        model.messages.last(where: { $0.role == .shannon })?.id
-    }
-
     var latestUserMessage: ConversationMessage? {
         model.messages.last(where: { $0.role == .user })
     }

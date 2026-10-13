@@ -40,6 +40,14 @@ public struct ShannonConversationActivityDTO: Codable, Sendable {
                 ?? (try? Date.ISO8601FormatStyle().parse(updatedAt)))?.formatted(.dateTime.hour().minute()) ?? "時刻不明"
         }
         public var isActive: Bool { ["ready", "executing", "waiting", "stopping", "unknown", "stopped"].contains(phase) }
+        /// Work that is still going on or waiting: the only work the strip above the composer shows.
+        /// Completed, failed, stopped and unknown outcomes stay in 「いま」 only.
+        public var isInProgress: Bool { Self.inProgressPhases.contains(phase) }
+        public static let inProgressPhases: Set<String> = ["ready", "executing", "waiting", "stopping"]
+        /// The step being run, only while the work runs: a finished task never reads 「資料と結果を確認中」.
+        public var activeStepTitle: String? { phase == "executing" ? currentStepTitle : nil }
+        /// One line of status that matches the phase: the running step while executing, else the phase.
+        public var statusTitle: String { activeStepTitle ?? phaseTitle }
         public var canStop: Bool { ["ready", "executing", "waiting"].contains(phase) }
         public var phaseTitle: String {
             switch phase {

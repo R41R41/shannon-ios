@@ -4,6 +4,10 @@ struct ShannonWaterlightCanvas: View {
     let frame: ShannonEyeRig.Frame
     let increasedContrast: Bool
     let blushOpacity: Double
+    /// Her eyes alone, without the face, fitted to the canvas (the eyes beside her name in a message).
+    var eyesOnly = false
+    /// A thin outline that keeps the pale eyes readable on a light background; used with `eyesOnly`.
+    var outlinesEyes = false
 
     var body: some View {
         // The approved browser study and icon are authored in sRGB.
@@ -13,6 +17,10 @@ struct ShannonWaterlightCanvas: View {
     }
 
     private func draw(in context: inout GraphicsContext, canvasSize: CGSize) {
+        if eyesOnly {
+            drawEyesOnly(in: &context, canvasSize: canvasSize)
+            return
+        }
         let side = min(canvasSize.width, canvasSize.height)
         let radius = side * ShannonWaterlightVisualTokens.bodyRadiusRatio
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
@@ -61,6 +69,40 @@ struct ShannonWaterlightCanvas: View {
         drawDecor(frame.decor, center: center, radius: radius, in: &clippedContext)
         drawCheeks(frame.eyes, center: center, radius: radius, in: &clippedContext)
         drawEyes(frame, bodyRect: bodyRect, center: center, radius: radius, in: &clippedContext)
+    }
+
+    /// The eyes of `frame`, centred and as large as the canvas allows, with no face behind them. A wide or
+    /// turned expression is fitted rather than cut; otherwise every expression keeps one scale.
+    private func drawEyesOnly(in context: inout GraphicsContext, canvasSize: CGSize) {
+        let side = min(canvasSize.width, canvasSize.height)
+        guard side > 0, let bounds = Self.eyeBounds(frame), bounds.width > 0, bounds.height > 0 else { return }
+        let fill: CGFloat = 0.92
+        let radius = min(
+            side * ShannonWaterlightVisualTokens.eyesOnlyRadiusRatio,
+            side * fill / bounds.width,
+            side * fill / bounds.height
+        )
+        let center = CGPoint(
+            x: canvasSize.width / 2 - bounds.midX * radius,
+            y: canvasSize.height / 2 - bounds.midY * radius
+        )
+        drawCheeks(frame.eyes, center: center, radius: radius, in: &context)
+        drawEyes(frame, bodyRect: .zero, center: center, radius: radius, in: &context)
+    }
+
+    /// The visible eyes' bounds for a unit radius around the origin.
+    static func eyeBounds(_ frame: ShannonEyeRig.Frame) -> CGRect? {
+        var union: CGRect?
+        for eye in frame.eyes where eye.depth > 0.02 {
+            let width = eye.configuration.width * ShannonEyeRig.heroEyeScale
+            let height = eye.configuration.height * ShannonEyeRig.heroEyeScale
+            let path = Path(
+                roundedRect: CGRect(x: -width / 2, y: -height / 2, width: width, height: height),
+                cornerRadius: min(width, height) / 2
+            ).applying(transform(for: eye, center: .zero, radius: 1, lid: frame.lid))
+            union = union.map { $0.union(path.boundingRect) } ?? path.boundingRect
+        }
+        return union
     }
 
     private func drawTerminalSurface(
@@ -244,7 +286,7 @@ struct ShannonWaterlightCanvas: View {
                 ),
                 cornerRadius: min(eyeWidth, eyeHeight) / 2
             )
-            eyePath = eyePath.applying(transform(for: eye, center: center, radius: radius, lid: frame.lid))
+            eyePath = eyePath.applying(Self.transform(for: eye, center: center, radius: radius, lid: frame.lid))
             let eyeBounds = eyePath.boundingRect
             var eyeContext = context
             eyeContext.opacity = min(1, max(0, (eye.depth - 0.08) / 0.35))
@@ -266,6 +308,13 @@ struct ShannonWaterlightCanvas: View {
                     )
                 )
             )
+            if outlinesEyes {
+                eyeContext.stroke(
+                    eyePath,
+                    with: .color(Color(hex: ShannonWaterlightVisualTokens.eyeOutline).opacity(increasedContrast ? 0.9 : 0.62)),
+                    lineWidth: max(0.6, radius * 0.022)
+                )
+            }
 
             guard eyeHeight > radius * 0.16 else { continue }
             var sheen = Path()
@@ -274,7 +323,7 @@ struct ShannonWaterlightCanvas: View {
                 to: CGPoint(x: eyeWidth * 0.18, y: -eyeHeight * 0.27),
                 control: CGPoint(x: 0, y: -eyeHeight * 0.36)
             )
-            sheen = sheen.applying(transform(for: eye, center: center, radius: radius, lid: frame.lid))
+            sheen = sheen.applying(Self.transform(for: eye, center: center, radius: radius, lid: frame.lid))
             eyeContext.stroke(
                 sheen,
                 with: .color(Color(hex: ShannonWaterlightVisualTokens.eyeSheen).opacity(0.48)),
@@ -283,7 +332,7 @@ struct ShannonWaterlightCanvas: View {
         }
     }
 
-    private func transform(
+    private static func transform(
         for eye: ShannonEyeRig.ProjectedEye,
         center: CGPoint,
         radius: CGFloat,

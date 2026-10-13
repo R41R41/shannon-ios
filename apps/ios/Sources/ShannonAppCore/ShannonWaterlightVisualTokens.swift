@@ -16,8 +16,12 @@ enum ShannonWaterlightVisualTokens {
     static let eyeBottom: UInt = 0x6397FF
     static let eyeSheen: UInt = 0xE4FDFF
     static let blush: UInt = 0xF8C4CD
+    /// The eyes alone on a light background (a message's icon) are outlined in a deeper water blue.
+    static let eyeOutline: UInt = 0x3A6FD6
 
     static let bodyRadiusRatio: CGFloat = 68.0 / 160.0
+    /// The eyes alone are drawn for a face this much larger than the canvas side, so they fill it.
+    static let eyesOnlyRadiusRatio: CGFloat = 0.95
     static let cornerRadiusRatio: CGFloat = 43.0 / 160.0
     static let borderInsetRatio: CGFloat = 1.2 / 160.0
     static let borderCornerRadiusRatio: CGFloat = 41.8 / 160.0

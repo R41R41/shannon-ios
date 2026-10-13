@@ -48,6 +48,8 @@ public struct ShannonConversationView: View {
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
     @State var dialogueDidCopy = false
+    /// The measured height of the dialogue display's last reply, so its bubble is as tall as the words.
+    @State var dialogueReplyContentHeight: CGFloat = 0
     @State var dialogueActivity: ShannonDialogueActivity = .idle
     @State var selectedAgentTaskID: UUID?
     @State var composerAttachments: [ShannonChatAttachmentDTO] = []

@@ -31,6 +31,21 @@ public final class ShannonConversationActivityModel {
     public var tasks: [ShannonConversationActivityDTO.Task] { state == .privateAudience ? [] : reading?.tasks ?? [] }
     public var featured: ShannonConversationActivityDTO.Task? { tasks.first(where: \.isActive) ?? tasks.first }
     public var showsActivity: Bool { state == .privateAudience || !tasks.isEmpty || state == .recovering && reading != nil }
+    /// Rows the owner swiped away from the strip above the composer. Hiding a row never stops its work, and
+    /// 「いま」 still lists it. Held for as long as the app runs.
+    public private(set) var dismissedFromStrip: Set<String> = []
+    /// The strip above the composer: work in progress or waiting, not what finished, and not what he hid.
+    public var stripTasks: [ShannonConversationActivityDTO.Task] {
+        Self.stripTasks(tasks, dismissed: dismissedFromStrip)
+    }
+    public var stripFeatured: ShannonConversationActivityDTO.Task? { stripTasks.first }
+    public var showsStrip: Bool { state == .privateAudience || !stripTasks.isEmpty }
+    public func dismissFromStrip(_ id: String) { dismissedFromStrip.insert(id) }
+    nonisolated public static func stripTasks(
+        _ tasks: [ShannonConversationActivityDTO.Task], dismissed: Set<String>
+    ) -> [ShannonConversationActivityDTO.Task] {
+        tasks.filter { $0.isInProgress && !dismissed.contains($0.id) }
+    }
     public func isStale(at date: Date = .now) -> Bool {
         guard let text = reading?.generatedAt,
               let generated = (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(text)) ?? (try? Date.ISO8601FormatStyle().parse(text)) else { return true }
