@@ -1,5 +1,6 @@
 import { visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
 import type { MindInboxDraft } from '../../contracts/mindInboxContract.js';
+import { MINECRAFT_LIFECYCLE_ACTIONS } from '../../contracts/minecraftLifecycleContract.js';
 
 /**
  * What produces the notices of a promise's time and of a task's end (Syzygy ADR-0008 stage 3, `docs/mind-workspace-contract.md`):
@@ -95,21 +96,26 @@ export interface LifecycleReport {
   /** Set when the accepted operation never started: busy, unavailable, not_allowed or error. */
   notStarted?: string;
 }
+/** The closed reason of an accepted operation whose action left `unknown` at its one exit with no receipt from the body. */
+export const LIFECYCLE_RESULT_UNKNOWN = 'lifecycle_result_unknown';
 
 /**
  * The Minecraft lifecycle operations the owner asked for in a conversation and she answered with 「受け付けた」 (2026-10-13
- * TI-REQ): their native receipt within the last hour, as `minecraft.<action>` done, failed or cancelled.
+ * TI-REQ): their native receipt within the last hour, as `minecraft.<action>` done, failed or cancelled; and one whose action left
+ * `unknown` at its ten-minute exit with no receipt (a body that never answered, as one predating `set_day` does) as failed with
+ * `lifecycle_result_unknown`, so that 「受け付けました」 is never left without an end.
  */
 export function lifecycleOutcomeNotices(reports: readonly LifecycleReport[], at: string): readonly ProducedNotice[] {
   const now = Date.parse(at);
   return reports.flatMap(report => {
     const ended = Date.parse(report.observedAt);
     if (!Number.isFinite(ended) || ended > now || now - ended > NOTICE_PRODUCER_LIMITS.outcomeWithinMinutes * MINUTE) return [];
-    if (!['start', 'stop', 'login', 'logout'].includes(report.action)) return [];
+    if (!(MINECRAFT_LIFECYCLE_ACTIONS as readonly string[]).includes(report.action)) return [];
     const code = report.outcome === 'completed' ? 'done' : report.outcome === 'cancelled' ? 'cancelled' : 'failed';
     const id = sourceId('minecraft-', report.id, ended);
     if (!id) return [];
-    const reason = report.notStarted ? { reason: `lifecycle_not_started.${report.notStarted}` } : {};
+    const reason = report.notStarted ? { reason: `lifecycle_not_started.${report.notStarted}` }
+      : report.outcome === 'unknown' ? { reason: LIFECYCLE_RESULT_UNKNOWN } : {};
     const tool = `minecraft.${report.action}`;
     const draft = { kind: 'task_outcome' as const, code, audience: 'owner' as const, source: 'api' as const, sourceId: id, tool, ...reason };
     return [{ at: iso(ended), draft }];

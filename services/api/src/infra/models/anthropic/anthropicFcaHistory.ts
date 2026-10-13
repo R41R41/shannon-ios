@@ -5,6 +5,11 @@ import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
 /** Public projection for a new replay epoch only. The original signed round is never edited or partly replayed. */
 export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
   bootstrap(text) { return [{ role: 'user', content: text }]; },
+  // Inline tool additions/removals restate catalog definitions; `nativeFcaTools` re-adds whatever a new epoch lacks.
+  reproducible(entry) {
+    const message = object(entry);
+    return !!message && isFcaToolChangeMessage(message);
+  },
   project(round) {
     const result: CompactionMessage[] = [];
     const calls = new Set<string>(), pending = new Set<string>();

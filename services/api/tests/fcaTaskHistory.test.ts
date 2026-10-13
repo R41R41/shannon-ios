@@ -221,6 +221,61 @@ describe('exact complete-round FCA history compaction', () => {
     }
   });
 
+  it('measures reproducible tool definitions apart from the history budget, within their own bound (Minebot lane 2026-10-14)', async () => {
+    const f = fixture(); await f.append(1); const window = f.window();
+    const definitions = { role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { name: 'mc_x', description: 'd'.repeat(46_000) } } }] };
+    const widened = { ...window, rounds: window.rounds.map(round => ({ ...round, entries: [round.entries[0], definitions, ...round.entries.slice(1)] })) };
+    const reproducible: FcaHistoryCodec = { ...codec, reproducible: entry => entry === definitions };
+    // Counted with the rest, the round is over 20,000 characters; measured apart, it is replayed native and unchanged.
+    const plan = planFcaHistory(widened, reproducible, { ...policy, maximumNativeCharacters: 20_000 });
+    expect(plan).toMatchObject({ kind: 'ready', replay: { history: widened.rounds[0]!.entries } });
+    expect(plan.kind === 'ready' && plan.replay.clippedMessages).toBe(undefined);
+    // A codec that does not mark them counts them as before; past their own bound they are compacted like the rest.
+    expect(planFcaHistory(widened, codec, { ...policy, maximumNativeCharacters: 20_000 })).toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
+    expect(planFcaHistory(widened, reproducible, { ...policy, maximumNativeCharacters: 20_000, maximumToolDefinitionCharacters: 40_000 }))
+      .toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
+    // Review P3-1: both together have their own bound too.
+    expect(planFcaHistory(widened, reproducible, { ...policy, maximumNativeCharacters: 20_000, maximumReplayCharacters: 40_000 }))
+      .toMatchObject({ kind: 'ready', replay: { clippedMessages: 0 } });
+  });
+
+  it('replays a newest round too long by itself as a clipped public epoch for this step only (Minebot lane 2026-10-14)', async () => {
+    const f = fixture(); await f.append(1);
+    const original = f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all();
+    const long = 'エンドの観測。'.repeat(12_000);
+    // The native round as stored carries the long observation in its first user message.
+    const widen = (value: ReturnType<typeof f.window>) => ({ ...value, rounds: value.rounds.map(round => ({ ...round,
+      entries: [{ role: 'user', content: long }, ...round.entries.slice(1)] })) });
+    const window = widen(f.window());
+    const wide: FcaHistoryCodec = { ...codec, project: round => codec.project(round)!.map(message => message.role === 'user' ? { ...message, content: long } : message) };
+    const plan = planFcaHistory(window, wide, { ...policy, maximumNativeCharacters: 20_000 });
+    if (plan.kind !== 'ready') throw new Error('expected a replay');
+    expect(plan.replay.clippedMessages).toBe(1);
+    expect(plan.replay.history).toHaveLength(1);
+    expect(JSON.stringify(plan.replay.history).length).toBeLessThanOrEqual(20_000);
+    expect(JSON.stringify(plan.replay.history)).not.toMatch(/private-|signed-/u);
+    const epoch = JSON.parse((plan.replay.history[0] as { content: string }).content) as { kind: string; summary: unknown; rounds: Array<{ messages: Array<{ role: string; callId?: string; content: string }> }> };
+    expect(epoch).toMatchObject({ kind: 'fca_public_history', summary: null });
+    const messages = epoch.rounds[0]!.messages;
+    // Every message stays in order with its call id; only the longest text is cut, with a marker.
+    expect(messages.map(message => message.role)).toEqual(['user', 'tool_call', 'tool_result', 'assistant']);
+    expect(messages.filter(message => message.callId).map(message => message.callId)).toEqual(['call-1', 'call-1']);
+    expect(messages[0]!.content).toMatch(/^エンドの観測。.*…（長いため後略: \d+字）$/su);
+    // Deterministic while the round stays the newest, so the prefix it starts is reused; nothing is stored.
+    expect(planFcaHistory(widen(f.window()), wide, { ...policy, maximumNativeCharacters: 20_000 })).toEqual(plan);
+    expect(f.window().summary).toBeNull();
+    expect(f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all()).toEqual(original);
+    // After a summary epoch, the summary stays in front of the clipped round.
+    const step = await f.begin(); await f.finish(step, 2); const next = await f.begin();
+    await prepareFcaHistory(next, f.ports(), new AbortController().signal, { ...policy, recentRounds: 1, maximumNativeCharacters: 100 }).catch(() => undefined);
+    const summarized = f.window();
+    expect(summarized.summary?.throughSequence).toBe(1);
+    const after = planFcaHistory(widen(summarized), wide, { ...policy, maximumNativeCharacters: 20_000 });
+    if (after.kind !== 'ready') throw new Error('expected a replay');
+    expect(JSON.parse((after.replay.history[0] as { content: string }).content).summary).toEqual(summarized.summary!.template);
+    expect(after.replay.summaryText).not.toBe('');
+  });
+
   it('migrates old append-only history and records actual committed task status', async () => {
     const f = fixture(':memory:', true); await f.append(2);
     expect(f.window().rounds.map(round => round.status)).toEqual(['queued', 'queued']);

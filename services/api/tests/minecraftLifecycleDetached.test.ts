@@ -12,6 +12,7 @@ import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ActionLeaseReader } from '../src/mind/action/threads/store/actionLeaseReader.js';
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
 import { noticeLine } from '../src/mind/workspace/promptLayout.js';
+import { offeredTools } from '../src/mind/tools/shannonTools.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -162,3 +163,83 @@ describe('a conversation lifecycle request holds its own Minecraft action, not t
     expect(retained(body, [body])).toBe(true);
   });
 });
+
+/** Owner request through the Minebot lane, 2026-10-14 (body ea1ef4ce): `minecraft.set_day`, the fixed `time set day`. */
+describe('minecraft.set_day: the owner alone in a conversation, under its own lifecycle action', () => {
+  it('is offered only to the owner alone in text or voice, never in her own time or with others present', () => {
+    const named = (surface: 'text' | 'voice' | 'autonomy', audience: 'owner_alone' | 'others') => offeredTools(surface, audience).some(tool => tool.name === 'minecraft.set_day');
+    expect(named('text', 'owner_alone')).toBe(true);
+    expect(named('voice', 'owner_alone')).toBe(true);
+    expect(named('autonomy', 'owner_alone')).toBe(false);
+    expect(named('text', 'others')).toBe(false);
+    expect(named('voice', 'others')).toBe(false);
+  });
+
+  it('answers 「受け付けました」, runs under its own Minecraft action and reports completed/changed as done', async () => {
+    const f = fixture(), asked = await f.call('minecraft.set_day', 'day-1');
+    expect(asked.result).toMatchObject({ ok: true, evidence: { outcome: 'queued', action: 'set_day', target: { kind: 'minecraft_server', id: 'home' } } });
+    expect(asked.result.text).toContain('受け付けました');
+    expect(asked.resources).not.toContain(body);
+    const command = await f.command();
+    expect(command.action).toBe('set_day');
+    expect(f.store.get(command.authority.executionId)).toMatchObject({ kind: 'minecraft', origin: 'owner_request', sourceId: command.id, resources: [body] });
+    // The body's success: completed/changed, ordinary state only, no stop guard.
+    expect(f.poll({ receipts: [f.receipt(command)] }).acknowledged).toEqual([command.id]);
+    await until(() => f.store.get(command.authority.executionId)!.state === 'completed');
+    const reports = new ActionLeaseReader(f.db).ownLifecycleReceipts('owner');
+    expect(lifecycleOutcomeNotices(reports, f.at())[0]!.draft).toMatchObject({ code: 'done', tool: 'minecraft.set_day' });
+  });
+
+  it('reports refused/players_present from the body as failed', async () => {
+    const f = fixture();
+    expect((await f.call('minecraft.set_day', 'day-crowded')).result.ok).toBe(true);
+    const command = await f.command();
+    const refused = f.receipt(command, { outcome: 'refused', code: 'players_present', state: { serverId: 'home', observedAt: f.at(), running: 'running', bot: 'joined', otherPlayers: 1 } });
+    expect(f.poll({ receipts: [refused] }).acknowledged).toEqual([command.id]);
+    await until(() => f.store.get(command.authority.executionId)!.state === 'failed');
+    const reports = new ActionLeaseReader(f.db).ownLifecycleReceipts('owner');
+    expect(lifecycleOutcomeNotices(reports, f.at())[0]!.draft).toMatchObject({ code: 'failed', tool: 'minecraft.set_day' });
+  });
+
+  it.each([
+    ['a stopped server', { running: 'stopped' as const }, 'サーバーが起動していない'],
+    ['another player online', { otherPlayers: 1 }, 'ほかの参加者がいる'],
+    ['an unknown player count', { otherPlayers: null }, 'ほかの参加者がいる'],
+  ])('refuses at once on %s, with nothing admitted or sent', async (_label, patch, text) => {
+    const f = fixture();
+    f.poll({ states: [{ serverId: 'home', observedAt: f.at(), running: 'running', bot: 'joined', otherPlayers: 0, ...patch }] });
+    const asked = await f.call('minecraft.set_day', 'day-refused');
+    expect(asked.result).toMatchObject({ ok: false, failure: 'refused', retryable: false });
+    expect(asked.result.text).toContain(text);
+    expect(f.configured.service.store.pending()).toEqual([]);
+    expect(f.db.prepare("SELECT COUNT(*) AS count FROM mind_actions WHERE kind='minecraft'").get()?.count).toBe(0);
+  });
+
+  it('a body that never answers set_day (one predating it) ends unknown, and the unknown exit tells her 「受け付けた」 ended without a result', async () => {
+    const f = fixture();
+    expect((await f.call('minecraft.set_day', 'day-old-body')).result.ok).toBe(true);
+    const command = await f.command();
+    // The old body drops the action in accept(): no receipt, ever. The deadline cancels it; the outcome is unknown. (The clock moves
+    // in steps the action's heartbeat would cover.)
+    const id = command.authority.executionId;
+    const pass = async (milliseconds: number) => {
+      for (let left = milliseconds; left > 0; left -= 10_000) { f.advance(Math.min(10_000, left)); await f.actions.renew(leaseOf(f.store.get(id)!)); await delay(30); }
+    };
+    await pass(121_000); await until(() => f.configured.service.store.pending()[0]?.cancelled === true);
+    await pass(6_000); await until(() => f.store.get(id)!.state === 'unknown');
+    expect(f.store.get(command.authority.executionId)).toMatchObject({ result: 'lifecycle_result_unknown' });
+    const leases = new ActionLeaseReader(f.db);
+    expect(leases.unknownExitedLifecycle('owner')).toEqual([]); // not before the exit: it may still answer
+    f.advance(600_001); f.store.sweep(f.at());
+    expect(f.store.get(command.authority.executionId)).toMatchObject({ state: 'unknown', result: 'outcome_unknown_closed' });
+    const [exited] = leases.unknownExitedLifecycle('owner');
+    expect(exited).toMatchObject({ id: command.id, action: 'set_day' });
+    const notices = lifecycleOutcomeNotices([{ id: exited!.id, action: exited!.action, outcome: 'unknown', observedAt: exited!.at }], f.at());
+    expect(notices[0]!.draft).toMatchObject({ kind: 'task_outcome', code: 'failed', tool: 'minecraft.set_day', reason: 'lifecycle_result_unknown' });
+    expect(noticeLine({ kind: 'task_outcome', at: exited!.at, detail: notices[0]!.draft } as never, f.at()))
+      .toContain('受け付けた〈minecraft.set_day〉は体から完了の返事がないまま、結果を確かめられずに閉じた');
+    // The operator slot is free again for a new request.
+    expect(f.configured.service.store.unresolved()).toBe(false);
+  });
+});
+

@@ -61,6 +61,8 @@ export class MinecraftLifecycle {
         && r.stopGuard?.admissionClosed === true && r.stopGuard.otherPlayers === 0 && Date.parse(r.stopGuard.checkedAt) <= Date.parse(r.observedAt));
       case 'login': return r.state.running === 'running' && r.state.bot === 'joined' && ['changed', 'already_joined'].includes(r.code);
       case 'logout': return r.state.bot === 'absent' && ['changed', 'already_absent'].includes(r.code);
+      // The body's reply carries ordinary state only (no time of day): its RCON confirmation is the `changed` code.
+      case 'set_day': return r.state.running === 'running' && r.code === 'changed' && r.stopGuard === undefined;
     }
   }
   private cancel(id: string): void {
