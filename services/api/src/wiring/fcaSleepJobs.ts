@@ -5,7 +5,10 @@ import { underWriteLock } from '../infra/sqlite/lockWaits.js';
 import { parseBackgroundJobPayload } from '../infra/sqlite/sqliteStoreCodecs.js';
 import { failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
 
-/** The old nightly schedule is the authority. The binding never grants owner task privileges. */
+/**
+ * The old nightly schedule is the authority. The binding never grants owner task privileges. A bound night's job row carries
+ * the task's mark (`lease_owner = fca-sleep:<task>`), never a second renewed lease (S7).
+ */
 export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = () => new Date().toISOString()) {
   const owner = (taskId: string) => `fca-sleep:${taskId}`;
   function ticket(scope: string, jobId: string): TaskSleepTicket | null {
@@ -25,6 +28,21 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
     if (!saved || !current || JSON.stringify(saved) !== JSON.stringify(current)) return null;
     const row = db.prepare('SELECT lease_owner FROM background_jobs WHERE job_id=? AND scope_key=?').get(saved.jobId, task.scopeKey);
     return row?.lease_owner === owner(task.id) ? { id: saved.jobId, scopeKey: task.scopeKey, dayKey: saved.dayKey, startAt: saved.startAt, endAt: saved.endAt } : null;
+  }
+  /**
+   * Whether a night still holds the scope's schedule (Syzygy ADR-0009 stage 1, S7): a legacy batch by its worker lease, a night
+   * bound to its FCA task by that binding while it holds. A bound night's job row keeps `leased` with the task's owner mark and
+   * its admission time; it is not renewed, because the one lease of the night is its task's action's.
+   */
+  function scheduleHeld(runtime: TaskRuntime): boolean {
+    const rows = db.prepare(`SELECT b.lease_until, m.task_id FROM background_jobs b LEFT JOIN fca_task_maintenance m
+      ON m.job_id=b.job_id AND m.scope_key=b.scope_key WHERE b.scope_key=? AND b.status='leased'`).all(ownerScope);
+    const at = now();
+    const held = (id: string) => {
+      const task = runtime.get(ownerScope, id);
+      return !!task && !!job(runtime, task);
+    };
+    return rows.some(row => row.task_id === null ? String(row.lease_until) > at : held(String(row.task_id)));
   }
   function reconcile(runtime: TaskRuntime) {
     underWriteLock(db, null, '', () => {
@@ -49,15 +67,15 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
             db.prepare('INSERT INTO activity_events(activity_id,scope_key,activity_type,title,detail,occurred_at,metadata_json) VALUES(?,?,?,?,?,?,?)')
               .run(`fca-sleep-activity:${row.job_id}`, ownerScope, 'sleep', '睡眠整理', String(row.day_key), at, JSON.stringify(metadata));
           }
-        } else db.prepare("UPDATE background_jobs SET lease_until=?,last_error=? WHERE job_id=? AND status='leased' AND lease_owner=?")
-          .run(new Date(Date.parse(at) + 120_000).toISOString(), task.phase === 'unknown' ? 'fca_result_unknown' : null, String(row.job_id), owner(task.id));
+        } else db.prepare("UPDATE background_jobs SET last_error=? WHERE job_id=? AND status='leased' AND lease_owner=?")
+          .run(task.phase === 'unknown' ? 'fca_result_unknown' : null, String(row.job_id), owner(task.id));
       }
     }, 'fca_sleep_reconcile');
   }
   function admit(runtime: TaskRuntime): TaskView | null {
     return underWriteLock(db, null, '', () => {
       // A previous night or an in-flight legacy batch keeps its scope-exclusive schedule claim.
-      if (db.prepare("SELECT 1 FROM background_jobs WHERE scope_key=? AND status='leased' AND lease_until>? LIMIT 1").get(ownerScope, now())) return null;
+      if (scheduleHeld(runtime)) return null;
       const row = db.prepare("SELECT job_id FROM background_jobs WHERE scope_key=? AND job_kind='sleep-consolidation' AND status='pending' AND attempts=0 AND available_at<=? ORDER BY sequence LIMIT 1").get(ownerScope, now());
       if (!row) return null;
       const task = runtime.admitSleep(ownerScope, String(row.job_id));

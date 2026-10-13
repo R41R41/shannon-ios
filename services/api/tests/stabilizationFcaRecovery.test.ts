@@ -162,7 +162,9 @@ describe('an unknown nightly sleep', () => {
     expect(f.store.enqueueSleepConsolidations('2026-10-07', '2026-10-07T00:00:00.000Z', '2026-10-08T00:00:00.000Z', f.now())).toBe(1);
     f.advance(9 * MINUTE); await f.tick();
     expect(status(stuckJob)).toMatchObject({ status: 'leased', last_error: 'fca_result_unknown' });
-    expect(Date.parse(String(status(stuckJob)?.lease_until))).toBeGreaterThan(Date.parse(f.now())); // still held inside the deadline
+    // Still held inside the deadline, by its task's binding: the job row's mark is not renewed (ADR-0009 S7).
+    expect(Date.parse(String(status(stuckJob)?.lease_until))).toBeLessThan(Date.parse(f.now()));
+    expect(f.sleep!.jobs.admit(f.driver.runtime)).toBeNull();
     expect(analyzed).toEqual([['stuck night']]);
 
     f.advance(2 * MINUTE); await f.tick(); await f.tick();
