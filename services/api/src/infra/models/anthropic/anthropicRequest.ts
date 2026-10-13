@@ -1,10 +1,10 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
-import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../chatModel.js';
+import { VOICE_REPLY_INSTRUCTIONS, type ShannonChatModelRequest, type ShannonConversationItem, type ShannonVoiceModelRequest } from '../chatModel.js';
 import { RICH_TEXT_BLOCK_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
-import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
-import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
+import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
+import { attachmentProjection, WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
@@ -12,10 +12,12 @@ import { appendForegroundMenu, stableForegroundMenu } from './anthropicForegroun
 export { structuredSchema } from './anthropicSchema.js';
 
 /**
- * The Sonnet tier's request (Syzygy ADR-0008 stage 2, step 5; `docs/skill-and-routing-contract.md`). Core: response path.
+ * The Claude request of a conversation turn, Haiku and Sonnet (Syzygy ADR-0008 stage 2, step 5; ADR-0009 stage 1, M8). Core:
+ * response path.
  *
- * Built from the same parts as luna's (`chatTurnRequestBody` for text, the voice payload's parts for voice), so the prompt
- * layers, the tool instructions and the registry's descriptions are the same text; only the lines below are Sonnet's own.
+ * Built from the same parts as the OpenAI adapter's (`chatTurnInstructions` and `chatTurnSchema` for text, the voice payload's
+ * parts for voice), never from its request: the prompt layers, the tool instructions and the registry's descriptions are the same
+ * text; only the lines below are Claude's own.
  * - Her prompt layers (identity, the fixed instructions, what she knows of the owner) are one `system` block with
  *   `cache_control`: tools render before it, so tools and system are the cached prefix. The turn's context follows the
  *   owner's words as a mid-conversation `system` message (operator authority, after the history, the cache untouched).
@@ -61,30 +63,42 @@ function strictProperty(property: ToolInputProperty): Record<string, unknown> {
 }
 
 
+/** The conversation of one turn, as the Claude request carries it. */
+export interface TurnConversation {
+  history: readonly ShannonConversationItem[];
+  /** The turn's own blocks: one mid-conversation `system` message right after the owner's words; none without blocks. */
+  context: readonly string[];
+  /** Her words just before the owner's (`ShannonPrecedingReply`). */
+  precedingReply?: string;
+  /** The owner's words; several parts (his message and an attachment's projection) are several text blocks. */
+  words: string | readonly string[];
+}
+
 /**
- * Luna's input items as Anthropic messages: the history (consecutive turns of one role joined, and a first turn of hers
- * preceded by a marker so the conversation starts with a user turn), the owner's words, and the turn's context as a
+ * The turn as Anthropic messages: the history (consecutive turns of one role joined, and a first turn of hers preceded by a
+ * marker so the conversation starts with a user turn), her preceding words, the owner's words, and the turn's context as a
  * mid-conversation `system` message right after them.
  */
-export function sonnetMessages(input: readonly unknown[]): Message[] {
+export function claudeTurnMessages(turn: TurnConversation): Message[] {
   const messages: Message[] = [];
-  const contexts: string[] = [];
-  const text = (content: unknown): string => typeof content === 'string' ? content
-    : Array.isArray(content) ? content.map(part => (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : '')).filter(Boolean).join('\n\n') : '';
-  for (const item of input) {
-    const value = item && typeof item === 'object' ? item as { role?: unknown; content?: unknown } : {};
-    if (value.role === 'developer') { contexts.push(text(value.content)); continue; }
-    if (value.role !== 'user' && value.role !== 'assistant') continue;
-    const blocks: ContentBlock[] = Array.isArray(value.content)
-      ? value.content.map(part => ({ type: 'text' as const, text: text([part]) })).filter(block => block.text)
-      : [{ type: 'text', text: text(value.content) }];
+  const add = (role: 'user' | 'assistant', blocks: Anthropic.TextBlockParam[]) => {
     const last = messages.at(-1);
-    if (last && last.role === value.role) last.content = [...last.content as ContentBlock[], ...blocks];
-    else messages.push({ role: value.role, content: blocks });
-  }
+    if (last && last.role === role) last.content = [...last.content as ContentBlock[], ...blocks];
+    else messages.push({ role, content: blocks });
+  };
+  for (const item of turn.history) add(item.role, [{ type: 'text', text: item.content }]);
+  if (turn.precedingReply) add('assistant', [{ type: 'text', text: turn.precedingReply }]);
+  const words = typeof turn.words === 'string' ? [turn.words] : turn.words.filter(Boolean);
+  add('user', words.map(text => ({ type: 'text' as const, text })));
   if (messages[0]?.role === 'assistant') messages.unshift({ role: 'user', content: [{ type: 'text', text: '[ここまでの会話の続き]' }] });
-  if (contexts.length) messages.push({ role: 'system', content: contexts.join('\n\n') });
+  if (turn.context.length) messages.push({ role: 'system', content: turn.context.join('\n\n') } as unknown as Message);
   return messages;
+}
+
+/** A text turn's conversation: its context blocks (`chatTurnContextBlocks`) and the owner's words with an attachment's projection. */
+export function textTurnConversation(request: ShannonChatModelRequest): TurnConversation {
+  const words = request.attachments?.length ? [request.message, attachmentProjection(request.attachments)] : request.message;
+  return { history: request.history, context: chatTurnContextBlocks(request), precedingReply: request.precedingReply, words };
 }
 
 /** The function tools a session offers now (with the tool menu, the schemas sent this round). */
@@ -113,11 +127,11 @@ const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ t
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
-  const luna = chatTurnRequestBody(settings.model, inline ? { ...request, tools: undefined, toolsWithheld: undefined } : request, agentHostHint);
+  const instructions = chatTurnInstructions(inline ? { ...request, tools: undefined, toolsWithheld: undefined } : request, agentHostHint);
   const web = !offersTools(request) && Boolean(request.useWebSearch || request.placeSearch);
   // Web evidence was obtained by the non-JSON auxiliary operation before this structured answer.
   const tools: Anthropic.ToolUnion[] = offersTools(request) ? claudeTools(request.tools) : [];
-  const schema = ((luna.text as { format?: { schema?: Record<string, unknown> } }).format?.schema) ?? {};
+  const schema = chatTurnSchema(request);
   if (request.requireWebSearch) {
     schema.properties = { ...schema.properties as object, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } };
     schema.required = [...schema.required as string[], 'webSearchNeedsInput'];
@@ -126,9 +140,9 @@ export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonCha
     model: settings.model,
     max_tokens: 16_000,
     // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
-    system: system([String(luna.instructions), CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
+    system: system([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
       ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
-    messages: sonnetMessages(luna.input as unknown[]),
+    messages: claudeTurnMessages(textTurnConversation(request)),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
     output_config: {
@@ -139,7 +153,7 @@ export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonCha
   return inline ? appendForegroundMenu(body, toolInstructions(request.tools!, false)) : body;
 }
 
-/** The voice turn's request: the parts of luna's voice payload, spoken text only. */
+/** The voice turn's request: the parts of the OpenAI adapter's voice payload, spoken text only. */
 export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number): Anthropic.MessageCreateParamsNonStreaming {
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
   const inline = stableForegroundMenu(settings.model, toolsOffered);
@@ -148,12 +162,7 @@ export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVo
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), CLAUDE_VOICE_LINES, ...(request.useWebSearch ? [CLAUDE_WEB_LINE] : []),
   ].join('\n\n');
-  const input = [
-    ...request.history.map(item => ({ role: item.role, content: item.content })),
-    ...turnContextMessage([...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])]),
-    ...precedingReplyMessage(request),
-    { role: 'user', content: request.message },
-  ];
+  const context = [...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])];
   const complex = request.conversationClass === 'skill_complex';
   const tools: Anthropic.ToolUnion[] = toolsOffered ? claudeTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
   const body: Anthropic.MessageCreateParamsNonStreaming = {
@@ -161,7 +170,7 @@ export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVo
     // Thinking counts toward the ceiling: room for it beside the spoken reply.
     max_tokens: maximumOutputTokens + (settings.voiceThinking === 'adaptive' ? 4_000 : 1_000),
     system: system(instructions, settings.model),
-    messages: sonnetMessages(input),
+    messages: claudeTurnMessages({ history: request.history, context, precedingReply: request.precedingReply, words: request.message }),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.voiceThinking } as Anthropic.ThinkingConfigParam,
     output_config: { effort: conversationEffort(settings) },

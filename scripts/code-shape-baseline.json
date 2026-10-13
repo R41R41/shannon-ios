@@ -382,9 +382,8 @@
       "long-line": 3
     },
     "services/api/src/infra/models/anthropic/anthropicRequest.ts": {
-      "multi-statement-line": 1,
       "complex-function": 1,
-      "long-line": 5
+      "long-line": 4
     },
     "services/api/src/infra/models/anthropic/anthropicSchema.ts": {
       "complex-function": 1,
@@ -437,7 +436,7 @@
       "long-line": 8
     },
     "services/api/src/infra/models/chatModelTurn.ts": {
-      "complex-function": 2,
+      "complex-function": 1,
       "long-line": 4
     },
     "services/api/src/infra/models/chatModelVoiceStream.ts": {

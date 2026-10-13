@@ -4,13 +4,12 @@ import { serverEnvironment } from '../../config/serverEnvironment.js';
 import { VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respondInstructions.js';
 import { VOICE_REPLY_INSTRUCTIONS, type ShannonVoiceModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
-import { precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu } from './anthropicForegroundMenu.js';
 import {
   cachedSystem, PLAN_NO_TOOLS_LINE, planned, planToolPair, splitCapabilityLines, splitSkillIndex, withTurnLines, type PlanEnvironment,
 } from './anthropicCachePlan.js';
-import { conversationEffort, CLAUDE_VOICE_LINES, sonnetMessages, claudeTools } from './anthropicRequest.js';
+import { claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_VOICE_LINES } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 
 /**
@@ -63,18 +62,14 @@ export function spokenWords(message: string): string {
 export function plannedVoiceBody(
   settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number,
 ): Anthropic.MessageCreateParamsNonStreaming {
-  const input = [
-    ...request.history.map(item => ({ role: item.role, content: item.content })),
-    ...turnContextMessage(request.turnContext ? [request.turnContext] : []),
-    ...precedingReplyMessage(request),
-    { role: 'user', content: spokenWords(request.message) },
-  ];
+  const context = request.turnContext ? [request.turnContext] : [];
+  const conversation = { history: request.history, context, precedingReply: request.precedingReply, words: spokenWords(request.message) };
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     // Thinking counts toward the ceiling, as without the plan (the ceiling is not part of the cached prefix).
     max_tokens: maximumOutputTokens + (settings.voiceThinking === 'adaptive' ? 4_000 : 1_000),
     system: cachedSystem(voiceStableSystem(request.systemPrompt)),
-    messages: withTurnLines(sonnetMessages(input), voiceTurnLines(request)),
+    messages: withTurnLines(claudeTurnMessages(conversation), voiceTurnLines(request)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
     thinking: { type: settings.voiceThinking } as Anthropic.ThinkingConfigParam,

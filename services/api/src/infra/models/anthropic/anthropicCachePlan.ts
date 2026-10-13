@@ -11,12 +11,12 @@ import { toolOpenDefinition } from '../../../mind/tools/shannonToolMenu.js';
 import type { ShannonChatModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import {
-  chatTurnRequestBody, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
+  chatTurnInstructions, chatTurnSchema, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
 } from '../chatModelTurn.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu, stableOpener } from './anthropicForegroundMenu.js';
 import {
-  conversationEffort, CLAUDE_TEXT_LINES, claudeTextBody, sonnetMessages, claudeTool, claudeTools, WEB_ANSWER_LINE,
+  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, textTurnConversation, WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
@@ -50,8 +50,6 @@ export function cachePlanApplies(model: string, environment: PlanEnvironment = s
 
 export const PLAN_NO_TOOLS_LINE = '[ボクの道具] この返事では道具を出していない。tool_open と tool_call は呼ばずに、そのまま答える。';
 
-type Schema = Record<string, unknown> & { properties: Record<string, Record<string, unknown>>; required: string[] };
-
 /**
  * The common schema: exactly the one an owner turn that offers only her feeling has without the plan (the base fields and
  * `feeling`). A turn that does not offer her feeling uses it too, with `feeling` null. M4 grammar fix: one schema with every
@@ -60,8 +58,7 @@ type Schema = Record<string, unknown> & { properties: Record<string, Record<stri
  * 2026-10-12), so the rare fields are not in it.
  */
 function commonSchema(): Record<string, unknown> {
-  const body = chatTurnRequestBody('', withCommonOffers({ scopeKey: '', systemPrompt: '', history: [], message: '' }), undefined);
-  return structuredSchema((body.text as { format: { schema: Schema } }).format.schema) as Record<string, unknown>;
+  return structuredSchema(chatTurnSchema(withCommonOffers({ scopeKey: '', systemPrompt: '', history: [], message: '' }))) as Record<string, unknown>;
 }
 
 /**
@@ -213,13 +210,13 @@ export function plannedChatBody(settings: ClaudeChatSettings, request: ShannonCh
   agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const layers = stableLayers(request);
   const fixed = { ...withoutTurnInstructions(request), systemPrompt: layers.systemPrompt, profilePrompt: layers.profilePrompt };
-  const luna = chatTurnRequestBody(settings.model, fixed, agentHostHint);
+  const instructions = chatTurnInstructions(fixed, agentHostHint);
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
     // Rich chat's lines depend on the surface, not the turn (the app's Talk always, other surfaces never): they stay in the system.
-    system: cachedSystem([String(luna.instructions), CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : [])].join('\n\n')),
-    messages: withTurnLines(sonnetMessages(luna.input as unknown[]), planTurnLines(request, layers)),
+    system: cachedSystem([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : [])].join('\n\n')),
+    messages: withTurnLines(claudeTurnMessages(textTurnConversation(fixed)), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
