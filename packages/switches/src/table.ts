@@ -159,10 +159,6 @@ export const SWITCHES = [
     doc: 'The common FCA task runtime (needs action threads; the server refuses to start without them).',
   },
   {
-    name: 'SHANNON_FCA_SLEEP', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
-    doc: 'Nightly sleep runs as an FCA task.',
-  },
-  {
     name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
     doc: 'Touch reflexes run under the FCA runtime.',
   },

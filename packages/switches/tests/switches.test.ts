@@ -3,12 +3,12 @@ import { SWITCHES, switchOn, validateSwitches, type SwitchName } from '../src/in
 
 /** The production values of 2026-10-12 (ADR-0009 §9, `d2bb0a33`), as the loader hands them in (quotes stripped). */
 const PRODUCTION: Readonly<Record<string, string>> = {
-  SHANNON_ADR8_STAGE4: 'on', SHANNON_ADR8_STAGE5: 'on', SHANNON_SONNET_ROUTING: 'on', SHANNON_FCA_RUNTIME: 'on', SHANNON_FCA_SLEEP: 'on',
+  SHANNON_ADR8_STAGE4: 'on', SHANNON_ADR8_STAGE5: 'on', SHANNON_SONNET_ROUTING: 'on', SHANNON_FCA_RUNTIME: 'on',
   SHANNON_FCA_TOUCH: 'on', SHANNON_TEMPORAL_KNOWLEDGE_RECALL: 'on', SHANNON_MINECRAFT_LIFECYCLE: 'on',
   SHANNON_EVIDENCE_DECAY: 'on', SHANNON_AUTONOMY_ENABLED: 'true',
 };
 /** Retired switches the production file still names (ADR-0009 S9): read by nothing, and no warning. */
-const RETIRED = { SHANNON_FCA_MINECRAFT: 'on' };
+const RETIRED = { SHANNON_FCA_MINECRAFT: 'on', SHANNON_FCA_SLEEP: 'on' };
 
 describe('the switch table', () => {
   it('names every switch once and only requires switches it holds', () => {
@@ -46,8 +46,8 @@ describe('validateSwitches', () => {
     expect(validateSwitches({ SHANNON_FCA_RUNTIME: 'on' })).toEqual([
       { name: 'SHANNON_FCA_RUNTIME', code: 'requires_off', needs: ['SHANNON_ADR8_STAGE4'] },
     ]);
-    expect(validateSwitches({ SHANNON_FCA_SLEEP: 'on', SHANNON_ADR8_STAGE4: 'on' })).toEqual([
-      { name: 'SHANNON_FCA_SLEEP', code: 'requires_off', needs: ['SHANNON_FCA_RUNTIME'] },
+    expect(validateSwitches({ SHANNON_FCA_TOUCH: 'on', SHANNON_ADR8_STAGE4: 'on' })).toEqual([
+      { name: 'SHANNON_FCA_TOUCH', code: 'requires_off', needs: ['SHANNON_FCA_RUNTIME'] },
     ]);
   });
 

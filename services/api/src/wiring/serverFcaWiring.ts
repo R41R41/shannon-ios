@@ -74,8 +74,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
   const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
   if (!provider) throw new Error('FCA_PROVIDER_REQUIRED');
-  const sleepEnabled = switchOn(values, 'SHANNON_FCA_SLEEP');
-  if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
+  // Sleep always takes the common runtime (S9 retired `SHANNON_FCA_SLEEP`); the API hands its store, the worker its owner night.
+  const sleepEnabled = Boolean(parts.sleepStore);
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
   const client = new MindSocketClient(mindSocketPath(values, parts.path));

@@ -22,7 +22,7 @@ describe('the switch table at boot (ADR-0009 stage 1)', () => {
     expect(stage4Enabled({})).toBe(false);
     expect(stage5Enabled({ SHANNON_ADR8_STAGE5: 'on' })).toBe(true);
     expect(stage5Enabled({ SHANNON_ADR8_STAGE5: 'true' })).toBe(false);
-    expect(fcaSleepConfigured({ SHANNON_FCA_RUNTIME: 'on', SHANNON_FCA_SLEEP: 'on' })).toBe(true);
+    expect(fcaSleepConfigured({ SHANNON_FCA_RUNTIME: 'on' })).toBe(true);
     expect(fcaSleepConfigured({ SHANNON_FCA_SLEEP: 'on' })).toBe(false);
   });
 });
