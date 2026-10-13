@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import {
   isInnerNoteDayReason, isInnerNoteIntent, isInnerNoteScale, isInnerNoteTell, isInnerNoteTrigger, shownKind,
   type InnerNote, type InnerNoteEvent, type InnerNoteFlags, type InnerNoteHooks, type InnerNoteText, type InnerNoteTrigger,
 } from '@shannon/cognition';
 import { applySchemaSteps } from '../../../infra/sqlite/migrations/schemaSteps.js';
-import { EMOTION_STEPS } from '../../../infra/sqlite/migrations/emotion/001_inner_notes.js';
+import { EMOTION_STEPS } from '../../../infra/sqlite/migrations/emotionSteps.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
+import { openDatabase } from '../../../infra/sqlite/sqliteOpen.js';
 
 /**
  * Her inner notes (Syzygy ADR-0012, stage 1; table `shannon_inner_notes`, schema step `emotion/001_inner_notes`). Core: emotion.
@@ -30,6 +31,8 @@ export interface NewInnerNote {
   summary: string | null;
   coreVersion: string;
   coreHash: string;
+  /** When the sulk this note belongs to began (null for a calm note): the ordinary hour counts from it. */
+  episodeStartedAt: string | null;
   usage: InnerNoteUsage | null;
   elapsedMs: number;
   createdAt: string;
@@ -58,7 +61,8 @@ type Row = Record<string, unknown>;
 
 const COLUMNS = `note_id, scope_key, sequence, day_id, day_key, day_ends_at, honne, tatemae, reason, plan, bottom, shown, tell, until_at,
   scale, day_reason, intent, route_summary, change_reason, summary, triggers_json, events_json, source_ids_json, flags_json, core_version,
-  core_hash, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, elapsed_ms, created_at, replaced_at, closed_at`;
+  core_hash, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, elapsed_ms, created_at, replaced_at, closed_at,
+  episode_started_at`;
 
 function parsedJson<T>(value: unknown, fallback: T): T {
   try { return typeof value === 'string' ? JSON.parse(value) as T : fallback; } catch { return fallback; }
@@ -90,6 +94,7 @@ function noteOf(row: Row): StoredInnerNote {
     hooks: hooksOf(row), triggers: parsedJson<unknown[]>(row.triggers_json, []).filter(isInnerNoteTrigger),
     changeReason: optionalText(row.change_reason), summary: optionalText(row.summary), flags: parsedJson<InnerNoteFlags>(row.flags_json, {}),
     createdAt: text(row.created_at), replacedAt: optionalText(row.replaced_at), closedAt: optionalText(row.closed_at), coreVersion: text(row.core_version),
+    episodeStartedAt: optionalText(row.episode_started_at),
     events: parsedJson<InnerNoteEvent[]>(row.events_json, []), sourceIds: parsedJson<string[]>(row.source_ids_json, []),
     usage: usageOf(row), elapsedMs: optionalNumber(row.elapsed_ms),
   };
@@ -102,8 +107,7 @@ export class SQLiteInnerNoteStore {
   /** A path opens its own connection; a connection is borrowed (tests, or a caller that already holds the file). */
   constructor(source: string | DatabaseSync) {
     this.owned = typeof source === 'string';
-    this.database = typeof source === 'string' ? new DatabaseSync(source) : source;
-    if (this.owned) this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
+    this.database = typeof source === 'string' ? openDatabase(source, 'innerNotes') : source;
     applySchemaSteps(this.database, EMOTION_STEPS);
     if (typeof source === 'string') secureDatabaseFiles(source);
   }
@@ -126,11 +130,28 @@ export class SQLiteInnerNoteStore {
       .all(scopeKey, since, Math.max(1, Math.min(limit, 2_000))) as Row[]).map(noteOf);
   }
 
-  /** The summary of the last day she closed (something that happened; never an attitude to carry on). */
-  lastClosedSummary(scopeKey: string): { summary: string; closedAt: string } | null {
-    const row = this.database.prepare(`SELECT summary, closed_at FROM shannon_inner_notes WHERE scope_key = ? AND closed_at IS NOT NULL
+  /** The summary of the last day she closed (something that happened; never an attitude to carry on), with its sources (lineage). */
+  lastClosedSummary(scopeKey: string): { summary: string; closedAt: string; sourceIds: readonly string[] } | null {
+    const row = this.database.prepare(`SELECT summary, closed_at, source_ids_json FROM shannon_inner_notes WHERE scope_key = ? AND closed_at IS NOT NULL
       AND summary IS NOT NULL ORDER BY sequence DESC LIMIT 1`).get(scopeKey) as Row | undefined;
-    return row && typeof row.summary === 'string' && typeof row.closed_at === 'string' ? { summary: row.summary, closedAt: row.closed_at } : null;
+    return row && typeof row.summary === 'string' && typeof row.closed_at === 'string'
+      ? { summary: row.summary, closedAt: row.closed_at, sourceIds: parsedJson<string[]>(row.source_ids_json, []) } : null;
+  }
+
+  /** A source known later by its stored id (a voice turn's utterance, once the turn is stored as an experience). */
+  rebindSource(scopeKey: string, from: string, to: string): void {
+    const rows = this.database.prepare('SELECT note_id, source_ids_json FROM shannon_inner_notes WHERE scope_key = ? AND source_ids_json LIKE ? LIMIT 400')
+      .all(scopeKey, `%${JSON.stringify(from).slice(1, -1)}%`) as Row[];
+    const update = this.database.prepare('UPDATE shannon_inner_notes SET source_ids_json = ? WHERE scope_key = ? AND note_id = ?');
+    for (const row of rows) {
+      const ids = parsedJson<string[]>(row.source_ids_json, []).map(id => (id === from ? to : id));
+      update.run(JSON.stringify([...new Set(ids)]), scopeKey, text(row.note_id));
+    }
+  }
+
+  /** Deletes notes written before an instant (retention: they follow what the touches and turns they come from keep). Returns how many. */
+  pruneBefore(scopeKey: string, before: string): number {
+    return Number(this.database.prepare('DELETE FROM shannon_inner_notes WHERE scope_key = ? AND created_at < ?').run(scopeKey, before).changes);
   }
 
   /** Appends a note as the newest, marks the one before it replaced, and returns it as stored. One transaction. */
@@ -153,26 +174,14 @@ export class SQLiteInnerNoteStore {
 
   private insert(id: string, sequence: number, note: NewInnerNote): void {
     const { hooks, usage } = note;
-    this.database.prepare(`INSERT INTO shannon_inner_notes (${COLUMNS}) VALUES (${new Array(36).fill('?').join(', ')})`).run(
+    this.database.prepare(`INSERT INTO shannon_inner_notes (${COLUMNS}) VALUES (${new Array(37).fill('?').join(', ')})`).run(
       id, note.scopeKey, sequence, note.dayId ?? id, note.dayKey, note.dayEndsAt, note.text.honne, note.text.tatemae, note.text.reason,
       note.text.plan, note.text.bottom, hooks.shown, hooks.tell, hooks.until, hooks.scale, hooks.dayReason, hooks.intent, hooks.routeSummary,
       note.changeReason, note.summary, JSON.stringify(note.triggers), JSON.stringify(note.events), JSON.stringify(note.sourceIds),
       JSON.stringify(note.flags), note.coreVersion, note.coreHash, usage?.model ?? null, usage?.inputTokens ?? null, usage?.outputTokens ?? null,
       usage?.cacheReadTokens ?? null, usage?.cacheWriteTokens ?? null, usage?.costUsd ?? null, Math.max(0, Math.round(note.elapsedMs)),
-      note.createdAt, null, note.closing ? note.createdAt : null,
+      note.createdAt, null, note.closing ? note.createdAt : null, note.episodeStartedAt,
     );
-  }
-
-  /**
-   * When her nightly sleep for this day (or a later one) completed after `since`, or null: her day may end there (D4). Read from the
-   * background jobs' own table; null where it does not exist.
-   */
-  sleepCompletedAfter(scopeKey: string, since: string, dayKey: string): string | null {
-    try {
-      const row = this.database.prepare(`SELECT MIN(completed_at) AS at FROM background_jobs WHERE scope_key = ? AND job_kind = 'sleep-consolidation'
-        AND status = 'completed' AND completed_at > ? AND json_extract(payload_json, '$.dayKey') >= ?`).get(scopeKey, since, dayKey) as Row | undefined;
-      return typeof row?.at === 'string' ? row.at : null;
-    } catch { return null; }
   }
 
   /** Closes her newest note as it stands (a closing reflection that failed): it is then a memory of its day, never carried on. */
@@ -182,13 +191,14 @@ export class SQLiteInnerNoteStore {
   }
 
   /**
-   * Deletes the notes one of whose sources she was asked to forget (`visible` says no), with what they said. Returns how many.
+   * Deletes the notes `forgotten` names (a source she was asked to forget, or a forgotten turn's words in its events; every note
+   * derived from one carries its sources), with what they said. Returns how many.
    * The forgetting is the owner's: a note is not kept with the moment removed, since its words were written about that moment.
    */
-  forget(scopeKey: string, visible: (sourceId: string) => boolean): number {
-    const rows = this.database.prepare('SELECT note_id, source_ids_json FROM shannon_inner_notes WHERE scope_key = ? ORDER BY sequence DESC LIMIT 2000')
+  forget(scopeKey: string, forgotten: (note: StoredInnerNote) => boolean): number {
+    const rows = this.database.prepare(`SELECT ${COLUMNS} FROM shannon_inner_notes WHERE scope_key = ? ORDER BY sequence DESC LIMIT 2000`)
       .all(scopeKey) as Row[];
-    const doomed = rows.filter(row => parsedJson<string[]>(row.source_ids_json, []).some(id => !visible(id))).map(row => text(row.note_id));
+    const doomed = rows.map(noteOf).filter(forgotten).map(note => note.id);
     const remove = this.database.prepare('DELETE FROM shannon_inner_notes WHERE scope_key = ? AND note_id = ?');
     for (const id of doomed) remove.run(scopeKey, id);
     return doomed.length;

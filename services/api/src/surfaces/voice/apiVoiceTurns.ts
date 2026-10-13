@@ -20,6 +20,8 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
   feedback?: FeedbackPorts;
   fcaVoice?: () => FcaVoicePort | null;
+  /** Syzygy ADR-0012: her inner note learns which stored turn a voice utterance became (forgetting the turn forgets its notes). */
+  innerNote?: { bind(scopeKey: string, from: string, to: string): void } | null;
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -80,6 +82,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage, utteranceId); } catch { /* the turn is stored either way */ }
   }
   if (!stored) dependencies.background.schedule(turn, experience.id);
+  if (utteranceId) dependencies.innerNote?.bind(scopeKey, `utterance:${utteranceId}`, `experience:${experience.id}`);
   // The face goes back as before; its `kind` is sent only to the owner alone (it is stored either way).
   const shownEmotion = 'audience' in companion ? messageEmotionForOthers(messageEmotion) : messageEmotion;
   const feedback = 'audience' in companion ? null : bindCompletedFeedback(dependencies.feedback,scopeKey,typeof request.body.feedbackRecordId==='string'?request.body.feedbackRecordId:undefined,threadId,experience.id,shannonReply);

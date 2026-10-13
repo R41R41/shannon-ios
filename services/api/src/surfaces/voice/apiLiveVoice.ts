@@ -62,7 +62,7 @@ import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { perceptionOrActionRequest } from './voiceRecallScope.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnToolResults, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -257,14 +257,14 @@ async function completeLiveVoiceDelegation(
   const previousExpressiveEmotion = emotionState ? feelingBeforeTurn(emotionState, occurredAt) : undefined;
   const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript, emotionTiming()) : undefined;
   // Her feeling for this turn, from his words and, once there is one, her reply (the decision is final from here on).
-  const emotionWith = (reply?: string) => innerNoteVoice.feeling(resolveShannonEmotionState({ previous: previousExpressiveEmotion,
-    provisionalPrimary: decision.affect, provisionalIntensity: decision.affectIntensity, transcript, ...(reply === undefined ? {} : { reply }), now: occurredAt,
-    target: temporaryGuest ? '現在の話者' : 'ライ氏' }), dependencies.innerNote, scopeKey, occurredAt, alone && !temporaryGuest); // ADR-0012 D5.2
+  const emotionWith = (reply?: string) => resolveShannonEmotionState({ previous: previousExpressiveEmotion, provisionalPrimary: decision.affect,
+    provisionalIntensity: decision.affectIntensity, transcript, ...(reply === undefined ? {} : { reply }), now: occurredAt,
+    target: temporaryGuest ? '現在の話者' : 'ライ氏' });
   const provisionalExpressiveEmotion = emotionWith();
   let expressiveEmotion = provisionalExpressiveEmotion;
   // Its timing line is noted too (`silence`, `chars`).
-  const planFor = voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing,
-    trigger: deviceContext?.userUtterance?.trigger });
+  const planFor = innerNoteVoice.planner(voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing,
+    trigger: deviceContext?.userUtterance?.trigger }), dependencies.innerNote, scopeKey, occurredAt, alone && !temporaryGuest); // ADR-0012 D5.2
   let voicePlan = planFor(expressiveEmotion);
   await observer?.onPlan(voicePlan);
   const waitingSaid = String(voicePlan.waitingPhrase ?? '').trim() ? { waitingSaid: observer?.waitingSaid?.bind(observer) ?? true as const } : {};
@@ -443,7 +443,7 @@ async function completeLiveVoiceDelegation(
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
   if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = emotionWith(reply);
-  voicePlan = planFor(expressiveEmotion);
+  voicePlan = planFor(expressiveEmotion, turnToolResults(toolOffer.tools).some(call => !call.ok)); // A failed tool keeps her apology.
   // Her stored feeling toward the owner moves only on his own words.
   if (alone) dependencies.stateStore.apply(scopeKey, { type: 'expressive-emotion-updated', emotion: expressiveEmotion });
   let completedIntent = provisionalIntent;
@@ -470,7 +470,8 @@ async function completeLiveVoiceDelegation(
       ...taskProposal,
     }];
   }
-  innerNoteVoice.ended(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt, transcript, reply, expressiveEmotion); // ADR-0012
+  innerNoteVoice.ended(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt, transcript, reply, expressiveEmotion,
+    deviceContext?.userUtterance?.id); // ADR-0012
   stageFcaVoice(fcaTurn);
   dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
   return visibleVoiceResponse(() => ({

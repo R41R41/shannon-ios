@@ -29,7 +29,7 @@ export interface InnerNoteTurn {
   userMessage: string;
   reply: string;
   feeling: { kind: ShannonEmotionKind; intensity: number } | null;
-  /** The stored turn (`experience:<id>`), so that forgetting it forgets the note it prompted. */
+  /** The stored turn (`experience:<id>`), or a voice utterance (`utterance:<id>`) bound to its turn once stored. */
   sourceId?: string;
 }
 
@@ -39,6 +39,8 @@ export interface InnerNoteTouch {
   audience: 'owner' | 'others';
   at: string;
   touchId: string;
+  /** The touch as she remembers it (`experience:<burst id>`): forgetting it, or its retention, takes the notes it prompted. */
+  sourceId?: string;
   phrase: string;
   stance?: string;
   reflex?: string;
@@ -55,6 +57,8 @@ export interface InnerNotePort {
   turnEnded(turn: InnerNoteTurn): void;
   /** After a touch: never waits, never throws. */
   touched(touch: InnerNoteTouch): void;
+  /** A source known later by its stored id (a voice turn's utterance once the app stored the turn). */
+  bind(scopeKey: string, from: string, to: string): void;
 }
 
 const safely = <T>(work: () => T, fallback: T): T => { try { return work(); } catch { return fallback; } };
@@ -86,9 +90,9 @@ export function innerNoteFaceOf(port: InnerNotePort | null | undefined, scopeKey
 
 /** D5.2: her own 「ごめん」 does not take her face while her note is active; without a port, the feeling as it was. */
 export function innerNoteOwnApology(port: InnerNotePort | null | undefined, scopeKey: string, at: string, emotion: ShannonExpressiveEmotion,
-  decided?: { primary: string; intensity: number }): ShannonExpressiveEmotion {
+  decided?: { primary: string; intensity: number }, failed = false): ShannonExpressiveEmotion {
   if (!port) return emotion;
-  return safely(() => withoutOwnApology(emotion, port.current(scopeKey, at), at, decided), emotion);
+  return safely(() => withoutOwnApology(emotion, port.current(scopeKey, at), at, decided, failed), emotion);
 }
 
 const CORE_BLOCK = characterCoreBlock(CHARACTER_CORE);
@@ -109,10 +113,13 @@ export function withCharacterCore<T extends { identity: string }>(parts: T, port
   return identity ? { ...parts, identity } : parts;
 }
 
-/** Her face on the body while her note is active: the face of what she shows, a blush when the note says, and her `until`. */
+/**
+ * Her face on the body while her note is active: the face of what she shows, a blush when the note says, and her `until`. An
+ * override of her present feeling (safety, grief, an emergency: 「胸が痛い、救急車」) keeps the face it gave: no sulk shows then.
+ */
 export function innerNoteMood<T extends { expression: ShannonExpression; feeling?: ShannonFeeling }>(port: InnerNotePort | null | undefined,
-  scopeKey: string, at: string, mood: T): T & { tell?: 'blush'; until?: string } {
-  const face = innerNoteFaceOf(port, scopeKey, at);
+  scopeKey: string, at: string, mood: T, overridden = false): T & { tell?: 'blush'; until?: string } {
+  const face = overridden ? null : innerNoteFaceOf(port, scopeKey, at);
   if (!face) return mood;
   const shown = faceForEmotionKind(face.shown);
   const { feeling: _feeling, ...rest } = mood;
@@ -120,13 +127,19 @@ export function innerNoteMood<T extends { expression: ShannonExpression; feeling
     ...(face.tell === 'blush' ? { tell: 'blush' as const } : {}), ...(face.until ? { until: face.until } : {}) } as T & { tell?: 'blush'; until?: string };
 }
 
-/** A resolved reply's feeling with D5.2 applied; its message face is built again only when the feeling changed. */
+/**
+ * A resolved reply with D5.2 applied to its face only: the message face shows what her note shows, and the feeling stored for the
+ * reply stays the one it was (her note must not read its own face back as her feeling). Built again only when the face changed.
+ */
 export function innerNoteReplyEmotion(port: InnerNotePort | null | undefined, scopeKey: string, at: string, resolved: ReplyEmotion,
-  snapshot: CompanionStateSnapshot, userMessage: string, decided?: { primary: string; intensity: number }): ReplyEmotion {
-  const expressiveEmotion = innerNoteOwnApology(port, scopeKey, at, resolved.expressiveEmotion, decided);
-  if (expressiveEmotion === resolved.expressiveEmotion) return resolved;
-  return { expressiveEmotion, messageEmotion: createShannonMessageEmotion(projectEmotionReaction(snapshot, userMessage, emotionTiming()), expressiveEmotion) };
+  snapshot: CompanionStateSnapshot, userMessage: string, decided?: { primary: string; intensity: number }, failed = false): ReplyEmotion {
+  const shown = innerNoteOwnApology(port, scopeKey, at, resolved.expressiveEmotion, decided, failed);
+  if (shown === resolved.expressiveEmotion) return resolved;
+  return { expressiveEmotion: resolved.expressiveEmotion,
+    messageEmotion: createShannonMessageEmotion(projectEmotionReaction(snapshot, userMessage, emotionTiming()), shown) };
 }
+
+
 
 type Audience = 'owner' | 'others' | 'guest';
 const audienceOf = (alone: boolean, guest: boolean): Audience => (alone ? 'owner' : guest ? 'guest' : 'others');
@@ -144,8 +157,9 @@ export const innerNoteText = Object.freeze({
     innerNoteTurnContext(port, scopeKey, audienceOf(alone, platform), at),
   /** D5.2 on a text reply's feeling; an apology she decided herself (the decided feeling, owner alone only) stays. */
   reply: (port: InnerNotePort | null, scopeKey: string, at: string, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, message: string,
-    completion: { replyFeeling?: ChatReplyFeeling }, alone: boolean) => innerNoteReplyEmotion(alone ? port : null, scopeKey, at, resolved, snapshot,
-    message, decidedReplyFeeling(completion, alone).decided),
+    /** `failed`: a tool of the turn failed (her apology may be for that: an alarm she could not set), and it stays. */
+    completion: { replyFeeling?: ChatReplyFeeling }, alone: boolean, failed = false) => innerNoteReplyEmotion(alone ? port : null,
+    scopeKey, at, resolved, snapshot, message, decidedReplyFeeling(completion, alone).decided, failed),
   ended: (port: InnerNotePort | null, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string, feeling: ShannonExpressiveEmotion,
     experienceId?: string) => port?.turnEnded({ scopeKey, surface: 'text', alone, at, userMessage, reply,
     feeling: { kind: feeling.primary, intensity: feeling.intensity }, ...(experienceId ? { sourceId: `experience:${experienceId}` } : {}) }),
@@ -163,10 +177,14 @@ export const innerNoteVoice = Object.freeze({
   route: (port: InnerNotePort | null | undefined, scopeKey: string, alone: boolean, at: string) => innerNoteRouteInput(port, scopeKey, alone, at),
   presence: (port: InnerNotePort | null | undefined) => (port ? INNER_NOTE_PRESENCE_LINE : PRESENCE_LINE),
   expressive: (port: InnerNotePort | null | undefined) => (port ? innerNoteExpressiveEmotionPrompt : buildExpressiveEmotionPrompt),
-  /** D5.2 on her feeling of the turn; the owner alone only. */
-  feeling: (emotion: ShannonExpressiveEmotion, port: InnerNotePort | null | undefined, scopeKey: string, at: string, alone: boolean) =>
-    innerNoteOwnApology(alone ? port : null, scopeKey, at, emotion),
+  /**
+   * D5.2 on the voice plan only (the face and the performance): the feeling stored for the turn stays the true one. The owner alone
+   * only; a tool of the turn that failed keeps her apology.
+   */
+  planner: <P>(plan: (emotion: ShannonExpressiveEmotion) => P, port: InnerNotePort | null | undefined, scopeKey: string, at: string, alone: boolean) =>
+    (emotion: ShannonExpressiveEmotion, failed = false) => plan(innerNoteOwnApology(alone ? port : null, scopeKey, at, emotion, undefined, failed)),
+  /** After the turn: her note may reflect. Its utterance is bound to the stored turn when the app stores it (`apiVoiceTurns.ts`). */
   ended: (port: InnerNotePort | null | undefined, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string,
-    feeling: ShannonExpressiveEmotion) => port?.turnEnded({ scopeKey, surface: 'voice', alone, at, userMessage, reply,
-    feeling: { kind: feeling.primary, intensity: feeling.intensity } }),
+    feeling: ShannonExpressiveEmotion, utteranceId?: string) => port?.turnEnded({ scopeKey, surface: 'voice', alone, at, userMessage, reply,
+    feeling: { kind: feeling.primary, intensity: feeling.intensity }, ...(utteranceId ? { sourceId: `utterance:${utteranceId}` } : {}) }),
 });

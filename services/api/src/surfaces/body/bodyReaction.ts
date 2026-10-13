@@ -191,7 +191,7 @@ export class BodyReactions {
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);
-      if (felt) this.noteTouch(scopeKey, request, decision, at);
+      if (felt) this.noteTouch(scopeKey, request, decision, at, felt.burst.id);
       // Syzygy ADR-0006 stage 2: her stance is the outcome of the touch, and its prediction error moves her.
       const prediction = felt?.prediction;
       const settled = felt && prediction ? this.settle(scopeKey, felt, decision) : null;
@@ -333,9 +333,11 @@ export class BodyReactions {
   }
 
   /** Syzygy ADR-0012: her inner note is told of the touch (it decides whether to reflect; others present: nothing). Never throws. */
-  private noteTouch(scopeKey: string, request: BodyReactionRequest, decision: BodyReactionDecision | null, at: string): void {
+  private noteTouch(scopeKey: string, request: BodyReactionRequest, decision: BodyReactionDecision | null, at: string, burstId: string): void {
     if (!this.innerNote) return;
-    this.innerNote.touched({ scopeKey, audience: request.audience, at, touchId: request.id, phrase: bodyTouchLine(request.touch, request.audience),
+    // The touch as she remembers it (the burst is its experience): its forgetting and its retention take the notes it prompted.
+    this.innerNote.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${burstId}`,
+      phrase: bodyTouchLine(request.touch, request.audience),
       ...(decision?.stance ? { stance: decision.stance } : {}), ...(request.touch.reflex ? { reflex: request.touch.reflex } : {}),
       ...(decision?.say ? { said: decision.text } : {}) });
   }
@@ -365,7 +367,10 @@ export class BodyReactions {
   /** Her face now, without its cause: the body may be on a stream. */
   private mood(snapshot: CompanionStateSnapshot, at: string): BodyReactionAnswer['mood'] {
     const mood = presentShannonMood(snapshot, at, emotionTiming());
-    return innerNoteMood(this.innerNote, snapshot.scopeKey, at, { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) });
+    // Syzygy ADR-0012: her note's face while it is active, never over an override (safety, grief, an emergency).
+    const overridden = presentShannonFeeling(snapshot, at, emotionTiming()).overrideReason !== undefined;
+    const face = { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) };
+    return innerNoteMood(this.innerNote, snapshot.scopeKey, at, face, overridden);
   }
 
   private allowed(scopeKey: string, at: string): boolean {

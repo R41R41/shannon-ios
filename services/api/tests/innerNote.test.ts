@@ -37,14 +37,17 @@ function draft(overrides: Partial<InnerNoteDraft> = {}): InnerNoteDraft {
   };
 }
 
-function setup(answers: Array<InnerNoteDraft | null | Error> = []) {
+type Answer = InnerNoteDraft | null | Error | (() => InnerNoteDraft);
+
+function setup(answers: Answer[] = [], limits: Record<string, number> = {}) {
   let now = T0;
   const facts: InnerNoteReflectionFacts[] = [];
   const reflector: InnerNoteReflector = {
     model: DEFAULT_HAIKU_MODEL,
     async reflect(request) {
       facts.push(request.facts);
-      const next = answers.shift() ?? draft();
+      const answer = answers.shift() ?? draft();
+      const next = typeof answer === 'function' ? answer() : answer;
       if (next instanceof Error) throw next;
       return { draft: next, usage: { model: DEFAULT_HAIKU_MODEL, inputTokens: 900, outputTokens: 120, cacheReadTokens: 800, cacheWriteTokens: null, costUsd: 0.00015 } };
     },
@@ -53,12 +56,14 @@ function setup(answers: Array<InnerNoteDraft | null | Error> = []) {
   const store = new SQLiteInnerNoteStore(database);
   let snapshot: CompanionStateSnapshot = createInitialCompanionState(OWNER, T0);
   const service = new InnerNoteService({ store, reflector, state: { snapshot: () => snapshot }, ownerScope: OWNER, timeZone: 'Asia/Tokyo', now: () => now,
-    manual: true, sleptAfter: () => null });
+    manual: true, retentionDays: 30, limits });
   return { service, store, facts, database, at: (value: string) => { now = value; }, setSnapshot: (value: CompanionStateSnapshot) => { snapshot = value; } };
 }
 
-const touch = (at = T0, audience: 'owner' | 'others' = 'owner') => ({ scopeKey: OWNER, audience, at, touchId: `t-${at}`, phrase: 'ライ氏に胸をつつかれた（ほんの一瞬）',
-  stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' });
+const touch = (at = T0, audience: 'owner' | 'others' = 'owner') => ({ scopeKey: OWNER, audience, at, touchId: `t-${at}`, sourceId: `experience:burst-${at}`,
+  phrase: 'ライ氏に胸をつつかれた（ほんの一瞬）', stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' });
+const forgotten = (memoryId: string, sourceEvidence?: string) => ({ memoryId, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: T0,
+  changeReason: 'test', ...(sourceEvidence ? { sourceEvidence } : {}) }) as never;
 
 describe('inner note storage (schema step emotion/001_inner_notes)', () => {
   it('pins the step and keeps the table additive and append-first', () => {
@@ -84,7 +89,7 @@ describe('the reflection writes her note after salient events (ADR-0012 D2.3)', 
     const note = store.latest(OWNER)!;
     expect(note.hooks).toMatchObject({ shown: 'sulky', intent: 'keep', scale: 'ordinary', until: '2026-10-14T14:00:00.000Z' });
     expect(note.coreVersion).toBe(CHARACTER_CORE.version);
-    expect(note.sourceIds).toEqual([`touch:t-${T0}`]);
+    expect(note.sourceIds).toEqual([`experience:burst-${T0}`]);
     expect(note.dayKey).toBe('2026-10-14');
     expect(note.dayEndsAt).toBe('2026-10-14T18:00:00.000Z');
     expect(facts[0]!.events[0]!.touch).toMatchObject({ stance: 'dislike', reflex: 'flinch' });
@@ -169,6 +174,103 @@ describe('the reflection writes her note after salient events (ADR-0012 D2.3)', 
   });
 });
 
+describe('forgetting follows the note and everything derived from it (H1)', () => {
+  it('deletes the notes of a forgotten voice turn by its words, and every later note of its lineage', async () => {
+    const { service, store, at, setSnapshot } = setup();
+    service.turnEnded({ scopeKey: OWNER, surface: 'voice', alone: true, at: T0, userMessage: 'ごめん、出来心で', reply: 'しばらく口ききません', feeling: null,
+      sourceId: 'utterance:u1' });
+    service.bind(OWNER, 'utterance:u1', 'experience:e-voice');
+    await service.flush(OWNER);
+    at('2026-10-14T13:35:00.000Z');
+    service.touched(touch('2026-10-14T13:35:00.000Z'));
+    await service.flush(OWNER);
+    const derived = store.latest(OWNER)!;
+    expect(derived.sourceIds).toEqual(expect.arrayContaining(['experience:e-voice', 'experience:burst-2026-10-14T13:35:00.000Z']));
+    // He has her forget the turn: by its id (bound) and by its words, both notes go, the later one through its lineage.
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('e-voice', 'ごめん、出来心で')] });
+    expect(service.current(OWNER, '2026-10-14T13:36:00.000Z')).toBeNull();
+    await service.sweep();
+    expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10)).toEqual([]);
+  });
+
+  it('discards a reflection whose turn was forgotten while the call ran, and drops queued events of a forgotten turn', async () => {
+    const { service, store, setSnapshot } = setup([() => {
+      setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('e2', 'ほんとにごめんって')] });
+      return draft();
+    }]);
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: T0, userMessage: 'ほんとにごめんって', reply: '…', feeling: null, sourceId: 'experience:e2' });
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)).toBeNull();
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: T0, userMessage: 'ほんとにごめんって', reply: '…', feeling: null, sourceId: 'experience:e2' });
+    expect(service.pending(OWNER)).toEqual([]);
+  });
+
+  it('carries a closed day into the next day only through lineage: forgetting the touch removes yesterday\'s summary too', async () => {
+    const { service, store, at, setSnapshot, facts } = setup([draft(), draft({ summary: '胸をつつかれた日。' }), draft({ intent: 'none', untilMinutes: null })]);
+    service.touched(touch());
+    await service.flush(OWNER);
+    at('2026-10-14T18:01:00.000Z');
+    await service.sweep();
+    at('2026-10-15T01:00:00.000Z');
+    service.turnEnded({ scopeKey: OWNER, surface: 'text', alone: true, at: '2026-10-15T01:00:00.000Z', userMessage: 'おはよう、昨日はごめんね', reply: 'おはようございます',
+      feeling: null, sourceId: 'experience:e3' });
+    await service.flush(OWNER);
+    expect(facts[2]!.yesterday).toBe('胸をつつかれた日。');
+    expect(store.latest(OWNER)!.sourceIds).toContain(`experience:burst-${T0}`);
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten(`burst-${T0}`)] });
+    await service.sweep();
+    expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10)).toEqual([]);
+  });
+
+  it('keeps notes only as long as the touches they come from (retention)', async () => {
+    const { service, store, at } = setup();
+    service.touched(touch());
+    await service.flush(OWNER);
+    at('2026-11-14T13:31:00.000Z');
+    await service.sweep();
+    expect(store.latest(OWNER)).toBeNull();
+  });
+});
+
+describe('the cap and the queue (H2, low)', () => {
+  it('asks an ordinary sulk without until to settle at its hour, and ends it there', async () => {
+    const { service, store, facts, at } = setup([draft({ untilMinutes: null }), draft({ untilMinutes: 60 })]);
+    service.touched(touch());
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.hooks).toMatchObject({ intent: 'keep', until: null });
+    expect(service.current(OWNER, '2026-10-14T14:29:00.000Z')).not.toBeNull();
+    at('2026-10-14T14:31:00.000Z');
+    await service.sweep();
+    await service.flush(OWNER);
+    expect(facts[1]!.events.map(event => event.kind)).toEqual(['until']);
+    expect(store.latest(OWNER)!.hooks).toMatchObject({ intent: 'none', until: null });
+    expect(store.latest(OWNER)!.flags).toMatchObject({ capEnded: true });
+    // Asked once: the sweep does not keep calling her.
+    await service.sweep();
+    expect(service.pending(OWNER)).toEqual([]);
+  });
+
+  it('closes a day without taking the next day\'s events, and counts failed attempts toward the cap', async () => {
+    const { service, store, facts, at } = setup([draft(), draft({ summary: '一日。' }), draft()], { reflectionsPerDay: 2 });
+    service.touched(touch());
+    await service.flush(OWNER);
+    at('2026-10-14T18:00:30.000Z');
+    service.touched(touch('2026-10-14T18:00:10.000Z'));
+    await service.sweep();
+    expect(facts[1]!.events.map(event => event.kind)).toEqual(['day_end']);
+    expect(service.pending(OWNER).map(event => event.at)).toEqual(['2026-10-14T18:00:10.000Z']);
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.dayKey).toBe('2026-10-15');
+    const capped = setup([new Error('INNER_NOTE_UPSTREAM_529'), draft()], { reflectionsPerDay: 1 });
+    capped.service.touched(touch());
+    await capped.service.flush(OWNER);
+    capped.service.touched(touch());
+    await capped.service.flush(OWNER);
+    expect(capped.facts).toHaveLength(1);
+    expect(capped.store.latest(OWNER)).toBeNull();
+  });
+});
+
 describe('the owner reads her notes afterwards (answer 3)', () => {
   it('shows what she shows at once and the whole note only once its episode closed; the day summary counts the gate', async () => {
     const { service, store, at } = setup([draft(), draft({ intent: 'none', untilMinutes: null, changeReason: '時間がたって、もう怒っていない' })]);
@@ -236,8 +338,10 @@ describe('readers: switched off is byte for byte what it was (ADR-0012 stage 1)'
     const mood = { expression: 'calm' as const };
     expect(innerNoteMood(null, OWNER, T0, mood)).toBe(mood);
     expect(voiceConversationInstructions(true, false, false, false)).toContain('Keep the same lively maid personality.');
-    expect(voiceConversationInstructions(true, false, false, true)).toContain('Keep the same lively personality.');
-    expect(voiceConversationInstructions(true, false, true, false)).toBe(voiceConversationInstructions(true, false, true, true));
+    expect(voiceConversationInstructions(true, false, false, false)).toContain('Sound bright and self-assured');
+    // M4: with the switch on, no fixed tone and no "lively personality": how she sounds is her core's.
+    expect(voiceConversationInstructions(true, false, false, true)).not.toMatch(/lively|Sound bright/u);
+    expect(voiceConversationInstructions(true, false, false, true)).toContain('present with a friend');
   });
 
   it('with a port: her character core in all three identities, her note, Jev, the face and the touch prompt', async () => {
@@ -256,6 +360,9 @@ describe('readers: switched off is byte for byte what it was (ADR-0012 stage 1)'
     expect(innerNoteVoice.presence(service)).toBe(INNER_NOTE_PRESENCE_LINE);
     expect(innerNoteMood(service, OWNER, T0, { expression: 'joyful' as const, feeling: 'proud' as const })).toEqual({ expression: 'annoyed', tell: 'blush',
       until: '2026-10-14T14:00:00.000Z' });
+    // M1: an override (an emergency) keeps its face.
+    const urgent = { expression: 'concerned' as const };
+    expect(innerNoteMood(service, OWNER, T0, urgent, true)).toBe(urgent);
     const prompt = bodyReactionPrompt({ touch: { type: 'poke', durationMs: 200, ongoing: false } as never, audience: 'owner', feeling: { primary: 'neutral' } as never,
       burst: { id: 'b', type: 'poke', count: 1 } as never, sitting: [], said: [], conversation: [], at: T0, inner: { block: innerNoteTouchContext(service, OWNER, 'owner', T0) } });
     expect(prompt).toContain(CHARACTER_CORE.summary);

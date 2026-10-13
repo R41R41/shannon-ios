@@ -35,6 +35,8 @@ export const SQLITE_PROFILES = Object.freeze({
   minecraftLifecycle: profile({ wal: true }),
   /** The liveness monitor (`wiring/livenessWiring.ts`): its episode is its one write. */
   liveness: profile({}),
+  /** Her inner notes (Syzygy ADR-0012, `mind/emotion/store/innerNoteStore.ts`): written after a turn, never inside one. */
+  innerNotes: profile({ wal: true }),
   /**
    * The S3 backfill of the execution columns at each start of the API (`wiring/executionBackfillWiring.ts`): a short wait, since
    * the API's event loop waits with it; a busy batch is tried again later.

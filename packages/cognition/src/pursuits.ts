@@ -80,7 +80,7 @@ export function pursuitKindLabel(kind: ShannonPursuitKind): string {
  */
 export function buildShannonPursuitsPrompt(
   pursuits: readonly ShannonPursuit[],
-  options: { maximumItems?: number; maximumCharacters?: number } = {},
+  options: { maximumItems?: number; maximumCharacters?: number; /** ADR-0012: he is ライ氏 to her, not 持ち主. */ characterCore?: boolean } = {},
 ): string {
   const maximumItems = Math.max(0, Math.min(8, Math.trunc(options.maximumItems ?? 4)));
   const maximumCharacters = Math.max(0, options.maximumCharacters ?? 360);
@@ -89,7 +89,7 @@ export function buildShannonPursuitsPrompt(
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, maximumItems);
   if (!current.length) return '';
-  const header = '[ボク自身のやりたいこと]（持ち主の目的とは別。やったことの証拠ではない）';
+  const header = `[ボク自身のやりたいこと]（${options.characterCore ? 'ライ氏' : '持ち主'}の目的とは別。やったことの証拠ではない）`;
   let result = header;
   for (const pursuit of current) {
     const line = `- ${KIND_LABEL[pursuit.kind]}: ${pursuit.title.slice(0, 60)}`;

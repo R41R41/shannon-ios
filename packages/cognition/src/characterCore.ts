@@ -1,4 +1,4 @@
-import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME } from './persona.js';
+import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME } from './persona.js';
 
 /**
  * Her character core (Syzygy ADR-0012 D6): who she is — her temperament, what she values and likes, how she speaks, her habits —
@@ -127,4 +127,16 @@ export function characterCoreHashInput(core: Pick<CharacterCore, 'version' | 'te
 /** The block as it stands in her identity and in the reflection: the heading names the version and the start of the hash. */
 export function characterCoreBlock(core: CharacterCore = CHARACTER_CORE): string {
   return `[${I}の性格の核 ${core.version} #${core.hash.slice(0, 8)}]\n${core.text}`;
+}
+
+/**
+ * The one-line voice while `SHANNON_INNER_NOTE` is on (ADR-0012 D5.1; owner 2026-10-14): who speaks, told by her core's short form,
+ * instead of a fixed register, a fixed way to address him and 「からかいに寄せず」. For every generator of one line as her (a touch
+ * reaction, the day's focus, a look's note) and the server's self-description.
+ */
+export const SHANNON_ONE_LINE_VOICE_INNER = `シャノン本人の一言として書く。どんな人か: ${CHARACTER_CORE.summary}`;
+
+/** The one-line voice for a path: her core's while the switch is on, the one of before otherwise (byte for byte). */
+export function shannonOneLineVoice(innerNote: boolean): string {
+  return innerNote ? SHANNON_ONE_LINE_VOICE_INNER : SHANNON_ONE_LINE_VOICE;
 }

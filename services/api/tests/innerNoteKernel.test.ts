@@ -47,7 +47,7 @@ async function harness(withNote: boolean) {
     await new Promise<void>(resolve => setImmediate(resolve));
     return response.body as { messageEmotion: { expression: string; feeling?: string; kind?: string } };
   };
-  return { model, chat, service };
+  return { model, chat, service, stateStore };
 }
 
 describe('a text turn reads her inner note (ADR-0012 stage 1)', () => {
@@ -60,7 +60,7 @@ describe('a text turn reads her inner note (ADR-0012 stage 1)', () => {
   });
 
   it('with it: her character core in the cached identity, her note at the end of the turn, and the turn told back', async () => {
-    const { model, chat, service } = await harness(true);
+    const { model, chat, service, stateStore } = await harness(true);
     const body = await chat('ごめん、出来心で', 'ごめんなさい……じゃなくて。もう知りません。');
     const request = model.requests.at(-1)!;
     expect(request.systemPrompt).toContain(CHARACTER_CORE.text);
@@ -71,6 +71,9 @@ describe('a text turn reads her inner note (ADR-0012 stage 1)', () => {
     // D5.2: her own 「ごめん」 does not take her face while the note is active.
     expect(body.messageEmotion.kind).not.toBe('apologetic');
     expect(body.messageEmotion.feeling).not.toBe('apologetic');
+    // M3: only the face is replaced; the feeling stored for the reply is the true one, so her note never reads its own face back.
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(stateStore.snapshot(scope).expressiveEmotion?.primary).toBe('apologetic');
     expect(service.pending(scope).map(event => event.kind)).toEqual(['apology']);
   });
 });

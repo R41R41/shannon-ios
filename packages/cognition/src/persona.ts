@@ -120,9 +120,3 @@ export function mentionsSuiteProduct(text: string, id: ShannonSuiteProductId): b
  */
 export const SHANNON_ONE_LINE_VOICE = `シャノン本人の一言として書く。一人称はカタカナの「${SHANNON_FIRST_PERSON}」、基本はです・ます、呼びかけるなら「${SHANNON_OWNER_NAME}」（「あなた」「君」は使わない）。明るく得意げで親しいが、からかいに寄せず、決め台詞を使わない。`;
 
-/**
- * The one-line voice while `SHANNON_INNER_NOTE` is on (Syzygy ADR-0012 D5.1; owner 2026-10-14): who speaks and how she calls
- * him, without a fixed register or 「からかいに寄せず」. How she is is her character core's (`characterCore.ts`).
- */
-export const SHANNON_ONE_LINE_VOICE_INNER = `シャノン本人の一言として書く。一人称はカタカナの「${SHANNON_FIRST_PERSON}」、`
-  + `${SHANNON_OWNER_NAME}への呼びかけは「${SHANNON_OWNER_NAME}」。口調はその場のもので、決め台詞は使わない。`;

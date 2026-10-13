@@ -1,5 +1,5 @@
 import { SHANNON_EMOTION_KINDS, type ShannonEmotionKind, type ShannonExpressiveEmotion } from './types.js';
-import { buildExpressiveEmotionPrompt, isShannonEmotionKind } from './emotionState.js';
+import { isShannonEmotionKind } from './emotionState.js';
 
 /**
  * Her inner note (Syzygy ADR-0012 D1–D4), the pure part: its vocabulary, the gates that hold what one reflection may change,
@@ -97,6 +97,8 @@ export interface InnerNoteFlags {
   forgaveWhileHigh?: true;
   /** She moved toward forgiving after an apology and gave no reason of her own (a heuristic of the words). */
   apologyOnlyReason?: true;
+  /** An ordinary sulk reached an hour from its start: it ended there, whatever the draft said (D4, the owner's safety bound). */
+  capEnded?: true;
 }
 
 /** A note as stored and read. */
@@ -118,6 +120,8 @@ export interface InnerNote {
   /** Set on the note that closed its day (D4): from then on it is a memory of that day, not her present attitude. */
   closedAt: string | null;
   coreVersion: string;
+  /** When the sulk this note belongs to began (its first keep/soften/forgive note); null for a calm note. The ordinary cap counts from it. */
+  episodeStartedAt: string | null;
 }
 
 /** What happened, as closed facts and her own or the owner's words where they are already hers to read (owner alone only). */
@@ -181,7 +185,7 @@ export function boundedUntil(scale: InnerNoteScale, minutes: number | null, at: 
 
 export interface SettleInnerNoteInput {
   draft: InnerNoteDraft;
-  previous: Pick<InnerNote, 'hooks' | 'closedAt'> | null;
+  previous: Pick<InnerNote, 'hooks' | 'closedAt' | 'createdAt' | 'episodeStartedAt'> | null;
   triggers: readonly InnerNoteTrigger[];
   at: string;
   dayEndsAt: string;
@@ -192,29 +196,62 @@ export interface SettleInnerNoteInput {
 }
 
 const APOLOGY_WORDS = /謝(?:られ|って|罪|った)|ごめん|すみません/u;
+const SULKING: ReadonlySet<InnerNoteIntent> = new Set(['keep', 'soften', 'forgive']);
+const MINUTE = 60_000;
 
-/** The draft through the gates (D2, D4): the hooks to store, and what the gates noticed. Closing a day sets the calm close. */
-export function settleInnerNote(input: SettleInnerNoteInput): { hooks: InnerNoteHooks; flags: InnerNoteFlags } {
+/** Whether an intent is a sulk (keep, soften or forgive): what the face, the cap and the sweep look at. */
+export const sulkingIntent = (intent: InnerNoteIntent): boolean => SULKING.has(intent);
+
+/** The instant an ordinary sulk ends at the latest: an hour from the start of its episode (never reset by a rewrite). */
+export function ordinaryCapOf(note: Pick<InnerNote, 'createdAt' | 'episodeStartedAt'>): string {
+  const start = Date.parse(note.episodeStartedAt ?? note.createdAt);
+  return new Date((Number.isFinite(start) ? start : 0) + INNER_NOTE_LIMITS.ordinaryUntilMinutes * MINUTE).toISOString();
+}
+
+/** The draft through the gates (D2, D4): the hooks to store, the episode it belongs to, and what the gates noticed. */
+export function settleInnerNote(input: SettleInnerNoteInput): { hooks: InnerNoteHooks; flags: InnerNoteFlags; episodeStartedAt: string | null } {
   const { draft, triggers } = input;
   const flags: InnerNoteFlags = {};
   if (triggers.includes('day_end')) {
     return { hooks: { shown: draft.shown, tell: 'none', until: null, scale: 'ordinary', dayReason: null, intent: 'none',
-      routeSummary: draft.routeSummary }, flags };
+      routeSummary: draft.routeSummary }, flags, episodeStartedAt: null };
   }
-  const previous = input.previous && !input.previous.closedAt ? input.previous.hooks.intent : null;
+  const open = input.previous && !input.previous.closedAt ? input.previous : null;
+  const previous = open ? open.hooks.intent : null;
   const gate = gatedIntent(previous, draft.intent, triggers);
   if (gate.stopped) flags.gateStopped = true;
   const dayAllowed = draft.scale === 'day' && draft.dayReason !== null;
   if (draft.scale === 'day' && !dayAllowed) flags.dayDowngraded = true;
   const scale: InnerNoteScale = dayAllowed ? 'day' : 'ordinary';
-  const bounded = gate.intent === 'none' ? { until: null, clamped: false } : boundedUntil(scale, draft.untilMinutes, input.at, input.dayEndsAt);
-  if (bounded.clamped) flags.untilClamped = true;
-  Object.assign(flags, driftFlags(input, previous, gate.intent));
+  const episodeStartedAt = open && SULKING.has(open.hooks.intent) ? open.episodeStartedAt ?? open.createdAt : input.at;
+  const capped = cappedIntent(gate.intent, scale, episodeStartedAt, input.at, flags);
+  const until = cappedUntil(capped, scale, draft.untilMinutes, input, episodeStartedAt, flags);
+  Object.assign(flags, driftFlags(input, previous, capped));
   return {
-    hooks: { shown: draft.shown, tell: draft.tell, until: bounded.until, scale, dayReason: dayAllowed ? draft.dayReason : null, intent: gate.intent,
+    hooks: { shown: draft.shown, tell: draft.tell, until, scale, dayReason: dayAllowed ? draft.dayReason : null, intent: capped,
       routeSummary: draft.routeSummary },
-    flags,
+    flags, episodeStartedAt: SULKING.has(capped) ? episodeStartedAt : null,
   };
+}
+
+/** Her `until` within the bounds: none for a calm note; an ordinary sulk's no later than an hour from its episode's start. */
+function cappedUntil(intent: InnerNoteIntent, scale: InnerNoteScale, minutes: number | null, input: SettleInnerNoteInput, episodeStartedAt: string,
+  flags: InnerNoteFlags): string | null {
+  if (intent === 'none') return null;
+  const bounded = boundedUntil(scale, minutes, input.at, input.dayEndsAt);
+  const cap = ordinaryCapOf({ createdAt: input.at, episodeStartedAt });
+  const until = scale === 'ordinary' && bounded.until !== null ? earlier(bounded.until, cap) : bounded.until;
+  if (bounded.clamped || until !== bounded.until) flags.untilClamped = true;
+  return until;
+}
+
+const earlier = (left: string, right: string) => (left <= right ? left : right);
+
+/** An ordinary sulk past an hour from its start ends: the owner's safety bound of D4, kept in code, not asked of her. */
+function cappedIntent(intent: InnerNoteIntent, scale: InnerNoteScale, episodeStartedAt: string, at: string, flags: InnerNoteFlags): InnerNoteIntent {
+  if (!SULKING.has(intent) || scale !== 'ordinary' || at < ordinaryCapOf({ createdAt: at, episodeStartedAt })) return intent;
+  flags.capEnded = true;
+  return 'none';
 }
 
 /** D3's drift marks: forgiving while the numbers are still high, and moving after an apology without a reason of her own. */
@@ -228,11 +265,23 @@ function driftFlags(input: SettleInnerNoteInput, previous: InnerNoteIntent | nul
   return flags;
 }
 
-/** While a note still holds her attitude: not closed, her day not over, and an intent to keep, or a time she means to until. */
-export function innerNoteActive(note: Pick<InnerNote, 'closedAt' | 'dayEndsAt' | 'hooks'> | null, at: string): boolean {
+type ActiveFields = Pick<InnerNote, 'closedAt' | 'dayEndsAt' | 'hooks' | 'createdAt' | 'episodeStartedAt'>;
+
+/**
+ * While a note still holds her attitude (D4): not closed, her day not over, her `until` not passed, and for an ordinary sulk not
+ * past an hour from the start of its episode (with no `until` it lasts at most that hour). A calm note is active only before its
+ * `until`. Past these the sulk has expired: the server's sweep asks her to settle (`innerNoteExpired`).
+ */
+export function innerNoteActive(note: ActiveFields | null, at: string): boolean {
   if (!note || note.closedAt || at >= note.dayEndsAt) return false;
-  if (note.hooks.intent === 'keep' || note.hooks.intent === 'soften' || note.hooks.intent === 'forgive') return true;
-  return note.hooks.until !== null && at < note.hooks.until;
+  if (note.hooks.until !== null && at >= note.hooks.until) return false;
+  if (!SULKING.has(note.hooks.intent)) return note.hooks.until !== null;
+  return note.hooks.scale === 'day' || at < ordinaryCapOf(note);
+}
+
+/** A sulk whose time ran out (its `until`, or the ordinary hour) while her day goes on: the sweep asks for a settling reflection. */
+export function innerNoteExpired(note: ActiveFields | null, at: string): boolean {
+  return Boolean(note && innerNoteCurrent(note, at) && SULKING.has(note.hooks.intent) && !innerNoteActive(note, at));
 }
 
 /** Whether her note still belongs to the present (her day is not over and it was not closed): what the readers are given. */
@@ -241,7 +290,7 @@ export function innerNoteCurrent(note: Pick<InnerNote, 'closedAt' | 'dayEndsAt'>
 }
 
 /** The face hooks while a note is active (Live2D: face, blush, until), or null. */
-export function innerNoteFace(note: Pick<InnerNote, 'closedAt' | 'dayEndsAt' | 'hooks'> | null, at: string): {
+export function innerNoteFace(note: ActiveFields | null, at: string): {
   shown: ShannonEmotionKind; tell: InnerNoteTell; until: string | null;
 } | null {
   if (!note || !innerNoteActive(note, at)) return null;
@@ -254,10 +303,12 @@ export function innerNoteFace(note: Pick<InnerNote, 'closedAt' | 'dayEndsAt' | '
  * feeling at moderate or above) or an override (safety, grief, an emergency) stays. Anything else is returned as it was.
  */
 export function withoutOwnApology(
-  emotion: ShannonExpressiveEmotion, note: Pick<InnerNote, 'closedAt' | 'dayEndsAt' | 'hooks'> | null, at: string,
+  emotion: ShannonExpressiveEmotion, note: ActiveFields | null, at: string,
   decided?: { primary: string; intensity: number },
+  /** A tool of the turn failed: her apology may be for that, and it stays. */
+  failed = false,
 ): ShannonExpressiveEmotion {
-  if (emotion.primary !== 'apologetic' || emotion.overrideReason) return emotion;
+  if (emotion.primary !== 'apologetic' || emotion.overrideReason || failed) return emotion;
   if (decided?.primary === 'apologetic' && decided.intensity >= 0.6) return emotion;
   const face = innerNoteFace(note, at);
   if (!face) return emotion;
@@ -319,32 +370,6 @@ export function localClock(at: string, timeZone = 'Asia/Tokyo'): string {
   if (!Number.isFinite(time)) return '';
   const local = zonedParts(time, timeZone);
   return `${String(local.hour).padStart(2, '0')}:${String(local.minute).padStart(2, '0')}`;
-}
-
-const TEASING = /(?:ポンコツ|ぽんこつ|チョロ|ちょろい|子供扱い|子ども扱い|お子様|ばーか|バカ|ばか|アホ|あほ|ドジ|へっぽこ|天才(?:\(笑\)|（笑）|w))/u;
-const GOODNIGHT = /^(?:じゃあ|じゃ|それじゃあ?|では|よし)?[、,\s]*(?:そろそろ)?[、,\s]*(?:おやすみ|お休み|寝る(?:ね|よ|わ)?|ねる(?:ね|よ)?|寝ます)/u;
-
-const APOLOGY = /(?:ごめん|ゴメン|すまん|すみません|申し訳|悪かった|謝る|許して)/u;
-
-/**
- * An apology in the owner's words, for her inner note only (a short message that apologizes anywhere in it: 「ごめん、出来心で」).
- * Wider than `soothingIn`, which eases her feeling by its table and stays as it is.
- */
-export function apologyIn(message: string): boolean {
-  const text = message.trim();
-  return Array.from(text).length <= 60 && APOLOGY.test(text);
-}
-
-/** A tease of hers in the owner's words (a short message only). Unsure means no. */
-export function teasingIn(message: string): boolean {
-  const text = message.trim();
-  return Array.from(text).length <= 80 && TEASING.test(text);
-}
-
-/** The owner saying goodnight (a short message that opens with it): her day may end there (D4). */
-export function goodnightIn(message: string): boolean {
-  const text = message.trim();
-  return Array.from(text).length <= 30 && GOODNIGHT.test(text);
 }
 
 const STANCE_WORDS: Readonly<Record<string, string>> = Object.freeze({ welcome: 'うれしい', fine: 'かまわない', unsure: '戸惑う', dislike: 'いや', refuse: '拒む' });
@@ -438,16 +463,4 @@ export function asciiRouteSummary(value: unknown): string {
 /** A kind read from a reflection: one of hers, else neutral. */
 export function shownKind(value: unknown): ShannonEmotionKind {
   return typeof value === 'string' && isShannonEmotionKind(value) ? value : 'neutral';
-}
-
-/** The line of the expressive-emotion block that kept every sulk and anger light (`buildExpressiveEmotionPrompt`). */
-export const LIGHT_SULKING_LINE = 'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, '
-  + 'non-controlling, and never induce guilt.';
-/** Its place while her inner note is on (D5.1; owner 2026-10-14: no rule of how light). */
-export const INNER_NOTE_EXPRESSIVE_LINE = 'Do not force advice when companionship is wanted. '
-  + 'Her jealousy, sulking, anger and teasing are her own, as her inner note says.';
-
-/** `buildExpressiveEmotionPrompt` with that one line in its inner-note wording; every other line as it is. */
-export function innerNoteExpressiveEmotionPrompt(emotion: ShannonExpressiveEmotion, audience: 'owner' | 'guest' | 'others' = 'owner'): string {
-  return buildExpressiveEmotionPrompt(emotion, audience).replace(LIGHT_SULKING_LINE, INNER_NOTE_EXPRESSIVE_LINE);
 }

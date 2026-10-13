@@ -365,7 +365,7 @@ export class ShannonBody {
         intensity: mood.fromConversation ? round(current.intensity, 1) : 0,
         fromConversation: mood.fromConversation,
         valence: round(snapshot.emotion.valence, 2), arousal: round(snapshot.emotion.arousal, 2), openness: round(snapshot.emotion.openness, 2),
-      }),
+      }, current.overrideReason !== undefined),
       doing: bodyDoing(overview.loop.state, this.dependencies.autonomy.activityDays(scopeKey, 2), at),
       autonomy: { state: overview.control.state },
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },

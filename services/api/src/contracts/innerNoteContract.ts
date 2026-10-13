@@ -19,7 +19,7 @@ export const INNER_NOTE_SERVICE_LIMITS = Object.freeze({
   reflectionsPerDay: 96,
   /** The provider call's own bound. */
   timeoutMilliseconds: 30_000,
-  maximumOutputTokens: 900,
+  maximumOutputTokens: 2_400, // adaptive thinking shares it: the JSON must not be cut (a cut answer is logged by its stop code).
   /** The last lines of a conversation in progress given to a reflection (owner alone only). */
   recentLines: 6,
   /** A conversation older than this is not "in progress". */

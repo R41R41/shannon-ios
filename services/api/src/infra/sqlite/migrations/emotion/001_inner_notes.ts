@@ -58,4 +58,3 @@ export const INNER_NOTES_STEP: SchemaStep = {
   ],
 };
 
-export const EMOTION_STEPS: readonly SchemaStep[] = Object.freeze([INNER_NOTES_STEP]);

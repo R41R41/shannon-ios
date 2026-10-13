@@ -32,6 +32,8 @@ import { autonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './store/autonomyStore.js';
 import { StudyDesk, type StudyReactionTap } from './studyDesk.js';
 import { clip, pursuitStatusPhrase, type AutonomyOverview } from './autonomyServiceParts.js';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
 /**
  * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current stop switch and budget, writes every
@@ -461,7 +463,8 @@ export class ShannonAutonomyService {
   pursuitPrompt(scopeKey: string): string {
     try {
       const at = this.now();
-      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at)), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
+      const core = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? { characterCore: true } : {}; // ADR-0012: ライ氏, not 持ち主.
+      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at), core), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
         buildShannonSeenPrompt(this.study.seen(scopeKey, at))].filter(Boolean).join('\n\n');
     } catch { return ''; }
   }
