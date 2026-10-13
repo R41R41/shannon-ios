@@ -54,6 +54,8 @@ public struct ShannonConversationView: View {
     @State var composerUsesWebSearch = false
     @State var composerIsImporting = false
     @State var composerIsSubmitting = false
+    /// The composer had the keyboard when the last send was accepted; its rebuilt field takes it back.
+    @State var composerKeepsFocus = false
     @State var composerAttachmentError: String?
 #if os(iOS)
     @State var voiceWorkspace = ShannonVoiceCallHost.shared.workspace

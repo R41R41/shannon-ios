@@ -5,6 +5,9 @@ import Observation
 @Observable
 public final class ShannonConversationModel {
     public var draft = ""
+    /// Changes when an accepted send cleared the draft, or cleared text the input view wrote back after it
+    /// (`ShannonConversationModel+Messaging.swift`). The iPhone composer rebuilds its field on it.
+    public internal(set) var draftResetToken = 0
     public internal(set) var isDesignPreview = false
     public internal(set) var messages: [ConversationMessage]
     public internal(set) var threads: [ChatThreadDTO]

@@ -2,14 +2,21 @@ import Foundation
 import Observation
 
 extension ShannonConversationModel {
+    /// Sends `text` (the draft when nil). Returns false when nothing was sent. The draft is cleared before
+    /// the network call; text the input view writes back right after (an IME committing its marked text into
+    /// the cleared field) is cleared too, so the field never keeps what was sent.
+    @discardableResult
     public func sendDraft(
+        text explicitText: String? = nil,
         attachments: [ShannonChatAttachmentDTO] = [],
         webSearch: Bool = false,
         photoJPEGData: Data? = nil
-    ) async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (!text.isEmpty || !attachments.isEmpty || photoJPEGData != nil), !isSending else { return }
+    ) async -> Bool {
+        let text = (explicitText ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (!text.isEmpty || !attachments.isEmpty || photoJPEGData != nil), !isSending else { return false }
         draft = ""
+        draftResetToken &+= 1
+        clearDraftWriteBack(of: text)
         let messageText = Self.messageText(text: text, attachments: attachments, includesPhoto: photoJPEGData != nil)
         let message = ConversationMessage(role: .user, text: messageText, deliveryState: .sending)
         messages.append(message)
@@ -29,6 +36,28 @@ extension ShannonConversationModel {
             webSearch: webSearch,
             photoJPEGData: photoJPEGData
         )
+        return true
+    }
+
+    /// For a short while after a send, a draft that is only (the end of) the sent text is the input view
+    /// writing it back, not new typing: it is cleared.
+    private func clearDraftWriteBack(of sent: String) {
+        guard !sent.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            for milliseconds in [0, 50, 150, 400, 800] {
+                if milliseconds > 0 { try? await Task.sleep(for: .milliseconds(milliseconds)) } else { await Task.yield() }
+                guard let self else { return }
+                if Self.isDraftWriteBack(self.draft, sent: sent) {
+                    self.draft = ""
+                    self.draftResetToken &+= 1
+                }
+            }
+        }
+    }
+
+    nonisolated static func isDraftWriteBack(_ draft: String, sent: String) -> Bool {
+        let value = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !value.isEmpty && sent.hasSuffix(value)
     }
 
     public func transcribeVoice(_ recording: ShannonVoiceRecording) async throws -> String {
