@@ -18,6 +18,7 @@
 - Branch and worktree lifecycle: [`BRANCHING.md`](BRANCHING.md)
 - Verification entrypoint: [`../scripts/verify.sh`](../scripts/verify.sh)
 - Test lanes (local targeted tests, the full suite on GitHub Actions, the VM deploy check): [`testing/test-lanes.md`](testing/test-lanes.md)
+- CI runner (the self-hosted GitHub Actions runner in WSL2 on the owner's Windows PC; setup in Japanese): [`development/ci-self-hosted-runner.md`](development/ci-self-hosted-runner.md)
 - Conversation regression coverage and suite-identity audit: [`testing/conversation-regression-audit.md`](testing/conversation-regression-audit.md)
 - Reach measures (fixed scenarios judged from outside, and counts from use): [`testing/reach-measures-runbook.md`](testing/reach-measures-runbook.md)
 
