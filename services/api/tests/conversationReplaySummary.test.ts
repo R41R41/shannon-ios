@@ -297,7 +297,7 @@ describe('the replay summary is written off the response path', () => {
       messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' as const }, completedAt: minute(200), threadSummary: '短いナビゲーション要約' };
     const recorded = recordingWriter();
     const errors: string[] = [];
-    const worker = new ShannonBackgroundWorker(store, store, store, new LocalRuleSleepMemoryAnalyzer(), { now: () => new Date(minute(300)), reportError: code => errors.push(code),
+    const worker = new ShannonBackgroundWorker(store, store, store, { now: () => new Date(minute(300)), reportError: code => errors.push(code),
       replaySummarizer: new ConversationReplaySummarizer(store, store, recorded.writer, store, { environment, now: () => minute(300) }) });
     dispatcher.schedule(turn, dispatcher.recordTurn(turn).id);
     // Sixteen turns are waiting (the stored ones are recovered into the queue); one summary serves them all.
@@ -317,7 +317,7 @@ describe('the replay summary is written off the response path', () => {
     database.close();
 
     const reopened = new SQLiteShannonStore({ path, now: () => minute(300) });
-    const failing = new ShannonBackgroundWorker(reopened, reopened, reopened, new LocalRuleSleepMemoryAnalyzer(), { now: () => new Date(minute(300)), reportError: code => errors.push(code),
+    const failing = new ShannonBackgroundWorker(reopened, reopened, reopened, { now: () => new Date(minute(300)), reportError: code => errors.push(code),
       replaySummarizer: { refreshForTurn: async () => { throw new Error('SUMMARY_BROKEN'); } } });
     const reopenedDispatcher = new DurableBackgroundDispatcher(reopened, reopened);
     reopenedDispatcher.schedule(turn, reopenedDispatcher.recordTurn(turn).id);

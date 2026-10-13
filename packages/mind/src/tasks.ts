@@ -51,14 +51,15 @@ export interface HostFlags {
   readonly waitReason?: string | null;
 }
 
-const FCA_KINDS: Readonly<Record<string, TaskKind>> = Object.freeze({
+/** The common runtime's own kinds (`fca_kind`) and the task kind each is: research and generic are both `work`. */
+export const FCA_TASK_KINDS: Readonly<Record<string, TaskKind>> = Object.freeze({
   root: 'root', conversation: 'conversation', research: 'work', generic: 'work', sleep: 'sleep',
 });
 
 /** `COALESCE(fca_kind, 'codex')`, with the FCA research and generic tasks as `work`; an unknown FCA kind has none. */
 export function deriveTaskKind(fcaKind: string | null): TaskKind | null {
   if (fcaKind === null) return 'codex';
-  return FCA_KINDS[fcaKind] ?? null;
+  return FCA_TASK_KINDS[fcaKind] ?? null;
 }
 
 /** Codex acts outside; every FCA kind only calls models, so its unknown step is retired today (`retireUnknown`). */
@@ -106,7 +107,7 @@ function fcaState(facts: TaskFacts): ExecState {
 
 /** The state of a task from what its row says today, or null for a status the vocabulary does not know. */
 export function deriveExecState(facts: TaskFacts): ExecState | null {
-  return facts.fcaKind === null ? codexState(facts) : fcaState(facts);
+  return deriveTaskKind(facts.fcaKind) === 'codex' ? codexState(facts) : fcaState(facts);
 }
 
 /** The new columns of one task, or null when its kind or status is not one written today. */
@@ -156,7 +157,7 @@ export function legacyProjection(state: ExecState, kind: TaskKind, hostFlags: Ho
 
 /** The old columns of a task as they are compared: an Agent Host pause by the reason the app reads. */
 export function legacyStateOf(facts: TaskFacts): LegacyTaskState {
-  const pauseReason = facts.fcaKind === null ? hostPauseReason(facts) : facts.pauseReason;
+  const pauseReason = deriveTaskKind(facts.fcaKind) === 'codex' ? hostPauseReason(facts) : facts.pauseReason;
   return legacy(facts.status, pauseReason);
 }
 

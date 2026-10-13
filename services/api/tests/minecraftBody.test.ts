@@ -29,7 +29,8 @@ import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiri
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import type { HostFolderOperations } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
-import { withMinecraftToolLine, type MinecraftRequestPort } from '../src/mind/tools/shannonMinecraftTools.js';
+import { withMinecraftToolLine } from '../src/mind/tools/shannonMinecraftTools.js';
+import { toolOk } from '../src/mind/tools/shannonTools.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import type { OwnOutreachReader } from '../src/surfaces/outreach/ownOutreach.js';
 import { promptOf } from './modelPrompt.js';
@@ -487,9 +488,11 @@ describe('what she did on her own, in game chat (owner decision 2026-10-06)', ()
 });
 
 /** Her Minecraft body's request queue as her tools see it: configured for the owner, in the game while `present.value`. */
-function bodyPort(present: { value: boolean }): MinecraftRequestPort {
-  return { configuredFor: (scopeKey: string) => scopeKey === 'owner', present: (scopeKey: string) => scopeKey === 'owner' && present.value,
-    enqueue: () => ({ kind: 'absent' }), cancel: () => 'NOT_FOUND', statusText: () => '' } as unknown as MinecraftRequestPort;
+/** Her body's task tools as the common runtime offers them: while its task context is open (here: while `present`). */
+function withBody(present: { value: boolean }) {
+  const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:') });
+  autonomy.tools.useMinecraftTasks({ available: scopeKey => scopeKey === 'owner' && present.value, execute: async () => toolOk('[]') });
+  return autonomy;
 }
 
 const voiceTurn = (transcript: string, extra: { companionPresent?: boolean } = {}) => ({
@@ -503,7 +506,7 @@ const voiceTurn = (transcript: string, extra: { companionPresent?: boolean } = {
 describe('her Minecraft body\'s capability line (review N1 and N-1, 2026-10-06)', () => {
   it('is in the owner\'s description only where minecraft.request is offered: alone, the body in the game, never game chat', async () => {
     const present = { value: false };
-    const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), minecraftBody: bodyPort(present) });
+    const autonomy = withBody(present);
     const { turn, model, api, close } = harness({ kernel: { autonomy } });
     const line = SHANNON_MINECRAFT_BODY_CAPABILITY.text;
     const chat = (extra: Record<string, unknown> = {}) => api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'おはよう', ...extra } });
@@ -547,8 +550,8 @@ describe('her Minecraft body\'s capability line (review N1 and N-1, 2026-10-06)'
 describe('Minecraft words in a voice turn (review B2, 2026-10-06)', () => {
   const said = '昨日マイクラで遊んだよ';
   it('change nothing without a body, or while it is away: no tools offered, as before her Minecraft body existed', async () => {
-    for (const minecraftBody of [undefined, bodyPort({ value: false })]) {
-      const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), ...(minecraftBody ? { minecraftBody } : {}) });
+    for (const away of [false, true]) {
+      const autonomy = away ? withBody({ value: false }) : createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:') });
       const { model, api, close } = harness({ kernel: { autonomy } });
       expect((await api.dispatch(voiceTurn(said))).status).toBe(200);
       const request = model.requests.at(-1)!;
@@ -563,7 +566,7 @@ describe('Minecraft words in a voice turn (review B2, 2026-10-06)', () => {
   });
 
   it('offer her tools, her body\'s among them, while the body is in the game', async () => {
-    const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), minecraftBody: bodyPort({ value: true }) });
+    const autonomy = withBody({ value: true });
     const { model, api, close } = harness({ kernel: { autonomy } });
     await api.dispatch(voiceTurn(said));
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.status');
@@ -896,7 +899,7 @@ describe('docs/minecraft-body-contract.md', () => {
       'MINECRAFT_BODY_NOT_CONFIGURED', 'MINECRAFT_BODY_DEVICE_DENIED', 'MINECRAFT_BODY_SCOPE_DENIED', 'MINECRAFT_SERVER_DENIED',
       'MINECRAFT_TURN_CONFLICT', 'RATE_LIMITED', 'BAD_REQUEST', 'game.died', 'not_game_body', 'game_only', 'body.game',
       '`body`', '`task`', '`dimension`', '`health`', '`food`', '`timeOfDay`', '`recentAdvancements`', '`busyWith`', '[マイクラの体の今]',
-      'GAME_BODY_CAPABILITIES_DENIED', 'GAME_BODY_DEVICE_DENIED', 'TextTurnSurface.ownOutreach', 'SHANNON_MINECRAFT_BODY_CAPABILITY', 'withMinecraftBodyLine']) {
+      'GAME_BODY_CAPABILITIES_DENIED', 'GAME_BODY_DEVICE_DENIED', 'TextTurnSurface.ownOutreach', 'SHANNON_MINECRAFT_BODY_CAPABILITY', 'withMinecraftToolLine']) {
       expect(document).toContain(word);
     }
   });

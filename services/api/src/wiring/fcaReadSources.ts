@@ -27,14 +27,30 @@ export interface FcaReadSourcesOptions {
 export function createFcaReadSources(parts: FcaReadSourcesOptions):
   (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
   const job = readSourceJob(parts.conversations);
+  /**
+   * What the skill reader answered (existence, status, ancestry, body checks: the same at every time of a receipt), per skill and
+   * revision, for one check of the caller's (`shared`: one walk of the FCA source guard over one snapshot); a later check asks
+   * again, so a skill retired or withdrawn since is seen at once. The memory controls, the receipt's time and the withholding of
+   * its text are still checked per receipt. 2026-10-13: one report's walk asked the skill reader 1,280 times for 16 skills (~80
+   * recalled memories, each with the receipts of what it read), ~0.7 s of the API's one thread.
+   */
+  const walks = new WeakMap<object, Map<string, { body: string } | null>>();
+  const skillOf = (shared: ReadSourceSnapshot | undefined): SkillReader => (scopeKey, skillId, revisionId) => {
+    if (!shared) return parts.skill?.(scopeKey, skillId, revisionId) ?? null;
+    let known = walks.get(shared.withholding);
+    if (!known) walks.set(shared.withholding, known = new Map());
+    const key = JSON.stringify([scopeKey, skillId, revisionId ?? null]);
+    if (!known.has(key)) known.set(key, parts.skill?.(scopeKey, skillId, revisionId) ?? null);
+    return known.get(key)!;
+  };
   return (scopeKey, sourceId, observedAt, shared) => {
     try {
       if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || sourceId.length > 240) return false;
-      if (shared) return readSourceVisible(parts, scopeKey, sourceId, observedAt, shared);
+      if (shared) return readSourceVisible(parts, skillOf(shared), scopeKey, sourceId, observedAt, shared);
       // Without a caller's snapshot: the state is read fresh every time, and one synchronous job shares the withholding made under
       // that same state (2026-10-13: each of a turn's ~224 checks loaded every remembered turn again, ~3 s a turn on the VM).
       const state = parts.state.snapshot(scopeKey);
-      return readSourceVisible(parts, scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
+      return readSourceVisible(parts, skillOf(undefined), scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
     } catch { return false; }
   };
 }
@@ -69,7 +85,10 @@ function readSourceJob(conversations: ConversationStore) {
   };
 }
 
-function readSourceVisible(parts: FcaReadSourcesOptions, scopeKey: string, sourceId: string, observedAt: string, shared: ReadSourceSnapshot): boolean {
+type SkillReader = (scopeKey: string, skillId: string, revisionId?: string) => { body: string } | null;
+
+function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, scopeKey: string, sourceId: string, observedAt: string,
+  shared: ReadSourceSnapshot): boolean {
     try {
       const match = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u.exec(sourceId);
       if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return false;
@@ -101,7 +120,9 @@ function readSourceVisible(parts: FcaReadSourcesOptions, scopeKey: string, sourc
             const control = memoryControlFor(state, key);
             return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
           })) return false;
-          const skill = parts.skill?.(scopeKey, skillId, revisionId); if (!skill) return false; text = skill.body; break;
+          const skill = skillOf(scopeKey, skillId, revisionId);
+          if (!skill) return false;
+          text = skill.body; break;
         }
         case 'shannon-folder': {
           const folder = /^([^/]+)\/([a-f0-9]{64})$/u.exec(id);

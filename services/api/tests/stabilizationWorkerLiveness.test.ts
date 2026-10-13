@@ -25,7 +25,7 @@ describe('background worker under a busy database', () => {
     cleanups.push(() => store.close());
     store.appendTurn('owner-a', store.createThread('owner-a', 'busy'), 'こんにちは', 'こんにちは', '2026-09-01T03:00:00.000Z');
     const errors: string[] = [];
-    const worker = new ShannonBackgroundWorker(store, store, store, new LocalRuleSleepMemoryAnalyzer(), {
+    const worker = new ShannonBackgroundWorker(store, store, store, {
       workerId: 'busy-worker', now: () => new Date('2026-09-01T18:30:00.000Z'), reportError: code => errors.push(code) });
     const claim = store.claimNextBackgroundJob.bind(store);
     store.claimNextBackgroundJob = () => { throw busy(); };
@@ -42,7 +42,7 @@ describe('background worker under a busy database', () => {
     let attempts = 0;
     const enqueue = store.enqueueSleepConsolidations.bind(store);
     store.enqueueSleepConsolidations = (...args) => { attempts++; if (attempts === 1) throw busy(); return enqueue(...args); };
-    const worker = new ShannonBackgroundWorker(store, store, store, new LocalRuleSleepMemoryAnalyzer(), {
+    const worker = new ShannonBackgroundWorker(store, store, store, {
       workerId: 'busy-worker', now: () => new Date('2026-09-01T18:30:00.000Z'), reportError: code => errors.push(code) });
     expect(await worker.runOnce()).toBe('idle');
     expect(errors).toEqual(['MAINTENANCE_SQLITE_BUSY']);

@@ -54,7 +54,14 @@ export interface SemanticRecallInput {
    * (2026-10-13: the rewrite was 1.5 s of a 4.2 s recall on a simple follow-up). The rerank still runs.
    */
   withoutRewrite?: boolean;
+  /**
+   * How long the rerank may take before the similarity order stands (a voice turn: `SHANNON_VOICE_RERANK_TIMEOUT_MS`, 1,200).
+   * Owner's Windows call, 2026-10-14: a non-streaming rerank took 2,178 ms and her first sentence came at 4.47 s. Absent: no cap.
+   */
+  rerankTimeoutMilliseconds?: number;
 }
+
+type Shortlist = ReadonlyArray<{ candidate: StoredEmbeddingCandidate; similarity: number }>;
 
 /**
  * Model-assisted recall. It reads only; every failure or timeout yields an
@@ -114,10 +121,10 @@ export class SemanticMemoryRecall {
       let scores = new Map(shortlist.map(row => [row.candidate.id, row.similarity]));
       if (modelCalls < budget) {
         modelCalls += 1;
-        const ranked = await gateway.rerank(input.scopeKey, input.query,
-          shortlist.map(row => ({ id: row.candidate.id, text: row.candidate.summary })), signal);
+        const ranked = await cappedRerank(gateway, input, shortlist, signal);
         signal.throwIfAborted();
-        scores = new Map(ranked.filter(row => scores.has(row.id)).map(row => [row.id, row.relevance]));
+        // Past its cap the rerank is dropped and the similarities stand as the relevance (the beam order, same threshold).
+        if (ranked) scores = new Map(ranked.filter(row => scores.has(row.id)).map(row => [row.id, row.relevance]));
       }
       const gate = new DisclosureGate(input.present, input.snapshot, conversationStoreOf(this.index), input.scopeKey);
       const hits = shortlist.flatMap(row => {
@@ -143,6 +150,32 @@ export class SemanticMemoryRecall {
       if (input.isEligible && !input.isEligible(candidate)) return false;
       return visibleMemoryText(input.snapshot, candidate.id, candidate.summary) !== null;
     });
+  }
+}
+
+/** The rerank, or null when it passed `rerankTimeoutMilliseconds` (its request is then aborted and a late answer dropped). */
+async function cappedRerank(gateway: MemoryModelGateway, input: SemanticRecallInput, shortlist: Shortlist, signal: AbortSignal):
+  Promise<readonly { id: string; relevance: number }[] | null> {
+  const candidates = shortlist.map(row => ({ id: row.candidate.id, text: row.candidate.summary }));
+  const cap = input.rerankTimeoutMilliseconds;
+  if (cap === undefined) return gateway.rerank(input.scopeKey, input.query, candidates, signal);
+  const capped = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>(resolve => {
+    timer = setTimeout(() => {
+      capped.abort();
+      resolve(null);
+    }, cap);
+  });
+  try {
+    const work = gateway.rerank(input.scopeKey, input.query, candidates, AbortSignal.any([signal, capped.signal]));
+    work.catch(() => {});
+    return await Promise.race([work, late]);
+  } catch (error) {
+    if (capped.signal.aborted && !signal.aborted) return null;
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

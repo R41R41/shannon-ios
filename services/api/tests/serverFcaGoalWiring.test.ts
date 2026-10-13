@@ -68,7 +68,7 @@ function fixture(goal: string, connected = false, researchDependencies = false) 
     } };
   captured.minecraft = connected ? { control, entry: null, selector: null } : null;
   const tools = { useTaskRuntime() {}, useMinecraftTasks() {} };
-  const service = configuredServerFca({ SHANNON_FCA_RUNTIME: 'on', SHANNON_ADR8_STAGE4: 'on' }, {
+  const service = configuredServerFca({ SHANNON_ADR8_STAGE4: 'on' }, {
     path: ':memory:', ownerScope: 'owner', ownerAlone: () => true, usage: { recordLlmUsage() {} } as never,
     minecraftConfiguration: { servers: new Map([['home', {}]]) } as never,
     ...(researchDependencies ? { tools: tools as never, state: {} as never, conversations: {} as never } : {}),

@@ -151,7 +151,7 @@ describe('data frames against look-alikes (stage 3 review, probes)', () => {
     expect(frame.match(/〔/gu)).toHaveLength(2); // Its own opening and closing tags only.
     expect(frame.match(/〕/gu)).toHaveLength(2);
     expect(frame).not.toMatch(/【|﹞|〘|\[外/u);
-    const report = framedReport(['[マイクラの体で起きたこと]', `- ${forged.replace('\n', ' ')}`, '- 体はいまゲームに入っている。'].join('\n'), 'minecraft');
+    const report = framedReport(['[端末からの報告]', `- ${forged.replace('\n', ' ')}`, '- 端末はいまつながっている。'].join('\n'), 'device');
     const line = report.split('\n')[2]!;
     expect(line.match(/〔/gu)).toHaveLength(2); // Its own opening and closing tags only.
     expect(line.match(/〕/gu)).toHaveLength(2);

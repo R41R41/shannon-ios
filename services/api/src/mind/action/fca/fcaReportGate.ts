@@ -113,22 +113,42 @@ function stale(task: TaskView, progress: TaskProgress, history: ReturnType<Repor
   return history.some(message => message.role === 'user' && Date.parse(message.observedAt) > finished && sameTopic(message.content, task.goal));
 }
 
+/** Owner-local quiet hours (23–7), by the clock alone. */
+export function quietHour(at: number, timeZone: string): boolean {
+  const hour = localDateParts(new Date(at), timeZone).hour;
+  return hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR;
+}
+
 /** Owner-local quiet hours while he has not talked in that Talk for `OWNER_ACTIVE_MS`. */
 function quietNow(parts: ReportGateParts, history: ReturnType<ReportGateParts['history']>, at: number): boolean {
-  const hour = localDateParts(new Date(at), parts.timeZone).hour;
-  if (!(hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR)) return false;
+  if (!quietHour(at, parts.timeZone)) return false;
   return !history.some(message => message.role === 'user' && at - Date.parse(message.observedAt) < OWNER_ACTIVE_MS);
 }
 
-export function reportGateDecision(parts: ReportGateParts, task: TaskView, progress: TaskProgress, view: ReportView = 'card'): ReportGateDecision {
-  if (!progress.report || task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind)) return 'deliver';
-  if (progress.report.heard) return view === 'card' ? 'deliver' : 'drop';
-  if (supersededBySibling(parts, task, progress)) return 'drop';
+/**
+ * The decision and why (`reason`), so that the card scan knows what can change it: a `hold` ends with the quiet hours or when
+ * something is said in its Talk (`threadId`); a `drop` for a `sibling` can change with the siblings; a `stale` drop never does.
+ */
+export type ReportGateVerdict = {
+  decision: ReportGateDecision;
+  reason: 'other_work' | 'heard' | 'sibling' | 'stale' | 'quiet' | 'deliver';
+  threadId?: string;
+};
+
+export function reportGateVerdict(parts: ReportGateParts, task: TaskView, progress: TaskProgress, view: ReportView = 'card'): ReportGateVerdict {
+  if (!progress.report || task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind)) return { decision: 'deliver', reason: 'other_work' };
+  if (progress.report.heard) return { decision: view === 'card' ? 'deliver' : 'drop', reason: 'heard' };
+  if (supersededBySibling(parts, task, progress)) return { decision: 'drop', reason: 'sibling' };
   const at = parts.now();
   const threadId = parts.runtime.taskSources(parts.ownerScope, task.id).find(source => source.threadId)?.threadId;
   const history = threadId ? parts.history(threadId) : [];
-  if (stale(task, progress, history, at)) return 'drop';
-  return quietNow(parts, history, at) ? 'hold' : 'deliver';
+  const where = threadId ? { threadId } : {};
+  if (stale(task, progress, history, at)) return { decision: 'drop', reason: 'stale', ...where };
+  return quietNow(parts, history, at) ? { decision: 'hold', reason: 'quiet', ...where } : { decision: 'deliver', reason: 'deliver', ...where };
+}
+
+export function reportGateDecision(parts: ReportGateParts, task: TaskView, progress: TaskProgress, view: ReportView = 'card'): ReportGateDecision {
+  return reportGateVerdict(parts, task, progress, view).decision;
 }
 
 /** A progress view with its report left out unless the gate lets it through for this view (the call never holds, it only drops). */
@@ -149,11 +169,22 @@ export function gatedProgress(parts: ReportGateParts, shown: (taskId: string) =>
 
 /** The two views of a progress the server hands out: the card's (holds and drops) and the call's (drops only). */
 export function reportGates(parts: Omit<ReportGateParts, 'history'> & {
-  conversations?: { recentMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
+  conversations?: { recentThreadMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
+    recentMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
     conversationHistory(scopeKey: string, threadId?: string): ReturnType<ReportGateParts['history']> } | undefined;
 }, shown: (taskId: string) => TaskProgress | null) {
   const { conversations, ...rest } = parts;
-  const gate: ReportGateParts = { ...rest, history: threadId => conversations?.recentMessages?.(parts.ownerScope, threadId, 40)
+  // A read only where the store has one: the gate is asked on every scan that looks at a report, and must not move the default Talk.
+  const gate: ReportGateParts = { ...rest, history: threadId => conversations?.recentThreadMessages?.(parts.ownerScope, threadId, 40)
+    ?? conversations?.recentMessages?.(parts.ownerScope, threadId, 40)
     ?? conversations?.conversationHistory(parts.ownerScope, threadId).slice(-40) ?? [] };
-  return { card: gatedProgress(gate, shown, 'card'), call: gatedProgress(gate, shown, 'call') };
+  return {
+    card: gatedProgress(gate, shown, 'card'), call: gatedProgress(gate, shown, 'call'),
+    /**
+     * The card's gate alone, on the stored progress (the request's row, its siblings and the last 40 turns of its Talk; no
+     * visibility walk): the card scan asks it first and walks the sources only for a report it delivers.
+     */
+    cardGate: { verdict: (task: TaskView, progress: TaskProgress) => reportGateVerdict(gate, task, progress, 'card'),
+      quiet: (at: number) => quietHour(at, parts.timeZone) },
+  };
 }

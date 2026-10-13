@@ -11,8 +11,8 @@ export interface DeviceActionWiring {
   actions: DeviceActions | null;
   /** The device routes; false for any other path. */
   serve(request: IncomingMessage, response: ServerResponse, principal: { scopeKey: string; deviceId: string } | null, url: URL): Promise<boolean>;
-  /** Her Minecraft body's reports with the devices' reports beside them (`devicePromptBlock`), for the text turn. */
-  reports(minecraft: { promptBlock(scopeKey: string, at: string): string } | null): ReportedWork;
+  /** The devices' reports (`devicePromptBlock`), for the text turn. */
+  reports(): ReportedWork;
   close(): void;
 }
 
@@ -42,10 +42,7 @@ export function configuredDeviceActions(environment: Readonly<Record<string, str
   return {
     actions,
     serve: (request, response, principal, url) => route(request, response, principal, url),
-    reports: minecraft => ({
-      promptBlock: (scopeKey, at) => minecraft?.promptBlock(scopeKey, at) ?? '',
-      devicePromptBlock: (scopeKey, at) => actions?.promptBlock(scopeKey, at) ?? '',
-    }),
+    reports: () => ({ devicePromptBlock: (scopeKey, at) => actions?.promptBlock(scopeKey, at) ?? '' }),
     close: () => {
       if (timer) clearInterval(timer);
       store?.close();

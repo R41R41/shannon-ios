@@ -8,7 +8,6 @@ import type { SQLiteAutonomyStore } from '../action/ownTime/ownTimePorts.js';
 import type { SecretCheck } from '../inhibition/disclosurePorts.js';
 import type { HostFolderOperations } from '../action/ownTime/ownTimePorts.js';
 import { folderExecutors, folderToolForHosts } from './shannonFolderTools.js';
-import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
 import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
@@ -135,13 +134,11 @@ export class ShannonToolRunner {
     private readonly recorder: ToolRecorder,
     now: () => string,
     private readonly transaction: <T>(operation: () => T) => T = operation => store.transaction(operation),
-    /** Her Minecraft body's request queue (`minecraftBodyRequests.ts`); absent, its tools are never offered. */
-    private readonly minecraft: MinecraftRequestPort | null = null,
     private readonly aether: ToolAetherPorts = {},
   ) {
     const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
     this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools, aether.study) : folderTools),
-      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null), ...ownerDocumentExecutors(aether.access ?? null) });
+      ...aetherExecutors(aether.proposals ?? null, aether.study ?? null), ...ownerDocumentExecutors(aether.access ?? null) });
   }
 
   /**
@@ -165,7 +162,7 @@ export class ShannonToolRunner {
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_lifecycle' ? !!scopeKey && (this.minecraftLifecycle?.available(scopeKey) ?? false)
       : tool.domain === 'device_action' ? !!scopeKey && once('device_action', () => this.deviceActions?.available(scopeKey) ?? false)
-      : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && once('minecraft_body', () => this.minecraftTasks!.available(scopeKey)) : minecraftToolOffered(this.minecraft, tool, scopeKey)
+      : tool.domain === 'minecraft_body' ? !!this.minecraftTasks && !!scopeKey && once('minecraft_body', () => this.minecraftTasks!.available(scopeKey))
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true),
@@ -281,9 +278,14 @@ export class ShannonToolRunner {
         const combined=active?signal?AbortSignal.any([signal,active.signal]):active.signal:signal;
         context.beforeExecution?.();
         observerHandoff('gate', 'tools', { name: tool.name });
-        return observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
+        // Until a write returns acknowledged, an interrupted turn cannot say what it did (`writeInFlight`, actionExecutionWiring.ts).
+        const writing = tool.effect === 'write' ? active : undefined;
+        if (writing) writing.writeInFlight = true;
+        const ran = await observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
           () => call.run(combined), run => ({ ...observedToolResult(tool.name, run.result, run.apply ? 'awaiting_commit' : 'returned'),
             acknowledged: run.acknowledged ?? null, commitPending: Boolean(run.apply) }));
+        if (writing && ran.acknowledged !== false) writing.writeInFlight = false;
+        return ran;
       }}};
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };

@@ -2,7 +2,7 @@
 export const FCA_CORE_PATHS = Object.freeze([
   'services/api/src/mind/action/taskRuntime/', 'services/api/src/mind/action/fca/',
   'services/api/src/mind/action/agentTasks/store/fcaTaskAuthority.ts',
-  'services/api/src/mind/action/agentTasks/store/fcaHostPredicate.ts',
+  'services/api/src/mind/action/agentTasks/store/taskKinds.ts',
   'services/api/src/wiring/fcaSharedWiring.ts', 'services/api/src/wiring/fcaMemoryWiring.ts',
   'services/api/src/infra/sqlite/sqliteFcaAffect.ts', 'services/api/src/infra/models/anthropic/anthropicFcaContext.ts',
   'services/api/src/mind/tools/memoryToolDefinitions.ts',

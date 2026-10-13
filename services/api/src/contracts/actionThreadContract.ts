@@ -64,9 +64,3 @@ export interface ActionStepPort {
   abandoned?(scopeKey:string,cycleId:string):Promise<boolean>;
 }
 
-/** Existing Minecraft claim/progress/report handshake supplies the body acknowledgement. */
-export interface MinecraftExecutionPort {
-  admit(scopeKey:string,id:string,deviceId:string):Promise<boolean>;
-  heartbeat(scopeKey:string,id:string):Promise<boolean>;
-  acknowledge(scopeKey:string,id:string,state:'completed'|'failed'|'cancelled'):Promise<void>;
-}

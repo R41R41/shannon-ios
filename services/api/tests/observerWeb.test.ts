@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObserverBatch, ObserverEvent } from '../src/contracts/observerContract.js';
 import {
-  MAX_EVENTS, createObserverClient, createObserverState, createObserverSession, createReceiptGate, linkedRunView, nodeState, observerBasePath,
+  MAX_EVENTS, blockAlerts, createNodeHistory, createObserverClient, runToolCalls, runUsage, turnFlow, createObserverState, createObserverSession, createReceiptGate, linkedRunView, nodeState, observerBasePath,
   reduceObserverEnvelope, runToolEvidence, spanState, validEnvelope,
   type ObserverRequest,
 } from '../src/infra/observer/web/observer.js';
@@ -366,5 +366,74 @@ describe('desktop observer uses the existing main-process connection', () => {
     expect(onCredential).not.toHaveBeenCalled(); refused=false;
     await vi.advanceTimersByTimeAsync(800); expect(onConnection).toHaveBeenLastCalledWith('live');
     client.disconnect();
+  });
+});
+
+describe('recent calls of a box (owner, 2026-10-14)', () => {
+  const call = (sequence: number, run: string, values: Partial<ObserverEvent> = {}) => [
+    event(sequence, { runId: run, spanId: `s${sequence}`, kind: 'span.started', input: { round: sequence }, ...values }),
+    event(sequence + 1, { runId: run, spanId: `s${sequence}`, kind: 'span.completed', elapsedMs: sequence, output: { stop: 'end_turn' }, ...values }),
+  ];
+  it('keeps the newest calls of each box across runs, newest first, with the projected input and output', () => {
+    const history = createNodeHistory(3);
+    const events = [1, 3, 5, 7].flatMap(n => call(n, `run-${n}`, { model: 'claude-haiku-5-5' }));
+    events.push(...call(20, 'run-j', { input: { provider: 'jev' } }));
+    const state = reduceObserverEnvelope(createObserverState(), batch(events));
+    history.observe(state);
+    const calls = history.list('haiku', state);
+    expect(calls.map(item => item.span.id)).toEqual(['s7', 's5', 's3']);
+    expect(calls[0]).toMatchObject({ state: 'completed', inWindow: true });
+    expect(calls[0].span.input).toEqual({ round: 7 }); expect(calls[0].span.output).toEqual({ stop: 'end_turn' });
+    expect(history.list('jevModel', state).map(item => item.span.id)).toEqual(['s20']);
+    expect(history.list('gate', state)).toEqual([]);
+  });
+  it('keeps a quiet box after the page window drops it, shows an unfinished one as unknown, and clears', () => {
+    const history = createNodeHistory(4);
+    let state = reduceObserverEnvelope(createObserverState(), batch([...call(1, 'run-a', { node: 'gate' }), event(3, { runId: 'run-b', spanId: 'open', node: 'tools' })]));
+    history.observe(state);
+    const flood = Array.from({ length: MAX_EVENTS }, (_, index) => event(10 + index, { runId: 'run-c', spanId: `f${index}`, node: 'store', kind: 'span.completed', elapsedMs: 1 }));
+    for (let index = 0; index < flood.length; index += 200) { state = reduceObserverEnvelope(state, batch(flood.slice(index, index + 200))); history.observe(state); }
+    expect(state.runs.has('run-a')).toBe(false);
+    expect(history.list('gate', state).map(item => [item.span.id, item.state, item.inWindow])).toEqual([['s1', 'completed', false]]);
+    expect(history.list('tools', state)[0].state).toBe('unknown');
+    expect(history.list('store', state)).toHaveLength(4);
+    history.clear();
+    expect(history.list('gate', state)).toEqual([]);
+  });
+});
+
+describe('owner picks of 2026-10-14: flow, critical path, marks and run marks', () => {
+  const turn = () => reduceObserverEnvelope(createObserverState(), batch([
+    event(1, { runId: 'r', spanId: 'root', node: 'turn', kind: 'run.started', input: { surface: 'text' } }),
+    event(2, { runId: 'r', spanId: 'jev', parentSpanId: 'root', node: 'jevt', kind: 'span.completed', input: { surface: 'text', offeredTools: ['a', 'b', 'c'], difficulty: 'normal' }, output: { difficulty: 'normal', toolMenu: 3 }, elapsedMs: 5 }),
+    event(3, { runId: 'r', spanId: 'rec', parentSpanId: 'root', node: 'recall', kind: 'span.completed', input: { semantic: true }, output: { recalledCount: 4 }, elapsedMs: 5 }),
+    event(4, { runId: 'r', spanId: 'h1', parentSpanId: 'root', node: 'llm', kind: 'span.completed', input: { model: 'claude-haiku-5-5' }, output: { stop: 'tool_use', usage: { inputTokens: 900, outputTokens: 40, cacheReadTokens: 6000, cacheCreationTokens: 0 } }, elapsedMs: 5 }),
+    event(5, { runId: 'r', spanId: 't1', parentSpanId: 'root', node: 'tools', kind: 'span.completed', input: { name: 'memory.search' }, elapsedMs: 5 }),
+    event(6, { runId: 'r', spanId: 't2', parentSpanId: 'root', node: 'tools', kind: 'span.failed', input: { name: 'web.search' }, output: { errorKind: 'TypeError' }, elapsedMs: 5 }),
+    event(7, { runId: 'r', spanId: 'h2', parentSpanId: 'root', node: 'llm', kind: 'span.completed', input: { model: 'claude-haiku-5-5' }, output: { stop: 'end_turn', cacheReadInputTokens: 6400 }, elapsedMs: 5 }),
+    event(8, { runId: 'r', spanId: 'dec', parentSpanId: 'root', node: 'decode', kind: 'span.completed', output: { replyChars: 42 }, elapsedMs: 1 }),
+    event(9, { runId: 'r', spanId: 'root', node: 'turn', kind: 'run.completed', elapsedMs: 1900 }),
+    event(10, { runId: 'bg', spanId: 'fca', node: 'fca', kind: 'span.started' }),
+  ]));
+  it('reads the turn as one line of observed stages, each pointing at its box', () => {
+    const state = turn(), flow = turnFlow(state.runs.get('r'));
+    expect(flow.map(stage => stage.text)).toEqual(['受付 text', 'Jev normal・道具3', '想起 4', 'Haiku ×2', 'memory.search ✓', 'web.search ✗', '返事 42字 · 1.9 s']);
+    expect(flow.map(stage => stage.view)).toEqual(['admit', 'router', 'recall', 'haiku', 'tools', 'tools', 'decode']);
+    expect(flow[5].failed).toBe(true);
+    expect(turnFlow(undefined)).toEqual([]);
+  });
+  it('sums reported tokens and cache only, and lists executed tools with failures', () => {
+    const state = turn(), run = state.runs.get('r')!;
+    expect(runUsage(run)).toEqual({ inputTokens: 900, outputTokens: 40, cacheReadTokens: 12400, cacheWriteTokens: 0 });
+    expect(runUsage(state.runs.get('bg')!)).toEqual({ inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null });
+    expect(runToolCalls(run).map(call => [call.name, call.failed])).toEqual([['memory.search', false], ['web.search', true]]);
+  });
+  it('marks each block with failed, running and unknown spans across every run held, not only the selected one', () => {
+    const state = turn(), alerts = blockAlerts(state);
+    expect(alerts.get('fca')!.failed.map(item => item.key)).toEqual(['r/t2']);
+    expect(alerts.get('fca')!.running.map(item => item.key)).toEqual(['bg/fca']);
+    expect(alerts.has('conv')).toBe(false);
+    const lost = { ...state, transport: 'lost' as const };
+    expect(blockAlerts(lost).get('fca')!.unknown.map(item => item.key)).toEqual(['bg/fca']);
   });
 });

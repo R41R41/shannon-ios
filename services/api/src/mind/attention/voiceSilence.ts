@@ -234,6 +234,7 @@ export function ownerVoiceTurnFacts(input: {
   const asked = last?.role === 'assistant' && asksSomething(last.content);
   const line =[...input.history].reverse().find(item => item.role === 'assistant')?.content;
   const elapsed = input.newest?.role === 'assistant' ? (Date.parse(input.at) - Date.parse(input.newest.observedAt)) / 1_000 : NaN;
+  const his = [...input.history].reverse().find(item => item.role === 'user')?.content;
   const secondsSinceShannon = Number.isFinite(elapsed) && elapsed >= 0 ? Math.round(elapsed) : undefined;
   return {
     followsShannon,
@@ -242,7 +243,15 @@ export function ownerVoiceTurnFacts(input: {
     ...(line ? { shannonLastLine: Array.from(line).slice(0, 600).join('') } : {}),
     othersPresent: input.othersPresent,
     ...(input.source ? { source: input.source } : {}),
+    ...(his !== undefined && asksForSomething(his) ? { ownerAskedBefore: true as const } : {}),
   };
+}
+
+/** His words ask something of her: a question (marked, polite, or with a question word) or a request. */
+function asksForSomething(text: string): boolean {
+  const words = text.normalize('NFKC').trim();
+  return /[?？]/u.test(words) || POLITE_QUESTION.test(words) || (ADDRESS_EVIDENCE.questionWord.test(words) && !WONDERING.test(words))
+    || ADDRESS_EVIDENCE.request.test(words) || TE_REQUEST.test(words);
 }
 
 /**
@@ -284,7 +293,7 @@ export function settleOwnerVoiceTurn(
   // Alone with him, words that ask her for something are answered even when the router chose silence (2026-10-13 daily evals
   // V1/R3: 「東京都 博多の天気」 and 「今日、博多でやってるイベントある」 got no reply at all). Garbled words get her one short
   // question through the interpretation prompt; a silence rule above (a hold, an echo, a backchannel) still stands.
-  if (asksHerSomething(decision, turn.facts, turn.transcript)) return answered(decision);
+  if (asksHerSomething(decision, turn.facts, turn.transcript, environment)) return answered(decision);
   // No rule has an opinion: the router's own answer stands, and silence is no longer overturned
   // just because the transcript is unclear. Asking to repeat is for an utterance that was addressed to her.
   if (!decision.shouldRespond) return silenced(decision, decision.silence ?? 'model');
@@ -299,6 +308,11 @@ export function settleOwnerVoiceTurn(
 /** Above this the router itself says he wants a concrete answer: with the owner alone that is never silence. */
 const SOLUTION_WANTED_ANSWERED = 0.7;
 /**
+ * The same, lower, right after he had asked her something (`SHANNON_VOICE_RESCUE_AFTER_REQUEST`, 0.6): owner's Windows call,
+ * 2026-10-14, turn 2e5c9325 scored .69 after his request, got no reply, and the conversation died.
+ */
+const rescueAfterRequest = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_RESCUE_AFTER_REQUEST, 0.6, 0, 1);
+/**
  * Words in the form of a question that lost its mark or its particle (「博多の天気」「イベントある」「明日は」), not a statement
  * (「明日雨らしいよ」「約束したんだ」). Read only together with a capability chosen for them.
  */
@@ -309,9 +323,11 @@ const BARE_QUESTION = /(?:天気|予報|気温|ある|ない|いる|いい|で�
  * in the form of a bare question. A capability chosen by a fixed word alone (私の, 約束, 雨, 何時) is not enough: speech not meant for
  * her (a call, the TV, 「明日雨らしいよ」) has such words too. Not with anyone else there: then she answers only when addressed.
  */
-export function asksHerSomething(decision: VoiceTurnDecision, facts: VoiceTurnFacts, transcript: string): boolean {
+export function asksHerSomething(decision: VoiceTurnDecision, facts: VoiceTurnFacts, transcript: string,
+  environment: Environment = serverEnvironment()): boolean {
   if (facts.othersPresent) return false;
-  return decision.solutionWantedProbability >= SOLUTION_WANTED_ANSWERED
+  const answeredFrom = facts.ownerAskedBefore ? Math.min(SOLUTION_WANTED_ANSWERED, rescueAfterRequest(environment)) : SOLUTION_WANTED_ANSWERED;
+  return decision.solutionWantedProbability >= answeredFrom
     || (decision.selectedSkills.length > 0 && BARE_QUESTION.test(bareText(transcript)));
 }
 

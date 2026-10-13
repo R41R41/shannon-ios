@@ -9,7 +9,7 @@ import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiri
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/infra/models/chatModel.js';
-import { MinecraftBodyRequests } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
+import { toolOk } from '../src/mind/tools/shannonTools.js';
 import { OwnOutreach, type OwnOutreachReader } from '../src/surfaces/outreach/ownOutreach.js';
 import { conversationCapabilityContext } from '../src/mind/action/respond/conversationCapabilities.js';
 import { SQLiteSurfaceTurnLog } from '../src/mind/action/respond/store/surfaceTurnStore.js';
@@ -69,12 +69,20 @@ function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader
   const store = new SQLiteShannonStore({ path, now });
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
-  const requests = options.minecraft ? new MinecraftBodyRequests(path, { deviceId: 'minebot-dev', ownerScopeKey: 'owner' }, now, null) : null;
+  // Her body's requests enter the common task tree (`fcaMinecraftRequests.ts`); this port stands for it, open while `present`.
+  const queued: Array<{ goal: string; state: 'queued'; origin: { surface: string; threadId?: string } }> = [];
+  let present = false;
+  const requests = options.minecraft ? { recent: (_scopeKey: string) => queued } : null;
   const autonomyStore = new SQLiteAutonomyStore(':memory:');
-  const autonomy = createInMemoryAutonomyService(now, { store: autonomyStore, ...(requests ? { minecraftBody: requests } : {}) });
+  const autonomy = createInMemoryAutonomyService(now, { store: autonomyStore });
+  if (requests) autonomy.tools.useMinecraftTasks({ available: scopeKey => scopeKey === 'owner' && present, async execute(name, input, context) {
+    if (name === 'minecraft.request') queued.push({ goal: (input as { goal: string }).goal, state: 'queued',
+      origin: { surface: context.surface, ...(context.threadId ? { threadId: context.threadId } : {}) } });
+    return toolOk('共通タスクとして受け付けた。まだ達成していない。');
+  } });
   const model = new Model();
   const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background,
-    peopleMemory: peopleStore, autonomy, ...(requests ? { minecraftRequests: requests } : {}), ...(options.ownOutreach ? { ownOutreach: options.ownOutreach } : {}) });
+    peopleMemory: peopleStore, autonomy, ...(options.ownOutreach ? { ownOutreach: options.ownOutreach } : {}) });
   const bridge = new PlatformBridgeService(configuredPlatformBridge(ENVIRONMENT)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_reply_turns');
   const service = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now });
@@ -85,12 +93,12 @@ function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader
   const refusal = async (operation: Promise<unknown>) => {
     try { await operation; return 'none'; } catch (error) { return error instanceof PlatformBridgeError ? `${error.status} ${error.code}` : String(error); }
   };
-  const claim = async () => { const answer = await requests!.claim('owner', 'minebot-dev', { waitSeconds: 0, holding: [] }); if (typeof answer === 'string') throw new Error(answer); return answer; };
+  const claim = async () => { present = true; };
   const close = async () => {
     await background.waitForIdle('owner');
     await new Promise(resolve => setImmediate(resolve));
     await background.waitForIdle('owner');
-    turns.close(); requests?.close(); autonomyStore.close(); peopleStore.close(); store.close();
+    turns.close(); autonomyStore.close(); peopleStore.close(); store.close();
   };
   return { store, peopleStore, background, bridge, api, model, reply, refusal, claim, requests, close, now, advance: (milliseconds: number) => { clock += milliseconds; } };
 }
@@ -136,7 +144,6 @@ describe('POST /v1/platform/reply', () => {
     expect(promptOf(request)).toContain('[Speak-time privacy check');
     expect(promptOf(request)).toContain('「テストサーバー」');
     expect(request.tools).toBeUndefined();
-    expect(promptOf(request)).not.toContain('[マイクラの体で起きたこと]');
     await background.waitForIdle('owner');
     const kept = store.experienceCandidates('owner').find(item => item.userMessage === '転職とカメラの話をして');
     expect(kept?.disclosure?.audience).toEqual(groupAudience(channelThread));
@@ -199,18 +206,12 @@ describe('one mind on Discord: requests to her Minecraft body', () => {
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.request');
     expect(requests!.recent('owner')).toHaveLength(1);
     expect(requests!.recent('owner')[0]).toMatchObject({ goal: 'オークの原木を16個集める', state: 'queued', origin: { surface: 'text', threadId: dmThread } });
-    // The next turn with him alone knows what it asked.
-    model.callTool = null;
-    await reply({ requestId: 'mc-2', userMessage: '何頼んだっけ？' });
-    expect(promptOf(model.requests.at(-1)!)).toContain('[マイクラの体で起きたこと]');
-    expect(promptOf(model.requests.at(-1)!)).toContain('オークの原木を16個集める');
     // Never in a shared channel, nor for a friend.
     model.callTool = { name: 'minecraft_request', input: { goal: 'ダイヤを掘る' } };
     await reply({ requestId: 'mc-3', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'マイクラで木材集めといて' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
     await reply({ requestId: 'mc-4', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
-    expect(promptOf(model.requests.at(-1)!)).not.toContain('[マイクラの体で起きたこと]');
     expect(requests!.recent('owner')).toHaveLength(1);
     await close();
   });
