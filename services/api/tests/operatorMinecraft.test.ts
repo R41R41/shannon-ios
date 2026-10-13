@@ -20,7 +20,9 @@ import { inspectOperatorAudit, operatorLifecycleAllowed, OperatorAuditStore } fr
 import { operatorSocketPath, requestOperatorSocket, serveOperatorSocket } from '../src/infra/ops/operatorSocket.js';
 import { operatorEnvelope, runOperatorCli, type OperatorCliDeps } from '../src/infra/ops/operatorCli.js';
 import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftParts } from '../src/wiring/operatorMinecraftWiring.js';
-import { configuredOperatorAudit } from '../src/wiring/operatorServerWiring.js';
+import { configuredOperatorAudit, operatorHandedOver } from '../src/wiring/operatorServerWiring.js';
+import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
+import { noticeLine } from '../src/mind/workspace/promptLayout.js';
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -403,21 +405,46 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
   const handed = { id: TASK, goal: '石を16個集めて', title: `${OPERATOR_TITLE_PREFIX}石を16個集めて`, origin: 'owner_request' };
   const progress = { report: { id: 'r1', text: '石を16個集めました。', updatedAt: at } } as never;
 
-  it('is never told as something he asked for, and no model words it', async () => {
+  it('is never told as something he asked for, and no model words it; the audit decides, not the title', async () => {
+    const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
+    audit.append({ operationId: 'operator:a', scopeKey: 'owner', at, operator: 'ops', command: 'request', event: 'accepted', code: 'accepted',
+      argsJson: '{}', taskId: TASK });
     const recorded: string[] = [];
     const reports = createSpokenReports({ localTime: () => '', record: (_scope, _id, _report, text) => recorded.push(text) > 0,
+      handedOver: operatorHandedOver({ store: audit, enabled: true, close: () => {} }, 'owner'),
       speaker: { speak: async () => { throw new Error('the model is not asked'); } } });
     reports.request('owner', handed, progress);
-    reports.request('owner', { ...handed, id: OTHER, title: '石を16個集めて' }, { report: { id: 'r2', text: '石を16個集めました。', updatedAt: at } } as never);
+    // His own request whose words happen to start with the operator's mark is still his.
+    reports.request('owner', { ...handed, id: OTHER }, { report: { id: 'r2', text: '石を16個集めました。', updatedAt: at } } as never);
     await reports.idle();
     expect(recorded[0]).toBe('運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
     expect(recorded[1]).toBe('石を16個集めました。');
     expect(recorded[0]).not.toContain('頼まれ');
+    expect(operatorHandedOver(null, 'owner')(TASK)).toBe(false);
   });
 
-  it('keeps the operator line within what a call says, and the plain form follows the title mark', () => {
+  it('keeps the operator line within what a call says', () => {
     expect([...handedOverReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
-    expect(plainSpokenReport(handed, '長い報告。')).toContain('運用者がライ氏の代わりに渡した依頼');
-    expect(plainSpokenReport({ goal: 'x', title: 'x' }, '石を集めました。')).toBe('石を集めました。');
+    expect(plainSpokenReport(handed, '長い報告。', true)).toContain('運用者がライ氏の代わりに渡した依頼');
+    expect(plainSpokenReport(handed, '石を集めました。', false)).toBe('石を集めました。');
+  });
+});
+
+describe('a lifecycle operation the operator asked for, in her notices (review 2026-10-14, L-c)', () => {
+  it('says the operator asked for it, never that she accepted it', () => {
+    const now = '2026-10-14T00:05:00.000Z';
+    const [own, theirs, unknown] = lifecycleOutcomeNotices([
+      { id: `lifecycle:${'a'.repeat(64)}`, action: 'start', outcome: 'completed', observedAt: at },
+      { id: `operator:${TASK}`, action: 'start', outcome: 'completed', observedAt: at },
+      { id: `operator:${OTHER}`, action: 'login', outcome: 'unknown', observedAt: at },
+    ], now);
+    expect(own!.draft.tool).toBe('minecraft.start');
+    expect(theirs!.draft.tool).toBe('operator.minecraft.start');
+    const line = (draft: typeof own) => noticeLine({ kind: 'task_outcome', at: draft!.at, detail: draft!.draft } as never, now);
+    expect(line(theirs)).toContain('運用者がライ氏の代わりに頼んだ〈minecraft.start〉が');
+    expect(line(theirs)).not.toContain('受け付けた');
+    expect(line(unknown)).toContain('運用者がライ氏の代わりに頼んだ〈minecraft.login〉は');
+    expect(line(own)).toContain('〈minecraft.start〉が');
+    expect(line(own)).not.toContain('運用者');
   });
 });

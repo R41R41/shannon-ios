@@ -66,6 +66,9 @@ A lifecycle operation goes through the conversation's detached path (`minecraftL
 with the operation id as its only source, the body taken once, and the native operation carried to its receipt. The lifecycle
 authority allows it only when the audit holds an `invoked` row of that operation with the same action and server and no refusal,
 the owner is alone, and the command id is that source. `set_day` additionally needs a running server with nobody else on it.
+When it ends, her notice (【知らせ:作業終了】) names it as the operator's: the tool is `operator.minecraft.<action>` (its source is
+`operator:<uuid>`, which only this audited path makes) and the line reads 「運用者がライ氏の代わりに頼んだ〈minecraft.start〉が終わった」,
+never 「受け付けた…」 as if she had accepted it.
 
 ## The request
 
@@ -96,7 +99,8 @@ Who handed a request over is never written as the owner's words. It is marked in
 
 The Observer shows the admission as a run of surface `operator_cli`; the task itself appears in 「いま」 like any other.
 
-Its result is never told as something he asked for. The spoken form of its report (what a call says, and a report card's short
+Its result is never told as something he asked for; whether a task is the operator's is read from the audit (an accepted
+`request` row naming it, `operatorHandedOver`), never from its title, so his own request that starts with the same words stays his. The spoken form of its report (what a call says, and a report card's short
 answer) is the fixed line 「運用者がライ氏の代わりに渡した依頼「…」の結果が届いています。詳しくは画面にあります。」, written without a
 model (`handedOverReportLine`); the report itself stays on the screen. Such a request has no source Talk, so no report card is
 written for it.
@@ -141,10 +145,17 @@ empty directory); nothing new is accepted. Off after it was on: the audit stays 
 
 ## Deploy
 
-The units' `InaccessiblePaths=` fails a unit's start when the directory is missing, so on the first deploy of this change:
-make the directory (`install -d -m 0700 /home/azureuser/shannon-ios-data/operator-runtime`, as the service user) before the
-units restart, then `sudo systemctl daemon-reload` and restart every changed unit, the agent host included
-(`shannon-agent-host.service`), not only the API. After that the API keeps the directory in place at each start.
+The units' `InaccessiblePaths=` fails a unit's start when the directory is missing (status 226 on systemd 245), so the
+directory is made at boot by systemd-tmpfiles, before any unit, not by the API's start order:
+`deploy/azure/shannon-operator-runtime.tmpfiles.conf` (`d /home/azureuser/shannon-ios-data/operator-runtime 0700 azureuser
+azureuser -`). On the first deploy of this change:
+
+1. `sudo install -m 0644 deploy/azure/shannon-operator-runtime.tmpfiles.conf /etc/tmpfiles.d/shannon-operator-runtime.conf`
+2. `sudo systemd-tmpfiles --create /etc/tmpfiles.d/shannon-operator-runtime.conf`, then check the directory is `0700 azureuser`;
+3. install the changed unit files, `sudo systemctl daemon-reload`, and restart every changed unit, the agent host included
+   (`shannon-agent-host.service`), not only the API; check each is active.
+
+The API also makes the directory at each start (a second guard; it changes nothing when tmpfiles made it).
 
 ## Code
 

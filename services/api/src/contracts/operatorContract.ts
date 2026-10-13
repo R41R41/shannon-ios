@@ -149,10 +149,7 @@ export function operatorTalkNote(kind: keyof typeof TALK_NOTES, subject: string)
 
 /** The title and the first inbox line of an operator's request: whoever reads the task sees who handed it over. */
 export const OPERATOR_TITLE_PREFIX = '（運用者経由）';
-/** Whether a task was handed over by the operator (its title's mark): its result is never told as something he asked for. */
-export function handedOverByOperator(task: { title: string }): boolean {
-  return task.title.startsWith(OPERATOR_TITLE_PREFIX);
-}
+
 export function operatorRequestContext(operator: string): string {
   return `この依頼は運用者（${operator}）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。`;
 }

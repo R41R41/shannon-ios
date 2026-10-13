@@ -98,10 +98,16 @@ export interface LifecycleReport {
 }
 /** The closed reason of an accepted operation whose action left `unknown` at its one exit with no receipt from the body. */
 export const LIFECYCLE_RESULT_UNKNOWN = 'lifecycle_result_unknown';
+/**
+ * The tool prefix of a lifecycle operation the operator asked for on his behalf (its source is `operator:<uuid>`, which only the
+ * operator's audited path makes): its notice says the operator asked for it, never that she accepted it (review 2026-10-14).
+ */
+export const OPERATOR_TOOL_PREFIX = 'operator.';
 
 /**
  * The Minecraft lifecycle operations the owner asked for in a conversation and she answered with 「受け付けた」 (2026-10-13
- * TI-REQ): their native receipt within the last hour, as `minecraft.<action>` done, failed or cancelled; and one whose action left
+ * TI-REQ), and those the operator asked for on his behalf (tool `operator.minecraft.<action>`): their native receipt within the
+ * last hour, as `minecraft.<action>` done, failed or cancelled; and one whose action left
  * `unknown` at its ten-minute exit with no receipt (a body that never answered, as one predating `set_day` does) as failed with
  * `lifecycle_result_unknown`, so that 「受け付けました」 is never left without an end.
  */
@@ -116,7 +122,7 @@ export function lifecycleOutcomeNotices(reports: readonly LifecycleReport[], at:
     if (!id) return [];
     const reason = report.notStarted ? { reason: `lifecycle_not_started.${report.notStarted}` }
       : report.outcome === 'unknown' ? { reason: LIFECYCLE_RESULT_UNKNOWN } : {};
-    const tool = `minecraft.${report.action}`;
+    const tool = `${report.id.startsWith('operator:') ? OPERATOR_TOOL_PREFIX : ''}minecraft.${report.action}`;
     const draft = { kind: 'task_outcome' as const, code, audience: 'owner' as const, source: 'api' as const, sourceId: id, tool, ...reason };
     return [{ at: iso(ended), draft }];
   });

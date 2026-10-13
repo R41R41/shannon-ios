@@ -1,6 +1,5 @@
 import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime } from '../taskRuntime/taskRuntimePorts.js';
-import { handedOverByOperator } from '../../../contracts/operatorContract.js';
 
 /**
  * The short form of a task's report that a call says aloud (owner feedback 2026-10-13: a 2,900-character report read out
@@ -124,9 +123,12 @@ export function handedOverReportLine(task: { goal: string }): string {
   return `運用者がライ氏の代わりに渡した依頼「${named}」の結果が届いています。詳しくは画面にあります。`;
 }
 
-/** The spoken form without a model: the operator's line for a handed-over request, a plain cut of the report otherwise. */
-export function plainSpokenReport(task: { goal: string; title: string }, report: string): string {
-  return handedOverByOperator(task) ? handedOverReportLine(task) : fallbackSpokenReport(report, task.title);
+/**
+ * The spoken form without a model: the operator's line for a request the operator handed over (as its audit says, never as a
+ * title reads: he may write anything at the start of his own request), a plain cut of the report otherwise.
+ */
+export function plainSpokenReport(task: { goal: string; title: string }, report: string, handedOver: boolean): string {
+  return handedOver ? handedOverReportLine(task) : fallbackSpokenReport(report, task.title);
 }
 
 /** A short report needs no model: it is already what would be said. */
@@ -148,6 +150,8 @@ export function createSpokenReports(parts: {
   record(scopeKey: string, taskId: string, reportId: string, spoken: string): boolean;
   localTime(): string;
   timeoutMs?: number;
+  /** Whether the operator handed this task over for him (its accepted audit row); absent, none was. */
+  handedOver?(taskId: string): boolean;
 }) {
   const attempted = new Set<string>();
   const running = new Set<Promise<void>>();
@@ -176,7 +180,7 @@ export function createSpokenReports(parts: {
       if (!report || task.origin !== 'owner_request' || report.spoken || !report.text.trim()) return;
       if (attempted.has(key) || controller.signal.aborted) return;
       remember(key);
-      if (handedOverByOperator(task)) return write(scopeKey, task.id, report.id, handedOverReportLine(task));
+      if (parts.handedOver?.(task.id)) return write(scopeKey, task.id, report.id, handedOverReportLine(task));
       const short = alreadyShort(report.text);
       if (short || !parts.speaker) return write(scopeKey, task.id, report.id, short ?? fallbackSpokenReport(report.text, task.title));
       const work = generate(scopeKey, task, report).finally(() => running.delete(work));

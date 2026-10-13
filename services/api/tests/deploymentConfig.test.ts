@@ -34,6 +34,9 @@ describe('Azure deployment contract', () => {
       const hidden = unit.includes('InaccessiblePaths=/home/azureuser/shannon-ios-data/operator-runtime\n');
       expect(hidden, name).toBe(name !== 'shannon-ios.service');
     }
+    // The hidden path must exist before any unit starts: systemd-tmpfiles makes it at boot, owned by the service user.
+    const tmpfiles = readFileSync(new URL('../../../deploy/azure/shannon-operator-runtime.tmpfiles.conf', import.meta.url), 'utf8');
+    expect(tmpfiles).toMatch(/^d \/home\/azureuser\/shannon-ios-data\/operator-runtime 0700 azureuser azureuser -$/mu);
   });
 
   it('allows confirmed camera snapshots through nginx to the route-specific API limit', () => {

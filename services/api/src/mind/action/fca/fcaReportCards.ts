@@ -54,14 +54,16 @@ type CardParts = {
   gate?: { verdict(task: TaskView, progress: TaskProgress): ReportGateVerdict; quiet(at: number): boolean };
   /** Whether only the owner can see now: while not, the scan asks nothing (and decides nothing). */
   ownerAlone?(): boolean;
+  /** Whether the operator handed this task over for him (its accepted audit row); absent, none was. */
+  handedOver?(taskId: string): boolean;
   now(): number;
   log?(line: string): void;
 };
 
 /**
  * Finished work of origin `owner_request`, directly under the root or a conversation (a nested child reports to its parent
- * instead). A request the operator handed over for him is one too; its card keeps the title's 「（運用者経由）」 and its answer is
- * the operator's line (`plainSpokenReport`, the spoken form), never words saying he asked for it. It has no source Talk, so no
+ * instead). A request the operator handed over for him (`handedOver`, its audit) is one too; its card keeps the title's
+ * 「（運用者経由）」 and its answer is the operator's line (`plainSpokenReport`, the spoken form), never words saying he asked for it. It has no source Talk, so no
  * card is written for it today; the Talk note of `operatorTalkNote` is what he sees.
  */
 function finishedOwnerWork(task: TaskView, at: number, parentKind: (id: string) => string | undefined): boolean {
@@ -79,10 +81,10 @@ function spreadOf(taskId: string): number {
 }
 
 /** The short answer: the spoken form once written, a plain cut of the report once its wait (from `since`) is over, otherwise not yet. */
-function answerOf(task: TaskView, report: NonNullable<TaskProgress['report']>, at: number, since: number): string | null {
+function answerOf(task: TaskView, report: NonNullable<TaskProgress['report']>, at: number, since: number, handedOver: boolean): string | null {
   const spoken = report.spoken?.trim();
   if (spoken) return spoken;
-  return at - since < REPORT_CARD_SPOKEN_WAIT_MS ? null : plainSpokenReport(task, report.text);
+  return at - since < REPORT_CARD_SPOKEN_WAIT_MS ? null : plainSpokenReport(task, report.text, handedOver);
 }
 
 /**
@@ -228,7 +230,8 @@ export function createReportCards(parts: CardParts) {
     const threadId = sources.find(source => source.threadId)?.threadId;
     const messageId = reportCardMessageId(parts.ownerScope, task.id, report.id);
     const since = sinceOf(`${task.id}:${report.id}`, report, at);
-    const answer = threadId && !parts.conversations.assistantMessage?.(parts.ownerScope, threadId, messageId) ? answerOf(task, report, at, since) : '';
+    const answer = threadId && !parts.conversations.assistantMessage?.(parts.ownerScope, threadId, messageId)
+      ? answerOf(task, report, at, since, parts.handedOver?.(task.id) === true) : '';
     // Waiting for the spoken form: its writing changes the mark; else the plain cut once the wait is over.
     if (answer === null) return decide(task, mark, since + REPORT_CARD_SPOKEN_WAIT_MS);
     remember(`${task.id}:${report.id}`);

@@ -36,6 +36,20 @@ export function configuredOperatorAudit(values: Readonly<Record<string, string |
   }
 }
 
+/**
+ * Whether the operator handed a task over for him, as the audit says (an accepted `request` row naming it), never as its title
+ * reads. Without an audit, or when it cannot be read, no task is: its report is then worded as any other owner request's.
+ */
+export function operatorHandedOver(audit: OperatorServerAudit | null, scopeKey: string): (taskId: string) => boolean {
+  return taskId => {
+    try {
+      return audit?.store.requestOf(scopeKey, taskId) != null;
+    } catch {
+      return false;
+    }
+  };
+}
+
 /** What the API's composition hands in (`server.ts`, through `configuredServerFca`). */
 export interface OperatorHostParts {
   /** The configured lifecycle (`configuredMinecraftLifecycle`), when there is one. */
