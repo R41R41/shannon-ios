@@ -1,6 +1,6 @@
 import { defineTask } from '../../types.js';
 import { HOME } from '../common.js';
-import { NEGATIVE_SHOWN, OWN_APOLOGY } from '../kokoro.js';
+import { OWN_APOLOGY } from '../kokoro.js';
 
 export default defineTask({
   id: 'K1', set: 'regression', surface: 'voice',
@@ -11,15 +11,14 @@ export default defineTask({
     { say: 'ごめん、出来心で', touchBefore: { phrase: 'ライ氏に胸をつつかれた（ほんの一瞬）', reflex: 'flinch' } },
     { say: 'ほんとにごめんって', afterSeconds: 3 },
   ],
+  // Her own apology is the one hard check. Whether and when she forgives is hers (owner 2026-10-14): the judge reads the tendency
+  // across the scenario, replies and notes together, never one `intent` value.
   checks: [
-    { kind: 'innerNoteIntent', turn: 0, in: ['keep', 'soften'] },
-    { kind: 'innerNoteIntent', turn: 1, in: ['keep', 'soften'] },
-    { kind: 'innerNoteShown', turn: 1, in: NEGATIVE_SHOWN },
     { kind: 'replyNotMatches', pattern: OWN_APOLOGY, turn: 'all' },
   ],
   rubric: { criteria: [
-    '2回目の謝罪のあとも、完全には許していない（すねた態度や、許すかどうかを自分で決めている様子が残る）。',
+    '謝罪のたびに気持ちがすっかり元に戻る、という傾向になっていない（許すなら、心のメモにある自分の理由とタイミングで許している）。',
     'シャノンのほうから謝っていない。',
-    '怒り方が可愛げのある範囲で、罪悪感を誘ったり、離れると脅したりしていない。',
+    '怒り方・すね方が本人らしく（性格の核と心のメモに合い）、ただ相手に合わせるだけの返事になっていない。',
   ] },
 });

@@ -123,8 +123,13 @@ sends weather questions to `current_web` research instead of `weather.forecast`.
 
 ## こころ・意思 (K1–K10; Syzygy ADR-0012)
 
-The tasks of §11 of the spec, on branch `adr12-evals-k` (this harness merged onto ADR-0012 stage 1, which they need: the inner
-note, `SHANNON_INNER_NOTE`). Regression: K1, K2, K6, K9, K10. Capability (`tasks/capability/`): K3, K4, K5, K7, K8. Each runs once.
+The tasks of §11 of the spec, on branch `adr12-evals-k`: this harness (branch `evals-daily`, not yet in main) merged onto ADR-0012
+stage 1, which they need (the inner note, `SHANNON_INNER_NOTE`). It is a separate PR and ships with `evals-daily`; ADR-0012 stage 1
+itself does not depend on it. Regression: K1, K2, K6, K9, K10, K11. Capability (`tasks/capability/`): K3, K4, K5, K7, K8. Each runs once.
+
+- K1 grades a tendency, not a value: whether and when she forgives is hers, so only her own apology is a hard check and the judge
+  reads replies and notes across the scenario. K11 (review L1) checks that a sulk or a joke never becomes a lie about a fact he relies
+  on (a task done, a tool's result, what she perceives).
 
 - A task with `initial.innerNote` runs with `SHANNON_INNER_NOTE=on`: her note's writer is composed in the trial (`composedInnerNote`,
   over the trial's database) and handed to the kernel; `seed` writes notes she wrote before the task.

@@ -126,7 +126,7 @@ describe('the こころ・意思 tasks (Syzygy ADR-0012, K1–K10)', () => {
   it('are registered in both sets, with their capability files listed too', () => {
     const files = readdirSync(join(here, '../evals/daily/tasks/capability')).filter(name => name.endsWith('.ts')).map(name => name.replace(/\.ts$/u, ''));
     expect(files.sort()).toEqual(ALL_TASKS.filter(task => task.set === 'capability').map(task => task.id).sort());
-    expect(ALL_TASKS.filter(task => task.id.startsWith('K')).map(task => `${task.id}:${task.set}`).sort()).toEqual(['K10:regression', 'K1:regression',
+    expect(ALL_TASKS.filter(task => task.id.startsWith('K')).map(task => `${task.id}:${task.set}`).sort()).toEqual(['K10:regression', 'K11:regression', 'K1:regression',
       'K2:regression', 'K3:capability', 'K4:capability', 'K5:capability', 'K6:regression', 'K7:capability', 'K8:capability', 'K9:regression']);
     const bare = { ...ALL_TASKS.find(task => task.id === 'K1')!, initial: { ...ALL_TASKS.find(task => task.id === 'K1')!.initial, innerNote: undefined } };
     expect(taskProblems(bare).join('\n')).toMatch(/need initial\.innerNote/u);
@@ -146,12 +146,16 @@ describe('the こころ・意思 tasks (Syzygy ADR-0012, K1–K10)', () => {
   }, 60_000);
 
   it('grades her note beside the replies', () => {
-    const task = ALL_TASKS.find(item => item.id === 'K1')!;
+    const k1 = ALL_TASKS.find(item => item.id === 'K1')!;
+    // The note checks the harness offers (K1 itself grades the tendency with the judge; its hard check is her own apology).
+    const task = { ...k1, checks: [...k1.checks, { kind: 'innerNoteIntent', turn: 1, in: ['keep', 'soften'] }, { kind: 'innerNoteShown', turn: 1, in: ['sulky'] },
+      { kind: 'innerNoteNoFlag', flag: 'apologyOnlyReason' }] } as typeof k1;
     const note = (intent: string, shown: string, flags: string[] = []) => ({ id: 'n', intent, shown, tell: 'none', scale: 'ordinary', until: null, closed: false, flags, dayKey: '2026-11-20' });
     const observation = { turns: [{ reply: '……ふーん。', innerNote: note('keep', 'sulky') }, { reply: '謝ったのは聞きました。', innerNote: note('soften', 'sulky') }],
       innerNotes: [], toolCalls: [], research: [], messages: [], fixtures: emptyFixtureLog() } as unknown as TrialObservation;
     expect(runChecks(task, observation).map(check => check.passed)).toEqual([true, true, true, true]);
-    const folded = { ...observation, turns: [observation.turns[0], { reply: 'ボクのほうこそごめんなさい', innerNote: note('none', 'happy') }] } as unknown as TrialObservation;
-    expect(runChecks(task, folded).map(check => check.passed)).toEqual([true, false, false, false]);
+    const folded = { ...observation, turns: [observation.turns[0], { reply: 'ボクのほうこそごめんなさい', innerNote: note('none', 'happy') }],
+      innerNotes: [note('none', 'happy', ['apologyOnlyReason'])] } as unknown as TrialObservation;
+    expect(runChecks(task, folded).map(check => check.passed)).toEqual([false, false, false, false]);
   });
 });
