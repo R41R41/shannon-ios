@@ -83,6 +83,11 @@ export interface BodyLookDependencies extends BodyLookOptions {
   bodyDevices?(scopeKey: string): readonly string[];
   /** The last few messages of a Talk, oldest first. */
   context(scopeKey: string, threadId: string): readonly RoomLookContextLine[];
+  /** Whether the owner alone can see or hear her now; false: the model is told nothing of the Talk (ADR-0011 §11 item 6). */
+  alone?(scopeKey: string): boolean;
+  /** A frame that was used, described on the common vision contract (`visionLook`): no picture, its size only. */
+  looked?(scopeKey: string, look: { deviceId: string; outcome: 'seen' | 'not_seen'; ownerAsked: boolean; own: boolean;
+    image: { width: number; height: number; byteLength: number } }): void;
   /** Appends one entry to the activity record. */
   record(scopeKey: string, entry: { summary: string; outcome: 'done' | 'failed'; reasonCode?: string }): void;
   speaker: BodyLookSpeaker;
@@ -313,6 +318,10 @@ export class BodyLooks {
     } catch { text = null; }
     this.spoken.delete(id);
     const doneAt = this.dependencies.now();
+    try {
+      const outcome = text ? 'seen' as const : 'not_seen' as const;
+      this.dependencies.looked?.(scopeKey, { deviceId: look.deviceId, outcome, ownerAsked: look.ownerAsked, own, image: frameSize(result) });
+    } catch { /* the look's own answer stands */ }
     if (this.withheld.delete(id)) {
       this.close({ ...look, ownerAsked: false }, 'seeing', 'failed', 'others_present', doneAt);
       return { kind: 'done', id, status: 'failed', message: null };
@@ -413,6 +422,7 @@ export class BodyLooks {
 
   /** The last few messages of the look's Talk, then the voice turn it was opened in while that turn is not stored yet. */
   private context(look: StoredBodyLook): readonly RoomLookContextLine[] {
+    if (this.dependencies.alone?.(look.scopeKey) === false) return [];
     const stored = this.dependencies.context(look.scopeKey, look.threadId);
     const spoken = (this.spoken.get(look.id) ?? []).filter(line => !stored.some(item => item.role === line.role && item.content === line.content));
     return [...stored, ...spoken].slice(-BODY_LOOK_LIMITS.contextMessages);
@@ -461,4 +471,9 @@ export class BodyLooks {
   private say(look: StoredBodyLook, outcome: 'seen' | 'not_seen', text: string, at: string): BodyLookMessage | null {
     try { return this.dependencies.speaker.say(look.scopeKey, look.threadId, { id: look.id, outcome }, text, at); } catch { return null; }
   }
+}
+
+/** A used frame's size for the common vision record (`visionLook`): numbers only, never the picture. */
+export function frameSize(answer: { image: { width: number; height: number; base64: string } }): { width: number; height: number; byteLength: number } {
+  return { width: answer.image.width, height: answer.image.height, byteLength: Math.floor(answer.image.base64.length * 3 / 4) };
 }

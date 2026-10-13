@@ -35,7 +35,22 @@ export const NOTICE_MARKERS = Object.freeze({
 } as const);
 const SURFACE_LABEL: Readonly<Record<MindSurface, string>> = Object.freeze({
   text: 'アプリの文字', voice: '声の会話', body: '体', minecraft: 'マイクラ', platform: 'メッセージの場', outreach: 'ボクからの連絡', own_time: 'ボクの時間',
+  vision: '目',
 });
+/** What a percept (Syzygy ADR-0011) says, from its closed code only: never words read from a picture. */
+const PERCEPT_WORD: Readonly<Record<string, string>> = Object.freeze({
+  'notice:owner_returned': 'ライ氏が戻ってきたのを見た', 'notice:owner_waved': 'ライ氏が手を振っているのを見た',
+  'notice:showing_something': 'ライ氏が何かを見せているのを見た', 'notice:new_object': '新しい物が映っているのを見た',
+  'notice:owner_looks_tired': 'ライ氏が疲れていそうに見えた', escalate: '気になるものが見えた', look: '一度見た',
+  'presence:others': '2人以上が映った（誰かは決めていない）', 'degrade:0': '目はいつもどおり見えている',
+  'degrade:1': '目を少し控えめにしている', 'degrade:2': '今は画像を見られない', 'degrade:3': '目を止めている',
+});
+
+/** One line of a percept: its closed code, or that she saw something. */
+function perceptWord(item: WorkspaceItem): string {
+  const code = item.detail?.code ?? '';
+  return PERCEPT_WORD[code] ?? (code.startsWith('react:') ? '見えたものに表情で反応した' : '何かを見た');
+}
 const SPEAKER_LABEL = Object.freeze({ owner: 'ライ氏', person: 'ほかの人', unknown: '誰か', shannon: 'ボク', system: '' });
 const TOUCH_WORD: Readonly<Record<string, string>> = Object.freeze({
   pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '持ち上げられた', holdHand: '手をにぎられた',
@@ -96,6 +111,7 @@ function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null
   if (SPEECH_KINDS.has(item.kind)) return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}が話した${excerpt ? `「${excerpt}」` : ''}`;
   if (item.kind === 'own_time_step') return `${head}${item.detail?.tool ? `〈${item.detail.tool}〉を` : ''}${item.detail?.code === 'failed' ? 'しようとして、できなかった' : 'した'}`;
   if (item.kind === 'presence') return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}の様子が変わった`;
+  if (item.kind === 'percept') return `${head}${perceptWord(item)}`;
   return `${head}できごと`;
 }
 

@@ -31,6 +31,15 @@ export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
 ] as const);
 
 /**
+ * Watching through the app's camera while the app is open (Syzygy ADR-0011 §4.4, owner answer of 2026-10-14). Not in
+ * `SHANNON_CAPABILITIES`: the line belongs to a turn only while `SHANNON_VISION_CAMERA` is on and the device is watching, and the
+ * API adds it then (stage 1 canary follow-up), so with the switch off the description is what it was.
+ */
+export const SHANNON_CAMERA_WATCH_CAPABILITY = 'アプリを開いている間に見る: アプリが前に出ていて、カメラの許可があり、ライ氏と二人の時だけ、'
+  + 'カメラで様子を見て、気づいたことがあれば短く話しかけたり表情で返したりする。絵は残さない。ほかの人が映った時、アプリを閉じた時、画面をロックした時は見ない。'
+  + `${SHANNON_ROOM_LOOK_RULES.join('。')}。`;
+
+/**
  * Where a memo or a note goes (owner decision 2026-10-05): her study, her own folder on the owner's PC, or Aether.
  * One rule for the capability text and the instructions of her tools (`services/api/src/chatModelTools.ts`).
  */

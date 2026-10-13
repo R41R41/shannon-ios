@@ -1,0 +1,31 @@
+[Unit]
+Description=Shannon vision worker (Syzygy ADR-0011 stage 1: camera frames judged in memory, never stored)
+After=shannon-ios.service
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-ios
+Environment=NODE_ENV=production
+Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+# Off unless SHANNON_VISION_WORKER=on: the entry then exits successfully at once (systemd 245 retries a skipped ExecCondition).
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/visionWorker.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+# The budget ledger, the device tokens and the Observer sidecar live in the data directory; frames live in memory only.
+ReadWritePaths=/home/azureuser/shannon-ios-data
+CPUQuota=25%
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

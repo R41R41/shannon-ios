@@ -42,6 +42,8 @@ export const SQLITE_PROFILES = Object.freeze({
   executionBackfill: profile({ busyTimeoutMs: 250, wal: true }),
   /** The sleep worker's read-only view of task proofs (`wiring/configuredWorkerFeedback.ts`). */
   readOnly: profile({ readOnly: true }),
+  /** The vision worker (`wiring/visionWorkerWiring.ts`): its budget ledger and the device tokens it checks. Short waits. */
+  visionWorker: profile({ busyTimeoutMs: 750, wal: true }),
 });
 
 export type SqliteProfileName = keyof typeof SQLITE_PROFILES;

@@ -23,7 +23,7 @@ describe('mind.event.v1', () => {
     expect(Object.isFrozen(event.speaker)).toBe(true);
     expect(Object.isFrozen(event.provenance.episodeIds)).toBe(true);
     expect(MIND_EVENT_KINDS).toContain('touch');
-    expect(MIND_SURFACES).toEqual(['text', 'voice', 'body', 'minecraft', 'platform', 'outreach', 'own_time']);
+    expect(MIND_SURFACES).toEqual(['text', 'voice', 'body', 'minecraft', 'platform', 'outreach', 'own_time', 'vision']);
   });
 
   it('copies the surface\'s audience as it was decided, never recomputing it, and cannot be changed through the copy', () => {

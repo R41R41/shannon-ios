@@ -218,6 +218,22 @@ export const SWITCHES = [
     name: 'SHANNON_EXECUTIVE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: ['SHANNON_AUTONOMY_ENABLED'],
     doc: 'ADR-0009 stage 2: the Executive decides her own time (one deliberation, one capability); off, the old own-time loop thinks.',
   },
+  {
+    name: 'SHANNON_VISION_WORKER', default: 'off', kind: 'explicit_on', owner: 'vision', requires: [],
+    doc: 'ADR-0011 stage 1: the vision worker (worker:vision, shannon-ios-vision) and the API\'s vision bridge socket; off, neither exists.',
+  },
+  {
+    name: 'SHANNON_VISION_CAMERA', default: 'off', kind: 'explicit_on', owner: 'vision', requires: ['SHANNON_VISION_WORKER'],
+    doc: 'Camera watching while the app is open (ADR-0011 §4.4): the worker judges gated frames; off, every device is told to stop.',
+  },
+  {
+    name: 'SHANNON_VISION_ESCALATE', default: 'off', kind: 'explicit_on', owner: 'vision', requires: ['SHANNON_VISION_CAMERA'],
+    doc: 'The camera notice may hand a frame to a closer look by the conversation model (escalate); off, escalate is never offered.',
+  },
+  {
+    name: 'SHANNON_VISION_HALT', default: 'off', kind: 'explicit_on', owner: 'vision', requires: ['SHANNON_VISION_WORKER'],
+    doc: 'Vision degrade level 3: every vision decision stops and devices are told to stop watching (the body floor is not affected).',
+  },
 ] as const satisfies readonly SwitchEntry[];
 
 export type SwitchName = (typeof SWITCHES)[number]['name'];

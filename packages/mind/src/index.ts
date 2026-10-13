@@ -15,6 +15,7 @@ export {
 } from './switches.js';
 export {
   MIND_EVENT_KINDS, MIND_EVENT_LIMITS, MIND_EVENT_SCHEMA, MIND_SPEAKER_KINDS, MIND_SURFACES, MIND_TRUST, checkedMindEvent, mindEvent, withoutText,
+  MIND_PERCEPT_LIMITS, MIND_PERCEPT_PRIVACY, type MindPercept, type MindPerceptPrivacy,
   type MindContent, type MindEvent, type MindEventDraft, type MindEventKind, type MindPresence, type MindProvenance, type MindSpeaker,
   type MindSpeakerKind, type MindSurface, type MindTrust,
 } from './envelope.js';

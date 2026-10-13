@@ -7,7 +7,7 @@ import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcedLook, appLookNotSeenLine, lookAnnouncement, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
 } from '../../mind/perception/appLookLines.js';
 import { SQLiteAppLookStore, type AppLookOutcome, type StoredAppLook } from './store/appLookStore.js';
-import { asksToLook, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
+import { asksToLook, frameSize, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from '../../contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from '../../mind/perception/bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
@@ -43,6 +43,10 @@ export interface AppLookDependencies extends AppLookOptions {
   now: () => string;
   /** The last few messages of a Talk, oldest first. */
   context(scopeKey: string, threadId: string): readonly RoomLookContextLine[];
+  /** Whether the owner alone can see or hear her now; false: the model is told nothing of the Talk (ADR-0011 §11 item 6). */
+  alone?(scopeKey: string): boolean;
+  /** A frame that was used, described on the common vision contract (`visionLook`): no picture, its size only. */
+  looked?(scopeKey: string, look: { deviceId: string; outcome: 'seen' | 'not_seen'; image: { width: number; height: number; byteLength: number } }): void;
   /** Appends one entry to the activity record. */
   record(scopeKey: string, entry: { summary: string; outcome: 'done' | 'failed'; reasonCode?: string }): void;
   speaker: BodyLookSpeaker;
@@ -218,6 +222,9 @@ export class AppLooks {
     } catch { text = null; }
     this.spoken.delete(id);
     const doneAt = this.dependencies.now();
+    try {
+      this.dependencies.looked?.(scopeKey, { deviceId, outcome: text ? 'seen' : 'not_seen', image: frameSize(result) });
+    } catch { /* the look's own answer stands */ }
     if (text && this.store.advance(scopeKey, id, 'seeing', 'seen', doneAt)) {
       try {
         this.dependencies.record(scopeKey, { summary: APP_LOOK_SEEN_SUMMARY, outcome: 'done' });
@@ -295,6 +302,8 @@ export class AppLooks {
   private context(look: StoredAppLook): readonly RoomLookContextLine[] {
     const spoken = this.spoken.get(look.id) ?? [];
     if (look.guarded) return spoken;
+    // Opened with the owner alone, used with someone else present: nothing of the Talk, not even the turn it was opened in.
+    if (this.dependencies.alone?.(look.scopeKey) === false) return [];
     const stored = this.dependencies.context(look.scopeKey, look.threadId);
     return [...stored, ...spoken.filter(line => !stored.some(item => item.role === line.role && item.content === line.content))]
       .slice(-BODY_LOOK_LIMITS.contextMessages);

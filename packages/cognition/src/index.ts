@@ -58,6 +58,7 @@ export {
   SHANNON_READ_TOOLS_CAPABILITY,
   withSkillsCapability,
   SHANNON_SKILLS_CAPABILITY,
+  SHANNON_CAMERA_WATCH_CAPABILITY,
   withMinecraftBodyCapability,
   SHANNON_STAGE5_CAPABILITIES,
   withStage5Capabilities,

@@ -13,11 +13,11 @@ import type { SalienceInputs } from './salience.js';
 export const MIND_EVENT_SCHEMA = 'mind.event.v1';
 
 export const MIND_EVENT_KINDS = Object.freeze([
-  'utterance', 'touch', 'presence', 'game', 'platform_message', 'task_outcome', 'promise_due', 'own_time_step', 'notice',
+  'utterance', 'touch', 'presence', 'game', 'platform_message', 'task_outcome', 'promise_due', 'own_time_step', 'notice', 'percept',
 ] as const);
 export type MindEventKind = typeof MIND_EVENT_KINDS[number];
 
-export const MIND_SURFACES = Object.freeze(['text', 'voice', 'body', 'minecraft', 'platform', 'outreach', 'own_time'] as const);
+export const MIND_SURFACES = Object.freeze(['text', 'voice', 'body', 'minecraft', 'platform', 'outreach', 'own_time', 'vision'] as const);
 export type MindSurface = typeof MIND_SURFACES[number];
 
 export const MIND_SPEAKER_KINDS = Object.freeze(['owner', 'person', 'unknown', 'shannon', 'system'] as const);
@@ -54,6 +54,18 @@ export interface MindProvenance {
 
 export type MindContent = { text: string } | { ref: string } | null;
 
+/** Syzygy ADR-0011 §3.2: what a seen thing carries besides the event. Present on `percept` events only. */
+export const MIND_PERCEPT_PRIVACY = Object.freeze(['owner_private', 'shared_room', 'world_shared', 'stream_public'] as const);
+export type MindPerceptPrivacy = typeof MIND_PERCEPT_PRIVACY[number];
+export interface MindPercept {
+  /** After this many milliseconds from `time` the percept is gone from the workspace (apart from `noticeMinutes`). */
+  ttlMs: number;
+  privacy: MindPerceptPrivacy;
+  /** A reference to a frame held in a process's memory only (`frame:<id>`), or null. Never the picture. */
+  frameRef: string | null;
+}
+export const MIND_PERCEPT_LIMITS = Object.freeze({ maxTtlMs: 30 * 60_000, frameRef: 120 });
+
 export interface MindEvent {
   schema: typeof MIND_EVENT_SCHEMA;
   id: string;
@@ -70,6 +82,8 @@ export interface MindEvent {
   salienceInputs: SalienceInputs;
   provenance: MindProvenance;
   content: MindContent;
+  /** Only on kind `percept` (ADR-0011): its TTL, privacy and frame reference. */
+  percept?: MindPercept;
 }
 
 export type MindEventDraft = Omit<MindEvent, 'schema' | 'body' | 'people' | 'salienceInputs' | 'content' | 'speaker' | 'provenance'> & {
@@ -79,6 +93,7 @@ export type MindEventDraft = Omit<MindEvent, 'schema' | 'body' | 'people' | 'sal
   content?: MindContent;
   speaker?: Partial<MindSpeaker> & { kind: MindSpeakerKind };
   provenance: Omit<MindProvenance, 'episodeIds'> & { episodeIds?: readonly string[] };
+  percept?: MindPercept;
 };
 
 const has = <T extends string>(list: readonly T[], value: unknown): value is T => typeof value === 'string' && (list as readonly string[]).includes(value);
@@ -103,12 +118,34 @@ export function mindEvent(draft: MindEventDraft): MindEvent | string {
     people: [...(draft.people ?? [])], time: draft.time, salienceInputs: { ...(draft.salienceInputs ?? {}) },
     provenance: { ...draft.provenance, episodeIds: [...(draft.provenance.episodeIds ?? [])] },
     content: draft.content ?? null,
+    ...(draft.percept ? { percept: { ...draft.percept } } : {}),
   };
   return checkedMindEvent(event, { copyAudience: true });
 }
 
-const KEYS = ['schema', 'id', 'kind', 'surface', 'body', 'audience', 'presence', 'speaker', 'people', 'time', 'salienceInputs', 'provenance', 'content'];
-const SALIENCE_KEYS = ['ownerSpeech', 'addressed', 'touch', 'promiseDeltaMinutes', 'predictionError', 'ownTaskOutcome', 'othersSpeech', 'novelty'];
+const KEYS = ['schema', 'id', 'kind', 'surface', 'body', 'audience', 'presence', 'speaker', 'people', 'time', 'salienceInputs', 'provenance', 'content',
+  'percept'];
+const SALIENCE_KEYS = ['ownerSpeech', 'addressed', 'touch', 'promiseDeltaMinutes', 'predictionError', 'ownTaskOutcome', 'othersSpeech', 'novelty', 'percept'];
+const FRAME_REF = /^frame:[A-Za-z0-9][A-Za-z0-9_.:-]*$/u;
+const unitOrAbsent = (value: unknown) =>
+  value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1);
+
+const validTtl = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= MIND_PERCEPT_LIMITS.maxTtlMs;
+const validFrameRef = (value: unknown): value is string | null =>
+  value === null || (typeof value === 'string' && value.length <= MIND_PERCEPT_LIMITS.frameRef && FRAME_REF.test(value));
+
+/** A percept's own fields (kind `percept` only), or what is wrong with them. */
+function checkedPercept(kind: unknown, value: unknown): MindPercept | null | string {
+  if (kind !== 'percept') return value === undefined ? null : 'percept is only on kind percept';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'a percept needs { ttlMs, privacy, frameRef }';
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).sort().join() !== 'frameRef,privacy,ttlMs') return 'percept must be { ttlMs, privacy, frameRef }';
+  if (!validTtl(row.ttlMs)) return 'percept.ttlMs is invalid';
+  if (!has(MIND_PERCEPT_PRIVACY, row.privacy)) return 'percept.privacy is invalid';
+  if (!validFrameRef(row.frameRef)) return 'percept.frameRef is invalid';
+  return Object.freeze({ ttlMs: row.ttlMs, privacy: row.privacy, frameRef: row.frameRef });
+}
 
 function checkedSalience(value: unknown): SalienceInputs | string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 'salienceInputs must be an object';
@@ -122,6 +159,7 @@ function checkedSalience(value: unknown): SalienceInputs | string {
   const finite = (key: string) => row[key] === undefined || row[key] === null || (typeof row[key] === 'number' && Number.isFinite(row[key]));
   if (!finite('promiseDeltaMinutes')) return 'salienceInputs.promiseDeltaMinutes must be a number';
   if (!finite('novelty') || (typeof row.novelty === 'number' && (row.novelty < 0 || row.novelty > 1))) return 'salienceInputs.novelty must be in [0, 1]';
+  if (!unitOrAbsent(row.percept)) return 'salienceInputs.percept must be in [0, 1]';
   const error = row.predictionError as Record<string, unknown> | null | undefined;
   if (error !== undefined && error !== null && (typeof error !== 'object' || Object.keys(error).some(key => key !== 'delta' && key !== 'sigma')
     || typeof error.delta !== 'number' || typeof error.sigma !== 'number' || !Number.isFinite(error.delta) || !Number.isFinite(error.sigma))) {
@@ -173,6 +211,8 @@ export function checkedMindEvent(value: unknown, options: { copyAudience?: boole
     if (typeof content !== 'object' || Object.keys(content).length !== 1) return 'content must be { text } or { ref } or null';
     if ('text' in content ? typeof content.text !== 'string' || content.text.length > L.text : !('ref' in content) || !isId(content.ref, L.ref)) return 'content is invalid';
   }
+  const percept = checkedPercept(row.kind, row.percept);
+  if (typeof percept === 'string') return percept;
   return Object.freeze({
     schema: MIND_EVENT_SCHEMA, id: row.id, kind: row.kind, surface: row.surface, body: row.body as string | null,
     audience: options.copyAudience ? copiedAudience(row.audience as MemoryAudience) : normalizeAudience(row.audience),
@@ -181,6 +221,7 @@ export function checkedMindEvent(value: unknown, options: { copyAudience?: boole
     people: Object.freeze([...row.people as string[]]), time: row.time, salienceInputs,
     provenance: Object.freeze({ source: provenance.source, sourceId: provenance.sourceId, trust: provenance.trust, episodeIds: Object.freeze([...provenance.episodeIds as string[]]) }),
     content: content === null ? null : Object.freeze({ ...content }) as MindContent,
+    ...(percept ? { percept } : {}),
   });
 }
 

@@ -10,6 +10,7 @@
     "mindWorker.ts",
     "server.ts",
     "testflightDistributor.ts",
+    "visionWorker.ts",
     "worker.ts",
     "worldWorker.ts"
   ],

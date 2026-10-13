@@ -1,0 +1,74 @@
+{
+  "frame": {
+    "schema": "vision.frame.v1",
+    "frameId": "frame-7d2c1f0a",
+    "capturedAt": "2026-10-14T09:00:00.000Z",
+    "receivedAt": "2026-10-14T09:00:00.180Z",
+    "source": { "kind": "app_camera", "bodyId": null, "deviceId": "device-owner-iphone" },
+    "sessionId": "watch-3b9e",
+    "generation": 1,
+    "privacy": "owner_private",
+    "audienceAtCapture": "owner_alone",
+    "ttlMs": 4000,
+    "encoding": { "width": 512, "height": 384, "format": "jpeg", "byteLength": 38211 },
+    "gate": { "reason": "difference", "difference": 0.31, "personCount": 1 },
+    "state": null
+  },
+  "session": {
+    "schema": "vision.session.v1",
+    "sessionId": "watch-3b9e",
+    "generation": 1,
+    "source": { "kind": "app_camera", "bodyId": null, "deviceId": "device-owner-iphone" },
+    "goal": "notice",
+    "parentTaskId": null,
+    "startedAt": "2026-10-14T08:59:00.000Z",
+    "deadlineAt": "2026-10-14T09:29:00.000Z",
+    "budget": { "maxDecisions": 900, "maxDurationMs": 1800000 },
+    "state": "ended",
+    "endReason": "audience_changed",
+    "endedAt": "2026-10-14T09:03:00.000Z"
+  },
+  "decision": {
+    "schema": "vision.decision.v1",
+    "decisionId": "decision-51aa",
+    "frameId": "frame-7d2c1f0a",
+    "sessionId": "watch-3b9e",
+    "generation": 1,
+    "source": { "kind": "app_camera", "bodyId": null, "deviceId": "device-owner-iphone" },
+    "candidates": ["quiet", "react:smile", "notice:owner_returned", "escalate", "other"],
+    "gate": { "probability": 0.81, "threshold": 0.7 },
+    "choice": {
+      "candidateId": "notice:owner_returned",
+      "confidence": 0.77,
+      "probabilities": [
+        { "id": "quiet", "probability": 0.12 },
+        { "id": "notice:owner_returned", "probability": 0.8 },
+        { "id": "react:smile", "probability": 0.08 }
+      ]
+    },
+    "outcome": "chosen",
+    "discardReason": null,
+    "timings": { "queuedMs": 2, "decisionMs": 640, "totalMs": 655 },
+    "cost": { "reservedUsd": 0.002, "estimatedUsd": 0.00009, "inputTokens": 880, "usageComplete": true },
+    "degrade": 0,
+    "decidedAt": "2026-10-14T09:00:00.840Z"
+  },
+  "reply": {
+    "schema": "vision.frame.reply.v1",
+    "frameId": "frame-7d2c1f0a",
+    "watch": "continue",
+    "stopReason": null,
+    "outcome": "chosen",
+    "candidateId": "react:smile",
+    "reaction": "smile",
+    "degrade": 0,
+    "nextFrameNotBefore": "2026-10-14T09:00:02.000Z"
+  },
+  "status": {
+    "schema": "vision.status.v1",
+    "watchAllowed": false,
+    "reason": "audience",
+    "degrade": 0,
+    "limits": { "judgeFramesPerSecond": 2, "sendIntervalMs": 2000, "longSide": 512, "frameBytes": 200000, "ttlMs": 4000 }
+  }
+}

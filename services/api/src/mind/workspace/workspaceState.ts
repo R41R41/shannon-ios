@@ -1,7 +1,7 @@
 import { UNKNOWN_GUEST_PRESENCE, type MemoryAudience } from '@shannon/cognition';
 import {
   SALIENCE_V1, admit, currentSalience, novelty, persistenceOf, salience, withoutText,
-  type AttentionItem, type MindEvent, type MindEventKind, type MindPresence, type MindSpeakerKind, type MindSurface, type MindTrust,
+  type AttentionItem, type MindEvent, type MindEventKind, type MindPercept, type MindPresence, type MindSpeakerKind, type MindSurface, type MindTrust,
 } from '@shannon/mind';
 
 /**
@@ -32,6 +32,8 @@ export interface WorkspaceItem {
   /** s₀ (`SALIENCE_V1`). */
   initial: number;
   detail: WorkspaceDetail | null;
+  /** A percept's TTL, privacy and frame reference (Syzygy ADR-0011); absent on every other kind. */
+  percept?: MindPercept;
 }
 
 export interface WorkspaceScope {
@@ -84,7 +86,14 @@ function itemOf(event: MindEvent, seq: number, initial: number, detail: Workspac
     id: event.id, seq, kind: event.kind, surface: event.surface, body: event.body, audience: event.audience, presence: event.presence,
     speaker: event.speaker.kind, trust: event.provenance.trust, source: event.provenance.source, sourceId: event.provenance.sourceId,
     ref: stored.content && 'ref' in stored.content ? stored.content.ref : null, at: event.time, initial, detail,
+    ...(event.percept ? { percept: { ...event.percept } } : {}),
   };
+}
+
+/** Whether a percept's TTL has passed at `at` (ADR-0011 §3.2: it leaves by its TTL, apart from `noticeMinutes`). Other kinds never expire here. */
+export function perceptExpired(item: Pick<WorkspaceItem, 'percept' | 'at'>, at: string): boolean {
+  if (!item.percept) return false;
+  return Date.parse(at) - Date.parse(item.at) >= item.percept.ttlMs;
 }
 
 export type ApplyResult = { itemId: string; verdict: 'admitted' | 'below_entry' | 'evicted' | 'duplicate' };
@@ -112,7 +121,7 @@ export function applyOp(scope: WorkspaceScope, op: WorkspaceOp): ApplyResult | n
     if (scope.notices.length > WORKSPACE_LIMITS.notices) scope.notices.splice(0, scope.notices.length - WORKSPACE_LIMITS.notices);
   }
   // Faded items leave attention; they were seen, and are not summarized.
-  scope.held = scope.held.filter(entry => currentSalience(attentionItem(entry), op.at) >= WORKSPACE_LIMITS.faded);
+  scope.held = scope.held.filter(entry => !perceptExpired(entry, op.at) && currentSalience(attentionItem(entry), op.at) >= WORKSPACE_LIMITS.faded);
   if (item.initial < SALIENCE_V1.entry) return { itemId: item.id, verdict: 'below_entry' };
   const admission = admit(scope.held.map(attentionItem), attentionItem(item), op.at);
   const evicted = new Set(admission.evicted.map(entry => entry.id));
@@ -127,6 +136,7 @@ export function applyOp(scope: WorkspaceScope, op: WorkspaceOp): ApplyResult | n
 /** What attention holds at `at`, highest current salience first (ties: newer, then id). */
 export function orderedHeld(scope: WorkspaceScope, at: string): Array<{ item: WorkspaceItem; salience: number }> {
   return scope.held
+    .filter(item => !perceptExpired(item, at))
     .map(item => ({ item, salience: currentSalience(attentionItem(item), at) }))
     .filter(entry => entry.salience >= WORKSPACE_LIMITS.faded)
     .sort((left, right) => right.salience - left.salience || right.item.at.localeCompare(left.item.at) || left.item.id.localeCompare(right.item.id));
@@ -136,6 +146,7 @@ export function orderedHeld(scope: WorkspaceScope, at: string): Array<{ item: Wo
 export function currentNotices(scope: WorkspaceScope, at: string): WorkspaceItem[] {
   const now = Date.parse(at);
   return scope.notices.filter(item => {
+    if (perceptExpired(item, at)) return false;
     const age = now - Date.parse(item.at);
     const minutes = WORKSPACE_LIMITS.noticeMinutes[item.kind] ?? 30;
     // A promise is a notice from 30 minutes before its time.

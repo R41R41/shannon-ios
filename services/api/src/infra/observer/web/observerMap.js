@@ -11,6 +11,7 @@ export const BLOCKS = [
   ['own', '自分の時間', 'autonomy worker', 'own'],
   ['db', '共有 SQLite', '全プロセスが読み書き', 'store'],
   ['world', '外の体と反射', 'world・agent-host（今はまれ）', 'own'],
+  ['vision', '目（視覚）', 'vision worker', 'input'],
 ];
 
 /** [id, block, col, row, label, role, contract nodes that can project here]. Display-only nodes list no contract node. */
@@ -58,6 +59,9 @@ export const VIEW_NODES = [
   ['bodyControl', 'world', 0, 8, '体の制御', 'stop・execute の応答', ['bodyControl']],
   ['minecraft', 'world', 1, 8, 'Minecraft', '外部・中は未計測', ['minecraft']],
   ['agentHost', 'world', 2, 8, 'Mac Agent Host', '外部・中は未計測', ['agentHost']],
+  ['visionGate', 'vision', 0, 9, '見る入口', '聞き手・段・鮮度', ['visionGate']],
+  ['visionDecision', 'vision', 1, 9, '見て選ぶ', 'Decisions（画像は残さない）', ['visionDecision']],
+  ['visionAct', 'vision', 2, 9, '見た結果', '表情・発言・場・look', ['visionAct']],
 ];
 
 /** Structural routes of the current architecture: [from, to, background]. Only received handoffs move. */
@@ -72,6 +76,7 @@ export const VIEW_LINKS = [
   ['store', 'memory'], ['memory', 'embedding'], ['embedding', 'recall', true], ['sleep', 'memory', true], ['emotion', 'prediction', true],
   ['store', 'sqlite', true], ['autonomy', 'queue'], ['executive', 'autonomy', true],
   ['bodyObserve', 'reflexDecision'], ['reflex', 'reflexJev'], ['reflexDecision', 'bodyControl'], ['bodyControl', 'minecraft'],
+  ['visionGate', 'visionDecision'], ['visionDecision', 'visionAct'], ['visionAct', 'workspace', true],
 ];
 
 export const ROLES = ['input', 'judgment', 'action', 'output', 'memory', 'own', 'store'];

@@ -17,6 +17,8 @@ export { voicePerception, type VoicePerceptionInput } from './voicePerception.js
 export { bodyPerception, type BodyPerceptionInput } from './bodyPerception.js';
 export { minecraftPerception, type MinecraftPerceptionInput } from './minecraftPerception.js';
 export { platformPerception, type PlatformPerceptionInput } from './platformPerception.js';
+export { visionPerception, type VisionPerceptionInput } from './visionPerception.js';
+export { imageSize, visionLook, visionLookFrame, type VisionLookInput, type VisionLookPurpose, type VisionLookSource } from './visionLook.js';
 export { INBOX_PRESENT, inboxDetail, inboxPerception } from './inboxPerception.js';
 export type { MindPerceiver, PerceivedDetail, PerceivedItem, PerceivedVerdict } from './perceiver.js';
 export { type ChatAudienceTurn } from './chatAudience.js';

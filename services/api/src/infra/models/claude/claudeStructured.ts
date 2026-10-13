@@ -25,7 +25,7 @@ import { bookBackgroundUsage, closedUsage } from './claudeUsage.js';
  * It imports nothing of the conversation, so a worker that loads it loads no turn deadline, stream decoder or tool loop.
  */
 export const BACKGROUND_ROUTES = Object.freeze({
-  turn_check: 'chat', spoken_report: 'chat', organize: 'chat', touch: 'chat', room_look: 'chat', voice_photo: 'chat',
+  turn_check: 'chat', spoken_report: 'chat', organize: 'chat', touch: 'chat', room_look: 'chat', voice_photo: 'chat', vision_notice: 'chat',
   voice_router: 'voice', memory_rewrite: 'memory', memory_rerank: 'memory', memory_sections: 'memory',
   replay_summary: 'memory_background', replay_template: 'memory_background', person_facts: 'memory_background',
   impressions: 'memory_background', platform_summary: 'memory_background', knowledge: 'memory_background',

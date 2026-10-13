@@ -7,6 +7,7 @@ import { configuredServerObserver } from './wiring/serverObserverWiring.js';
 import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
 import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readJson, sendJson, VoiceRequestAllowances } from './infra/http/serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './infra/auth/apiAuth.js';
+import { configuredVisionBridge } from './wiring/visionBridgeWiring.js';
 import { handleVoiceVisionSnapshot } from './surfaces/voice/serverVoiceVisionRoute.js';
 import { createPairingRoute } from './infra/auth/serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './surfaces/voice/voiceVision.js';
@@ -389,7 +390,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (url.pathname === '/v1/voice/vision/snapshots') {
-      await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
+      await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel, perceiver: mind?.mind ?? null });
       return;
     }
     const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
@@ -460,11 +461,16 @@ server.listen(port, host, () => {
   console.log('Shannon persistence ready: sqlite');
   console.log(selfDiagnosis.startupLine());
 });
+// Syzygy ADR-0011 stage 1: the vision worker's bridge (audience, percepts, a notice's line). SHANNON_VISION_WORKER off: no socket.
+const visionBridge = await configuredVisionBridge(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
+  now: Date.now, presence: scopeKey => kernel.ownerPresenceForFeedback(scopeKey), perceiver: mind?.mind ?? null, conversations: persistentStore,
+  usage: persistentStore, affect: persistentStore, log: line => console.log(line) });
 let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close(async () => {
+    await visionBridge?.close();
     await fca?.close();
     signalObserver?.close(); deviceAuth?.close();
     pushStore.close(); worldStore.close(); initiativeStore.close();

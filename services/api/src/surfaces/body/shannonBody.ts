@@ -9,6 +9,7 @@ import { APP_LOOK_TOOL } from '../../mind/perception/appLookLines.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from '../../contracts/bodyLookContract.js';
 import { noteBodyLookSpeaker } from './store/bodyLookDelivery.js';
+import { lookContextReader } from './lookContext.js';
 import { bodyNudgeCandidates } from './bodyNudges.js';
 import { BodyReactions, type BodyReactionDependencies } from './bodyReaction.js';
 import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from '../../contracts/bodyReactionContract.js';
@@ -20,7 +21,9 @@ import { desktopBodyDeviceId, isDesktopBodyDeviceId } from '../../mind/inhibitio
 import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { isReflexPart } from './bodyTouchReflex.js';
 import { ConversationLooks } from '../../mind/perception/conversationLooks.js';
-import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallSurface } from '../../mind/perception/perceptionPorts.js';
+import {
+  OWNER_CALL_LIMITS, OwnerCalls, visionLook, type OwnerCallDependencies, type OwnerCallSurface, type VisionLookPurpose,
+} from '../../mind/perception/perceptionPorts.js';
 import type { TouchExperienceWriter } from '../../mind/memory/bodyTouchExperience.js';
 import { gameDeathExperience, type GameExperienceWriter } from '../../mind/memory/memoryPorts.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
@@ -118,20 +121,29 @@ export class ShannonBody {
   /** The owner in a call on another device: the presence field, and the refusal of a voice request from her body. */
   readonly ownerCalls: OwnerCalls;
 
+  /** Whether the owner alone can see or hear her now (the kernel's audience watch, `useAudience`); unset, the Talk is read as before. */
+  private audienceNow: ((scopeKey: string) => boolean) | null = null;
+  /** The Talk for a look's model, filtered by forgetting and the audience when the frame is used (Syzygy ADR-0011 §11 item 6). */
+  private readonly lookContext: (scopeKey: string, threadId: string) => readonly { role: 'user' | 'assistant'; content: string }[];
+
   constructor(private readonly dependencies: ShannonBodyDependencies) {
+    this.lookContext = lookContextReader({ stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
+      alone: scopeKey => this.audienceNow?.(scopeKey) !== false });
     this.store = dependencies.store ?? new SQLiteBodyStore(':memory:');
     this.ingestEnabled = dependencies.ingestEnabled ?? true;
     this.looks = new BodyLooks({
       speaker: noteBodyLookSpeaker(dependencies.conversationStore), ...dependencies.look,
       ingestEnabled: this.ingestEnabled, now: dependencies.now, dayKey: ownerDay,
       cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'), bodyDevices: scopeKey => this.fullBodies(scopeKey),
-      context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
+      context: (scopeKey, threadId) => this.lookContext(scopeKey, threadId), alone: scopeKey => this.audienceNow?.(scopeKey) !== false,
+      looked: (scopeKey, look) => this.looked(scopeKey, 'body_look', look.own ? 'own_time' : look.ownerAsked ? 'owner_asked' : 'curious', look),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
     });
-    const context = (scopeKey: string, threadId: string) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages);
+    const context = (scopeKey: string, threadId: string) => this.lookContext(scopeKey, threadId);
     this.appLooks = new AppLooks({
       speaker: noteBodyLookSpeaker(dependencies.conversationStore), viewer: dependencies.look?.viewer ?? null, ...dependencies.appLook,
-      now: dependencies.now, context,
+      now: dependencies.now, context, alone: scopeKey => this.audienceNow?.(scopeKey) !== false,
+      looked: (scopeKey, look) => this.looked(scopeKey, 'app_look', 'owner_asked', look),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: APP_LOOK_TOOL }); },
     });
     this.turnLooks = new ConversationLooks(this.looks, this.appLooks);
@@ -164,6 +176,19 @@ export class ShannonBody {
       surface: dependencies.ownerCalls?.surface ?? bodySurface,
       ...(dependencies.ownerCalls?.answered ? { answered: dependencies.ownerCalls.answered } : {}),
     });
+  }
+
+  /** A used frame on the common vision contract (Syzygy ADR-0011 §11 item 6): its record, percept and Observer line; never the picture. */
+  private looked(scopeKey: string, source: 'app_look' | 'body_look', purpose: VisionLookPurpose,
+    look: { deviceId: string; outcome: 'seen' | 'not_seen'; image: { width: number; height: number; byteLength: number } }): void {
+    visionLook({ scopeKey, source, purpose, deviceId: look.deviceId, outcome: look.outcome, at: this.dependencies.now(),
+      audience: this.audienceNow?.(scopeKey) === false ? 'others' : 'owner_alone', perceiver: this.dependencies.reactions?.mind ?? null,
+      image: { format: 'jpeg', ...look.image } });
+  }
+
+  /** The kernel's audience watch: a look's model is given the Talk only while the owner alone can see or hear her now. */
+  useAudience(alone: (scopeKey: string) => boolean): void {
+    this.audienceNow = alone;
   }
 
   /** Stores a validated batch. Each event answers for itself; nothing here calls a model or writes a reply. */

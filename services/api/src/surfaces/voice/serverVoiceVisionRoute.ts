@@ -3,6 +3,13 @@ import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
 import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { consumeDeviceAllowance, readBytes, scalarHeader, sendJson } from '../../infra/http/serverHttp.js';
 import { VoiceVisionError, type ShannonVisionMimeType, type VoiceVisionGateway } from './voiceVision.js';
+import { shannonIdentityPrompt } from '@shannon/cognition';
+import { imageSize, visionLook, type MindPerceiver } from '../../mind/perception/perceptionPorts.js';
+
+/** A shared photo's context while anyone else may be present: who she is to a guest, nothing of the owner. */
+export function guestPhotoContext(): string {
+  return shannonIdentityPrompt('guest');
+}
 
 const perDeviceUsage = new Map<string, { startedAt: number; count: number }>();
 const activeScopes = new Set<string>();
@@ -11,7 +18,7 @@ export async function handleVoiceVisionSnapshot(
   request: IncomingMessage,
   response: ServerResponse,
   principal: ShannonDevicePrincipal | null,
-  dependencies: { gateway: VoiceVisionGateway | null; kernel: ShannonApiKernel },
+  dependencies: { gateway: VoiceVisionGateway | null; kernel: ShannonApiKernel; perceiver?: MindPerceiver | null },
 ): Promise<void> {
   if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
   if (!principal) return sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
@@ -36,12 +43,19 @@ export async function handleVoiceVisionSnapshot(
     const session = dependencies.kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
       clientDelegation: true,
     });
+    // The audience when the photo is used (Syzygy ADR-0011 §11 item 6): the owner's session context only while he alone can see or
+    // hear her now; otherwise the context of a guest session, which carries no owner state at all.
+    const alone = dependencies.kernel.ownerPresenceForFeedback(principal.scopeKey) === 'alone';
     const result = await dependencies.gateway.analyze({
       scopeKey: principal.scopeKey,
       image,
       mimeType: contentType,
-      conversationContext: session.instructions,
+      conversationContext: alone ? session.instructions : guestPhotoContext(),
     });
+    const size = imageSize(image);
+    visionLook({ scopeKey: principal.scopeKey, source: 'photo', purpose: 'shared_photo', deviceId: principal.deviceId, outcome: 'seen',
+      audience: alone ? 'owner_alone' : 'others', at: new Date().toISOString(), perceiver: dependencies.perceiver ?? null,
+      image: size ? { format: contentType === 'image/png' ? 'png' : 'jpeg', byteLength: image.byteLength, ...size } : null });
     sendJson(response, 200, { ...result, threadId: session.threadId });
   } catch (error) {
     if (error instanceof VoiceVisionError) {

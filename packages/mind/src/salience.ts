@@ -24,6 +24,8 @@ export const SALIENCE_V1 = Object.freeze({
     othersSpeech: 0.3,
     /** Novelty: 1 − the highest trigram similarity over the last 30 minutes. */
     novelty: 0.4,
+    /** A percept (Syzygy ADR-0011): the probability its decision gave that it calls for a response. */
+    percept: 0.75,
   }),
   touch: Object.freeze({ press: 1, hover: 0.5 }),
   promise: Object.freeze({ windowMinutes: 30, scaleMinutes: 10 }),
@@ -50,6 +52,8 @@ export interface SalienceInputs {
   othersSpeech?: boolean;
   /** In [0, 1]; `novelty()` computes it. */
   novelty?: number | null;
+  /** In [0, 1]: a percept's probability that it calls for a response (ADR-0011). */
+  percept?: number | null;
 }
 
 const unit = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0);
@@ -72,7 +76,13 @@ export function salienceTerms(inputs: SalienceInputs): Readonly<Record<SalienceT
     ownTaskOutcome: inputs.ownTaskOutcome ? weights.ownTaskOutcome : 0,
     othersSpeech: inputs.othersSpeech ? othersWeight : 0,
     novelty: weights.novelty * unit(inputs.novelty ?? 0),
+    percept: perceptTerm(inputs),
   });
+}
+
+/** A percept's term (Syzygy ADR-0011): its probability, weighted. */
+function perceptTerm(inputs: SalienceInputs): number {
+  return SALIENCE_V1.weights.percept * unit(inputs.percept ?? 0);
 }
 
 /** s₀ = 1 − Π(1 − wᵢxᵢ), in [0, 1]. */

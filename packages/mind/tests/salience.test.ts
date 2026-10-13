@@ -8,7 +8,8 @@ const later = (minutes: number) => new Date(Date.parse(AT) + minutes * 60_000).t
 
 describe('SALIENCE_V1', () => {
   it('has the weights, the decay and the capacity of the plan', () => {
-    expect(SALIENCE_V1.weights).toEqual({ ownerSpeech: 0.9, addressed: 0.8, touch: 0.7, promiseDue: 0.8, predictionError: 0.6, ownTaskOutcome: 0.5, othersSpeech: 0.3, novelty: 0.4 });
+    expect(SALIENCE_V1.weights).toEqual({ ownerSpeech: 0.9, addressed: 0.8, touch: 0.7, promiseDue: 0.8, predictionError: 0.6, ownTaskOutcome: 0.5, othersSpeech: 0.3, novelty: 0.4,
+      percept: 0.75 });
     expect(SALIENCE_V1.tauMinutes).toEqual({ ambient: 10, sustained: 60 });
     expect([SALIENCE_V1.entry, SALIENCE_V1.capacity]).toEqual([0.5, 12]);
     expect(Object.isFrozen(SALIENCE_V1.weights)).toBe(true);
