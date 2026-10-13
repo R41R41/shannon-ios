@@ -95,9 +95,11 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
       excludeIds: new Set(context.memories.map(memory => memory.id)),
       isEligible: candidate => candidate.kind !== 'knowledge' || usableIds.has(candidate.sourceId),
       ...(input.signal ? { signal: input.signal } : {}),
-      // With the stage-2 recall (tree recall wired), a voice turn (the router's class is given) searches with the spoken words:
-      // no rewrite call before the search. Without it, the recall requests stay those of ca7cf519 (`stage2SwitchedOffRecall.test.ts`).
-      ...(input.voiceClass !== undefined && this.tree ? { withoutRewrite: true } : {}),
+      // With the stage-2 recall (tree recall wired), a turn searches with the owner's own words: no rewrite call before the search
+      // (voice since stage 2; text since the 2026-10-13 daily evals, where a memory question waited for rewrite, embedding and
+      // rerank one after another before the model started). Without it, the recall requests stay those of ca7cf519
+      // (`stage2SwitchedOffRecall.test.ts`).
+      ...(this.tree ? { withoutRewrite: true } : {}),
     }) : { status: 'skipped', hits: [], modelCalls: 0, elapsedMilliseconds: 0 };
     // A hit with others present carries its marker at its start; with only open items allowed a marked one is left out whole.
     const experienceHits = outcome.hits.filter(hit => !hit.id.startsWith('knowledge:') && !(context.openOnly && hit.summary.includes('【機微:')));

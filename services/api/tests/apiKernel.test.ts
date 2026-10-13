@@ -97,7 +97,8 @@ describe('Shannon local API kernel', () => {
       uiBlocks: [{ type: 'place_search', places: [expect.objectContaining({ name: '浜松城公園' })] }] } });
     expect(model.requests[0]).toMatchObject({ useWebSearch: true, placeSearch: { spoken: true } });
     expect(promptOf(model.requests[1])).toContain('浜松城公園');
-    expect(promptOf(model.requests[1])).toContain('Selected capabilities: current_web, place_discovery');
+    // The weather is chosen as the weather (2026-10-13 daily evals E2/E3); without her weather tool the place search reads it.
+    expect(promptOf(model.requests[1])).toContain('Selected capabilities: place_discovery, weather');
     expect(model.requests[1]?.placeSearch).toBeUndefined();
     expect(model.voiceRequests).toHaveLength(0);
   });
@@ -313,7 +314,7 @@ describe('Shannon local API kernel', () => {
         affect: 'neutral', affectIntensity: 0.2, delivery: 'conversational',
         selectedSkills: [], skillScores: {
           current_web: 0, place_discovery: 0, conversation_memory: 0, daily_mind: 0, aether_notes: 0,
-          voyager_tasks: 0, agent_status: 0, device_context: 0,
+          voyager_tasks: 0, agent_status: 0, device_context: 0, weather: 0,
         }, elapsedMilliseconds: 72,
       }) },
     });
@@ -355,7 +356,8 @@ describe('Shannon local API kernel', () => {
         voicePlan: {
           shouldRespond: true,
           conversationClass: 'skill_simple',
-          selectedSkills: ['current_web'],
+          // A forecast question (2026-10-13 daily evals E2/E3); this kernel has no weather tool, so the web answers it as before.
+          selectedSkills: ['weather'],
           waitingPhrase: 'いまの天気を確認しますね。',
         },
       },

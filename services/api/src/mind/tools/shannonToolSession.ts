@@ -75,7 +75,7 @@ export function conversationTools(
   // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06); words
   // that name Aether only while her Aether tools are.
   const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface), offersDevice(runner, scopeKey))
-      ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
+      ?? commonVoiceOffer(runner, scopeKey, words) : 'text';
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
   // her Aether reading tools stay, held by the gate to 「シャノン用フォルダ」 (owner decision 2026-10-06, Syzygy ADR-0007).
@@ -89,9 +89,11 @@ export function conversationTools(
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
       || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
   const definitions = runner.offered(surface, audience, scopeKey)
-    .filter(tool => (offer !== 'common_fca' || tool.domain === 'task_runtime' || tool.domain === 'memory_read') && (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
+    .filter(tool => (offer !== 'common_fca' || COMMON_FCA_VOICE_DOMAINS.has(tool.domain)) && (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   if (!definitions.length) return {};
   const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
+  // Tools his words ask for by name are loaded with the turn, not left behind `tool_open` (`withToolMenu`): one model round less.
+  const preload = askedToolNames(words).filter(name => definitions.some(tool => tool.name === name));
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
   // The existing verifier switch owns this additive projection; OFF keeps historical tool-result bytes.
   const evidenceEnabled = skillRoutingSwitches(serverEnvironment()).turnVerify;
@@ -101,6 +103,7 @@ export function conversationTools(
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
   TURN_WEB_READS.set(session, () => webReadResult(memory));
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
+  if (preload.length) Object.defineProperty(session, 'preload', { enumerable: false, value: Object.freeze(preload) });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
   if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
   if (ownerAlone === 'guests') Object.defineProperty(session, 'guestTurn', { enumerable: false, value: true });
@@ -244,10 +247,10 @@ export function toolMenuCandidates(
     const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
     const words = turn.slice(turn.indexOf('\n') + 1);
     const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface), offersDevice(runner, scopeKey))
-      ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
+      ?? commonVoiceOffer(runner, scopeKey, words) : 'text';
     if (!offer) return [];
     const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
-    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => (offer !== 'common_fca' || tool.domain === 'task_runtime' || tool.domain === 'memory_read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
+    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => (offer !== 'common_fca' || COMMON_FCA_VOICE_DOMAINS.has(tool.domain)) && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   } catch { return []; }
 }
 
@@ -268,11 +271,43 @@ export function asksAboutMinecraftBody(transcript: string): boolean {
   return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
 }
 
+/**
+ * What a spoken turn without words about her things is offered while the common FCA runs (`common_fca`): her task and memory
+ * tools as before, and, since the 2026-10-13 daily evals, her everyday reads (the weather, a route, the morning brief) and her
+ * device tools. Without them 「明日、傘いる？」 went to research and 「1時間後に起こして」 had no timer to open.
+ */
+const COMMON_FCA_VOICE_DOMAINS: ReadonlySet<string> = new Set(['task_runtime', 'memory_read', 'daily_read', 'device_action']);
+
+/**
+ * A spoken turn without words about her things: her task and memory tools while the common FCA runs, and, for a weather question,
+ * her everyday reads also without it (a turn whose words could not be trusted has no FCA turn: 「東京都 博多の天気」, 2026-10-13).
+ */
+function commonVoiceOffer(runner: ShannonToolRunner, scopeKey: string, words: string): 'common_fca' | null {
+  const offered = runner.offered('voice', 'owner_alone', scopeKey);
+  return offered.some(tool => tool.domain === 'task_runtime') || (WEATHER_REQUEST.test(words) && offered.some(tool => tool.domain === 'daily_read'))
+    ? 'common_fca' : null;
+}
+
 /** A music word (not 作曲・編曲) followed, within a short phrase, by what to do with it: play, stop, change or skip. */
 const MUSIC_REQUEST = /(?<![作編])(?:音楽|曲|BGM|プレイリスト|アルバム)[^。！？!?\n]{0,12}?(?:かけて|かけよう|流して|再生して|聴かせて|聞かせて|止めて|とめて|変えて|替えて|スキップ|飛ばして)|(?:次|前)の曲/iu;
-const REMINDER_REQUEST = /リマインド|リマインダー|忘れないように|[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?に(?:教えて|知らせて|声をかけて|声かけて)|通知して/u;
-const TIMER_REQUEST = /タイマー|[0-9０-９一二三四五六七八九十]+分(?:後に|後で|たったら|経ったら)/u;
+const REMINDER_REQUEST = /リマインド|リマインダー|忘れないように|[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?に(?:教えて|知らせて|声をかけて|声かけて|起こして)|通知して/u;
+// 「1時間後に起こして」 and an alarm are a timer too (2026-10-13 daily evals D1: only minutes were read, and she had no timer).
+const TIMER_REQUEST = /タイマー|アラーム|目覚まし|[0-9０-９一二三四五六七八九十]+(?:分|時間|秒)半?(?:後に|後で|後、|たったら|経ったら)|起こして/u;
 const CALENDAR_REQUEST = /予定(?:を|に)?(?:入れて|入れといて|入れておいて|追加)|カレンダーに/u;
+const WEATHER_REQUEST = /天気|天候|予報|気温|降水|傘|雨|雪/u;
+
+/**
+ * The tools his words ask for by name (registry names), loaded with the turn wherever it offers them: a timer, a reminder, an
+ * event, music, the weather. Anything else is the menu's to choose.
+ */
+export function askedToolNames(words: string): string[] {
+  return [
+    ...(TIMER_REQUEST.test(words) || REMINDER_REQUEST.test(words) ? ['timer.start', 'reminder.create'] : []),
+    ...(CALENDAR_REQUEST.test(words) ? ['calendar.create_event'] : []),
+    ...(MUSIC_REQUEST.test(words) ? ['music.search', 'music.recent', 'music.play', 'music.control'] : []),
+    ...(WEATHER_REQUEST.test(words) ? ['weather.forecast'] : []),
+  ];
+}
 
 /**
  * Explicit device intents only (music, a reminder, a timer, a calendar entry): a voice turn is offered her tools while her
@@ -288,6 +323,22 @@ const proposesMusic = (reply: string) => /曲|音楽|かけ(?:ましょう|よ�
 /** Whether the runner has her device tools for this scope (the owner's, switched on). */
 function offersDevice(runner: ShannonToolRunner | undefined, scopeKey: string): boolean {
   try { return runner?.offered('voice', 'owner_alone', scopeKey).some(tool => tool.domain === 'device_action') ?? false; } catch { return false; }
+}
+
+/**
+ * Whether a conversation turn of the owner alone has her device tools (`docs/device-actions-contract.md`): the switch is on and
+ * his app is paired. Her capability text and the reminder boundary follow this (2026-10-13 daily evals D1–D3).
+ */
+export function deviceActionsAvailable(autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, ownerAlone: boolean): boolean {
+  return ownerAlone && ownToolsEnabled() && offersDevice(autonomy?.tools, scopeKey);
+}
+
+/** Whether a spoken turn of the owner alone has her weather tool (its port is wired and her tools are on). */
+export function weatherToolAvailable(autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, ownerAlone: boolean): boolean {
+  try {
+    const offered = ownerAlone && ownToolsEnabled() ? autonomy?.tools?.offered('voice', 'owner_alone', scopeKey) ?? [] : [];
+    return offered.some(tool => tool.name === 'weather.forecast');
+  } catch { return false; }
 }
 
 /** Whether the runner offers her Aether tools on this surface now (Aether configured). */

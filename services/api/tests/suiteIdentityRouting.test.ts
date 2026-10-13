@@ -132,7 +132,8 @@ describe('Voyager search phrase', () => {
     expect(generic.prompt).toContain('Voyager open task read result');
     expect(generic.prompt).toContain('There are no open tasks in this workspace');
     const specific = await probe('text', '写真整理のタスクどうなってる？');
-    expect(specific.taskQueries).toEqual(['写真整理']);
+    // Beside the search, the open-task read gives the hits their due dates (2026-10-13 daily evals M4).
+    expect(specific.taskQueries).toEqual(['__open__', '写真整理']);
     expect(specific.prompt).toContain('Nothing matched this keyword');
   });
 });

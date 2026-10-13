@@ -244,6 +244,23 @@ describe('settling the router\'s answer against the rules', () => {
     expect(settleOwnerVoiceTurn(unsure, { transcript: 'あれ、ウェブコミに乗っ出るの。', facts: alone, uncertain: true }, { SHANNON_VOICE_FRAGMENT_CHARACTERS: '0' }).shouldRespond).toBe(true);
   });
 
+  it('alone with him, words that ask her for something are answered even when the router chose silence (2026-10-13 daily evals V1/R3)', async () => {
+    // 「東京都 博多の天気」: garbled, a capability chosen by the weather words; she answers (or asks which, from the interpretation prompt).
+    const garbled = await base({ ...silentModel, selectedSkills: ['weather'], transcriptReliabilityProbability: 0.3, replyRequiredProbability: 0.1 });
+    expect(settleOwnerVoiceTurn(garbled, { transcript: '東京都 博多の天気', facts: alone, uncertain: true }))
+      .toMatchObject({ shouldRespond: true, conversationClass: 'skill_simple' });
+    // 「今日、博多でやってるイベントある」: no capability, but the router itself says he wants a concrete answer.
+    const request = await base({ ...silentModel, selectedSkills: [], solutionWantedProbability: 0.9 });
+    expect(settleOwnerVoiceTurn(request, { transcript: '今日、博多でやってるイベントある', facts: alone, uncertain: false }))
+      .toMatchObject({ shouldRespond: true, conversationClass: 'direct' });
+    // With anyone else there she still answers only when addressed, and a silence rule still stands.
+    expect(settleOwnerVoiceTurn(garbled, { transcript: '東京都 博多の天気', facts: { ...alone, othersPresent: true }, uncertain: true }).shouldRespond).toBe(false);
+    expect(settleOwnerVoiceTurn(garbled, { transcript: 'そっか、ちょっと待ってね。', facts: alone, uncertain: false })).toMatchObject({ shouldRespond: false, silence: 'hold' });
+    // Nothing asked of her (no capability, no concrete answer wanted): the router's silence stands as before.
+    expect(settleOwnerVoiceTurn(await base({ ...silentModel, selectedSkills: [], solutionWantedProbability: 0.2 }),
+      { transcript: '明日の会議、どうなるかな', facts: alone, uncertain: false }).shouldRespond).toBe(false);
+  });
+
   it('a router that is nearly sure no reply is needed is believed even when its class says otherwise', async () => {
     const doubtful = await base({ replyRequiredProbability: 0.05 });
     const turn = { transcript: 'うん、その件は明日折り返します。', facts: alone, uncertain: false };

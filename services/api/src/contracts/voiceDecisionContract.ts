@@ -7,9 +7,27 @@ export const VOICE_SKILLS = [
   'voyager_tasks',
   'agent_status',
   'device_context',
+  // Her weather tool (`weather.forecast`), not the web (2026-10-13 daily evals E2/E3: forecasts went to research).
+  'weather',
 ] as const;
 
 export type VoiceSkill = typeof VOICE_SKILLS[number];
+
+/**
+ * The capabilities a router model is asked about by default: every one but `weather`, so that the router requests of the historical
+ * profile stay byte for byte (`stage2SwitchedOff*.test.ts`). The weather question is asked only where the server has her weather
+ * tool (`weatherSkill`, wired from `SHANNON_READ_TOOLS`); everywhere the fixed weather words still choose it (`mandatorySkillPatterns`).
+ */
+export const ROUTER_SKILLS: readonly VoiceSkill[] = Object.freeze(VOICE_SKILLS.filter(skill => skill !== 'weather'));
+export const routerSkills = (weatherSkill: boolean): readonly VoiceSkill[] => weatherSkill ? VOICE_SKILLS : ROUTER_SKILLS;
+
+/** `current_web` as the router reads it while it is also asked about the weather: a forecast is the weather tool's. */
+export const CURRENT_WEB_BESIDE_WEATHER = 'Does answering this utterance require current or externally verified web information, such as news, schedules, '
+  + 'transit, opening hours, prices, or current public facts? A weather forecast (rain, temperature, an umbrella) is the weather capability, not '
+  + 'this one, unless it asks for warnings, disasters or news about the weather. The status of the owner\'s own apps Aether, Voyager, and Shannon '
+  + 'is not on the public web.';
+export const routerSkillInstruction = (skill: VoiceSkill, weatherSkill: boolean): string =>
+  weatherSkill && skill === 'current_web' ? CURRENT_WEB_BESIDE_WEATHER : skillInstructions[skill];
 /**
  * The voice's affects: every kind of hers except those added after the apps fixed their voice vocabulary
  * (`ShannonVoiceAffectDTO` decodes `affect` strictly, so a newer name would fail a whole voice plan on an app from
@@ -129,6 +147,8 @@ export const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
   voyager_tasks: 'Does the utterance ask to find, inspect, discuss, or update tasks or to-do items stored in Voyager (ボイジャー), the owner\'s task app?',
   agent_status: 'Does the utterance ask about the status, completion, failure, approval, or progress of Codex or agent work?',
   device_context: 'Does answering require the device\'s current local time, timezone, or one-time location?',
+  weather: 'Does the utterance ask about the weather or a forecast for some day or place: rain, snow, temperature, sunshine, or whether an '
+    + 'umbrella is needed? Shannon reads forecasts with her own weather tool.',
 };
 
 export const voiceAffectInstructions: Readonly<Record<VoiceAffect, string>> = Object.freeze({
@@ -155,6 +175,9 @@ const TIME_BEFORE = '(?<!(?:[0-9０-９]|[一二三四五六七八九十百数�
 const PAST_ACT_BEFORE = `(?:${TIME_BEFORE}前に|以前)[^。？！?!]{0,10}?`
   + '(?:話|言っ|言わ|聞い|聞か|教え|約束|決め|頼ん|頼ま|伝え|相談|行っ|来た|来て|やっ|もら|会っ|読ん|送っ|使っ|お願い|作っ|観た|見た|見て|食べ|買っ|書い)';
 
+/** A forecast question: the weather, rain or snow, the temperature, an umbrella (`雨宮` is a rare price for one short pattern). */
+const WEATHER_WORDS = /(?:天気|天候|予報|気温|降水|傘|雨|雪|晴れ|曇り|くもり)/u;
+
 export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>>> = {
   current_web: /(?:最新|天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート)/iu,
   conversation_memory: new RegExp(`(?:覚えて|${PAST_ACT_BEFORE}|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的(?!地)|(?<!手)続き|踏まえて|今まで)`, 'iu'),
@@ -163,7 +186,14 @@ export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>
   voyager_tasks: new RegExp(`(?:${suiteProductPattern('voyager').source}|タスク|to.?do|やること)`, 'iu'),
   agent_status: /(?:(?:codex|エージェント).{0,20}(?:進捗|状況|完了|失敗|承認待ち)|(?:作業|実装|ビルド|デプロイ).{0,12}(?:進捗|状況|完了|終わった|どうなった|承認待ち))/iu,
   device_context: /(?:ここから|現在地|近く|周辺|いま何時|今何時|今日は何日|今日は何曜日)/iu,
+  weather: WEATHER_WORDS,
 };
+
+/**
+ * Weather words that are no forecast question (警報・台風・地震, news): the web stays for them. Everything else a weather question
+ * needs is in her weather tool.
+ */
+export const WEATHER_BEYOND_FORECAST = /(?:警報|注意報|台風|地震|津波|災害|避難|ニュース|花粉|黄砂|運行|遅延|運休|電車|バス|イベント|営業時間)/u;
 
 /**
  * Words that ask for something on the public web. `最新` is deliberately absent: on its own it

@@ -1,5 +1,5 @@
 /** The voice router asking Jev (Syzygy ADR-0008 stage 3, S3: moved unchanged out of `voiceDecision.ts`, which re-exports it). */
-import { emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, VOICE_WAITING_AFFECTS, VOICE_WAITING_SCENARIOS, VOICE_WAITING_VARIANTS, voiceAffectInstructions, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
+import { emptySkillScores, routerSkillInstruction, routerSkills, VOICE_AFFECTS, VOICE_WAITING_AFFECTS, VOICE_WAITING_SCENARIOS, VOICE_WAITING_VARIANTS, voiceAffectInstructions, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import { JevChoiceClient } from '../../infra/models/jev/jevChoice.js';
 import { affectIntensityValue, applyMandatorySkillFloors, boundedProbability, choiceValue, normalizedConversationClass, noulValue, selectedSkills, shouldRespondToTurn } from './voiceDecisionValues.js';
 import { roomLookAnswer, roomLookRouterQuestions } from '../../surfaces/voice/voiceRoomLook.js';
@@ -23,6 +23,8 @@ export interface JevVoiceDecisionOptions {
    * only delays the turn (2026-10-13: a Jev timeout at 1.4 s, then a model call cut off at 2.5 s).
    */
   fallbackStartMilliseconds?: number;
+  /** Ask about the weather too (`routerSkills`): only where her weather tool exists. Absent, the question set is the historical one. */
+  weatherSkill?: boolean;
 }
 
 /** Room the model fallback needs inside the 2.5 s route bound. */
@@ -63,9 +65,9 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
           criteria: { true: 'Literal reading is well-supported; no consequential ambiguity.',
             false: 'Likely mistranscription or ambiguity needs contextual LLM interpretation or confirmation.' },
         }],
-        ...VOICE_SKILLS.map(skill => [`skill__${skill}`, {
+        ...routerSkills(this.options.weatherSkill === true).map(skill => [`skill__${skill}`, {
           type: 'noul',
-          instructions: skillInstructions[skill],
+          instructions: routerSkillInstruction(skill, this.options.weatherSkill === true),
           criteria: {
             true: 'This capability is materially needed for an accurate, useful reply.',
             false: 'The reply can be accurate and useful without this capability.',
@@ -159,7 +161,8 @@ function parsedJevDecision(
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) throw new Error('JEV_RESPONSE_INVALID');
   const answerMap = answers as Record<string, unknown>;
   const skillScores = emptySkillScores();
-  for (const skill of VOICE_SKILLS) {
+  // A capability the router was not asked about (the weather, without her weather tool) starts at 0; the fixed words still floor it.
+  for (const skill of routerSkills(answerMap.skill__weather !== undefined)) {
     skillScores[skill] = noulValue(answerMap[`skill__${skill}`]);
   }
   applyMandatorySkillFloors(skillScores, input);

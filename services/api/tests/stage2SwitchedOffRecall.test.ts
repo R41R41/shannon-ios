@@ -52,7 +52,8 @@ describe('stage 2 switched off with tree recall wired', () => {
     const traces: Array<{ decision: string; surface: string }> = [];
     const current = await capturedRecallDigests({ tree: tree({}, traces) });
     expect(current['text-recall-note']!.openai).not.toEqual(recorded['text-recall-note']!.openai);
-    expect(current['text-recall-note']!.openai.length).toBe(recorded['text-recall-note']!.openai.length - 1);
+    // One call fewer for the note luna no longer navigates, and one for the query rewrite a text turn no longer makes (2026-10-13).
+    expect(current['text-recall-note']!.openai.length).toBe(recorded['text-recall-note']!.openai.length - 2);
     expect(current['text-recall-note']!.jev.length).toBeGreaterThan(0);
     expect(traces.length).toBeGreaterThan(0);
     expect(traces.every(trace => trace.decision === 'recall_beam')).toBe(true);

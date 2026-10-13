@@ -107,7 +107,11 @@ describe('Jev\'s question sets, cache and replay (ADR-0008 §14)', () => {
     expect(off[0]).not.toHaveProperty('qv');
     const on: Array<Record<string, unknown>> = [];
     await configuredVoiceDecision({}, undefined, (_scope, draft) => { on.push(draft.answers); }).decide(input);
-    expect(on[0]).toMatchObject({ qv: ['voice_route.v1'], ql: 'en' });
+    // With her weather tool (the read tools, on by default) the router also asks about the weather: v2 (2026-10-13 daily evals).
+    expect(on[0]).toMatchObject({ qv: ['voice_route.v2'], ql: 'en' });
+    const noReads: Array<Record<string, unknown>> = [];
+    await configuredVoiceDecision({ SHANNON_READ_TOOLS: 'off' }, undefined, (_scope, draft) => { noReads.push(draft.answers); }).decide(input);
+    expect(noReads[0]).toMatchObject({ qv: ['voice_route.v1'], ql: 'en' });
   });
 
   it('keeps every band decision on one side of 0.9 and 0.1', () => {

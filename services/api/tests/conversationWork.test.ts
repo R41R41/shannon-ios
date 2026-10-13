@@ -18,6 +18,7 @@ import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/tur
 import { MEMORY_TOOLS } from '../src/mind/tools/memoryToolDefinitions.js';
 import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { reportGateDecision } from '../src/mind/action/fca/fcaReportGate.js';
+import { asksWorkProgress } from '../src/surfaces/voice/voiceConversationHint.js';
 
 const at = '2026-10-10T00:00:00.000Z';
 const closes: Array<() => Promise<void> | void> = [];
@@ -200,6 +201,46 @@ describe('conversation plus ongoing work', () => {
     const said = [f.driver.runtime.get('owner', seen[0]!.result!.taskId)!, f.driver.runtime.progress!('owner', seen[0]!.result!.taskId)!] as const;
     // Its card stays in the Talk with the full report and sources; the call never says it again.
     expect([reportGateDecision(gate, ...said, 'card'), reportGateDecision(gate, ...said, 'call')]).toEqual(['deliver', 'drop']);
+  });
+
+  it('follows the research still running when he asks how it is going, and hears its result in that turn (2026-10-13 daily evals R5)', async () => {
+    let turn: FcaConversationTurn | null = null, asking = false;
+    const seen: Array<{ followed?: string; again: unknown; text?: string }> = [];
+    let f!: ReturnType<typeof fixture>;
+    f = fixture(false, '太宰府までは西鉄バスで約40分です。', async () => {
+      if (!asking) { expect(turn!.followWork!()).toBeNull(); return; } // The turn that admitted it keeps its own research.
+      const followed = turn!.followWork!();
+      const again = turn!.followWork!();
+      f.parent(followed!.parentId!);
+      const waiting = turn!.awaitWork!(10_000);
+      f.read.resolve({ status: 'results', text: '西鉄バス「旅人」で約40分', sources: [{ title: 'Source', url: 'https://example.com/source' }] });
+      for (let i = 0; i < 6; i++) { await f.driver.tick(); await f.driver.drain(); }
+      seen.push({ followed: followed?.id, again, text: (await waiting)?.report.text });
+    });
+    const begin = f.bridge.begin.bind(f.bridge);
+    f.bridge.begin = input => (turn = begin(input));
+    await f.chat('博多駅から太宰府までの行き方、調べといて', { webSearch: true });
+    const child = f.driver.runtime.readyTasks('owner')[0]!;
+    asking = true;
+    await f.chat('どうなった？');
+    expect(seen[0]).toMatchObject({ followed: child.id, again: null });
+    expect(seen[0]!.text).toContain('40分');
+    expect(f.driver.runtime.readyTasks('owner').filter(task => task.kind === 'research')).toHaveLength(0);
+  });
+
+  it('reads a progress question in his words, and nothing else as one', () => {
+    for (const words of ['どうなった？', 'で、結果は？', '終わった？', '調べもの、どんな感じ？', '進み具合は？', 'まだかな']) expect(asksWorkProgress(words), words).toBe(true);
+    for (const words of ['明日の天気どうなるかな', '結果的にはよかった', '終わったら教えて', 'まだ時間ある']) expect(asksWorkProgress(words), words).toBe(false);
+  });
+
+  it('follows nothing when no research of the conversation is running', async () => {
+    const followed: unknown[] = [];
+    let turn: FcaConversationTurn | null = null;
+    const f = fixture(false, undefined, () => { followed.push(turn!.followWork!()); });
+    const begin = f.bridge.begin.bind(f.bridge);
+    f.bridge.begin = input => (turn = begin(input));
+    await f.chat('どうなった？');
+    expect(followed).toEqual([null]);
   });
 
   it('still admits web.research on its own when the turn admitted no research', async () => {

@@ -298,7 +298,8 @@
     "aether_notes": 0.1,
     "voyager_tasks": 0.1,
     "agent_status": 0.1,
-    "device_context": 0.1
+    "device_context": 0.1,
+    "weather": 0
    },
    "elapsedMilliseconds": 0
   }

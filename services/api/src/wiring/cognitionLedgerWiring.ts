@@ -57,10 +57,13 @@ export function configuredPredictionLedger(
 export function configuredVoiceDecision(
   environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore | undefined, write: DecisionTraceWriter | null,
 ): VoiceDecisionGateway {
-  if (!write) return createConfiguredVoiceDecisionGateway(environment, usageStore);
-  const inner = createConfiguredVoiceDecisionGateway(environment, usageStore, countedJevFetch());
+  // Her weather tool exists with the read tools (`dailyToolPorts`): then Jev is also asked about the weather (`voice_route.v2`).
+  const weatherSkill = skillRoutingSwitches(environment).readTools;
+  if (!write) return createConfiguredVoiceDecisionGateway(environment, usageStore, undefined, { weatherSkill });
+  const inner = createConfiguredVoiceDecisionGateway(environment, usageStore, countedJevFetch(), { weatherSkill });
   return new TracedVoiceDecisionGateway(inner, write, { usdPerJevCall: jevUsdPerCall(environment),
-    ...(skillRoutingSwitches(environment).stage2 ? { questionSet: { id: JEV_QUESTION_SETS.voiceRoute, language: JEV_QUESTION_LANGUAGE } } : {}) });
+    ...(skillRoutingSwitches(environment).stage2 ? { questionSet: {
+      id: weatherSkill ? JEV_QUESTION_SETS.voiceRouteWeather : JEV_QUESTION_SETS.voiceRoute, language: JEV_QUESTION_LANGUAGE } } : {}) });
 }
 
 /**

@@ -56,7 +56,8 @@ export const WEB_RESEARCH_TOOL: ShannonToolDefinition = Object.freeze({
   name: 'web.research', domain: 'task_runtime', effect: 'write', cost: 'none', audiences: Object.freeze(['owner_alone'] as const),
   surfaces: Object.freeze(['voice'] as const),
   description: '通話中に、ウェブで調べる必要がある質問（今の情報・比較・詳しい調べもの）を、調べものの仕事として任せる。通話は待たせず、結果はわかった時に伝わる。'
-    + '頼まれたら聞き返さずに使い、呼んだあとは「調べてみますね」くらいを短く言う。結果を推測して先に答えない。調べなくても答えられることには使わない。',
+    + '頼まれたら聞き返さずに使い、呼んだあとは「調べてみますね」くらいを短く言う。結果を推測して先に答えない。調べなくても答えられることには使わない。'
+    + '天気予報（雨・傘・気温）は weather_forecast で今すぐ見て、これには任せない。',
   input: schema({
     question: { type: 'string', description: '調べること（ライ氏の質問を、日付・場所・対象がわかる形で）', minLength: 1, maxLength: 500 },
   }, ['question']),

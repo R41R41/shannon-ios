@@ -118,7 +118,7 @@ export function fallbackWaitingDirection(
     : skills.has('aether_notes') ? 'aether'
       : skills.has('voyager_tasks') ? 'voyager'
         : skills.has('agent_status') ? 'agent'
-          : skills.has('current_web') && /(?:天気|気温|予報|雨|晴)/u.test(text) ? 'weather'
+          : skills.has('weather') || (skills.has('current_web') && /(?:天気|気温|予報|雨|晴)/u.test(text)) ? 'weather'
             : skills.has('current_web') && /(?:電車|バス|運行|遅延|乗換|経路)/u.test(text) ? 'transit'
               : skills.has('current_web') ? 'web'
                 : skills.has('device_context') && /(?:現在地|場所|近く|周辺)/u.test(text) ? 'location'
@@ -171,7 +171,8 @@ function scenarioAllowed(scenario: VoiceWaitingScenario, selectedSkills: readonl
     case 'agent': return skills.has('agent_status');
     case 'memory': return skills.has('conversation_memory');
     case 'daily_mind': return skills.has('daily_mind');
-    case 'web': case 'weather': case 'transit': return skills.has('current_web');
+    case 'weather': return skills.has('weather') || skills.has('current_web');
+    case 'web': case 'transit': return skills.has('current_web');
     case 'time': case 'location': return skills.has('device_context');
     default: return true;
   }

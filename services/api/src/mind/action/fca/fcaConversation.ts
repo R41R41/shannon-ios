@@ -208,6 +208,15 @@ export function createFcaConversationBridge(parts: {
           }
           return null;
         },
+        followWork() {
+          // 「どうなった？」 (2026-10-13 daily evals R5): the newest research of this conversation still running is followed like this
+          // turn's own, so that its result is said in this turn if it arrives in time. Nothing is admitted.
+          if (closed || turn.work || !current(step.scopeKey)) return null;
+          const running = parts.runtime.list(step.scopeKey, { parentId: step.taskId, order: 'recent', limit: 50 }).find(task => task.kind === 'research'
+            && ['ready', 'executing', 'waiting'].includes(task.phase) && parts.visible(step.scopeKey, task.id, step.id));
+          if (running) turn.work = running.id;
+          return running ?? null;
+        },
         hearWork(taskId, reportId, spoken) {
           if (taskId !== turn.work) return false;
           try { return parts.runtime.recordSpokenReport?.(step.scopeKey, taskId, reportId, spoken, true) ?? false; } catch { return false; }

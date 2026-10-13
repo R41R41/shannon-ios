@@ -37,7 +37,7 @@ export const DAILY_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
 ]);
 
 export const DAILY_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
-  'weather.forecast': '天気予報を見る（家のあたりか、指定した場所）',
+  'weather.forecast': '天気予報を見る（雨・傘・気温も。家のあたりか、指定した場所）',
   'route.estimate': '二つの場所の距離と所要時間の目安を見る（Apple マップのリンクつき）',
   'brief.morning': '今日の天気と予定の朝のまとめを作る',
 });

@@ -155,22 +155,38 @@ export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
 /**
  * Her device tools (`docs/device-actions-contract.md`; owner decisions of Syzygy ADR-0009 §10): reminders, timers, calendar events
  * and Apple Music, done by the owner's own app. Appended by the API (`withDeviceActionsCapability`) only to a turn that offers them,
- * after everything else of her identity, so the cached prefix is the same with and without it (`anthropicCachePlan.ts`). It says
- * itself which two limitation lines no longer hold in that turn.
+ * after everything else of her identity; the same function takes what the device does out of 「今はできないこと」 (2026-10-13 daily
+ * evals D1–D3: with both lines in one prompt she refused timers and events). The cache plan moves this block to the turn's lines
+ * (`anthropicCachePlan.ts`); the limitation lines it rewrote stay in her identity, the same for every turn that offers the tools.
  */
 export const SHANNON_DEVICE_ACTIONS_CAPABILITY = Object.freeze({
   id: 'device_actions', audience: 'owner',
   text: '端末に頼む: ライ氏と二人だけの会話で頼まれたら、ライ氏のiPhoneやMacのシャノンのアプリを通して、リマインダー（通知つき）・タイマー・'
-    + 'カレンダーの予定を入れる（この会話では、上の「今はできないこと」のカレンダーへの登録とタイマーは、端末に頼めばできる）。'
+    + 'カレンダーの予定を入れる（入れた予定を動かす・消すことはできない）。'
     + 'Apple Musicで曲を探してかけ、止める・飛ばす。曲はライ氏が頼んだ時か、ボクの提案にライ氏が応じた時だけかけ、'
     + '自分から黙ってかけない（かけたい曲は言葉で提案する）。選ぶ時はライ氏のよく聴く曲や最近の曲から、会話の雰囲気といまの気持ちに合うものを選び、'
     + '理由をひと言添える。端末の報告が届くまで済んだとは言わない。アプリが開いていない時、音楽はかけられない。',
 } as const satisfies ShannonCapability);
 
-/** The owner's description with the device block appended; adding it twice changes nothing. */
+/**
+ * What the device does, out of 「今はできないこと」: the calendar line keeps only what no tool does, and the timer line goes.
+ * Built from `SHANNON_LIMITATIONS`, so a change of those words cannot leave a stale line behind.
+ */
+export function deviceActionsLimitationRewrites(): readonly (readonly [string, string])[] {
+  return [
+    [`- ${limitationText('calendar_mail')}\n`, '- カレンダーの予定の変更・削除、メールやメッセージの送信、ほかの人への電話、予約、購入。\n'],
+    [`- ${limitationText('exact_time_alarm')}\n`, ''],
+  ];
+}
+
+/**
+ * The owner's description with the device block appended and the limitation lines the device answers rewritten; adding it twice
+ * changes nothing. A prompt without the owner's limitation lines (a guest's) only gets the block.
+ */
 export function withDeviceActionsCapability(prompt: string): string {
   const block = `\n\n${SHANNON_DEVICE_ACTIONS_CAPABILITY.text}`;
-  return prompt.includes(block) ? prompt : `${prompt}${block}`;
+  const rewritten = deviceActionsLimitationRewrites().reduce((text, [from, to]) => text.replace(from, to), prompt);
+  return rewritten.includes(block) ? rewritten : `${rewritten}${block}`;
 }
 
 /** Capabilities the API may add to the description while it has them. */
@@ -261,6 +277,10 @@ export const SHANNON_LIMITATIONS = Object.freeze([
   { id: 'owner_content_write', text: 'Aether本文の書き換え、Voyagerタスクの状態・期限・優先度の変更や削除（提案まで）。' },
   { id: 'speaker_identification', text: '声で話者を聞き分けること。' },
 ] as const);
+
+function limitationText(id: typeof SHANNON_LIMITATIONS[number]['id']): string {
+  return SHANNON_LIMITATIONS.find(item => item.id === id)!.text;
+}
 
 const answeringRules = (audience: ShannonAudience) => [
   '- 何ができるか聞かれたら、この一覧の範囲で自分の言葉で答える。一覧にないことを、できると言わない。',

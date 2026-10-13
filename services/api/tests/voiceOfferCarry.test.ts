@@ -11,7 +11,8 @@ const turn = (transcript: string, offer: string, before = '有明海でエビは
 describe('a short yes to her own offer to look something up (owner decision 2026-10-13)', () => {
   it('carries the offer into the turn: the web when nothing else is named, the named capability otherwise', () => {
     expect(carriedOffer(turn('お願いします', 'ボクの中には確かな情報がありません。調べてみましょうか？'))?.skills).toEqual(['current_web']);
-    expect(carriedOffer(turn('うん、お願い。', '博多の天気は晴れです。東京の天気も見ますか？'))?.skills).toEqual(['current_web']);
+    // A weather offer carries the weather too; the router then reads it with her weather tool (2026-10-13 daily evals E2/E3).
+    expect(carriedOffer(turn('うん、お願い。', '博多の天気は晴れです。東京の天気も見ますか？'))?.skills).toEqual(['current_web', 'weather']);
     expect(carriedOffer(turn('はい', '博多も同じ道具で確かめ直せますけど、見ますか？'))?.skills).toEqual(['current_web']);
     expect(carriedOffer(turn('ぜひ', 'Voyagerのタスクも確認しましょうか？'))?.skills).toEqual(['voyager_tasks']);
   });
@@ -41,8 +42,13 @@ describe('a short yes to her own offer to look something up (owner decision 2026
       latency_class: { type: 'choice', choice: 'under_3s' },
     };
     const jev = await new JevVoiceDecisionGateway({ apiKey: 'test-only',
-      fetcher: vi.fn(async () => new Response(JSON.stringify({ answers }))) as typeof fetch }).decide(turn('うん、お願い', '東京の天気も見ますか？'));
-    expect(jev.source).toBe('jev');
-    expect(jev.selectedSkills).toContain('current_web');
+      fetcher: vi.fn(async () => new Response(JSON.stringify({ answers }))) as typeof fetch });
+    const looked = await jev.decide(turn('うん、お願い', '博多も同じ道具で確かめ直せますけど、見ますか？'));
+    expect(looked.source).toBe('jev');
+    expect(looked.selectedSkills).toContain('current_web');
+    // A yes to her weather offer: her weather tool, not research (2026-10-13 daily evals E2/E3).
+    const weather = await jev.decide(turn('うん、お願い', '東京の天気も見ますか？'));
+    expect(weather.selectedSkills).toContain('weather');
+    expect(weather.selectedSkills).not.toContain('current_web');
   });
 });

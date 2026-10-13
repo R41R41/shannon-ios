@@ -329,7 +329,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   ...MINECRAFT_LIFECYCLE_SUMMARIES, ...DAILY_SUMMARIES, ...DEVICE_ACTION_SUMMARIES,
   'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
-  'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）', ...WEB_RESEARCH_SUMMARIES,
+  'web.search': 'ウェブで今の情報を調べる（ニュース・営業時間など。天気予報は weather_forecast）', ...WEB_RESEARCH_SUMMARIES,
   'study.list': '書斎のメモと物語の一覧を見る',
   'study.search': '書斎の題名と本文から言葉を探す',
   'study.read': '書斎のものを1つ、本文まで読む（版も読める）',
@@ -428,7 +428,7 @@ export const ALWAYS_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['minec
  * Legacy provider search entry, used only when no real `web.search` read port is configured.
  * Native Anthropic uses the registry read tool, which remains recoverable through `tool_open`.
  */
-export const WEB_CAPABILITY_ENTRY = Object.freeze({ name: 'web_search', summary: 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）', group: 'web' });
+export const WEB_CAPABILITY_ENTRY = Object.freeze({ name: 'web_search', summary: 'ウェブで今の情報を調べる（ニュース・営業時間など。天気予報は weather_forecast）', group: 'web' });
 
 /** `SHANNON_OWN_TOOLS=off` offers no tool on any surface; every request and prompt is then what it was before the tools. */
 export function ownToolsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {

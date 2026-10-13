@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { shannonCapabilityPrompt, SHANNON_DEVICE_ACTIONS_CAPABILITY } from '@shannon/cognition';
+import { shannonCapabilityPrompt, SHANNON_DEVICE_ACTIONS_CAPABILITY, SHANNON_LIMITATIONS } from '@shannon/cognition';
 import { DeviceActions } from '../src/surfaces/device/deviceActions.js';
 import { createDeviceActionRoute } from '../src/surfaces/device/deviceActionRoutes.js';
 import { SQLiteDeviceActionStore } from '../src/surfaces/device/store/deviceActionStore.js';
@@ -9,7 +9,14 @@ import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiri
 import { configuredDeviceActions } from '../src/wiring/deviceActionWiring.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js';
-import { asksForDeviceAction, voiceToolOffer } from '../src/mind/tools/shannonToolSession.js';
+import { askedToolNames, asksForDeviceAction, conversationTools, voiceToolOffer } from '../src/mind/tools/shannonToolSession.js';
+import { withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
+import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
+import { ToolAudienceWatch } from '../src/mind/inhibition/shannonToolAudience.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
+import type { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
+import { conversationCapabilityPrompt } from '../src/mind/action/respond/conversationCapabilities.js';
+import { DEVICE_REMINDER_BOUNDARY } from '../src/mind/action/respond/reminderCapability.js';
 import type { DevicePollState } from '../src/contracts/deviceActionContract.js';
 
 const OWNER = 'owner';
@@ -150,8 +157,16 @@ describe('her device tools in a conversation', () => {
     const owner = shannonCapabilityPrompt('owner');
     const offered = withToolCapabilityLines({ systemPrompt: owner, tools: { definitions: [{ name: 'music.play', domain: 'device_action' }] } });
     expect(offered.systemPrompt).toContain(SHANNON_DEVICE_ACTIONS_CAPABILITY.text);
-    // Appended after her identity, so the cached prefix is the same with and without it.
-    expect(offered.systemPrompt.startsWith(owner)).toBe(true);
+    // 2026-10-13 daily evals D1–D3: what the device does is no longer in 「今はできないこと」 of that turn (she refused timers and
+    // events while both lines were there); everything else of her identity is as it was.
+    const limitation = (id: string) => `- ${SHANNON_LIMITATIONS.find(item => item.id === id)!.text}`;
+    expect(owner).toContain(limitation('exact_time_alarm'));
+    expect(offered.systemPrompt).not.toContain(limitation('exact_time_alarm'));
+    expect(offered.systemPrompt).not.toContain(limitation('calendar_mail'));
+    expect(offered.systemPrompt).toContain('- カレンダーの予定の変更・削除、メールやメッセージの送信、ほかの人への電話、予約、購入。');
+    expect(offered.systemPrompt).not.toContain('今はできないこと」のカレンダー');
+    for (const other of ['media_generation', 'binary_documents', 'owner_content_write', 'speaker_identification']) expect(offered.systemPrompt).toContain(limitation(other));
+    expect(withToolCapabilityLines(offered).systemPrompt).toBe(offered.systemPrompt);
     expect(withToolCapabilityLines({ systemPrompt: owner, tools: { definitions: [{ name: 'study.read', domain: 'aether_study' }] } }).systemPrompt).toBe(owner);
     expect(asksForDeviceAction('なんか落ち着く曲かけて')).toBe(true);
     expect(asksForDeviceAction('次の角を曲がって')).toBe(false);
@@ -164,6 +179,56 @@ describe('her device tools in a conversation', () => {
     expect(plain.filter(words => asksForDeviceAction(words))).toEqual([]);
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, true)).toBe('asked');
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, false)).toBeNull();
+    // 2026-10-13 daily evals D1: an hour, an alarm and 「起こして」 are timers too.
+    for (const words of ['1時間後に起こして', '一時間後に起こして', '30秒後に教えて', 'アラームかけて', '目覚ましお願い', '明日7時に起こして']) {
+      expect(asksForDeviceAction(words), words).toBe(true);
+    }
+  });
+});
+
+describe('her device tools as the turn asks for them (2026-10-13 daily evals D1–D3, E2/E3)', () => {
+  const pick = (...names: string[]) => names.map(name => SHANNON_TOOLS.find(tool => tool.name === name)!);
+  const offered = pick('task.create', 'memory.search', 'weather.forecast', 'timer.start', 'reminder.create', 'calendar.create_event', 'music.play', 'study.list');
+  const runner = { offered: () => offered, knownTool: () => null } as unknown as ShannonToolRunner;
+  const server = { audience: new ToolAudienceWatch({ othersPresent: () => false }, now), secrets: () => null };
+  const turn = (surface: 'text' | 'voice', words: string) =>
+    conversationTools({ tools: runner }, OWNER, surface, true, server, `thread\n${words}`, new TurnDeadline(TEXT_TURN_DEADLINE)).tools;
+
+  it('offers a spoken turn without such words her everyday reads and device tools beside her task tools, not her other tools', () => {
+    const names = turn('voice', '明日、傘いる？')?.definitions.map(tool => tool.name);
+    expect(names).toEqual(['task.create', 'memory.search', 'weather.forecast', 'timer.start', 'reminder.create', 'calendar.create_event', 'music.play']);
+  });
+
+  it('offers a weather question her weather tool also without the common FCA (an untrusted transcript has no FCA turn)', () => {
+    const noFca = { offered: () => pick('weather.forecast', 'timer.start', 'study.list'), knownTool: () => null } as unknown as ShannonToolRunner;
+    const spoken = (words: string) => conversationTools({ tools: noFca }, OWNER, 'voice', true, server, `thread\n${words}`, new TurnDeadline(TEXT_TURN_DEADLINE),
+      { trust: 'uncertain' }).tools?.definitions.map(tool => tool.name);
+    expect(spoken('東京都 博多の天気')).toEqual(['weather.forecast']);
+    expect(spoken('元気？')).toBeUndefined();
+  });
+
+  it('loads what his words ask for with the turn, so no tool_open round comes first', () => {
+    expect(askedToolNames('1時間後に起こして')).toEqual(['timer.start', 'reminder.create']);
+    expect(askedToolNames('明日の朝9時に歯医者、予定に入れて')).toEqual(['calendar.create_event']);
+    expect(askedToolNames('明日の福岡と東京の天気は？')).toEqual(['weather.forecast']);
+    expect(askedToolNames('元気？')).toEqual([]);
+    for (const surface of ['voice', 'text'] as const) {
+      const visible = (words: string) => withToolMenu(turn(surface, words)!, []).definitions.map(tool => tool.name);
+      expect(visible('1時間後に起こして'), surface).toEqual(expect.arrayContaining(['timer.start', 'reminder.create', 'tool.open']));
+      expect(visible('明日の朝9時に歯医者、予定に入れて'), surface).toContain('calendar.create_event');
+      expect(visible('明日の朝9時に歯医者、予定に入れて'), surface).not.toContain('timer.start');
+      expect(visible('元気？'), surface).not.toContain('timer.start');
+    }
+  });
+
+  it('tells the reply to use the device for a timer or a reminder, and the old boundary only without the device', () => {
+    const selection = { aetherNotes: false, voyagerTasks: false };
+    for (const words of ['1時間後に起こして', '明日8時に起こして']) {
+      expect(conversationCapabilityPrompt(OWNER, words, {}, { ...selection, deviceActions: true }), words).toBe(DEVICE_REMINDER_BOUNDARY);
+      expect(conversationCapabilityPrompt(OWNER, words, {}, selection), words).toContain('cannot');
+    }
+    expect(DEVICE_REMINDER_BOUNDARY).toContain('timer_start');
+    expect(conversationCapabilityPrompt(OWNER, '明日プレゼンの練習しよう', {}, { ...selection, deviceActions: true })).toBe('');
   });
 });
 

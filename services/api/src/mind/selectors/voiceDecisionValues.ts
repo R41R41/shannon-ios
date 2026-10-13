@@ -2,7 +2,7 @@ import { mentionsSuiteProduct } from '@shannon/cognition';
 import { memoNotForAether } from '../action/respond/memoPlacePorts.js';
 import { wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
 import {
-  explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
+  explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS, WEATHER_BEYOND_FORECAST,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
 } from '../../contracts/voiceDecisionContract.js';
 import { carriedOffer } from './voiceOfferCarry.js';
@@ -22,6 +22,10 @@ export function applyMandatorySkillFloors(
   if (asksInternalSuiteStatus(input.transcript)) scores.current_web = 0;
   // A short yes to her own offer to look something up carries the offer's capabilities (`voiceOfferCarry.ts`).
   for (const skill of carriedOffer(input)?.skills ?? []) scores[skill] = 1;
+  // A forecast question is her weather tool's, not research (2026-10-13 daily evals E2/E3), wherever that tool is offered: the
+  // owner alone. With anyone else there, or a question beyond a forecast (警報, 台風, news), the web stays.
+  if (scores.weather >= 1 && input.participantMode === 'owner' && input.turn?.othersPresent !== true
+    && !WEATHER_BEYOND_FORECAST.test(input.transcript)) scores.current_web = 0;
   if (input.requestedLocation) scores.device_context = 1;
   if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {

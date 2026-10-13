@@ -46,7 +46,8 @@ export function voicePlanResponse(
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
     ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion), ...(kind ? { kind } : {}) } : {}),
     selectedSkills: decision.selectedSkills,
-    skillScores: decision.skillScores,
+    // `weather` (2026-10-13) only when it scored: a plan without it is the plan the apps and the historical profile had.
+    skillScores: decision.skillScores.weather ? decision.skillScores : withoutWeatherScore(decision.skillScores),
     waitingPhrase,
     ...(waitingPerformance ? { waitingPerformance } : {}),
     decisionSource: decision.source,
@@ -113,4 +114,9 @@ export function storedVoiceFace(resolved: ReplyEmotion, voiced: { primary: strin
     || feeling.continued !== true || feeling.primary === voiced.primary || feeling.overrideReason) return resolved.messageEmotion;
   const { valence, arousal, openness } = resolved.messageEmotion;
   return Object.freeze({ valence, arousal, openness, ...faceForEmotionKind(voiced.primary), kind: voiced.primary });
+}
+
+function withoutWeatherScore(scores: VoiceTurnDecision['skillScores']): Partial<VoiceTurnDecision['skillScores']> {
+  const { weather: _weather, ...rest } = scores;
+  return rest;
 }

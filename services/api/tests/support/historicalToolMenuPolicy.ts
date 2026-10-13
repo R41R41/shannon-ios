@@ -23,17 +23,30 @@ export function historicalReadCapabilityPolicy(actual: typeof import('@shannon/c
   return { ...actual, withReadToolsCapability: prompt => actual.withReadToolsCapability(prompt).replace(actual.SHANNON_READ_TOOLS_CAPABILITY.text, text) };
 }
 
-/** Preserve only Voyager's v1 display/schema wording in the explicitly historical menu profile.
+/**
+ * The web and weather wording before the 2026-10-13 daily evals (a forecast is her weather tool's, not the web's): summaries,
+ * the text menu's web entry and the research tool's description, as afb38c28 sent them.
+ */
+const HISTORICAL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
+  'voyager.tasks': 'ライ氏のVoyagerのタスクを言葉で探して読む',
+  'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
+  'weather.forecast': '天気予報を見る（家のあたりか、指定した場所）',
+});
+const RESEARCH_WEATHER_LINE = '天気予報（雨・傘・気温）は weather_forecast で今すぐ見て、これには任せない。';
+
+/** Preserve only Voyager's v1 display/schema wording (and the web/weather wording above) in the explicitly historical menu profile.
  * Native registry, validation, tool execution and Q01 list behavior are unchanged. */
 export function historicalVoyagerToolPolicy(actual: typeof import('../../src/mind/tools/shannonTools.js')): typeof actual {
-  const summary = 'ライ氏のVoyagerのタスクを言葉で探して読む';
-  const project = (tool: import('../../src/mind/tools/shannonTools.js').ShannonToolDefinition) => tool.name !== 'voyager.tasks' ? tool : ({ ...tool,
+  const project = (tool: import('../../src/mind/tools/shannonTools.js').ShannonToolDefinition) => tool.name === 'web.research'
+    ? { ...tool, description: tool.description.replace(RESEARCH_WEATHER_LINE, '') }
+    : tool.name !== 'voyager.tasks' ? tool : ({ ...tool,
     description: 'ライ氏のVoyagerのタスクを言葉で探して読む（読むだけ。言葉で探すので、全部の一覧ではない）。タスクを作る・変える' + tool.description.split('タスクを作る・変える')[1],
     input: { ...tool.input, properties: { ...tool.input.properties, query: { ...tool.input.properties.query!, description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ「タスク」で探す' } } },
   });
   return { ...actual, SHANNON_TOOLS: actual.SHANNON_TOOLS.map(project),
-    TOOL_SUMMARIES: { ...actual.TOOL_SUMMARIES, 'voyager.tasks': summary },
-    toolSummary: tool => tool.name === 'voyager.tasks' ? summary : actual.toolSummary(tool),
+    TOOL_SUMMARIES: { ...actual.TOOL_SUMMARIES, ...HISTORICAL_SUMMARIES },
+    toolSummary: tool => HISTORICAL_SUMMARIES[tool.name] ?? actual.toolSummary(tool),
     offeredTools: (...args) => actual.offeredTools(...args).map(project),
+    WEB_CAPABILITY_ENTRY: Object.freeze({ ...actual.WEB_CAPABILITY_ENTRY, summary: HISTORICAL_SUMMARIES['web.search']! }) as unknown as typeof actual.WEB_CAPABILITY_ENTRY,
   };
 }
