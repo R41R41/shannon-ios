@@ -32,7 +32,6 @@ export function observerValue(value: unknown, depth = 0): ObserverJson {
 function emit(run: Run, event: Omit<ObserverDraft,'scopeKey'|'runId'|'parentSpanId'|'at'>): void {
   if (!sink || run.audience !== 'owner') return;
   try { sink({ ...taskLink(run), ...event,origin:'server',scopeKey:run.scopeKey,runId:run.runId,parentSpanId:run.parent,at:new Date().toISOString() }); } catch { /* observation never changes the turn */ }
-  if (event.node === 'native' && event.kind === 'handoff') markModelStart(run.runId);
 }
 function projected(project: (()=>unknown) | undefined): ObserverJson | undefined {
   if (!project) return undefined;
@@ -138,7 +137,9 @@ export function observeSync<T>(node:ObserverNodeId,input:unknown,work:()=>T,proj
   });
 }
 export function observerHandoff(fromNode:ObserverNodeId,toNode:ObserverNodeId,payload?:unknown):void {
-  const run=context.getStore();if(!sink||!run||run.audience!=='owner')return;
+  const run=context.getStore();
+  if (run && toNode === 'native') markModelStart(run.runId); // The steps line's model start, also on a turn others share (numbers only).
+  if(!sink||!run||run.audience!=='owner')return;
   emit(run,{spanId:randomUUID(),node:toNode,kind:'handoff',fromNode,toNode,sourceSpanId:run.activeNode===fromNode?run.activeSpan??null:run.latest.get(fromNode)??null,output:projected(payload===undefined?undefined:()=>payload)});
 }
 /** The bounded stages of a turn (`turnTiming.ts`), here beside the spans for the routes that already import this module. */

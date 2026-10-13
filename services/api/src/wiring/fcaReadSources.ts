@@ -40,7 +40,7 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
 }
 
 /**
- * What the checks of one synchronous job share: per scope and state (its version, update time and memory controls), one
+ * What the checks of one synchronous job share: per scope and state (its version, update time and number of memory controls), one
  * `MemoryWithholding`, so that the remembered turns are loaded once, not once per receipt. The source itself (availability,
  * the clock, the audience) is checked on every call as before. Cleared at the end of the job (a microtask); a forget or a
  * correction changes the state key, so no check uses a withholding from before it.
@@ -50,7 +50,8 @@ function readSourceJob(conversations: ConversationStore) {
   let clearing = false;
   return {
     withholding(scopeKey: string, state: ReadSourceSnapshot['state']): MemoryWithholding {
-      const key = JSON.stringify([scopeKey, state.version, state.updatedAt, state.memoryControls]);
+      // Every forget or correction is a new state version (and update time); the count is a further guard. Never the controls' text.
+      const key = `${scopeKey}\u0000${state.version}\u0000${state.updatedAt}\u0000${state.memoryControls.length}`;
       let withholding = entries.get(key);
       if (!withholding) {
         withholding = new MemoryWithholding(state, conversations, scopeKey);

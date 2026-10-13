@@ -39,5 +39,10 @@ describe('turn steps line', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^Shannon turn steps surface=text id=[0-9a-f]{8} threadSummary=\d+ms model=\d+ms total=\d+ms$/u);
     expect(observedStep('replay', () => 'outside')).toBe('outside');
+    info.mockClear();
+    await withObserverRun({ scopeKey: 'owner', surface: 'text', audience: 'others' }, async () => {
+      observedStep('replay', () => 1); observerHandoff('context', 'native', { surface: 'text' });
+    });
+    expect(info.mock.calls.map(([line]) => String(line)).find(line => line.startsWith('Shannon turn steps'))).toMatch(/ model=\d+ms /u);
   });
 });
