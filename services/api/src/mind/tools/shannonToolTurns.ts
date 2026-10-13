@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { TurnBackgroundService } from '../sleep/sleepPorts.js';
 import { saidKey, sameWords } from '../../surfaces/body/bodyLookTurnWait.js';
 import {
-  TRACE_CALLS, UNLINKED_TURN, saidDigest, tracedOperations, withLatestOutcomes, type ToolTraceCall, type ToolTraceRecord, type TracedOperationOutcomes,
+  TRACE_CALLS, UNLINKED_TURN, saidDigest, tracedOperations, withLatestOutcomes, type ToolTraceCall, type ToolTraceRecord,
+  type TracedOperationOutcome, type TracedOperationOutcomes,
 } from './shannonToolTrace.js';
 
 /** Where traces are kept: the SQLite store in production (`sqliteToolTraces.ts`), memory otherwise. */
@@ -76,8 +77,8 @@ export class ToolTurnLog {
   private pending: PendingTurn[] = [];
 
   /**
-   * `outcomes`: how her accepted Minecraft lifecycle operations ended (wired from the lease reader). Without it a trace says
-   * only 「受け付けた」 of such an operation, as it did when it was written.
+   * `outcomes`: how her accepted Minecraft lifecycle operations ended (wired from the lease reader). Without it, or when it cannot
+   * be read, a trace says only 「受け付けた」 of such an operation.
    */
   constructor(private readonly store: ToolTraceStore, private readonly now: () => string, private readonly outcomes?: TracedOperationOutcomes) {}
 
@@ -143,7 +144,9 @@ export class ToolTurnLog {
     // An operation she accepted is told as it ended, read now (the 2026-10-14 incident), not as the 「受け付けた」 of its turn.
     const operations = this.outcomes ? tracedOperations(kept) : [];
     if (!operations.length) return kept;
-    try { return withLatestOutcomes(kept, this.outcomes!(scopeKey, operations)); } catch { return kept; }
+    let outcomes: ReadonlyMap<string, TracedOperationOutcome> | null = null;
+    try { outcomes = this.outcomes!(scopeKey, operations); } catch { outcomes = null; }
+    return outcomes ? withLatestOutcomes(kept, outcomes) : kept;
   }
 
   /** The background service of the API, which stores every turn: each stored turn takes its trace with it. */

@@ -51,6 +51,9 @@ export function fcaSourceOf(sourceId: string, taskId: string): boolean {
  * The one read path of action leases outside the action store (Syzygy ADR-0009 stage 1, S1). Every read is synchronous on the
  * caller's own connection, so a caller inside its own transaction keeps that transaction as its commit fence. It never writes.
  */
+/** How an accepted lifecycle operation ended (`lifecycleOutcomes`). */
+export type LifecycleOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
+
 export class ActionLeaseReader {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -158,24 +161,27 @@ export class ActionLeaseReader {
    * one voice turn completed two seconds later, and her next turn read only 「受け付けた」 and a failed first attempt). Closed
    * values only: `completed`, `refused` or `cancelled` from an accepted receipt; `not_started` when its own action closed before
    * the operation began; `unknown` when it left at the unknown exit, or closed without an accepted receipt. An operation still
-   * running (or one this scope never ran under its own action) is absent. At most 12 ids are read.
+   * running (or one this scope never ran under its own action) is absent. Null when the tables are not there (nothing can be
+   * known). Every id is read, in pages of 100.
    */
-  lifecycleOutcomes(scopeKey: string, ids: readonly string[]): Map<string, 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown'> {
-    const wanted = [...new Set(ids)].filter(id => /^lifecycle:[a-f0-9]{64}$/u.test(id)).slice(0, 12);
-    const outcomes = new Map<string, 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown'>();
-    if (!wanted.length) return outcomes;
+  lifecycleOutcomes(scopeKey: string, ids: readonly string[]): Map<string, LifecycleOutcome> | null {
     const tables = this.db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
       AND name IN ('mind_actions','minecraft_lifecycle_operations')`).get();
-    if (Number(tables?.count) !== 2) return outcomes;
-    const rows = this.db.prepare(`SELECT a.source_id,a.state,a.result,json_extract(o.receipt_json,'$.outcome') AS outcome
-      FROM mind_actions a LEFT JOIN minecraft_lifecycle_operations o ON o.id=a.source_id AND o.execution_id=a.id
-      WHERE a.scope_key=? AND a.kind='minecraft' AND a.source_id IN (${wanted.map(() => '?').join(',')})`).all(scopeKey, ...wanted);
-    for (const row of rows) {
-      const id = String(row.source_id), state = String(row.state), result = String(row.result ?? '');
-      const outcome = row.outcome == null ? null : String(row.outcome);
-      if (outcome === 'completed' || outcome === 'refused' || outcome === 'cancelled') outcomes.set(id, outcome);
-      else if (result.startsWith('lifecycle_not_started:')) outcomes.set(id, 'not_started');
-      else if (['completed', 'failed', 'cancelled', 'unknown'].includes(state)) outcomes.set(id, 'unknown');
+    if (Number(tables?.count) !== 2) return null;
+    const wanted = [...new Set(ids)].filter(id => /^lifecycle:[a-f0-9]{64}$/u.test(id));
+    const outcomes = new Map<string, LifecycleOutcome>();
+    for (let start = 0; start < wanted.length; start += 100) {
+      const page = wanted.slice(start, start + 100);
+      const rows = this.db.prepare(`SELECT a.source_id,a.state,a.result,json_extract(o.receipt_json,'$.outcome') AS outcome
+        FROM mind_actions a LEFT JOIN minecraft_lifecycle_operations o ON o.id=a.source_id AND o.execution_id=a.id
+        WHERE a.scope_key=? AND a.kind='minecraft' AND a.source_id IN (${page.map(() => '?').join(',')})`).all(scopeKey, ...page);
+      for (const row of rows) {
+        const id = String(row.source_id), state = String(row.state), result = String(row.result ?? '');
+        const outcome = row.outcome == null ? null : String(row.outcome);
+        if (outcome === 'completed' || outcome === 'refused' || outcome === 'cancelled') outcomes.set(id, outcome);
+        else if (result.startsWith('lifecycle_not_started:')) outcomes.set(id, 'not_started');
+        else if (['completed', 'failed', 'cancelled', 'unknown'].includes(state)) outcomes.set(id, 'unknown');
+      }
     }
     return outcomes;
   }

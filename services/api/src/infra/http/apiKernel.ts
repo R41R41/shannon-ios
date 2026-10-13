@@ -149,8 +149,7 @@ export interface ShannonApiKernelOptions {
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
    */
-  mind?: MindTurnPorts;
-  operationOutcomes?: TracedOperationOutcomes; // How her accepted lifecycle operations ended, for later tool traces (2026-10-14).
+  mind?: MindTurnPorts; operationOutcomes?: TracedOperationOutcomes; // The latter: lifecycle ends, for later tool traces (2026-10-14).
   /** Explicit opt-in; the normal text model/stream remains the foreground conversation executor. */
   fcaConversation?: () => FcaConversationPort | null;
   fcaVoice?: () => FcaVoicePort | null;
@@ -281,6 +280,7 @@ export class ShannonApiKernel {
     }
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
     if (testFlightResponse) return testFlightResponse;
+
     if (request.path.startsWith('/v1/organize/') || request.path.startsWith('/v1/integrations/voyager/')) {
       const organizeResponse = await dispatchOrganizeRequest(request, {
         organizeStore: this.organizeStore,

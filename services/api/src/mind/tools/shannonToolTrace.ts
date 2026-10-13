@@ -34,12 +34,17 @@ export interface ToolTraceCall {
   operation?: string;
   /** How that operation ended, as known when the trace is read (`ToolTurnLog.traces`); never stored. Absent: not ended yet. */
   latest?: TracedOperationOutcome;
+  /** Read when the trace was read, and not ended yet; never stored. Neither this nor `latest`: how it ended could not be read. */
+  pending?: true;
 }
 
 /** How an accepted lifecycle operation ended (`ActionLeaseReader.lifecycleOutcomes`). */
 export type TracedOperationOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
-/** Reads how these accepted operations of the scope ended; an operation not ended yet is absent. Wired from the lease reader. */
-export type TracedOperationOutcomes = (scopeKey: string, operationIds: readonly string[]) => ReadonlyMap<string, TracedOperationOutcome>;
+/**
+ * Reads how these accepted operations of the scope ended; an operation not ended yet is absent. Null: it could not be read (then a
+ * trace says only 「受け付けた」, never that no result has come). Wired from the lease reader.
+ */
+export type TracedOperationOutcomes = (scopeKey: string, operationIds: readonly string[]) => ReadonlyMap<string, TracedOperationOutcome> | null;
 const LIFECYCLE_OPERATION = /^lifecycle:[a-f0-9]{64}$/u;
 const TRACED_OUTCOMES: ReadonlySet<string> = new Set(['completed', 'refused', 'cancelled', 'not_started', 'unknown']);
 
@@ -185,26 +190,38 @@ export function tracedOperations(records: readonly ToolTraceRecord[]): string[] 
   return [...new Set(records.flatMap(record => record.calls.flatMap(call => (call.operation ? [call.operation] : []))))];
 }
 
-/** The records with each accepted lifecycle operation's latest outcome, as `outcomes` read it now. */
+/** The records with each accepted lifecycle operation's latest outcome as `outcomes` read it now; one it lacks is still running. */
 export function withLatestOutcomes(records: readonly ToolTraceRecord[], outcomes: ReadonlyMap<string, TracedOperationOutcome>): readonly ToolTraceRecord[] {
-  if (!outcomes.size) return records;
-  return records.map(record => record.calls.some(call => call.operation && outcomes.has(call.operation))
+  return records.map(record => record.calls.some(call => call.operation)
     ? { ...record, calls: record.calls.map(call => {
-      const latest = call.operation ? outcomes.get(call.operation) : undefined;
-      return latest ? { ...call, latest } : call;
+      if (!call.operation) return call;
+      const latest = outcomes.get(call.operation);
+      return latest ? { ...call, latest } : { ...call, pending: true as const };
     }) } : record);
 }
 
+/** Failures decided before anything ran: the input check, or a tool not offered. Nothing else (a timeout may have run) is ever hidden. */
+const DECIDED_BEFORE_EXECUTION: ReadonlySet<string> = new Set(['invalid_input', 'not_offered']);
+
 /**
- * The calls of one turn as she should remember them: a call that failed before anything ran (`invalid_input`, `not_offered`,
- * `unavailable`, a refusal) and that she made again in the same turn with the same tool and target, successfully, is left out.
- * The retry is what happened; the first try changed nothing (the 2026-10-14 incident: 「minecraft.login → できなかった」 beside
- * the accepted retry read as 「入れなかった」). A failure that was not followed by a success of the same call stays.
+ * The calls of one turn as she should remember them: a call refused before anything ran (`invalid_input`, `not_offered`) is left
+ * out when a later call of the same turn did the same thing successfully, which is only known for
+ * - the same Minecraft lifecycle operation, accepted later (its own operation id): it has no argument but the server, and a refused
+ *   input started nothing (the 2026-10-14 incident: 「minecraft.login → できなかった」 beside the accepted retry read as 「入れなかった」);
+ * - the same tool with the same real target (a path, title, id or search words), neither of them hidden.
+ * Anything else stays: a call without a target (a timer's length, a piece of music) may have asked something else, a failure
+ * after execution (a timeout, a conflict) may have done something, and two hidden targets are not known to be the same.
  */
 export function supersededFailuresDropped(calls: readonly ToolTraceCall[]): ToolTraceCall[] {
-  return calls.filter((call, index) => call.ok || !calls.slice(index + 1)
-    .some(later => later.ok && later.tool === call.tool && (later.target ?? '') === (call.target ?? '')));
+  return calls.filter((call, index) => call.ok || !DECIDED_BEFORE_EXECUTION.has(call.failure ?? '')
+    || !calls.slice(index + 1).some(later => later.ok && later.tool === call.tool && sameCall(call, later)));
 }
+
+function sameCall(failed: ToolTraceCall, later: ToolTraceCall): boolean {
+  if (later.operation && LIFECYCLE_WRITES.has(later.tool)) return true;
+  return failed.target !== undefined && failed.target !== HIDDEN && failed.target === later.target;
+}
+const LIFECYCLE_WRITES: ReadonlySet<string> = new Set(['minecraft.start', 'minecraft.stop', 'minecraft.login', 'minecraft.logout', 'minecraft.set_day']);
 
 /** What became of an accepted lifecycle operation, as a fixed neutral phrase. */
 const LATEST_WORD: Readonly<Record<TracedOperationOutcome, string>> = Object.freeze({
@@ -218,7 +235,8 @@ const LATEST_WORD: Readonly<Record<TracedOperationOutcome, string>> = Object.fre
 function callLine(call: ToolTraceCall): string {
   const head = `${call.tool}${call.target ? `「${call.target}」` : ''}`;
   if (!call.ok) return `${head} → できなかった（${call.failure ?? 'failed'}）`;
-  if (call.operation) return `${head} → 受け付けた。${call.latest ? LATEST_WORD[call.latest] : 'まだ結果は届いていない'}`;
+  // Without a read of how it ended (none wired, or the database could not be read) only what was known then is said.
+  if (call.operation) return `${head} → 受け付けた${call.latest ? `。${LATEST_WORD[call.latest]}` : call.pending ? '。まだ結果は届いていない' : ''}`;
   const found = call.names ? (call.names.length ? `。あったもの: ${call.names.join('、')}${call.more ? '、ほかにもある' : ''}` : '。何もなかった') : '';
   return `${head} → できた${found}${call.note ? `（${call.note}）` : ''}`;
 }
