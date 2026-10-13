@@ -6,7 +6,7 @@ The server suite (422 vitest files, about 5,300 tests, plus six typechecks) is t
 | Lane | Where | What runs | Typical time |
 | --- | --- | --- | --- |
 | Work | the Mac | `scripts/verify.sh fast`, the test files you touched, `scripts/verify.sh related <changed files>` | seconds to a minute |
-| CI | GitHub Actions, every push | typechecks, `verify.sh fast`, every vitest file in four shards | about 3–4 minutes wall clock |
+| CI | GitHub Actions on the owner's PC (self-hosted runner in WSL2), every push | typechecks, `verify.sh fast`, every vitest file | a few minutes (to be measured on the PC) |
 | Deploy | the VM, after the bundle is extracted | `scripts/deploy-check.mjs`: incremental typecheck, the deploy-critical tests, the tests related to the bundle's files | about 1–2 minutes |
 
 ## Work (the Mac)
@@ -22,23 +22,34 @@ The server suite (422 vitest files, about 5,300 tests, plus six typechecks) is t
 - `scripts/verify.sh api` / `cognition-eval` still run the whole suite locally when that is really wanted. Check
   `pgrep -fl "node.*vitest"` first: two full runs at once do not fit in 8 GB.
 
-## CI (GitHub Actions)
+## CI (GitHub Actions on a self-hosted runner)
 
 `.github/workflows/api-tests.yml` runs on a push to any branch, unless every changed file is under `apps/` or `docs/`, and on
 demand (Run workflow on the Actions tab). A newer push to the same branch cancels the older run.
 
-- `static`: `tsc --noEmit` for `services/api` and every `packages/*` (the incremental state is cached between runs), then
-  `scripts/verify.sh fast`. On Linux the one macOS-only step, the icon footprint check that needs CoreGraphics, reports itself
-  skipped; everything else runs as on the Mac.
-- `tests` (four jobs): `vitest run services packages --shard=i/4 --maxWorkers=2`, with the temporary directory on tmpfs.
-- Node 24.20 (production runs v24.20.0), pnpm 11.19.0 through corepack from `packageManager`, the pnpm store cached by the
-  lockfile hash. Nothing of `apps/` is built: no Xcode, no Swift. Those lanes stay `scripts/verify.sh ios|app|mac` and Xcode Cloud.
+It runs on one self-hosted runner, `shannon-wsl-pc`, in WSL2 Ubuntu 24.04 on the owner's Windows PC (labels `self-hosted,
+linux, x64, shannon-wsl`). GitHub's hosted runners are not used: the repository is private and the account's Actions budget is
+$0, so hosted minutes are blocked. Setup, keeping WSL alive, security and removal: [`../development/ci-self-hosted-runner.md`](../development/ci-self-hosted-runner.md).
+While the PC is off or asleep a run waits in the queue (GitHub cancels a job after 24 hours of waiting).
+
+- One job, `typecheck, fast lane and vitest`, with one install (shards on one runner would only run in turn and reinstall):
+  `tsc --noEmit` for `services/api` and every `packages/*` (the incremental state is kept through `actions/cache`, optional),
+  `scripts/verify.sh fast`, then `vitest run services packages --maxWorkers=4`. Every check step runs even when an earlier one
+  failed. The worker count is the repository variable `SHANNON_CI_MAX_WORKERS` when set.
+- On Linux the one macOS-only step, the icon footprint check that needs CoreGraphics, reports itself skipped; everything else
+  runs as on the Mac.
+- The temporary directory is the run's own folder on tmpfs (`/dev/shm`) when an executable can run there, else `/tmp`; it is
+  removed after the run, also on failure or cancellation. `TZ` is pinned to UTC (the hosted runners' zone, where the suite was
+  green); WSL would otherwise take the PC's Japan time. The open-file limit is raised to 65536 before vitest.
+- Node 24.20 (production runs v24.20.0) from `actions/setup-node`, pnpm 11.19.0 through corepack from `packageManager`. The
+  pnpm store stays on the runner's disk; the GitHub cache restores it only when it is empty, and every cache step is
+  `continue-on-error`. Nothing of `apps/` is built: no Xcode, no Swift. Those lanes stay `scripts/verify.sh ios|app|mac` and
+  Xcode Cloud.
 - No secret is configured, and none is needed. The suite was run on 2026-10-12 with a guard on every socket, DNS lookup and
   `fetch`: no test file connected anywhere but the loopback address. A test that needs the network or a model key does not
   belong in this suite (the real-LLM evaluations are separate `*LiveEval.ts` scripts).
-- Budget: the repository is private, so minutes are billed (2,000 free a month), each job rounded up to a whole minute.
-  A full run is five jobs of roughly two minutes, about 10 billable minutes. If the shards grow past two minutes each, three
-  shards cost less than four.
+- Cost: a self-hosted runner uses no Actions minutes. (Until 2026-10 the suite ran on hosted runners in four shards, about
+  10 billable minutes a run, until the free minutes ran out and the $0 budget blocked them.)
 
 Reading the result: the Actions tab of `R41R41/shannon-ios`, or the check mark beside the commit or branch on GitHub. From a
 terminal, `gh run list --branch <branch>` / `gh run watch` (GitHub CLI, signed in). The REST API answers for a private

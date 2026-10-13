@@ -1,9 +1,17 @@
-# The full server suite: typechecks, the fast lane of scripts/verify.sh, and every vitest file under services/ and packages/,
-# split in four. It runs on GitHub's Linux runners and builds nothing of apps/ (no Xcode, no Swift); the Apple lanes stay on
-# the Mac (scripts/verify.sh ios|app|mac) and in Xcode Cloud. No secret is needed: the tests use fakes, never a model or network.
+# The full server suite: typechecks, the fast lane of scripts/verify.sh, and every vitest file under services/ and packages/.
+# It builds nothing of apps/ (no Xcode, no Swift); the Apple lanes stay on the Mac (scripts/verify.sh ios|app|mac) and in
+# Xcode Cloud. No secret is needed: the tests use fakes, never a model or network.
+#
+# Where it runs: a self-hosted runner on the owner's Windows PC, inside WSL2 Ubuntu 24.04 (labels self-hosted, linux, x64,
+# shannon-wsl). GitHub's hosted runners are not used: the repository is private and the account's Actions budget is $0, so
+# hosted minutes are blocked. Setting up, keeping alive and removing the runner: docs/development/ci-self-hosted-runner.md.
+# While the PC is off or asleep, a run waits in the queue (GitHub cancels a job that waits more than 24 hours).
+#
+# One runner runs one job at a time, so the suite is a single job with a single install: shards would only run one after
+# another and reinstall each time. Every check step runs even when an earlier one failed, so one run reports them all.
 #
 # Where to read it: the Actions tab of the repository, or the check mark beside a commit on GitHub. The Mac and the VM run
-# targeted tests only (docs/development.md); this workflow is the one place the whole suite runs on every push.
+# targeted tests only (docs/testing/test-lanes.md); this workflow is the one place the whole suite runs on every push.
 name: API tests
 
 on:
@@ -23,21 +31,38 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    # bash -eo pipefail, as on the hosted runners (an unnamed shell on a self-hosted runner would be bash -e).
+    shell: bash
+
 env:
   CI: 'true'
   COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+  # WSL takes the PC's time zone (Japan). The suite was green on GitHub's hosted runners, which are UTC; pin it so a result
+  # does not depend on the machine's clock setting (the Mac lane still runs the targeted tests in JST).
+  TZ: Etc/UTC
+  LANG: C.UTF-8
 
 jobs:
-  static:
-    name: typecheck and fast lane
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+  suite:
+    name: typecheck, fast lane and vitest
+    runs-on: [self-hosted, linux, x64, shannon-wsl]
+    timeout-minutes: 40
+    env:
+      # vitest workers. The default 4 suits a PC that gives WSL 8 GB or more; set the repository variable
+      # SHANNON_CI_MAX_WORKERS (Settings → Secrets and variables → Actions → Variables) to change it without a commit.
+      MAX_WORKERS: ${{ vars.SHANNON_CI_MAX_WORKERS || '4' }}
+      # The run's own temporary directory on tmpfs; removed by the last step.
+      SHM_TMPDIR: /dev/shm/shannon-vitest-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-api
-      # The tsconfig files write their incremental state under node_modules/.cache/tsc; carrying it from the last run of the
-      # branch (or of main) makes the six typechecks recheck only what changed. A stale or missing state only costs time.
+      # The tsconfig files write their incremental state under node_modules/.cache/tsc, which the checkout's clean removes.
+      # Carrying it from the last run of the branch (or of main) makes the typechecks recheck only what changed. A stale or
+      # missing state only costs time, and a failing cache service never fails the run.
       - uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: node_modules/.cache/tsc
           key: tsc-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
@@ -47,6 +72,7 @@ jobs:
       - name: Typecheck services/api
         run: node node_modules/typescript/bin/tsc -p services/api/tsconfig.json --noEmit
       - name: Typecheck packages
+        if: ${{ !cancelled() }}
         run: |
           status=0
           for config in packages/*/tsconfig.json; do
@@ -58,27 +84,34 @@ jobs:
       # Harness, architecture, check-api-layers --enforce, check-code-shape, product spec and the env example check. On
       # Linux the one macOS-only step (the icon footprint check, which needs CoreGraphics) reports itself skipped.
       - name: scripts/verify.sh fast
+        if: ${{ !cancelled() }}
         run: scripts/verify.sh fast
-
-  tests:
-    name: vitest ${{ matrix.shard }}/4
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-api
-      # The suite opens many short-lived SQLite files; /dev/shm is tmpfs on the hosted runners, so fsync costs nothing.
-      # A runner has two cores: two workers keep one busy while the other waits on a file or a child process.
-      # A few tests write and run a small executable under the temporary directory, so tmpfs is used only when it allows that.
-      - name: vitest run --shard=${{ matrix.shard }}/4
+      # The suite opens many short-lived SQLite files; /dev/shm is tmpfs (on WSL2 as on the hosted runners), so fsync costs
+      # nothing. A few tests write and run a small executable under the temporary directory, so tmpfs is used only when a
+      # probe executable actually runs there; otherwise the tests use /tmp on the distribution's ext4 disk.
+      - name: vitest run
+        if: ${{ !cancelled() }}
         run: |
-          if [ -d /dev/shm ] && ! findmnt -no OPTIONS /dev/shm | grep -qw noexec; then
-            export TMPDIR=/dev/shm/shannon-vitest
-            mkdir -p "$TMPDIR"
+          case "$MAX_WORKERS" in
+            ''|*[!0-9]*|0) echo "::warning::SHANNON_CI_MAX_WORKERS='$MAX_WORKERS' is not a positive integer; using 4"; MAX_WORKERS=4 ;;
+          esac
+          # A service's default soft limit of open files (often 1024) is lower than the hosted runners' 65536.
+          ulimit -n 65536 2>/dev/null || ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
+          # Leftovers of runs that were killed with the PC (older than 12 hours) are removed; current runs are left alone.
+          find /dev/shm -maxdepth 1 -name 'shannon-vitest-*' -mmin +720 -exec rm -rf {} + 2>/dev/null || true
+          if [ -d /dev/shm ] && mkdir -p "$SHM_TMPDIR" 2>/dev/null; then
+            probe="$SHM_TMPDIR/.exec-probe"
+            printf '#!/bin/sh\nexit 0\n' > "$probe" && chmod +x "$probe"
+            if "$probe" 2>/dev/null; then
+              export TMPDIR="$SHM_TMPDIR"
+            else
+              echo "/dev/shm does not allow executables ($(findmnt -no OPTIONS --target /dev/shm 2>/dev/null)); using /tmp"
+            fi
+            rm -f "$probe"
           fi
-          echo "TMPDIR=${TMPDIR:-/tmp}"
-          node node_modules/vitest/vitest.mjs run services packages --shard=${{ matrix.shard }}/4 --maxWorkers=2
+          echo "TMPDIR=${TMPDIR:-/tmp} ($(findmnt -no FSTYPE --target "${TMPDIR:-/tmp}" 2>/dev/null)), workers=$MAX_WORKERS, open files=$(ulimit -n), cpus=$(nproc)"
+          node node_modules/vitest/vitest.mjs run services packages --maxWorkers="$MAX_WORKERS"
+      # tmpfs is memory: free it even when the run failed or was cancelled by a newer push.
+      - name: Remove the temporary directory
+        if: always()
+        run: rm -rf "$SHM_TMPDIR"

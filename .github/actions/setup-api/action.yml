@@ -1,25 +1,39 @@
 name: Set up the API toolchain
 description: >-
-  Node at the production minor version, pnpm at the version named by package.json (through corepack), the pnpm store
-  restored from the cache, and the workspace installed from the frozen lockfile. Nothing of apps/ is built.
+  Node at the production minor version, pnpm at the version named by package.json (through corepack), and the workspace
+  installed from the frozen lockfile. Nothing of apps/ is built. The runner is the owner's self-hosted one (WSL2 Ubuntu on
+  his Windows PC, docs/development/ci-self-hosted-runner.md): its pnpm store stays on its disk between runs, so the GitHub
+  cache is only a first-run fallback, and a failing cache service (for example while the account's Actions billing is
+  blocked) never fails the run.
 runs:
   using: composite
   steps:
     # Production runs Node v24.20.0 (/home/azureuser/shannon-ios-runtime, deploy/azure/README.md); keep the same major/minor.
+    # On the self-hosted runner setup-node keeps the download in the runner's tool cache, so it is fetched once.
     - uses: actions/setup-node@v5
       with:
         node-version: '24.20'
         package-manager-cache: false
     # corepack reads "packageManager": "pnpm@11.19.0" from package.json, the version the lockfile was written with.
     - name: Enable pnpm through corepack
+      id: pnpm
       shell: bash
       env:
         COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
       run: |
         corepack enable pnpm
         pnpm --version
-        echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+        store="$(pnpm store path --silent)"
+        echo "PNPM_STORE=$store" >> "$GITHUB_ENV"
+        # A store that already holds packages (every run after the first on the self-hosted runner) needs no restore.
+        if [ -d "$store" ] && [ -n "$(find "$store" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+          echo "warm=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "warm=false" >> "$GITHUB_OUTPUT"
+        fi
     - uses: actions/cache@v4
+      if: steps.pnpm.outputs.warm != 'true'
+      continue-on-error: true
       with:
         path: ${{ env.PNPM_STORE }}
         key: pnpm-store-${{ runner.os }}-node24.20-${{ hashFiles('pnpm-lock.yaml') }}
