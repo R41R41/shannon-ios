@@ -50,11 +50,17 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   Waterlight Eye meanwhile. With no screen showing her, the page is paused at once. On the Mac the web view is
   released after 90 seconds (the model holds its textures in GPU memory: about 150 MB since the model of 2026-10-06 08:06, which added a third 4096×4096 texture). On the iPhone
   (owner request 2026-10-14: ボット → ガール loaded the whole page every time; `ShannonLive2DStage+Keep.swift`) the
-  paused web view waits in a parking place behind the app's window (invisible, no touches, hidden from VoiceOver)
-  and is kept, with the Live2D form chosen, until memory runs short, and with the Waterlight form for 30 minutes,
-  so the next screen (a switch back to ガール, the end of 読む, another tab) shows her at once. When the owner
-  chooses the Live2D form, the page is loaded there ahead of her screen; when Talk appears or the app comes back
-  to the front with that form chosen and no page loaded, it is loaded 2 seconds later, except in Low Power Mode.
+  paused web view waits in a parking place behind the app's main window (invisible, no touches, hidden from
+  VoiceOver). In front it is kept, with the Live2D form chosen, until memory runs short, and with the Waterlight form
+  for 30 minutes from when she was last seen (an activation does not start it again), so the next screen (a switch
+  back to ガール, the end of 読む, another tab) shows her at once. In the background it is kept 10 minutes with the
+  Live2D form chosen and let go at once with the Waterlight form; that time only runs out while the app runs in the
+  background (a call, audio), since a suspended app's page process is suspended with it and is the system's to end.
+  When the owner chooses the Live2D form, the page is loaded there ahead of her screen; when Talk appears or the app
+  comes back to the front with that form chosen and no page loaded, it is loaded 2 seconds later, except in Low Power
+  Mode, for 10 minutes after a memory warning (or until a screen has shown her), and after a page that never became
+  ready (the next waits 5 minutes after the last one loaded ahead; after two, only a screen loads it)
+  (`ShannonLive2DStagePolicy+Keep.swift`).
   A load costs about 1.1–1.9 s with the same WebKit on an A18 Pro (parsing the 26 MB `assets.js`, decoding the
   model and textures from base64 — about 0.2–0.3 s of it in `Uint8Array.from(atob(…), …)` — and decoding and
   uploading the textures, about 0.5 s for the 4096×4096 one alone). A memory warning with no

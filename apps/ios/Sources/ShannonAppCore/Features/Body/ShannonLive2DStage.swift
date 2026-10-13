@@ -74,7 +74,7 @@ public final class ShannonLive2DStage {
     @ObservationIgnored var lastMouthLevel = 0.0
     @ObservationIgnored var frameStats = false
     @ObservationIgnored private var observing = false
-    @ObservationIgnored private var failuresWithoutReady = 0
+    @ObservationIgnored private(set) var failuresWithoutReady = 0
     @ObservationIgnored private var fingerDown = false
     @ObservationIgnored private var lastHeardAt = Date()
     @ObservationIgnored var bodyRequestWatch: Task<Void, Never>?
@@ -101,8 +101,7 @@ public final class ShannonLive2DStage {
         hosts.removeAll { $0.id == id || $0.container == nil }
         let index = ShannonLive2DStagePolicy.insertionIndex(for: priority, among: hosts.map(\.priority))
         hosts.insert(Host(id: id, container: container, priority: priority, layout: layout, touchEnabled: touchEnabled), at: index)
-        releaseTask?.cancel()
-        releaseTask = nil
+        seen() // `+Keep.swift`: nothing waits to let the page go
         observeSystem()
         if status == .unloaded { load() }
         mount()
@@ -354,7 +353,7 @@ public final class ShannonLive2DStage {
         timeoutTask = nil
         restTask = nil
         releaseTask = nil
-        keep.warmTask?.cancel()
+        keep.released()
         if let webView {
             webView.stopLoading()
             webView.navigationDelegate = nil
@@ -472,6 +471,7 @@ public final class ShannonLive2DStage {
             case let .lowPower(value): self?.calmChanged(lowPower: value)
             case let .active(value): self?.activeChanged(value)
             case .memoryWarning: self?.memoryWarning()
+            case let .background(value): self?.backgroundChanged(value)
             }
         }
     }
@@ -493,6 +493,7 @@ public final class ShannonLive2DStage {
     /// With no screen showing her, the model is let go at once; a visible figure is left to the system,
     /// which ends the page's process if it must (and the page then reloads once).
     private func memoryWarning() {
+        keep.history.memoryWarnedAt = Date() // and no page is loaded ahead for a while (`+Keep.swift`)
         guard hosts.isEmpty, status != .unloaded else { return }
         release()
     }

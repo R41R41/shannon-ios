@@ -656,6 +656,78 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: true, reason: .chosen, lowPower: false))
     }
 
+    func testAfterAMemoryWarningNothingIsLoadedAheadOnActivationForTenMinutes() {
+        typealias Policy = ShannonLive2DStagePolicy
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let warned = ShannonLive2DWarmHistory(memoryWarnedAt: now.addingTimeInterval(-60))
+        // Control Center, a notification or Face ID make the app active again: no reload 2 s later, so no warning loop.
+        for reason in [Policy.Warming.launch, .foreground] {
+            XCTAssertFalse(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: reason, lowPower: false, history: warned, now: now), "\(reason)")
+        }
+        // The owner's own choice of ガール still loads it ahead: a screen will load it in a moment anyway.
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .chosen, lowPower: false, history: warned, now: now))
+        // Ten minutes after the warning it is loaded ahead again.
+        XCTAssertEqual(Policy.memoryWarningQuietSeconds, 10 * 60)
+        let later = now.addingTimeInterval(Policy.memoryWarningQuietSeconds)
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .foreground, lowPower: false, history: warned, now: later))
+        // A screen that has shown her since forgets the warning (`seen` clears it): loaded ahead at once.
+        XCTAssertTrue(Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: .foreground, lowPower: false, history: ShannonLive2DWarmHistory(), now: now))
+    }
+
+    func testInTheBackgroundAParkedPageIsLetGoAndInFrontTheFastSwitchStays() {
+        typealias Policy = ShannonLive2DStagePolicy
+        // In front with the Live2D form: kept however long she has been out of sight (the fast switch).
+        XCTAssertNil(Policy.keepRemaining(formIsLive2D: true, parks: true, unseenFor: 24 * 3600, backgroundFor: nil))
+        // In the background with the Live2D form: ten minutes of background, whatever came before.
+        XCTAssertEqual(Policy.backgroundKeepSeconds, 10 * 60)
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: true, parks: true, unseenFor: 3600, backgroundFor: 0), 600)
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: true, parks: true, unseenFor: 3600, backgroundFor: 240), 360)
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: true, parks: true, unseenFor: 3600, backgroundFor: 900), 0)
+        // With the Waterlight form she is not shown: going to the background lets the page go at once.
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: false, parks: true, unseenFor: 10, backgroundFor: 0), 0)
+        // The Mac knows no background rule: 90 s from the last screen as before.
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: true, parks: false, unseenFor: 30, backgroundFor: 0), 60)
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: true, parks: false, unseenFor: 30, backgroundFor: nil), 60)
+    }
+
+    func testTheWaterlightKeepingTimeRunsFromWhenSheWasLastSeenNotFromEachActivation() {
+        typealias Policy = ShannonLive2DStagePolicy
+        // An activation 20 minutes after she was last seen leaves 10 minutes, not another 30.
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: false, parks: true, unseenFor: 20 * 60, backgroundFor: nil), 10 * 60)
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: false, parks: true, unseenFor: 0, backgroundFor: nil), 30 * 60)
+        // Past the time: let go at once, never a negative wait.
+        XCTAssertEqual(Policy.keepRemaining(formIsLive2D: false, parks: true, unseenFor: 45 * 60, backgroundFor: nil), 0)
+        // Only the owner's change of form starts it again (ボット after an hour parked in ガール: 30 minutes from then).
+        let seen = Date(timeIntervalSince1970: 1_000), now = Date(timeIntervalSince1970: 5_000)
+        XCTAssertEqual(Policy.keepingSince(seen, formChanged: false, now: now), seen)
+        XCTAssertEqual(Policy.keepingSince(seen, formChanged: true, now: now), now)
+        XCTAssertNil(Policy.keepingSince(nil, formChanged: true, now: now)) // a page shown or let go has no keeping time
+        // The moment she was last seen is the stage's; a page let go forgets it (a new page counts from its own).
+        var keep = ShannonLive2DKeep()
+        keep.unseenSince = Date(timeIntervalSince1970: 1)
+        keep.released()
+        XCTAssertNil(keep.unseenSince)
+    }
+
+    func testPagesThatNeverBecameReadyAreNotLoadedAheadOnEveryActivation() {
+        typealias Policy = ShannonLive2DStagePolicy
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func warms(_ failures: Int, lastWarmAgo: TimeInterval?, _ reason: Policy.Warming = .foreground) -> Bool {
+            let history = ShannonLive2DWarmHistory(lastWarmAt: lastWarmAgo.map { now.addingTimeInterval(-$0) }, failuresWithoutReady: failures)
+            return Policy.warmsAhead(form: .live2d, status: .unloaded, hasHosts: false, reason: reason, lowPower: false, history: history, now: now)
+        }
+        XCTAssertTrue(warms(0, lastWarmAgo: 1))
+        // One failure: the next page loaded ahead waits five minutes after the last one.
+        XCTAssertEqual(Policy.warmRetrySeconds, 5 * 60)
+        XCTAssertFalse(warms(1, lastWarmAgo: 60))
+        XCTAssertFalse(warms(1, lastWarmAgo: 60, .chosen))
+        XCTAssertTrue(warms(1, lastWarmAgo: Policy.warmRetrySeconds))
+        XCTAssertTrue(warms(1, lastWarmAgo: nil)) // the failure was a screen's own load
+        // As many failures as a screen accepts before it shows the failure: only a screen loads it, never ahead.
+        XCTAssertFalse(warms(Policy.failuresWithoutReadyLimit, lastWarmAgo: 3600))
+        XCTAssertFalse(warms(Policy.failuresWithoutReadyLimit, lastWarmAgo: nil, .chosen))
+    }
+
     func testTheGirlPresetIsTheLive2DFormTheStageFollows() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-body-keep-\(UUID().uuidString)"))
         ShannonPersonaPreset.girl.select(defaults: defaults)
@@ -677,7 +749,7 @@ final class ShannonBodyTests: XCTestCase {
         // The Mac has no parking place: following the form neither loads nor keeps anything (the stage stays as it is).
         let stage = ShannonLive2DStage.shared
         let before = stage.status
-        stage.follow(form: .live2d, launching: false)
+        stage.follow(form: .live2d, reason: .chosen)
         XCTAssertFalse(ShannonLive2DStage.parks)
         XCTAssertEqual(stage.status, before)
         XCTAssertNil(stage.keep.warmTask)
