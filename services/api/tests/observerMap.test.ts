@@ -129,7 +129,10 @@ describe('the owner moves boxes and blocks (owner, 2026-10-14)', () => {
     expect(layout.blocks.get('client')!.w).toBe(CURRENT_LAYOUT.blocks.get('client')!.w);
   });
   it('restores only known boxes with bounded numbers, and only for the same default placement', () => {
-    expect(savedPositions({ layout: LAYOUT_ID, nodes: { haiku: [500.4, 90], ghost: [1, 2], tools: ['x', 1], gate: [1e9, -5], store: [1, 2, 3] } })).toEqual({ haiku: [500, 90], gate: [20000, 0] });
+    expect(savedPositions({ layout: LAYOUT_ID, nodes: { haiku: [500.4, 90], ghost: [1, 2], tools: ['x', 1], gate: [1e9, -5], store: [1, 2, 3] } })).toEqual({ haiku: [500, 90], gate: [20000, 30] });
+    // A saved position at the very edge is what a drag at the edge produces.
+    const edge = movedPositions(CURRENT_LAYOUT, ['pcm'], -9999, -9999);
+    expect(savedPositions({ layout: LAYOUT_ID, nodes: { pcm: [0, 0] } })).toEqual(edge);
     expect(savedPositions({ layout: 'older-placement', nodes: { haiku: [1, 2] } })).toEqual({});
     for (const value of [null, 'x', [], { layout: LAYOUT_ID }, { layout: LAYOUT_ID, nodes: [] }]) expect(savedPositions(value)).toEqual({});
     expect(customPositions(CURRENT_LAYOUT)).toEqual({});

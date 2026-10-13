@@ -113,8 +113,10 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 .map { background: var(--sunk); }
 .map svg { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; cursor: grab; }
 #map text { fill: var(--ink); }
-.block-box { fill: color-mix(in srgb, var(--c) 6%, var(--surface)); stroke: color-mix(in srgb, var(--c) 42%, var(--line)); stroke-width: 1.2; }
-[data-level="1"] .block-box { fill: color-mix(in srgb, var(--c) 13%, var(--surface)); cursor: pointer; }
+/* Frames are translucent and only a block's name is hit-tested, so a frame stretched by a moved box hides no other block. */
+.block-box { fill: color-mix(in srgb, var(--c) 7%, transparent); stroke: color-mix(in srgb, var(--c) 42%, var(--line)); stroke-width: 1.2; pointer-events: none; }
+[data-level="1"] .block-box { fill: color-mix(in srgb, var(--c) 16%, transparent); }
+[data-level="1"] .far-handle { cursor: pointer; }
 .block.active .block-box { stroke: var(--c); stroke-width: 2.4; }
 .block.dim, .node.dim { opacity: .3; }
 .block-head { font-weight: 700; cursor: grab; }

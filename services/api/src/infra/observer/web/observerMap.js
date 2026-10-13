@@ -192,14 +192,15 @@ export function movedPositions(layout, ids, dx, dy) {
 export function customPositions(layout) {
   return Object.fromEntries([...layout.boxes].filter(([, box]) => box.shift[0] !== 0 || box.shift[1] !== 0).map(([id, box]) => [id, [box.x, box.y]]));
 }
-/** A saved arrangement from this browser's storage: only known boxes with finite, bounded coordinates, and only for the
+/** A saved arrangement from this browser's storage: only known boxes with finite coordinates, clamped to what a drag can reach, and only for the
  * placement it was made on (a new default placement starts from the new default). Anything else is ignored. */
 export function savedPositions(value, ids = VIEW_NODES.map(spec => spec[0]), layoutId = LAYOUT_ID) {
   if (value === null || typeof value !== 'object' || Array.isArray(value) || value.layout !== layoutId) return {};
   const nodes = value.nodes !== null && typeof value.nodes === 'object' && !Array.isArray(value.nodes) ? value.nodes : {}, known = new Set(ids), result = {};
   for (const [id, at] of Object.entries(nodes)) {
     if (!known.has(id) || !Array.isArray(at) || at.length !== 2 || !at.every(n => typeof n === 'number' && Number.isFinite(n))) continue;
-    result[id] = [Math.round(Math.max(0, Math.min(MAX_COORD, at[0]))), Math.round(Math.max(0, Math.min(MAX_COORD, at[1])))];
+    // The same bounds a drag can reach: a block's frame never starts left of or above the map.
+    result[id] = [Math.round(Math.max(BLOCK_PAD.side, Math.min(MAX_COORD, at[0]))), Math.round(Math.max(BLOCK_PAD.top, Math.min(MAX_COORD, at[1])))];
   }
   return result;
 }

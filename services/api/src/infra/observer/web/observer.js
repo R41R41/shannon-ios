@@ -720,7 +720,7 @@ function mountObserver() {
       group.addEventListener('click', event => { event.stopPropagation(); pick(); });
       group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); } });
     }
-    map = { svg, layout: model.layout, frame: { width: model.layout.width, height: model.layout.height }, routes: new Map(), blockLines: new Map(), blockEdges, edges, packets, edgeElements: [], nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: model.layout.width / 2, cy: model.layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
+    map = { svg, groups, layout: model.layout, frame: { width: model.layout.width, height: model.layout.height }, routes: new Map(), blockLines: new Map(), blockEdges, edges, packets, edgeElements: [], nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: model.layout.width / 2, cy: model.layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
     placeMap();
     applyView(); highlightMapSelection();
   }
@@ -742,14 +742,24 @@ function mountObserver() {
         if (size) element.setAttribute('font-size', Math.min(size, (box.w - 16) / wordWidth(text)).toFixed(1));
       }
     }
+    // A block frame always surrounds its own boxes, so a box moved far away stretches it. Larger frames are drawn first
+    // (underneath), frames are translucent, and only a block's name catches the pointer, so a stretched frame never hides
+    // or steals the press from another block (review of 1d2f337).
+    const order = [...map.blockElements].sort(([a], [b]) => { const one = layout.blocks.get(a), two = layout.blocks.get(b); return two.w * two.h - one.w * one.h; });
+    if (order.some(([, parts], index) => map.groups.children[index] !== parts.group)) for (const [, parts] of order) map.groups.append(parts.group);
+    // The links never change, only their geometry: paths are created once and their `d` is rewritten in place.
     map.routes = routeTable(layout, model.links); map.blockLines = blockRoutes(layout, model.links);
-    map.blockEdges.replaceChildren();
-    for (const route of map.blockLines.values()) { const path = sv('path', { class: 'block-edge', d: routePath(route) }, map.blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); }
-    const hot = new Set(map.edgeElements.filter(([, , path]) => path.classList.contains('hot')).map(([from, to]) => `${from}>${to}`));
-    map.edges.replaceChildren(); map.edgeElements = [];
-    for (const route of map.routes.values()) {
-      const path = sv('path', { class: `edge${route.background ? ' background' : ''}${hot.has(`${route.from}>${route.to}`) ? ' hot' : ''}`, d: routePath(route) }, map.edges);
-      map.edgeElements.push([route.from, route.to, path]); role(path, roleFor(model, route.from));
+    map.blockPaths ??= new Map();
+    for (const [key, route] of map.blockLines) {
+      let path = map.blockPaths.get(key);
+      if (!path) { path = sv('path', { class: 'block-edge' }, map.blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); map.blockPaths.set(key, path); }
+      const d = routePath(route); if (path.getAttribute('d') !== d) path.setAttribute('d', d);
+    }
+    map.edgePaths ??= new Map();
+    for (const [key, route] of map.routes) {
+      let path = map.edgePaths.get(key);
+      if (!path) { path = sv('path', { class: `edge${route.background ? ' background' : ''}` }, map.edges); role(path, roleFor(model, route.from)); map.edgePaths.set(key, path); map.edgeElements.push([route.from, route.to, path]); }
+      const d = routePath(route); if (path.getAttribute('d') !== d) path.setAttribute('d', d);
     }
     $('layout-reset').disabled = !Object.keys(customPositions(layout)).length;
   }
@@ -1062,8 +1072,14 @@ function mountObserver() {
     if (block && handle) return { ids: model.nodes.filter(spec => spec[1] === block.dataset.block).map(spec => spec[0]), element: block };
     return null;
   };
+  /** The pointer in map coordinates, whatever the zoom: a drag measured this way stays under the pointer even if the view
+   * zooms or pans while it is held. */
+  const mapPoint = event => { const matrix = svgMap.getScreenCTM(); if (!matrix) return null; const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()); return [point.x, point.y]; };
+  // Pointer moves are applied once per frame.
+  const applyDrag = () => { if (!drag?.next) return; const [dx, dy] = drag.next; drag.next = null; setPositions(movedPositions(drag.base, drag.ids, dx, dy), false); };
   const endDrag = save => {
     if (!drag) return;
+    if (drag.raf) cancelAnimationFrame(drag.raf); applyDrag();
     drag.element.classList.remove('dragging'); svgMap.classList.remove('dragging');
     if (save && drag.moved) { writeLayout(customPositions(model.layout)); $('announcement').textContent = '地図の配置を保存しました。「初期配置に戻す」で元に戻せます。'; }
     drag = null;
@@ -1074,24 +1090,31 @@ function mountObserver() {
   svgMap.addEventListener('pointerdown', event => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); moved = 0;
-    if (pointers.size === 1) { const target = grabTarget(event); drag = target ? { ...target, pointerId: event.pointerId, x: event.clientX, y: event.clientY, base: model.layout, moved: false } : null; }
+    if (pointers.size === 1) { const target = grabTarget(event), start = target && mapPoint(event); drag = target && start ? { ...target, pointerId: event.pointerId, start, base: model.layout, moved: false, next: null, raf: 0 } : null; }
     // A second finger turns the gesture into a pinch; a box already moved stays where it was put.
     if (pointers.size === 2 && map) { endDrag(true); const [a, b] = [...pointers.values()]; pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: map.k }; }
   });
-  svgMap.addEventListener('pointermove', event => { const point = pointers.get(event.pointerId); if (!point || !map) return; const dx = event.clientX - point.x, dy = event.clientY - point.y; point.x = event.clientX; point.y = event.clientY; moved += Math.abs(dx) + Math.abs(dy);
+  svgMap.addEventListener('pointermove', event => { const point = pointers.get(event.pointerId); if (!point || !map) return;
+    // A mouse released outside the page (no pointerup reached us) is a release, not a drag that continues on hover.
+    if (event.pointerType === 'mouse' && event.buttons === 0) { release(event); return; }
+    const dx = event.clientX - point.x, dy = event.clientY - point.y; point.x = event.clientX; point.y = event.clientY; moved += Math.abs(dx) + Math.abs(dy);
     if (pointers.size === 2 && pinch) { const [a, b] = [...pointers.values()]; map.k = Math.max(1, Math.min(5, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.distance)); applyView(); return; }
     if (moved <= 4) return;
     try { if (!svgMap.hasPointerCapture(event.pointerId)) svgMap.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks keeps working without capture */ }
     const scale = baseScale() * map.k;
     if (drag && drag.pointerId === event.pointerId) {
       if (!drag.moved) { drag.moved = true; drag.element.classList.add('dragging'); svgMap.classList.add('dragging'); }
-      // Measured from where the press began, so the box stays under the pointer (the first 4 px included).
-      setPositions(movedPositions(drag.base, drag.ids, (event.clientX - drag.x) / scale, (event.clientY - drag.y) / scale), false);
+      // Measured in map coordinates from where the press began, so the box stays under the pointer (the first 4 px included).
+      const now = mapPoint(event); if (!now) return;
+      drag.next = [now[0] - drag.start[0], now[1] - drag.start[1]];
+      if (!drag.raf) drag.raf = requestAnimationFrame(() => { if (drag) { drag.raf = 0; applyDrag(); } });
       return;
     }
     map.cx -= dx / scale; map.cy -= dy / scale; applyView(); });
-  const release = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; if (drag?.pointerId === event.pointerId) endDrag(event.type === 'pointerup' || drag.moved); };
-  svgMap.addEventListener('pointerup', release); svgMap.addEventListener('pointercancel', release);
+  function release(event) { if (!pointers.has(event.pointerId)) return; pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; if (drag?.pointerId === event.pointerId) endDrag(true); }
+  svgMap.addEventListener('pointerup', release); svgMap.addEventListener('pointercancel', release); svgMap.addEventListener('lostpointercapture', release);
+  // A press that ends outside the map before capture began must still end there.
+  window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release);
   svgMap.addEventListener('click', event => { if (moved > 4) { event.stopPropagation(); event.preventDefault(); } }, true);
   // Fit to the viewport on load and on resize unless the owner has zoomed in.
   const refit = () => { if (!map) return; if (map.k <= 1.01) fitFrame(); applyView(); };

@@ -1,5 +1,16 @@
 # Mind Observer UI validation
 
+## Review fixes for drag and drop (2026-10-14)
+
+Same fixture and CDP method at 1600×900, after the review of `1d2f337`. Minecraft dragged next to 声の計画 stretched the
+外の体と反射 frame to 1248×512 px; that frame is now drawn first (block order world, conv, mind, …), translucent, and not
+hit-tested, so the point under 会話の経路's title still hit `conv:block-head` and dragging it moved conv by (30, 20)
+([capture](observer-evidence/dnd-1600-stretched-frame.jpg)). A box pressed and moved by (50, 25), then hovered with no button
+held (the release happened outside the page), did not move further. A wheel zoom in the middle of a drag kept the box under
+the pointer (pointer 880,491; box centre 880,492). During 40 rapid moves, route paths stayed 45 elements, and only the
+changed `d` attributes were rewritten (334 writes, against 2067 before the unchanged ones were skipped). No console
+exceptions.
+
 ## No zoom on click and recent calls (2026-10-14)
 
 Same fixture and CDP method; two `turn` commands were sent before pairing and one after. At 1600×900: a block click at 塊
