@@ -4,32 +4,42 @@ import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, u
 import { parseJson } from './store/dailyMindStore.js';
 import { commitmentLineInstructions, commitmentRequest, groundedCommitmentLine, type CommitmentFacts, type CommitmentLineWriter } from './commitmentLine.js';
 import {
-  groundedLifecycleOutcomeLine, lifecycleOutcomeLineInstructions, lifecycleOutcomeRequest, type LifecycleOutcomeFacts, type LifecycleOutcomeLineWriter,
+  lifecycleOutcomeLineInstructions, lifecycleOutcomeMessage, lifecycleOutcomeRequest, type LifecycleOutcomeFacts,
+  type LifecycleOutcomeLineWriter,
 } from './lifecycleOutcomeLine.js';
 
 /**
- * The writers of a line in her voice from facts (`commitmentLine.ts`, `lifecycleOutcomeLine.ts`): one background model call, cut
- * off after 20 seconds, checked before it is used.
+ * The writers of her words from facts (`commitmentLine.ts`: a promise's line; `lifecycleOutcomeLine.ts`: her phrase beside a fixed
+ * fact): one background model call, cut off after 20 seconds, checked before it is used.
  */
-const SCHEMA = { type: 'object', additionalProperties: false, properties: { line: { type: 'string' } }, required: ['line'] };
+const LINE_SCHEMA = { type: 'object', additionalProperties: false, properties: { line: { type: 'string' } }, required: ['line'] };
+const PHRASE_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['phrase', 'position'],
+  properties: { phrase: { type: 'string' }, position: { type: 'string', enum: ['before', 'after'] } },
+};
 const CUTOFF_MILLISECONDS = 20_000;
 
-/** One kind of line: its names (for usage and the provider's schema), its instructions, its request, and its check. */
+/** One kind of words: its names (for usage and the provider's schema), its schema, instructions and request, and its check. */
 interface FactLine<F> {
   label: BackgroundRoute;
   schemaName: string;
+  schema: Record<string, unknown>;
   instructions(): string;
   request(facts: F): string;
-  grounded(line: unknown, facts: F): string | null;
+  /** What is said, from the model's parsed answer, or null when nothing of it can be used. */
+  read(answer: unknown, facts: F): string | null;
 }
 
 const COMMITMENT: FactLine<CommitmentFacts> = {
-  label: 'commitment_line', schemaName: 'shannon_commitment_line',
-  instructions: () => commitmentLineInstructions(), request: commitmentRequest, grounded: groundedCommitmentLine,
+  label: 'commitment_line', schemaName: 'shannon_commitment_line', schema: LINE_SCHEMA,
+  instructions: () => commitmentLineInstructions(), request: commitmentRequest,
+  read: (answer, facts) => groundedCommitmentLine((answer as { line?: unknown } | null)?.line, facts),
 };
 const LIFECYCLE_OUTCOME: FactLine<LifecycleOutcomeFacts> = {
-  label: 'lifecycle_outcome_line', schemaName: 'shannon_lifecycle_outcome_line',
-  instructions: () => lifecycleOutcomeLineInstructions(), request: lifecycleOutcomeRequest, grounded: groundedLifecycleOutcomeLine,
+  label: 'lifecycle_outcome_line', schemaName: 'shannon_lifecycle_outcome_phrase', schema: PHRASE_SCHEMA,
+  instructions: () => lifecycleOutcomeLineInstructions(), request: lifecycleOutcomeRequest,
+  // The fact word for word, with her phrase when it passes; a fact alone when it does not.
+  read: (answer, facts) => (answer && typeof answer === 'object' ? lifecycleOutcomeMessage(answer, facts) : null),
 };
 
 /** The background model (`SHANNON_BACKGROUND_LLM_MODEL`, as the daily mind), within the background budget; null when none is set. */
@@ -64,8 +74,7 @@ function configuredFactLineWriter<F>(
         const instructions = kind.instructions(), request = kind.request(facts);
         const text = claude ? await claudeLine(claude, kind, scopeKey, instructions, request, both, at)
           : await openAILine({ apiKey: selected.apiKey, model, fetcher: fetcher ?? fetch, usageStore }, kind, scopeKey, instructions, request, both, at);
-        const parsed = parseJson(text ?? '') as { line?: unknown } | null;
-        return kind.grounded(parsed?.line, facts);
+        return kind.read(parseJson(text ?? ''), facts);
       } catch { return null; }
     },
   };
@@ -74,7 +83,7 @@ function configuredFactLineWriter<F>(
 async function claudeLine<F>(
   claude: ClaudeBackground, kind: FactLine<F>, scopeKey: string, instructions: string, request: string, signal: AbortSignal, at: string,
 ): Promise<string | null> {
-  const answer = await completeStructured<string>(kind.label, instructions, request, SCHEMA,
+  const answer = await completeStructured<string>(kind.label, instructions, request, kind.schema,
     { claude, scopeKey, maximumOutputTokens: 160, effort: 'none', signal, read: text => text, at: () => at });
   return answer.ok ? answer.value : null;
 }
@@ -87,7 +96,7 @@ async function openAILine<F>(
     method: 'POST', headers: { authorization: `Bearer ${options.apiKey}`, 'content-type': 'application/json' }, signal,
     body: JSON.stringify({
       model: options.model, instructions, input: request, reasoning: { effort: 'none' },
-      text: { format: { type: 'json_schema', name: kind.schemaName, strict: true, schema: SCHEMA } }, max_output_tokens: 160, store: false,
+      text: { format: { type: 'json_schema', name: kind.schemaName, strict: true, schema: kind.schema } }, max_output_tokens: 160, store: false,
     }),
   });
   const json = parseJson(await response.text());

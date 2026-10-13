@@ -28,9 +28,9 @@ export interface LifecycleOutcomeTellingParts {
 
 /**
  * Tells him how a lifecycle operation he asked for ended (owner decision 2026-10-14, `lifecycleOutcomeLine.ts`): when its runner
- * settles it (`minecraftLifecycleRunner.ts`, the `settled` callback), she writes one line in her voice from the facts (cut off after
- * 20 seconds; the neutral factual line when none could be written or trusted), with the private-safe wording while anyone else may
- * see or hear her body, and it is said once into the Talk it was asked in and to her body. Nothing of her mood, her inner note or
+ * settles it (`minecraftLifecycleRunner.ts`, the `settled` callback), the fixed fact sentence with one short phrase of hers (cut off
+ * after 20 seconds; the fact alone when no phrase could be written or kept), and the private-safe line while anyone else may see or
+ * hear her body (the model is not asked then), and it is said once into the Talk it was asked in and to her body. Nothing of her mood, her inner note or
  * her moments is read, and no cap of theirs applies: it is system delivery of something he asked for. Never throws.
  */
 export function lifecycleOutcomeTeller(parts: LifecycleOutcomeTellingParts): LifecycleOutcomeTeller {
@@ -53,7 +53,8 @@ export function lifecycleOutcomeTeller(parts: LifecycleOutcomeTellingParts): Lif
       let line = facts.others ? null : await parts.writer?.write(report.scopeKey, facts, parts.signal).catch(() => null) ?? null;
       // Someone came while it was written: the line for him alone is not said in front of them.
       const privately = facts.others || others(report.scopeKey);
-      if (privately) line = null;
+      // The fact is always said word for word (`lifecycleOutcomeMessage`): a message without it is not used.
+      if (privately || (line !== null && !line.includes(neutralLifecycleOutcomeLine(facts)))) line = null;
       if (parts.signal?.aborted) return;
       parts.speaker.say(report.scopeKey, report.threadId, report.operationId, line ?? neutralLifecycleOutcomeLine({ ...facts, others: privately }),
         report.outcome === 'completed', parts.now());

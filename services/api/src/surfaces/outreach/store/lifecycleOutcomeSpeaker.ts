@@ -16,11 +16,13 @@ export interface LifecycleOutcomeMessage { id: string; threadId: string; initiat
 
 export class SQLiteLifecycleOutcomeSpeaker {
   private opened: DatabaseSync | null = null;
+  private closed = false;
 
-  /** The connection is opened at the first message, so a server without the lifecycle never opens it. */
+  /** The connection is opened at the first message, so a server without the lifecycle never opens it; never again after close. */
   constructor(private readonly path: string) {}
 
   private get database(): DatabaseSync {
+    if (this.closed) throw new Error('LIFECYCLE_OUTCOME_SPEAKER_CLOSED');
     this.opened ??= openDatabase(this.path, 'outreach');
     return this.opened;
   }
@@ -63,6 +65,7 @@ export class SQLiteLifecycleOutcomeSpeaker {
   }
 
   close(): void {
+    this.closed = true;
     if (this.opened?.isOpen) this.opened.close();
     this.opened = null;
   }
