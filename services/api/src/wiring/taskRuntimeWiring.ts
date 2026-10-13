@@ -28,6 +28,8 @@ export interface TaskRuntimeWiringOptions {
   ownTimeAllowed?(task: TaskView): boolean;
   /** E3: per-task caps and own-time reservations around each step. */
   budget?: FcaBudget;
+  /** The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`); tests give 0. */
+  providerRetryDelayMs?(): number;
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
@@ -147,6 +149,12 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       return;
     }
+    if (step && providerServerErrorCode(code, execution) && await retryAfterServerError(step, execution)) {
+      // The provider answered 5xx/529: nothing came back, so the step ran nothing. The task runs it once more, then fails.
+      console.log(`Shannon FCA step retried task=${taskId} code=${code}`);
+      await flushReceipts();
+      return;
+    }
     if (step && rejectedBeforeAnyEffect(code, execution) && failRejectedStep(step)) {
       // The provider refused the request itself: nothing ran and nothing was charged, and an identical retry is refused again.
       console.log(`Shannon FCA step failed task=${taskId} code=${code}`);
@@ -159,6 +167,24 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const unsent = !!action && leaseUnsent(action, lease);
     await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
     runtime.recover(scopeKey, classify);
+  }
+  /**
+   * Once per task: after a short wait with jitter (the provider was briefly unavailable), the step is committed as `continue`
+   * with nothing added, so the scheduler runs the same decision again under a new action. A stop during the wait, or a second
+   * server error, leaves it to the known failure.
+   */
+  async function retryAfterServerError(step: TaskStep, execution: ActionExecution): Promise<boolean> {
+    const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
+    const retries = typeof prior.fcaProviderRetries === 'number' ? prior.fcaProviderRetries : 0;
+    if (retries >= 1) return false;
+    const waited = execution.signal.aborted ? false : await new Promise<boolean>(resolve => {
+      setTimeout(() => resolve(true), options.providerRetryDelayMs?.() ?? PROVIDER_RETRY_DELAY()).unref?.();
+      execution.signal.addEventListener('abort', () => resolve(false), { once: true }); // a stop wins; the timer settles nothing
+    });
+    if (!waited || runtime.get(scopeKey, step.taskId)?.phase !== 'executing') return false;
+    try {
+      return runtime.commitStep(step, { disposition: 'continue', history: [], checkpoint: { ...prior, fcaProviderRetries: retries + 1 } }) !== null;
+    } catch { return false; }
   }
   /**
    * A task at its cap, or an own-time task without budget (E3): failed with its report in one commit. A task with unfinished
@@ -248,10 +274,19 @@ export function fcaErrorCode(error: unknown): string {
   return error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? error.name : 'unknown';
 }
 
+/** 3-5 s: one short wait with jitter before a step the provider answered 5xx/529 is run again. */
+export const PROVIDER_RETRY_DELAY = () => 3_000 + Math.floor(Math.random() * 2_000);
+
+/** A decision request the provider answered with a server error (5xx, 529), with no tool outcome in doubt. */
+export function providerServerErrorCode(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
+  return /^FCA_MODEL_HTTP_5\d\d$/u.test(code) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
+}
+
 /**
- * Definitive provider answers to the decision request with no paid or tool outcome in doubt: a refusal (4xx, not throttling or
- * timeouts) or a server error (5xx, 529; 2026-10-13: a research step's server error sat unknown for ten minutes holding a slot
- * while the owner waited). Nothing was generated or billed; the task fails with its report and he can ask again.
+ * Definitive provider answers to the decision request with no tool outcome in doubt: a refusal (4xx, not throttling or timeouts)
+ * or a server error (5xx, 529, after its one retry; 2026-10-13: a research step's server error sat unknown for ten minutes
+ * holding a slot while the owner waited). No decision came back, so nothing ran; a server error's spend stays booked as
+ * unknown (a conservative bound), a refusal's as none. The task fails with its report and he can ask again.
  */
 export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
   const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1];

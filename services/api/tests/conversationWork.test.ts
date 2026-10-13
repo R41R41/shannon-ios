@@ -5,6 +5,7 @@ import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { createFcaConversationBridge, createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
+import { FORWARDED_QUESTION, sameRequest } from '../src/mind/action/fca/fcaConversation.js';
 import { fcaResearchTools } from '../src/wiring/fcaResearchWiring.js';
 import { fcaNowProjection } from '../src/infra/http/fcaNowProjection.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
@@ -97,13 +98,24 @@ describe('conversation plus ongoing work', () => {
     const f = fixture(false, undefined, bridge => {
       results.push(bridge.executeTaskTool('web.research', { question: '大濠公園から博多空港まで17時着の出発時刻' }, { scopeKey: 'owner' }));
       results.push(bridge.executeTaskTool('web.research', { question: '大濠公園から福岡空港への地下鉄の所要時間' }, { scopeKey: 'owner' }));
+      results.push(bridge.executeTaskTool('web.research', { question: '今大濠公園にいるんだけど 17時に博多空港にいるためには何時に出ればいいかな' }, { scopeKey: 'owner' }));
+      bridge.executeTaskTool('web.research', { question: '大濠公園から福岡空港への地下鉄の所要時間' }, { scopeKey: 'owner' });
     });
     await f.chat('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？', { webSearch: true });
     const tasks = f.driver.runtime.readyTasks('owner');
     expect(tasks).toHaveLength(1);
     expect(tasks[0]!.goal).toBe('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？');
-    expect(results.map(result => result.ok)).toEqual([true, true]);
+    expect(results.map(result => result.ok)).toEqual([true, true, true]);
     for (const result of results) expect(result.text).toContain(`task: ${tasks[0]!.id}`);
+    // The same request is reused as it is; each different question reaches the running research as one message (idempotent).
+    const forwarded = f.driver.runtime.snapshot('owner', tasks[0]!.id)!.messages.filter(message => message.text.startsWith(FORWARDED_QUESTION));
+    expect(forwarded.map(message => message.text.slice(FORWARDED_QUESTION.length))).toEqual(['大濠公園から博多空港まで17時着の出発時刻', '大濠公園から福岡空港への地下鉄の所要時間']);
+  });
+  it('folds spacing, punctuation and width when it decides a question is the same request', () => {
+    expect(sameRequest('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？', '今大濠公園にいるんだけど 17時に博多空港にいるためには何時に出ればいいかな')).toBe(true);
+    expect(sameRequest('博多の天気', '明日の博多の天気を調べて')).toBe(true);
+    expect(sameRequest('大濠公園から博多空港まで17時着の出発時刻', '今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？')).toBe(false);
+    expect(sameRequest('', '天気')).toBe(false);
   });
   it('starts conversation work while its turn is still in progress and binds its provenance afterwards (owner decision 2026-10-13)', async () => {
     let f!: ReturnType<typeof fixture>;

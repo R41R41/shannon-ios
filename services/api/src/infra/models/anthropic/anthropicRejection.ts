@@ -101,7 +101,7 @@ export function providerFailureFacts(error: unknown): { errorClass: string; stat
     cause: typeof rawCause === 'string' && CAUSE_CODE.test(rawCause) ? rawCause : null };
 }
 
-/** Whether the provider answered the request with a server error (5xx, 529 overloaded): a received, unbilled outcome. */
+/** Whether the provider answered the request with a server error (5xx, 529 overloaded): a received answer with no decision. */
 export function providerServerError(error: unknown): error is ApiError & { status: number } {
   return error instanceof Anthropic.APIError && typeof error.status === 'number' && error.status >= 500 && error.status < 600;
 }
