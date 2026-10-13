@@ -183,7 +183,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       parts.ownerAlone));
     // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
     const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
-      conversations: parts.conversations, shown: shown.card, now: Date.now, log: line => console.warn(line) }) : null;
+      conversations: parts.conversations, shown: shown.card, ownerAlone: parts.ownerAlone, now: Date.now, log: line => console.warn(line) }) : null;
     const cardTimer = reportCards ? setInterval(() => { timedTick('report_cards', () => reportCards.tick()); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,

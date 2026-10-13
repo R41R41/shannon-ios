@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { createReportCards, reportCardMessageId, REPORT_CARD_SPOKEN_WAIT_MS } from '../src/mind/action/fca/fcaReportCards.js';
+import { createReportCards, reportCardMessageId, REPORT_CARD_RECHECK_MS, REPORT_CARD_SPOKEN_WAIT_MS } from '../src/mind/action/fca/fcaReportCards.js';
 import { fallbackSpokenReport } from '../src/mind/action/fca/fcaSpokenReport.js';
 import type { TaskProgress } from '../src/mind/action/taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskSource, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
@@ -47,7 +47,7 @@ function harness(options: { spoken?: string; reportAt?: number; parentKind?: str
     updatedAt: new Date(options.reportAt ?? AT - 30_000).toISOString(),
     findings: [{ id: 'f1', text: 'A店は駅前。', status: 'unconfirmed', sources: [{ title: 'A店', url: 'https://a.example/' }], updatedAt: new Date(AT).toISOString() }],
     report: { id: 'report-1', text: REPORT, updatedAt: new Date(options.reportAt ?? AT - 30_000).toISOString(), ...(options.spoken ? { spoken: options.spoken } : {}) } };
-  const cards = createReportCards({ runtime, ownerScope: 'owner', conversations: store, now: () => clock.at,
+  const cards = createReportCards({ runtime, ownerScope: 'owner', conversations: store, now: () => clock.at, ownerAlone: () => clock.alone,
     shown: () => clock.alone && clock.visible ? progress : null });
   const extras = createConversationExtras({ database: db, ownerScope: 'owner', now: () => new Date(clock.at).toISOString(), ownerAlone: () => clock.alone,
     feedback: () => null, reportVisible: () => clock.alone && clock.visible });
@@ -84,6 +84,35 @@ describe('report cards (rich chat)', () => {
     task.updatedAt = new Date(AT).toISOString();
     cards.tick();
     expect(asked).toBe(2);
+  });
+
+  it('asks again about a report it does not show only after a while, or at once when the stored progress changes (2026-10-13)', () => {
+    harness(); // The file's store, closed after each test.
+    const task = { id: 'task-1', parentId: 'conversation-1', kind: 'research', origin: 'owner_request', title: '調べる',
+      phase: 'failed', updatedAt: new Date(AT - 5_000).toISOString() } as TaskView;
+    const parent = { id: 'conversation-1', kind: 'conversation' } as TaskView;
+    let stored: TaskProgress = { currentStep: 'fca.result', status: 'failed', startedAt: task.updatedAt, updatedAt: task.updatedAt, findings: [],
+      report: { id: 'report-1', text: '調べきれませんでした。', updatedAt: task.updatedAt } };
+    let asked = 0, at = AT;
+    const cards = createReportCards({ runtime: { list: () => [task], get: (_scope, id) => id === parent.id ? parent : task, taskSources: () => [],
+      progress: () => stored }, ownerScope: 'owner', conversations: { assistantMessage: () => null, appendReportCardOnce: () => null } as never,
+      now: () => at, ownerAlone: () => true,
+      shown: () => { asked += 1; const { report: _dropped, ...rest } = stored; return rest; } }); // The gate drops it (an hour late).
+    for (let scan = 0; scan < 12; scan++) { cards.tick(); at += 5_000; } // A minute of scans.
+    expect(asked).toBe(1);
+    at += 2 * REPORT_CARD_RECHECK_MS; cards.tick();
+    expect(asked).toBe(2); // Looked at again after the recheck window (a hold ends in the morning).
+    stored = { ...stored, updatedAt: new Date(at).toISOString(), report: { ...stored.report!, id: 'report-2' } };
+    cards.tick();
+    expect(asked).toBe(3); // A new report: at once.
+  });
+
+  it('asks nothing while the owner is not alone', () => {
+    const { cards, clock } = harness({ spoken: '答え。' });
+    clock.alone = false;
+    expect(cards.tick()).toBe(0);
+    clock.alone = true;
+    expect(cards.tick()).toBe(1);
   });
 
   it('survives a restart of the scan without a second card', () => {

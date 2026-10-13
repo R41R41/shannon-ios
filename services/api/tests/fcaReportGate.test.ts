@@ -170,7 +170,8 @@ describe('a voice turn\'s research', () => {
 
 describe('the card scan and a held report (review 2026-10-13)', () => {
   it('writes a report held overnight even after forty newer tasks pushed it out of the recent scan', async () => {
-    const { createReportCards } = await import('../src/mind/action/fca/fcaReportCards.js');
+    const { createReportCards, REPORT_CARD_RECHECK_MS } = await import('../src/mind/action/fca/fcaReportCards.js');
+    let at = night;
     const parent = { ...task('conversation', '', night), kind: 'conversation', parentId: null } as TaskView;
     const held = task('held', 'アベンジャーズの最新作の公開日', night - minutes(30));
     const newer = Array.from({ length: 40 }, (_, index) => ({ ...task(`n${index}`, `別件${index}`, night), phase: 'executing' }) as TaskView);
@@ -178,7 +179,7 @@ describe('the card scan and a held report (review 2026-10-13)', () => {
     const written: string[] = [];
     const full = progress('12月18日公開です。', night, 'received', { spoken: '12月18日公開です。' });
     const cards = createReportCards({
-      ownerScope: 'owner', now: () => night,
+      ownerScope: 'owner', now: () => at,
       runtime: { list: () => scanned, get: (_scope: string, id: string) => id === 'conversation' ? parent : id === 'held' ? held : null,
         taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(night), recalledMemoryIds: [] }] } as never,
       conversations: { assistantMessage: () => null, appendReportCardOnce: (_scope: string, _thread: string, id: string) => { written.push(id); return true; } } as never,
@@ -186,6 +187,7 @@ describe('the card scan and a held report (review 2026-10-13)', () => {
     });
     expect(cards.tick()).toBe(0); // Held: seen without its report.
     scanned = newer; morning = true;
+    at += 2 * REPORT_CARD_RECHECK_MS; // A held report is looked at again after a recheck window, not every scan.
     expect(cards.tick()).toBe(1);
     expect(written).toHaveLength(1);
   });
