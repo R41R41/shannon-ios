@@ -155,7 +155,7 @@ export class AnthropicFcaModel implements FcaModel {
       if (!combined.aborted && providerServerError(error)) {
         // The provider answered with a server error: no decision came back, so the step's outcome is known even though its
         // spend stays recorded as unknown (2026-10-13: such a step sat unknown for ten minutes holding a research slot while
-        // the owner waited). The runner fails the task with its report at once; nothing is resent.
+        // the owner waited). The runner runs the step once more after a short wait, then fails the task with its report.
         if (execution) execution.modelOutcome = 'acknowledged';
         throw new Error(`FCA_MODEL_HTTP_${error.status}`);
       }

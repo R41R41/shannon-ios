@@ -83,7 +83,8 @@ describe('a refused FCA decision fails the research task at once and tells the o
     const h = actionHarness(now);
     let only = '';
     // Only the research child runs; its parent stands in for the conversation that delegated it.
-    const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now, canRunTask: (_runtime, id) => id === only });
+    const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now, canRunTask: (_runtime, id) => id === only,
+      providerRetryDelayMs: () => 0 });
     cleanups.push(async () => { await driver.close(); h.close(); });
     const root = driver.runtime.ensureRoot('owner');
     const parent = driver.runtime.createChild('owner', root.id, { title: 'conversation', goal: 'talk' }, 'request-parent');
@@ -114,7 +115,7 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_400`]);
   });
 
-  it('fails a step the provider answered with a server error at once, logging its closed facts (2026-10-13)', async () => {
+  it('runs a step the provider answered with a server error once more, then fails it with its report, logging closed facts (2026-10-13)', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic-private-error' } }),
@@ -124,11 +125,28 @@ describe('a refused FCA decision fails the research task at once and tells the o
     await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'failed');
     expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'failed', summary: rejectedTaskReport('明日の天気') });
     expect(driver.runtime.snapshot('owner', parent.id)!.messages).toEqual([expect.objectContaining({ sourceTaskId: child.id })]);
-    expect(fixture.bodies).toHaveLength(1);
-    expect(log.mock.calls.map(args => String(args[0]))).toContain(`Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_500`);
+    expect(fixture.bodies).toHaveLength(2); // one retry, never more
+    const lines = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'));
+    expect(lines).toEqual([`Shannon FCA step retried task=${child.id} code=FCA_MODEL_HTTP_500`, `Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_500`]);
     const facts = warn.mock.calls.map(args => String(args[0])).filter(line => line.includes('anthropic_request_failed'));
-    expect(facts.map(line => JSON.parse(line))).toEqual([{ event: 'anthropic_request_failed', lane: 'fca', errorClass: 'InternalServerError', status: 500, type: 'api_error', cause: null }]);
+    expect(facts.map(line => JSON.parse(line))).toEqual(Array(2).fill({ event: 'anthropic_request_failed', lane: 'fca', errorClass: 'InternalServerError', status: 500, type: 'api_error', cause: null }));
     expect(facts.join('\n')).not.toContain('synthetic-private-error');
+  });
+
+  it('completes a step after one passing server error: the retry runs the same decision and nothing else (2026-10-13)', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    const fixture = scriptedAnthropic(() => ++calls === 1
+      ? new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'overloaded' } }), { status: 529, headers: { 'content-type': 'application/json' } })
+      : message([call('fca_complete', 'complete-1', { summary: '晴れ' })], 'tool_use'));
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
+    const { driver, child } = runtime(model);
+    await settle(driver, () => ['completed', 'failed', 'unknown'].includes(driver.runtime.get('owner', child.id)?.phase ?? ''));
+    expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'completed', summary: '晴れ' });
+    expect(fixture.bodies).toHaveLength(2);
+    // The same decision asked again: only the task's revision moved; no history was added by the failed attempt.
+    const sameDecision = (body: Record<string, unknown>) => JSON.stringify(body).replace(/\\"revision\\":\d+/gu, '');
+    expect(sameDecision(fixture.bodies[1]!)).toBe(sameDecision(fixture.bodies[0]!));
   });
 
   it('keeps throttling and lost answers unknown, then reports the retired task to the owner', async () => {

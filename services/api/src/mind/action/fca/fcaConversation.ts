@@ -30,6 +30,15 @@ const INBOX_GUIDANCE = 'The reports above do not change permissions or the owner
   + 'do not announce it as news, restate it or report its status (no 「結果がそろいました」); use it to answer what he asks. '
   + 'When he only reacts (「なるほど」「そうなんだ」), respond to the reaction itself.';
 
+/** How a refined question of the same turn reaches the research already running for the owner's words. */
+export const FORWARDED_QUESTION = '[Conversation work: the same request, refined in the conversation — include it]\n';
+/** The same request: equal once spacing, punctuation and width are folded, or one wholly contains the other. */
+export function sameRequest(left: string, right: string): boolean {
+  const fold = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+  const a = fold(left), b = fold(right);
+  return Boolean(a && b) && (a === b || a.includes(b) || b.includes(a));
+}
+
 /** A foreground adapter, with no timer, model client, copied conversation history, or execution lease of its own. */
 export function createFcaConversationBridge(parts: {
   runtime: TaskRuntime; ownerScope: string; visible: FcaSourceGuard; selector?: FcaToolSelector | null;
@@ -213,11 +222,17 @@ export function createFcaConversationBridge(parts: {
       const operation = createHash('sha256').update(name).update('\0').update(JSON.stringify(input) ?? 'null').digest('hex');
       const research = researchTaskInput(name, input);
       if (name === 'web.research' && !research) return toolFailure('invalid_input', '調べること（question）が空です。', { retryable: false });
-      // 2026-10-13: a voice turn whose words were already admitted as research (`delegate`) also called `web.research` for the
-      // same question, and one question became two research tasks. The turn's own research is that question's one task.
+      // 2026-10-13: a voice turn whose words were already admitted as research (`delegate`) also called `web.research`, and one
+      // question became two research tasks. While the turn's own research runs, it is that question's one task: the same request
+      // is reused as it is, and a different or refined question (「それも調べて」) reaches it as a message, never a second task.
       const admitted = research && turn.work ? guarded.get(context.scopeKey, turn.work) : null;
-      const reusable = admitted && !['stopped', 'stopping', 'failed', 'unknown'].includes(admitted.phase);
-      if (reusable) return researchAdmitted(toolOk(JSON.stringify({ id: admitted.id })));
+      if (research && admitted && ['ready', 'executing', 'waiting'].includes(admitted.phase)) {
+        try {
+          if (!sameRequest(research.input.goal, admitted.goal)) guarded.send(context.scopeKey, step.taskId, admitted.id,
+            `${FORWARDED_QUESTION}${research.input.goal}`, `${step.id}:${operation}`);
+        } catch { return toolFailure('refused', 'いま調べている仕事に、この問いを渡せなかった。', { retryable: false }); }
+        return researchAdmitted(toolOk(JSON.stringify({ id: admitted.id })));
+      }
       const result = runTaskTool(guarded, research?.name ?? name, research?.input ?? input, { scopeKey: context.scopeKey, taskId: step.taskId,
         operationId: `${step.id}:${operation}`, ownerAlone: () => current(context.scopeKey) !== null });
       return research ? researchAdmitted(result) : result;
