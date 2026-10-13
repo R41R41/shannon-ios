@@ -10,6 +10,7 @@ import { TaskOwnTimeStore } from '../src/mind/action/taskRuntime/store/taskOwnTi
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { MINECRAFT_TASK_CAP, OWNER_TASK_CAP, OWN_TIME_STEP_ESTIMATE_YEN, fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
+import { MINECRAFT_REQUEST_CRITERIA, admittedMinecraftRequest } from '../src/wiring/fcaMinecraftRequests.js';
 import { inActionExecution } from '../src/infra/context/actionExecution.js';
 
 const cleanups: Array<() => void> = [];
@@ -79,12 +80,12 @@ describe('one budget for FCA steps (E3)', () => {
     expect(calls).toEqual([]);
   });
 
-  it('gives an owner request bound to the Minecraft body a 2000 yen cap, and leaves every other owner request at 300 yen', async () => {
+  it('gives an admitted Minecraft request a 2000 yen cap, and leaves every other owner request at 300 yen', async () => {
     const { db } = world();
     const store = new TaskBudgetStore(db);
     const { actions, calls } = fakeActions(true);
     const bound = new Set(['t-mc']);
-    const budget = fcaBudget({ actions, store, now, minecraftTask: id => bound.has(id) });
+    const budget = fcaBudget({ actions, store, now, minecraftRequest: candidate => bound.has(candidate.id) });
     const mc = { ...(task('owner_request') as object), id: 't-mc', kind: 'generic' } as never;
     const other = { ...(task('owner_request') as object), id: 't-other', kind: 'generic' } as never;
     for (let step = 0; step < OWNER_TASK_CAP.steps; step += 1) { store.add('t-mc', 'owner', 'owner_request', 10, now()); store.add('t-other', 'owner', 'owner_request', 10, now()); }
@@ -94,6 +95,19 @@ describe('one budget for FCA steps (E3)', () => {
     expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('2000円・300歩') });
     expect(store.spent('t-mc').cappedAt).toBe(now());
     expect(calls).toEqual([]);
+  });
+
+  it('counts as a Minecraft request only the admitted task: bound at creation, with its criteria, under the conversation or root', () => {
+    const admitted = { origin: 'owner_request' as const, completionCriteria: MINECRAFT_REQUEST_CRITERIA };
+    expect(admittedMinecraftRequest(admitted, { kind: 'conversation' }, true)).toBe(true);
+    expect(admittedMinecraftRequest(admitted, { kind: 'root' }, true)).toBe(true);
+    // A child the request starts copies nothing that matters: its parent is the request, a generic task.
+    expect(admittedMinecraftRequest(admitted, { kind: 'generic' }, true)).toBe(false);
+    // Research that called minecraft.observe is bound by that call, but was not admitted as a request.
+    expect(admittedMinecraftRequest({ origin: 'owner_request', completionCriteria: '雨の日の過ごし方が三つ分かる。' }, { kind: 'conversation' }, true)).toBe(false);
+    expect(admittedMinecraftRequest(admitted, { kind: 'conversation' }, false)).toBe(false);
+    expect(admittedMinecraftRequest({ ...admitted, origin: 'own_time' }, { kind: 'root' }, true)).toBe(false);
+    expect(admittedMinecraftRequest(admitted, null, true)).toBe(false);
   });
 
   it('reserves an own-time step before it runs and settles its actual yen after; a refused reservation stops it', async () => {

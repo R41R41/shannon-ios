@@ -7,7 +7,7 @@ import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
-import { fcaMinecraftRequests } from './fcaMinecraftRequests.js';
+import { admittedMinecraftRequest, fcaMinecraftRequests } from './fcaMinecraftRequests.js';
 import { createFcaTouchWiring } from './fcaTouchWiring.js';
 import { underWriteLock } from '../infra/sqlite/lockWaits.js';
 import { JevTouchSelector } from '../mind/action/reflex/fcaTouchPorts.js';
@@ -83,7 +83,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const ownTimeBudget = parts.ownTime ? ownTimeBudgetPort(parts.ownTime, provider.model) : null;
     const budgetStore = new TaskBudgetStore(db);
     const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget,
-      minecraftTask: id => Boolean(minecraft?.control.store.body(id)) });
+      minecraftRequest: task => admittedMinecraftRequest(task, task.parentId ? runtime.runtime.get(task.scopeKey, task.parentId) : null,
+        Boolean(minecraft?.control.store.body(task.id))) });
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
       budget.recordUsage(usage.estimatedCostUsd);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,

@@ -1,10 +1,23 @@
 import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
-import type { TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskRecord, TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
 import type { MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
+
+/** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
+export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
+
+/**
+ * Whether a task is a Minecraft request the owner made, as admitted: bound to a body at creation, with the admission's criteria,
+ * directly under the conversation or the root. A child it starts, or any other task that merely touched the body (a tool call
+ * binds too), is not one.
+ */
+export function admittedMinecraftRequest(task: Pick<TaskRecord, 'origin' | 'completionCriteria'>, parent: Pick<TaskRecord, 'kind'> | null, bound: boolean): boolean {
+  return bound && task.origin === 'owner_request' && task.completionCriteria === MINECRAFT_REQUEST_CRITERIA
+    && (parent?.kind === 'root' || parent?.kind === 'conversation');
+}
 
 /** Existing conversation tools now refer to common tasks. No legacy queue or planner fallback in this mode. */
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
@@ -21,7 +34,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       if (page.length < 100) return tasks;
     }
   };
-  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: '目的の達成を新しいワールド観測と実行結果から確認する。', context: '共通FCAのmc.*の道具で実行する。minecraft.reflexで視覚操作の短いセッションを要求できる。' });
+  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: '共通FCAのmc.*の道具で実行する。minecraft.reflexで視覚操作の短いセッションを要求できる。' });
   return {
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();
