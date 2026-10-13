@@ -191,6 +191,14 @@ export const SWITCHES = [
     doc: 'Claude 5.5 voice turns keep the same cached prefix (fixed tools and system; per-turn lines after the words), canaried apart from text.',
   },
   {
+    name: 'SHANNON_STRICT_CONVERSATION_TOOLS', default: 'off', kind: 'explicit_on', owner: 'model', requires: [],
+    doc: 'Claude 5.5 conversation tools go strict within the grammar budget (off: native non-strict tools; a new strict tool set cost 5-8 s to compile).',
+  },
+  {
+    name: 'SHANNON_HAIKU_VOICE_THINKING', default: 'off', kind: 'explicit_on', owner: 'model', requires: [],
+    doc: 'Haiku voice turns think adaptively before speaking (off: thinking disabled, owner-approved 2026-10-13; it cost 2-3 s before the first word).',
+  },
+  {
     name: 'SHANNON_REPLAY_EPOCHS', default: 'off', kind: 'explicit_on', owner: 'model', requires: ['SHANNON_CLAUDE_CACHE_PLAN'],
     doc: 'Replayed history is rendered once per epoch and only appended to until its budget is passed (text; voice also needs the voice plan).',
   },

@@ -6,6 +6,16 @@ import { TOOL_CALL_DEFINITION, TOOL_CALL_JSON_CHARACTERS, TOOL_CALL_PROVIDER_NAM
 
 const INVALID = JSON.stringify({ ok: false, failure: 'invalid_input', retryable: false, text: '道具の名前とJSON入力を確認してください。実行していません。' });
 
+/**
+ * The original input as JSON text. Without strict decoding (`strictConversationTools`) the model may write `argumentsJson` as the
+ * object itself instead of its JSON string; both are the same input. Anything else is no input.
+ */
+function bridgedArguments(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && !Array.isArray(value)) return JSON.stringify(value);
+  return null;
+}
+
 /** One provider transport, retaining the original offer, gate, deadline, notes and per-call identity. */
 export function bridgedAnthropicSession(base: ShannonModelToolSession, nativeNames: Set<string>): ShannonModelToolSession {
   const opened = new Set(base.definitions.filter(tool => tool.domain !== 'meta').map(tool => providerToolName(tool.name)));
@@ -23,14 +33,15 @@ export function bridgedAnthropicSession(base: ShannonModelToolSession, nativeNam
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['name', 'argumentsJson'].includes(key))) return outcome(INVALID);
       args = value;
     } catch { return outcome(INVALID); }
-    if (typeof args.name !== 'string' || typeof args.argumentsJson !== 'string' || args.argumentsJson.length > TOOL_CALL_JSON_CHARACTERS) return outcome(INVALID);
+    const argumentsJson = bridgedArguments(args.argumentsJson);
+    if (typeof args.name !== 'string' || argumentsJson === null || argumentsJson.length > TOOL_CALL_JSON_CHARACTERS) return outcome(INVALID);
     if (!allowed.has(args.name) || !opened.has(args.name)) return outcome(refusal(args.name));
     try {
-      const value: unknown = JSON.parse(args.argumentsJson);
+      const value: unknown = JSON.parse(argumentsJson);
       if (!value || typeof value !== 'object' || Array.isArray(value)) return outcome(INVALID);
     } catch { return outcome(INVALID); }
     // The original validator/gate checks the original object; the bridge never executes or grants authority itself.
-    return originalStart(args.name, args.argumentsJson, signal, milliseconds);
+    return originalStart(args.name, argumentsJson, signal, milliseconds);
   };
   return {
     get definitions() { return [...base.definitions.filter(tool => nativeNames.has(providerToolName(tool.name))), TOOL_CALL_DEFINITION]; },

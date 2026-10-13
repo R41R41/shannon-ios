@@ -80,6 +80,11 @@ export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPr
   toolsWithheld?: true;
   /** The Talk of the turn, for content-free cache receipts only (kept there as a short hash); never sent to a model. */
   threadKey?: string;
+  /**
+   * The owner already heard this turn's waiting phrase (the voice plan's `waitingPhrase`): no fixed phrase is added before a
+   * tool call, and a sentence that only announces the look again is not said. Never sent to a model.
+   */
+  waitingSaid?: true;
 }
 
 export interface ShannonWebSource {

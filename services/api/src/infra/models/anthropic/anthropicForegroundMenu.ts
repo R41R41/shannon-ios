@@ -4,7 +4,9 @@ import type { ShannonModelToolSession } from '../chatModelTools.js';
 import { alwaysLoadedToolNames, TOOL_OPEN_PROVIDER_NAME } from '../../../mind/tools/shannonToolMenu.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 import { providerToolName, toolFromProviderName } from '../../../mind/tools/shannonTools.js';
-import { nonStrictTool, strictGrammarFits, strictRequestFits, TOOL_CALL_SCHEMA, TOOL_CALL_INSTRUCTIONS } from './anthropicToolCapacity.js';
+import {
+  conversationTool, nonStrictTool, strictGrammarFits, strictRequestFits, TOOL_CALL_SCHEMA, TOOL_CALL_INSTRUCTIONS,
+} from './anthropicToolCapacity.js';
 
 /** Only native 5.5 function-tool sessions use this protocol. Native web search keeps its own request. */
 export function stableForegroundMenu(model: string, session: ShannonModelToolSession | undefined): boolean {
@@ -24,14 +26,15 @@ export function stableOpener(open: Anthropic.Tool): Anthropic.Tool {
 /**
  * Jev's selected definitions remain available on the first decision, but no longer change the cached tools/system.
  * The current offer is operator context after the history. Its original session still validates every open and call.
- * Definitions are strict while the request stays within the grammar budget (`ANTHROPIC_GRAMMAR_BUDGET`; the stopping/approval
- * controls and the owner's voice lookups first); the rest go as native non-strict definitions, still callable by name.
+ * Definitions go as native non-strict definitions, callable by name, unless `strictConversationTools()` (a strict tool set the
+ * provider had not compiled before cost seconds before the first token; then strict within the grammar budget, the stopping/
+ * approval controls and the owner's voice lookups first); the executor still validates every input.
  */
 export function appendForegroundMenu(body: Anthropic.MessageCreateParamsNonStreaming, instructions: string): Anthropic.MessageCreateParamsNonStreaming {
   const tools = (body.tools ?? []) as Anthropic.Tool[];
   const open = tools.find(tool => tool.name === TOOL_OPEN_PROVIDER_NAME);
   if (!open) throw new Error('ANTHROPIC_FOREGROUND_MENU_MISSING');
-  const bounded = { ...body, tools: [stableOpener(open), TOOL_CALL_SCHEMA] };
+  const bounded = { ...body, tools: [stableOpener(open), TOOL_CALL_SCHEMA].map(conversationTool) };
   if (!strictRequestFits(bounded)) throw new Error('ANTHROPIC_OUTPUT_SCHEMA_CAPACITY');
   const candidates = tools.filter(tool => tool.name !== TOOL_OPEN_PROVIDER_NAME);
   const registryNames = candidates.map(tool => ({ name: toolFromProviderName(tool.name)?.name ?? tool.name }));

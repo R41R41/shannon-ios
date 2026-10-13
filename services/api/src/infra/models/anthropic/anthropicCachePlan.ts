@@ -20,7 +20,7 @@ import {
   WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
-import { TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
+import { conversationTool, TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 
 /**
@@ -82,7 +82,7 @@ export function planOutputSchema(): Record<string, unknown> {
 /** The fixed tool pair, the same bytes `appendForegroundMenu` leaves for a turn with tools. */
 export function planToolPair(): Anthropic.Tool[] {
   pairOnce ??= Object.freeze([stableOpener(claudeTool(toolOpenDefinition([]))), TOOL_CALL_SCHEMA]);
-  return structuredClone([...pairOnce]);
+  return structuredClone([...pairOnce]).map(conversationTool);
 }
 
 /** Capability lines `withToolCapabilityLines` puts inside her identity (after an anchor line) for a turn that offers their tools. */

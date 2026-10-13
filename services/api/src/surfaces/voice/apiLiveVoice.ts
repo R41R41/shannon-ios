@@ -256,6 +256,7 @@ async function completeLiveVoiceDelegation(
   let expressiveEmotion = provisionalExpressiveEmotion;
   let voicePlan = observedVoicePlan(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   await observer?.onPlan(voicePlan);
+  const waitingPhraseSaid = typeof voicePlan.waitingPhrase === 'string' && voicePlan.waitingPhrase.trim() !== '';
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
     return visibleVoiceResponse(() => ({
@@ -406,7 +407,8 @@ async function completeLiveVoiceDelegation(
     ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false, spokenReply: true })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(
-        { ...modelRequest, threadKey: threadId },
+        // The stream route speaks the first plan's waiting phrase: the model's tool rounds then add no second one.
+        { ...modelRequest, threadKey: threadId, ...(waitingPhraseSaid ? { waitingSaid: true as const } : {}) },
         async delta => {
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
           timing.mark('firstToken');

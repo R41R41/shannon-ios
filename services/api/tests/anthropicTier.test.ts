@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decideTier } from '@shannon/learning';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession } from '../src/infra/models/chatModelTools.js';
-import { anthropicApiKey, sonnetRoutingAvailable, sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicApiKey, haikuVoiceThinking, sonnetRoutingAvailable, sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { AnthropicChatModel, FirstTokenLatency } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { CLAUDE_TEXT_LINES, CLAUDE_WEB_LINE, claudeTextBody, claudeTool, claudeVoiceBody, structuredSchema } from '../src/infra/models/anthropic/anthropicRequest.js';
@@ -97,6 +97,17 @@ describe('the Sonnet request', () => {
     expect((body.system as Array<{ text: string }>)[0]!.text).toContain('[Web検索の回答]');
   });
 
+  it('lets Haiku speak without thinking first unless SHANNON_HAIKU_VOICE_THINKING is on (2026-10-13 latency probe)', () => {
+    expect(haikuVoiceThinking({})).toBe('disabled');
+    expect(haikuVoiceThinking({ SHANNON_HAIKU_VOICE_THINKING: 'on' })).toBe('adaptive');
+    expect(haikuVoiceThinking({ SHANNON_HAIKU_VOICE_THINKING: 'off' })).toBe('disabled');
+    const haiku = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: haikuVoiceThinking({}) } as const;
+    const body = claudeVoiceBody(haiku, { ...base, useWebSearch: false, conversationClass: 'direct' }, 1_200);
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.max_tokens).toBe(2_200);
+    expect(claudeTextBody(haiku, base, undefined).thinking).toEqual({ type: 'adaptive' });
+  });
+
   it('speaks on voice with between_tools thinking at low effort and room for it', () => {
     const body = claudeVoiceBody(settings, { ...base, useWebSearch: false, conversationClass: 'direct' }, 1_200);
     expect(body.thinking).toEqual({ type: 'between_tools' });
@@ -157,6 +168,47 @@ describe('a Sonnet turn', () => {
     expect(latency.estimate()).toBe(1_200);
     for (const value of [600, 700, 650, 640]) latency.record(value);
     expect(latency.estimate()).toBe(700);
+  });
+
+  it('says one waiting phrase a turn: her own announcement after the call is not said again (2026-10-13)', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'ちょっと調べてみますね、ライ氏。メモが1つありますよ。' }], 'end_turn')]);
+    const heard: string[] = [];
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('ちょっと見てみますね。メモが1つありますよ。');
+    expect(result.reply).toBe('ちょっと見てみますね。メモが1つありますよ。');
+  });
+
+  it('says no announcement written before the first call when the plan\'s waiting phrase was already heard (review 2026-10-13)', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const call = anthropicFixture('tool-call');
+    const announced = message([{ type: 'text', text: '確認しますね。' }, ...call.content.filter(block => block.type === 'tool_use')], 'tool_use');
+    const { model } = sonnet([announced, message([{ type: 'text', text: 'メモが1つありますよ。' }], 'end_turn')]);
+    const heard: string[] = [];
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools, waitingSaid: true }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('メモが1つありますよ。');
+    expect(result.reply).toBe('メモが1つありますよ。');
+    expect(tools.calls).toEqual(['study_list']);
+  });
+
+  it('says a reply that was only an announcement after all, never an empty one', async () => {
+    const { model } = sonnet([message([{ type: 'text', text: '調べてみますね。' }], 'end_turn')]);
+    const heard: string[] = [];
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'direct', waitingSaid: true }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('調べてみますね。');
+    expect(result.reply).toBe('調べてみますね。');
+  });
+
+  it('adds no fixed phrase when the plan\'s waiting phrase was already heard, and keeps a sentence that is an answer', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'メモが1つありますよ。見てみますね、と言ったのはこれです。' }], 'end_turn')]);
+    const heard: string[] = [];
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools, waitingSaid: true }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('メモが1つありますよ。見てみますね、と言ったのはこれです。');
+    expect(result.reply).toBe('メモが1つありますよ。見てみますね、と言ったのはこれです。');
   });
 
   it('ends with her fixed line, never a second answer, when it fails after a tool ran', async () => {

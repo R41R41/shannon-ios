@@ -63,6 +63,72 @@ export function voiceWaitingPhrase(providerName: string): string {
   return /(?:create|update|rename|move|delete|restore)$/u.test(providerName) ? 'ちょっと書いてみますね。' : 'ちょっと見てみますね。';
 }
 
+/**
+ * A sentence that only announces a look or a write (「ちょっと調べてみますね、ライ氏。」「確認しますね。」「検索してみますね！」), as her
+ * fixed waiting phrase does. The whole sentence must be the announcement; a sentence with content stays.
+ */
+const ANNOUNCED_VERB = '(?:見て(?:み|き)?|見|調べ(?:て(?:み|き)?)?|確認し(?:て(?:み|き)?)?|確かめ(?:て(?:み|き)?)?|探し(?:て(?:み|き)?)?'
+  + '|検索し(?:て(?:み|き)?)?|チェックし(?:て(?:み|き)?)?|書いて(?:み)?|書き|読んで(?:み)?|読み|開いて(?:み)?|のぞいて(?:み)?|覗いて(?:み)?)';
+const WAITING_ANNOUNCEMENT = new RegExp('^\\s*(?:(?:うん|よし|はい|じゃあ|では|了解(?:です)?|わかりました)[、。！!]?\\s*)?(?:ライ氏[、,]?\\s*)?'
+  + `[^。！？!?\\n]{0,16}?${ANNOUNCED_VERB}(?:ます(?:ね|よ)?|ましょう(?:か|ね)?)`
+  + '(?:[、,]\\s*ライ氏)?[。．.！!…〜ー\\s]*$', 'u');
+
+export function isWaitingAnnouncement(sentence: string): boolean {
+  return WAITING_ANNOUNCEMENT.test(sentence);
+}
+
+/**
+ * One waiting phrase per spoken turn (owner feedback 2026-10-13: 「ちょっと見てみますね。ちょっと調べてみますね、ライ氏。」). Once
+ * something was said before a tool call (her fixed phrase or the model's own words), the first sentence the model says after
+ * that call is held until it ends; a sentence that only announces a look again is dropped, anything else is spoken unchanged.
+ */
+export class VoiceWaitingEcho {
+  private armed = false;
+  private held = '';
+  /** The last announcement left unsaid: spoken after all when it turns out to be the whole reply. */
+  private unsaid = '';
+
+  /** Words were already said (a waiting phrase, or her words before a call): the model's next sentence is checked. */
+  arm(): void {
+    this.armed = true;
+    this.held = '';
+  }
+
+  /** What of this delta may be spoken now. */
+  take(delta: string): string {
+    if (!this.armed) return delta;
+    this.held += delta;
+    const end = this.held.search(/[。！？!?\n]/u);
+    if (end < 0) return this.held.length > 80 ? this.flush() : '';
+    const sentence = this.held.slice(0, end + 1);
+    const rest = this.held.slice(end + 1);
+    this.armed = false;
+    this.held = '';
+    if (!isWaitingAnnouncement(sentence)) return `${sentence}${rest}`;
+    this.unsaid = sentence;
+    return rest.replace(/^\s+/u, '');
+  }
+
+  /** Before another call or at the end of the reply: what is held is decided as it stands. */
+  flush(): string {
+    const held = this.held;
+    this.armed = false;
+    this.held = '';
+    if (held && isWaitingAnnouncement(held)) {
+      this.unsaid = held;
+      return '';
+    }
+    return held;
+  }
+
+  /** At the end of a reply that said nothing else: the announcement left unsaid, so the reply is never empty. */
+  leftUnsaid(): string {
+    const unsaid = this.unsaid;
+    this.unsaid = '';
+    return unsaid;
+  }
+}
+
 export const TOOLS_WITHHELD_INSTRUCTIONS = '[ボクの道具] いまはライ氏以外の人もいるかもしれないので、書斎と自分のフォルダの道具は出していない。頼まれたら、二人だけの時にすると伝える（道具が壊れているのではない）。';
 
 export const TOOL_INSTRUCTIONS = [

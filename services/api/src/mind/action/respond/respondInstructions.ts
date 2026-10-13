@@ -4,12 +4,21 @@
 export const VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。ただし相手が長い話・物語・長めのセリフなどをはっきり求めたときは、求められた長さで最後まで話してよい。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。';
 
 /**
+ * A question whose answer must be worked out from facts (owner feedback 2026-10-13: asked 「17時に福岡空港にいるには何時に出ればいい？」,
+ * she gave only the travel time): the conclusion he asked for comes first, with a sensible margin, and the basis after it.
+ * The Claude text reply (`CLAUDE_TEXT_LINES`) and the Claude voice reply (`SHORT_VOICE_REPLY_INSTRUCTIONS`) carry it.
+ */
+export const COMPUTED_ANSWER_LINE = '「何時に出ればいい？」「いくら要る？」「どっちがいい？」のように、事実から計算や判断がいる質問には、材料（所要時間など）だけで終えず、'
+  + '聞かれたことへの結論を最初に言う（例:「16時半ごろ出れば余裕です。空港まで16分ほどです」）。'
+  + '結論には乗り換えや混み具合を見込んだ無理のない余裕を含め、根拠はそのあとに短く添える。';
+
+/**
  * The Claude voice reply's length (owner feedback 2026-10-13, 「長くて聞いていられない」; live replies still ran 110–174 characters):
  * the historical profile's 「複雑な回答でも原則3文」 no longer stands beside the 1–2 sentence rule of `VOICE_NATURAL_INSTRUCTIONS`.
  * Also given to a voice turn answered through the structured text request (`spokenReply`). The historical GPT profile keeps
  * `VOICE_REPLY_INSTRUCTIONS`.
  */
-export const SHORT_VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。'
+export const SHORT_VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。' + COMPUTED_ANSWER_LINE
   + 'ふだんは1〜2文の短い文（全体でおよそ60字）にし、複雑な内容でも要点だけを言う。'
   + '言い切れない続きがある時だけ、要点のあとに続きを話そうかと聞くか、詳しくは画面に出すと短く添える。'
   + '相手が長い話・物語・長めのセリフや詳しい説明をはっきり求めたときだけ、求められた長さで最後まで話してよい。'

@@ -23,6 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   resetCacheReceipts();
 });
 
@@ -80,6 +81,7 @@ describe('F1: a refused plan request falls back to the shape without the plan, o
 
 describe('a grammar refusal of a plan turn with tools (M4 grammar fix)', () => {
   it('keeps the inline definitions native without strict decoding and the plan\'s prefix; a second refusal answers in the plan-off shape', async () => {
+    vi.stubEnv('SHANNON_STRICT_CONVERSATION_TOOLS', 'on'); // The strict admission this refusal is about (off by default).
     const h = context([refused('The compiled grammar is too large'), answer(HAIKU.model, 0, 2_000)]);
     const turn = { ...request, tools: tools(['study.list', 'study.read']) };
     expect((await planChat(h.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');
