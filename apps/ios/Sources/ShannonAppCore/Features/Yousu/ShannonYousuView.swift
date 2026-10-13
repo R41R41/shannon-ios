@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 「シャノン › ようす」: シャノンのいま (decision 2026-10-03), with 学び and 気分 beside it (Syzygy ADR-0008 §13, option A,
-/// owner 2026-10-07): a switch いま／学び／気分 at the top. The services of the legacy runtime are 「設定 › 管理 › 運用」
+/// owner 2026-10-07): a switch いま／学び／気分 at the top, with 目標 and 点検 (Syzygy ADR-0009 E7) for the owner alone.
+/// The services of the legacy runtime are 「設定 › 管理 › 運用」
 /// (`ShannonOpsView`).
 public struct ShannonYousuView: View {
     @Bindable private var model: ShannonYousuModel
@@ -46,7 +47,7 @@ public struct ShannonYousuView: View {
                 if model.learning.skills == nil, model.learning.values == nil { await model.learning.reload() }
             }
             .onChange(of: model.learning.isUnavailable) { _, unavailable in
-                if unavailable, model.tab == .learning { model.tab = .now }
+                if unavailable, ShannonYousuModel.ownerPages.contains(model.tab) { model.tab = .now }
             }
     }
 
@@ -61,6 +62,10 @@ public struct ShannonYousuView: View {
             .id(model.tab)
         case .learning:
             ShannonLearningView(model: model.learning)
+        case .goals:
+            ShannonGoalsView(model: model.executive)
+        case .inspection:
+            ShannonInspectionView(model: model.executive)
         }
     }
 
@@ -82,5 +87,21 @@ public struct ShannonYousuView: View {
             options: model.tabs.map { .init($0.title, value: $0) }
         )
 #endif
+    }
+}
+
+/// Tells ようす whether someone besides the owner may see or hear (the same rule as 「いま」's reads): 目標 and 点検 are offered
+/// only while the owner is alone, and an open one goes back to いま when someone joins.
+public struct ShannonYousuAudience: ViewModifier {
+    let model: ShannonYousuModel
+    let othersPresent: Bool
+
+    public init(model: ShannonYousuModel, othersPresent: Bool) {
+        self.model = model
+        self.othersPresent = othersPresent
+    }
+
+    public func body(content: Content) -> some View {
+        content.onChange(of: othersPresent, initial: true) { model.othersPresent = othersPresent }
     }
 }

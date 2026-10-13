@@ -187,7 +187,7 @@ final class ShannonLearningTests: XCTestCase {
         await yousu.learning.reload()
         XCTAssertEqual(yousu.learning.skillsPhase, .loaded)
         XCTAssertEqual(yousu.learning.valuesPhase, .hidden)
-        XCTAssertEqual(yousu.tabs, [.now, .learning, .mood])
+        XCTAssertEqual(yousu.tabs, [.now, .goals, .learning, .mood, .inspection])
 
         client.skills = .failure(ShannonAPIError.rejected(status: 403))
         await yousu.learning.reload()
@@ -381,7 +381,11 @@ final class ShannonLearningTests: XCTestCase {
         XCTAssertEqual(yousu.tabs, [.now, .mood], "a failed read offers nothing")
         client.skills = .success(.init(capacity: .init(used: 0, limit: 20), skills: []))
         await yousu.learning.reload()
-        XCTAssertEqual(yousu.tabs, [.now, .learning, .mood])
+        XCTAssertEqual(yousu.tabs, [.now, .goals, .learning, .mood, .inspection])
+        yousu.tab = .goals
+        yousu.othersPresent = true
+        XCTAssertEqual(yousu.tabs, [.now, .learning, .mood], "目標 and 点検 are the owner's alone")
+        XCTAssertEqual(yousu.tab, .now)
     }
 
     @MainActor
