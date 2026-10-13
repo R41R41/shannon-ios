@@ -255,6 +255,7 @@
     "mind/action/fca/fcaToolState.ts",
     "mind/action/fca/fcaVoice.ts",
     "mind/action/fca/fcaVoicePorts.ts",
+    "mind/action/fca/fcaWaitGate.ts",
     "mind/action/fca/researchReport.ts",
     "mind/action/fca/store/fcaEvidenceStore.ts",
     "mind/action/ownTime/anthropicAutonomyTextModel.ts",
