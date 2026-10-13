@@ -30,7 +30,7 @@ import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
-import { innerNoteMood, type InnerNotePort } from '../../mind/emotion/innerNotePorts.js';
+import { innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
 export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 
 /**
@@ -359,8 +359,7 @@ export class ShannonBody {
     // This read is what tells her the window is visible; an open look for this device rides on the snapshot.
     const looking = this.looks.presence(scopeKey, deviceId, at);
     const content = {
-      // Syzygy ADR-0012: while her inner note is active, the face is what she shows (and a blush, and her until); else as before.
-      mood: innerNoteMood(this.innerNote, scopeKey, at, {
+      mood: innerNoteMood(this.reactions.innerNote, scopeKey, at, { // Syzygy ADR-0012: while her inner note is active, the face it shows.
         expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}),
         primary: mood.fromConversation ? current.primary : 'neutral',
         intensity: mood.fromConversation ? round(current.intensity, 1) : 0,
@@ -466,13 +465,5 @@ export class ShannonBody {
   /** Stories the owner can read and has not reacted to: the study card's own `awaitingReaction`. */
   private awaitingReaction(scopeKey: string): number {
     return this.dependencies.autonomy.study.overview(scopeKey).pieces.filter(piece => piece.awaitingReaction).length;
-  }
-
-  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note, for the face on presence and the touch reaction. Null: as before. */
-  private innerNote: InnerNotePort | null = null;
-
-  useInnerNote(port: InnerNotePort | null): void {
-    this.innerNote = port;
-    this.reactions.useInnerNote(port);
   }
 }
