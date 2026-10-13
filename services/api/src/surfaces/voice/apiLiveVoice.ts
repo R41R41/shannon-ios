@@ -47,7 +47,7 @@ import {
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import { validatedVoiceDeviceContext, type VoiceDeviceContext } from './voiceDeviceContext.js';
 export { voiceConversationInstructions } from './voiceConversationInstructions.js';
-import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
+import { answerFirstLine, spokenScheduleLine, temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { guestSpeakerReminder, guestTurnPositionInstruction } from './voiceIntroductionInstructions.js';
 import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
@@ -74,9 +74,7 @@ import { conversationFcaProvenance, observeFcaConversation } from '../../mind/ac
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
-import { admittedWorkContext, admitVoiceResearch, researchHeardInTurn, researchSaid, voiceTurnClock } from './voiceResearchTurn.js';
-import { unquotedSpokenLine } from './spokenSentences.js';
-import { answerFirstLine, spokenScheduleLine } from './voiceConversationInstructions.js';
+import { admittedWorkContext, admitVoiceResearch, researchAfterAck, researchSaid, voiceTurnClock, type AckStream } from './voiceResearchTurn.js';
 import { finishTurnTiming, TurnTiming, turnStages, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT, webForWeather, followUp } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -107,18 +105,13 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   mind?: MindTurnPorts;
   fcaVoice?: () => FcaVoicePort | null; deviceId?: string;
 }
-export interface LiveVoiceStreamObserver {
+export interface LiveVoiceStreamObserver extends Pick<AckStream, 'flushSpoken'> {
   readonly signal?: AbortSignal;
   readonly timing?: TurnTiming; // The stream's own timing line (`turnTiming.ts`); absent, the delegation writes one itself.
   onPlan(plan: Record<string, unknown>): void | Promise<void>;
   onTextDelta(delta: string): void | Promise<void>;
   /** Whether the plan's waiting phrase has been heard yet (the stream route says it only after a silence); absent, it was said with the plan. */
   waitingSaid?(): boolean;
-  /**
-   * Says now what is held of an unfinished sentence: before a turn waits for its research, so the acknowledgement is heard at once
-   * (owner test 2026-10-13: 「「ちょっと調べてみますね」」 had no 。 and was held 20 s, until the wait ended).
-   */
-  flushSpoken?(): Promise<void>;
 }
 export function dispatchLiveVoiceRequest(
   request: ApiRequest,
@@ -356,8 +349,7 @@ async function completeLiveVoiceDelegation(
       decision.solutionWantedProbability < 0.4
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
-    ].join('\n'),
-    answerFirstLine(askedToolNames(transcript)), spokenScheduleLine(capabilityPrompt),
+    ].join('\n'), answerFirstLine(askedToolNames(transcript)), spokenScheduleLine(capabilityPrompt),
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
     alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
@@ -440,11 +432,7 @@ async function completeLiveVoiceDelegation(
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
   orchestrationState = settleVoiceTaskDecision(dependencies, orchestrationState, requiresStructuredTaskDecision, completion.taskDecision);
-  const acknowledged = unquotedSpokenLine(completion.reply);
-  const flushed = Boolean(next.admitted.work && observer?.flushSpoken);
-  if (flushed) await observer!.flushSpoken!();
-  const say = observer?.onTextDelta.bind(observer);
-  const heard = await researchHeardInTurn(fcaTurn, next.admitted, { before: acknowledged, say, flushed }, observer?.signal);
+  const { acknowledged, heard } = await researchAfterAck(fcaTurn, next.admitted, completion.reply, observer);
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
   const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(acknowledged, work)}${heard}`;
   let feedbackRecordId: string | undefined;

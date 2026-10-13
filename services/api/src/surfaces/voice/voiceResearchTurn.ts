@@ -11,6 +11,7 @@ import type { FcaConversationTurn } from '../../mind/action/fca/fcaConversationP
 import { fallbackSpokenReport } from '../../mind/action/fca/fcaSpokenReport.js';
 import type { TaskView } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import { withResearchUnderWay } from '../../mind/action/respond/turnDeadline.js';
+import { unquotedSpokenLine } from './spokenSentences.js';
 import { carriedOffer, carriedRequest } from '../../mind/selectors/voiceOfferCarry.js';
 import type { VoiceDecisionInput } from '../../contracts/voiceDecisionContract.js';
 import type { PlaceSearchContext } from '../../integrations/places/placeDiscovery.js';
@@ -63,6 +64,27 @@ export async function researchHeardInTurn(turn: FcaConversationTurn | null, admi
   if (signal?.aborted) return '';
   turn.hearWork?.(result.taskId, result.report.id, answer);
   return text;
+}
+
+/** The voice stream as a research turn uses it (`LiveVoiceStreamObserver`). */
+export interface AckStream {
+  readonly signal?: AbortSignal;
+  onTextDelta(text: string): Promise<void> | void;
+  /** Says now what is held of an unfinished sentence (the stream route's segmenter), before a wait. */
+  flushSpoken?(): Promise<void>;
+}
+
+/**
+ * Her reply as said (a line wholly in quotation marks without them), then the research's result if it arrives within the wait. What is
+ * held of her acknowledgement is said before the wait (owner test 2026-10-13: 「「ちょっと調べてみますね」」 had no 。 and was held 20 s).
+ */
+export async function researchAfterAck(turn: FcaConversationTurn | null, admitted: { work: TaskView | null; admittedAt: number },
+  reply: string, stream: AckStream | undefined): Promise<{ acknowledged: string; heard: string }> {
+  const acknowledged = unquotedSpokenLine(reply);
+  const flushed = Boolean(admitted.work && stream?.flushSpoken);
+  if (flushed) await stream!.flushSpoken!();
+  const say = stream?.onTextDelta.bind(stream);
+  return { acknowledged, heard: await researchHeardInTurn(turn, admitted, { before: acknowledged, say, flushed }, stream?.signal) };
 }
 
 const SENTENCE_CLOSED = /[。！？!?\n][」』）】”"]?\s*$/u;
