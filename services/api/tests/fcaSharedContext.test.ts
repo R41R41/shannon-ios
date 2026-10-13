@@ -89,7 +89,8 @@ describe('FCA shared context through actual execution and existing state/memory 
         return { ...context, knowledgePrompt: '', memoryRecall: { status: 'skipped', modelCalls: 0, elapsedMilliseconds: 0 } };
       },
     });
-    const task = f.create('調査'); await f.driver.tick(); await aborted;
+    // Only a decision that waits for enrichment starts it (a memory inquiry, 2026-10-13).
+    const task = f.create('調査について何を覚えてる？'); await f.driver.tick(); await aborted;
     expect(f.driver.runtime.get('owner', task.id)?.phase).toBe('executing');
     expect(f.driver.runtime.pendingReceipts('owner')).toEqual([]);
     release(); await f.driver.drain();

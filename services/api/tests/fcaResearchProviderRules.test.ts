@@ -114,6 +114,23 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_400`]);
   });
 
+  it('fails a step the provider answered with a server error at once, logging its closed facts (2026-10-13)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic-private-error' } }),
+      { status: 500, headers: { 'content-type': 'application/json' } }));
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
+    const { driver, parent, child } = runtime(model);
+    await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'failed');
+    expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'failed', summary: rejectedTaskReport('明日の天気') });
+    expect(driver.runtime.snapshot('owner', parent.id)!.messages).toEqual([expect.objectContaining({ sourceTaskId: child.id })]);
+    expect(fixture.bodies).toHaveLength(1);
+    expect(log.mock.calls.map(args => String(args[0]))).toContain(`Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_500`);
+    const facts = warn.mock.calls.map(args => String(args[0])).filter(line => line.includes('anthropic_request_failed'));
+    expect(facts.map(line => JSON.parse(line))).toEqual([{ event: 'anthropic_request_failed', lane: 'fca', errorClass: 'InternalServerError', status: 500, type: 'api_error', cause: null }]);
+    expect(facts.join('\n')).not.toContain('synthetic-private-error');
+  });
+
   it('keeps throttling and lost answers unknown, then reports the retired task to the owner', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }),

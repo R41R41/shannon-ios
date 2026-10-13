@@ -2,7 +2,7 @@ import { configuredActionResourceProof, configuredRetainedResources } from './co
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { applySchemaSteps } from '../infra/sqlite/migrations/schemaSteps.js';
 import { ACTION_SLOTS_STEP, ACTION_THREADS_STEP, MIND_WORKER_STARTS_STEP, OWNER_SLOT_LIMITS_STEP } from '../infra/sqlite/migrations/executionSteps.js';
-import { ACTION_ID, UNKNOWN_EXIT_MS, type ActionDraft, type ActionLease, type ActionView } from '@shannon/mind';
+import { ACTION_ID, UNKNOWN_EXIT_MODEL_ONLY_MS, UNKNOWN_EXIT_MS, type ActionDraft, type ActionLease, type ActionView } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
 import { knownAgentHostIds } from '../mind/action/agentTasks/store/agentHostIds.js';
 import { agentTaskSettled } from '../mind/action/agentTasks/store/agentTaskSettlement.js';
@@ -23,7 +23,7 @@ export function sweepActions(actions:Pick<SQLiteActionStore,'transaction'|'sweep
   let released=0;
   try { released=actions.transaction(()=>actions.sweep(at)); }
   catch(error) { if(!isSqliteBusy(error))throw error; busyLog('Shannon mind sweep skipped: database busy'); return; }
-  if(released>0)log(`Shannon mind closed ${released} unknown action(s) after ${UNKNOWN_EXIT_MS/60_000} min`);
+  if(released>0)log(`Shannon mind closed ${released} unknown action(s) after ${UNKNOWN_EXIT_MODEL_ONLY_MS/60_000} or ${UNKNOWN_EXIT_MS/60_000} min`);
 }
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
 export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string,

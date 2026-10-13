@@ -67,7 +67,8 @@ describe('FCA tasks leave fca_unknown without replaying anything', () => {
     await driver.stop(parent.id, 'owner_stop');
     expect(driver.runtime.get('owner', parent.id)?.phase).toBe('stopping'); // held by the unknown child
 
-    f.advance(9 * MINUTE); await driver.tick(); await driver.drain();
+    // A work task's step is model-only: it leaves at the shorter exit (2026-10-13), not after ten minutes.
+    f.advance(2 * MINUTE); await driver.tick(); await driver.drain();
     expect(driver.runtime.get('owner', child.id)?.phase).toBe('unknown');
 
     f.advance(2 * MINUTE); await driver.tick(); await driver.drain();

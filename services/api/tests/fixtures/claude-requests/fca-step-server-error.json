@@ -163,7 +163,7 @@
  "cacheReceipts": [],
  "outcome": {
   "result": {
-   "error": "FCA_MODEL_RESPONSE_UNKNOWN",
+   "error": "FCA_MODEL_HTTP_500",
    "receipts": [
     {
      "model": "claude-haiku-5-5",

@@ -34,8 +34,10 @@ export class TaskSourceStore {
           AND m.message_id=l.message_id AND ((?!='conversation' AND m.consumed_by IS NOT NULL)
           OR m.message_id IN (SELECT value FROM json_each(?))))))) ORDER BY s.observed_at,s.step_id`)
       .all(task.scopeKey, task.id, task.kind, activeStepId, task.kind, messageIds === undefined ? 0 : 1, task.kind, JSON.stringify(messageIds ?? []));
+    const pendingRuns = rows.some(row => row.state === 'pending') && this.runsOnPendingOrigin(task.id);
     return rows.map(row => ({ ...(row.source_kind === 'memory' ? { kind: 'memory' as const, threadId: null, experienceId: null }
-      : { threadId: String(row.thread_id), experienceId: row.experience_id as string | null }), stepId: String(row.step_id),
+      : { threadId: String(row.thread_id), experienceId: row.experience_id as string | null,
+        ...(pendingRuns && row.state === 'pending' ? { pending: true as const } : {}) }), stepId: String(row.step_id),
       observedAt: String(row.observed_at), recalledMemoryIds: JSON.parse(String(row.recalled_ids_json)) as string[],
       ...(row.read_ids_json !== '[]' ? { readSourceIds: JSON.parse(String(row.read_ids_json)) as string[] } : {}) }));
   }
@@ -43,13 +45,35 @@ export class TaskSourceStore {
     for (const source of this.refs(task, activeStepId, messageIds)) this.db.prepare(
       'INSERT OR IGNORE INTO fca_task_source_links(task_id,step_id,message_id) VALUES(?,?,?)').run(targetId, source.stepId, messageId);
   }
+  /**
+   * Conversation work (the owner's 「調べて」: a research task whose context is the turn's `[Conversation work]`) runs while the
+   * turn it was made in is still in progress (owner decision 2026-10-13: it starts at once and its provenance binds afterwards;
+   * before, it waited ~12 s for a voice turn to finish). A failed turn still holds it, and stops it (`failConversation`).
+   */
+  runsOnPendingOrigin(taskId: string): boolean {
+    const row = this.db.prepare(`SELECT m.text AS text FROM agent_tasks t JOIN fca_task_messages m
+      ON m.target_task_id=t.task_id AND m.message_id='context:'||t.task_id WHERE t.task_id=? AND t.fca_kind='research'`).get(taskId);
+    return typeof row?.text === 'string' && row.text.startsWith('[Conversation work]');
+  }
+  /** What a link's source must be for the task to use it: bound, or (conversation work) not failed. */
+  private unusable(taskId: string): string {
+    return this.runsOnPendingOrigin(taskId) ? "s.state='failed'" : "s.state!='bound'";
+  }
   hasUnboundOrigin(taskId: string): boolean {
     return Boolean(this.db.prepare(`SELECT 1 FROM fca_task_source_links l JOIN fca_task_sources s ON s.step_id=l.step_id
-      WHERE l.task_id=? AND l.message_id='' AND s.state!='bound' LIMIT 1`).get(taskId));
+      WHERE l.task_id=? AND l.message_id='' AND ${this.unusable(taskId)} LIMIT 1`).get(taskId));
+  }
+  /**
+   * What a lost origin turn does to a dependent: an unknown stays unknown (S5); conversation work already running on the turn (it
+   * no longer waits for the bind) is stopped through its step like any stop; anything else is paused as stopped.
+   */
+  failedOriginStop(task: TaskRecord): { status?: 'paused'; pauseReason?: string } {
+    const running = this.db.prepare('SELECT step_id FROM fca_task_checkpoints WHERE task_id=?').get(task.id)?.step_id;
+    return task.pauseReason === 'fca_unknown' || running ? {} : { status: 'paused', pauseReason: 'fca_stopped' };
   }
   messageVisible(taskId: string, messageId: string): boolean {
     return !this.db.prepare(`SELECT 1 FROM fca_task_source_links l JOIN fca_task_sources s ON s.step_id=l.step_id
-      WHERE l.task_id=? AND l.message_id=? AND s.state!='bound' LIMIT 1`).get(taskId, messageId);
+      WHERE l.task_id=? AND l.message_id=? AND ${this.unusable(taskId)} LIMIT 1`).get(taskId, messageId);
   }
   hasPendingMessage(taskId: string): boolean {
     return Boolean(this.db.prepare(`SELECT 1 FROM fca_task_messages m JOIN fca_task_source_links l

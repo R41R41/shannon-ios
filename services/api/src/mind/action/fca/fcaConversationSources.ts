@@ -170,7 +170,7 @@ export function createFcaSourceGuard(parts: {
             observedAt: source.observedAt, recalledMemoryIds: source.recalledMemoryIds })) return false;
         continue;
       }
-      if (!source.experienceId) { if (source.stepId !== pendingStepId) return false; continue; }
+      if (!source.experienceId) { if (!unboundSourceVisible(source, task, pendingStepId, withholding)) return false; continue; }
       if (source.readSourceIds?.some(id => !checked.readSourceVisible?.(scopeKey, id, source.observedAt))) return false;
       const experience = parts.conversations.experiencesById?.(scopeKey, [source.experienceId])[0];
       if (!experience || parts.conversations.threadOfTurn?.(scopeKey, source.experienceId) !== source.threadId) return false;
@@ -208,6 +208,16 @@ export function createFcaSourceGuard(parts: {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
   }, { sources: sourcesVisible, progress, content });
+}
+
+/**
+ * Conversation work made in a turn still in progress runs at once (owner decision 2026-10-13): until the turn binds, the task's
+ * own words are judged like any reply, and the bound turn is judged in full on the next check (the verdict key holds the sources).
+ */
+function unboundSourceVisible(source: TaskSource, task: TaskView, pendingStepId: string | undefined, withholding: MemoryWithholding): boolean {
+  if (source.stepId === pendingStepId) return true; // the turn that is asking
+  return source.kind !== 'memory' && source.pending === true && !withholding.withholdsReply({ observedAt: source.observedAt,
+    recalledMemoryIds: source.recalledMemoryIds, text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n') });
 }
 
 /** Trusted executor receipts only. Unknown or missing private read metadata is explicit, never treated as public. */

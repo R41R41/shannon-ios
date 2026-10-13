@@ -3,6 +3,7 @@ import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { memoryWorld } from './support/memoryWorld.js';
 import { createTaskMemory } from '../src/mind/memory/taskMemory.js';
 import { createTaskRecall } from '../src/mind/recall/taskRecall.js';
+import { fcaRecallContext } from '../src/mind/action/fca/fcaRecallContext.js';
 import type { EnrichedTurnContext, TurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 import type { TurnCognitiveContext } from '../src/mind/workspace/contextPorts.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
@@ -30,6 +31,17 @@ describe('task recall decisions', () => {
     expect(first.items).toEqual([]);
     const second = await f.recall.packet(f.input); expect(second.status).toBe('ready'); expect(second.sourceIds).toContain(late.id);
     await f.recall.packet(f.input); expect(f.calls).toHaveLength(1);
+  });
+  it('starts no enrichment for a decision that will not wait for it, and still gives the deterministic recall (2026-10-13)', async () => {
+    const f = fixture(), known = f.store.appendTurn('owner', 'thread', '望遠鏡の話', '望遠鏡を見た', f.now());
+    const input = { ...f.input, semantic: false };
+    f.recall.start(input); expect(f.calls).toHaveLength(0);
+    const packet = await f.recall.packet(input);
+    expect(packet.status).toBe('ready'); expect(packet.sourceIds).toContain(known.id); expect(f.calls).toHaveLength(0);
+    const inquiry = fcaRecallContext({ scopeKey: 'owner', taskId: 't', snapshot: { task: { goal: '望遠鏡について何を覚えてる？', completionCriteria: '', summary: '' }, messages: [] } } as never, {}, new AbortController().signal);
+    expect(inquiry).toMatchObject({ waitMilliseconds: 1500, input: { semantic: true } });
+    const research = fcaRecallContext({ scopeKey: 'owner', taskId: 't', snapshot: { task: { goal: '大濠公園から福岡空港までの所要時間', completionCriteria: '', summary: '' }, messages: [] } } as never, {}, new AbortController().signal);
+    expect(research).toMatchObject({ waitMilliseconds: 0, input: { semantic: false } });
   });
   it('invalidates obsolete goals and cancelled work even if a provider resolves after abort', async () => {
     const f = fixture(), old = f.store.appendTurn('owner', 'thread', '古い目的の資料', '記録', f.now());

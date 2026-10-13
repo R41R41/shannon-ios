@@ -64,7 +64,8 @@ export function liveSlotClasses(db: DatabaseSync, scopeKey: string, at?: string)
   const columns = hasActionSlotColumns(db) ? 'slot_class, kind, source_id, state, updated_at' : 'NULL AS slot_class, kind, source_id, state, updated_at';
   return db.prepare(`SELECT ${columns} FROM mind_actions WHERE scope_key = ? AND (state IN ('running','waiting','stopping')
     OR (state = 'unknown' AND kind != 'respond' AND sent = 1))`).all(scopeKey)
-    .filter(row => at === undefined || row.state !== 'unknown' || !unknownDue(String(row.updated_at), at))
+    .filter(row => at === undefined || row.state !== 'unknown'
+      || !unknownDue(String(row.updated_at), at, actionTaskLink(db, { kind: String(row.kind), sourceId: String(row.source_id) }).taskKind))
     .map(row => slotClassOfRow(db, row));
 }
 

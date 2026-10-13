@@ -3,7 +3,7 @@ import { observerSpan, withObserverTask } from '../../../infra/observer/observer
 import { createHash } from 'node:crypto';
 import { currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { executeTaskTool as runTaskTool } from '../../tools/toolRunnerPorts.js';
-import { providerToolName, toolFailure, type ToolResult } from '../../tools/toolRegistryPorts.js';
+import { providerToolName, toolFailure, toolOk, type ToolResult } from '../../tools/toolRegistryPorts.js';
 import { baseToolSession, withToolMenu } from '../../tools/toolsPorts.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import type { TaskRuntime, TaskStep, TaskView } from '../taskRuntime/taskRuntimePorts.js';
@@ -37,7 +37,9 @@ export function createFcaConversationBridge(parts: {
   budgetMs?: number;
 }): FcaConversationPort {
   const budgetMs = parts.budgetMs ?? FCA_TURN_BUDGET_MS;
-  type Turn = { step: TaskStep; ownerAlone(): boolean; observed: Set<string>; memories: Set<string>; reads: Set<string>; spentMs: number; overBudget: boolean };
+  type Turn = { step: TaskStep; ownerAlone(): boolean; observed: Set<string>; memories: Set<string>; reads: Set<string>; spentMs: number; overBudget: boolean;
+    /** The research this turn already admitted for the owner's words (`delegate`): a `web.research` of the same turn reuses it. */
+    work?: string };
   const active = new Map<string, Turn>();
   /** Runs one provenance check of the turn on its budget; once spent, the turn answers closed. */
   const budgeted = <T>(turn: Turn, closedValue: T, work: () => T): T => {
@@ -146,9 +148,13 @@ export function createFcaConversationBridge(parts: {
         delegate(spec, places) {
           if (closed || !current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
           const existing = parts.runtime.list(step.scopeKey, { parentId: step.taskId, order: 'recent', limit: 50 }).find(task => task.goal === spec.goal && JSON.stringify(parts.runtime.placeContext?.(step.scopeKey, task.id)) === JSON.stringify(normalizedPlaceContext(places)) && ['ready', 'executing', 'waiting'].includes(task.phase) && parts.visible(step.scopeKey, task.id, step.id));
-          if (existing) return existing;
+          if (existing) {
+            turn.work = existing.id;
+            return existing;
+          }
           const child = parts.runtime.createChild(step.scopeKey, step.taskId, { ...spec, kind: 'research', origin: 'owner_request' }, `${step.id}:work`);
           if (places && !parts.runtime.admitPlaceContext?.(step, child.id, places)) throw new Error('FCA_PLACE_CONTEXT_FENCED');
+          turn.work = child.id;
           return child;
         },
         commit(experienceId) {
@@ -207,6 +213,11 @@ export function createFcaConversationBridge(parts: {
       const operation = createHash('sha256').update(name).update('\0').update(JSON.stringify(input) ?? 'null').digest('hex');
       const research = researchTaskInput(name, input);
       if (name === 'web.research' && !research) return toolFailure('invalid_input', '調べること（question）が空です。', { retryable: false });
+      // 2026-10-13: a voice turn whose words were already admitted as research (`delegate`) also called `web.research` for the
+      // same question, and one question became two research tasks. The turn's own research is that question's one task.
+      const admitted = research && turn.work ? guarded.get(context.scopeKey, turn.work) : null;
+      const reusable = admitted && !['stopped', 'stopping', 'failed', 'unknown'].includes(admitted.phase);
+      if (reusable) return researchAdmitted(toolOk(JSON.stringify({ id: admitted.id })));
       const result = runTaskTool(guarded, research?.name ?? name, research?.input ?? input, { scopeKey: context.scopeKey, taskId: step.taskId,
         operationId: `${step.id}:${operation}`, ownerAlone: () => current(context.scopeKey) !== null });
       return research ? researchAdmitted(result) : result;

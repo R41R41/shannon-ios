@@ -36,7 +36,7 @@ export function createTaskRecall(parts: {
       const context = observeSync('recall', { phase: 'task_deterministic' }, () => prepareTurnCognitiveContext(snapshot, parts.conversations, { scopeKey: input.scopeKey, message: input.cue,
         occurredAt: parts.now(), channel: 'system', present: input.present, currentGoal: input.cue }), value => ({ memoryCount: value.memories.length }));
       entry.ids = [...new Set([...parts.memory.search(input.scopeKey, input.cue, input.present).map(item => item.id), ...context.memories.map(item => item.id)])];
-      if (!parts.enrich) { entry.status = entry.ids.length ? 'ready' : 'no_match'; return; }
+      if (!parts.enrich || input.semantic === false) { entry.status = entry.ids.length ? 'ready' : 'no_match'; return; }
       const running = pending.get(key) ?? new Set<Entry>(); running.add(entry); pending.set(key, running);
       const span = observerSpan('recall', { phase: 'task_semantic' });
       entry.done = span.run(() => parts.enrich!.enrich(context, { scopeKey: input.scopeKey, message: input.cue, snapshot, memoryTurn: true, signal: entry.controller.signal }))

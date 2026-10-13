@@ -15,6 +15,8 @@ export function fcaRecallContext(step: TaskStep, prior: Record<string, unknown>,
   const serialized = JSON.stringify(context);
   const contextVersion = createHash('sha256').update(serialized).digest('hex');
   const cue = [step.snapshot.task.goal.slice(0, 1400), step.snapshot.task.summary.slice(0, 500), JSON.stringify(messages).slice(0, 1400), JSON.stringify(context.results).slice(0, 600)].join('\n').slice(0, 4000);
-  const input: TaskRecallInput = { scopeKey: step.scopeKey, taskId: step.taskId, contextVersion, cue, present: OWNER_AUDIENCE, signal };
-  return { input, checkpoint: { messages }, waitMilliseconds: isMemoryInquiry(cue) ? 1500 : 0 };
+  // Only a decision that waits for enrichment starts it (`TaskRecallInput.semantic`); the deterministic recall is always given.
+  const inquiry = isMemoryInquiry(cue);
+  const input: TaskRecallInput = { scopeKey: step.scopeKey, taskId: step.taskId, contextVersion, cue, present: OWNER_AUDIENCE, signal, semantic: inquiry };
+  return { input, checkpoint: { messages }, waitMilliseconds: inquiry ? 1500 : 0 };
 }

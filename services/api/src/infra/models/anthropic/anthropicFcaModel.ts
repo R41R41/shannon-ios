@@ -14,7 +14,7 @@ import { observedAnthropicResponse, observedToolName } from './observerProjectio
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
-import { reportRejection } from './anthropicRejection.js';
+import { providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -150,7 +150,15 @@ export class AnthropicFcaModel implements FcaModel {
         if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: 0, outputTokens: 0 }; }
         throw new Error(`FCA_MODEL_HTTP_${error.status}`);
       }
+      reportDispatchFailure('fca', error);
       await this.options.recordUsage(this.usage(undefined));
+      if (!combined.aborted && providerServerError(error)) {
+        // The provider answered with a server error: no decision came back, so the step's outcome is known even though its
+        // spend stays recorded as unknown (2026-10-13: such a step sat unknown for ten minutes holding a research slot while
+        // the owner waited). The runner fails the task with its report at once; nothing is resent.
+        if (execution) execution.modelOutcome = 'acknowledged';
+        throw new Error(`FCA_MODEL_HTTP_${error.status}`);
+      }
       throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
     }
     const usage = this.usage(message.usage);
