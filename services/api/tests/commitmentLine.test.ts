@@ -2,8 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { SHANNON_ONE_LINE_VOICE_INNER } from '@shannon/cognition';
 import {
-  COMMITMENT_LINE_INSTRUCTIONS, commitmentRequest, groundedCommitmentLine, neutralCommitmentLine, type CommitmentFacts, type CommitmentLineWriter,
+  COMMITMENT_LINE_INSTRUCTIONS, commitmentLineInstructions, commitmentRequest, groundedCommitmentLine, neutralCommitmentLine, type CommitmentFacts, type CommitmentLineWriter,
 } from '../src/mind/action/respond/commitmentLine.js';
 import { commitmentFacts, commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
@@ -55,6 +56,10 @@ describe('the line', () => {
     expect(Object.keys(request).sort()).toEqual(['due', 'others_present', 'promise', 'state']);
     expect(COMMITMENT_LINE_INSTRUCTIONS).not.toMatch(/sulk|mood|feeling|すね|気分/iu);
     expect(COMMITMENT_LINE_INSTRUCTIONS).toMatch(/Never add a place, a person, a time, a date/u);
+    // Syzygy ADR-0012 (N7): with SHANNON_INNER_NOTE on, her one-line voice is her core's; off, the bytes of before.
+    expect(commitmentLineInstructions(false)).toBe(COMMITMENT_LINE_INSTRUCTIONS);
+    expect(commitmentLineInstructions(true)).toContain(SHANNON_ONE_LINE_VOICE_INNER);
+    expect(commitmentLineInstructions(true)).not.toMatch(/sulk|mood|feeling|すね|気分/iu);
   });
 });
 
