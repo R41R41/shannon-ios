@@ -1,5 +1,6 @@
 import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime } from '../taskRuntime/taskRuntimePorts.js';
+import { handedOverByOperator } from '../../../contracts/operatorContract.js';
 
 /**
  * The short form of a task's report that a call says aloud (owner feedback 2026-10-13: a 2,900-character report read out
@@ -114,6 +115,20 @@ export function fallbackSpokenReport(report: string, title = ''): string {
   return `${comma > 20 ? cut.slice(0, comma) : cut.replace(/[。！？!?]+$/u, '')}。`;
 }
 
+/**
+ * What is said of a request the operator handed over for him (review 2026-10-14, M1): never 「頼まれて調べた」, never as his
+ * request, and no model is asked to word it; the result itself stays on the screen.
+ */
+export function handedOverReportLine(task: { goal: string }): string {
+  const named = [...task.goal.replace(/\s+/gu, ' ').trim()].slice(0, 22).join('');
+  return `運用者がライ氏の代わりに渡した依頼「${named}」の結果が届いています。詳しくは画面にあります。`;
+}
+
+/** The spoken form without a model: the operator's line for a handed-over request, a plain cut of the report otherwise. */
+export function plainSpokenReport(task: { goal: string; title: string }, report: string): string {
+  return handedOverByOperator(task) ? handedOverReportLine(task) : fallbackSpokenReport(report, task.title);
+}
+
 /** A short report needs no model: it is already what would be said. */
 function alreadyShort(report: string): string | null {
   const direct = spokenReportText(report);
@@ -161,6 +176,7 @@ export function createSpokenReports(parts: {
       if (!report || task.origin !== 'owner_request' || report.spoken || !report.text.trim()) return;
       if (attempted.has(key) || controller.signal.aborted) return;
       remember(key);
+      if (handedOverByOperator(task)) return write(scopeKey, task.id, report.id, handedOverReportLine(task));
       const short = alreadyShort(report.text);
       if (short || !parts.speaker) return write(scopeKey, task.id, report.id, short ?? fallbackSpokenReport(report.text, task.title));
       const work = generate(scopeKey, task, report).finally(() => running.delete(work));

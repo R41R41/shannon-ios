@@ -1,7 +1,8 @@
+import { dirname } from 'node:path';
 import { switchOn } from '@shannon/switches';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { OperatorAuditStore } from '../infra/ops/store/operatorAuditStore.js';
-import { operatorSocketPath, serveOperatorSocket } from '../infra/ops/operatorSocket.js';
+import { ensureOperatorDirectory, operatorSocketPath, serveOperatorSocket } from '../infra/ops/operatorSocket.js';
 import { openDatabase, tableColumns } from '../infra/sqlite/sqliteOpen.js';
 import { autonomyDayKey, type AutonomyConfig } from '../mind/inhibition/autonomyBudget.js';
 import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyActivity.js';
@@ -35,17 +36,22 @@ export function configuredOperatorAudit(values: Readonly<Record<string, string |
   }
 }
 
-export interface OperatorServerParts {
-  audit: OperatorServerAudit | null; path: string; scopeKey: string; now(): string; ownerAlone(): boolean;
-  /** The configured lifecycle (`configuredMinecraftLifecycle`) and the common runtime (`configuredServerFca`), when they exist. */
+/** What the API's composition hands in (`server.ts`, through `configuredServerFca`). */
+export interface OperatorHostParts {
+  /** The configured lifecycle (`configuredMinecraftLifecycle`), when there is one. */
   lifecycle: { operator: OperatorLifecycle; service: { store: { unresolved(): boolean } } } | null;
-  fca: { minecraft: { operator: OperatorMinecraftRequests; wake(): void } | null } | null;
   actions: ActionThreads | null;
   activity: Pick<AutonomyActivityRecord, 'append'>; config: Pick<AutonomyConfig, 'timeZone'>;
   conversation: {
     threadId(scopeKey: string): string;
     appendNoteOnce(scopeKey: string, threadId: string, id: string, content: string, at: string, kind: string, ownerAlone?: boolean): unknown;
   };
+}
+
+export interface OperatorServerParts extends OperatorHostParts {
+  audit: OperatorServerAudit | null; path: string; scopeKey: string; now(): string; ownerAlone(): boolean;
+  /** The common runtime's side of a request (`fcaMinecraftRequests(...).operator` and the runtime's wake), when Minecraft is on. */
+  requests: (OperatorMinecraftRequests & { wake(): void }) | null;
   log(line: string): void;
 }
 
@@ -58,17 +64,21 @@ function recorder(parts: OperatorServerParts) {
   };
 }
 
+const failure = (error: unknown) => (error instanceof Error ? error.message : 'unknown');
+
 /**
- * Starts the operator's Minecraft path: the time-limit tick whenever the audit is open, and the socket only while the switch is
- * on. A socket that cannot be served is logged and leaves the API running without it.
+ * Starts the operator's Minecraft path: the socket's directory always (the other units hide it), the time-limit tick whenever the
+ * audit is open, and the socket only while the switch is on. A socket that cannot be served is logged and leaves the API running.
  */
 export function startOperatorMinecraft(parts: OperatorServerParts): { close(): Promise<void> } {
+  const socketPath = operatorSocketPath(parts.path);
+  const directory = ensureOperatorDirectory(dirname(socketPath))
+    .catch((error: unknown) => parts.log(`Shannon operator Minecraft: directory unavailable (${failure(error)})`));
   const audit = parts.audit;
-  if (!audit) return { close: async () => {} };
+  if (!audit) return { close: async () => { await directory; } };
   const service = createOperatorMinecraft({
     scopeKey: parts.scopeKey, enabled: () => audit.enabled, ownerAlone: parts.ownerAlone, now: parts.now, audit: audit.store,
-    lifecycle: parts.lifecycle?.operator ?? null, actions: parts.actions,
-    requests: parts.fca?.minecraft ? { ...parts.fca.minecraft.operator, wake: parts.fca.minecraft.wake } : null,
+    lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions,
     lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false,
     activity: recorder(parts),
     note: (id, text, at) => {
@@ -81,11 +91,11 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   const timer = setInterval(() => service.tick(), TICK_MS);
   timer.unref();
   const socket = audit.enabled
-    ? serveOperatorSocket(operatorSocketPath(parts.path), body => service.handle(body)).then(served => {
-      parts.log(`Shannon operator Minecraft: serving ${operatorSocketPath(parts.path)}`);
+    ? directory.then(() => serveOperatorSocket(socketPath, body => service.handle(body), reason => service.socketRefused(reason))).then(served => {
+      parts.log(`Shannon operator Minecraft: serving ${socketPath}`);
       return served;
     }, (error: unknown) => {
-      parts.log(`Shannon operator Minecraft: socket unavailable (${error instanceof Error ? error.message : 'unknown'})`);
+      parts.log(`Shannon operator Minecraft: socket unavailable (${failure(error)})`);
       return null;
     })
     : Promise.resolve(null);

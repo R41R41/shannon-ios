@@ -3,9 +3,11 @@ import { ACTION_TERMINAL } from '@shannon/mind';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { auditedArguments, operatorLabel, operatorTalkNote, parseOperatorEnvelope, OPERATOR_LIMITS,
   type OperatorCode, type OperatorInput, type OperatorReply } from '../contracts/operatorContract.js';
-import type { OperatorAuditDraft, OperatorAuditStore } from '../infra/ops/store/operatorAuditStore.js';
+import type { OperatorAuditDraft, OperatorAuditRow, OperatorAuditStore } from '../infra/ops/store/operatorAuditStore.js';
+import type { TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { observeSync, withObserverRunSync } from '../infra/observer/observerContext.js';
 import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
+import type { OperatorSocketRefusal } from '../infra/ops/operatorSocket.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 
@@ -25,6 +27,10 @@ export interface OperatorMinecraftParts {
 }
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
+const HOUR_MS = 3_600_000;
+const STATUS: Partial<Record<OperatorCode, number>> = { out_of_scope: 403, rate_limited: 429, flooded: 429 };
+const ago = (at: string, ms: number) => new Date(Date.parse(at) - ms).toISOString();
+
 const MESSAGES: Partial<Record<OperatorCode, string>> = {
   disabled: '運用者のマイクラ操作はサーバーで有効になっていません（SHANNON_OPERATOR_MINECRAFT）。',
   owner_not_alone: 'ライ氏以外の人がいる間は始めません。',
@@ -33,6 +39,7 @@ const MESSAGES: Partial<Record<OperatorCode, string>> = {
   lease_conflict: 'マイクラの管理操作がまだ動いています。',
   unresolved_operation: '前のマイクラ管理操作の結果がまだ確認できていません。',
   rate_limited: `1時間に${OPERATOR_LIMITS.requestsPerHour}件までです。`,
+  flooded: '呼び出しが多すぎるので、しばらく受け付けません（監査はまとめて残します）。',
   not_found: '運用者が始めた進行中のマイクラの依頼が見つかりません。',
   not_operator_task: 'このタスクは運用者が始めたものではないので止めません（ライ氏の依頼は本人の「止まって」で止めます）。',
   not_running: 'このタスクはもう終わっているか、止めている途中です。',
@@ -48,6 +55,31 @@ const MESSAGES: Partial<Record<OperatorCode, string>> = {
 export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   const stopping = new Set<string>();
   const audit = (draft: Omit<OperatorAuditDraft, 'scopeKey'>) => parts.audit.append({ ...draft, scopeKey: parts.scopeKey });
+  const flood = { suppressed: 0, lastRowAt: 0 };
+  /**
+   * Past `invocationsPerHour` invocations in the last hour, nothing is audited one by one: one coalesced `flooded` row a minute
+   * says how many were turned away, and the owner's activity record is not written at all (a runaway process cannot flood it).
+   */
+  function flooded(at: string, operator: string): { status: number; body: unknown } | null {
+    if (parts.audit.invocationsSince(parts.scopeKey, ago(at, HOUR_MS)) < OPERATOR_LIMITS.invocationsPerHour) return null;
+    flood.suppressed += 1;
+    if (Date.parse(at) - flood.lastRowAt >= OPERATOR_LIMITS.floodRowMs) {
+      audit({ operationId: `operator:${randomUUID()}`, at, operator, command: 'unknown', event: 'refused', code: 'flooded', argsJson: '{}',
+        detail: `suppressed=${flood.suppressed}` });
+      flood.suppressed = 0;
+      flood.lastRowAt = Date.parse(at);
+    }
+    return { status: 429, body: { outcome: 'refused', code: 'flooded', message: MESSAGES.flooded } };
+  }
+  /** A refusal reaches the activity record only for the first few an hour; one line says the rest are in the audit only. */
+  function recordRefusal(at: string, entry: OperatorActivity): void {
+    const count = parts.audit.refusalsSince(parts.scopeKey, ago(at, HOUR_MS));
+    if (count <= OPERATOR_LIMITS.refusalsRecordedPerHour) parts.activity(at, entry);
+    else if (count === OPERATOR_LIMITS.refusalsRecordedPerHour + 1) {
+      parts.activity(at, { ...entry, summary: '運用者のマイクラ操作の拒否が続いているので、この1時間の残りは監査記録だけに残します。',
+        reasonCode: 'operator_refusals_coalesced' });
+    }
+  }
   const observed = <T>(operation: string, operationId: string, work: () => T): T => withObserverRunSync({ scopeKey: parts.scopeKey,
     surface: 'operator_cli', audience: parts.ownerAlone() ? 'owner' : 'others' }, () => observeSync('taskHub',
     { operation, via: 'operator_cli', operationId }, work, value => ({ operation, outcome: value === null ? 'none' : 'returned' })));
@@ -64,10 +96,10 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const command = parsed.ok ? parsed.input.command : 'unknown';
     const argsJson = auditedArguments(value);
     const reply = (outcome: OperatorReply['outcome'], code: OperatorCode, message: string, extra: Partial<OperatorReply> = {}) =>
-      ({ status: outcome === 'accepted' ? 202 : code === 'out_of_scope' ? 403 : 409, body: { operationId, outcome, code, message, ...extra } });
+      ({ status: outcome === 'accepted' ? 202 : STATUS[code] ?? 409, body: { operationId, outcome, code, message, ...extra } });
     const refuse = (code: OperatorCode, message = MESSAGES[code] ?? code, extra: Partial<OperatorAuditDraft> = {}) => {
       audit({ operationId, at: parts.now(), operator, command, event: 'refused', code, argsJson, detail: message, ...extra });
-      parts.activity(at, { summary: `運用者（${operator}）のマイクラ操作を受け付けませんでした。`, tool: `operator.minecraft.${command}`,
+      recordRefusal(at, { summary: `運用者（${operator}）のマイクラ操作を受け付けませんでした。`, tool: `operator.minecraft.${command}`,
         outcome: 'refused', reasonCode: code, detail: `operation=${operationId}` });
       return reply('refused', code, message);
     };
@@ -126,8 +158,8 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       if (parts.audit.requestOf(parts.scopeKey, taskId)) return { id: taskId };
       return { code: requests.get(taskId) ? 'not_operator_task' : 'not_found' };
     }
-    const since = new Date(Date.parse(c.at) - 48 * 3600_000).toISOString();
-    const open = parts.audit.openRequests(parts.scopeKey, since).find(row => row.taskId && !FINISHED.includes(requests.get(row.taskId)?.phase ?? 'stopped'));
+    const open = parts.audit.requestsSince(parts.scopeKey, ago(c.at, 48 * HOUR_MS))
+      .find(row => row.taskId && !FINISHED.includes(requests.get(row.taskId)?.phase ?? 'stopped'));
     return open?.taskId ? { id: open.taskId } : { code: 'not_found' };
   }
 
@@ -149,6 +181,8 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   }
 
   async function handle(value: unknown): Promise<{ status: number; body: unknown }> {
+    const turnedAway = flooded(parts.now(), operatorLabel((value as { operator?: unknown } | null)?.operator));
+    if (turnedAway) return turnedAway;
     const c = context(value);
     const input = c.parsed.ok ? c.parsed.input : null;
     const serverId = input?.command === 'lifecycle' ? parts.lifecycle?.server(input.serverId) ?? input.serverId : null;
@@ -165,27 +199,42 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     return cancel(c, parsed);
   }
 
+  /** A refusal at the socket itself (unknown path, a forwarded request, an unreadable body): audited without its content. */
+  function socketRefused(reason: OperatorSocketRefusal): void {
+    const at = parts.now();
+    if (flooded(at, 'unknown')) return;
+    audit({ operationId: `operator:${randomUUID()}`, at, operator: 'unknown', command: 'socket', event: 'refused', code: `socket_${reason}`,
+      argsJson: '{}' });
+  }
+
+  /** The first time a request is stopped at its limit: audited, recorded and noted once, however often the stop is asked again. */
+  function timeLimitReached(row: OperatorAuditRow, task: TaskView, phase: string | null, now: string): void {
+    if (parts.audit.hasEvent(task.id, 'time_limit')) return;
+    audit({ operationId: row.operationId, at: parts.now(), operator: row.operator, command: 'request', event: 'time_limit', code: 'time_limit',
+      argsJson: row.argsJson, taskId: task.id, deadlineAt: row.deadlineAt, detail: phase });
+    parts.activity(now, { summary: '運用者が代わりに始めたマイクラの依頼を、決められた時間に達したので止めました。', tool: 'operator.minecraft.time_limit',
+      outcome: 'done', reasonCode: 'operator_time_limit', detail: `operation=${row.operationId} task=${task.id}` });
+    parts.note(`${row.operationId}:time_limit`, operatorTalkNote('time_limit', task.goal), now);
+  }
+
   /**
-   * The operator's time limit: a request past its deadline is stopped by the same stop path, once, and noted. It holds with the
-   * switch off too, so turning the switch off never leaves an operator's request without its limit.
+   * The operator's time limit: a request past its deadline is stopped by the same stop path. It is enforced until the task's
+   * phase is terminal, not until a stop was audited (a cancel's stop may not have taken), and stopping it again is not noted again.
+   * It holds with the switch off too, so turning the switch off never leaves an operator's request without its limit.
    */
   function tick(): void {
     if (!parts.requests) return;
-    const requests = parts.requests, now = parts.now(), since = new Date(Date.parse(now) - 48 * 3600_000).toISOString();
-    for (const row of parts.audit.openRequests(parts.scopeKey, since)) {
+    const requests = parts.requests, now = parts.now();
+    for (const row of parts.audit.requestsSince(parts.scopeKey, ago(now, 48 * HOUR_MS))) {
       const task = row.taskId ? requests.get(row.taskId) : null;
       if (!task || !row.deadlineAt || Date.parse(now) < Date.parse(row.deadlineAt) || FINISHED.includes(task.phase) || stopping.has(task.id)) continue;
       stopping.add(task.id);
-      void requests.stop(task.id, 'operator_time_limit').then(stopped => {
-        audit({ operationId: row.operationId, at: parts.now(), operator: row.operator, command: 'request', event: 'time_limit', code: 'time_limit',
-          argsJson: row.argsJson, taskId: task.id, deadlineAt: row.deadlineAt, detail: stopped.find(item => item.id === task.id)?.phase ?? null });
-        parts.activity(now, { summary: '運用者が代わりに始めたマイクラの依頼を、決められた時間に達したので止めました。', tool: 'operator.minecraft.time_limit',
-          outcome: 'done', reasonCode: 'operator_time_limit', detail: `operation=${row.operationId} task=${task.id}` });
-        parts.note(`${row.operationId}:time_limit`, operatorTalkNote('time_limit', task.goal), now);
-      }).catch(() => {}).finally(() => { stopping.delete(task.id); });
+      void requests.stop(task.id, 'operator_time_limit')
+        .then(stopped => timeLimitReached(row, task, stopped.find(item => item.id === task.id)?.phase ?? null, now))
+        .catch(() => {}).finally(() => { stopping.delete(task.id); });
     }
   }
 
-  return { handle, tick };
+  return { handle, tick, socketRefused };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

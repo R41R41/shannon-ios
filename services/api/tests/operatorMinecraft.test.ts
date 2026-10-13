@@ -14,7 +14,8 @@ import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraft
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import { underWriteLock } from '../src/infra/sqlite/lockWaits.js';
 import { admittedMinecraftRequest, fcaMinecraftRequests, MINECRAFT_REQUEST_CRITERIA } from '../src/wiring/fcaMinecraftRequests.js';
-import { OPERATOR_LIMITS, OPERATOR_TITLE_PREFIX, parseOperatorEnvelope } from '../src/contracts/operatorContract.js';
+import { OPERATOR_LIMITS, OPERATOR_NOTE_MARK, OPERATOR_TITLE_PREFIX, parseOperatorEnvelope } from '../src/contracts/operatorContract.js';
+import { createSpokenReports, handedOverReportLine, plainSpokenReport, SPOKEN_REPORT_CHARACTERS } from '../src/mind/action/fca/fcaSpokenReport.js';
 import { inspectOperatorAudit, operatorLifecycleAllowed, OperatorAuditStore } from '../src/infra/ops/store/operatorAuditStore.js';
 import { operatorSocketPath, requestOperatorSocket, serveOperatorSocket } from '../src/infra/ops/operatorSocket.js';
 import { operatorEnvelope, runOperatorCli, type OperatorCliDeps } from '../src/infra/ops/operatorCli.js';
@@ -116,7 +117,10 @@ function task(id: string, phase: TaskView['phase'], goal = '石を集めて'): T
   return { id, phase, goal, title: goal, childIds: [] } as unknown as TaskView;
 }
 
-function service(options: { enabled?: boolean; alone?: boolean; body?: string | null; busy?: boolean; unresolved?: boolean; liveAction?: boolean } = {}) {
+type ServiceOptions = { enabled?: boolean; alone?: boolean; body?: string | null; busy?: boolean; unresolved?: boolean; liveAction?: boolean;
+  /** false: a stop is asked for but does not take (the body never acknowledges, the task keeps running). */
+  stopTakes?: boolean };
+function service(options: ServiceOptions = {}) {
   const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
   const tasks = new Map<string, TaskView>([[OTHER, task(OTHER, 'executing', 'ライ氏の依頼')]]);
   const activity: OperatorActivity[] = [], notes: Array<{ id: string; text: string }> = [], stopped: string[] = [], admitted: unknown[] = [];
@@ -132,7 +136,7 @@ function service(options: { enabled?: boolean; alone?: boolean; body?: string | 
     },
     stop: async (id: string) => {
       stopped.push(id);
-      tasks.set(id, task(id, 'stopping', tasks.get(id)?.goal));
+      if (options.stopTakes !== false) tasks.set(id, task(id, 'stopping', tasks.get(id)?.goal));
       return [tasks.get(id)!];
     },
     wake: () => { wakes += 1; },
@@ -185,7 +189,7 @@ describe('the operator service', () => {
     expect(events(s.audit)).toEqual(['request/invoked/invoked', 'request/accepted/accepted']);
     expect(s.audit.budgetYen(TASK)).toBe(300);
     expect(s.activity[0]!.summary).toContain('運用者（ops.ryo）');
-    expect(s.notes[0]!.text).toBe('運用者がライ氏の代わりに Minecraft の依頼「石を集めて」を始めました。');
+    expect(s.notes[0]!.text).toBe(`${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「石を集めて」を始めました。`);
     expect(s.wakes()).toBe(1);
   });
 
@@ -219,7 +223,7 @@ describe('the operator service', () => {
     expect(s.stopped).toEqual([]);
     expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ outcome: 'accepted', code: 'stopped', taskId: TASK });
     expect(s.stopped).toEqual([TASK]);
-    expect(s.notes.at(-1)!.text).toBe('運用者が、代わりに始めた Minecraft の依頼「石を集めて」を止めました。');
+    expect(s.notes.at(-1)!.text).toBe(`${OPERATOR_NOTE_MARK}運用者が、代わりに始めた Minecraft の依頼「石を集めて」を止めました。`);
     expect(s.audit.recent('owner', 1)[0]).toMatchObject({ event: 'stopped', taskId: TASK });
     expect((await s.operator.handle(envelope('cancel', { latest: true }))).body).toMatchObject({ code: 'not_found' });
   });
@@ -246,6 +250,55 @@ describe('the operator service', () => {
     s.operator.tick();
     await new Promise(resolve => setImmediate(resolve));
     expect(s.stopped).toEqual([TASK]);
+  });
+
+  it('keeps enforcing the time limit after a cancel until the task is really stopped, audited and noted once', async () => {
+    const s = service({ stopTakes: false });
+    await s.operator.handle(envelope('request', { goal: '石を集めて', maxMinutes: 5 }));
+    expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ code: 'stopped' });
+    expect(s.tasks.get(TASK)!.phase).toBe('ready');
+    s.advance(6);
+    for (let round = 0; round < 2; round += 1) {
+      s.operator.tick();
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    expect(s.stopped).toEqual([TASK, TASK, TASK]);
+    expect(events(s.audit).filter(event => event.includes('time_limit'))).toEqual(['request/time_limit/time_limit']);
+    expect(s.notes.filter(note => note.text.includes('決められた時間'))).toHaveLength(1);
+  });
+
+  it('coalesces a flood: past the hourly limit nothing is audited one by one and the activity record is left alone', async () => {
+    const s = service();
+    for (let index = 0; index < OPERATOR_LIMITS.invocationsPerHour; index += 1) {
+      s.audit.append({ operationId: `operator:${index}`, scopeKey: 'owner', at, operator: 'ops', command: 'unknown', event: 'invoked',
+        code: 'invoked', argsJson: '{}' });
+    }
+    const before = s.audit.recent('owner', 200).length;
+    for (let index = 0; index < 5; index += 1) {
+      expect(await s.operator.handle(envelope('send', {}, 'chat'))).toMatchObject({ status: 429, body: { code: 'flooded' } });
+      s.operator.socketRefused('not_found');
+    }
+    const added = s.audit.recent('owner', 200).slice(0, s.audit.recent('owner', 200).length - before);
+    expect(added).toMatchObject([{ event: 'refused', code: 'flooded', detail: 'suppressed=1', argsJson: '{}' }]);
+    expect(s.activity).toEqual([]);
+    s.advance(1.5);
+    await s.operator.handle(envelope('send', {}, 'chat'));
+    expect(s.audit.recent('owner', 1)[0]).toMatchObject({ code: 'flooded', detail: 'suppressed=10' });
+  });
+
+  it(`writes at most ${OPERATOR_LIMITS.refusalsRecordedPerHour} refusals an hour to the activity record, then one line saying so`, async () => {
+    const s = service();
+    for (let index = 0; index < OPERATOR_LIMITS.refusalsRecordedPerHour + 5; index += 1) await s.operator.handle(envelope('send', {}, 'chat'));
+    expect(s.activity).toHaveLength(OPERATOR_LIMITS.refusalsRecordedPerHour + 1);
+    expect(s.activity.at(-1)).toMatchObject({ reasonCode: 'operator_refusals_coalesced' });
+    expect(events(s.audit).filter(event => event.endsWith('out_of_scope'))).toHaveLength(OPERATOR_LIMITS.refusalsRecordedPerHour + 5);
+  });
+
+  it('audits a refusal at the socket itself without anything of the request', () => {
+    const s = service();
+    s.operator.socketRefused('forwarded');
+    expect(s.audit.recent('owner', 1)[0]).toMatchObject({ operator: 'unknown', command: 'socket', event: 'refused', code: 'socket_forwarded',
+      argsJson: '{}', detail: null });
   });
 
   it('hands a lifecycle operation to the lifecycle under its operation id', async () => {
@@ -340,5 +393,31 @@ describe('the operator socket and command line', () => {
     expect(await runOperatorCli(['minecraft', 'status'], env, io, deps)).toBe(0);
     expect(await runOperatorCli(['minecraft', 'stop'], { SHANNON_OPERATOR: 'ops' }, io, deps)).toBe(2);
     expect(await runOperatorCli(['minecraft'], env, io, deps)).toBe(2);
+    // Measured in bytes as the server measures it: 3,000 characters of Japanese are over 8 KiB.
+    expect(await runOperatorCli(['minecraft', 'request', 'あ'.repeat(3000)], env, io, deps)).toBe(2);
+    expect(sent).toHaveLength(2);
+  });
+});
+
+describe('the result of a request the operator handed over (review 2026-10-14, M1)', () => {
+  const handed = { id: TASK, goal: '石を16個集めて', title: `${OPERATOR_TITLE_PREFIX}石を16個集めて`, origin: 'owner_request' };
+  const progress = { report: { id: 'r1', text: '石を16個集めました。', updatedAt: at } } as never;
+
+  it('is never told as something he asked for, and no model words it', async () => {
+    const recorded: string[] = [];
+    const reports = createSpokenReports({ localTime: () => '', record: (_scope, _id, _report, text) => recorded.push(text) > 0,
+      speaker: { speak: async () => { throw new Error('the model is not asked'); } } });
+    reports.request('owner', handed, progress);
+    reports.request('owner', { ...handed, id: OTHER, title: '石を16個集めて' }, { report: { id: 'r2', text: '石を16個集めました。', updatedAt: at } } as never);
+    await reports.idle();
+    expect(recorded[0]).toBe('運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
+    expect(recorded[1]).toBe('石を16個集めました。');
+    expect(recorded[0]).not.toContain('頼まれ');
+  });
+
+  it('keeps the operator line within what a call says, and the plain form follows the title mark', () => {
+    expect([...handedOverReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
+    expect(plainSpokenReport(handed, '長い報告。')).toContain('運用者がライ氏の代わりに渡した依頼');
+    expect(plainSpokenReport({ goal: 'x', title: 'x' }, '石を集めました。')).toBe('石を集めました。');
   });
 });

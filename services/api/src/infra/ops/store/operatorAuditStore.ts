@@ -70,11 +70,32 @@ export class OperatorAuditStore {
     return found ? row(found as Record<string, unknown>) : null;
   }
 
-  /** Accepted operator requests not yet stopped or timed out by the operator, newest first (the last two days). */
-  openRequests(scopeKey: string, since: string): OperatorAuditRow[] {
-    return this.db.prepare(`SELECT a.* FROM operator_audit a WHERE a.scope_key=? AND a.command='request' AND a.event='accepted'
-      AND a.occurred_at>=? AND NOT EXISTS (SELECT 1 FROM operator_audit b WHERE b.task_id=a.task_id AND b.event IN ('stopped','time_limit'))
-      ORDER BY a.sequence DESC LIMIT 50`).all(scopeKey, since).map(value => row(value as Record<string, unknown>));
+  /**
+   * Accepted operator requests since `since`, newest first, whatever the audit says happened to them since: whether one still
+   * runs is the task's phase, not a `stopped` row (a stop asked for may not have taken yet).
+   */
+  requestsSince(scopeKey: string, since: string): OperatorAuditRow[] {
+    return this.db.prepare(`SELECT * FROM operator_audit WHERE scope_key=? AND command='request' AND event='accepted' AND occurred_at>=?
+      ORDER BY sequence DESC LIMIT 50`).all(scopeKey, since).map(value => row(value as Record<string, unknown>));
+  }
+
+  /** Whether a task already has an event of this kind (a time limit is audited, noted and recorded once). */
+  hasEvent(taskId: string, event: OperatorAuditEvent): boolean {
+    return Boolean(this.db.prepare('SELECT 1 AS found FROM operator_audit WHERE task_id=? AND event=? LIMIT 1').get(taskId, event));
+  }
+
+  /** Invocations since `since`: every `invoked` row and every refusal at the socket itself (the flood limit counts both). */
+  invocationsSince(scopeKey: string, since: string): number {
+    const found = this.db.prepare(`SELECT COUNT(*) AS count FROM operator_audit WHERE scope_key=? AND occurred_at>=?
+      AND (event='invoked' OR command='socket')`).get(scopeKey, since);
+    return Number(found?.count ?? 0);
+  }
+
+  /** Refusals since `since`, the coalesced flood rows aside (the activity record shows only the first few an hour). */
+  refusalsSince(scopeKey: string, since: string): number {
+    const found = this.db.prepare(`SELECT COUNT(*) AS count FROM operator_audit WHERE scope_key=? AND occurred_at>=? AND event='refused'
+      AND code<>'flooded'`).get(scopeKey, since);
+    return Number(found?.count ?? 0);
   }
 
   /** The per-task yen cap the operator asked for, or null for any task it did not start. */

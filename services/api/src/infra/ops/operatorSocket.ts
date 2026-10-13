@@ -9,13 +9,27 @@ import { readJson, sendJson } from '../http/serverHttp.js';
  * The operator's channel to the running API (owner decision 2026-10-14). It is a Unix socket in a directory only the service
  * user can enter (0700, the socket 0600), beside the database: nginx's `/companion/` proxy forwards every TCP path of
  * 127.0.0.1:4319 to the internet-facing site, so a new TCP route would be reachable from outside, and a loopback secret would be
- * a new credential to mint, store and keep unprinted. The socket needs neither: who can open it is who can read the database.
+ * a new credential to mint, store and keep unprinted.
+ *
+ * The boundary is the service user, not the operator: every process of that user can connect unless its systemd unit makes the
+ * directory inaccessible (`InaccessiblePaths=`; every unit in `deploy/azure` but the API's does, the agent host's above all,
+ * since `ProtectHome=read-only` does not stop an AF_UNIX connect). An interactive login of the user, a cron job, or a process
+ * outside those units can still connect, and a same-user process that can read another one's `/proc/<pid>/root` could reach it
+ * through that; only running the API as its own user would close those.
  */
 export function operatorSocketPath(databasePath: string): string {
   return join(dirname(databasePath), OPERATOR_SOCKET_DIRECTORY, OPERATOR_SOCKET_NAME);
 }
 
 export type OperatorHandler = (body: unknown) => Promise<{ status: number; body: unknown }>;
+
+/**
+ * The socket's directory, made (0700, the service user's) whether or not the switch is on: the other units' `InaccessiblePaths=`
+ * needs it to exist when they start. It holds nothing until the socket is served.
+ */
+export async function ensureOperatorDirectory(path: string): Promise<void> {
+  await ownDirectory(path);
+}
 
 async function ownDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });
@@ -52,19 +66,29 @@ async function clearStale(path: string): Promise<void> {
 }
 
 /** Serves `POST /operator/v1/minecraft` on the socket; any other path or method is refused. */
-export async function serveOperatorSocket(path: string, handle: OperatorHandler): Promise<{ close(): Promise<void> }> {
+/** What a refusal at the socket itself was; handed to `refused` without anything of the request. */
+export type OperatorSocketRefusal = 'not_found' | 'forwarded' | 'invalid_body';
+
+export async function serveOperatorSocket(path: string, handle: OperatorHandler,
+  refused: (reason: OperatorSocketRefusal) => void = () => {}): Promise<{ close(): Promise<void> }> {
+  const refuse = (response: Parameters<typeof sendJson>[0], status: number, error: string, reason: OperatorSocketRefusal) => {
+    try {
+      refused(reason);
+    } catch { /* The refusal is answered whether or not its audit row could be written. */ }
+    return sendJson(response, status, { error });
+  };
   await ownDirectory(dirname(path));
   await clearStale(path);
   const server: Server = createServer((request, response) => {
     void (async () => {
-      if (request.method !== 'POST' || request.url !== OPERATOR_PATH) return sendJson(response, 404, { error: 'NOT_FOUND' });
+      if (request.method !== 'POST' || request.url !== OPERATOR_PATH) return refuse(response, 404, 'NOT_FOUND', 'not_found');
       // Nothing proxied ever reaches a Unix socket; a forwarded header means something is wrong, so it is refused.
-      if (request.headers['x-forwarded-for'] !== undefined) return sendJson(response, 403, { error: 'OPERATOR_LOCAL_ONLY' });
+      if (request.headers['x-forwarded-for'] !== undefined) return refuse(response, 403, 'OPERATOR_LOCAL_ONLY', 'forwarded');
       let body: unknown;
       try {
         body = await readJson(request, OPERATOR_LIMITS.bodyBytes);
       } catch {
-        return sendJson(response, 400, { error: 'INVALID_REQUEST' });
+        return refuse(response, 400, 'INVALID_REQUEST', 'invalid_body');
       }
       const reply = await handle(body);
       sendJson(response, reply.status, reply.body);

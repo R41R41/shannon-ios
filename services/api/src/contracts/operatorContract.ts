@@ -26,13 +26,19 @@ export const OPERATOR_LIMITS = Object.freeze({
   /** The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answer of 2026-10-13); a lower cap may be asked. */
   maxBudgetYen: 2000,
   requestsPerHour: 20,
+  /** Invocations an hour (socket refusals included) that are audited one by one; past it they are coalesced (`flooded`). */
+  invocationsPerHour: 120,
+  /** At most one coalesced `flooded` audit row this often while flooded. */
+  floodRowMs: 60_000,
+  /** Refusals an hour written to the owner's activity record; the rest are in the audit only. */
+  refusalsRecordedPerHour: 10,
 });
 
 /** The closed outcome codes the API answers and the audit records. */
 export const OPERATOR_CODES = [
   'accepted', 'out_of_scope', 'invalid_input', 'disabled', 'owner_not_alone', 'body_unavailable', 'lifecycle_unavailable',
   'minecraft_busy', 'lease_conflict', 'unresolved_operation', 'budget_above_cap', 'refused', 'not_found', 'not_operator_task',
-  'not_running', 'rate_limited', 'stopped', 'time_limit', 'settled', 'error',
+  'not_running', 'rate_limited', 'flooded', 'stopped', 'time_limit', 'settled', 'error',
 ] as const;
 export type OperatorCode = typeof OPERATOR_CODES[number];
 
@@ -125,11 +131,17 @@ export function auditedArguments(value: unknown): string {
 }
 
 /** The Talk note when the operator starts or stops something for the owner: plain, attributed to the operator, never his words. */
+/**
+ * The Talk notes are notices, not her words: the conversation store keeps only `user` and `assistant` messages (a CHECK of
+ * `conversation_messages`), so a note is stored as `assistant` with note kind `operator-note`, and its words are a neutral,
+ * marked notice in the third person, never in her voice and never as his request.
+ */
+export const OPERATOR_NOTE_MARK = '［運用者の操作のお知らせ］';
 const TALK_NOTES = {
-  request: (quoted: string) => `運用者がライ氏の代わりに Minecraft の依頼「${quoted}」を始めました。`,
-  cancel: (quoted: string) => `運用者が、代わりに始めた Minecraft の依頼「${quoted}」を止めました。`,
-  time_limit: (quoted: string) => `運用者が代わりに始めた Minecraft の依頼「${quoted}」は、決められた時間に達したので止めました。`,
-  lifecycle: (quoted: string) => `運用者がライ氏の代わりに Minecraft の操作（${quoted}）を頼みました。`,
+  request: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「${quoted}」を始めました。`,
+  cancel: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が、代わりに始めた Minecraft の依頼「${quoted}」を止めました。`,
+  time_limit: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が代わりに始めた Minecraft の依頼「${quoted}」は、決められた時間に達したので止めました。`,
+  lifecycle: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の操作（${quoted}）を頼みました。`,
 } as const;
 export function operatorTalkNote(kind: keyof typeof TALK_NOTES, subject: string): string {
   return TALK_NOTES[kind](subject.replace(/\s+/gu, ' ').slice(0, 80));
@@ -137,6 +149,10 @@ export function operatorTalkNote(kind: keyof typeof TALK_NOTES, subject: string)
 
 /** The title and the first inbox line of an operator's request: whoever reads the task sees who handed it over. */
 export const OPERATOR_TITLE_PREFIX = '（運用者経由）';
+/** Whether a task was handed over by the operator (its title's mark): its result is never told as something he asked for. */
+export function handedOverByOperator(task: { title: string }): boolean {
+  return task.title.startsWith(OPERATOR_TITLE_PREFIX);
+}
 export function operatorRequestContext(operator: string): string {
   return `この依頼は運用者（${operator}）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。`;
 }

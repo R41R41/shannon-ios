@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { apiSourcePath } from './support/sources.js';
 
@@ -24,6 +24,16 @@ describe('Azure deployment contract', () => {
     expect(unit).toContain('NoNewPrivileges=true');
     expect(unit).toMatch(/^CPUQuota=\d+%$/mu);
     expect(unit).toMatch(/^MemoryMax=\d+M$/mu);
+  });
+
+  it('hides the operator socket from every unit but the API (review 2026-10-14, M2: an AF_UNIX connect passes ProtectHome)', () => {
+    const units = readdirSync(new URL('../../../deploy/azure/', import.meta.url)).filter(name => name.endsWith('.service'));
+    expect(units).toContain('shannon-agent-host.service');
+    for (const name of units) {
+      const unit = readFileSync(new URL(`../../../deploy/azure/${name}`, import.meta.url), 'utf8');
+      const hidden = unit.includes('InaccessiblePaths=/home/azureuser/shannon-ios-data/operator-runtime\n');
+      expect(hidden, name).toBe(name !== 'shannon-ios.service');
+    }
   });
 
   it('allows confirmed camera snapshots through nginx to the route-specific API limit', () => {

@@ -3,7 +3,7 @@ import { REPORT_CARD_LIMITS, validatedReportCard, type ReportCard } from '../../
 import type { ConversationStore } from '../../memory/memoryPorts.js';
 import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskView } from '../taskRuntime/taskRuntimePorts.js';
-import { fallbackSpokenReport } from './fcaSpokenReport.js';
+import { plainSpokenReport } from './fcaSpokenReport.js';
 import type { ReportGateVerdict } from './fcaReportGate.js';
 
 /** How long a card waits for the report's spoken form before it uses a plain cut of the report instead. */
@@ -58,7 +58,12 @@ type CardParts = {
   log?(line: string): void;
 };
 
-/** Finished work he asked for, directly under the root or a conversation (a nested child reports to its parent instead). */
+/**
+ * Finished work of origin `owner_request`, directly under the root or a conversation (a nested child reports to its parent
+ * instead). A request the operator handed over for him is one too; its card keeps the title's 「（運用者経由）」 and its answer is
+ * the operator's line (`plainSpokenReport`, the spoken form), never words saying he asked for it. It has no source Talk, so no
+ * card is written for it today; the Talk note of `operatorTalkNote` is what he sees.
+ */
 function finishedOwnerWork(task: TaskView, at: number, parentKind: (id: string) => string | undefined): boolean {
   if (task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind)) return false;
   if (!['completed', 'failed'].includes(task.phase) || !(at - Date.parse(task.updatedAt) < REPORT_CARD_WINDOW_MS)) return false;
@@ -77,7 +82,7 @@ function spreadOf(taskId: string): number {
 function answerOf(task: TaskView, report: NonNullable<TaskProgress['report']>, at: number, since: number): string | null {
   const spoken = report.spoken?.trim();
   if (spoken) return spoken;
-  return at - since < REPORT_CARD_SPOKEN_WAIT_MS ? null : fallbackSpokenReport(report.text, task.title);
+  return at - since < REPORT_CARD_SPOKEN_WAIT_MS ? null : plainSpokenReport(task, report.text);
 }
 
 /**

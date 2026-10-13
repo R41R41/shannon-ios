@@ -14,7 +14,14 @@ credential. Anything else is refused as `out_of_scope` and audited.
 ## Channel
 
 - A Unix socket beside the database: `<dirname(SHANNON_DATABASE_PATH)>/operator-runtime/operator.sock`. The directory is `0700`
-  and the socket `0600`, both owned by the service user; who can open it is who can already read the database.
+  and the socket `0600`, both owned by the service user. The API makes the directory at every start, switch on or off, because
+  the other units hide it and need it to exist.
+- **The real boundary is the service user (`azureuser`), not the operator.** Every VM service runs as that user, and
+  `ProtectHome=read-only` does not stop an AF_UNIX `connect`. So every unit in `deploy/azure` except the API's
+  (`shannon-ios.service`) has `InaccessiblePaths=/home/azureuser/shannon-ios-data/operator-runtime`; the agent host, which runs
+  Codex, is the one that matters most. What can still connect: an interactive login of `azureuser`, a cron job, and any process
+  of that user outside those units; and a same-user process that can read another process's `/proc/<pid>/root` could reach the
+  path through it. Only running the API as its own user would close those (not done here).
 - There is no TCP route. nginx forwards every path of `127.0.0.1:4319` under `/companion/` to the internet-facing site, so a new
   TCP route would be reachable from outside, and a loopback secret would be a new credential to mint, store and keep unprinted.
 - Only `POST /operator/v1/minecraft` is served (8 KiB body). A request with `X-Forwarded-For` is refused.
@@ -39,7 +46,16 @@ Every invocation is audited before anything else, then refused when:
 
 - it is outside the operations above (`out_of_scope`) or malformed (`invalid_input`);
 - the switch is off (`disabled`);
-- 20 invocations were accepted in the last hour (`rate_limited`; counted from the audit, so a restart does not reset it).
+- 20 invocations were accepted in the last hour (`rate_limited`; counted from the audit, so a restart does not reset it);
+- 120 invocations were made in the last hour, refused ones and socket refusals included (`flooded`, `429`). A flood is not
+  audited one by one: one coalesced audit row a minute (`code = flooded`, `detail = suppressed=N`), nothing in the activity record.
+
+Refusals reach the owner's activity record only for the first 10 an hour; the 11th writes one line saying the rest of the hour
+is in the audit only. Every refusal before a flood is still its own audit row.
+
+A refusal at the socket itself (another path or method, a forwarded request, an unreadable or oversized body) is audited without
+anything of the request: operator `unknown`, command `socket`, code `socket_not_found`, `socket_forwarded` or
+`socket_invalid_body`, arguments `{}`.
 
 A request is also refused when someone other than the owner is present (`owner_not_alone`), the body is not exactly one connected
 body (`body_unavailable`), a lifecycle operation is unresolved (`unresolved_operation`), a `minecraft` action is live
@@ -58,8 +74,11 @@ the owner is alone, and the command id is that source. `set_day` additionally ne
   (`admittedMinecraftRequest`): the same budget, the same gates, the same body binding. The origin is not new: a new origin would
   either silently pass the owner's gates or be silently refused by them.
 - `budgetYen` only lowers the Minecraft request cap (2000 yen) for that one task (`fcaBudget` `taskCapYen`); it never raises it.
+  It caps the request itself, the root of its work: a child the request starts has its own cap, as for the owner's requests.
 - `maxMinutes` is the operator's time limit. Past it the API stops the task through the owner's stop path (`runtime.stop`, which
-  waits for the body's stop acknowledgement), once, and audits `time_limit`. The limit holds with the switch turned off too.
+  waits for the body's stop acknowledgement). It is enforced until the task's phase is terminal, not until a stop was audited: a
+  cancelled task whose stop did not take is stopped again at the limit. `time_limit` is audited, recorded and noted once. The
+  limit holds with the switch turned off too.
 
 ## Attribution
 
@@ -68,12 +87,19 @@ Who handed a request over is never written as the owner's words. It is marked in
 1. the task title starts with 「（運用者経由）」;
 2. its first inbox line: 「この依頼は運用者（label）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。」;
 3. a note in the owner's Talk (note kind `operator-note`) when a request starts, is cancelled or reaches its time limit, and when a
-   lifecycle operation is asked;
+   lifecycle operation is asked. The conversation store keeps only `user` and `assistant` messages (a CHECK of
+   `conversation_messages`), so the note is stored as `assistant`; its words are therefore a marked, neutral notice in the third
+   person (「［運用者の操作のお知らせ］運用者がライ氏の代わりに…」), never her voice and never his request;
 4. the audit (below), and the activity record (自律活動 › 記録), domain `minecraft_lifecycle`, whose summary names
    「運用者（label）」. The activity record's actor column admits only `shannon` and `owner`, so the actor is `owner` and the
    sentence says it was the operator.
 
 The Observer shows the admission as a run of surface `operator_cli`; the task itself appears in 「いま」 like any other.
+
+Its result is never told as something he asked for. The spoken form of its report (what a call says, and a report card's short
+answer) is the fixed line 「運用者がライ氏の代わりに渡した依頼「…」の結果が届いています。詳しくは画面にあります。」, written without a
+model (`handedOverReportLine`); the report itself stays on the screen. Such a request has no source Talk, so no report card is
+written for it.
 
 ## Cancel
 
@@ -110,8 +136,15 @@ Exit codes: `0` accepted, `1` refused or failed (also when the socket is absent)
 
 ## Switch
 
-`SHANNON_OPERATOR_MINECRAFT`, `explicit_on`, default off. A restart of `shannon-ios.service` applies it. Off: no socket; nothing new
-is accepted. Off after it was on: the audit stays open so running operator requests keep their lower cap and time limit.
+`SHANNON_OPERATOR_MINECRAFT`, `explicit_on`, default off. A restart of `shannon-ios.service` applies it. Off: no socket (only its
+empty directory); nothing new is accepted. Off after it was on: the audit stays open so running operator requests keep their lower cap and time limit.
+
+## Deploy
+
+The units' `InaccessiblePaths=` fails a unit's start when the directory is missing, so on the first deploy of this change:
+make the directory (`install -d -m 0700 /home/azureuser/shannon-ios-data/operator-runtime`, as the service user) before the
+units restart, then `sudo systemctl daemon-reload` and restart every changed unit, the agent host included
+(`shannon-agent-host.service`), not only the API. After that the API keeps the directory in place at each start.
 
 ## Code
 

@@ -21,6 +21,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
+# The operator socket (docs/operator-minecraft-contract.md) is the API's alone: ProtectHome=read-only does not stop an AF_UNIX connect.
+InaccessiblePaths=/home/azureuser/shannon-ios-data/operator-runtime
 ReadWritePaths=/home/azureuser/shannon-agent-workspace /home/azureuser/shannon-agent-data
 
 [Install]

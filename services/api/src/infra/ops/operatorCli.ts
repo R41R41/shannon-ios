@@ -158,7 +158,7 @@ export async function runOperatorCli(argv: readonly string[], env: Readonly<Reco
     if (!existsSync(path)) throw new UsageError(`no database at ${path}`);
     if (argv[0] === 'minecraft' && argv[1] === 'status' && argv.length === 2) return status(path, io, deps);
     const envelope = operatorEnvelope(argv, env);
-    if (JSON.stringify(envelope).length > OPERATOR_LIMITS.bodyBytes) throw new UsageError('the request is too long');
+    if (Buffer.byteLength(JSON.stringify(envelope), 'utf8') > OPERATOR_LIMITS.bodyBytes) throw new UsageError('the request is too long');
     const socket = operatorSocketPath(path);
     if (!deps.socketPresent(socket)) {
       io.err('the operator socket is absent: SHANNON_OPERATOR_MINECRAFT is off, or the API is not running.');
