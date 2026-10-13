@@ -14,7 +14,9 @@ export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワール�
  * directly under the conversation or the root. A child it starts, or any other task that merely touched the body (a tool call
  * binds too), is not one.
  */
-export function admittedMinecraftRequest(task: Pick<TaskRecord, 'origin' | 'completionCriteria'>, parent: Pick<TaskRecord, 'kind'> | null, bound: boolean): boolean {
+export function admittedMinecraftRequest(
+  task: Pick<TaskRecord, 'origin' | 'completionCriteria'>, parent: Pick<TaskRecord, 'kind'> | null, bound: boolean,
+): boolean {
   return bound && task.origin === 'owner_request' && task.completionCriteria === MINECRAFT_REQUEST_CRITERIA
     && (parent?.kind === 'root' || parent?.kind === 'conversation');
 }
