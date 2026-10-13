@@ -11,6 +11,7 @@ import { configuredAwakeClock } from './mind/emotion/store/autonomyAwakeClock.js
 import { moodHistoryRecording } from './contracts/moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyLoop } from './mind/action/ownTime/autonomyLoop.js';
+import { configuredExecutive } from './wiring/executiveWiring.js';
 import { configuredAutonomyLoop } from './mind/action/ownTime/autonomyLoopConfig.js';
 import { AutonomyToolResults } from './mind/action/ownTime/autonomyLoopToolStep.js';
 import { configuredOwnerContext } from './wiring/autonomyOwnerContextWiring.js';
@@ -178,7 +179,11 @@ const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => 
 const model = configuredAutonomyTextModel(process.env, undefined, line => console.log(line));
 const planningMode = configuredPlanningMode(process.env, { path: databasePath, ownerScope: loopConfig.scopeKey, model,
   fallbackPlanning: scope => resolveAutonomyModel('planning', store.modelPreferences(scope), id => model.canUse(id)) });
+// Syzygy ADR-0009 stage 2 (E5): with SHANNON_EXECUTIVE=on the Executive starts every cycle and its deliberation is the thought; off, none of it.
+const executive = configuredExecutive(process.env, { databasePath, now, values: predictionLedger?.values ?? null, choices: predictionLedger?.choices ?? null,
+  state: ownerState, log: line => console.log(`Shannon executive: ${line.replace(/[^A-Za-z0-9_:., -]/gu, '_').slice(0, 200)}`) });
 const loop = new ShannonAutonomyLoop({
+  ...(executive ? { executive: executive.executive } : {}),
   ...(actionSteps?{actionSteps,concurrentActions:true}:{}),
   store, service, config, loop: loopConfig, model, ...(planningMode ? { planningModel: planningMode.planningModel } : {}),
   reader: new BoundedPublicReader({

@@ -14,6 +14,7 @@ import { acquireAction } from './actionExecutionWiring.js';
 import { UNKNOWN_EXIT_MS, classifyLease, deriveTaskKind, leaseOutcome, leaseUnsent, slotAdmissible, slotClassOf, type SlotClass } from '@shannon/mind';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
+import type { FcaBudget } from './fcaBudgetWiring.js';
 
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
@@ -21,6 +22,10 @@ export interface TaskRuntimeWiringOptions {
   sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   maintenanceAllowed?(runtime: TaskRuntime, task: TaskView): boolean;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
+  /** Own-time tasks (ADR-0009 stage 2, E4): whether one may run now (the Executive on, her own time enabled and not paused). */
+  ownTimeAllowed?(task: TaskView): boolean;
+  /** E3: per-task caps and own-time reservations around each step. */
+  budget?: FcaBudget;
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
@@ -34,13 +39,14 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const action = leases.get(lease.id);
     const task = authority.get(scope, taskId);
     const sleepTicketed = () => task?.origin === 'maintenance' && task.kind === 'sleep' && !!runtime.sleepTicketForTask(scope, taskId);
-    const originMatches = !!task && action?.origin === task.origin && (task.origin === 'owner_request' || sleepTicketed());
+    const originMatches = !!task && action?.origin === task.origin && (task.origin === 'owner_request' || task.origin === 'own_time' || sleepTicketed());
     return originMatches && fcaTaskLeaseValid(action, scope, taskId, lease, at);
   };
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
     if (task.origin === 'owner_request') return options.ownerAlone();
+    if (task.origin === 'own_time') return options.ownTimeAllowed?.(task) === true;
     if (task.origin !== 'maintenance' || task.kind !== 'sleep' || !options.maintenanceAllowed?.(runtime, task)) return false;
     const saved = runtime.sleepTicketForTask(scopeKey, task.id), current = saved && options.sleepTicket?.(scopeKey, saved.jobId);
     return !!current && !!saved && current.jobId === saved.jobId && current.dayKey === saved.dayKey
@@ -101,12 +107,20 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       step = observeSync('taskHub', { phase: 'begin_step', actionId: active.execution.lease.id }, () => runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision), value => ({ admitted: value !== null, stepId: value?.id ?? null }));
       if (!step) { await active.finish('cancelled', 'fca_not_ready'); return; }
       const admitted = step;
+      const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
+      if (!budgeted.ok) {
+        // At its cap or without her budget: the task ends here with a report, before any paid call (E3).
+        stopForBudget(admitted, budgeted.report);
+        await flushReceipts();
+        return;
+      }
       stepPorts = options.stepPorts?.(runtime, admitted);
       if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
       observerHandoff('queue', 'fca', { stepId: admitted.id });
       await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
           ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
-          executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
+          executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal))
+        .finally(() => options.budget?.after(task, active.execution.lease, budgeted.reservationId));
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
     } catch (error) {
@@ -139,6 +153,13 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const unsent = !!action && leaseUnsent(action, lease);
     await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
     runtime.recover(scopeKey, classify);
+  }
+  /** A task at its cap, or an own-time task without budget: failed with its report in the same commit (E3). */
+  function stopForBudget(step: TaskStep, report: string): void {
+    try {
+      runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
+      runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] });
+    } catch { /* the step's lease ends unknown; nothing paid was sent */ }
   }
   /** A known refusal fails the task in the same commit that tells its parent, and leaves a report the owner's call can speak. */
   function failRejectedStep(step: TaskStep): boolean {

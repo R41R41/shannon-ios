@@ -148,6 +148,12 @@ export class PursuitGoalLedger {
     if (change.to === 'active') this.keepActiveCap(scopeKey, pursuitId, at);
   }
 
+  /** She worked on it now (a dispatched capability for it finished). */
+  worked(scopeKey: string, pursuitId: string, at: string): void {
+    this.database.prepare(`UPDATE autonomy_pursuits SET last_worked_at = ? WHERE scope_key = ? AND pursuit_id = ? AND origin <> 'seed'`)
+      .run(at, scopeKey, pursuitId);
+  }
+
   /** She thinks it is done: recorded, and the goal stays as it is until evidence or the owner closes it. */
   proposedComplete(scopeKey: string, pursuitId: string, status: string, at: string): void {
     this.append(scopeKey, { pursuitId, kind: 'propose_complete', actor: 'shannon', fromStatus: status, toStatus: status, detail: {}, at });

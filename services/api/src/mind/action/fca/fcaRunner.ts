@@ -56,7 +56,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (maintenance) return;
     try { runtime.recordProgress?.(step, event); } catch { /* Optional UI observations never change an operation's actual outcome. */ }
   };
-  const allowed = () => maintenance ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
+  // Her own-time work (ADR-0009 stage 2, E4) is hers, not a conversation: it is held by its own gate, not by who is present.
+  const ownTime = step.snapshot.task.origin === 'own_time';
+  const allowed = () => maintenance || ownTime ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
   const checked = () => observeAsync('gate', { phase: 'step_permit' }, async () => {
     signal.throwIfAborted();
     if (!allowed()) throw new Error('FCA_EXECUTION_HELD');

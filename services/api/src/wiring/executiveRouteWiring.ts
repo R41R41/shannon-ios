@@ -24,6 +24,8 @@ export interface ExecutiveRouteOptions {
   autonomy: ShannonAutonomyService;
   autonomyStore: SQLiteAutonomyStore;
   config: AutonomyConfig;
+  /** `SHANNON_EXECUTIVE` is on (E5). */
+  executive?: boolean;
 }
 
 export function executiveRouteWiring(options: ExecutiveRouteOptions) {
@@ -47,7 +49,10 @@ export function executiveRouteWiring(options: ExecutiveRouteOptions) {
     return null;
   });
   const capabilities = (scopeKey: string, at: string) => capabilitiesView(
-    { paused: safe(() => options.autonomyStore.control(scopeKey).paused, true), aether: options.autonomy.studyAether !== null, executive: false },
+    {
+      paused: safe(() => options.autonomyStore.control(scopeKey).paused, true), aether: options.autonomy.studyAether !== null,
+      executive: options.executive === true,
+    },
     options.store.valueVersions()?.overview(scopeKey).cells ?? [],
     readings.choiceUses(scopeKey, new Date(Date.parse(at) - 7 * 86_400_000).toISOString()), at);
   const inspection = (scopeKey: string, day: string, at: string) => {
@@ -57,10 +62,13 @@ export function executiveRouteWiring(options: ExecutiveRouteOptions) {
       dayKey, events: pursuits.goals.eventsSince(scopeKey, since), predictions: readings.predictions(scopeKey, since),
       notices: readings.notices(scopeKey, since), sleepRuns: readings.sleepRuns(scopeKey, days),
       spentYen: key => safe(() => options.autonomyStore.spentYen(scopeKey, key), 0), unknownNow: unknownNow(readings.connection(), at),
+      deliberations: options.autonomyStore.deliberations.since(scopeKey, since, 2000),
     }, day, at);
   };
   const dependencies = { ownerScopeKey: options.ownerScope, now: options.now, dayKey, goals, confirm, capabilities, inspection,
-    choices: (_scope: string, days: number, at: string) => choicesView(days, at) };
+    choices: (scopeKey: string, days: number, at: string) => choicesView(
+      options.autonomyStore.deliberations.since(scopeKey, new Date(Date.parse(at) - days * 86_400_000).toISOString(), 50),
+      id => pursuits.get(scopeKey, id)?.title ?? null, days, at) };
   return {
     /** Answers an Executive path (true), or leaves the request to the next route (false). */
     async serve(request: IncomingMessage, response: ServerResponse, principal: { scopeKey: string } | null, url: URL): Promise<boolean> {

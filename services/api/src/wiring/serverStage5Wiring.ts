@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { switchOn } from '@shannon/switches';
 import type { DatabaseSync } from 'node:sqlite';
 import { dayBand } from '../contracts/cognitionLedgerContract.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
@@ -74,7 +75,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
       selfRewriteRoute = options.selfRewriteRoute ?? null;
       // The owner's Executive routes (ADR-0009 stage 2, E1/E2), with or without Stage5: goals, confirm, catalog, choices, inspection.
       executive = executiveRouteWiring({ path: parts.path, ownerScope: parts.ownerScope, now: parts.now, store: parts.store,
-        autonomy: options.autonomy, autonomyStore: options.autonomyStore, config: options.config });
+        autonomy: options.autonomy, autonomyStore: options.autonomyStore, config: options.config, executive: switchOn(environment, 'SHANNON_EXECUTIVE') });
       if (!enabled) return;
       selfRewrite = selfRewriteRuntimeWiring({environment,path:parts.path,ownerScope:parts.ownerScope,now:parts.now,
         config:options.config,autonomy:options.autonomy,autonomyStore:options.autonomyStore,tasks,actions:options.actions});

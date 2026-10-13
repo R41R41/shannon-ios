@@ -20,7 +20,7 @@ export interface ChoiceDraft {
   /** `<band>.<presence>`: the owner-local quarter of the day and who was around (alone, others, away, unknown). */
   context: string;
   /** `turn` (stage 2): a tier choice of a conversation turn. `skill` (stage 2, step 6): a use of one of her skills, by its id. */
-  sourceKind: 'step' | 'tool_call' | 'turn' | 'skill';
+  sourceKind: 'step' | 'tool_call' | 'turn' | 'skill' | 'deliberation';
   sourceId: string;
 }
 
@@ -119,7 +119,7 @@ function addColumn(database: DatabaseSync, statement: string): void {
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 
 export function checkedChoice(row: StoredChoice): StoredChoice {
-  if (!(CHOICE_SURFACES as readonly string[]).includes(row.surface) || !['step', 'tool_call', 'turn', 'skill'].includes(row.sourceKind)) throw new Error('CHOICE_VOCABULARY');
+  if (!(CHOICE_SURFACES as readonly string[]).includes(row.surface) || !['step', 'tool_call', 'turn', 'skill', 'deliberation'].includes(row.sourceKind)) throw new Error('CHOICE_VOCABULARY');
   if (![row.choice, row.context, row.expectedLevel].every(value => PREDICTION_SYMBOL.test(value))) throw new Error('CHOICE_SYMBOL');
   if (![row.choiceId, row.sourceId, row.valueVersion].every(value => PREDICTION_SOURCE_ID.test(value))) throw new Error('CHOICE_IDENTIFIER');
   if (!Number.isFinite(Date.parse(row.chosenAt))) throw new Error('CHOICE_TIME');

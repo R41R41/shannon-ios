@@ -206,6 +206,10 @@ export const SWITCHES = [
     name: 'SHANNON_AUTONOMY_ENABLED', default: 'off', kind: 'true_only', owner: 'autonomy', requires: [],
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },
+  {
+    name: 'SHANNON_EXECUTIVE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: ['SHANNON_AUTONOMY_ENABLED'],
+    doc: 'ADR-0009 stage 2: the Executive decides her own time (one deliberation, one capability); off, the old own-time loop thinks.',
+  },
 ] as const satisfies readonly SwitchEntry[];
 
 export type SwitchName = (typeof SWITCHES)[number]['name'];

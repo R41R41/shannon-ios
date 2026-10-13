@@ -1,7 +1,7 @@
 import type { ShannonPursuit } from '@shannon/cognition';
 import { capabilityOfChoice, activityOfCapability, type ValueCell } from '@shannon/learning';
 import { GOAL_LIMITS, evaluateGoalPredicate, goalPredicateSummary, goalProgressLabel, type CapabilityExecutor, type CapabilityPolicy } from '@shannon/mind';
-import type { PursuitClosedReason, PursuitEvent, PursuitGoalColumns } from '../ownTime/ownTimePorts.js';
+import type { DeliberationRecord, PursuitClosedReason, PursuitEvent, PursuitGoalColumns } from '../ownTime/ownTimePorts.js';
 import { capabilityCatalog, capabilityCatalogView, type CapabilityAvailability } from './capabilityCatalog.js';
 import type { ChoiceUse, NoticeMark, PredictionMark } from './store/executiveReadings.js';
 
@@ -107,9 +107,15 @@ export function capabilitiesView(availability: CapabilityAvailability, cells: re
   return { schemaVersion: EXECUTIVE_VIEW_SCHEMA, generatedAt: at, capabilities };
 }
 
-/** `GET /v1/autonomy/choices`: the Executive's deliberations; none exist before E5, so the list is empty. */
-export function choicesView(days: number, at: string) {
-  return { schemaVersion: EXECUTIVE_VIEW_SCHEMA, generatedAt: at, days, choices: [] as unknown[] };
+/** `GET /v1/autonomy/choices`: the Executive's deliberations of the last `days`, newest first, at most 50. */
+export function choicesView(records: readonly DeliberationRecord[], goalTitle: (id: string) => string | null, days: number, at: string) {
+  const choices = records.slice(0, 50).map(record => ({
+    id: record.id, at: record.at, capability: record.capability, label: labelOf(record.capability),
+    ...(record.goalId ? { goalId: record.goalId, goalTitle: goalTitle(record.goalId) ?? undefined } : {}),
+    ...(record.reason ? { reason: record.reason } : {}), outcome: record.outcome, offCandidates: record.offCandidates, topByValue: record.topByValue,
+    trigger: record.trigger, valueRank: record.valueRank,
+  }));
+  return { schemaVersion: EXECUTIVE_VIEW_SCHEMA, generatedAt: at, days, choices };
 }
 
 export interface InspectionInputs {
@@ -122,6 +128,8 @@ export interface InspectionInputs {
   spentYen(dayKey: string): number;
   /** Actions still unknown (a gauge of now, given for today only); null when not known. */
   unknownNow: number | null;
+  /** The Executive's deliberations in the window (E5); absent before it ran. */
+  deliberations?: readonly DeliberationRecord[];
 }
 
 interface DayCounts {
@@ -131,6 +139,11 @@ interface DayCounts {
   sleepRuns: number;
   spentYen: number;
   unknown?: number;
+  deliberations?: number;
+  choices?: number;
+  chosenTopValue?: number;
+  offCandidates?: number;
+  distinctCapabilities?: number;
 }
 
 function emptyCounts(): DayCounts {
@@ -178,9 +191,27 @@ export function inspectionView(inputs: InspectionInputs, day: string, at: string
     counts.sleepRuns = inputs.sleepRuns.get(key) ?? 0;
     counts.spentYen = Math.round(inputs.spentYen(key) * 100) / 100;
   }
+  if (inputs.deliberations?.length) countDeliberations(byDay, inputs.deliberations, inputs.dayKey);
   const today = byDay.get(day)!;
   if (inputs.unknownNow !== null && day === inputs.dayKey(at)) today.unknown = inputs.unknownNow;
   return { schemaVersion: EXECUTIVE_VIEW_SCHEMA, generatedAt: at, day, today, week: summed([...byDay.values()]) };
+}
+
+/** The Executive's rows of plan §6: deliberations, active choices, the top-valued and off-candidate ones, capabilities used. */
+function countDeliberations(byDay: Map<string, DayCounts>, records: readonly DeliberationRecord[], dayKey: (at: string) => string): void {
+  const capabilities = new Map<string, Set<string>>();
+  for (const record of records) {
+    const key = dayKey(record.at);
+    const counts = byDay.get(key);
+    if (!counts) continue;
+    const chose = record.dispatch !== 'none';
+    counts.deliberations = (counts.deliberations ?? 0) + 1;
+    counts.choices = (counts.choices ?? 0) + (chose ? 1 : 0);
+    counts.chosenTopValue = (counts.chosenTopValue ?? 0) + (chose && record.topByValue ? 1 : 0);
+    counts.offCandidates = (counts.offCandidates ?? 0) + (record.offCandidates ? 1 : 0);
+    capabilities.set(key, (capabilities.get(key) ?? new Set()).add(record.capability));
+    counts.distinctCapabilities = capabilities.get(key)!.size;
+  }
 }
 
 function summed(all: readonly DayCounts[]): DayCounts {
@@ -192,6 +223,9 @@ function summed(all: readonly DayCounts[]): DayCounts {
     total.predictions.hit += counts.predictions.hit;
     total.sleepRuns += counts.sleepRuns;
     total.spentYen = Math.round((total.spentYen + counts.spentYen) * 100) / 100;
+    for (const key of ['deliberations', 'choices', 'chosenTopValue', 'offCandidates'] as const) {
+      if (counts[key] !== undefined) total[key] = (total[key] ?? 0) + counts[key]!;
+    }
   }
   return total;
 }

@@ -9,5 +9,11 @@ export const EXECUTIVE_CORE_PATHS = Object.freeze([
   'services/api/src/mind/action/ownTime/store/pursuitGoalMigration.ts',
   'services/api/src/infra/http/executiveRoutes.ts',
   'services/api/src/wiring/executiveRouteWiring.ts',
+  // E3-E5: the deliberation record, the one budget of FCA steps, own-time tasks and the Executive's wiring.
+  'services/api/src/mind/action/ownTime/store/deliberationLedger.ts',
+  'services/api/src/mind/action/ownTime/store/executiveMigration.ts',
+  'services/api/src/wiring/executiveWiring.ts',
+  'services/api/src/wiring/fcaBudgetWiring.ts',
+  'services/api/src/wiring/fcaOwnTimeWiring.ts',
   'docs/executive-ui-contract.md',
 ]);

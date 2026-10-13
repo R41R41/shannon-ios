@@ -125,6 +125,7 @@ export class ShannonAutonomyLoop {
   }
 
   private startCycleIfDue(at: string): AutonomyLoopCycle | AutonomyLoopTick {
+    if (this.dependencies.executive) return this.dependencies.executive.startIfDue(this.dependencies, this.scopeKey, at); // ADR-0009 E5.
     const { store, service, config, loop, showing } = this.dependencies;
     const dayKey = autonomyDayKey(at, config);
     // A piece she called 「見せてもいい」 but has not told him about: one step of its own, when she may speak.

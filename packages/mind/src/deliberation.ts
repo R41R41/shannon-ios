@@ -141,6 +141,28 @@ export interface DeliberationAnswer {
   readonly nextThinkMinutes: number;
   /** She chose a capability of the catalog that was not among the candidates. */
   readonly outsideCandidates: boolean;
+  /** What the chosen capability is handed: what to do in her words, why she speaks up, which piece. */
+  readonly args: DeliberationArgs;
+}
+
+export const NOTIFY_ABOUT = ['share', 'wonder', 'upcoming', 'saw'] as const;
+export type NotifyAbout = typeof NOTIFY_ABOUT[number];
+
+export interface DeliberationArgs {
+  /** What to do, one line of hers (at most 160 characters). */
+  readonly intent?: string;
+  /** For notify: why she speaks up, from the closed set. */
+  readonly about?: NotifyAbout;
+  /** For create.story or show.piece: the piece. */
+  readonly pieceId?: string;
+}
+
+function argsOf(value: unknown): DeliberationArgs {
+  const item = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const intent = typeof item.intent === 'string' ? item.intent.replace(/\s+/gu, ' ').trim().slice(0, 160) : '';
+  const about = NOTIFY_ABOUT.find(reason => reason === item.about);
+  const pieceId = typeof item.pieceId === 'string' && /^[A-Za-z0-9][A-Za-z0-9_:-]{0,99}$/u.test(item.pieceId) ? item.pieceId : '';
+  return Object.freeze({ ...(intent ? { intent } : {}), ...(about ? { about } : {}), ...(pieceId ? { pieceId } : {}) });
 }
 
 /**
@@ -159,6 +181,7 @@ export function checkedDeliberationAnswer(
   return Object.freeze({
     ...chosen, reason: oneLine(item.reason), ...(proposal ? { goalProposal: proposal } : {}), nextThinkMinutes: nextMinutes(item.nextThinkMinutes),
     outsideCandidates: !candidates.some(candidate => candidateKey(candidate) === candidateKey(chosen)),
+    args: argsOf(item.args ?? item),
   });
 }
 
