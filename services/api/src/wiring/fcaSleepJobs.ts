@@ -42,7 +42,9 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
       const task = runtime.get(ownerScope, id);
       return !!task && !!job(runtime, task);
     };
-    return rows.some(row => row.task_id === null ? String(row.lease_until) > at : held(String(row.task_id)));
+    // An unbound row holds by its worker lease while it runs (a row without one holds nothing); a bound one by its task.
+    const leased = (until: unknown) => until !== null && until !== undefined && String(until) > at;
+    return rows.some(row => row.task_id === null ? leased(row.lease_until) : held(String(row.task_id)));
   }
   function reconcile(runtime: TaskRuntime) {
     underWriteLock(db, null, '', () => {

@@ -24,6 +24,8 @@ function hasTaskKind(db: DatabaseSync): boolean {
 export function ensureTaskKinds(db: DatabaseSync): void {
   const columns = tableColumns(db, 'agent_tasks');
   if (!columns.has('task_kind')) return;
+  // Read first: an UPDATE would take the write lock at every store open, also when no row needs it.
+  if (!db.prepare('SELECT 1 AS found FROM agent_tasks WHERE task_kind IS NULL LIMIT 1').get()) return;
   if (!columns.has('fca_kind')) db.prepare("UPDATE agent_tasks SET task_kind='codex' WHERE task_kind IS NULL").run();
   else {
     const cases = Object.entries(FCA_TASK_KINDS).map(([fca, kind]) => `WHEN '${fca}' THEN '${kind}'`).join(' ');
