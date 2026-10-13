@@ -564,7 +564,7 @@
     "services/api/src/infra/sqlite/sqliteStore.ts": {
       "complex-function": 1,
       "multi-statement-line": 1,
-      "long-line": 38
+      "long-line": 37
     },
     "services/api/src/infra/sqlite/sqliteStoreCodecs.ts": {
       "complex-function": 1,
@@ -2166,7 +2166,7 @@
       "long-line": 2
     },
     "services/api/src/worker.ts": {
-      "long-line": 4
+      "long-line": 1
     },
     "services/api/src/worldWorker.ts": {
       "multi-statement-line": 5,

@@ -1,25 +1,18 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { fcaSleepConfigured } from './infra/config/fcaSwitches.js';
 import { ShannonBackgroundWorker } from './mind/sleep/backgroundWorker.js';
-import { createConfiguredSleepMemoryAnalyzer } from './mind/sleep/sleepConsolidation.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { MemoryEmbeddingWorker } from './mind/memory/memoryEmbeddingWorker.js';
 import { configuredMemoryModelGateway } from './mind/recall/turnMemoryRecall.js';
-import { createConfiguredKnowledgeAnalyzer, ShannonKnowledgeConsolidator } from './mind/sleep/knowledgeConsolidation.js';
 import { usableKnowledgeFor } from './mind/recall/turnKnowledgeRecall.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
-import { PlatformPeople } from './mind/memory/platformPeople.js';
-import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer } from './surfaces/platform/platformPeopleSummaries.js';
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
+import { stage5InterestNightSchedule, stage5MemoryReaders, stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 import { memoryWriterOf } from './wiring/memoryOutboxWiring.js';
 import { replayCompaction } from './wiring/compactionWiring.js';
-import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
-import { stage5InterestNightSchedule, stage5MemoryReaders, stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
 import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
-import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 import { configuredWorkerFeedback } from './wiring/configuredWorkerFeedback.js';
 import { configuredOwnerScope } from './infra/config/ownerScope.js';
 import { startObserverPublisher } from './infra/observer/store/observerStore.js';
@@ -32,17 +25,8 @@ const feedback = configuredWorkerFeedback(process.env, { path: configuredDatabas
 const interestNightly = stage5InterestNightSchedule(store, { now: () => new Date().toISOString(),
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3) });
 const memory = store.memoryProposals();
-const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
-// Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
-const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: false });
-const skills = skillMemory ? skillSleepConsolidator(process.env, { memory: skillMemory.memory, store, choices: store.choiceLedger() }) : null;
-// Step 7: their readable copies in Aether's シャノン用フォルダ, and the owner's edits of them adopted; off without Aether.
-const skillExport = skillMemory ? configuredSkillExport(process.env, { memory: skillMemory.memory, store }) : null;
 const peopleStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
-// F6 (review M4): with temporal facts on, the facts the rules closed are left out of what a summary reads, as in a conversation.
-const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store, undefined, memory, peopleFactReaders(store, () => new Date().toISOString())),
-  createConfiguredPlatformSummaryWriter(process.env, store), store);
-// Her impressions of people: one bounded call after a turn (the owner) and after the sleep batch (people met on a platform).
+// Her impressions of people: one bounded call after a turn (the owner); after a night, the common runtime's sleep task.
 const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
   { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', memory });
 const replayWriter = createConfiguredReplaySummaryWriter(process.env, store);
@@ -61,25 +45,17 @@ const valueNightly = valueNightSchedule({
   },
   run: (scopeKey, at, notBefore) => valueNight(scopeKey, at, () => store.snapshot(scopeKey), notBefore),
 });
-const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
-  ...(fcaSleepConfigured(process.env) ? { fcaSleepScope: configuredOwnerScope(process.env) } : {}),
+// Turn refinement, and the owner's nights scheduled for the common runtime's sleep task (Syzygy ADR-0009 S9: no sleep runs here).
+const worker = new ShannonBackgroundWorker(store, store, store, {
+  sleepScope: configuredOwnerScope(process.env),
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
-  minimumSleepMessages: parseInteger(process.env.SHANNON_SLEEP_MIN_MESSAGES, 3),
   // What left a thread's replay window is summarized here, after the turn's refinement, inside the shared background budget.
   replaySummarizer,
   impressionUpdater: impressions,
   memoryProposals: memory,
-  ...stage5MemoryReaders(store),
-  // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
-  knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
-    try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
-      // Her skills after her knowledge (they may be built from it); a failure is logged by code and never fails the rest.
-      try { await skills?.consolidate(scopeKey, startAt, endAt); } catch (error) { console.error('Shannon skill sleep failed', error instanceof Error ? error.name : 'unknown'); }
-      try { await skillExport?.(scopeKey, new Date().toISOString()); } catch (error) { console.error('Shannon skill export failed', error instanceof Error ? error.name : 'unknown'); }
-      try { await platformSummaries.consolidate(scopeKey, startAt, endAt); } finally { await impressions.observePlatformPeople(scopeKey, startAt, endAt); }
-    }
-  } },
+  // Stage 5: what a turn teaches is read against her self interests (`stage5MemoryReaders`), as before.
+  stage5: stage5MemoryReaders(store).stage5 === true,
 });
 // The one memory writer, on this process's connection, under its lease (null while the outbox is switched off).
 const memoryWriter = memoryWriterOf(store, { now: () => new Date().toISOString(), owner: `memory-${worker.workerId}`,
@@ -129,7 +105,6 @@ try {
   await memoryLoop;
   try { memoryWriter?.releaseLease(); } catch { /* the next writer takes it when it expires */ }
   peopleStore.close();
-  skillMemory?.close();
   feedback?.close();
   observation?.close();
   store.close();

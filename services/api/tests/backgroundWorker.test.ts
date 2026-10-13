@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,11 +38,7 @@ describe('Shannon durable background worker', () => {
     apiStore.close();
 
     const workerStore = new SQLiteShannonStore({ path, now: () => '2026-08-31T10:00:01.000Z' });
-    const worker = new ShannonBackgroundWorker(
-      workerStore,
-      workerStore,
-      workerStore,
-      new LocalRuleSleepMemoryAnalyzer(),
+    const worker = new ShannonBackgroundWorker(workerStore, workerStore, workerStore,
       { workerId: 'test-worker', now: () => new Date('2026-08-31T10:00:01.000Z') },
     );
     expect(await worker.runOnce()).toBe('processed');
@@ -58,11 +55,7 @@ describe('Shannon durable background worker', () => {
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-05T10:00:01.000Z' });
     const threadId = store.createThread('owner-a', '創作');
     store.appendTurn('owner-a', threadId, '創作の続きを考えたい', '続きを考えよう。', '2026-09-05T09:00:00.000Z');
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      new LocalRuleSleepMemoryAnalyzer(),
+    const worker = new ShannonBackgroundWorker(store, store, store,
       { workerId: 'bulk-memory-worker', now: () => new Date('2026-09-05T10:00:01.000Z') },
     );
     expect(await worker.runOnce()).toBe('processed');
@@ -88,11 +81,7 @@ describe('Shannon durable background worker', () => {
       '覚えておくね。',
       '2026-09-01T10:00:00.000Z',
     );
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      new LocalRuleSleepMemoryAnalyzer(),
+    const worker = new ShannonBackgroundWorker(store, store, store,
       { workerId: 'immediate-memory-worker', now: () => new Date('2026-09-01T10:00:01.000Z') },
     );
 
@@ -116,48 +105,13 @@ describe('Shannon durable background worker', () => {
     store.close();
   });
 
-  it('never calls the model analyzer during immediate turn refinement', async () => {
-    const path = databasePath();
-    const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
-    const threadId = store.createThread('owner-a', '食事検証');
-    const message = '食事でいちばん気分が上がるのは、お寿司かな';
-    store.appendTurn('owner-a', threadId, message, 'そうなんだね。', '2026-09-01T10:00:00.000Z');
-    let analyzerCalls = 0;
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      {
-        mode: 'openai',
-        analyze: async () => {
-          analyzerCalls += 1;
-          return [{
-          kind: 'user-fact',
-          statement: 'ユーザーの好きな食べ物は寿司',
-          evidence: message,
-          }];
-        },
-      },
-      { workerId: 'immediate-llm-worker', now: () => new Date('2026-09-01T10:00:01.000Z') },
-    );
-
-    expect(await worker.runOnce()).toBe('processed');
-    expect(store.snapshot('owner-a').userFacts).toEqual([]);
-    expect(analyzerCalls).toBe(0);
-    store.close();
-  });
-
   it('keeps emotion and local memory updates independent from the sleep model', async () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
     const threadId = store.createThread('owner-a', '感情失敗対策');
     store.appendTurn('owner-a', threadId, '寿司が好き。完成して嬉しい！', 'よかった。', '2026-09-01T10:00:00.000Z');
     let analyzerCalls = 0;
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      { mode: 'openai', analyze: async () => { analyzerCalls += 1; throw new Error('network'); } },
+    const worker = new ShannonBackgroundWorker(store, store, store,
       {
         workerId: 'immediate-llm-fallback-worker',
         now: () => new Date('2026-09-01T10:00:01.000Z'),
@@ -221,95 +175,17 @@ describe('Shannon durable background worker', () => {
     store.close();
   });
 
-  it('runs one sleep consolidation per local day and learns only explicit user facts', async () => {
-    const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
-    const threadId = store.createThread('owner-a', '睡眠サマリー');
-    store.appendTurn(
-      'owner-a',
-      threadId,
-      '僕は青い照明が好き。落ち着くんだ。',
-      '覚えておくね。',
-      '2026-09-01T03:00:00.000Z',
-    );
-    const now = new Date('2026-09-01T18:30:00.000Z'); // 2026-09-02 03:30 JST
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      new LocalRuleSleepMemoryAnalyzer(),
-      { workerId: 'sleep-worker', timeZone: 'Asia/Tokyo', sleepHour: 3, now: () => now },
-    );
-    expect(await worker.runOnce()).toBe('processed'); // recovered turn refinement
-    expect(store.snapshot('owner-a').userFacts).toEqual([
-      expect.objectContaining({ statement: 'ユーザーは青い照明が好き', confidence: 0.72 }),
-    ]);
-    expect(await worker.runOnce()).toBe('processed'); // sleep consolidation
-    expect(store.snapshot('owner-a').userFacts).toEqual([
-      expect.objectContaining({ statement: 'ユーザーは青い照明が好き' }),
-    ]);
-    expect(store.snapshot('owner-a').userFacts[0]?.confidence).toBeCloseTo(0.8, 5);
-    expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
-    expect(store.personalityProfile('owner-a')).toMatchObject({
-      version: 1,
-      analysis: expect.stringContaining('青い照明'),
-    });
-    expect(store.promptProjection('owner-a')).toContain('[Personality analysis v1]');
+  it('never claims a night: every night is the common runtime\'s sleep task (ADR-0009 S9)', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => '2026-09-02T19:00:00.000Z' });
+    const threadId = store.createThread('owner-a', '夜');
+    store.appendTurn('owner-a', threadId, '今日は散歩した', 'いいね。', '2026-09-01T10:00:00.000Z');
+    const worker = new ShannonBackgroundWorker(store, store, store, { sleepScope: 'owner-a', now: () => new Date('2026-09-02T19:00:00.000Z') });
+    expect(await worker.runOnce()).toBe('processed'); // the turn's refinement
     expect(await worker.runOnce()).toBe('idle');
-    store.close();
-  });
-
-  it('does not spend a sleep-model call on a day with fewer than three user messages', async () => {
-    const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
-    const threadId = store.createThread('owner-a', '短い一日');
-    store.appendTurn(
-      'owner-a', threadId, '僕は桃が好き。', '覚えておくね。', '2026-09-01T03:00:00.000Z',
-    );
-    let analyzerCalls = 0;
-    const worker = new ShannonBackgroundWorker(
-      store,
-      store,
-      store,
-      {
-        mode: 'openai',
-        analyze: async () => {
-          analyzerCalls += 1;
-          return [];
-        },
-      },
-      {
-        workerId: 'minimum-sleep-messages-worker',
-        timeZone: 'Asia/Tokyo',
-        sleepHour: 3,
-        minimumSleepMessages: 3,
-        now: () => new Date('2026-09-01T18:30:00.000Z'),
-      },
-    );
-
-    expect(await worker.runOnce()).toBe('processed'); // turn refinement
-    expect(await worker.runOnce()).toBe('processed'); // local-only sleep consolidation
-    expect(analyzerCalls).toBe(0);
-    expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
-    store.close();
-  });
-
-  it('runs Shannon knowledge building after a sleep batch without letting its failure fail the batch', async () => {
-    const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
-    store.appendTurn('owner-a', store.createThread('owner-a', '知識'), '写真整理が進まない', '区切ろう', '2026-09-01T03:00:00.000Z');
-    const windows: string[] = [];
-    const errors: string[] = [];
-    const worker = new ShannonBackgroundWorker(store, store, store, new LocalRuleSleepMemoryAnalyzer(), {
-      workerId: 'knowledge-worker', timeZone: 'Asia/Tokyo', sleepHour: 3,
-      now: () => new Date('2026-09-01T18:30:00.000Z'), reportError: code => errors.push(code),
-      knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
-        windows.push(`${scopeKey}:${startAt}:${endAt}`);
-        throw new Error('KNOWLEDGE_TEST_FAILURE');
-      } },
-    });
-    expect(await worker.runOnce()).toBe('processed'); // turn refinement
-    expect(await worker.runOnce()).toBe('processed'); // sleep consolidation + knowledge
-    expect(windows).toEqual(['owner-a:2026-08-31T15:00:00.000Z:2026-09-01T15:00:00.000Z']);
-    expect(errors).toEqual(['KNOWLEDGE_CONSOLIDATION_KNOWLEDGE_TEST_FAILURE']);
-    expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
+    const nights = new DatabaseSync(path).prepare("SELECT scope_key,status FROM background_jobs WHERE job_kind='sleep-consolidation'").all();
+    expect(nights.length).toBeGreaterThan(0);
+    expect(nights.every(row => row.scope_key === 'owner-a' && row.status === 'pending')).toBe(true);
     store.close();
   });
 
@@ -321,11 +197,7 @@ describe('Shannon durable background worker', () => {
     apiStore.close();
 
     const workerStore = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:01.000Z' });
-    const worker = new ShannonBackgroundWorker(
-      workerStore,
-      workerStore,
-      workerStore,
-      new LocalRuleSleepMemoryAnalyzer(),
+    const worker = new ShannonBackgroundWorker(workerStore, workerStore, workerStore,
       { workerId: 'recovery-worker', now: () => new Date('2026-08-31T00:00:01.000Z') },
     );
     expect(await worker.runOnce()).toBe('processed');

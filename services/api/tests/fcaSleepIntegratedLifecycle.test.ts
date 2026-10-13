@@ -111,13 +111,13 @@ describe('sleep joins the existing common FCA lifecycle through the production s
     expect(f.foregroundCalls()).toBe(1);
   });
 
-  it('keeps same-owner turn refinement and other scopes on the legacy worker while a bound night never falls back, even expired and disabled', async () => {
+  it('keeps turn refinement on the worker while no night ever reaches it, bound or of another scope (ADR-0009 S9)', async () => {
     let analyses = 0;
     const analyzer: SleepMemoryAnalyzer = { mode: 'local-rules', async analyze() { analyses++; return proposal; } };
     const f = fixture(analyzer), night = scheduled(f);
     f.store.enqueueTurnRefinement('owner', night.sourceId, message, '2026-10-06T12:00:00.000Z');
-    const worker = new ShannonBackgroundWorker(f.store, f.store, f.store, analyzer, {
-      workerId: 'legacy', now: () => new Date(f.now()), fcaSleepScope: 'owner', memoryProposals: f.ports.proposals,
+    const worker = new ShannonBackgroundWorker(f.store, f.store, f.store, {
+      workerId: 'legacy', now: () => new Date(f.now()), sleepScope: 'owner', memoryProposals: f.ports.proposals,
     });
     expect(await worker.runOnce()).toBe('processed');
     expect(f.actions.db.prepare('SELECT status FROM background_jobs WHERE dedupe_key=?').get(`turn:${night.sourceId}`)).toEqual({ status: 'completed' });
@@ -127,11 +127,13 @@ describe('sleep joins the existing common FCA lifecycle through the production s
     f.store.appendTurn('other-scope', 'their-night', '別の範囲の会話です。', 'はい。', '2026-10-06T13:00:00.000Z');
     expect(f.store.enqueueSleepConsolidations('2026-10-06', '2026-10-06T00:00:00.000Z', '2026-10-07T00:00:00.000Z', f.now())).toBe(1);
     f.advance(180_000);
-    // No excludedSleepScope is the legacy/OFF contract: the durable binding still owns the old night.
-    const other = f.store.claimNextBackgroundJob('legacy-off', f.now(), new Date(Date.parse(f.now()) + 60_000).toISOString());
-    expect(other).toMatchObject({ scopeKey: 'other-scope', payload: { kind: 'sleep-consolidation' } });
-    f.store.completeClaimedBackgroundJob(other!, 'legacy-off', f.now(), () => {});
-    expect(f.store.claimNextBackgroundJob('legacy-off', f.now(), new Date(Date.parse(f.now()) + 60_000).toISOString())).toBeNull();
+    // The old sleep batch is gone: the worker claims turn refinements only, so no night of any scope runs here.
+    // (The other scope's turn is still refined.)
+    const runs: string[] = [];
+    for (let n = 0; n < 4; n++) runs.push(await worker.runOnce());
+    expect(runs.filter(run => run === 'processed')).toHaveLength(1);
+    expect(runs.slice(-2)).toEqual(['idle', 'idle']);
+    expect(f.actions.db.prepare("SELECT status FROM background_jobs WHERE scope_key='other-scope' AND job_kind='sleep-consolidation'").get()).toEqual({ status: 'pending' });
     expect(status(f, night.jobId)?.status).toBe('leased');
     expect(analyses).toBe(0);
   });
