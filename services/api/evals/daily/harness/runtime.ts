@@ -54,6 +54,9 @@ export function evalEnvironment(source: Readonly<Record<string, string | undefin
     SHANNON_FCA_RUNTIME: 'on', SHANNON_ADR8_STAGE4: 'on', SHANNON_FCA_SLEEP: 'off', SHANNON_FCA_TOUCH: 'off', SHANNON_FCA_MINECRAFT: 'off',
     SHANNON_DEVICE_ACTIONS: 'on', SHANNON_AUTONOMY_ENABLED: 'off', SHANNON_MORNING_BRIEF: 'off', SHANNON_SONNET_ROUTING: 'off',
     SHANNON_CALENDAR_INGEST: 'on',
+    // Jev is absent, so the voice router is its Haiku fallback. Production gives that fallback 3 s (deploy env); the code default
+    // of 1.2 s times out on almost every turn and routes by keywords only, which offers no tools (first live smoke, 2026-10-13).
+    SHANNON_VOICE_ROUTER_TIMEOUT_MS: source.SHANNON_VOICE_ROUTER_TIMEOUT_MS?.trim() || '3000',
   });
   return environment;
 }
