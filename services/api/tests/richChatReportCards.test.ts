@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { createReportCards, reportCardMessageId, REPORT_CARD_SPOKEN_WAIT_MS } from '../src/mind/action/fca/fcaReportCards.js';
+import { createReportCards, reportCardMessageId, REPORT_CARD_RECHECKS_PER_SCAN, REPORT_CARD_SPOKEN_WAIT_MS } from '../src/mind/action/fca/fcaReportCards.js';
 import { fallbackSpokenReport } from '../src/mind/action/fca/fcaSpokenReport.js';
 import type { TaskProgress } from '../src/mind/action/taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskSource, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
@@ -84,6 +84,29 @@ describe('report cards (rich chat)', () => {
     task.updatedAt = new Date(AT).toISOString();
     cards.tick();
     expect(asked).toBe(2);
+  });
+
+  it('asks again only a few held tasks a scan, the longest unasked first (production 2026-10-13: 600–850 ms every 5 s)', () => {
+    harness();
+    const parent = { id: 'conversation-1', kind: 'conversation' } as TaskView;
+    const tasks = Array.from({ length: 20 }, (_, index) => ({ id: `task-${index}`, parentId: parent.id, kind: 'research', origin: 'owner_request',
+      title: '調べる', phase: 'completed', updatedAt: new Date(AT - 5_000).toISOString() }) as TaskView);
+    const asked: string[] = [];
+    const cards = createReportCards({ runtime: { list: () => tasks, get: (_scope, id) => id === parent.id ? parent : tasks.find(task => task.id === id) ?? null,
+      taskSources: () => [] }, ownerScope: 'owner', conversations: { assistantMessage: () => null, appendReportCardOnce: () => null } as never,
+      now: () => AT, shown: id => { asked.push(id); return null; } });
+    cards.tick();
+    expect(asked).toHaveLength(20); // The first look asks each once.
+    for (let scan = 0; scan < 5; scan++) {
+      asked.length = 0;
+      cards.tick();
+      expect(asked).toHaveLength(REPORT_CARD_RECHECKS_PER_SCAN);
+    }
+    // In five scans every held task was asked again once (20 / 4).
+    tasks[19]!.updatedAt = new Date(AT).toISOString();
+    asked.length = 0;
+    cards.tick();
+    expect(asked).toContain('task-19'); // A changed task is looked at at once.
   });
 
   it('survives a restart of the scan without a second card', () => {

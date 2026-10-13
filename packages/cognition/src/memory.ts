@@ -34,6 +34,8 @@ export function visibleMemoryText(
 }
 
 export function isMemoryEvidenceVisible(snapshot: CompanionStateSnapshot, evidence: string, exceptMemoryId?: string): boolean {
+  // Only a forgotten, rejected or corrected item can hide evidence: with none, nothing is compared (asked for every remembered turn).
+  if (!snapshot.memoryControls.some(control => control.status !== 'active' || control.overrideText)) return true;
   const normalize = (value: string) => value.replace(/[\s。、]/gu, '');
   const quote = normalize(evidence);
   if (quote.length < 3) return true;

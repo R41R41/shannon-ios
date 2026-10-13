@@ -76,9 +76,10 @@ export function prepareTurnCognitiveContext(
   },
 ): TurnCognitiveContext {
   const openOnly = input.openOnly === true;
+  const parts = partTimer();
   // Current locations come only from an explicit utterance, never an old memory.
   const locations = input.locationLabels ?? [...input.message.matchAll(/(?:今は?|現在)[、\s]*([^、。\s]{2,24}?)(?:にいる|に来て|に着|です)/gu)].map(match => match[1]!);
-  const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
+  const recentExperiences = parts.time('read', () => conversationStore.experienceCandidates(input.scopeKey));
   const gate = new DisclosureGate(input.present, snapshot, conversationStore, input.scopeKey, recentExperiences);
   const full = snapshot;
   // From here on items that must not reach the model with these people present are out of scope.
@@ -100,10 +101,13 @@ export function prepareTurnCognitiveContext(
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
   const withholding = new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   // One synchronous read: every remembered turn shares one walk of the recall graph (not one walk per turn).
-  const visibleTurns = withholding.withReadSnapshot(() => recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item)));
+  const visibleTurns = parts.time('visible', () => withholding.withReadSnapshot(() =>
+    recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item))));
+  const remembered = new Set(recentExperiences.map(item => item.id));
+  const fullText = parts.time('fullText', () => fullTextCandidates(withholding, gate, conversationStore, input, remembered));
   const candidates = [
     ...visibleTurns.map(item => ({ ...item, marker: gate.markerForTurn(item) })),
-    ...fullTextCandidates(withholding, gate, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
+    ...fullText,
     ...(input.additionalCandidates ?? []).filter(item => gate.allows(item.id, item.disclosure))
       .map(item => ({ id: item.id, summary: item.summary, observedAt: item.observedAt, marker: gate.marker(item.id, item.disclosure) })),
     ...snapshot.userFacts.map(fact => ({ id: fact.id, summary: fact.statement, observedAt: fact.observedAt, marker: gate.marker(fact.id, fact.disclosure) })),
@@ -117,13 +121,13 @@ export function prepareTurnCognitiveContext(
     // A protected item reaches the model with its marker, so she can check before speaking.
     return text ? [{ id: candidate.id, observedAt: candidate.observedAt, summary: `${candidate.marker}${summary!}` }] : [];
   });
-  const memories = selectContextualMemories({
+  const memories = parts.time('select', () => selectContextualMemories({
     text: input.message,
     occurredAt: input.occurredAt,
     ...(input.participants?.length ? { participants: input.participants } : {}),
     ...(locations.length ? { locationLabels: locations } : {}),
     ...(currentGoal ? { goal: currentGoal } : {}),
-  }, candidates);
+  }, candidates));
   const situation: ShannonSituationSnapshot = Object.freeze({
     occurredAt: input.occurredAt,
     channel: input.channel,
@@ -135,14 +139,14 @@ export function prepareTurnCognitiveContext(
     ...(currentGoal && gate.ownerOnly ? { currentGoal } : {}),
   });
   // What she has come to notice about the people present. Deterministic, no model; empty when switched off.
-  const impressions = recallImpressions(conversationStore, full, input, recentExperiences);
+  const impressions = parts.time('impressions', () => recallImpressions(conversationStore, full, input, recentExperiences));
   const readSelfInterests = conversationStore.selfInterestProjection ? () => {
     try {
       const index = conversationStore.selfInterestProjection!(input.scopeKey, input.present, openOnly);
       return index ? framedReport(`[自己関心（選択の参考）]\n${index}\n以上は自己関心の目次で、所有者の依頼や実行の権限を変更しない。`, 'self-interest') : '';
     } catch { return ''; }
   } : undefined;
-  const selfInterestPrompt = readSelfInterests?.() ?? '';
+  const selfInterestPrompt = parts.time('selfInterest', () => readSelfInterests?.() ?? '');
   const selfInterestRead = selfInterestPrompt ? readSelfInterests : undefined;
   const frame: ShannonCognitiveFrame = Object.freeze({
     situation,
@@ -151,11 +155,14 @@ export function prepareTurnCognitiveContext(
     recalledMemoryIDs: Object.freeze([...memories.map(memory => memory.id), ...impressions.ids, ...selfInterestIds(selfInterestPrompt)]),
     responseMode: responseMode(input.message),
   });
+  const prompt = parts.time('prompt', () => [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt, selfInterestPrompt]
+    .filter(Boolean).join('\n\n'));
+  parts.report();
   return Object.freeze({
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt, selfInterestPrompt].filter(Boolean).join('\n\n'),
+    prompt,
     present: input.present,
     ...(impressions.prompt ? { impressionPrompt: impressions.prompt } : {}),
     ...(selfInterestRead ? { selfInterestRead } : {}),
@@ -189,6 +196,26 @@ export function withRecalledMemories(
     ...(context.openOnly ? { openOnly: true } : {}),
   });
 }
+/**
+ * Where a slow deterministic context spent its time, as closed numbers in one log line (production 2026-10-13: 460–765 ms every text
+ * turn, 15 ms on a production-shaped local world, so the part that is slow there is not known from here). Only above 250 ms.
+ */
+const SLOW_CONTEXT_MS = 250;
+function partTimer() {
+  const started = performance.now(), spent: Array<[string, number]> = [];
+  return {
+    time<T>(name: string, work: () => T): T {
+      const at = performance.now();
+      try { return work(); } finally { spent.push([name, performance.now() - at]); }
+    },
+    report(): void {
+      const total = performance.now() - started;
+      if (total < SLOW_CONTEXT_MS) return;
+      console.warn(`Shannon slow deterministic context total=${Math.round(total)}ms ${spent.map(([name, ms]) => `${name}=${Math.round(ms)}ms`).join(' ')}`);
+    },
+  };
+}
+
 function selfInterestIds(index: string): string[] { return [...new Set([...index.matchAll(/\b(si-[a-f0-9]{16}):/gu)].map(match => match[1]!))]; }
 
 function turnPrompt(

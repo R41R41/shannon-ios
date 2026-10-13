@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { turnClockLine } from '../src/mind/action/respond/respondInstructions.js';
+import { ownerSubjectLine, turnClockLine } from '../src/mind/action/respond/respondInstructions.js';
 import { clockContext, textTurnConversation } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { askedToolNames } from '../src/mind/tools/shannonToolSession.js';
 import { ANSWER_FIRST_LINE, answerFirstLine, SPOKEN_SCHEDULE_LINE, spokenScheduleLine } from '../src/surfaces/voice/voiceConversationInstructions.js';
@@ -24,6 +24,16 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
     expect(evening).toContain('22:00');
     expect(evening).toContain('締めのひと言');
     expect(evening).toContain('出かけると聞いていなければ「いってらっしゃい」とは言わない');
+  });
+
+  it('says whose 「〜してた」 his words are, only for such a statement of his (owner test 2026-10-13)', () => {
+    const clock = { at: '2026-10-13T13:46:00.000Z', timeZone: 'Asia/Tokyo' };
+    expect(ownerSubjectLine('シャノンのことを考えてた')).toContain('ライ氏がボクのことを考えていた');
+    for (const words of ['今日は会社でずっと会議してたよ', '待ってました！']) expect(ownerSubjectLine(words), words).not.toBe('');
+    for (const words of ['何してた？', '何してた', 'シャノンは何を考えてた？', 'シャノンが寝てた', 'おはよう', '明日の予定は？', undefined]) expect(ownerSubjectLine(words), String(words)).toBe('');
+    expect(clockContext({ clock, message: 'シャノンのことを考えてた' } as never)).toEqual([turnClockLine(clock), ownerSubjectLine('シャノンのことを考えてた')]);
+    expect(clockContext({ clock, message: 'おはよう' } as never)).toEqual([turnClockLine(clock)]);
+    expect(clockContext({ message: 'シャノンのことを考えてた' } as never)).toEqual([]);
   });
 
   it('tells a spoken turn to summarize the schedule and to lead with the conclusion (owner test 2026-10-13)', () => {

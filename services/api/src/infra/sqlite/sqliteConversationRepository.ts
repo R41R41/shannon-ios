@@ -18,7 +18,7 @@ import {
 } from '../../mind/memory/store/conversationStore.js';
 import type { ActivityItem } from '../../mind/memory/memoryService.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../surfaces/text/threadTitle.js';
-import { readWhileUnchanged } from './experienceCandidateReads.js';
+import { parsedRow, readWhileUnchanged } from './experienceCandidateReads.js';
 import {
   conciseThreadTitle,
   freezeStoredMessage,
@@ -273,7 +273,7 @@ export class SQLiteConversationRepository implements ConversationStore {
       ORDER BY sequence DESC
       LIMIT ?
     `).all(scopeKey, this.context.maximumExperiences) as unknown as EventRow[];
-    return Object.freeze(rows.reverse().flatMap(experienceFromRow));
+    return Object.freeze(rows.reverse().flatMap(row => parsedRow(this.context.database, scopeKey, row, this.context.maximumExperiences, experienceFromRow)));
   }); }
 
   experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {

@@ -29,3 +29,26 @@ function changeMark(database: DatabaseSync): string {
   const version = database.prepare('PRAGMA data_version').get() as { data_version: number };
   return `${changes.changes}:${version.data_version}`;
 }
+
+/** A row of `experience_events` as the remembered turns are read. */
+interface ExperienceRow { sequence: number; event_id: string; observed_at: string; payload_json: string }
+
+/**
+ * The parsed turn of a row, kept while its id, time and payload text are the ones parsed (a payload may be rewritten, e.g. a touch
+ * or a task's experience). 2026-10-13: every turn changes the database, so every text turn parsed all remembered turns again.
+ */
+const PARSED = new WeakMap<object, Map<string, Map<number, { row: ExperienceRow; value: unknown }>>>();
+export function parsedRow<R extends ExperienceRow, T>(database: object, scopeKey: string, row: R, window: number, parse: (row: R) => T): T {
+  let byScope = PARSED.get(database);
+  if (!byScope) PARSED.set(database, byScope = new Map());
+  let rows = byScope.get(scopeKey);
+  if (!rows) byScope.set(scopeKey, rows = new Map());
+  const known = rows.get(row.sequence);
+  const same = known && known.row.event_id === row.event_id && known.row.observed_at === row.observed_at;
+  if (same && known.row.payload_json === row.payload_json) return known.value as T;
+  const value = parse(row);
+  // Rows that fell out of the window are dropped once the map holds more than twice the window.
+  if (rows.size > 2 * window) rows.clear();
+  rows.set(row.sequence, { row, value });
+  return value;
+}

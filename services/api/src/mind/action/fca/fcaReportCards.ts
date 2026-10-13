@@ -13,6 +13,12 @@ const SCANNED_TASKS = 40;
 const REMEMBERED = 512;
 /** Finished work whose report is held (quiet hours) is looked at again by id, so a long night of newer tasks cannot hide it. */
 const WAITING_KEPT = 256;
+/**
+ * Finished work not shown at its last look (held for quiet hours, its report not yet there, or not visible), unchanged since: a scan
+ * asks again at most this many of them, the longest unasked first. 2026-10-13 (production, 22:26–22:55): every 5 s scan asked the
+ * report gate again for each held task of the day, 600–850 ms of the API's one thread every 5 s.
+ */
+export const REPORT_CARD_RECHECKS_PER_SCAN = 4;
 
 /** The card's message id: one per task and report, a UUID so every client keeps it as the message's identity. */
 export function reportCardMessageId(scopeKey: string, taskId: string, reportId: string): string {
@@ -83,13 +89,22 @@ export function createReportCards(parts: CardParts) {
     if (settled.size > REMEMBERED) settled.delete(settled.keys().next().value!);
     return null;
   };
+  /** Not shown at its last look, by the task as it was then; in the order they were last asked (the longest unasked first). */
+  const deferred = new Map<string, string>();
+  const defer = (task: TaskView): null => {
+    deferred.delete(task.id);
+    deferred.set(task.id, settledMark(task));
+    if (deferred.size > REMEMBERED) deferred.delete(deferred.keys().next().value!);
+    return null;
+  };
   /** True when the task needs no further look (written now, written before, or nothing to write). */
   const consider = (task: TaskView, at: number): boolean | null => {
     if (settled.get(task.id) === settledMark(task)) return null;
     const progress = parts.shown(task.id), report = progress?.report;
     // Shown without its report: held (or dropped) for now; looked at again by id until it is written or leaves the window.
     if (progress && !report && waiting.size < WAITING_KEPT) waiting.add(task.id);
-    if (!progress || !report?.text.trim()) return null;
+    if (!progress || !report?.text.trim()) return defer(task);
+    deferred.delete(task.id);
     waiting.delete(task.id);
     const key = `${task.id}:${report.id}`;
     if (done.has(key)) return settle(task);
@@ -120,8 +135,14 @@ export function createReportCards(parts: CardParts) {
         if (task && finishedOwnerWork(parts, task, at)) tasks.push(task);
         else if (!listed.has(id)) waiting.delete(id);
       }
+      // A changed task is looked at at once; unchanged ones not shown last time take their turn, a few a scan.
+      const unchanged = (task: TaskView) => deferred.get(task.id) === settledMark(task);
+      const order = [...deferred.keys()];
+      const turn = new Set(tasks.filter(unchanged).map(task => task.id).sort((left, right) => order.indexOf(left) - order.indexOf(right))
+        .slice(0, REPORT_CARD_RECHECKS_PER_SCAN));
       for (const task of tasks) {
         try {
+          if (unchanged(task) && !turn.has(task.id)) continue;
           if (finishedOwnerWork(parts, task, at) && consider(task, at)) appended += 1;
         } catch { parts.log?.('Shannon report card skipped code=report_card_failed'); }
       }

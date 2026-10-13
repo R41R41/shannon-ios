@@ -38,8 +38,25 @@ const STOP_TERMS = new Set([
 const RUN = /[一-龠々〆]+|[ァ-ヴー]{2,}|[a-z][a-z0-9+#.-]*|[0-9]+(?:[.:/][0-9]+)*[一-龠]?|[ぁ-ん]+/gu;
 const PARTICLE = /[がをはにでともへのやか]/u;
 
+/**
+ * The same texts are normalized again and again (every remembered turn, a skill's body, under every rule of every check): kept for
+ * a while, a pure value of the text. Bounded; cleared when full.
+ */
+const NORMALIZED = new Map<string, string>();
+const NORMALIZED_KEPT = 4_096, NORMALIZED_CHARACTERS = 2_000_000;
+let normalizedCharacters = 0;
 function normalized(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
+  const known = NORMALIZED.get(value);
+  if (known !== undefined) return known;
+  const result = value.normalize('NFKC').toLocaleLowerCase('ja-JP');
+  if (value.length > 50_000) return result;
+  if (NORMALIZED.size >= NORMALIZED_KEPT || normalizedCharacters + value.length * 2 > NORMALIZED_CHARACTERS) {
+    NORMALIZED.clear();
+    normalizedCharacters = 0;
+  }
+  NORMALIZED.set(value, result);
+  normalizedCharacters += value.length + result.length;
+  return result;
 }
 
 /**
