@@ -16,7 +16,7 @@ public struct ShannonCameraWatchEnvironment: Sendable {
     /// Whether the sign registered under this id can be seen now (`ShannonCameraWatchSignAnchors`): a presentation over it hides it.
     public var signVisible: @MainActor @Sendable (UUID) -> Bool = { _ in true }
     /// How often, while a sign is registered, the coordinator looks again whether one is visible (presentations post no notice).
-    public var signCheckInterval: Duration = .milliseconds(500)
+    public var signCheckInterval: Duration = .milliseconds(250)
 
     public init(
         system: @escaping @MainActor @Sendable () -> ShannonCameraWatchSystemFacts,
@@ -134,7 +134,7 @@ public final class ShannonCameraWatchCoordinator {
         signs.contains { environment.signVisible($0) }
     }
 
-    /// Looks again every `signCheckInterval` while a sign is registered, and reevaluates when visibility changed.
+    /// Looks again every `signCheckInterval` (a quarter second) while a sign is registered, and reevaluates when visibility changed.
     private func followSignVisibility() {
         signCheck?.cancel()
         signShown = anySignVisible()

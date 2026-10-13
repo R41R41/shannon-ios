@@ -33,17 +33,34 @@ describe('Azure deployment contract', () => {
     );
 
     // The photo route keeps its 3 MiB (plus headroom) in its own location; the rest of /companion/ is small (ADR-0011 review).
-    const blocks = [...configuration.matchAll(/location ([^{]+)\{([^}]*)\}/gu)].map(match => ({ location: match[1]!.trim(), body: match[2]! }));
-    const snapshots = blocks.find(block => block.location === '= /companion/v1/voice/vision/snapshots');
-    expect(snapshots?.body).toContain('client_max_body_size 4m;');
-    expect(snapshots?.body).toContain('limit_req zone=');
-    expect(blocks.find(block => block.location === '^~ /companion/')?.body).toContain('client_max_body_size 256k;');
+    // Each `location` header and the directives up to the next header or closing brace belong to it (one nested location exists).
+    const blocks = [...configuration.matchAll(/location ((?:"[^"]*"|[^{"])+)\{((?:(?!location )[^{}])*)/gu)].map(match => ({ location: match[1]!.trim(), body: match[2]! }));
+    const block = (location: string) => blocks.find(item => item.location === location)?.body ?? '';
+    expect(block('= /companion/v1/voice/vision/snapshots')).toContain('client_max_body_size 4m;');
+    expect(block('= /companion/v1/voice/vision/snapshots')).toContain('limit_req zone=shannon_media_req');
+    expect(block('^~ /companion/')).toContain('client_max_body_size 256k;');
+    // Her folder's long poll (`claim`) and `binding` stay small and are never counted; only a step report gets 1m and limits.
+    const hostSteps = block('^~ /companion/v1/autonomy/host-steps/');
+    expect(hostSteps).toContain('client_max_body_size 256k;');
+    expect(hostSteps).not.toMatch(/limit_(req|conn) /u);
+    const report = block('~ "^/companion/v1/autonomy/host-steps/[0-9a-f-]{36}/report$"');
+    expect(report).toContain('client_max_body_size 1m;');
+    expect(report).toContain('limit_conn shannon_report_conn');
+    expect(block('^~ /companion/')).not.toMatch(/limit_(req|conn) /u);
     // No accepted body is written to client_body_temp: each location's buffer is its whole maximum body.
-    for (const block of blocks) {
-      const maximum = /client_max_body_size (\w+);/u.exec(block.body)?.[1];
-      expect(maximum, block.location).toBeDefined();
-      expect(block.body, block.location).toContain(`client_body_buffer_size ${maximum};`);
+    for (const item of blocks) {
+      const maximum = /client_max_body_size (\w+);/u.exec(item.body)?.[1];
+      expect(maximum, item.location).toBeDefined();
+      expect(item.body, item.location).toContain(`client_body_buffer_size ${maximum};`);
     }
-    expect(readFileSync(new URL('../../../deploy/azure/nginx-http-limits.conf', import.meta.url), 'utf8')).toContain('limit_req_zone');
+    // One request and one connection zone per kind of route (vision, media, look, report), each declared, none shared.
+    const limits = readFileSync(new URL('../../../deploy/azure/nginx-http-limits.conf', import.meta.url), 'utf8');
+    for (const kind of ['vision', 'media', 'look', 'report']) {
+      expect(limits).toContain(`zone=shannon_${kind}_req:`);
+      expect(limits).toContain(`zone=shannon_${kind}_conn:`);
+    }
+    const used = [...configuration.matchAll(/limit_conn (shannon_\w+) (\d+);/gu)];
+    expect(new Set(used.map(match => match[1])).size).toBe(4);
+    expect(used.every(match => Number(match[2]) >= 6)).toBe(true);
   });
 });

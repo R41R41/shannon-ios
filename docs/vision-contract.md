@@ -28,12 +28,21 @@ The change touches every `/companion/` request, whatever the vision switches are
 - **No body on disk.** Each location's `client_body_buffer_size` equals its `client_max_body_size`, so an accepted body stays in
   memory and never reaches `client_body_temp` (camera frames, photos, recorded speech, her folder's files).
 - **No large buffer for everyone.** nginx allocates the body buffer before the API checks the device token (a chunked body gets
-  the whole buffer at once), so the large buffers are only on the routes that take large bodies, each with a per-address rate
-  and connection limit (429 beyond): `= /v1/voice/vision/snapshots` and `= /v1/voice/transcriptions` 4m; `^~ /v1/body/looks/`,
-  `^~ /v1/app/looks/` and `^~ /v1/autonomy/host-steps/` 1m; the vision worker 256k at 4 requests a second. Everything else
-  under `/companion/` is 256k (ordinary JSON is 64 KiB in the API; Agent Host state and calendar uploads 256 KiB).
-- The syntax was checked with nginx 1.18.0 on the VM in an isolated test configuration (`nginx -t -p <tmp> -c <tmp>/nginx.conf`,
-  2026-10-14); production nginx was not touched.
+  the whole buffer at once), so the large buffers are only on the routes that take large bodies: `= /v1/voice/vision/snapshots`
+  and `= /v1/voice/transcriptions` 4m; `^~ /v1/body/looks/` and `^~ /v1/app/looks/` 1m; her folder's step report only (the nested
+  regex `~ "^/companion/v1/autonomy/host-steps/[0-9a-f-]{36}/report$"`) 1m; the vision worker 256k. Everything else under
+  `/companion/` is 256k (ordinary JSON is 64 KiB in the API; Agent Host state and calendar uploads 256 KiB).
+- **Limits per kind of route, sized for one home address.** All of the owner's devices come from one NAT address, so each kind has
+  its own request and connection zone (`nginx-http-limits.conf`: vision 8 r/s, media 4 r/s, look 2 r/s, report 2 r/s; 8
+  connections each, report 6; 429 beyond) and no kind can use up another's slots. Long polls are never counted: her folder's
+  `claim` (held up to 25 s) and `binding` stay in the ordinary 256k location of `/v1/autonomy/host-steps/`, which has no limit,
+  and nor does the rest of `/companion/` (turns, voice streams). At most 8 × 4 MiB per address is held for media.
+- **Her Minecraft body does not pass through nginx**: Minebot refuses a companion URL that is not loopback (`companionBaseUrl`), so
+  `/v1/body/minecraft/control` (1 MiB) goes to 127.0.0.1:4319 directly and needs no location here.
+- Checked on the VM with nginx 1.18.0 in an isolated configuration whose upstreams were a dummy echo server on another port
+  (production nginx and the API untouched, 2026-10-14): `nginx -t` ok; a 600 KB step report 200 while a 600 KB `claim` and a
+  600 KB other request 413; `binding` 200; a 3 MB photo 200; a 900 KB app look 200; 20 `claim`s in a row all 200; 30 rapid photos
+  13 × 200 then 429; no file in `client_body_temp` and no `buffered to a temporary file` line.
 
 On `azure-constant-server`:
 
@@ -43,7 +52,8 @@ On `azure-constant-server`:
 3. In the sh4nnon.com TLS server block, replace the old `location ^~ /companion/` block with all the location blocks of
    `nginx-location.conf` (the vision block may stay out until the vision worker is enabled; the others go in now).
 4. `sudo nginx -t`, then `sudo systemctl reload nginx` (a reload keeps connections).
-5. Check: a normal turn, a voice turn, a shared photo and an app look still work; a 3 MB synthetic JPEG to
+5. Check: a normal turn, a voice turn, a shared photo, an app look and her folder (a step on the Mac or PC) still work, with
+   several of the owner's devices open at once; a 3 MB synthetic JPEG to
    `/companion/v1/voice/vision/snapshots` with a device token leaves `sudo find /var/lib/nginx/body -type f` empty and adds no
    `buffered to a temporary file` line to `/var/log/nginx/error.log`; a 600 KB body to any other `/companion/` path gets 413.
 6. Rollback: restore the backup, remove `/etc/nginx/conf.d/shannon-limits.conf`, `sudo nginx -t && sudo systemctl reload nginx`.
