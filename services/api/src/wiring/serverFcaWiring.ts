@@ -46,6 +46,7 @@ import { MindSocketClient } from '../infra/ipc/mindSocket.js';
 import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.js';
 import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
+import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
@@ -63,6 +64,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   readSources?: Omit<FcaReadSourcesOptions, 'ownerScope' | 'ownerAlone' | 'state' | 'conversations'>;
   /** Her own time's store and settings: own-time tasks and their budget (ADR-0009 stage 2, E3/E4); absent, none run. */
   ownTime?: OwnTimeFcaParts;
+  /**
+   * The action threads to hold leases with. Absent (the server): the mind worker's, over its socket. An in-process harness
+   * (`evals/daily`) hands its own SQLite action store here; nothing else changes.
+   */
+  actionThreads?: ActionThreads;
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
@@ -76,13 +82,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
-  const client = new MindSocketClient(mindSocketPath(values, parts.path));
+  const client = parts.actionThreads ? null : new MindSocketClient(mindSocketPath(values, parts.path));
+  const threads = parts.actionThreads ?? actionThreadsClient(client!.call);
   let sleep: ReturnType<typeof createFcaSleepWiring> | null = null;
   try {
     sleep = sleepEnabled ? createFcaSleepWiring({ values, store: parts.sleepStore!, ownerScope: parts.ownerScope }) : null;
     const ownTimeBudget = parts.ownTime ? ownTimeBudgetPort(parts.ownTime, provider.model) : null;
     const budgetStore = new TaskBudgetStore(db);
-    const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget });
+    const budget = fcaBudget({ actions: threads, store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget });
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
       budget.recordUsage(usage.estimatedCostUsd);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
@@ -92,7 +99,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const timeZone = ownerTimeZone(values);
     const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }) });
     const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
-    const actions = actionThreadsClient(client.call);
+    const actions = threads;
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
     const minecraft = configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev });
@@ -190,14 +197,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       ...(source.experienceId ? [`experience:${source.experienceId}`] : []),
       ...source.recalledMemoryIds.map(id => `memory:${id}`), ...(source.readSourceIds ?? []).map(id => `read:${id}`),
     ]);
-    return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
+    return { route, conversation, voice, touch, runtime: runtime.runtime, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null, async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
-  } catch (error) { sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
+    }, async close() { clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client?.close(); if (!borrowed) db.close(); } };
+  } catch (error) { sleep?.close(); client?.close(); if (!borrowed) db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,
   response: ServerResponse, principal: { scopeKey: string } | null, url: URL): Promise<boolean> {

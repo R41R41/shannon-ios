@@ -1,0 +1,61 @@
+import { firstJsonObject, type EvalClaude } from '../claude.js';
+import type { TrialObservation } from '../harness/trial.js';
+import type { DailyEvalTask } from '../types.js';
+
+/** The rubric judge's verdict (HealthBench style: each criterion 0–2, pass at a ratio of the maximum). */
+export interface RubricResult {
+  scores: { criterion: string; score: number; reason: string }[];
+  total: number;
+  maximum: number;
+  ratio: number;
+  passed: boolean;
+  /** Set when no judge ran (not live, or the judge's answer could not be read). */
+  skipped?: string;
+}
+
+const JUDGE_SYSTEM = [
+  'あなたはAIの相棒「シャノン」の日常タスク評価の審査役です。持ち主（ライ氏）とシャノンのやりとり、評価環境で観測した状態、',
+  'ルーブリックが与えられます。ルーブリックの各項目を 0（満たさない）・1（一部）・2（満たす）で採点します。',
+  '観測した状態（端末の予定・リマインダー、調べものの結果）は事実として扱い、シャノンの言葉と食い違えばそれを減点します。',
+  '音声の課題では、返事は声で聞かれるものとして判断します。採点は厳しめに、理由は日本語で一文。',
+  '出力は JSON だけ: {"scores":[{"criterion":"…","score":0|1|2,"reason":"…"}]}',
+].join('\n');
+
+/** What the judge reads of a trial: the conversation as said, and the observed state (no hidden reasoning, no prompts). */
+export function judgeInput(task: DailyEvalTask, observation: TrialObservation): string {
+  const device = observation.device;
+  const state = [
+    `端末の予定: ${device.calendar.map(event => `${event.title} ${event.start}${event.seeded ? '（元からある）' : '（新規）'}`).join(' / ') || 'なし'}`,
+    `リマインダー: ${device.reminders.map(reminder => `${reminder.title} ${reminder.dueLocal ?? ''}`).join(' / ') || 'なし'}`,
+    `タイマー: ${device.timers.map(timer => `${timer.seconds}秒 ${timer.fireAt}`).join(' / ') || 'なし'}`,
+    `呼んだ道具: ${observation.toolCalls.map(call => call.tool).join(', ') || 'なし'}`,
+    `調べもの: ${observation.research.map(item => `「${item.title.slice(0, 60)}」${item.phase}${item.summary ? ` 要約: ${item.summary.slice(0, 400)}` : ''}`).join(' / ') || 'なし'}`,
+    `会話に届いた報告カード: ${observation.messages.filter(message => message.reportCard).map(message => `${message.reportCard!.status}: ${message.reportCard!.answer.slice(0, 300)}`).join(' / ') || 'なし'}`,
+  ];
+  return [
+    `課題 ${task.id}: ${task.title}（${task.surface === 'voice' ? '音声' : 'テキスト'}、時刻 ${task.initial.clock}）`,
+    `防ぎたい失敗: ${task.failureShape}`,
+    '', 'やりとり:',
+    ...observation.turns.flatMap(turn => [`ライ氏: ${turn.said}`, `シャノン: ${turn.reply || `（返事なし: ${turn.error ?? turn.status}）`}`]),
+    '', '観測した状態:', ...state,
+    '', 'ルーブリック:', ...task.rubric.criteria.map((criterion, index) => `${index + 1}. ${criterion}`),
+  ].join('\n');
+}
+
+export async function judgeTrial(judge: EvalClaude | null, task: DailyEvalTask, observation: TrialObservation): Promise<RubricResult> {
+  const maximum = task.rubric.criteria.length * 2, passRatio = task.rubric.passRatio ?? 0.7;
+  const skipped = (reason: string): RubricResult => ({ scores: [], total: 0, maximum, ratio: 0, passed: false, skipped: reason });
+  if (!judge) return skipped('no judge (not live)');
+  let text: string;
+  try { text = await judge.text(JUDGE_SYSTEM, judgeInput(task, observation), 900); } catch (error) {
+    return skipped(`judge call failed: ${error instanceof Error ? error.name : 'unknown'}`);
+  }
+  const parsed = firstJsonObject(text) as { scores?: { criterion?: unknown; score?: unknown; reason?: unknown }[] } | null;
+  const raw = Array.isArray(parsed?.scores) ? parsed!.scores : null;
+  if (!raw || raw.length !== task.rubric.criteria.length) return skipped('judge answer unreadable');
+  const scores = raw.map((item, index) => ({ criterion: task.rubric.criteria[index]!, score: Math.max(0, Math.min(2, Math.round(Number(item.score) || 0))),
+    reason: typeof item.reason === 'string' ? item.reason.slice(0, 300) : '' }));
+  const total = scores.reduce((sum, item) => sum + item.score, 0);
+  const ratio = maximum ? total / maximum : 0;
+  return { scores, total, maximum, ratio: Math.round(ratio * 100) / 100, passed: ratio >= passRatio };
+}

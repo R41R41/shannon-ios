@@ -36,6 +36,9 @@ demand (Run workflow on the Actions tab). A newer push to the same branch cancel
 - No secret is configured, and none is needed. The suite was run on 2026-10-12 with a guard on every socket, DNS lookup and
   `fetch`: no test file connected anywhere but the loopback address. A test that needs the network or a model key does not
   belong in this suite (the real-LLM evaluations are separate `*LiveEval.ts` scripts).
+- The daily-use evals (`services/api/evals/daily/`, its README) put only their free half here: `tests/dailyEvals.test.ts`
+  validates the task definitions and runs the harness over a scripted model with the network refused. Live trials need
+  `SHANNON_EVALS_LIVE=1` and a model key and never run in CI.
 - Budget: the repository is private, so minutes are billed (2,000 free a month), each job rounded up to a whole minute.
   A full run is five jobs of roughly two minutes, about 10 billable minutes. If the shards grow past two minutes each, three
   shards cost less than four.
