@@ -195,22 +195,34 @@ extension ShannonConversationView {
         }
     }
 
-    func sendDraft() {
+    /// Sends `text`, or the draft when nil. The text is passed explicitly: the field is never written back to
+    /// before a send (that write could land after the clear and leave the sent text in the field).
+    /// Returns false when nothing was sent.
+    @discardableResult
+    func sendDraft(text explicitText: String? = nil) -> Bool {
         // A send already accepted (the return key and onSubmit can both arrive for one press).
-        guard !composerIsSubmitting else { return }
+        guard !composerIsSubmitting else { return false }
         voiceModel.stopSpeaking()
+        let text = explicitText ?? model.draft
+        let hasContent = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !composerAttachments.isEmpty
+            || composerHasPhoto
         // Never a silent no-op: when something holds the send back, the composer says what.
         if let reason = Self.sendBlockReason(
-            hasContent: composerHasSendableContent,
+            hasContent: hasContent,
             photoIsLoading: composerPhotoIsLoading,
             isSending: model.isSending,
             isLoadingHistory: model.isLoadingHistory
         ) {
             composerAttachmentError = reason
-            return
+            return false
         }
-        guard model.canSendDraft(attachmentCount: composerAttachments.count + (composerHasPhoto ? 1 : 0)) else { return }
+        guard hasContent else { return false }
         composerIsSubmitting = true
+        // Cleared now, before the network call; the model clears it again with any text the field writes back,
+        // and the field is rebuilt (`draftResetToken`), keeping the keyboard up when it was.
+        composerKeepsFocus = composerIsFocused
+        model.draft = ""
         let attachments = composerAttachments
         let usesWebSearch = composerUsesWebSearch
         let photoJPEGData = composerPhotoJPEGData
@@ -222,12 +234,21 @@ extension ShannonConversationView {
 #endif
         Task {
             defer { composerIsSubmitting = false }
-            await model.sendDraft(
+            let sent = await model.sendDraft(
+                text: text,
                 attachments: attachments,
                 webSearch: usesWebSearch,
                 photoJPEGData: photoJPEGData
             )
+            // Not taken (another send began in between): the text comes back unless something new was typed.
+            if !sent, model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.draft = text
+                composerAttachmentError = Self.sendBlockReason(
+                    hasContent: true, photoIsLoading: false, isSending: true, isLoadingHistory: false
+                )
+            }
         }
+        return true
     }
 
     /// The keyboard's 送信 key on the multi-line composer: exactly one "\n" appended at the end of the draft.
