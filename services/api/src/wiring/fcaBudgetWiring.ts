@@ -41,10 +41,23 @@ export interface FcaBudget {
 const capped = (task: TaskView, cap: { yen: number; steps: number }) =>
   `「${task.title.slice(0, 60)}」は1件の上限（${cap.yen}円・${cap.steps}歩）に達したので、ここで止めました。`;
 
+/** The cap of one task: her own time's, an admitted Minecraft request's (lowered by an operator's cap), or an owner task's. */
+function capOf(task: TaskView, options: { minecraftRequest?(task: TaskView): boolean; taskCapYen?(taskId: string): number | null }) {
+  if (task.origin === 'own_time') return OWN_TIME_TASK_CAP;
+  if (!options.minecraftRequest?.(task)) return OWNER_TASK_CAP;
+  const lower = options.taskCapYen?.(task.id) ?? null;
+  return lower !== null && lower > 0 && lower < MINECRAFT_TASK_CAP.yen ? { ...MINECRAFT_TASK_CAP, yen: lower } : MINECRAFT_TASK_CAP;
+}
+
 export function fcaBudget(options: {
   actions: ActionThreads; store: TaskBudgetStore; now(): string; ownTime?: OwnTimeBudgetPort | null;
   /** Whether the task is a Minecraft request the owner made, as admitted (`admittedMinecraftRequest`); absent, no task is. */
   minecraftRequest?(task: TaskView): boolean;
+  /**
+   * A lower yen cap for one admitted Minecraft request, or null: the operator's `--budget-yen` (2026-10-14). It only lowers the
+   * request's cap, never raises it, and touches no other task.
+   */
+  taskCapYen?(taskId: string): number | null;
 }): FcaBudget {
   const usd = new Map<string, number>();
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
@@ -58,7 +71,7 @@ export function fcaBudget(options: {
       if (!counted(task)) return { ok: true };
       if (usd.size >= IN_FLIGHT) usd.delete(usd.keys().next().value!);
       usd.set(lease.id, 0);
-      const cap = task.origin === 'own_time' ? OWN_TIME_TASK_CAP : options.minecraftRequest?.(task) ? MINECRAFT_TASK_CAP : OWNER_TASK_CAP;
+      const cap = capOf(task, options);
       const spent = options.store.spent(task.id);
       if (spent.steps >= cap.steps || spent.yen >= cap.yen) {
         usd.delete(lease.id);

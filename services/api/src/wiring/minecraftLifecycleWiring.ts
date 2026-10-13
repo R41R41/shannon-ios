@@ -5,6 +5,8 @@ import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import { createMinecraftLifecycleRecovery } from './minecraftLifecycleRecoveryWiring.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
+import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE } from './operatorLifecycleWiring.js';
+import { operatorLifecycleAllowed } from '../infra/ops/store/operatorAuditStore.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { stage4Enabled } from '../infra/config/stage4.js';
@@ -77,6 +79,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
         { domain: 'minecraft_lifecycle', summary: '登録されたマイクラへの参加を継続します。' }).decision === 'allow';
       // A guessed Ops prefix never falls through to the ordinary conversation authority.
       const opsSource = row.sourceId.startsWith('ops:') || authority.sourceIds.some(id => id.startsWith('ops-command:'));
+      // The operator's own operation (2026-10-14): its own action, its id as the only source, and its audit row; never another's.
+      if (OPERATOR_LIFECYCLE_SOURCE.test(row.sourceId)) return operatorOperation(row, authority, command, opsSource);
       if (conversationOperation(row, opsSource)) return parts.ownerAlone() && command?.id === row.sourceId;
       if (row.kind === 'minecraft' || opsSource) return parts.ownerAlone() && !!parts.ops?.enabled()
         && opsLifecycleAuthorityAllowed(db, authority, command);
@@ -86,6 +90,12 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
         && (!parts.taskSources || taskSources !== null && authority.sourceIds.every(id => taskSources?.includes(id))));
     } catch { return false; }
   };
+  function operatorOperation(row: { kind: string; origin: string; sourceId: string }, authority: MinecraftLifecycleAuthority,
+    command: Pick<MinecraftLifecycleCommand, 'id' | 'serverId' | 'action'> | undefined, opsSource: boolean): boolean {
+    return !opsSource && row.kind === 'minecraft' && row.origin === 'owner_request' && parts.ownerAlone() && command?.id === row.sourceId
+      && authority.sourceIds.length === 1 && authority.sourceIds[0] === row.sourceId
+      && operatorLifecycleAllowed(db, authority.scopeKey, row.sourceId, command);
+  }
   const lifecycleStore = new MinecraftLifecycleStore(db, id => leases.unknownExited(id));
   const service = new MinecraftLifecycle(lifecycleStore, configuration, { now: () => Date.parse(now()), allowed, servers: new Set(serverIds) });
   const runner = createLifecycleRunner({ actions: parts.actions, service, deviceId: configuration.deviceId });
@@ -176,6 +186,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   const recovery = parts.actions ? createMinecraftLifecycleRecovery({ db, service, actions: parts.actions, deviceId: configuration.deviceId }) : null;
   const ops = parts.ops && serverIds.includes('shannon-home') ? createOpsMinecraftLifecycle({ ...parts.ops, service, scopeKey: configuration.ownerScopeKey,
     deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone }) : null;
-  return { service, ops, recover: () => recovery?.recover() ?? Promise.resolve(),
+  const operator = createOperatorLifecycle({ service, runner, scopeKey: configuration.ownerScopeKey, serverIds, ownerAlone: parts.ownerAlone, allowed });
+  return { service, ops, operator, recover: () => recovery?.recover() ?? Promise.resolve(),
     async close() { await ops?.close(); await runner?.close(); await recovery?.close(); db.close(); } };
 }

@@ -163,3 +163,4 @@ Aether本番版と同様の一時接続情報、端末固有トークン、iOS K
 実機・配布・復旧の現行手順は [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md)、FCA・感情・記憶・worker・接続の現行境界は [`docs/architecture.md`](docs/architecture.md) を正本とする。旧ブラウザ資料は必要な場合だけ [`docs/archive/index.md`](docs/archive/index.md) から参照する。
 
 - [Minecraft lifecycle](docs/minecraft-lifecycle-contract.md): registered server start/stop and bot login/logout under the original action lease.
+- [Operator Minecraft requests](docs/operator-minecraft-contract.md): a VM operator's Minecraft lifecycle operation or one request for the owner, over a service-user socket, audited (`SHANNON_OPERATOR_MINECRAFT`, default off).

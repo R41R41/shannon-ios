@@ -8,6 +8,7 @@
     "autonomyWorker.ts",
     "fakeAgentHost.ts",
     "mindWorker.ts",
+    "opsCli.ts",
     "server.ts",
     "testflightDistributor.ts",
     "worker.ts",

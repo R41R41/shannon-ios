@@ -5,9 +5,13 @@ import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftB
 import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
+import { operatorMinecraftRequests, type OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
+/** The working note every admitted Minecraft request is handed as its first inbox line. */
+export const MINECRAFT_REQUEST_CONTEXT = '共通FCAのmc.*の道具で実行する。判断ごとの身体の観測は要約で、全体はminecraft.observeで読む。'
+  + '一人称画像が得られるときはminecraft.reflexで視覚操作の短いセッションを要求できる。';
 
 /**
  * Whether a task is a Minecraft request the owner made, as admitted: bound to a body at creation, with the admission's criteria,
@@ -27,7 +31,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   sourceVisible(id: string): boolean;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
-}): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } {
+}): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>; operator: OperatorMinecraftRequests } {
   const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -36,8 +40,9 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       if (page.length < 100) return tasks;
     }
   };
-  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: '共通FCAのmc.*の道具で実行する。判断ごとの身体の観測は要約で、全体はminecraft.observeで読む。一人称画像が得られるときはminecraft.reflexで視覚操作の短いセッションを要求できる。' });
+  const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: MINECRAFT_REQUEST_CONTEXT });
   return {
+    operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();
       // 2026-10-13: the turn's task context closed after its menu was built (`fca_context_budget`), and the call threw. Whatever

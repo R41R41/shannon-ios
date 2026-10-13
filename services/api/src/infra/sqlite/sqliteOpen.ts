@@ -44,6 +44,8 @@ export const SQLITE_PROFILES = Object.freeze({
   executionBackfill: profile({ busyTimeoutMs: 250, wal: true }),
   /** Her moments and the read of her initiatives' sources (`proactiveMomentStore.ts`, `initiativeSources.ts`), as their siblings open. */
   outreach: profile({ wal: true, synchronous: 'NORMAL' }),
+  /** The operator's append-only audit (`infra/ops/store/operatorAuditStore.ts`, 2026-10-14): one short write per event. */
+  operatorAudit: profile({ wal: true }),
   /** The sleep worker's read-only view of task proofs (`wiring/configuredWorkerFeedback.ts`). */
   readOnly: profile({ readOnly: true }),
 });
