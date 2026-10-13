@@ -79,8 +79,11 @@ export interface AckStream {
  * held of her acknowledgement is said before the wait (owner test 2026-10-13: 「「ちょっと調べてみますね」」 had no 。 and was held 20 s).
  */
 export async function researchAfterAck(turn: FcaConversationTurn | null, admitted: { work: TaskView | null; admittedAt: number },
-  reply: string, stream: AckStream | undefined): Promise<{ acknowledged: string; heard: string }> {
-  const acknowledged = unquotedSpokenLine(reply);
+  completion: { reply: string; truncated?: boolean }, stream: AckStream | undefined): Promise<{ acknowledged: string; heard: string }> {
+  const acknowledged = unquotedSpokenLine(completion.reply);
+  // A reply cut at its length limit ends at its last whole sentence: what is held is half a sentence, never said (review of 1a647abc),
+  // and nothing is said after it in this turn; the result goes to the card and the call.
+  if (completion.truncated) return { acknowledged, heard: '' };
   const flushed = Boolean(admitted.work && stream?.flushSpoken);
   if (flushed) await stream!.flushSpoken!();
   const say = stream?.onTextDelta.bind(stream);

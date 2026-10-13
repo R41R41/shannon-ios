@@ -62,7 +62,7 @@ export function spokenWords(message: string): string {
 export function plannedVoiceBody(
   settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number,
 ): Anthropic.MessageCreateParamsNonStreaming {
-  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request)];
+  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request), ...request.spokenLines ?? []];
   const conversation = { history: request.history, context, precedingReply: request.precedingReply, words: spokenWords(request.message) };
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,

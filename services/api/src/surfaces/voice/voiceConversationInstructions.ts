@@ -47,22 +47,38 @@ export { temporaryGuestVoiceInstructions } from './voiceIntroductionInstructions
 
 /**
  * Owner test 2026-10-13: 「明日って傘いる？」 was answered 「傘ですね、ライ氏。明日の天気をすぐ見ますね。明日は傘いらないと思います…」.
- * Part of the turn's voice route (not the cached instructions above): the conclusion is the first sentence.
+ * The conclusion is the first sentence.
  */
 export const ANSWER_FIRST_LINE = '[Answer first] When a lookup or tool gives the answer, call it before saying anything and make the conclusion your '
   + 'first sentence (「明日は傘いらないと思います」): do not echo his question or announce that you will look.';
-/** Only in a turn whose words ask for a tool by name (`askedToolNames` in the API: the weather, a timer, an event, music); '' otherwise. */
-export function answerFirstLine(toolsAsked: readonly string[]): string {
-  return toolsAsked.length ? ANSWER_FIRST_LINE : '';
+const WEATHER_WORDS = /天気|天候|予報|気温|降水|傘|雨|雪|晴れ|曇り|くもり/u;
+/** A weather question or request, not a remark (「今日は雨で大変だったよ」: review of 1a647abc). The transcript often has no 「？」. */
+const WEATHER_ASKED = /[？?]|教えて|調べて|見て|どう|かな|ですか|降る(?:か|かな|の|って)|傘(?:は|って|が)?(?:いる|要る|必要)|晴れる|何度/u;
+/** Only for a weather question in a turn that offers her weather tool; '' otherwise. */
+export function answerFirstLine(words: string, offeredToolNames: readonly string[]): string {
+  return offeredToolNames.includes('weather.forecast') && WEATHER_WORDS.test(words) && WEATHER_ASKED.test(words) ? ANSWER_FIRST_LINE : '';
 }
 
 /**
- * Owner test 2026-10-13: 「明日の予定は？」 was answered aloud as a list of five times and titles (198 characters). With the owner's
- * upcoming items in the turn, a spoken reply summarizes them; '' for any other turn.
+ * Owner test 2026-10-13: 「明日の予定は？」 was answered aloud as a list of five times and titles (198 characters). With at least one of the
+ * owner's upcoming items in the turn (not 「(なし)」), a spoken reply summarizes them; '' otherwise.
  */
 export function spokenScheduleLine(capabilityPrompt: string): string {
-  return capabilityPrompt.includes('[Owner\'s upcoming items') ? SPOKEN_SCHEDULE_LINE : '';
+  const at = capabilityPrompt.indexOf('[Owner\'s upcoming items');
+  if (at < 0) return '';
+  const block = capabilityPrompt.slice(at).split('\n\n')[0]!.split('\n');
+  return block.some(line => line.startsWith('- ') && line.trim() !== '- (なし)') ? SPOKEN_SCHEDULE_LINE : '';
 }
 export const SPOKEN_SCHEDULE_LINE = '[Spoken schedule] This reply is heard, not read: never read the items out as a list of times and titles. '
   + 'In at most two short sentences say how many there are, the first one and any notable one (time and a short title), and when he is free '
   + 'between them. The full list stays in his calendar; read it all only when he asks for every item.';
+
+/**
+ * The spoken-reply lines of a voice turn, for the Claude voice requests only (`spokenLines`, beside his clock): the historical GPT profile
+ * and the stage-2 switched-off proof never read them (review of 1a647abc: in the turn context they changed ca7cf519's bytes).
+ */
+export function spokenReplyLines(words: string, capabilityPrompt: string,
+  tools: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } } | undefined): string[] {
+  const offered = (tools?.menu?.offered ?? tools?.definitions ?? []).map(tool => tool.name);
+  return [answerFirstLine(words, offered), spokenScheduleLine(capabilityPrompt)].filter(Boolean);
+}

@@ -47,7 +47,7 @@ import {
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import { validatedVoiceDeviceContext, type VoiceDeviceContext } from './voiceDeviceContext.js';
 export { voiceConversationInstructions } from './voiceConversationInstructions.js';
-import { answerFirstLine, spokenScheduleLine, temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
+import { spokenReplyLines, temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { guestSpeakerReminder, guestTurnPositionInstruction } from './voiceIntroductionInstructions.js';
 import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
@@ -60,7 +60,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { askedToolNames, conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -349,7 +349,7 @@ async function completeLiveVoiceDelegation(
       decision.solutionWantedProbability < 0.4
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
-    ].join('\n'), answerFirstLine(askedToolNames(transcript)), spokenScheduleLine(capabilityPrompt),
+    ].join('\n'),
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
     alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
@@ -392,7 +392,7 @@ async function completeLiveVoiceDelegation(
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
-    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier), // His clock: 今日 and 明日 are his days (`turnClockLine`).
+    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier), spokenLines: spokenReplyLines(transcript, capabilityPrompt, toolOffer.tools),
     useWebSearch: !work && !placeSkill && selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,
@@ -432,7 +432,7 @@ async function completeLiveVoiceDelegation(
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
   orchestrationState = settleVoiceTaskDecision(dependencies, orchestrationState, requiresStructuredTaskDecision, completion.taskDecision);
-  const { acknowledged, heard } = await researchAfterAck(fcaTurn, next.admitted, completion.reply, observer);
+  const { acknowledged, heard } = await researchAfterAck(fcaTurn, next.admitted, completion, observer);
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
   const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(acknowledged, work)}${heard}`;
   let feedbackRecordId: string | undefined;

@@ -15,7 +15,10 @@ function policyOf(overrides: Partial<FcaHistoryPolicy>): FcaHistoryPolicy {
 }
 const size = (value: unknown): number => JSON.stringify(value).length;
 
-/** No truncation: every covered native round appears in the summary input, in original order. */
+/**
+ * Every covered native round appears in the summary input, whole and in original order; only a round longer than the summary input by
+ * itself has its longest texts shortened there, with the cut marked (`clippedRound`). Native history is never cut.
+ */
 export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec,
   overrides: Partial<FcaHistoryPolicy> = {}): FcaHistoryPlan {
   const policy = policyOf(overrides);
@@ -63,7 +66,9 @@ function clippedRound(round: ProjectedRound, previous: unknown, maximum: number)
   for (let guard = 0; guard < messages.length * 4 && over() > 0; guard++) {
     const longest = messages.reduce((best, message) => message.content.length > best.content.length ? message : best);
     if (longest.content.length <= CLIPPED_MESSAGE_CHARACTERS) return null;
-    const keep = Math.max(CLIPPED_MESSAGE_CHARACTERS, longest.content.length - over() - 64);
+    let keep = Math.max(CLIPPED_MESSAGE_CHARACTERS, longest.content.length - over() - 64);
+    // Never between the halves of a surrogate pair (review of 1a647abc).
+    if (/[\uD800-\uDBFF]/u.test(longest.content[keep - 1] ?? '')) keep -= 1;
     longest.content = `${longest.content.slice(0, keep)}…（要約用に後略: ${longest.content.length - keep}字）`;
   }
   return over() > 0 ? null : { ...round, messages };

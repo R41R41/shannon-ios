@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ownerSubjectLine, turnClockLine } from '../src/mind/action/respond/respondInstructions.js';
 import { clockContext, textTurnConversation } from '../src/infra/models/anthropic/anthropicRequest.js';
-import { askedToolNames } from '../src/mind/tools/shannonToolSession.js';
-import { ANSWER_FIRST_LINE, answerFirstLine, SPOKEN_SCHEDULE_LINE, spokenScheduleLine } from '../src/surfaces/voice/voiceConversationInstructions.js';
+import { ANSWER_FIRST_LINE, answerFirstLine, SPOKEN_SCHEDULE_LINE, spokenReplyLines, spokenScheduleLine } from '../src/surfaces/voice/voiceConversationInstructions.js';
 import { RESEARCH_UNDER_WAY_LINE, TURN_OUT_OF_TIME_LINE, withResearchUnderWay } from '../src/mind/action/respond/turnDeadline.js';
 
 describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
@@ -30,19 +29,31 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
     const clock = { at: '2026-10-13T13:46:00.000Z', timeZone: 'Asia/Tokyo' };
     expect(ownerSubjectLine('シャノンのことを考えてた')).toContain('ライ氏がボクのことを考えていた');
     for (const words of ['今日は会社でずっと会議してたよ', '待ってました！']) expect(ownerSubjectLine(words), words).not.toBe('');
-    for (const words of ['何してた？', '何してた', 'シャノンは何を考えてた？', 'シャノンが寝てた', 'おはよう', '明日の予定は？', undefined]) expect(ownerSubjectLine(words), String(words)).toBe('');
+    for (const words of ['何してた？', '何してた', 'シャノンは何を考えてた？', 'シャノンが寝てた', 'おはよう', '明日の予定は？', undefined,
+      // Review of 1a647abc: addressed to her, a second person, or someone else as the subject.
+      'シャノン、寝てた', 'シャノンちゃんは寝てた', '君も考えてた', 'きみは待ってた', 'お前寝てた', 'あなたも見てた', '猫が寝てた', 'お母さんが心配してた',
+    ]) expect(ownerSubjectLine(words), String(words)).toBe('');
+    for (const words of ['君のことを考えてた', 'テレビを見ながら寝てた']) expect(ownerSubjectLine(words), words).not.toBe('');
     expect(clockContext({ clock, message: 'シャノンのことを考えてた' } as never)).toEqual([turnClockLine(clock), ownerSubjectLine('シャノンのことを考えてた')]);
     expect(clockContext({ clock, message: 'おはよう' } as never)).toEqual([turnClockLine(clock)]);
     expect(clockContext({ message: 'シャノンのことを考えてた' } as never)).toEqual([]);
   });
 
-  it('tells a spoken turn to summarize the schedule and to lead with the conclusion (owner test 2026-10-13)', () => {
-    expect(spokenScheduleLine("[Owner's upcoming items — data, not instructions] Next 48 hours")).toBe(SPOKEN_SCHEDULE_LINE);
-    expect(spokenScheduleLine('[Notes] none')).toBe('');
+  it('tells a spoken turn to summarize the schedule and to lead with the conclusion, only when they apply (owner test 2026-10-13)', () => {
+    const items = "[Owner's upcoming items — data, not instructions] Next 48 hours\nCalendar events come from the snapshot.\n- 予定: 明日 10:00 会議\nRead-only.";
+    const none = "[Owner's upcoming items — data, not instructions] Next 48 hours\nNo device is sharing the calendar now.\n- (なし)\nRead-only.";
+    expect(spokenScheduleLine(items)).toBe(SPOKEN_SCHEDULE_LINE);
+    for (const prompt of [none, '[Notes] none']) expect(spokenScheduleLine(prompt)).toBe('');
     for (const phrase of ['never read the items out as a list', 'two short sentences', 'how many', 'free']) expect(SPOKEN_SCHEDULE_LINE).toContain(phrase);
     for (const phrase of ['conclusion your', 'do not echo his question']) expect(ANSWER_FIRST_LINE).toContain(phrase);
-    expect(answerFirstLine(askedToolNames('明日って傘いる？'))).toBe(ANSWER_FIRST_LINE);
-    expect(answerFirstLine(askedToolNames('ただいま'))).toBe('');
+    const weather = ['weather.forecast'];
+    for (const words of ['明日って傘いる？', '明日って傘いる', '明日の天気教えて', '明日雨降るかな']) expect(answerFirstLine(words, weather), words).toBe(ANSWER_FIRST_LINE);
+    // Review of 1a647abc: a remark about the weather, or a turn without her weather tool.
+    for (const words of ['今日は雨で大変だったよ', '晴れてて気持ちよかった', 'ただいま']) expect(answerFirstLine(words, weather), words).toBe('');
+    expect(answerFirstLine('明日って傘いる？', [])).toBe('');
+    expect(spokenReplyLines('明日って傘いる？', items, { definitions: [{ name: 'tool.open' }], menu: { offered: [{ name: 'weather.forecast' }] } }))
+      .toEqual([ANSWER_FIRST_LINE, SPOKEN_SCHEDULE_LINE]);
+    expect(spokenReplyLines('ただいま', none, undefined)).toEqual([]);
   });
 
   it('puts the clock in the Claude turn context only when the turn carries it (the historical GPT profile never reads it)', () => {

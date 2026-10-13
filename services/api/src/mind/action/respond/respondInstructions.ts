@@ -67,23 +67,31 @@ export const VOICE_NATURAL_INSTRUCTIONS = '[音声の自然さ]\n'
   + '不確かさは答えが変わる時だけ短く添える。相づちや感想には、それ自体に応える。';
 
 /**
- * The owner's clock for a turn (owner decision 2026-10-13: at 2:40 at night she took 「明日」 for the day after the date had
- * changed and then "corrected" the right answer). The Claude text and voice requests say it in the turn's context; from 0:00 to
- * 4:00 his 「明日」 may still mean the day that has just begun.
- */
-/**
  * Owner test 2026-10-13: to 「シャノンのことを考えてた」 she answered 「ライ氏のこと、ちょっと考えていました」, taking his words as hers. A short
- * statement of his without a subject about what he did, thought or felt (not a question, not one about her: 「シャノンは〜」) gets one line
- * saying whose it is; any other message none ('').
+ * statement of his without a subject about what he did, thought or felt gets one line saying whose it is; any other message none ('').
+ * Not a question (the transcript often has no 「？」, so question words count too), not words addressed to her or about someone named
+ * as the subject (「シャノン、寝てた」「君も考えてた」「お前寝てた」「猫が寝てた」: review of 1a647abc); 「シャノンのこと」「君を」 are objects.
  */
 const OWNER_DID = /(?:考えて|思って|想って|心配して|待って|探して|見て|聞いて|聴いて|やって|して|行って|食べて|寝て)(?:た|ました|る|ます|いた|いました)(?:よ|んだ|の|ん|けど)?[。！!〜ー…wｗ]*$/u;
+const NOT_HIS_STATEMENT = [
+  /[？?]|何|なに|どう|いつ|どこ|誰|だれ/u,
+  // Her name or a second person, unless it is an object (「シャノンのことを」「君に」).
+  /(?:シャノン|君|きみ|キミ|お前|おまえ|あなた|ボク)(?:ちゃん|さん|くん)?(?![のをにへと])/u,
+  // Someone else named as the subject (「猫が寝てた」「お母さんが心配してた」); 「〜ながら」 is no subject.
+  /(?<!な)が(?!ら)/u,
+];
 export function ownerSubjectLine(message: string | undefined): string {
   const said = message?.trim() ?? '';
-  if (!said || said.length > 60 || /[？?]|何|なに|どう|いつ|どこ|誰|だれ/u.test(said) || /シャノン(?:は|が|も)|ボク(?:は|が)/u.test(said) || !OWNER_DID.test(said)) return '';
+  if (!said || said.length > 60 || NOT_HIS_STATEMENT.some(pattern => pattern.test(said)) || !OWNER_DID.test(said)) return '';
   return '[誰の話か] ライ氏の主語のない「〜してた」「〜考えてた」は、ライ氏自身がしたこと・思ったこと。'
     + '「シャノンのことを考えてた」なら、ライ氏がボクのことを考えていた。ボクがしたことのように言い換えない。';
 }
 
+/**
+ * The owner's clock for a turn (owner decision 2026-10-13: at 2:40 at night she took 「明日」 for the day after the date had
+ * changed and then "corrected" the right answer). The Claude text and voice requests say it in the turn's context; from 0:00 to
+ * 4:00 his 「明日」 may still mean the day that has just begun.
+ */
 export function turnClockLine(clock: { at: string; timeZone: string }): string {
   let zone = clock.timeZone;
   try { new Intl.DateTimeFormat('ja-JP', { timeZone: zone }); } catch { zone = 'Asia/Tokyo'; }

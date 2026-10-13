@@ -190,7 +190,7 @@ describe('her device tools in a conversation', () => {
     }
     for (const words of ['問題を起こしてごめん', '事故を起こしてしまった']) expect(asksForDeviceAction(words), words).toBe(false);
     // Owner test 2026-10-13: a clock written 「9:20」 is a clock time too.
-    for (const words of ['明日の9:20に起こして。', '９：２０に教えて', '7時半ごろに起こして', '明日の9時20分に起こして']) {
+    for (const words of ['明日の9:20に起こして。', '９：２０に教えて', '7時半ごろに起こして', '明日の9時20分に起こして', '7時ごろ起こして', '9:20起こして']) {
       expect(asksForDeviceAction(words), words).toBe(true);
       expect(askedToolNames(words), words).toEqual(['timer.start', 'reminder.create']);
     }

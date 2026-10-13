@@ -181,7 +181,8 @@ export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVo
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), CLAUDE_VOICE_LINES, ...(request.useWebSearch ? [CLAUDE_WEB_LINE] : []),
   ].join('\n\n');
-  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])];
+  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request), ...request.spokenLines ?? [],
+    ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])];
   const complex = request.conversationClass === 'skill_complex';
   const tools: Anthropic.ToolUnion[] = toolsOffered ? claudeTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
   const body: Anthropic.MessageCreateParamsNonStreaming = {

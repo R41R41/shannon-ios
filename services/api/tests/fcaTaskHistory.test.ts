@@ -210,6 +210,15 @@ describe('exact complete-round FCA history compaction', () => {
     expect(round!.messages.map(message => message.id)).toEqual([...wide.project(window.rounds[0]!)!.map(message => message.id), `fca-round:${window.rounds[0]!.sequence}:status`]);
     expect(round!.messages.find(message => message.role === 'tool_result')!.content).toMatch(/^福岡のおすすめ。.*要約用に後略/su);
     expect(JSON.stringify(plan.input).length).toBeLessThanOrEqual(5_000);
+    // Review of 1a647abc: a cut never splits a surrogate pair, wherever it falls.
+    for (const pad of [0, 1]) {
+      const emoji: FcaHistoryCodec = { ...codec, project: round => codec.project(round)!.map(message => message.role === 'tool_result'
+        ? { ...message, content: `${'a'.repeat(pad)}${'😀'.repeat(3_000)}` } : message) };
+      const cut = planFcaHistory(window, emoji, { ...policy, maximumNativeCharacters: 1, maximumSummaryCharacters: 5_000 });
+      if (cut.kind !== 'compact') throw new Error('expected a compaction');
+      const text = cut.input.rounds[0]!.messages.find(message => message.role === 'tool_result')!.content;
+      expect(text, String(pad)).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u);
+    }
   });
 
   it('migrates old append-only history and records actual committed task status', async () => {

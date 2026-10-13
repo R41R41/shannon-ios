@@ -90,6 +90,8 @@ export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPr
   waitingSaid?: true | (() => boolean);
   /** The owner's clock for this turn (`turnClockLine`): the Claude requests say it in the turn's context; the historical GPT profile does not. */
   clock?: { at: string; timeZone: string };
+  /** How this spoken reply is said (`spokenReplyLines`): the Claude voice requests add them after the clock; the historical GPT profile does not. */
+  spokenLines?: readonly string[];
 }
 
 export interface ShannonWebSource {

@@ -3,7 +3,7 @@ import { gatedProgress, reportGateDecision, type ReportGateParts } from '../src/
 import type { TaskProgress } from '../src/mind/action/taskRuntime/taskProgressPorts.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
-import { admitVoiceResearch, researchHeardInTurn, researchSaid } from '../src/surfaces/voice/voiceResearchTurn.js';
+import { admitVoiceResearch, researchAfterAck, researchHeardInTurn, researchSaid } from '../src/surfaces/voice/voiceResearchTurn.js';
 import { RESEARCH_UNDER_WAY_LINE, TURN_OUT_OF_TIME_LINE } from '../src/mind/action/respond/turnDeadline.js';
 
 const noon = Date.parse('2026-10-13T03:00:00.000Z'); // 12:00 in Tokyo.
@@ -160,6 +160,16 @@ describe('a voice turn\'s research', () => {
     expect(await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { before: 'ちょっと調べてみますね', say, flushed: true }))
       .toBe('。大濠公園から福岡空港は地下鉄で16分ほどです。');
     expect(said).toEqual(['大濠公園から福岡空港は地下鉄で16分ほどです。']);
+    // Review of 1a647abc: a reply cut at its length limit flushes nothing (half a sentence) and says nothing after it.
+    said.length = 0;
+    let flushes = 0;
+    const stream = { onTextDelta: say, flushSpoken: async () => { flushes += 1; } };
+    expect(await researchAfterAck(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { reply: 'ちょっと調べて', truncated: true }, stream))
+      .toEqual({ acknowledged: 'ちょっと調べて', heard: '' });
+    expect([flushes, said]).toEqual([0, []]);
+    expect((await researchAfterAck(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { reply: '「ちょっと調べてみますね」' }, stream)))
+      .toEqual({ acknowledged: 'ちょっと調べてみますね。', heard: '大濠公園から福岡空港は地下鉄で16分ほどです。' });
+    expect([flushes, said]).toEqual([1, ['大濠公園から福岡空港は地下鉄で16分ほどです。']]);
     // Cut off while it was being said: not marked heard, so the card and the call still deliver it.
     const controller = new AbortController();
     heard.length = 0;
