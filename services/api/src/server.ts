@@ -461,7 +461,7 @@ server.listen(port, host, () => {
   console.log('Shannon persistence ready: sqlite');
   console.log(selfDiagnosis.startupLine());
 });
-const visionBridge = await serverVisionBridge(process.env, { kernel, mind, store: persistentStore }); // ADR-0011 S1; off: no socket.
+const visionBridge = await serverVisionBridge(process.env, { kernel, mind, store: persistentStore, body: bodyStore }); // ADR-0011 S1; off: no socket.
 let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { applySchemaSteps } from '../../../infra/sqlite/migrations/schemaSteps.js';
-import { VISION_STEPS } from '../../../infra/sqlite/migrations/vision/001_vision_budget.js';
+import { VISION_STEPS } from '../../../infra/sqlite/migrations/vision/visionSteps.js';
 
 export type VisionBudgetPurpose = 'decision' | 'notice_line' | 'escalate';
 export interface VisionDayTotals { settledUsd: number; heldUsd: number; reservedUsd: number }

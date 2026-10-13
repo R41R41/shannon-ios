@@ -48,8 +48,8 @@ export const VISION_FORBIDDEN_KEYS = Object.freeze(['persist', 'image', 'images'
 export const VISION_LIMITS = Object.freeze({
   /** The long side of a frame sent to the worker. */
   longSide: 512,
-  /** A frame body larger than this is refused (a 512px JPEG is far below it). */
-  frameBytes: 200_000,
+  /** A frame body larger than this is refused (a 512px JPEG is far below it); its base64 fits one bridge IPC frame for an escalation. */
+  frameBytes: 160_000,
   /** How often the device may judge a frame on the device. */
   judgeFramesPerSecond: 2,
   /** At most one frame to the worker per this interval, per device. */
@@ -297,7 +297,7 @@ export const VISION_DECISION_OUTCOMES = Object.freeze(['chosen', 'quiet', 'disca
 export type VisionDecisionOutcome = typeof VISION_DECISION_OUTCOMES[number];
 export const VISION_DISCARD_REASONS = Object.freeze([
   'stale_generation', 'expired', 'audience_changed', 'below_gate', 'low_confidence', 'budget', 'degraded', 'busy', 'disabled',
-  'repeated', 'timeout', 'http_error', 'usage_unknown', 'invalid_answer',
+  'repeated', 'timeout', 'http_error', 'usage_unknown', 'invalid_answer', 'capped',
 ] as const);
 export type VisionDiscardReason = typeof VISION_DISCARD_REASONS[number];
 

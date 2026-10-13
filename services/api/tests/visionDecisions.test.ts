@@ -26,6 +26,8 @@ describe('Decisions: predicate and choice in one request', () => {
     expect(body.input[0]!.content[1]).toMatchObject({ type: 'input_image', detail: 'low' });
     expect(String(body.input[0]!.content[1]!.image_url)).toMatch(/^data:image\/jpeg;base64,/u);
     expect(body.questions.map(question => question.type)).toEqual(['predicate', 'choice']);
+    // /v1/decisions refuses `store` (400 unknown_parameter, probed 2026-10-14); its retention is the account's (docs/vision-contract.md).
+    expect(Object.keys(body).sort()).toEqual(['input', 'model', 'questions']);
   });
 
   it('reads the measured answer and usage', () => {

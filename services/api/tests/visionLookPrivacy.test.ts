@@ -102,12 +102,38 @@ describe('a camera notice and an escalation are said only with the owner alone',
     const looks: string[] = [];
     const escalation = new VisionEscalation({
       viewer: { see: async request => { requests.push(request); alone = false; return 'ライ氏、それは新しいマグですね。'; } },
-      alone: () => alone, say: () => ({ threadId: 't' }), looked: (_scope, look) => { looks.push(look.outcome); }, now: () => Date.parse(minute(10)),
+      alone: () => alone, ownerActive: () => false, say: () => ({ threadId: 't' }), looked: (_scope, look) => { looks.push(look.outcome); },
+      now: () => Date.parse(minute(10)),
     });
     const result = await escalation.look({ scopeKey: 'owner', decisionId: 'd1', deviceId: 'device-1', mimeType: 'image/jpeg', base64: 'AAAA', width: 512,
       height: 384, at: minute(10) });
     expect(result).toEqual({ seen: false });
     expect(requests.map(request => request.context)).toEqual([[]]);
     expect(looks).toEqual(['withheld']);
+  });
+});
+
+describe('she does not cut in', () => {
+  it('holds a notice while a voice call is going on, and an escalation while the owner just spoke', async () => {
+    const said: string[] = [];
+    const speaker = new VisionNoticeSpeaker({ compose: async () => 'ライ氏、おかえりなさい。', ownerLastActiveAt: () => null, voiceActive: () => true,
+      alone: () => true, say: (_s, _d, text) => { said.push(text); return { threadId: 't' }; }, now: () => Date.parse(minute(10)) });
+    expect(await speaker.deliver({ scopeKey: 'owner', decisionId: 'd1', category: 'owner_returned', at: minute(10) }))
+      .toEqual({ delivered: false, reason: 'owner_active' });
+    const seen: string[] = [];
+    const escalation = new VisionEscalation({ viewer: { see: async () => { seen.push('x'); return 'マグですね。'; } }, alone: () => true, ownerActive: () => true,
+      say: () => ({ threadId: 't' }), looked: () => undefined, now: () => Date.parse(minute(10)) });
+    expect(await escalation.look({ scopeKey: 'owner', decisionId: 'd1', deviceId: 'device-1', mimeType: 'image/jpeg', base64: 'AAAA', width: 512,
+      height: 384, at: minute(10) })).toEqual({ seen: false });
+    expect([...said, ...seen]).toEqual([]);
+  });
+
+  it('waits for the foreground speaking right when the mind provides one', async () => {
+    const order: string[] = [];
+    const speaker = new VisionNoticeSpeaker({ compose: async () => { order.push('compose'); return 'ライ氏。'; }, ownerLastActiveAt: () => null,
+      alone: () => true, say: () => { order.push('say'); return { threadId: 't' }; }, now: () => Date.parse(minute(10)),
+      foreground: async (_scope, work) => { order.push('admitted'); const value = await work(); order.push('released'); return value; } });
+    await speaker.deliver({ scopeKey: 'owner', decisionId: 'd2', category: 'owner_waved', at: minute(10) });
+    expect(order).toEqual(['admitted', 'compose', 'say', 'released']);
   });
 });

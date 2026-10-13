@@ -46,6 +46,24 @@ export interface VisionWatchOptions {
   now(): number;
   /** How long a percept stays in the workspace. */
   perceptTtlMs?: number;
+  /** What was chosen, kept across restarts (`SQLiteVisionChoiceStore`); absent, in memory. */
+  choices?: VisionChoiceLedger;
+}
+/** The camera notice's chosen candidates: cooldowns and the hourly cap read them. */
+export interface VisionChoiceLedger {
+  record(scopeKey: string, candidateId: string, kind: 'react' | 'notice' | 'escalate', at: string): void;
+  lastChosenAt(scopeKey: string, candidateId: string): string | null;
+  countSince(scopeKey: string, kinds: readonly ('react' | 'notice' | 'escalate')[], since: string): number;
+}
+
+/** The ledger in memory (tests, and a worker whose database could not hold it). */
+export function memoryChoiceLedger(): VisionChoiceLedger {
+  const rows: Array<{ scopeKey: string; candidateId: string; kind: 'react' | 'notice' | 'escalate'; at: string }> = [];
+  return {
+    record: (scopeKey, candidateId, kind, at) => { rows.push({ scopeKey, candidateId, kind, at }); },
+    lastChosenAt: (scopeKey, candidateId) => rows.filter(row => row.scopeKey === scopeKey && row.candidateId === candidateId).at(-1)?.at ?? null,
+    countSince: (scopeKey, kinds, since) => rows.filter(row => row.scopeKey === scopeKey && kinds.includes(row.kind) && row.at >= since).length,
+  };
 }
 export interface VisionPrincipal { scopeKey: string; deviceId: string }
 export type VisionFrameResult = { status: 200; reply: VisionFrameReply } | { status: 400 | 403 | 409 | 429; error: string; nextFrameNotBefore?: string };
@@ -71,11 +89,13 @@ export function visionFrameBodyError(meta: VisionFrameV1, bytes: Uint8Array, mim
 
 export class VisionWatch {
   private readonly devices = new Map<string, DeviceState>();
-  private readonly chosen = new Map<string, number>();
+  private readonly choices: VisionChoiceLedger;
   private readonly recent: string[] = [];
   private lastLevel: VisionDegradeLevel = 0;
 
-  constructor(private readonly options: VisionWatchOptions) {}
+  constructor(private readonly options: VisionWatchOptions) {
+    this.choices = options.choices ?? memoryChoiceLedger();
+  }
 
   /** `GET /v1/vision/status`: whether the device may watch now. */
   async status(principal: VisionPrincipal): Promise<VisionStatus> {
@@ -102,6 +122,8 @@ export class VisionWatch {
   async frame(principal: VisionPrincipal, meta: VisionFrameV1, bytes: Uint8Array, mimeType: 'image/jpeg' | 'image/png'): Promise<VisionFrameResult> {
     const refused = visionFrameBodyError(meta, bytes, mimeType);
     if (refused) return { status: 400, error: refused };
+    // A camera frame is never used past 4 s, whatever TTL the device sent (§4.4).
+    if (meta.ttlMs > VISION_LIMITS.cameraTtlMs) meta = { ...meta, ttlMs: VISION_LIMITS.cameraTtlMs };
     if (meta.source.deviceId !== null && meta.source.deviceId !== principal.deviceId) return { status: 403, error: 'VISION_WRONG_DEVICE' };
     const now = this.options.now();
     const device = this.device(principal.deviceId);
@@ -164,8 +186,27 @@ export class VisionWatch {
     } catch (error) {
       failure = this.failed(error, reservation);
     }
-    this.options.budget.observed({ ok: answer !== null, elapsedMs: answer?.elapsedMs ?? null }, this.options.now());
+    // A timeout counts its full wait toward the p95, so a slow provider reaches level 1 (§7.3) and not only failures.
+    this.options.budget.observed({ ok: answer !== null, elapsedMs: answer?.elapsedMs ?? this.options.now() - decided }, this.options.now());
     return this.checked(principal, meta, base, answer, failure, reservation.amountUsd, started, this.options.now() - decided);
+  }
+
+  private lastChosen(scopeKey: string, candidateId: string): number | null {
+    try {
+      const at = this.choices.lastChosenAt(scopeKey, candidateId);
+      return at ? Date.parse(at) : null;
+    } catch {
+      // A ledger that cannot be read counts as just chosen: when unsure, quiet.
+      return this.options.now();
+    }
+  }
+
+  private remember(scopeKey: string, candidateId: string, now: number): void {
+    const kind = visionCandidateOf(candidateId)?.kind;
+    if (kind !== 'react' && kind !== 'notice' && kind !== 'escalate') return;
+    try {
+      this.choices.record(scopeKey, candidateId, kind, iso(now));
+    } catch { /* the cooldown is then only as long as this process */ }
   }
 
   private failed(error: unknown, reservation: Parameters<VisionBudget['close']>[0]): VisionDiscardReason {
@@ -186,12 +227,14 @@ export class VisionWatch {
       : await this.audience(principal.scopeKey) !== 'owner_alone' ? 'audience_changed' : null;
     if (discard) return this.record(base, answer, 'discarded', discard, started, reservedUsd, decisionMs);
     const level = this.level(principal.scopeKey, iso(this.options.now()));
+    const now = this.options.now();
     const verdict = visionNoticeVerdict({ predicate: answer.predicate, choiceId: answer.choice?.id ?? null, confidence: answer.choice?.confidence ?? null,
-      level: level === 0 ? 0 : 1, lastChosenAt: id => this.chosen.get(`${principal.scopeKey}:${id}`) ?? null, now: this.options.now() });
+      level: level === 0 ? 0 : 1, now, lastChosenAt: id => this.lastChosen(principal.scopeKey, id),
+      spokenLastHour: this.choices.countSince(principal.scopeKey, ['notice', 'escalate'], iso(now - 60 * 60_000)) });
     const record = this.record({ ...base, degrade: level }, answer, verdict.outcome, verdict.discardReason, started, reservedUsd, decisionMs,
       verdict.candidateId);
     if (verdict.candidateId) {
-      this.chosen.set(`${principal.scopeKey}:${verdict.candidateId}`, this.options.now());
+      this.remember(principal.scopeKey, verdict.candidateId, now);
       this.recent.push(verdict.candidateId);
       if (this.recent.length > 8) this.recent.shift();
     }

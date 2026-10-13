@@ -8,6 +8,7 @@ import { OpenAIVisionDecisions, type VisionDecisionsClient } from '../infra/mode
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { localDateParts, ownerTimeZone, pad } from '../infra/time/localDate.js';
 import { SQLiteVisionBudgetStore } from '../mind/vision/store/visionBudgetStore.js';
+import { SQLiteVisionChoiceStore } from '../mind/vision/store/visionChoiceStore.js';
 import {
   VISION_BUDGET_DEFAULTS, VisionBudget, VisionFrameHolder, VisionWatch, createVisionReflexHost, type VisionAudienceNow, type VisionBridge,
 } from '../mind/vision/visionPorts.js';
@@ -28,13 +29,17 @@ function dayKey(timeZone: string) {
   };
 }
 
-function bridgeOver(client: MindSocketClient): VisionBridge {
+/**
+ * Two connections: the API serves each connection's requests in order, so a notice that waits for the model (seconds) must not sit
+ * in front of an audience check (400 ms). `fast` carries the audience, percepts and presence; `slow` the notice and escalation.
+ */
+function bridgeOver(fast: MindSocketClient, slow: MindSocketClient): VisionBridge {
   return {
-    audience: async scopeKey => (await client.call<{ audience: VisionAudienceNow }>('vision.audience', { scopeKey }, BRIDGE_DEADLINES.audience)).audience,
-    percept: async (scopeKey, percept) => { await client.call('vision.percept', { scopeKey, ...percept }, BRIDGE_DEADLINES.percept); },
-    notice: (scopeKey, notice) => client.call('vision.notice', { scopeKey, ...notice }, BRIDGE_DEADLINES.notice),
-    escalate: (scopeKey, look) => client.call('vision.escalate', { scopeKey, ...look }, BRIDGE_DEADLINES.escalate),
-    presence: async (scopeKey, presence) => { await client.call('vision.presence', { scopeKey, ...presence }, BRIDGE_DEADLINES.presence); },
+    audience: async scopeKey => (await fast.call<{ audience: VisionAudienceNow }>('vision.audience', { scopeKey }, BRIDGE_DEADLINES.audience)).audience,
+    percept: async (scopeKey, percept) => { await fast.call('vision.percept', { scopeKey, ...percept }, BRIDGE_DEADLINES.percept); },
+    notice: (scopeKey, notice) => slow.call('vision.notice', { scopeKey, ...notice }, BRIDGE_DEADLINES.notice),
+    escalate: (scopeKey, look) => slow.call('vision.escalate', { scopeKey, ...look }, BRIDGE_DEADLINES.escalate),
+    presence: async (scopeKey, presence) => { await fast.call('vision.presence', { scopeKey, ...presence }, BRIDGE_DEADLINES.presence); },
   };
 }
 
@@ -47,14 +52,15 @@ export async function configuredVisionWorker(values: Readonly<Record<string, str
   const db = openDatabase(databasePath, 'visionWorker');
   const ledger = new SQLiteVisionBudgetStore(db);
   const budget = new VisionBudget({ ledger, dayKey: dayKey(ownerTimeZone(values)), halted: () => visionSwitches(values).halted });
-  const client = new MindSocketClient(visionBridgeSocketPath(values, databasePath));
+  const fast = new MindSocketClient(visionBridgeSocketPath(values, databasePath));
+  const slow = new MindSocketClient(visionBridgeSocketPath(values, databasePath));
   const apiKey = values.OPENAI_API_KEY?.trim();
   const unknownCostUpperBoundUsd = VISION_BUDGET_DEFAULTS.decisionReserveUsd;
   const decisions = options.decisions !== undefined ? options.decisions
     : apiKey ? new OpenAIVisionDecisions({ apiKey, timeoutMilliseconds: 2_500, unknownCostUpperBoundUsd }) : null;
   const frames = new VisionFrameHolder(now);
   const ownerScope = configuredOwnerScope(values);
-  const watch = new VisionWatch({ ownerScope, budget, decisions, frames, bridge: bridgeOver(client), now,
+  const watch = new VisionWatch({ ownerScope, budget, decisions, frames, bridge: bridgeOver(fast, slow), now, choices: new SQLiteVisionChoiceStore(db),
     cameraWatch: () => visionSwitches(values).camera, escalate: () => visionSwitches(values).escalate });
   // Stage 1: the reflex loop lives here with no source registered; nothing of it runs until stage 2 adds the Minecraft adapter.
   const reflex = createVisionReflexHost([], { providers: () => ({ entry: null, image: null, text: null }), event: () => undefined, now });
@@ -83,7 +89,8 @@ export async function configuredVisionWorker(values: Readonly<Record<string, str
       frames.clear();
       await reflex?.close();
       await new Promise<void>(resolve => server.close(() => resolve()));
-      client.close();
+      fast.close();
+      slow.close();
       auth.close?.();
       if (db.isOpen) db.close();
     },

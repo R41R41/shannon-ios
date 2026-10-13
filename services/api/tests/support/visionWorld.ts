@@ -4,7 +4,7 @@ import { VISION_FRAME_SCHEMA, type VisionFrameV1 } from '../../src/contracts/vis
 import type { VisionDecisionsAnswer, VisionDecisionsClient, VisionDecisionsRequest } from '../../src/infra/models/openAIVisionDecisions.js';
 import { SQLiteVisionBudgetStore } from '../../src/mind/vision/store/visionBudgetStore.js';
 import {
-  VisionBudget, VisionFrameHolder, VisionWatch, type VisionAudienceNow, type VisionBridge, type VisionPerceptWire,
+  VisionBudget, VisionFrameHolder, VisionWatch, type VisionAudienceNow, type VisionBridge, type VisionChoiceLedger, type VisionPerceptWire,
 } from '../../src/mind/vision/visionPorts.js';
 
 /** A marker no real picture contains: the privacy scans look for it, and for the base64 of the whole frame, in every sink. */
@@ -60,8 +60,8 @@ export class FakeBridge implements VisionBridge {
   async presence(_scopeKey: string, presence: { personCount: number }) { this.presences.push(presence.personCount); }
 }
 
-export function visionWorld(options: { camera?: boolean; escalate?: boolean; halted?: boolean; capUsd?: number } = {}) {
-  let clock = Date.parse('2026-10-14T09:00:00.000Z');
+export function visionWorld(options: { camera?: boolean; escalate?: boolean; halted?: boolean; capUsd?: number; choices?: VisionChoiceLedger; start?: number } = {}) {
+  let clock = options.start ?? Date.parse('2026-10-14T09:00:00.000Z');
   const db = new DatabaseSync(':memory:');
   const ledger = new SQLiteVisionBudgetStore(db);
   const switches = { camera: options.camera ?? true, escalate: options.escalate ?? false, halted: options.halted ?? false };
@@ -70,7 +70,7 @@ export function visionWorld(options: { camera?: boolean; escalate?: boolean; hal
   const bridge = new FakeBridge();
   const frames = new VisionFrameHolder(() => clock);
   const watch = new VisionWatch({ ownerScope: 'owner', budget, decisions, frames, bridge, now: () => clock,
-    cameraWatch: () => switches.camera, escalate: () => switches.escalate });
+    cameraWatch: () => switches.camera, escalate: () => switches.escalate, ...(options.choices ? { choices: options.choices } : {}) });
   return {
     db, ledger, budget, decisions, bridge, frames, watch, switches,
     principal: { scopeKey: 'owner', deviceId: 'device-1' },

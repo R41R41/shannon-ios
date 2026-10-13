@@ -42,6 +42,8 @@ export interface VisionNoticeDependencies {
   alone(scopeKey: string): boolean;
   /** When the owner last wrote or spoke, or null. */
   ownerLastActiveAt(scopeKey: string): string | null;
+  /** Whether a voice call with her is going on now (its words may not be in the Talk yet): she does not cut in. */
+  voiceActive?(scopeKey: string): boolean;
   /** Her note in the Talk, once per decision id (marked owner-alone), or null when there is nowhere to say it. */
   say(scopeKey: string, decisionId: string, text: string, at: string): { threadId: string } | null;
   /** The foreground speaking right, when the mind provides one. */
@@ -68,8 +70,7 @@ export class VisionNoticeSpeaker {
     const now = this.dependencies.now();
     if (!Number.isFinite(Date.parse(at)) || now - Date.parse(at) > VISION_NOTICE_LIMITS.freshMs) return 'stale';
     if (!this.dependencies.alone(scopeKey)) return 'others';
-    const active = this.dependencies.ownerLastActiveAt(scopeKey);
-    return active && now - Date.parse(active) < VISION_NOTICE_LIMITS.ownerActiveMs ? 'owner_active' : null;
+    return ownerActive(this.dependencies, scopeKey, now) ? 'owner_active' : null;
   }
 
   private async spoken(scopeKey: string, decisionId: string, category: VisionNoticeCategory, at: string): Promise<VisionNoticeResult> {
@@ -86,5 +87,16 @@ export class VisionNoticeSpeaker {
     if (blocked) return { delivered: false, reason: blocked };
     const said = this.dependencies.say(scopeKey, decisionId, text, new Date(this.dependencies.now()).toISOString());
     return said ? { delivered: true, threadId: said.threadId } : { delivered: false, reason: 'nowhere' };
+  }
+}
+
+/** The owner wrote or spoke within `ownerActiveMs`, or a voice call with her is going on: she does not cut in. Unknown counts as active. */
+export function ownerActive(dependencies: Pick<VisionNoticeDependencies, 'ownerLastActiveAt' | 'voiceActive'>, scopeKey: string, now: number): boolean {
+  try {
+    if (dependencies.voiceActive?.(scopeKey)) return true;
+    const active = dependencies.ownerLastActiveAt(scopeKey);
+    return active !== null && now - Date.parse(active) < VISION_NOTICE_LIMITS.ownerActiveMs;
+  } catch {
+    return true;
   }
 }

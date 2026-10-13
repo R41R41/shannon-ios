@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { VisionDecisionsError } from '../src/infra/models/openAIVisionDecisions.js';
 import { VISION_BUDGET_DEFAULTS, visionDegradeLevel } from '../src/mind/vision/visionPorts.js';
+import { DatabaseSync } from 'node:sqlite';
+import { SQLiteVisionChoiceStore } from '../src/mind/vision/store/visionChoiceStore.js';
 import { answer, frameMeta, syntheticJpeg, visionWorld } from './support/visionWorld.js';
 
 // Syzygy ADR-0011 §4.3, §4.4, §7 and §8.1: the worker's handling of one gated camera frame.
@@ -162,5 +164,46 @@ describe('vision watch: budget and degrade', () => {
     expect(world.decisions.requests[0]!.choice.candidates.map(candidate => candidate.id)).toContain('escalate');
     expect(world.bridge.escalations).toHaveLength(1);
     expect(world.frames.size).toBe(0);
+  });
+});
+
+describe('vision watch: review fixes', () => {
+  it('caps notices and escalations together per hour, and keeps cooldowns in the ledger it is given', async () => {
+    const world = visionWorld({ escalate: true });
+    const categories = ['owner_returned', 'owner_waved', 'showing_something', 'new_object', 'owner_looks_tired'];
+    world.decisions.next = categories.map(category => answer(`notice:${category}`));
+    for (const _ of categories) {
+      await send(world);
+      world.advance(2_000);
+    }
+    expect(world.bridge.notices.map(notice => notice.category)).toEqual(categories.slice(0, 4));
+  });
+
+  it('never uses a camera frame past 4 s, whatever TTL the device sent', async () => {
+    const world = visionWorld();
+    world.decisions.next = [answer('react:smile')];
+    world.decisions.during = () => { world.advance(4_500); };
+    expect(await send(world, { ttlMs: 30_000 })).toMatchObject({ reply: { outcome: 'discarded' } });
+  });
+
+  it('counts a timeout\'s wait toward the latency p95, so a slow provider reaches level 1', async () => {
+    const world = visionWorld();
+    world.decisions.next = [0, 1].map(() => new VisionDecisionsError('timeout', null));
+    world.decisions.during = () => { world.advance(5_000); };
+    await send(world);
+    world.decisions.during = null;
+    world.advance(2_000);
+    expect(world.budget.level('owner', new Date(world.now()).toISOString())).toBe(1);
+  });
+
+  it('keeps a notice\'s cooldown across a restart of the worker', async () => {
+    const choices = new SQLiteVisionChoiceStore(new DatabaseSync(':memory:'));
+    const first = visionWorld({ choices });
+    first.decisions.next = [answer('notice:owner_returned')];
+    await send(first);
+    const restarted = visionWorld({ choices, start: first.now() + 60_000 });
+    restarted.decisions.next = [answer('notice:owner_returned')];
+    expect(await send(restarted)).toMatchObject({ reply: { outcome: 'quiet' } });
+    expect(restarted.bridge.notices).toEqual([]);
   });
 });

@@ -16,6 +16,8 @@ export const VISION_NOTICE_THRESHOLDS = Object.freeze({
   gateAtLevel1: 0.85,
   /** The same candidate again within this time is dropped (ADR-0008 §15: no repeated business). */
   repeatMs: Object.freeze({ react: 60_000, notice: 30 * 60_000, escalate: 30 * 60_000 }),
+  /** At most this many notices and escalations together in any hour (she speaks up on her own; ADR-0002 2026-10-03). */
+  speakingPerHour: 4,
 });
 
 const REACTION_WORDS: Readonly<Record<string, string>> = Object.freeze({
@@ -82,6 +84,8 @@ export interface VisionNoticeVerdict {
 export function visionNoticeVerdict(input: {
   predicate: number | null; choiceId: string | null; confidence: number | null; level: 0 | 1;
   lastChosenAt: (candidateId: string) => number | null; now: number;
+  /** Notices and escalations chosen in the last hour. */
+  spokenLastHour?: number;
 }): VisionNoticeVerdict {
   const quiet = (reason: VisionDiscardReason | null): VisionNoticeVerdict => ({ candidateId: null, outcome: 'quiet', discardReason: reason });
   const gate = input.level === 1 ? VISION_NOTICE_THRESHOLDS.gateAtLevel1 : VISION_NOTICE_THRESHOLDS.gate;
@@ -89,8 +93,15 @@ export function visionNoticeVerdict(input: {
   if (input.choiceId === null || input.confidence === null || input.confidence < VISION_NOTICE_THRESHOLDS.confidence) return quiet('low_confidence');
   const candidate = visionCandidateOf(input.choiceId);
   if (!candidate || candidate.kind === 'quiet' || candidate.kind === 'other') return quiet(null);
-  if (candidate.kind === 'escalate' && input.level === 1) return quiet('degraded');
+  const held = heldBack(candidate as VisionCandidate & { kind: 'react' | 'notice' | 'escalate' }, input);
+  return held ? quiet(held) : { candidateId: candidate.id, outcome: 'chosen', discardReason: null };
+}
+
+/** Why a chosen candidate is held back: degraded (escalate at level 1), repeated within its cooldown, or over the hourly cap. */
+function heldBack(candidate: VisionCandidate & { kind: 'react' | 'notice' | 'escalate' },
+  input: { level: 0 | 1; lastChosenAt: (candidateId: string) => number | null; now: number; spokenLastHour?: number }): VisionDiscardReason | null {
+  if (candidate.kind === 'escalate' && input.level === 1) return 'degraded';
   const last = input.lastChosenAt(candidate.id);
-  if (last !== null && input.now - last < VISION_NOTICE_THRESHOLDS.repeatMs[candidate.kind]) return quiet('repeated');
-  return { candidateId: candidate.id, outcome: 'chosen', discardReason: null };
+  if (last !== null && input.now - last < VISION_NOTICE_THRESHOLDS.repeatMs[candidate.kind]) return 'repeated';
+  return candidate.kind !== 'react' && (input.spokenLastHour ?? 0) >= VISION_NOTICE_THRESHOLDS.speakingPerHour ? 'capped' : null;
 }

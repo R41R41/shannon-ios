@@ -180,7 +180,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null; readonly ownerVoiceActive: (scopeKey: string) => boolean;
   private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
@@ -227,7 +227,7 @@ export class ShannonApiKernel {
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, ...(this.mind ? { reactions: { ...options.body?.reactions, mind: this.mind } } : {}), stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
-    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); this.body.useAudience(scopeKey => !this.toolServer.audience.othersKnown(scopeKey)); // Stage 2, step 8; ADR-0011: a look's model gets the Talk only with the owner alone now.
+    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); this.body.useAudience(scopeKey => !this.toolServer.audience.othersKnown(scopeKey)); this.ownerVoiceActive = scopeKey => this.body.ownerCalls.elsewhere(scopeKey, '', this.now()).active; // Stage 2, step 8; ADR-0011: a look's model gets the Talk only with the owner alone now.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
     this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); // Stage 2, step 6: skill.read.

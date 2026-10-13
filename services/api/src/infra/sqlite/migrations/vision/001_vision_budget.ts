@@ -26,5 +26,3 @@ export const VISION_BUDGET_STEP: SchemaStep = {
     ` },
   ],
 };
-
-export const VISION_STEPS: readonly SchemaStep[] = Object.freeze([VISION_BUDGET_STEP]);
