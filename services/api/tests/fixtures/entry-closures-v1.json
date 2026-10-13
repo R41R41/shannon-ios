@@ -768,6 +768,7 @@
     "wiring/fcaSleepWiring.ts",
     "wiring/fcaSleepWriterBarrier.ts",
     "wiring/fcaTaskObservationWiring.ts",
+    "wiring/fcaTouchSources.ts",
     "wiring/fcaTouchWiring.ts",
     "wiring/feedbackSourceWiring.ts",
     "wiring/feedbackWiring.ts",

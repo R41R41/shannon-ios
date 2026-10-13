@@ -11,6 +11,7 @@ import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
 import { admittedMinecraftRequest, fcaMinecraftRequests } from './fcaMinecraftRequests.js';
 import { createFcaTouchWiring } from './fcaTouchWiring.js';
+import { touchSourcesVisible } from './fcaTouchSources.js';
 import { underWriteLock } from '../infra/sqlite/lockWaits.js';
 import { JevTouchSelector } from '../mind/action/reflex/fcaTouchPorts.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
@@ -167,9 +168,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       observeRead: (scope, receipt) => conversation.observeRead(scope, receipt) });
     const sourceVisible = (scope: string, id: string) => Boolean(shared?.memory.read(scope, [id], { kind: 'owner' }).length);
     const touch = switchOn(values, 'SHANNON_FCA_TOUCH') ? (() => {
-      if (!jev || !parts.touchAllowed || !shared) throw new Error('FCA_TOUCH_REQUIRES_BODY_JEV_MEMORY');
+      // `shared` exists only with the state and conversations (above); the last two checks only narrow their types.
+      if (!jev || !parts.touchAllowed || !shared || !parts.state || !parts.conversations) throw new Error('FCA_TOUCH_REQUIRES_BODY_JEV_MEMORY');
+      // One snapshot and withholding for all of a touch's sources (`fcaTouchSources.ts`, hotfix 2026-10-14).
+      const sourcesVisible = touchSourcesVisible({ memory: shared.memory, state: parts.state, conversations: parts.conversations, readSourceVisible });
       return createFcaTouchWiring({ db, runtime: runtime.runtime, actions, selector: new JevTouchSelector(jev), ownerScope: parts.ownerScope,
-        allowed: parts.touchAllowed, sourceVisible, threadId: scope => parts.conversations?.threadId(scope) ?? null });
+        allowed: parts.touchAllowed, sourceVisible, sourcesVisible, threadId: scope => parts.conversations?.threadId(scope) ?? null });
     })() : null;
     const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, control: minecraft.control,
       runtime: runtime.runtime, conversation, visible, stop: runtime.stop, sourceVisible: id => sourceVisible(parts.ownerScope, id),

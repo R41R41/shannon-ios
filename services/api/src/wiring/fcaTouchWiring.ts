@@ -21,6 +21,14 @@ interface Row {
  * `not_applied` and its action closes as cancelled.
  */
 const UNPROVEN = "CASE WHEN issued=1 THEN 'unknown' ELSE 'not_applied' END";
+const TERMINAL = ['applied', 'not_applied', 'unknown', 'none'];
+/**
+ * A receipt the tick still has work for: an open command, or an observed/result/reaction event not yet delivered (`deliver`).
+ * A terminal, fully delivered receipt is never read again by the tick (hotfix 2026-10-14: every receipt ever made was re-read,
+ * re-acknowledged and source-checked through memory every second). The `(scope_key, touch_id)` unique index bounds the scan.
+ */
+const PENDING = `state IN ('selecting','ready','claimed') OR observed_delivered=0
+  OR (result_delivered=0 AND state IN ('applied','not_applied','unknown','none')) OR (reaction_delivered=0 AND reaction_json IS NOT NULL)`;
 /** One leased candidate selection and one device invocation. No speech, emotion or experience writer. */
 export function createFcaTouchWiring(parts: {
   db: DatabaseSync; runtime: TaskRuntime; actions: ActionThreads; selector: FcaTouchSelector;
@@ -28,6 +36,8 @@ export function createFcaTouchWiring(parts: {
   /** Fresh device registration and current capability, checked both before inference and command claim. */
   allowed(scope: string, device: string, gesture?: string): boolean;
   sourceVisible(scope: string, experienceId: string): boolean;
+  /** All of one touch's sources in one check (one state snapshot and withholding); absent, `sourceVisible` per source. */
+  sourcesVisible?(scope: string, ids: readonly string[]): boolean;
   threadId(scope: string): string | null;
 }) {
   const now = parts.now ?? (() => new Date().toISOString()), db = parts.db;
@@ -37,23 +47,32 @@ export function createFcaTouchWiring(parts: {
   const row = (id: string) => db.prepare('SELECT * FROM fca_touch_receipts WHERE operation_id=?').get(id) as unknown as Row | undefined;
   const byTouch = (scope: string, id: string) => db.prepare('SELECT * FROM fca_touch_receipts WHERE scope_key=? AND touch_id=?').get(scope, id) as unknown as Row | undefined;
   const rootAllows = () => !['stopped', 'stopping', 'unknown'].includes(parts.runtime.ensureRoot(parts.ownerScope).phase);
-  const sourcesVisible = (input: FcaTouchInput) => [input.experienceId, ...input.stanceSourceIds].every(id => parts.sourceVisible(input.scopeKey, id));
+  const sourcesVisible = (input: FcaTouchInput) => {
+    const ids = [input.experienceId, ...input.stanceSourceIds];
+    return parts.sourcesVisible ? parts.sourcesVisible(input.scopeKey, ids) : ids.every(id => parts.sourceVisible(input.scopeKey, id));
+  };
+  /** Receipts whose acknowledgement threw (the mind worker unreachable); the tick retries only these, plus one sweep at start. */
+  const unacknowledged = new Set<string>();
+  let swept = false, ticking: Promise<void> | null = null;
   const usable = (input: FcaTouchInput, gesture?: string) => !closing && input.scopeKey === parts.ownerScope && rootAllows()
     && parts.allowed(input.scopeKey, input.deviceId, gesture) && sourcesVisible(input);
   // A restarted process cannot prove whether its old command reached the renderer. Never issue it again; it leaves by the one
   // unknown exit (ADR-0009 stage 1, S5): an issued gesture may have acted (unknown), one never issued did not (not_applied).
   db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE state IN ('selecting','ready','claimed')`).run();
   async function acknowledge(saved: Row): Promise<void> {
-    if (!saved.lease_json || !['applied', 'not_applied', 'unknown', 'none'].includes(saved.state)) return;
+    if (!saved.lease_json || !TERMINAL.includes(saved.state)) return;
     const lease = JSON.parse(saved.lease_json) as ActionLease;
     const state = saved.state === 'unknown' ? 'unknown' : saved.state === 'not_applied' ? 'cancelled' : 'completed';
     const result = `fca_touch_${saved.state}`;
     try {
       const finished = await parts.actions.finish(lease, state, result);
       if (!finished && state !== 'unknown') await parts.actions.reconcile(lease, state, result);
-    } catch { /* Retry only this original receipt, not selection or the gesture. */ }
+      unacknowledged.delete(saved.operation_id);
+    } catch { unacknowledged.add(saved.operation_id); /* Retry only this original receipt, not selection or the gesture. */ }
   }
   function deliver(saved: Row) {
+    // Nothing left to send: no source check (each one is a guarded memory read).
+    if (saved.observed_delivered && (saved.result_delivered || !TERMINAL.includes(saved.state)) && (saved.reaction_delivered || !saved.reaction_json)) return;
     const input = JSON.parse(saved.input_json) as FcaTouchInput;
     if (!sourcesVisible(input)) return;
     const send = (phase: string, payload: unknown) => withObserverRunSync({ scopeKey: saved.scope_key, surface: 'reflex_touch_receipt',
@@ -64,7 +83,7 @@ export function createFcaTouchWiring(parts: {
     })));
     try {
       if (!saved.observed_delivered) { send('observed', { immediateReflex: input.touch.reflex ?? 'not_reported' }); db.prepare('UPDATE fca_touch_receipts SET observed_delivered=1 WHERE operation_id=?').run(saved.operation_id); }
-      if (!saved.result_delivered && ['applied', 'not_applied', 'unknown', 'none'].includes(saved.state)) {
+      if (!saved.result_delivered && TERMINAL.includes(saved.state)) {
         send(`result:${saved.state}`, { gesture: saved.gesture, outcome: saved.state, meaning: 'applied means renderer accepted one invocation, not completed motion or speech' });
         db.prepare('UPDATE fca_touch_receipts SET result_delivered=1 WHERE operation_id=?').run(saved.operation_id);
       }
@@ -139,15 +158,28 @@ export function createFcaTouchWiring(parts: {
       await acknowledge(row(id)!); deliver(row(id)!); return true;
     },
   };
-  return { ...port, async tick() {
-    for (const saved of db.prepare('SELECT * FROM fca_touch_receipts WHERE scope_key=?').all(parts.ownerScope) as unknown as Row[]) {
-      if (['selecting', 'ready', 'claimed'].includes(saved.state) && (!rootAllows() || saved.expires_at <= now())) {
+  async function sweep() {
+    // The first tick of a process acknowledges every receipt once (a restart may have lost an acknowledgement); later ticks read
+    // only receipts with work left and the acknowledgements that threw.
+    const first = !swept, rows = db.prepare(`SELECT * FROM fca_touch_receipts WHERE scope_key=?${first ? '' : ` AND (${PENDING})`}`)
+      .all(parts.ownerScope) as unknown as Row[];
+    for (const id of unacknowledged) if (!rows.some(saved => saved.operation_id === id)) { const saved = row(id); if (saved) rows.push(saved); }
+    for (const saved of rows) {
+      if (closing) return;
+      const open = ['selecting', 'ready', 'claimed'].includes(saved.state);
+      if (open && (!rootAllows() || saved.expires_at <= now())) {
         const job = jobs.get(saved.operation_id); job?.controller.abort(); await job?.done;
         db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE operation_id=? AND state IN ('selecting','ready','claimed')`).run(saved.operation_id);
         job?.action?.stop(); jobs.delete(saved.operation_id);
       }
-      await acknowledge(row(saved.operation_id)!); deliver(row(saved.operation_id)!);
+      if (first || open || unacknowledged.has(saved.operation_id)) await acknowledge(row(saved.operation_id)!);
+      deliver(row(saved.operation_id)!);
     }
+    swept = true;
+  }
+  return { ...port, tick() {
+    // One tick at a time: the 1 s wake never stacks a second pass over a slow one (hotfix 2026-10-14).
+    return ticking ??= sweep().finally(() => { ticking = null; });
   }, async close() { closing = true; for (const job of jobs.values()) job.controller.abort(); await Promise.all([...jobs.values()].map(job => job.done));
     for (const [id, job] of jobs) { db.prepare(`UPDATE fca_touch_receipts SET state=${UNPROVEN} WHERE operation_id=? AND state IN ('selecting','ready','claimed')`).run(id); job.action?.stop(); await acknowledge(row(id)!); } jobs.clear(); } };
 }
