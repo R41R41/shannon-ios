@@ -750,6 +750,96 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonBodyRegistration.identifiers(["joyful", "だめ", "joyful", "-x", "a.b_c-d"], limit: 64), ["joyful", "a.b_c-d"])
     }
 
+    /// Production 2026-10-13 (「iphoneのシャノンに触れてもシャノンから反応がない」): finger touches of 43–576 ms, which the page
+    /// never asks about (it asks at the end only from 0.6 s, or about a poke), so the phone sent events and no question.
+    private func phoneCoordinator(_ client: FakeBodyClient, clock: PhoneClock, idle: FlagBox? = nil,
+                                  shown: ExpressionBox? = nil) -> ShannonBodyTouchCoordinator {
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, audience: { .owner }, capabilities: { (["joyful"], ["wave"]) },
+            express: { expression, _ in shown?.values.append(expression) }, now: { clock.now }))
+        coordinator.environment.asksAfterShortTouch = true
+        coordinator.environment.pageIsIdle = { idle?.value ?? true }
+        return coordinator
+    }
+
+    private static func fingerTouch(_ id: String, _ kind: ShannonLive2DTouch.Kind = .pet, durationMs: Int = 223) -> ShannonLive2DTouch {
+        ShannonLive2DTouch(id: id, occurredAt: "2026-10-13T20:46:15.504Z", kind: kind, durationMs: durationMs, strength: 0.2, ongoing: false,
+                           region: .head, detail: .init(part: .hair, gesture: .stroke))
+    }
+
+    func testOnThePhoneAShortStrokeIsAskedAboutWhenItEndsAndHerLineIsShown() async {
+        let client = FakeBodyClient()
+        await client.setAnswer(.init(
+            id: "s1", status: "said",
+            message: .init(id: "m1", text: "ん、髪ですか？", expression: "bashful", feeling: nil, threadId: nil, listenSeconds: 6),
+            mood: .init(expression: "bashful", feeling: nil)))
+        let shown = ExpressionBox()
+        let coordinator = phoneCoordinator(client, clock: PhoneClock(), shown: shown)
+        await coordinator.handle(.touch(Self.fingerTouch("s1")))?.value
+        let calls = await client.calls
+        // The question first, so it is the touch's first message; then the finished touch as its event, same id.
+        XCTAssertEqual(calls, ["register", "ask:s1:owner:ended", "events:s1:owner:223"])
+        let asks = await client.sentAsks
+        XCTAssertEqual(asks.first?.touch.durationMs, 223)
+        XCTAssertEqual(asks.first?.touch.region, "head")
+        XCTAssertEqual(coordinator.line?.text, "ん、髪ですか？")
+        XCTAssertEqual(shown.values, ["bashful"])
+    }
+
+    func testOnThePhoneQuestionsKeepThePagesSpacingAndLeaveThePagesOwnMoments() async {
+        let client = FakeBodyClient()
+        let clock = PhoneClock()
+        let coordinator = phoneCoordinator(client, clock: clock)
+        // 20:46:15 and 20:46:16: the first is asked about, the second a second later only reported.
+        await coordinator.handle(.touch(Self.fingerTouch("a")))?.value
+        clock.advance(1)
+        await coordinator.handle(.touch(Self.fingerTouch("b", durationMs: 43)))?.value
+        // A page question inside the spacing of the app's own is not sent either.
+        clock.advance(10)
+        XCTAssertNil(coordinator.handle(.askReaction(Self.fingerTouch("c", .poke, durationMs: 0))))
+        // 20:49:56: minutes later, asked again; 20:50:02, six seconds after, only reported.
+        clock.advance(220)
+        await coordinator.handle(.touch(Self.fingerTouch("d", durationMs: 243)))?.value
+        clock.advance(6)
+        await coordinator.handle(.touch(Self.fingerTouch("e", durationMs: 294)))?.value
+        var calls = await client.calls.filter { $0 != "register" }
+        XCTAssertEqual(calls, ["ask:a:owner:ended", "events:a:owner:223", "events:b:owner:43",
+                               "ask:d:owner:ended", "events:d:owner:243", "events:e:owner:294"])
+
+        // The page's own moments stay the page's: a poke, a touch of 0.6 s or more, and a touch it asked about while it lasted.
+        let page = FakeBodyClient()
+        let later = PhoneClock()
+        let own = phoneCoordinator(page, clock: later)
+        await own.handle(.touch(Self.fingerTouch("p", .poke, durationMs: 0)))?.value
+        later.advance(60)
+        await own.handle(.touch(Self.fingerTouch("l", durationMs: 600)))?.value
+        later.advance(60)
+        await own.handle(.askReaction(ShannonLive2DTouch(id: "o", occurredAt: "2026-10-13T20:46:15.504Z", kind: .tickle, durationMs: 1_200,
+                                                         strength: 0.2, ongoing: true)))?.value
+        await own.handle(.touch(Self.fingerTouch("o", .tickle, durationMs: 400)))?.value
+        calls = await page.calls.filter { $0 != "register" }
+        XCTAssertEqual(calls, ["events:p:owner:0", "events:l:owner:600", "ask:o:owner:ongoing", "events:o:owner:400"])
+    }
+
+    func testOnThePhoneNoQuestionWhileThePageIsNotIdleNorOffThePhone() async {
+        // A voice conversation, a text reply on its way, or her line being said: the page's phase is not idle.
+        let client = FakeBodyClient()
+        let idle = FlagBox(false)
+        let coordinator = phoneCoordinator(client, clock: PhoneClock(), idle: idle)
+        await coordinator.handle(.touch(Self.fingerTouch("busy")))?.value
+        var calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:busy:owner:223"])
+
+        // A mouse (the Mac's figure, her desktop body) keeps only the page's moments.
+        let mouse = FakeBodyClient()
+        let desk = ShannonBodyTouchCoordinator(scopeKey: "owner", client: mouse, environment: .init(
+            reportsTouch: { true }, audience: { .owner }, capabilities: { ([], []) }, express: { _, _ in }))
+        XCTAssertFalse(desk.environment.asksAfterShortTouch)
+        await desk.handle(.touch(Self.fingerTouch("m")))?.value
+        calls = await mouse.calls
+        XCTAssertEqual(calls, ["register", "events:m:owner:223"])
+    }
+
     func testAQuietAnswerShowsHerFaceAndNoLine() async {
         let client = FakeBodyClient()
         await client.setAnswer(.init(id: "t1", status: "quiet", message: nil, mood: .init(expression: "bashful", feeling: "flustered")))
@@ -1363,6 +1453,14 @@ private final class FakeLineSpeaker: ShannonReachOutSpeaking {
 @MainActor private final class LineBox: Sendable { var values: [ShannonBodyTouchCoordinator.Line] = [] }
 @MainActor private final class ExpressionBox: Sendable { var values: [String] = [] }
 @MainActor private final class AudienceBox: Sendable { var value = ShannonBodyAudience.owner }
+/// The phone's clock in a test: moved by hand, read from any isolation as `Environment.now` is.
+private final class PhoneClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = Date(timeIntervalSince1970: 1_791_924_375)
+    var now: Date { lock.withLock { value } }
+    func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
+}
+
 @MainActor private final class FlagBox: Sendable {
     var value: Bool
     init(_ value: Bool) { self.value = value }

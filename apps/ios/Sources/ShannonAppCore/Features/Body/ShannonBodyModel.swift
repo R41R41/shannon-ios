@@ -106,6 +106,10 @@ public final class ShannonBodyModel {
             },
             maySend: { !isDesignPreview() }
         ))
+        #if os(iOS)
+        // A finger: strokes and resting touches end before the page's 0.6 s, so the app asks about them itself.
+        touch.environment.asksAfterShortTouch = true
+        #endif
         self.voice = voice
         if let voice {
             voice.mayAnswerInVoice = { [weak self] in self?.answersInVoice ?? false }
