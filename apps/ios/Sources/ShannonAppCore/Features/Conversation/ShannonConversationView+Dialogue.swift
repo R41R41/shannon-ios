@@ -384,7 +384,10 @@ extension ShannonConversationView {
 
     @ViewBuilder
     private func dialogueReply(_ palette: ShannonPalette, geometry: GeometryProxy) -> some View {
-        if model.isSending {
+        if model.isSending, let streaming = model.visibleStreamingReply {
+            ShannonDialogueStreamingBubble(text: streaming.text, palette: palette, maxWidth: min(560, geometry.size.width - 32))
+                .transition(.opacity)
+        } else if model.isSending {
             ShannonDialogueBubble(palette: palette, isExpanded: false) {
                 ShannonThinkingDots()
             }

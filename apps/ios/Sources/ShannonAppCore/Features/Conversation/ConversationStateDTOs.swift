@@ -124,6 +124,11 @@ public struct ChatRequestDTO: Codable, Equatable, Sendable {
     public let placeLocation: ShannonVoiceDeviceLocationDTO?
     /// What this app's camera can do in this turn; absent on a client that never looks.
     public var appLook: ShannonAppLookClientStateDTO? = nil
+    /// `"sentences"` asks for the reply as NDJSON sentence by sentence (docs/chat-stream-contract.md); absent: one JSON document.
+    public var stream: String? = nil
+
+    /// The one value of `stream` the contract defines.
+    public static let sentenceStream = "sentences"
 
     public init(
         scopeKey: String,

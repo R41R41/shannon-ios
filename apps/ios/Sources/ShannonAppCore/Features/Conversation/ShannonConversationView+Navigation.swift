@@ -25,6 +25,8 @@ extension ShannonConversationView {
         } else {
             // Another device, or the worker, may have recorded captures while this one was away.
             Task { await model.refreshCaptures() }
+            // A reply whose stream iOS cut while the app was away was finished by the server: show it from the Talk.
+            Task { await model.resumeInterruptedReplies() }
         }
 #if os(iOS)
         switch scenePhase {

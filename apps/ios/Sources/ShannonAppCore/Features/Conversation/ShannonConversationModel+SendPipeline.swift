@@ -15,6 +15,17 @@ extension ShannonConversationModel {
         isSearchingMemory = ShannonMemoryRecallCue.matches(text)
         defer { isSearchingMemory = false }
         let titleRevisionsAtSend = titleEditRevisions
+        let sentAt = Date()
+        let knownIdentities = knownTurnIdentities()
+        let replyID = UUID()
+        // A new send replaces a cut-off reply still on screen; its own message keeps 再送.
+        if streamingReply?.phase == .interrupted { streamingReply = nil }
+        uncertainTurnRecoveryTask?.cancel()
+#if os(iOS)
+        // A reply being written goes on for a little while after he leaves the app; iOS suspends it after that.
+        let backgroundTime = ShannonBackgroundAssertion(name: "Shannon text reply")
+        defer { backgroundTime.end() }
+#endif
 
         do {
             var referenceAttachments = attachments
@@ -31,31 +42,29 @@ extension ShannonConversationModel {
                     text: "ユーザーが選んで共有した写真の視覚的な観察です。撮影時刻は不明です。\n\(vision.description)"
                 ))
             }
+            let threadAtSend = selectedThreadId
+            let placeLocation = await requestedPlaceLocation(for: text)
+            beginStreamingReply(id: replyID, userMessageID: userMessageID, threadAtSend: threadAtSend)
             let response = try await sendChatTurn(
                 message: text,
-                threadId: selectedThreadId,
+                threadId: threadAtSend,
                 attachments: referenceAttachments,
                 webSearch: webSearch,
-                placeLocation: await requestedPlaceLocation(for: text)
+                placeLocation: placeLocation,
+                onProgress: { [weak self] progress in
+                    await self?.streamingReplyDidGrow(replyID, progress)
+                }
             )
+            // `done` (or the JSON response) is the authority: the provisional row gives way to the reply it stands for.
+            discardStreamingReply(replyID)
             updateDeliveryState(for: userMessageID, to: .sent)
             pendingAttachmentsByMessageID.removeValue(forKey: userMessageID)
             pendingPhotoByMessageID.removeValue(forKey: userMessageID)
             pendingWebSearchMessageIDs.remove(userMessageID)
             state = response.state
             selectedThreadId = response.threadId
-            let emotion = response.messageEmotion
             let organizeSession = response.uiBlocks?.compactMap(\.session).first
-            let replyMessage = ConversationMessage(
-                id: organizeSession?.commandThroughMessageId.flatMap(UUID.init(uuidString:)) ?? UUID(),
-                role: .shannon,
-                text: response.reply,
-                emotionSnapshot: ConversationMessage.EmotionSnapshot(emotion, stateVersion: response.snapshotVersion),
-                artifacts: response.artifacts ?? [],
-                places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? [],
-                turnID: response.turnId,
-                feedback: response.feedback
-            )
+            let replyMessage = Self.reconciledReply(response, provisionalID: replyID)
             messages.append(replyMessage)
             feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
             feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)
@@ -94,16 +103,60 @@ extension ShannonConversationModel {
             // She looks through this app's camera: what she saw arrives as her next message.
             if let ask = response.appLook { Task { await performAppLook(ask) } }
             return response.reply
+        } catch let retracted as ShannonChatStreamRetracted {
+            // The server took back what it showed: every sentence of it goes (contract, "Errors").
+            let threadAtSend = streamingThread(replyID)
+            discardStreamingReply(replyID)
+            updateDeliveryState(for: userMessageID, to: .failed)
+            errorMessage = ShannonFailureCopy.streamRetracted
+            if !retracted.turnWasNotStored {
+                // STREAM_FAILED: the turn is complete and stored; the Talk has the reply.
+                rememberUncertainTurn(
+                    userMessageID, sentText: text, threadID: retracted.threadId ?? threadAtSend,
+                    threadAtSend: threadAtSend, knownIdentities: knownIdentities, settlesBy: Date())
+                isSending = false
+                scheduleUncertainTurnRecovery(userMessageID)
+                return nil
+            }
+        } catch let interrupted as ShannonChatStreamInterrupted {
+            // The connection broke (or the app was suspended) before `done`. The server finishes the turn without
+            // this device: what arrived stays, marked cut off, and the Talk is read until the turn shows up.
+            let threadAtSend = streamingThread(replyID)
+            keepInterruptedReply(replyID, partialText: interrupted.partialText)
+            updateDeliveryState(for: userMessageID, to: .failed)
+            errorMessage = ShannonFailureCopy.streamInterrupted
+            rememberUncertainTurn(
+                userMessageID, sentText: text, threadID: interrupted.threadId ?? threadAtSend,
+                threadAtSend: threadAtSend, knownIdentities: knownIdentities,
+                settlesBy: sentAt.addingTimeInterval(Self.serverTurnBudgetSeconds))
+            isSending = false
+            scheduleUncertainTurnRecovery(userMessageID)
+            return nil
         } catch {
+            discardStreamingReply(replyID)
             updateDeliveryState(for: userMessageID, to: .failed)
             errorMessage = ShannonFailureCopy.send(
                 error,
                 messageLength: text.count,
                 includesPhoto: photoJPEGData != nil
             )
+            if Self.sendMayHaveReachedServer(error) {
+                // 再送 first looks for the turn in the Talk, so a turn the server did finish is not made twice.
+                rememberUncertainTurn(
+                    userMessageID, sentText: text, threadID: selectedThreadId, threadAtSend: selectedThreadId,
+                    knownIdentities: knownIdentities, settlesBy: sentAt.addingTimeInterval(Self.serverTurnBudgetSeconds))
+            }
         }
         isSending = false
         return nil
+    }
+
+    /// The server's budget for one text turn from its arrival (30 s, docs/chat-stream-contract.md "Timeouts"),
+    /// with a margin for the network: until then a turn this device lost may still be stored.
+    static let serverTurnBudgetSeconds: TimeInterval = 40
+
+    private func streamingThread(_ replyID: UUID) -> String? {
+        streamingReply?.id == replyID ? streamingReply?.threadAtSend : selectedThreadId
     }
 
     private func requestedPlaceLocation(for text: String) async -> ShannonVoiceDeviceLocationDTO? {

@@ -83,6 +83,7 @@ extension ShannonDesktopRootView {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         ForEach(conversation.messages) { message in
                             let canRetry = message.deliveryState == .failed
+                                && !conversation.isConfirmingFailedSend
                                 && message.id == conversation.messages.last(where: {
                                     $0.role == .user && $0.deliveryState == .failed
                                 })?.id
@@ -110,7 +111,21 @@ extension ShannonDesktopRootView {
                         }
                         // A song she chose, while it plays (docs/device-actions-contract.md).
                         ShannonNowPlayingCard()
-                        if conversation.isSending {
+                        // Her reply as it is written (docs/chat-stream-contract.md); `done` replaces it with her message.
+                        if let streaming = conversation.visibleStreamingReply {
+                            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.extraSmall) {
+                                DesktopMessageView(message: streaming.message, retry: nil)
+                                    .opacity(streaming.phase == .interrupted ? 0.72 : 1)
+                                Label(
+                                    streaming.phase == .writing ? "書いています…" : "返事はここで途切れています",
+                                    systemImage: streaming.phase == .writing ? "ellipsis" : "exclamationmark.circle"
+                                )
+                                .font(.shannonDesktop(.caption))
+                                .foregroundStyle(streaming.phase == .writing ? Color.secondary : Color.shannonDanger)
+                            }
+                            .id("desktop-streaming-reply")
+                        }
+                        if conversation.showsTypingIndicator {
                             HStack(spacing: ShannonDesktopSpacing.small) {
                                 ShannonAvatarView(expression: .thinking, size: 26)
                                 ProgressView().controlSize(.small)
@@ -135,6 +150,12 @@ extension ShannonDesktopRootView {
                 }
                 .onChange(of: conversation.messages.count) {
                     scrollConversation(using: proxy)
+                }
+                .onChange(of: conversation.visibleStreamingReply?.text.count) {
+                    guard conversation.visibleStreamingReply != nil, requestedMessageJumpID == nil else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                        proxy.scrollTo("desktop-streaming-reply", anchor: .bottom)
+                    }
                 }
                 .task(id: messageJumpRevision) {
                     await Task.yield()
