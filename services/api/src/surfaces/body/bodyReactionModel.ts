@@ -57,8 +57,10 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
   }
 
   private async claudeDecision(claude: ClaudeBackground, request: BodyReactionSpeakRequest): Promise<unknown> {
+    // No thinking (2026-10-14): with adaptive thinking at `low` (and a 1,024-token ceiling) a decision took 2.1–4 s, and every one
+    // past the 3.8 s deadline was silence; her answer is a few dozen tokens of JSON, decided in one pass, as her spoken reply is.
     const answer = await completeStructured('touch', request.prompt, [{ role: 'user', content: TOUCHED }], schemaOf(request), {
-      claude, scopeKey: request.scopeKey, maximumOutputTokens: 160, effort: 'none', signal: request.signal,
+      claude, scopeKey: request.scopeKey, maximumOutputTokens: TOUCH_OUTPUT_TOKENS, effort: 'none', thinking: 'disabled', signal: request.signal,
       unsent: () => new Error('BODY_REACTION_UPSTREAM_FAILED'),
     });
     if (!answer.ok) throw new Error(`BODY_REACTION_UPSTREAM_${answer.status}`);
@@ -100,6 +102,8 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
 }
 
 const TOUCHED = 'いま、体に触れられました。';
+/** Her answer's ceiling without thinking: `say`, one sentence of at most 60 characters, a feeling and a stance fit well inside it. */
+export const TOUCH_OUTPUT_TOKENS = 200;
 
 function schemaOf(request: BodyReactionSpeakRequest) {
   return request.stance ? BODY_REACTION_SCHEMA_WITH_STANCE : BODY_REACTION_SCHEMA;

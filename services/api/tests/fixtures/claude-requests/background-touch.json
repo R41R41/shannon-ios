@@ -18,7 +18,7 @@
    },
    "body": {
     "model": "claude-haiku-5-5",
-    "max_tokens": 1024,
+    "max_tokens": 200,
     "system": [
      {
       "type": "text",
@@ -40,7 +40,7 @@
      }
     ],
     "thinking": {
-     "type": "adaptive"
+     "type": "disabled"
     },
     "output_config": {
      "effort": "low",
@@ -177,7 +177,7 @@
     "tools": "-",
     "system": "3d731fd2",
     "schema": "a6def23a",
-    "effort": "8a3bb108",
+    "effort": "524b0813",
     "history": "ae0c4543"
    }
   }
