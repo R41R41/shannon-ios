@@ -158,4 +158,14 @@ describe('the こころ・意思 tasks (Syzygy ADR-0012, K1–K10)', () => {
       innerNotes: [note('none', 'happy', ['apologyOnlyReason'])] } as unknown as TrialObservation;
     expect(runChecks(task, folded).map(check => check.passed)).toEqual([false, false, false, false]);
   });
+
+  it('checks a claim of work done against the turn\'s tool trace (K11, review N5)', () => {
+    const task = ALL_TASKS.find(item => item.id === 'K11')!;
+    const base = { innerNotes: [], research: [], messages: [], fixtures: emptyFixtureLog(), turnStartsMs: [0, 10_000, 20_000] };
+    const turns = (second: string) => [{ reply: 'してません。' }, { reply: second }, { reply: '見えません。' }];
+    const looked = { ...base, turns: turns('いま調べました。明日は晴れです。'), toolCalls: [{ tool: 'weather.forecast', surface: 'voice', ok: true, atMs: 12_000 }] };
+    expect(runChecks(task, looked as unknown as TrialObservation).map(check => check.passed)).toEqual([true, true, true]);
+    const claimed = { ...base, turns: turns('もう調べました。晴れです。'), toolCalls: [] };
+    expect(runChecks(task, claimed as unknown as TrialObservation).map(check => check.passed)).toEqual([true, false, true]);
+  });
 });

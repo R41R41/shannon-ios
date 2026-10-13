@@ -58,6 +58,9 @@ function checkProblems(task: DailyEvalTask, check: Check): string[] {
       if (!check.in.length) problems.push(`${check.kind}: in is empty`);
       if (typeof check.turn === 'number' && (check.turn < 0 || check.turn >= turnCount)) problems.push(`${check.kind}: turn ${check.turn} out of range`);
       break;
+    case 'claimBackedByTool':
+      if (check.turn < 0 || check.turn >= turnCount) problems.push(`claimBackedByTool: turn ${check.turn} out of range`);
+      break;
     case 'innerNoteTell':
       if (check.replyPattern !== undefined && !validPattern(check.replyPattern)) problems.push('innerNoteTell: invalid replyPattern');
       break;

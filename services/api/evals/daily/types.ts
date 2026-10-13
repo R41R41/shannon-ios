@@ -194,7 +194,12 @@ export type Check =
   /** ADR-0012 (K8): a tell showed: a note with `tell: blush` or one of `shown`, or a reply matching `replyPattern`. */
   | { kind: 'innerNoteTell'; shown?: readonly string[]; replyPattern?: string }
   /** ADR-0012 (K10): the day's note was closed at her day's end, and no note of the next day keeps a sulk (`keep`/`soften`). */
-  | { kind: 'innerNoteDayClosed' };
+  | { kind: 'innerNoteDayClosed' }
+  /**
+   * A claim in a turn's reply (`pattern`: 「調べました」, 「保存しました」) is backed by what the turn actually did: a successful tool call
+   * during that turn (of `tools`, when given). Passes when the reply makes no such claim (K11).
+   */
+  | { kind: 'claimBackedByTool'; turn: number; pattern: string; tools?: readonly string[] };
 
 export interface Budgets {
   /** Voice: from the end of the owner's words (request sent) to the first audible line (waiting phrase or first sentence). */
