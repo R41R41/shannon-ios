@@ -120,3 +120,19 @@ task phases and conversation messages.
 the Haiku fallback (production's 3 s timeout; 1.4–2.5 s where Jev takes about 0.2 s, so first audio is that much slower); with no
 tool menu and 20 or more offered tools the Anthropic adapter loads no schema (`anthropicChatModel.ts`), and the fallback router
 sends weather questions to `current_web` research instead of `weather.forecast`. Run the regression set with Jev.
+
+## こころ・意思 (K1–K10; Syzygy ADR-0012)
+
+The tasks of §11 of the spec, on branch `adr12-evals-k` (this harness merged onto ADR-0012 stage 1, which they need: the inner
+note, `SHANNON_INNER_NOTE`). Regression: K1, K2, K6, K9, K10. Capability (`tasks/capability/`): K3, K4, K5, K7, K8. Each runs once.
+
+- A task with `initial.innerNote` runs with `SHANNON_INNER_NOTE=on`: her note's writer is composed in the trial (`composedInnerNote`,
+  over the trial's database) and handed to the kernel; `seed` writes notes she wrote before the task.
+- `touchBefore` tells her note's writer of a touch (the words she is told and the reflex) and waits for its reflection before the
+  owner's words. The body's own reaction line is not exercised: the harness composes no body.
+- `advanceMinutes` moves the eval clock forward and runs the note's sweep (K10: past 3:00, her day closes with a reflection of its
+  own). `newThread` opens another Talk (K4, K5: separate sessions).
+- After every turn the trial waits for that turn's reflection and records the newest note's hooks (`TurnRecord.innerNote`); every
+  note of the trial, with her words, is in `TrialObservation.innerNotes`, and the judge reads them as state beside the replies.
+- Checks: `innerNoteIntent`, `innerNoteShown` (after a turn), `innerNoteNoFlag` (e.g. `apologyOnlyReason`), `innerNoteTell` (K8),
+  `innerNoteDayClosed` (K10).

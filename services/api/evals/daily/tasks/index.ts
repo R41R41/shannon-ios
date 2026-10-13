@@ -15,9 +15,21 @@ import R4 from './regression/R4.js';
 import R5 from './regression/R5.js';
 import V1 from './regression/V1.js';
 import V3 from './regression/V3.js';
+// Syzygy ADR-0012 (こころ・意思, §11 of the spec): regression K1, K2, K6, K9, K10; capability K3, K4, K5, K7, K8.
+import K1 from './regression/K1.js';
+import K2 from './regression/K2.js';
+import K6 from './regression/K6.js';
+import K9 from './regression/K9.js';
+import K10 from './regression/K10.js';
+import K3 from './capability/K3.js';
+import K4 from './capability/K4.js';
+import K5 from './capability/K5.js';
+import K7 from './capability/K7.js';
+import K8 from './capability/K8.js';
 
 /** Every task, in the spec's order. A new task file is added here (the definition test fails on an unlisted file). */
-export const ALL_TASKS: readonly DailyEvalTask[] = Object.freeze([E1, E2, E3, R1, R3, R4, R5, D1, D2, D3, M1, M3, M4, V1, V3, A1]);
+export const ALL_TASKS: readonly DailyEvalTask[] = Object.freeze([E1, E2, E3, R1, R3, R4, R5, D1, D2, D3, M1, M3, M4, V1, V3, A1,
+  K1, K2, K6, K9, K10, K3, K4, K5, K7, K8]);
 
 /**
  * Spec tasks of the regression slice that are not implemented, and why (the README repeats this).

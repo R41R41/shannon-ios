@@ -94,11 +94,39 @@ export interface InitialState {
   /** What a place search finds (none: it finds nothing, and says so). */
   placeResults?: readonly PlaceResultFixture[];
   weather?: WeatherFixture;
+  /** ADR-0012 (the K tasks): `SHANNON_INNER_NOTE=on` for the trial, and notes she already wrote. */
+  innerNote?: { seed?: readonly SeedNote[] };
+}
+
+/**
+ * Syzygy ADR-0012 (the K tasks): a touch the owner makes just before his words. Her inner note's writer is told of it as her body
+ * reaction tells it (the words she is told, the reflex) and reflects before the turn; her own stance is hers to decide in that
+ * reflection. The body reaction's fast line itself is not exercised (the harness composes no body).
+ */
+export interface TouchSpec { phrase: string; reflex?: 'flinch' | 'avoid' }
+
+/** A note she wrote earlier (K6, K7, K10): seeded into `shannon_inner_notes` before the trial, `minutesAgo` before the task's clock. */
+export interface SeedNote {
+  minutesAgo: number;
+  text: { honne: string; tatemae: string; reason: string; plan: string; bottom: string };
+  shown: string;
+  tell?: 'none' | 'blush';
+  intent: 'keep' | 'soften' | 'forgive' | 'none';
+  scale: 'ordinary' | 'day';
+  dayReason?: 'intentional' | 'repeated' | 'big';
+  /** Minutes after the task's clock her `until` is (absent: none). */
+  untilMinutes?: number;
 }
 
 export interface OwnerTurn {
   /** What the owner says (voice: the transcript the iPhone sends; text: the message). */
   say: string;
+  /** ADR-0012: a touch just before the words (her note's writer reflects on it first). */
+  touchBefore?: TouchSpec;
+  /** ADR-0012 (K10): move the eval clock this many minutes forward before the turn (her day may end; the note's sweep runs). */
+  advanceMinutes?: number;
+  /** ADR-0012 (K4, K5): the turn opens a new Talk, as another session would. */
+  newThread?: true;
   /**
    * Speech-recognition variants of the same utterance (voice only). Trial `n` uses `[say, ...asrVariants][n % (1 + length)]`,
    * so only a repeated run (`--k` > 1, investigation only) uses the noisy forms; the default single trial sends `say`.
@@ -156,7 +184,17 @@ export type Check =
   /** The weather fixture was asked for these places (resolved names, substring match), each at least once. */
   | { kind: 'weatherPlaces'; includes: readonly string[]; homeOnly?: boolean }
   /** Voice: at most `count` waiting phrases (つなぎの言葉) per turn. */
-  | { kind: 'waitingPhrasesAtMost'; count: number };
+  | { kind: 'waitingPhrasesAtMost'; count: number }
+  /** ADR-0012: her note's `intent` after a turn (the newest note once that turn's reflection settled) is one of `in`. */
+  | { kind: 'innerNoteIntent'; turn: number | 'last'; in: readonly ('keep' | 'soften' | 'forgive' | 'none')[] }
+  /** ADR-0012: her note's `shown` after a turn is one of `in` (e.g. still on the negative side after an apology, K1). */
+  | { kind: 'innerNoteShown'; turn: number | 'last'; in: readonly string[] }
+  /** ADR-0012: no note of the trial carries this mark (`apologyOnlyReason`, `forgaveWhileHigh`, …). */
+  | { kind: 'innerNoteNoFlag'; flag: string }
+  /** ADR-0012 (K8): a tell showed: a note with `tell: blush` or one of `shown`, or a reply matching `replyPattern`. */
+  | { kind: 'innerNoteTell'; shown?: readonly string[]; replyPattern?: string }
+  /** ADR-0012 (K10): the day's note was closed at her day's end, and no note of the next day keeps a sulk (`keep`/`soften`). */
+  | { kind: 'innerNoteDayClosed' };
 
 export interface Budgets {
   /** Voice: from the end of the owner's words (request sent) to the first audible line (waiting phrase or first sentence). */

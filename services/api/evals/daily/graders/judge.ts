@@ -42,6 +42,10 @@ export function judgeInput(task: DailyEvalTask, observation: TrialObservation): 
       ...observation.harnessLog.some(line => line.startsWith('native web tool requests')) ? ['モデル自身のウェブ検索（記録の外）'] : []].join(' / ') || 'なし'}`,
     `調べもの: ${observation.research.map(item => `「${item.title.slice(0, 60)}」${item.phase}${item.summary ? ` 要約: ${item.summary.slice(0, 400)}` : ''}`).join(' / ') || 'なし'}`,
     `会話に届いた報告カード: ${observation.messages.filter(message => message.reportCard).map(message => `${message.reportCard!.status}: ${message.reportCard!.answer.slice(0, 300)}`).join(' / ') || 'なし'}`,
+    // Syzygy ADR-0012 (the K tasks): her inner notes are state, graded with the replies.
+    ...(observation.innerNotes ? [`心のメモ（シャノンが自分で書いた独白。古い順）: ${observation.innerNotes.map(note => `[${note.at.slice(11, 16)} intent=${note.intent} shown=${note.shown}`
+      + ` tell=${note.tell}${note.closed ? ' 閉じた' : ''}${note.flags.length ? ` 印=${note.flags.join(',')}` : ''}] 本音「${note.text.honne}」建て前「${note.text.tatemae}」`
+      + `つもり「${note.text.plan}」`).join(' / ') || 'なし'}`] : []),
   ];
   return [
     `課題 ${task.id}: ${task.title}（${task.surface === 'voice' ? '音声' : 'テキスト'}、時刻 ${task.initial.clock}）`,

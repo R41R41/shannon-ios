@@ -42,6 +42,9 @@ export function setEvalClock(local: string, timeZone = 'Asia/Tokyo'): void {
 
 export function resetEvalClock(): void { offsetMilliseconds = 0; }
 
+/** Moves the clock forward (ADR-0012 K10: past the end of her day); timers and `performance.now()` are untouched. */
+export function advanceEvalClock(minutes: number): void { offsetMilliseconds += minutes * 60_000; }
+
 /** Puts the real `Date` back (tests that install the clock inside a shared worker). */
 export function uninstallEvalClock(): void {
   offsetMilliseconds = 0;

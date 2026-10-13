@@ -2,11 +2,13 @@ import type { ShannonChatModel } from '../../../src/infra/models/chatModel.js';
 import type { EvalClaude } from '../claude.js';
 import { nextOwnerTurn } from '../simulator.js';
 import type { DailyEvalTask } from '../types.js';
-import { setEvalClock } from './clock.js';
+import { randomUUID } from 'node:crypto';
+import { advanceEvalClock, setEvalClock } from './clock.js';
 import type { FakeDeviceState } from './device.js';
 import type { FixtureLog } from './fixtures.js';
 import { OWNER_SCOPE, applyEnvironment, createEvalRuntime, evalEnvironment, type EvalRuntime, type ToolCallRecord } from './runtime.js';
-import { textTurn, voiceTurn, type TurnRecord } from './turns.js';
+import { textTurn, voiceTurn, type InnerNoteHooksView, type TurnRecord } from './turns.js';
+import type { OwnerTurn } from '../types.js';
 
 /** A research task (an FCA child of the conversation) as the trial watched it. Times are real ms from the trial's start. */
 export interface ResearchObservation {
@@ -52,6 +54,8 @@ export interface TrialObservation {
   sonnetFallbacks?: { toLuna: number; fixedLine: number; reasons: string[] };
   /** Requests that asked Anthropic for its own server-side web tools (set by the runner; they bypass the fixtures). */
   nativeWebRequests?: number;
+  /** ADR-0012 (K tasks): every note of the trial, oldest first, with her words (the judge reads them with the replies). */
+  innerNotes?: (InnerNoteHooksView & { at: string; triggers: string[]; text: Record<string, string>; summary: string | null })[];
   error?: string;
 }
 
@@ -107,6 +111,7 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
   const say = async (text: string, by: TurnRecord['by']) => {
     turnStarts.push(performance.now());
     const record = task.surface === 'voice' ? await voiceTurn(runtime, task, text, turns.length, by) : await textTurn(runtime, task, text, turns.length, by);
+    if (runtime.innerNote) record.innerNote = await settledNote(runtime);
     turns.push(record);
     watcher.sample();
     return record;
@@ -114,6 +119,7 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
   try {
     for (let index = 0; index < task.turns.length; index += 1) {
       if (task.turns[index]!.afterSeconds) await delay(task.turns[index]!.afterSeconds! * 1_000);
+      await beforeTurn(runtime, task.turns[index]!);
       const utterance = utteranceOf(task, index, trial);
       if (index === 0) variant = utterance.variant;
       await say(utterance.text, 'script');
@@ -147,6 +153,8 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
       return totals;
     }, {}),
     fcaComposed: runtime.fcaComposed, harnessLog, durationMs: Math.round(performance.now() - origin), ...(error ? { error } : {}),
+    ...(runtime.innerNote ? { innerNotes: runtime.innerNotes().reverse().map(note => ({ ...hooksView(note), at: note.createdAt, triggers: [...note.triggers],
+      text: { ...note.text }, summary: note.summary })) } : {}),
   };
   try { await runtime.close(); } catch (caught) { log(`close failed: ${caught instanceof Error ? caught.message : 'unknown'}`); }
   return observation;
@@ -183,4 +191,30 @@ function threadMessages(runtime: EvalRuntime): ThreadMessage[] {
       ...(message.reportCard ? { reportCard: { status: message.reportCard.status, title: message.reportCard.title, answer: message.reportCard.answer } } : {}),
     }));
   } catch { return []; }
+}
+
+/** ADR-0012 (K tasks): what comes before the owner's words: the clock moved on (and her note's sweep), a new Talk, a touch. */
+async function beforeTurn(runtime: EvalRuntime, turn: OwnerTurn): Promise<void> {
+  if (turn.advanceMinutes) {
+    advanceEvalClock(turn.advanceMinutes);
+    await runtime.innerNote?.sweep();
+    await runtime.innerNote?.idle();
+  }
+  if (turn.newThread) runtime.threadId = runtime.store.createThread(OWNER_SCOPE, '新しいトーク');
+  if (!turn.touchBefore || !runtime.innerNote) return;
+  runtime.innerNote.touched({ scopeKey: OWNER_SCOPE, audience: 'owner', at: new Date().toISOString(), touchId: `eval-${randomUUID()}`,
+    phrase: turn.touchBefore.phrase, ...(turn.touchBefore.reflex ? { reflex: turn.touchBefore.reflex } : {}) });
+  await runtime.innerNote.flush(OWNER_SCOPE);
+}
+
+/** Her newest note once the reflection of the turn settled. */
+async function settledNote(runtime: EvalRuntime): Promise<InnerNoteHooksView | null> {
+  await runtime.innerNote!.flush(OWNER_SCOPE);
+  const note = runtime.innerNotes()[0];
+  return note ? hooksView(note) : null;
+}
+
+function hooksView(note: ReturnType<EvalRuntime['innerNotes']>[number]): InnerNoteHooksView {
+  return { id: note.id, intent: note.hooks.intent, shown: note.hooks.shown, tell: note.hooks.tell, scale: note.hooks.scale, until: note.hooks.until,
+    closed: note.closedAt !== null, flags: Object.keys(note.flags), dayKey: note.dayKey };
 }

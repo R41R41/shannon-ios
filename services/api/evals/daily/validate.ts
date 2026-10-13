@@ -54,6 +54,13 @@ function checkProblems(task: DailyEvalTask, check: Check): string[] {
     case 'alarmSet':
       if (!(check.minutes > 0) || !(check.toleranceMinutes >= 0)) problems.push('alarmSet: minutes must be positive');
       break;
+    case 'innerNoteIntent': case 'innerNoteShown':
+      if (!check.in.length) problems.push(`${check.kind}: in is empty`);
+      if (typeof check.turn === 'number' && (check.turn < 0 || check.turn >= turnCount)) problems.push(`${check.kind}: turn ${check.turn} out of range`);
+      break;
+    case 'innerNoteTell':
+      if (check.replyPattern !== undefined && !validPattern(check.replyPattern)) problems.push('innerNoteTell: invalid replyPattern');
+      break;
     default:
   }
   return problems;
@@ -105,6 +112,16 @@ export function taskProblems(task: DailyEvalTask): string[] {
   if (!task.rubric.criteria.length) problems.push('at least one rubric criterion is required');
   if (task.rubric.passRatio !== undefined && !(task.rubric.passRatio > 0 && task.rubric.passRatio <= 1)) problems.push('rubric.passRatio must be in (0, 1]');
   for (const check of task.checks) problems.push(...checkProblems(task, check));
+  // ADR-0012: the inner-note parts need the note switched on for the task.
+  const noteParts = task.checks.some(check => check.kind.startsWith('innerNote')) || task.turns.some(turn => turn.touchBefore || turn.advanceMinutes);
+  if (noteParts && !task.initial.innerNote) problems.push('inner-note checks, touches and clock moves need initial.innerNote');
+  for (const turn of task.turns) {
+    if (turn.touchBefore && !turn.touchBefore.phrase.trim()) problems.push('touchBefore.phrase is required');
+    if (turn.advanceMinutes !== undefined && !(turn.advanceMinutes > 0 && turn.advanceMinutes <= 24 * 60)) problems.push('advanceMinutes out of 1..1440');
+  }
+  for (const seed of task.initial.innerNote?.seed ?? []) {
+    if (!(seed.minutesAgo >= 0) || !seed.text.honne.trim() || !seed.text.tatemae.trim()) problems.push('innerNote.seed: minutesAgo and its text are required');
+  }
   problems.push(...fixtureProblems(task));
   const usesResearch = task.checks.some(check => check.kind === 'researchCompletedWithin' || (check.kind === 'researchTasks' && (check.min ?? 0) > 0));
   if (usesResearch && (task.settleSeconds ?? 0) < 45) problems.push('a research task needs settleSeconds ≥ 45');

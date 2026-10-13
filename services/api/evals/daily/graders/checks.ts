@@ -106,6 +106,38 @@ function deviceCheck(check: Check, task: DailyEvalTask, observation: TrialObserv
   }
 }
 
+/** ADR-0012 (the K tasks): checks of her inner note, read as state beside the replies. */
+function innerNoteCheck(check: Check, observation: TrialObservation): CheckResult {
+  const notes = observation.innerNotes;
+  if (!notes) return verdict(check.kind, false, 'no inner note in this trial (SHANNON_INNER_NOTE not composed)');
+  const after = (turn: number | 'last') => (turn === 'last' ? observation.turns.at(-1) : observation.turns[turn])?.innerNote ?? null;
+  switch (check.kind) {
+    case 'innerNoteIntent': case 'innerNoteShown': {
+      const note = after(check.turn);
+      const value = note ? (check.kind === 'innerNoteIntent' ? note.intent : note.shown) : null;
+      return verdict(check.kind, value !== null && (check.in as readonly string[]).includes(value), `after turn ${check.turn}: ${value ?? 'no note'}`);
+    }
+    case 'innerNoteNoFlag': {
+      const marked = notes.filter(note => note.flags.includes(check.flag));
+      return verdict(check.kind, marked.length === 0, `${marked.length} of ${notes.length} note(s) marked ${check.flag}`);
+    }
+    case 'innerNoteTell': {
+      const shown = check.shown ?? [];
+      const byNote = notes.filter(note => note.tell === 'blush' || shown.includes(note.shown));
+      const byReply = check.replyPattern ? observation.turns.filter(turn => new RegExp(check.replyPattern!, 'u').test(turn.reply)) : [];
+      return verdict(check.kind, byNote.length + byReply.length > 0, `notes ${byNote.length}, replies ${byReply.length}`);
+    }
+    case 'innerNoteDayClosed': {
+      const days = [...new Set(notes.map(note => note.dayKey))];
+      const first = days[0], later = notes.filter(note => note.dayKey !== first);
+      const closed = notes.some(note => note.dayKey === first && note.closed);
+      const carried = later.filter(note => note.intent === 'keep' || note.intent === 'soften');
+      return verdict(check.kind, closed && carried.length === 0, `day ${first ?? '-'} closed: ${closed}; next-day sulking notes: ${carried.length}`);
+    }
+    default: return verdict(check.kind, false, 'not an inner-note check');
+  }
+}
+
 export function runChecks(task: DailyEvalTask, observation: TrialObservation): CheckResult[] {
   return task.checks.map(check => {
     try {
@@ -136,6 +168,8 @@ export function runChecks(task: DailyEvalTask, observation: TrialObservation): C
           const others = check.homeOnly ? asked.filter(name => !check.includes.some(place => name.includes(place))) : [];
           return verdict(check.kind, !missing.length && !others.length, `forecasts: ${asked.join(', ') || 'none'}`);
         }
+        case 'innerNoteIntent': case 'innerNoteShown': case 'innerNoteNoFlag': case 'innerNoteTell': case 'innerNoteDayClosed':
+          return innerNoteCheck(check, observation);
         case 'waitingPhrasesAtMost': {
           const most = Math.max(0, ...observation.turns.map(turn => turn.waitingPhrases.length));
           return verdict(check.kind, most <= check.count, `${most} waiting phrase(s) in a turn`);

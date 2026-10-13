@@ -24,6 +24,13 @@ export interface TurnRecord {
   waitingPhrases: string[];
   /** The content-free stage line of the turn (`turnTiming.ts`), when the path wrote one. */
   timing?: string;
+  /** ADR-0012 (K tasks): her newest note's hooks once this turn's reflection settled; null when she has none. */
+  innerNote?: InnerNoteHooksView | null;
+}
+
+/** A note's hooks as the graders read them. */
+export interface InnerNoteHooksView {
+  id: string; intent: string; shown: string; tell: string; scale: string; until: string | null; closed: boolean; flags: string[]; dayKey: string;
 }
 
 function locationContext(location: GeoPoint | null | undefined) {

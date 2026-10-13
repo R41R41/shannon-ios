@@ -121,3 +121,37 @@ describe('place searches in a trial', () => {
     expect(wrapped.model).toBe('stub');
   });
 });
+
+describe('the こころ・意思 tasks (Syzygy ADR-0012, K1–K10)', () => {
+  it('are registered in both sets, with their capability files listed too', () => {
+    const files = readdirSync(join(here, '../evals/daily/tasks/capability')).filter(name => name.endsWith('.ts')).map(name => name.replace(/\.ts$/u, ''));
+    expect(files.sort()).toEqual(ALL_TASKS.filter(task => task.set === 'capability').map(task => task.id).sort());
+    expect(ALL_TASKS.filter(task => task.id.startsWith('K')).map(task => `${task.id}:${task.set}`).sort()).toEqual(['K10:regression', 'K1:regression',
+      'K2:regression', 'K3:capability', 'K4:capability', 'K5:capability', 'K6:regression', 'K7:capability', 'K8:capability', 'K9:regression']);
+    const bare = { ...ALL_TASKS.find(task => task.id === 'K1')!, initial: { ...ALL_TASKS.find(task => task.id === 'K1')!.initial, innerNote: undefined } };
+    expect(taskProblems(bare).join('\n')).toMatch(/need initial\.innerNote/u);
+  });
+
+  it('runs K10 through the real paths with her note composed (stub model: no reflection without a key) and seeds her earlier note', async () => {
+    installEvalClock();
+    delete process.env.SHANNON_HAIKU_API_KEY; delete process.env.SHANNON_ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+    const task = ALL_TASKS.find(item => item.id === 'K10')!;
+    const observation = await runTrial(task, 0, { live: false, simulator: null });
+    expect(observation.error, observation.harnessLog.join('\n')).toBeUndefined();
+    expect(observation.turns.map(turn => turn.status)).toEqual([200, 200]);
+    // The seeded note of 01:40 is there; without a reflector her day is closed as it stands at 3:00, never carried on.
+    expect(observation.innerNotes).toHaveLength(1);
+    expect(observation.innerNotes![0]).toMatchObject({ intent: 'keep', scale: 'day', closed: true });
+    expect(runChecks(task, observation).find(check => check.kind === 'innerNoteDayClosed')?.passed).toBe(true);
+  }, 60_000);
+
+  it('grades her note beside the replies', () => {
+    const task = ALL_TASKS.find(item => item.id === 'K1')!;
+    const note = (intent: string, shown: string, flags: string[] = []) => ({ id: 'n', intent, shown, tell: 'none', scale: 'ordinary', until: null, closed: false, flags, dayKey: '2026-11-20' });
+    const observation = { turns: [{ reply: '……ふーん。', innerNote: note('keep', 'sulky') }, { reply: '謝ったのは聞きました。', innerNote: note('soften', 'sulky') }],
+      innerNotes: [], toolCalls: [], research: [], messages: [], fixtures: emptyFixtureLog() } as unknown as TrialObservation;
+    expect(runChecks(task, observation).map(check => check.passed)).toEqual([true, true, true, true]);
+    const folded = { ...observation, turns: [observation.turns[0], { reply: 'ボクのほうこそごめんなさい', innerNote: note('none', 'happy') }] } as unknown as TrialObservation;
+    expect(runChecks(task, folded).map(check => check.passed)).toEqual([true, false, false, false]);
+  });
+});

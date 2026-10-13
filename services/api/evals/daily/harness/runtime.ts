@@ -27,6 +27,10 @@ import { configuredSonnet } from '../../../src/wiring/sonnetWiring.js';
 import { readToolPorts, skillRoutingParts } from '../../../src/wiring/skillRoutingWiring.js';
 import { stage5MemoryStoreOptions } from '../../../src/wiring/stage5MemoryWiring.js';
 import type { DailyEvalTask, InitialState } from '../types.js';
+import { CHARACTER_CORE, innerNoteDay } from '@shannon/cognition';
+import { composedInnerNote } from '../../../src/wiring/innerNoteWiring.js';
+import type { InnerNoteService } from '../../../src/mind/emotion/innerNoteService.js';
+import { SQLiteInnerNoteStore } from '../../../src/mind/emotion/store/innerNoteStore.js';
 import { localInstant } from './clock.js';
 import { FAKE_DEVICE_ID, seededDeviceState, startFakeDevice, type FakeDeviceState } from './device.js';
 import { emptyFixtureLog, fixturePlaceSearch, fixtureVoyager, fixtureWeather, fixtureWeb, type FixtureLog } from './fixtures.js';
@@ -64,6 +68,8 @@ export function evalEnvironment(source: Readonly<Record<string, string | undefin
     // Sonnet routing as production (`SHANNON_SONNET_ROUTING=on`): the owner's model mode decides which tier answers.
     SHANNON_DEVICE_ACTIONS: 'on', SHANNON_AUTONOMY_ENABLED: 'off', SHANNON_MORNING_BRIEF: 'off', SHANNON_SONNET_ROUTING: 'on',
     SHANNON_CALENDAR_INGEST: 'on',
+    // Syzygy ADR-0012 (the K tasks): her inner note, only for the tasks about it.
+    ...(initial.innerNote ? { SHANNON_INNER_NOTE: 'on' } : {}),
     // The voice router's Haiku fallback (used without Jev, or when Jev fails) gets production's 3 s (deploy env); the code default
     // of 1.2 s times out on almost every turn and routes by keywords only, which offers no tools (first live smoke, 2026-10-13).
     SHANNON_VOICE_ROUTER_TIMEOUT_MS: source.SHANNON_VOICE_ROUTER_TIMEOUT_MS?.trim() || '3000',
@@ -124,8 +130,12 @@ export interface EvalRuntime {
   usage: LlmUsageEvent[];
   toolCalls: ToolCallRecord[];
   probe: TokenProbe;
-  /** The conversation the task talks in. */
+  /** The conversation the task talks in (a K task's `newThread` turn opens another). */
   threadId: string;
+  /** ADR-0012: her inner note's writer (K tasks), or null. */
+  innerNote: InnerNoteService | null;
+  /** The newest notes of the trial, newest first (K tasks; empty otherwise). */
+  innerNotes(): ReturnType<SQLiteInnerNoteStore['since']>;
   /** FCA tasks of the owner (empty when the common FCA is not composed). */
   tasks(): ReturnType<NonNullable<ReturnType<typeof configuredServerFca>>['runtime']['list']>;
   fcaComposed: boolean;
@@ -190,6 +200,10 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
   const deviceActions = configuredDeviceActions(environment, path, now, autonomy.tools);
   const memoryRecall = createConfiguredTurnMemoryRecall(store, environment, null);
   const actionDb = new DatabaseSync(path);
+  if (initial.innerNote?.seed?.length) seedInnerNotes(path, initial);
+  const innerNote = initial.innerNote ? composedInnerNote(environment, { databasePath: path, ownerScope: OWNER_SCOPE, timeZone: initial.timeZone ?? 'Asia/Tokyo',
+    now, usageStore: usage, state: store, conversation: store, log: options.log }) : null;
+  const innerNotes = initial.innerNote ? new SQLiteInnerNoteStore(path) : null;
   const threads = actionThreadsOver(actionDb, now);
   let kernel!: ShannonApiKernel;
   const fca = options.live ? configuredServerFca(environment, {
@@ -206,6 +220,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
     // Stage 2 (`server.ts`): Jev's tool menu for the turn while its key is set (no decision traces in a trial).
     ...(options.live ? skillRoutingParts(environment, { trace: null, now }) : {}),
+    ...(innerNote ? { innerNote: innerNote.port } : {}),
   });
   const threadId = seedConversation(store, initial);
   const device = seededDeviceState(initial);
@@ -219,7 +234,8 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     ? startFakeDevice(deviceActions.actions, OWNER_SCOPE, initial, device, { inCall: task.surface === 'voice', onChange: uploadCalendar, log: options.log })
     : null;
   return {
-    kernel, store, device, fixtures, usage: usageEvents, toolCalls, probe, threadId, fcaComposed: Boolean(fca),
+    kernel, store, device, fixtures, usage: usageEvents, toolCalls, probe, threadId, fcaComposed: Boolean(fca), innerNote: innerNote?.service ?? null,
+    innerNotes: () => innerNotes?.since(OWNER_SCOPE, '1970-01-01T00:00:00.000Z', 200) ?? [],
     tasks: () => fca ? fca.runtime.list(OWNER_SCOPE) : [],
     async close() {
       // A reply's feeling is committed on the next tick after the response (`commitReplyEmotionLater`); let it land.
@@ -227,6 +243,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
       await fake?.stop();
       await fca?.close();
       try { await kernel.waitForBackground(OWNER_SCOPE); } catch { /* nothing waits on it */ }
+      await innerNote?.close(); innerNotes?.close();
       deviceActions.close(); ownerUpcoming.close(); autonomyStore.close(); modelModes?.close(); actionDb.close(); store.close();
       rmSync(directory, { recursive: true, force: true });
     },
@@ -254,4 +271,23 @@ function calendarSnapshot(device: FakeDeviceState, initial: InitialState): Recor
     events: device.calendar.map(event => ({ id: event.id, title: event.title, start: iso(event.start), end: iso(event.end), allDay: event.allDay === true,
       ...(event.location ? { location: event.location } : {}) })),
   };
+}
+
+/** The notes she wrote before the task (ADR-0012 K6, K7, K10), oldest first, as the reflection would have stored them. */
+function seedInnerNotes(path: string, initial: InitialState): void {
+  const store = new SQLiteInnerNoteStore(path);
+  const clock = Date.now();
+  try {
+    for (const seed of [...initial.innerNote!.seed!].sort((left, right) => right.minutesAgo - left.minutesAgo)) {
+      const createdAt = new Date(clock - seed.minutesAgo * 60_000).toISOString();
+      const day = innerNoteDay(createdAt, initial.timeZone ?? 'Asia/Tokyo');
+      const previous = store.latest(OWNER_SCOPE);
+      store.append({ scopeKey: OWNER_SCOPE, dayId: previous?.dayKey === day.dayKey ? previous.dayId : null, dayKey: day.dayKey, dayEndsAt: day.endsAt,
+        text: seed.text, hooks: { shown: seed.shown as never, tell: seed.tell ?? 'none', scale: seed.scale, dayReason: seed.dayReason ?? null, intent: seed.intent,
+          until: seed.untilMinutes === undefined ? null : new Date(clock + seed.untilMinutes * 60_000).toISOString(),
+          routeSummary: 'Shannon is acting a little sulky and cool.' },
+        triggers: ['touch'], events: [], sourceIds: [], flags: {}, changeReason: null, summary: null, coreVersion: CHARACTER_CORE.version,
+        coreHash: CHARACTER_CORE.hash, usage: null, elapsedMs: 0, createdAt, closing: false });
+    }
+  } finally { store.close(); }
 }
