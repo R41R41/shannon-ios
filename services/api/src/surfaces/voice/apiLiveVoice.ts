@@ -34,7 +34,8 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../mind/action/respond/conversationCapabilities.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
 import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
-import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt, withClientConfidence } from './voiceTranscriptContext.js';
+import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
+import { commandOnce } from './voiceContinuation.js';
 import {
   buildConversationOrchestrationPrompt,
   confirmedVoiceImplementationRequest,
@@ -143,6 +144,7 @@ export function dispatchLiveVoiceRequest(
   const transcript=request.body.transcript.trim();
   const chatModel = dependencies.chatModel.forTurn?.(scopeKey) ?? dependencies.chatModel;
   const timing = observer?.timing ?? new TurnTiming('voice', turnTimingId(deviceContext?.userUtterance?.id)); // A stream writes its own line.
+  timing.note('trigger', deviceContext?.userUtterance?.trigger ?? ''); // What opened the microphone (`wake`): a closed code or nothing.
   const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
     reaction?.text ?? null, { ...dependencies, chatModel, deviceId: request.deviceId, looks: dependencies.looks?.of(request) }, observer, timing);
   return finishTurnTiming(withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
@@ -207,10 +209,9 @@ async function completeLiveVoiceDelegation(
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined, ...dependencies.looks?.routing,
   };
-  let decision = withClientConfidence(await timing.measure('route', () => bounded('route_timeout', router.decide(routeInput),
-    () => localRules.decide(routeInput))), deviceContext?.userUtterance);
+  let decision = await timing.measure('route', () => bounded('route_timeout', router.decide(routeInput), () => localRules.decide(routeInput)));
   observer?.signal?.throwIfAborted();
-  // The client's confidence joins the router's score; words trusted to act (commands, writes, goals) or to talk, look and run FCA.
+  // Words trusted to act (commands, writes, goals; the client's confidence only lowers it) or to talk, look and run FCA.
   const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance),
     unclearTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance, 'converse');
   const confirmedImplementationRequest = !alone || uncertainTranscript ? null
@@ -244,9 +245,8 @@ async function completeLiveVoiceDelegation(
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone, on words that can be trusted.
   const command = alone && spokenCommandAllowed(transcriptTrust(decision, deviceContext?.userUtterance), scopeKey, threadId, deviceContext?.userUtterance, occurredAt, dependencies.conversationStore) && !notHisWordsToHer(decision) && deviceContext?.userUtterance
-    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
-      ...dependencies, agentTasks: dependencies.agentTasks,
-    })
+    ? commandOnce(dependencies.conversationStore, scopeKey, deviceContext.userUtterance, occurredAt, () => executeConversationCommand(scopeKey, threadId,
+      deviceContext.userUtterance!, occurredAt, { ...dependencies, agentTasks: dependencies.agentTasks })) // Once for words sent again (`continues`).
     : null;
   if (command) {
     if (orchestrationState && command.receipt) orchestrationState = dependencies.conversationOrchestration.save(recordConversationReceipt(orchestrationState, command.receipt));
@@ -261,22 +261,16 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏' });
   const provisionalExpressiveEmotion = emotionWith();
   let expressiveEmotion = provisionalExpressiveEmotion;
-  const planFor = voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing }); // Also notes the timing line.
+  // Its timing line is noted too (`silence`, `chars`).
+  const planFor = voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing,
+    trigger: deviceContext?.userUtterance?.trigger });
   let voicePlan = planFor(expressiveEmotion);
   await observer?.onPlan(voicePlan);
   const waitingSaid = String(voicePlan.waitingPhrase ?? '').trim() ? { waitingSaid: observer?.waitingSaid?.bind(observer) ?? true as const } : {};
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
-    return visibleVoiceResponse(() => ({
-      status: 200,
-      body: {
-        threadId,
-        model: dependencies.chatModel.model,
-        reply: '',
-        webSources: [], ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
-        voicePlan,
-      },
-    }));
+    return visibleVoiceResponse(() => ({ status: 200, body: { threadId, model: dependencies.chatModel.model, reply: '', webSources: [],
+      ...(!temporaryGuest && !alone ? { companionPresent: true } : {}), voicePlan } }));
   }
   const contextStartedAt = performance.now();
   const selectedSkills = webForWeather(new Set(decision.selectedSkills), weatherToolAvailable(dependencies.autonomy, scopeKey, alone && !temporaryGuest));
@@ -363,7 +357,7 @@ async function completeLiveVoiceDelegation(
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
       : '',
     backendInstructions, roomLook.prompt,
-    voiceTranscriptInterpretationPrompt(unclearTranscript, rawTranscript),
+    voiceTranscriptInterpretationPrompt(unclearTranscript, rawTranscript, uncertainTranscript),
   ].filter(Boolean).join('\n\n');
   // The owner's thread is replayed by character budget, from after its last long silence, with the replay summary for what fell out
   // of it; a 「友人も一緒」 call keeps its own in-call turns and never sees the owner's thread.
@@ -375,7 +369,9 @@ async function completeLiveVoiceDelegation(
     readSourceIds: capability.readSourceIds, ownerAlone: () => dependencies.toolServer?.audience.othersKnown(scopeKey) === false }) : null;
   try {
   const placeContext = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript) ? { ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? { latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude } : {}), spoken: true } : undefined;
-  const admitted = admitVoiceResearch(fcaTurn, { transcript, route: routeInput, research: selectedSkills.has('current_web') || Boolean(placeContext),
+  // A research task is started only on words trusted to act (review M2); otherwise the web is searched inline as without FCA.
+  const research = !uncertainTranscript && (selectedSkills.has('current_web') || Boolean(placeContext));
+  const admitted = admitVoiceResearch(fcaTurn, { transcript, route: routeInput, research,
     places: placeContext, at: occurredAt, timeZone: deviceContext?.timeZoneIdentifier }), work = admitted.work, next = followUp(fcaTurn, transcript, admitted);
   const placeSkill = !work && placeContext ? await bounded('places_timeout', runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: placeContext }), () => null) : null;
   observer?.signal?.throwIfAborted();
@@ -397,7 +393,8 @@ async function completeLiveVoiceDelegation(
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
-    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier), spokenLines: spokenReplyLines(transcript, capabilityPrompt, toolOffer.tools, decision),
+    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier),
+    spokenLines: spokenReplyLines(transcript, capabilityPrompt, toolOffer.tools, decision, deviceContext?.userUtterance?.source === 'camera'),
     useWebSearch: !work && !placeSkill && selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,

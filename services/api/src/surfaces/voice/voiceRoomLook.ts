@@ -193,8 +193,14 @@ export const VOICE_ROOM_LOOK_CONFIRM_PROMPT = `[部屋を見る]（${SHANNON_OWN
   + '「見ましょうか？」のように短く一度だけ確かめる。「見てと言われたら見られる」とは言わない。見えたものや、カメラの許可・接続の不具合を作って言わない）';
 /** Whether a prompt of this module opened no look (the ready or the confirming one). */
 export const roomLookUndecided = (prompt: string): boolean => prompt === VOICE_ROOM_LOOK_READY_PROMPT || prompt === VOICE_ROOM_LOOK_CONFIRM_PROMPT;
-/** A look asked for with a verb (「これ見て」「部屋見える？」), not the camera merely named (「カメラを買った」). */
-export const LOOK_VERB_ASK = /(?:部屋|まわり|周り|こっち|ここ|これ|机|外|カメラ)[^。！？\n]{0,12}(?:見て|見える|見えて|見れる|見られる|のぞいて|写して)|見て(?:みて|ほしい|くれ)/u;
+/**
+ * A look asked for now, as the end of a short clause: what to look at, then a request or "can you see" (「これ見て」「部屋見える？」
+ * 「カメラで見てみて」). Not the camera merely named (「カメラを買った」), and not a past or reported look (「映画、見てくれた？」
+ * 「これ見てくれた？」: review L6).
+ */
+const LOOK_NOW = new RegExp('(?:部屋|まわり|周り|こっち|ここ|これ|机|外|カメラ)[^、。]{0,12}?(?:見て|のぞいて|写して|映して|見える|見えてる|見えます|見れる|見れます|見られる)'
+  + '(?:みて)?(?:ほしい|欲しい|くれる|くれない|ください|もらえる)?(?:かな|か|の|よ|ね)?$', 'u');
+export const asksToLookNow = (transcript: string): boolean => clauses(transcript).some(clause => LOOK_NOW.test(clause));
 
 export type VoiceRoomLookUnavailable = BodyLookUnavailable;
 /** She cannot look: the server's own reason, and nothing else, in one short sentence. */
@@ -217,6 +223,11 @@ export interface VoiceRoomLookTurn {
   cutOff(threadId: string, said: string): void;
 }
 
+/** Below this transcript score not even a plain request is taken on doubtful words (review L2). */
+const DOUBTFUL_LOOK_FLOOR = 0.3;
+/** A look on doubtful words: only with the owner alone (whoever aims the camera), and above the floor. */
+const doubtfulLookAllowed = (turn: { audience: 'owner' | 'others'; heardBy?: 'owner' | 'others'; decision: VoiceTurnDecision }) =>
+  (turn.heardBy ?? turn.audience) === 'owner' && (turn.decision.transcriptReliabilityProbability ?? 0) >= DOUBTFUL_LOOK_FLOOR;
 /** The fixed rule on his words is set aside when the gateway is this sure that no look is wanted. */
 const ASKED_CONTRADICTED_BELOW = 0.2;
 /** Looser words (「見てみて」「これ見て」) count as a request when the gateway is at least this sure. */
@@ -233,7 +244,9 @@ const cannot = (reason: VoiceRoomLookUnavailable): VoiceRoomLookTurn => ({ ...NO
  */
 export function voiceRoomLookTurn(
   looks: { voiceTurn(scopeKey: string, at: string, audience: unknown): BodyLookVoiceTurn } | undefined,
-  turn: { scopeKey: string; threadId?: string; turnId?: string; transcript: string; at: string; audience: 'owner' | 'others'; decision: VoiceTurnDecision; uncertain: boolean },
+  turn: { scopeKey: string; threadId?: string; turnId?: string; transcript: string; at: string; audience: 'owner' | 'others'; decision: VoiceTurnDecision; uncertain: boolean;
+    /** Who can really hear the reply, where `audience` is set to `owner` for a camera he aims himself (`voiceAppLook.ts`). */
+    heardBy?: 'owner' | 'others' },
   environment: Environment = serverEnvironment(),
 ): VoiceRoomLookTurn {
   if (!looks || !voiceRoomLookEnabled(environment)) return NO_LOOK;
@@ -258,7 +271,7 @@ export function voiceRoomLookTurn(
     || (request === 'ambiguous' && score !== undefined && score >= ASKED_CONTRADICTED_BELOW)
     || ((loose || bare) && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM)
     || (bare && offerStands(looks, offer, time) && (score ?? 1) >= ASKED_CONTRADICTED_BELOW)))
-    || (request !== null && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM));
+    || (request !== null && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM && doubtfulLookAllowed(turn)));
   // Her own wish to look comes only from the gateway's judgement, and not from words it could not trust.
   const judged = !turn.uncertain && (score ?? 0) >= lookThreshold(environment);
   const mentioned = asked || judged || request !== null || loose;
@@ -268,7 +281,7 @@ export function voiceRoomLookTurn(
     // She is told that she could look, and may offer it: for a minute a bare 「見て」 in this Talk is the answer. When his words
     // already asked, she asks once instead of saying that she would look if asked.
     offerStands(looks, offer, time, true);
-    const asking = request !== null || bare || LOOK_VERB_ASK.test(turn.transcript.normalize('NFKC'));
+    const asking = request !== null || bare || asksToLookNow(turn.transcript);
     return { ...NO_LOOK, prompt: asking ? VOICE_ROOM_LOOK_CONFIRM_PROMPT : VOICE_ROOM_LOOK_READY_PROMPT };
   }
   let settled = false;

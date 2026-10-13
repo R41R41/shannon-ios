@@ -55,12 +55,13 @@ type PlanArguments = Parameters<typeof voicePlanResponse>;
  * category that kept her silent, and `characters` (when given) how long his words were: never the words.
  */
 export function observedVoicePlan(decision: PlanArguments[0], emotion?: PlanArguments[1], mood?: PlanArguments[2], options?: PlanArguments[3],
-  characters?: number): Record<string, unknown> {
+  characters?: number, trigger?: string): Record<string, unknown> {
   return observeSync('plan', { surface: 'voice' }, () => voicePlanResponse(decision, emotion, mood, options), value => ({
     shouldRespond: value.shouldRespond, conversationClass: value.conversationClass, latencyClass: value.latencyClass,
     affect: value.affect, affectIntensity: value.affectIntensity, delivery: value.delivery,
     selectedSkills: value.selectedSkills, decisionSource: value.decisionSource,
     ...(value.silenceCategory ? { silence: value.silenceCategory } : {}), ...(characters !== undefined ? { characterCount: characters } : {}),
+    ...(trigger ? { trigger } : {}),
   }));
 }
 
@@ -68,11 +69,12 @@ export function observedVoicePlan(decision: PlanArguments[0], emotion?: PlanArgu
  * The plans of one turn, for its feeling of the moment (`observedVoicePlan`). Its timing line is told, once, how many characters
  * his words had and, when she stays silent, the category that decided it (`silence=<category> chars=<n>`).
  */
-export function voicePlanner(decision: PlanArguments[0], mood: PlanArguments[2], turn: { ownerAlone: boolean; transcript: string; timing?: TurnTiming }) {
+export function voicePlanner(decision: PlanArguments[0], mood: PlanArguments[2],
+  turn: { ownerAlone: boolean; transcript: string; timing?: TurnTiming; trigger?: string }) {
   const characters = Array.from(turn.transcript).length;
   turn.timing?.note('chars', characters);
   if (!decision.shouldRespond) turn.timing?.note('silence', decision.silence ?? 'unspecified');
-  return (emotion?: PlanArguments[1]) => observedVoicePlan(decision, emotion, mood, { ownerAlone: turn.ownerAlone }, characters);
+  return (emotion?: PlanArguments[1]) => observedVoicePlan(decision, emotion, mood, { ownerAlone: turn.ownerAlone }, characters, turn.trigger);
 }
 
 export function visibleVoiceResponse(work: () => ApiResponse): ApiResponse {

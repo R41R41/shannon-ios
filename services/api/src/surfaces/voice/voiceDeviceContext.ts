@@ -36,6 +36,9 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     ...(utterance.source !== undefined ? { source: utterance.source } : {}),
     ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
     ...clientConfidence(utterance.confidence),
+    // Windows, 2026-10-14: optional; anything malformed is dropped, never a refused turn.
+    ...(typeof utterance.trigger === 'string' && /^[a-z][a-z0-9_]{0,31}$/u.test(utterance.trigger) ? { trigger: utterance.trigger } : {}),
+    ...(validBoundedString(utterance.continues, 120) && utterance.continues !== utterance.id ? { continues: utterance.continues } : {}),
     ...(utterance.historyReceipt === 'utterance-id' ? { historyReceipt: 'utterance-id' as const } : {}),
   } as UserUtterance;
   if (value.companionPresent !== undefined && typeof value.companionPresent !== 'boolean') return false;

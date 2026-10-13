@@ -12,7 +12,7 @@ export const TURN_TIMING_STAGES = ['admit', 'route', 'recall', 'capability', 'fc
 export type TurnTimingStage = typeof TURN_TIMING_STAGES[number];
 
 /** The notes a line may carry, in this order, after the outcome (`TurnTiming.note`). */
-export const TURN_TIMING_NOTES = ['silence', 'chars'] as const;
+export const TURN_TIMING_NOTES = ['silence', 'chars', 'trigger'] as const;
 export type TurnTimingNote = typeof TURN_TIMING_NOTES[number];
 
 /** Closed outcome codes; anything else is reported as `error`. */
@@ -58,7 +58,8 @@ export class TurnTiming {
 
   /**
    * A content-free fact of the turn for its line (owner's Windows call, 2026-10-14: an unanswered turn left no trace of why):
-   * `silence` the closed category that kept her quiet, `chars` how many characters his words had. Anything else is dropped.
+   * `silence` the closed category that kept her quiet, `chars` how many characters his words had, `trigger` what opened the
+   * microphone (a closed code from the client, `wake`). Anything else is dropped.
    */
   note(key: TurnTimingNote, value: string | number): void {
     const text = String(value);

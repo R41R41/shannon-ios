@@ -82,9 +82,12 @@ export const SPOKEN_SCHEDULE_LINE = '[Spoken schedule] This reply is heard, not 
 export const SOCIAL_LENGTH_LINE = '[声の長さ] あいさつ・雑談・お礼やお詫びへの返事は1〜2文で終える。説明や謝罪を重ねない。';
 /** The same call: nearly every reply opened with 「ライ氏、」. */
 export const NAME_PREFIX_LINE = `[呼びかけ] 返事を毎回「${SHANNON_OWNER_NAME}、」で始めない。名前で呼ぶのはときどきにして、たいていは名前なしで話し始める。`;
-/** The same call: 「慌てたような声」 (she hears no tone) and a link to Minecraft nobody had made. */
-export const PERCEPTION_HONESTY_LINE = '[知覚の正直さ] 届いているのは言葉の文字起こしだけで、声の調子・表情・見た目は分からない。'
-  + 'それらや、この文脈に書かれていないこと（話に出ていないゲームや話題など）を感じ取った・結びつけたように言わない。';
+/**
+ * The same call: 「慌てたような声」 (she hears no tone) and a link to Minecraft nobody had made. Not in a turn that brings an image
+ * (a photo he shared): what it shows is in the context, and the line would contradict it (review L7).
+ */
+export const PERCEPTION_HONESTY_LINE = '[知覚の正直さ] 見えた・聞こえた・感じたと言えるのは、この文脈に書かれていることだけ。'
+  + '声の調子や表情は文字起こしからは分からない。話に出ていない話題（ゲームなど）に結びつけない。';
 
 /** A greeting, or a direct reply that needs no capability and no concrete answer. */
 const socialTurn = (turn: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }) =>
@@ -97,8 +100,8 @@ const socialTurn = (turn: { conversationClass: string; selectedSkills: readonly 
  */
 export function spokenReplyLines(words: string, capabilityPrompt: string,
   tools: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } } | undefined,
-  turn?: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }): string[] {
+  turn?: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }, image = false): string[] {
   const offered = (tools?.menu?.offered ?? tools?.definitions ?? []).map(tool => tool.name);
   return [answerFirstLine(words, offered), spokenScheduleLine(capabilityPrompt), turn && socialTurn(turn) ? SOCIAL_LENGTH_LINE : '',
-    NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE].filter(Boolean);
+    NAME_PREFIX_LINE, image ? '' : PERCEPTION_HONESTY_LINE].filter(Boolean);
 }

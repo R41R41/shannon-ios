@@ -696,6 +696,7 @@
     "surfaces/voice/store/voiceIdentityStore.ts",
     "surfaces/voice/transcriptionRoute.ts",
     "surfaces/voice/voiceAppLook.ts",
+    "surfaces/voice/voiceContinuation.ts",
     "surfaces/voice/voiceConversationHint.ts",
     "surfaces/voice/voiceConversationInstructions.ts",
     "surfaces/voice/voiceDeviceContext.ts",

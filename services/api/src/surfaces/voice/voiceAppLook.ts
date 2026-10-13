@@ -102,7 +102,8 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     // The app's camera is aimed by the owner himself: for it, a turn other people hear is judged like one of his alone.
     // His plain request stands even when no model tier answered.
     const chosen = voiceRoomLookTurn({ voiceTurn: () => state },
-      { ...turn, audience: 'owner', ...(!guarded && score === undefined && plainAsk ? { decision: { ...turn.decision, roomLookProbability: 1 } } : {}) },
+      { ...turn, audience: 'owner', heardBy: turn.audience,
+        ...(!guarded && score === undefined && plainAsk ? { decision: { ...turn.decision, roomLookProbability: 1 } } : {}) },
       { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on' });
     const withAsk = () => (ask ? { appLook: ask } : {});
     if (chosen.prompt && !roomLookUndecided(chosen.prompt)) {

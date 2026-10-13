@@ -10,7 +10,7 @@ import type { FcaVoiceHistoryInput, FcaVoiceInput, FcaVoicePort } from './fcaVoi
  * retry: once the delivery it named is settled (its history bound, its generation failed, or staged longer than a retry can take),
  * or the words differ, the new utterance is delivered under the next occurrence of that id (`<id>#2`, `#3`, …) instead of being
  * refused with 409. Only a delivery still in flight with the same device and words is the same utterance (a retry: 409 as before).
- * The history receipt of the reused id binds the newest occurrence, and is a duplicate only when its reply is the bound one too.
+ * A history receipt of the reused id binds the occurrence it is for (`receiptFor`), and is a duplicate only when its reply is a bound one's too.
  */
 const OCCURRENCES = 8;
 const IN_FLIGHT_MILLISECONDS = 120_000;
@@ -22,16 +22,28 @@ export function createFcaVoiceBridge(parts: {
 }): FcaVoicePort {
   const now = () => Date.parse(parts.now?.() ?? new Date().toISOString());
   const identity = (input: FcaVoiceInput, utteranceId: string) => ({ deviceId: input.deviceId, utteranceId, inputDigest: digest(input.userTranscript) });
-  /** The newest occurrence of the client's id, with its own id and number; null when the id is new. */
-  const newest = (input: FcaVoiceInput) => {
-    let found: { record: TaskConversationDelivery; id: string; occurrence: number } | null = null;
+  /** Every occurrence of the client's id, oldest first, each with its own id and number; empty when the id is new. */
+  const occurrences = (input: FcaVoiceInput) => {
+    const found: Array<{ record: TaskConversationDelivery; id: string; occurrence: number }> = [];
     for (let occurrence = 1; occurrence <= OCCURRENCES; occurrence += 1) {
       const id = occurrenceId(input.utteranceId, occurrence);
       const record = parts.runtime.conversationDelivery(input.scopeKey, input.threadId, id);
       if (!record) break;
-      found = { record, id, occurrence };
+      found.push({ record, id, occurrence });
     }
     return found;
+  };
+  const newest = (input: FcaVoiceInput) => occurrences(input).at(-1) ?? null;
+  /**
+   * The occurrence a history receipt is for (review L3): one already bound to this very turn (a retried receipt), else the newest
+   * staged one with the same device and words, else the newest.
+   */
+  const receiptFor = (input: FcaVoiceHistoryInput) => {
+    const all = occurrences(input);
+    const newestFirst = [...all].reverse();
+    return newestFirst.find(known => known.record.state === 'bound' && matches(input, known.record) && known.record.experienceId
+      && source(input, known.record.experienceId))
+      ?? newestFirst.find(known => known.record.state === 'staged' && matches(input, known.record)) ?? all.at(-1) ?? null;
   };
   const matches = (input: FcaVoiceInput, record: TaskConversationDelivery) =>
     record.scopeKey === parts.ownerScope && record.deviceId === input.deviceId && record.inputDigest === digest(input.userTranscript);
@@ -58,7 +70,7 @@ export function createFcaVoiceBridge(parts: {
       return parts.conversation.begin({ ...input, delivery: identity(input, utteranceId) });
     },
     history(input) {
-      const known = newest(input);
+      const known = receiptFor(input);
       if (!known) return { status: 'untracked' };
       const { record } = known;
       if (!matches(input, record) || input.companionPresent || !parts.ownerAlone()) return { status: 'rejected' };
@@ -69,7 +81,7 @@ export function createFcaVoiceBridge(parts: {
       return { status: record.state === 'staged' ? 'ready' : 'untracked' };
     },
     recorded(input) {
-      const known = newest(input);
+      const known = receiptFor(input);
       if (!known || !matches(input, known.record) || input.companionPresent || !parts.ownerAlone() || !source(input, input.experienceId)) return false;
       return parts.runtime.bindConversationDelivery(input.scopeKey,
         { ...identity(input, known.id), threadId: input.threadId, experienceId: input.experienceId });

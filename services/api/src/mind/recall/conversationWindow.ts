@@ -202,8 +202,8 @@ function liveConversation(channel: ReplayChannel, messages: readonly VisibleMess
   return rule && at ? silenceAwareMessages(messages, at, rule) : { messages: [...messages], cut: 0, line: '' };
 }
 
-/** Nothing but what lies before a long silence was left out: no summary of it is given to the live conversation. */
-const onlyStaleLeftOut = (cut: number, start: number, reachedLimit: boolean) => cut > 0 && start === 0 && !reachedLimit;
+/** Only what lies before a long silence was left out (also past a long Talk's read limit): no summary of it is given. */
+const onlyStaleLeftOut = (cut: number, start: number) => cut > 0 && start === 0;
 
 export interface ReplayWindow {
   history: ShannonConversationItem[];
@@ -433,9 +433,9 @@ export function conversationReplay(
     toolBlock = traced(window.start);
   }
   const truncated = window.start > 0 || visible.reachedLimit || live.cut > 0;
-  // A summary has no label of its own: with others it is marked, so it is never given where only open items may be.
-  // What lies before a long silence alone is not summarized into the live conversation either.
-  const stored = truncated && !openOnly && !onlyStaleLeftOut(live.cut, window.start, visible.reachedLimit) ? replaySummaryFor(state, store, scopeKey, threadId, present, channel) : undefined;
+  // A summary has no label of its own: with others it is marked, so it is never given where only open items may be; nor
+  // for what lies before a long silence alone.
+  const stored = truncated && !openOnly && !onlyStaleLeftOut(live.cut, window.start) ? replaySummaryFor(state, store, scopeKey, threadId, present, channel) : undefined;
   const summary = stored?.text;
   const history = window.history;
   const epochFields = epoch ? { epoch: { number: epoch.record.epoch, rebased: epoch.rebased } } : {};
