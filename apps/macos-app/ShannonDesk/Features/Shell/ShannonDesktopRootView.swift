@@ -41,6 +41,8 @@ public struct ShannonDesktopRootView: View {
     @State var requestedMessageJumpID: UUID?
     @State var requestedConversationAnchorID: String?
     @State var messageJumpRevision = 0
+    /// Talk is scrolled to its end: her reply as it is written is followed only then.
+    @State var talkIsAtBottom = true
     @State var steeringText = ""
     @State var taskStopConfirmation: DesktopTaskStopConfirmation?
     @State var activeConversationOutlineEntryID: String?

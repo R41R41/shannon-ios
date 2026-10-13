@@ -14,6 +14,9 @@ public final class ShannonConversationModel {
     public internal(set) var selectedThreadId: String?
     public internal(set) var state: CompanionStateDTO?
     public internal(set) var isSending = false
+    /// Her reply while it is being written, sentence by sentence, or what arrived of it before the stream broke
+    /// (`ShannonConversationModel+Streaming.swift`). Never in `messages` and never cached: `done` replaces it.
+    public internal(set) var streamingReply: ShannonStreamingReply?
     /// True while a pending text reply includes a memory search (FTS, and semantic recall when enabled).
     public internal(set) var isSearchingMemory = false
     public internal(set) var isLoadingHistory = false
@@ -73,6 +76,10 @@ public final class ShannonConversationModel {
     var pendingAttachmentsByMessageID: [UUID: [ShannonChatAttachmentDTO]] = [:]
     var pendingPhotoByMessageID: [UUID: Data] = [:]
     var pendingWebSearchMessageIDs: Set<UUID> = []
+    /// Sent messages whose turn the server may have finished without this device hearing the end of it.
+    var uncertainTurns: [UUID: ShannonUncertainTurn] = [:]
+    var uncertainTurnRecoveryTask: Task<Void, Never>?
+    var isCheckingUncertainTurn = false
     /// Capture and reminder actions in flight, keyed by capture id or commitment id.
     public internal(set) var pendingCaptureActionIDs: Set<String> = []
     public internal(set) var captureActionError: String?

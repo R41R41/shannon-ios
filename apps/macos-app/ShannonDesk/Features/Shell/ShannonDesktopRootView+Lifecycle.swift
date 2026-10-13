@@ -84,6 +84,11 @@ extension ShannonDesktopRootView {
                 guard !notificationsHeld, connection.isConnected, !conversation.isDesignPreview else { return }
                 ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
             }
+            // A reply whose stream broke (sleep, network) was finished by the server: show it from the Talk.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                guard connection.isConnected, !conversation.isDesignPreview else { return }
+                Task { await conversation.resumeInterruptedReplies() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopNotificationOpened)) { _ in
                 openNotificationTarget()
             }

@@ -68,12 +68,20 @@ extension ShannonConversationView {
                     // A song she chose, while it plays (docs/device-actions-contract.md).
                     ShannonNowPlayingCard()
 
-                    if model.isSending {
+                    // Her reply as it is written (docs/chat-stream-contract.md); the waiting indicator stands until
+                    // its first sentence, and `done` replaces the row with her stored message.
+                    if let streaming = model.visibleStreamingReply {
+                        ShannonStreamingReplyRow(reply: streaming, face: model.currentFace)
+                            .id("shannon-streaming-reply")
+                    }
+
+                    if model.showsTypingIndicator {
                         ShannonTypingIndicator(expression: model.currentExpression, isSearchingMemory: model.isSearchingMemory)
                             .id("shannon-is-typing")
                     }
 
                     Color.clear.frame(height: 1).id("conversation-bottom")
+                        .shannonMarksConversationBottom($conversationIsAtBottom)
                 }
                 .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonSpacing.medium)
@@ -89,6 +97,12 @@ extension ShannonConversationView {
                 scrollToBottom(proxy)
             }
             .onChange(of: model.isSending) {
+                scrollToBottom(proxy)
+            }
+            .shannonFollowsConversationBottom($conversationIsAtBottom)
+            .onChange(of: model.visibleStreamingReply?.text.count) {
+                // Each sentence is followed only while he is at the end; scrolled up to read, he stays there.
+                guard conversationIsAtBottom else { return }
                 scrollToBottom(proxy)
             }
 #if DEBUG
