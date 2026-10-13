@@ -80,7 +80,7 @@ import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/own
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, startTextIdentityAndCapability, textTurnSystemPrompt, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
-import { withObserverRun, observeAsync, observeSync, observerHandoff, textStage } from '../observer/observerContext.js';
+import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
@@ -372,7 +372,7 @@ export class ShannonApiKernel {
     const { basePrompt, capability: capabilityPending } = startTextIdentityAndCapability(deps, input, begun, Boolean(fca)); // Beside recall.
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await textStage('recall_timeout', observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})), () => begun.deterministicContext) : begun.deterministicContext;
-    const capability = await capabilityPending;
+    const capability = capabilityPending instanceof Promise ? await capabilityPending : capabilityPending;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
     observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});
@@ -407,7 +407,7 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) })].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) })].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,

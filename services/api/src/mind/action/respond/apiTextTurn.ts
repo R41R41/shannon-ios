@@ -39,7 +39,7 @@ import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, t
 import type { ShannonToolRunner } from '../../tools/toolsPorts.js';
 import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
 import { TurnDeadline } from './turnDeadline.js';
-import { textStage } from '../../../infra/observer/observerContext.js';
+import { observedStep, textStage } from '../../../infra/observer/observerContext.js';
 import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
 import { closedId, minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../perception/perceptionPorts.js';
 import { framedReport, type MindTurnPorts } from '../../workspace/workspacePorts.js';
@@ -181,39 +181,40 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
   const body = input.body;
   const occurredAt = dependencies.now();
   // Another surface (her Minecraft body) has no commands, organizing, orchestration, looks or agent-task proposals.
-  let orchestrationState = surface ? null : observeConversationTurn({
+  // Each synchronous step is timed for the turn's steps line (`turnSteps.ts`), so a blocked loop names its step.
+  let orchestrationState = surface ? null : observedStep('orchestration', () => observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(body.scopeKey, threadId),
     scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode,
     tasks: dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
-  });
-  if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
-  const explicitCommand = !audience.alone || surface ? null : executeConversationCommand(body.scopeKey, threadId,
+  }));
+  if (orchestrationState) orchestrationState = observedStep('orchestration', () => dependencies.conversationOrchestration.save(orchestrationState!));
+  const explicitCommand = !audience.alone || surface ? null : observedStep('command', () => executeConversationCommand(body.scopeKey, threadId,
     { id: randomUUID(), text: message }, occurredAt, {
       stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
       organizeStore: dependencies.organizeStore, aetherProposals: dependencies.aetherProposals, agentTasks: dependencies.agentTasks,
       cognitiveIntents: dependencies.cognitiveIntents, memoryRecall: dependencies.memoryRecall,
-    });
+    }));
   if (orchestrationState && explicitCommand?.receipt) {
     orchestrationState = dependencies.conversationOrchestration.save(
       recordConversationReceipt(orchestrationState, explicitCommand.receipt),
     );
   }
-  const captured = dependencies.stateStore.snapshot(body.scopeKey);
+  const captured = observedStep('snapshot', () => dependencies.stateStore.snapshot(body.scopeKey));
   const provisionalIntent = audience.alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
   // What she talked about with other people is recalled here too; alone with the owner all of it may be used. On a surface
   // with others (anyone's turn in a shared chat, someone's whisper, the owner's shared-chat turn) only what everyone here
   // already heard, or what the owner made ordinary himself (`heardByEveryoneHere`), as the platform context gives it: one
   // person's whisper never reaches another's turn.
-  const recalledPeople = dependencies.people.recall(body.scopeKey, captured, message, audience.present);
+  const recalledPeople = observedStep('people', () => dependencies.people.recall(body.scopeKey, captured, message, audience.present));
   const peopleRecall = surface && !audience.alone ? { ...recalledPeople,
     candidates: recalledPeople.candidates.filter(candidate => heardByEveryoneHere(captured, candidate.id, candidate.disclosure, audience.present)) } : recalledPeople;
-  const deterministicContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
+  const deterministicContext = observedStep('deterministic', () => prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
     scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
     threadId, additionalCandidates: peopleRecall.candidates,
     intents: dependencies.cognitiveIntents.list(body.scopeKey, 'active'),
     provisionalIntent, ...(surface?.openOnly ? { openOnly: true } : {}),
     participants: dependencies.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
-  });
+  }));
   const organizeTurn = !surface && audience.alone && isOrganizeCommand(message);
   return { occurredAt, orchestrationState, explicitCommand, captured, provisionalIntent, peopleRecall, deterministicContext, organizeTurn };
 }
@@ -274,13 +275,13 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
 
 /**
  * `textTurnIdentityAndCapability`, started before the turn awaits semantic recall so that the capability reads run beside it
- * (2026-10-13: they waited for recall). The read keeps its stage bound and is always handed back as a promise, which never
- * rejects unhandled while the turn waits for something else first.
+ * (2026-10-13: they waited for recall). An asynchronous read keeps its stage bound and never rejects unhandled while the turn
+ * waits for something else first; a synchronous one is handed back as it is.
  */
 export function startTextIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, collectReadSources: boolean) {
-  const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(dependencies, input, begun, collectReadSources);
-  const capability = capabilityContext instanceof Promise
-    ? textStage('capability_timeout', capabilityContext, noCapabilityContext) : Promise.resolve(capabilityContext);
+  const { basePrompt, capabilityContext } = observedStep('identity', () => textTurnIdentityAndCapability(dependencies, input, begun, collectReadSources));
+  if (!(capabilityContext instanceof Promise)) return { basePrompt, capability: capabilityContext }; // Nothing to wait for: no tick.
+  const capability = textStage('capability_timeout', capabilityContext, noCapabilityContext);
   capability.catch(() => {});
   return { basePrompt, capability };
 }

@@ -15,6 +15,7 @@ import {
 import type { ConversationStore, ShannonExperience, StoredConversationMessage } from './store/conversationStore.js';
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { observedStep } from '../../infra/observer/observerContext.js';
 
 /** A Shannon reply (or the Shannon side of an experience summary) as the withholding rule sees it. */
 export interface WithholdableReply {
@@ -363,10 +364,12 @@ export function usableThreadSummary(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
   present: MemoryAudience,
 ): string | undefined {
+  return observedStep('threadSummary', () => { // Timed for the turn's steps line (`turnSteps.ts`).
   const gate = new DisclosureGate(present, state, store, scopeKey);
   if (!gate.allowsThreadSummary(threadId)) return undefined;
   const summary = new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
   return summary && gate.unlabelledMarker ? `${gate.unlabelledMarker}${summary}` : summary;
+  });
 }
 
 /**

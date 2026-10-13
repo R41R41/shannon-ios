@@ -19,6 +19,7 @@ import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolS
 import type { TurnDeadline } from '../action/respond/respondPorts.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/respondPorts.js';
 import { SKILL_LIMITS, SKILL_NAME } from '../memory/memoryPorts.js';
+import { observedStep } from '../../infra/observer/observerContext.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
 export { withToolCapabilityLines } from './shannonAetherTools.js';
 export { skillProfilePrompt, turnSkillIndex, type SkillTurnPorts } from './shannonSkillTools.js';
@@ -65,6 +66,7 @@ export function conversationTools(
     /** Syzygy ADR-0008 stage 2: a search or read that found nothing names the places this turn can look in (`sourcesLine`). */
     sourceHints?: boolean } = {},
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
+  return observedStep('toolOffer', () => { // Timed for the turn's steps line (`turnSteps.ts`).
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
   if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return {};
@@ -160,6 +162,7 @@ export function conversationTools(
     },
   });
   return { tools: session };
+  });
 }
 
 /**

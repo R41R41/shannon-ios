@@ -9,6 +9,7 @@ import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type Tool
 import { shannonTool } from '../tools/toolRegistryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { switchOn } from '@shannon/switches';
+import { observedStep } from '../../infra/observer/observerContext.js';
 import { notePlanEvent } from '../../infra/models/anthropic/cacheWarmTurns.js';
 
 /**
@@ -344,6 +345,7 @@ export function conversationReplay(
   /** Only what may be shown to anyone (a turn someone other than the owner wrote): no summary, no marked message. */
   openOnly = false,
 ): ConversationReplay {
+  return observedStep('replay', () => { // Timed for the turn's steps line (`turnSteps.ts`).
   const rule = replayRule(channel, environment);
   const visible = visibleReplayMessages(state, store, scopeKey, threadId, present, rule.maximumMessages + 1);
   const items = openOnly ? openItems(visible.messages.map(entry => entry.item)) : visible.messages.map(entry => entry.item);
@@ -372,6 +374,7 @@ export function conversationReplay(
       return { ...(context ? { turnContext: context } : {}), history };
     },
   };
+  });
 }
 
 /** The trace block of the replayed turns from `start`, newest first; replies are counted from the newest (notes are not replies). */

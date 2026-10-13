@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { ObserverDraft, ObserverJson, ObserverNodeId, ObserverTaskLink } from '../../contracts/observerContract.js';
+import { beginTurnSteps, flushTurnSteps, markModelStart, timedStep, type TurnStep } from './turnSteps.js';
 
 export type ObserverSink = (event: ObserverDraft) => void;
 type Run = ObserverTaskLink & { scopeKey: string; runId: string; parent: string | null; root: string; activeNode?:ObserverNodeId; activeSpan?:string; latest: Map<ObserverNodeId,string>; audience: 'owner' | 'others' };
@@ -31,6 +32,7 @@ export function observerValue(value: unknown, depth = 0): ObserverJson {
 function emit(run: Run, event: Omit<ObserverDraft,'scopeKey'|'runId'|'parentSpanId'|'at'>): void {
   if (!sink || run.audience !== 'owner') return;
   try { sink({ ...taskLink(run), ...event,origin:'server',scopeKey:run.scopeKey,runId:run.runId,parentSpanId:run.parent,at:new Date().toISOString() }); } catch { /* observation never changes the turn */ }
+  if (event.node === 'native' && event.kind === 'handoff') markModelStart(run.runId);
 }
 function projected(project: (()=>unknown) | undefined): ObserverJson | undefined {
   if (!project) return undefined;
@@ -85,6 +87,8 @@ export function withObserverRunSync<T>(options: RunOptions, work: () => T): T {
   });
 }
 export function currentObserverRunId(): string | null { return context.getStore()?.runId ?? null; }
+/** A synchronous step of the current turn, timed for its steps line (`turnSteps.ts`); outside an observed turn it only runs. */
+export function observedStep<T>(step: TurnStep, work: () => T): T { return timedStep(sink ? currentObserverRunId() : null, step, work); }
 export async function withObserverRun<T>(options:RunOptions,work:()=>Promise<T>):Promise<T> {
   if (!sink) return work();
   const inherited=context.getStore();
@@ -92,9 +96,11 @@ export async function withObserverRun<T>(options:RunOptions,work:()=>Promise<T>)
   const run:Run={...taskLink(options),scopeKey:options.scopeKey,runId:options.runId??randomUUID(),parent:null,root:randomUUID(),latest:new Map(),audience:inherited?.audience==='others'?'others':options.audience??'owner'};
   return context.run(run,async()=>{
     const started=performance.now();
+    beginTurnSteps(run.runId);
     emit(run,{spanId:run.root,node:'turn',kind:'run.started',input:projected(()=>({surface:options.surface,parentRunId:options.parentRunId??null}))});
     try {const value=await context.run({...run,parent:run.root},work);emit(run,{spanId:run.root,node:'turn',kind:'run.completed',elapsedMs:performance.now()-started,output:{status:'completed'}});return value;}
     catch(error){emit(run,{spanId:run.root,node:'turn',kind:'span.failed',elapsedMs:performance.now()-started,output:{status:'failed'}});throw error;}
+    finally{flushTurnSteps(run.runId,options.surface,performance.now()-started);}
   });
 }
 /** Detached work keeps the original promise and microtask boundary; terminal callbacks run in its existing chain. */

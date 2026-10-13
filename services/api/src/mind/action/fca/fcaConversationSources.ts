@@ -7,10 +7,12 @@ import type { ConversationStore, ShannonExperience } from '../../memory/memoryPo
 import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
+import { observedStep } from '../../../infra/observer/observerContext.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
 export function conversationFcaProvenance(state: CompanionStateSnapshot, conversations: ConversationStore,
   scopeKey: string, threadId: string, recalledMemoryIds: readonly string[]): string[] {
+  return observedStep('provenance', () => { // Timed for the turn's steps line (`turnSteps.ts`).
   const withholding = new MemoryWithholding(state, conversations, scopeKey);
   const lineage = conversations.threadSummaryLineage?.(scopeKey, threadId)?.messages
     ?? conversations.conversationHistory(scopeKey, threadId);
@@ -25,6 +27,7 @@ export function conversationFcaProvenance(state: CompanionStateSnapshot, convers
   const visibleLineage = withholding.withReadSnapshot(() => lineage.filter(message => !withholding.withholdsMessage(message)));
   return [...new Set([...recalledMemoryIds, ...profile, ...visibleLineage
     .flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : [])])];
+  });
 }
 
 /**
