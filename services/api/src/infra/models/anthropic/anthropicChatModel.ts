@@ -281,7 +281,8 @@ export class AnthropicChatModel implements ShannonChatModel {
           watch?.first();
           if (!onTextDelta) return;
           await speak(echo.flush());
-          if (!spoken && !waitingSaid() && names[0]) await speak(voiceWaitingPhrase(names[0]));
+          // A plan cue still pending names the lookup itself: the stream route says it after its silence, so no fixed phrase here.
+          if (!spoken && request.waitingSaid === undefined && names[0]) await speak(voiceWaitingPhrase(names[0]));
           if (spoken || waitingSaid()) echo.arm();
           if (spoken || waitingSaid()) firstWords = false;
         },

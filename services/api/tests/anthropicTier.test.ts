@@ -205,6 +205,15 @@ describe('a Sonnet turn', () => {
     expect(result.reply).toBe('確認しますね。メモが1つありますよ。');
   });
 
+  it('leaves the silence before an external call to the plan\'s own cue while it is still pending', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'メモが1つありますよ。' }], 'end_turn')]);
+    const heard: string[] = [];
+    await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools, waitingSaid: () => false }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('メモが1つありますよ。');
+  });
+
   it('adds no fixed phrase before a call to her own memory', async () => {
     const tools = session(['memory.search']);
     const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };

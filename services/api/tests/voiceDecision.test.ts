@@ -370,12 +370,15 @@ describe('OpenAI voice decision compatibility routing', () => {
   it('does not take a duration or a destination for a memory question (2026-10-13: a flight follow-up)', async () => {
     const local = new LocalVoiceDecisionGateway();
     const decide = (transcript: string) => local.decide({ scopeKey: 'owner-a', transcript, participantMode: 'owner', requestedLocation: false, hasFreshLocation: false });
-    for (const transcript of ['フライトが18:30なんだけど、どれくらい前に空港に着いてるべき？', '30分前に出ればいい？', '目的地まで何分？', '手続きの方法を教えて']) {
+    for (const transcript of ['フライトが18:30なんだけど、どれくらい前に空港に着いてるべき？', '30分前に出ればいい？', '目的地まで何分？', '手続きの方法を教えて',
+      '1時間前に行っておけばいい？', '2日前に送っておけば間に合う？', '３０分くらい前に着いて見てればいい？', '何日前に頼めばいい？']) {
       const decision = await decide(transcript);
       expect(decision.selectedSkills, transcript).not.toContain('conversation_memory');
       expect(voicePlanResponse(decision).waitingPhrase, transcript).toBeUndefined();
     }
-    for (const transcript of ['前に話した旅行の件', '以前行った店の名前は？', 'この前の続きを話して']) {
+    for (const transcript of ['前に話した旅行の件', '以前行った店の名前は？', 'この前の続きを話して', '前に言われたこと', '前に行ってたカフェ',
+      '前にやったゲーム', '前にもらった本', '前に会った人', '前に読んだ記事', '前に送ったリンク', '前に頼まれた件', '前に使ってたアプリ',
+      '前にお願いしたこと', '前に作ってくれたメモ', '前に観た映画']) {
       expect((await decide(transcript)).selectedSkills, transcript).toContain('conversation_memory');
     }
   });

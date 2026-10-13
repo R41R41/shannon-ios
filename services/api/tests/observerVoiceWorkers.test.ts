@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
@@ -96,11 +96,12 @@ describe('observed voice and background work', () => {
     }) as unknown as ServerResponse;
     const kernel = { streamLiveVoiceDelegation: async (_request: unknown, observer: LiveVoiceStreamObserver) => {
       await observer.onPlan({ waitingPhrase: '確認しますね。', shouldRespond: true });
-      await new Promise(resolve => setTimeout(resolve, WAITING_CUE_DELAY_MILLISECONDS + 50)); // The waiting line follows a silence.
+      await vi.advanceTimersByTimeAsync(WAITING_CUE_DELAY_MILLISECONDS + 50); // The waiting line follows a silence.
       await observer.onTextDelta('答え');
       await observer.onTextDelta('です。PRIVATE_DISCARDED_TAIL');
       return { status: 200, body: { threadId: 'thread', reply: '答えです。', truncated: true } };
     } };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       await createLiveVoiceStreamRoute(kernel as never, () => true)(request, response, { scopeKey: 'owner', deviceId: 'fixture' } as never);
       const sent = wire.trim().split('\n').map(line => JSON.parse(line) as { type: string; text?: string })
@@ -111,7 +112,7 @@ describe('observed voice and background work', () => {
       expect(observed).toEqual(['確認しますね。', '答えです。']);
       expect(events.every(event => event.runId === runId)).toBe(true);
       expect(JSON.stringify(events)).not.toContain('PRIVATE_DISCARDED_TAIL');
-    } finally { restore(); }
+    } finally { vi.useRealTimers(); restore(); }
   });
 
   it('opens a real run per memory row and keeps private fact payloads out', async () => {
