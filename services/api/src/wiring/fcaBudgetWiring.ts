@@ -9,8 +9,11 @@ import type { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudge
  *   touches her own budget;
  * - an own-time task (E4) reserves each step from her day's budget (2000 yen) before it runs and settles the actual yen after,
  *   through the same reservations as her other own-time steps, and stops when the reservation is refused or its own cap is hit.
+ * - a task the owner asked for that is bound to the Minecraft body has a larger cap, 2000 yen (owner answer of 2026-10-13, the
+ *   new-architecture Minebot validation lane); its steps are bounded loosely so that the yen and the owner's stop end a run.
  */
 export const OWNER_TASK_CAP = Object.freeze({ yen: 300, steps: 40 });
+export const MINECRAFT_TASK_CAP = Object.freeze({ yen: 2000, steps: 300 });
 export const OWN_TIME_TASK_CAP = Object.freeze({ yen: 150, steps: 10 });
 /** Steps counted at once (each is removed when it settles; an abandoned one gives way to the newest). */
 const IN_FLIGHT = 32;
@@ -37,7 +40,11 @@ export interface FcaBudget {
 const capped = (task: TaskView, cap: { yen: number; steps: number }) =>
   `「${task.title.slice(0, 60)}」は1件の上限（${cap.yen}円・${cap.steps}歩）に達したので、ここで止めました。`;
 
-export function fcaBudget(options: { actions: ActionThreads; store: TaskBudgetStore; now(): string; ownTime?: OwnTimeBudgetPort | null }): FcaBudget {
+export function fcaBudget(options: {
+  actions: ActionThreads; store: TaskBudgetStore; now(): string; ownTime?: OwnTimeBudgetPort | null;
+  /** Whether the task is bound to a Minecraft body (`fca_body_bindings`); absent, no task is. */
+  minecraftTask?(taskId: string): boolean;
+}): FcaBudget {
   const usd = new Map<string, number>();
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
   return {
@@ -50,7 +57,7 @@ export function fcaBudget(options: { actions: ActionThreads; store: TaskBudgetSt
       if (!counted(task)) return { ok: true };
       if (usd.size >= IN_FLIGHT) usd.delete(usd.keys().next().value!);
       usd.set(lease.id, 0);
-      const cap = task.origin === 'own_time' ? OWN_TIME_TASK_CAP : OWNER_TASK_CAP;
+      const cap = task.origin === 'own_time' ? OWN_TIME_TASK_CAP : options.minecraftTask?.(task.id) ? MINECRAFT_TASK_CAP : OWNER_TASK_CAP;
       const spent = options.store.spent(task.id);
       if (spent.steps >= cap.steps || spent.yen >= cap.yen) {
         usd.delete(lease.id);

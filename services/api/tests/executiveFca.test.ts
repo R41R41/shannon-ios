@@ -9,7 +9,7 @@ import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/tas
 import { TaskOwnTimeStore } from '../src/mind/action/taskRuntime/store/taskOwnTimeStore.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
-import { OWNER_TASK_CAP, OWN_TIME_STEP_ESTIMATE_YEN, fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
+import { MINECRAFT_TASK_CAP, OWNER_TASK_CAP, OWN_TIME_STEP_ESTIMATE_YEN, fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
 import { inActionExecution } from '../src/infra/context/actionExecution.js';
 
 const cleanups: Array<() => void> = [];
@@ -76,6 +76,23 @@ describe('one budget for FCA steps (E3)', () => {
     store.add('t-yen', 'owner', 'owner_request', OWNER_TASK_CAP.yen, now());
     expect(await budget.before({ ...(task('owner_request') as object), id: 't-yen' } as never, lease)).toMatchObject({ ok: false, code: 'task_cap' });
     expect(await budget.before(task('owner_request', 'root'), lease)).toEqual({ ok: true });
+    expect(calls).toEqual([]);
+  });
+
+  it('gives an owner request bound to the Minecraft body a 2000 yen cap, and leaves every other owner request at 300 yen', async () => {
+    const { db } = world();
+    const store = new TaskBudgetStore(db);
+    const { actions, calls } = fakeActions(true);
+    const bound = new Set(['t-mc']);
+    const budget = fcaBudget({ actions, store, now, minecraftTask: id => bound.has(id) });
+    const mc = { ...(task('owner_request') as object), id: 't-mc', kind: 'generic' } as never;
+    const other = { ...(task('owner_request') as object), id: 't-other', kind: 'generic' } as never;
+    for (let step = 0; step < OWNER_TASK_CAP.steps; step += 1) { store.add('t-mc', 'owner', 'owner_request', 10, now()); store.add('t-other', 'owner', 'owner_request', 10, now()); }
+    expect(await budget.before(mc, lease)).toEqual({ ok: true });
+    expect(await budget.before(other, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('300円・40歩') });
+    store.add('t-mc', 'owner', 'owner_request', MINECRAFT_TASK_CAP.yen, now());
+    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('2000円・300歩') });
+    expect(store.spent('t-mc').cappedAt).toBe(now());
     expect(calls).toEqual([]);
   });
 

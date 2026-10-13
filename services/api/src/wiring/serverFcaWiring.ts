@@ -82,7 +82,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     sleep = sleepEnabled ? createFcaSleepWiring({ values, store: parts.sleepStore!, ownerScope: parts.ownerScope }) : null;
     const ownTimeBudget = parts.ownTime ? ownTimeBudgetPort(parts.ownTime, provider.model) : null;
     const budgetStore = new TaskBudgetStore(db);
-    const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget });
+    const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget,
+      minecraftTask: id => Boolean(minecraft?.control.store.body(id)) });
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
       budget.recordUsage(usage.estimatedCostUsd);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
