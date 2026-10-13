@@ -13,7 +13,7 @@ import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/toolGatePorts.js';
 import type { StudyAether } from '../action/ownTime/ownTimePorts.js';
-import { validToolInput, type ToolInput } from './shannonToolInput.js';
+import { validToolInput, type ToolInput, type ToolInputProblem } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor, ToolDocuments } from './shannonToolTypes.js';
 import {
   isReadToolDomain, offeredTools, providerToolName, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
@@ -71,6 +71,8 @@ export type ToolCallChoiceSink = (scopeKey: string, call: { tool: string; surfac
  * them out (`turnToolResults`), so a stop is never learned as a failure of hers.
  */
 const WITHHELD_RESULTS = new WeakSet<object>();
+/** Why an `invalid_input` refusal of the input check was given, as a closed value for the gate span (2026-10-14). */
+const INPUT_PROBLEMS = new WeakMap<object, ToolInputProblem>();
 
 export function wasWithheld(result: ToolResult): boolean {
   return WITHHELD_RESULTS.has(result);
@@ -248,7 +250,11 @@ export class ShannonToolRunner {
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
-    if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
+    if ('problem' in checked) {
+      const refused = toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false });
+      INPUT_PROBLEMS.set(refused, checked.code);
+      return { tool, result: refused };
+    }
     const inputRefused = authorizeToolInput(tool, checked.input, context);
     if (inputRefused) return this.withhold(context, tool, inputRefused, 'outside_reach', context.audience === 'others' ? 'audience' : 'gate');
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
@@ -488,5 +494,7 @@ function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, s
 
 /** A result's content can be private recall, an unshown story or file contents; retain only the execution outcome. */
 function observedToolResult(name: string, result: ToolResult, status: 'not_run' | 'awaiting_commit' | 'returned') {
-  return { name, ok: result.ok, failureKind: result.failure ?? null, retryable: result.retryable, status, withheld: wasWithheld(result) };
+  const inputProblem = INPUT_PROBLEMS.get(result);
+  return { name, ok: result.ok, failureKind: result.failure ?? null, retryable: result.retryable, status, withheld: wasWithheld(result),
+    ...(inputProblem ? { inputProblem } : {}) };
 }

@@ -30,6 +30,7 @@ export const BACKGROUND_ROUTES = Object.freeze({
   replay_summary: 'memory_background', replay_template: 'memory_background', person_facts: 'memory_background',
   impressions: 'memory_background', platform_summary: 'memory_background', knowledge: 'memory_background',
   skill_sleep: 'memory_background', sleep: 'sleep', daily_mind: 'sleep', commitment_line: 'sleep',
+  lifecycle_outcome_line: 'sleep', // A lifecycle operation he asked for, told when it ended (owner decision 2026-10-14).
   inner_note: 'memory_background', // Syzygy ADR-0012: the reflection that writes her inner note, after a turn.
 } as const satisfies Readonly<Record<string, LlmUsageLane>>);
 

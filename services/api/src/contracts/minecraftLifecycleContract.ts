@@ -65,3 +65,11 @@ export function validLifecyclePoll(v: unknown, now: number): v is MinecraftLifec
       && typeof r.inputsReleased === 'boolean' && recorded(r.observedAt, now) && validLifecycleState(r.state, now, true)
       && (r.stopGuard === undefined || record(r.stopGuard) && r.stopGuard.admissionClosed === true && r.stopGuard.otherPlayers === 0 && recorded(r.stopGuard.checkedAt, now)));
 }
+
+/**
+ * The source reference of her message telling how a lifecycle operation asked for in a conversation ended (owner decision
+ * 2026-10-14, `lifecycleOutcomeLine.ts`): this prefix and the operation's own id. One message per operation (the reference is
+ * unique in `initiative_messages`). It answers his request, so it is not her own initiative, and a body says it as it says a due
+ * promise (`initiativeFreshness.ts`).
+ */
+export const LIFECYCLE_OUTCOME_SOURCE_PREFIX = 'lifecycle-outcome:';

@@ -9,7 +9,8 @@ import { conversationSecrets, othersSecrets, type SecretCheck } from '../inhibit
 import type { ConversationStore, StoredConversationMessage } from '../memory/memoryPorts.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from '../inhibition/disclosurePorts.js';
 import { wasWithheld, type ShannonToolRunner } from './shannonToolRunner.js';
-import { toolTraceCall } from './shannonToolTrace.js';
+import { toolTraceCall, type TracedOperationOutcomes } from './shannonToolTrace.js';
+export type { TracedOperationOutcomes } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { webReadResult } from './shannonReadTools.js';
@@ -420,6 +421,8 @@ export interface ConversationToolServer {
 export function conversationToolServer(
   body: ToolAudienceSource | null, stateStore: Pick<CompanionStateStore, 'snapshot'>,
   conversations: Pick<ConversationStore, 'experienceCandidates' | 'conversationHistory' | 'recentMessages'> & Partial<ToolTraceStore>, now: () => string,
+  /** How her accepted Minecraft lifecycle operations ended, for the traces of later turns (`ToolTurnLog`). */
+  operationOutcomes?: TracedOperationOutcomes,
 ): ConversationToolServer {
   // The SQLite store keeps the traces (`sqliteToolTraces.ts`); a store without them keeps them in memory.
   const kept = conversations as Partial<ToolTraceStore>;
@@ -429,7 +432,7 @@ export function conversationToolServer(
     audience: new ToolAudienceWatch(body, now),
     secrets: scopeKey => { try { return conversationSecrets(stateStore.snapshot(scopeKey), conversations, scopeKey); } catch { return null; } },
     othersText: (scopeKey, openOnly) => { try { return { ...othersSecrets(stateStore.snapshot(scopeKey), conversations, scopeKey), openOnly }; } catch { return null; } },
-    turns: new ToolTurnLog(traces, now),
+    turns: new ToolTurnLog(traces, now, operationOutcomes),
     lastMessage: (scopeKey, threadId) => (conversations.recentMessages?.(scopeKey, threadId, 1) ?? conversations.conversationHistory(scopeKey, threadId).slice(-1)).at(-1),
     now,
   };

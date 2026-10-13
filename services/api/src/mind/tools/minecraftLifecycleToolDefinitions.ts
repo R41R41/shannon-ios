@@ -1,5 +1,9 @@
 import type { ShannonToolDefinition } from './shannonTools.js';
-const server = { type: 'string' as const, description: '登録済みサーバーID。1つなら省略できる。任意の接続先は指定できない', minLength: 1, maxLength: 160 };
+// 2026-10-14: the first call of a turn failed invalid_input twice (login, logout) and ran once the field was left out. The field
+// is optional and normally absent: a registered server alone is used then; an id is written only as lifecycle_status showed it.
+const server = { type: 'string' as const,
+  description: '普通は書かない（登録済みのサーバーが1つならそれを使う）。複数ある時は minecraft.lifecycle_status が示した serverId をそのまま書く。空文字や推測した名前は書かない。任意の接続先は指定できない',
+  minLength: 1, maxLength: 160 };
 type Surfaces = ShannonToolDefinition['surfaces'];
 const define = (name: string, description: string, effect: 'read' | 'write', surfaces: Surfaces = ['text', 'voice', 'autonomy']): ShannonToolDefinition => ({
   name, description, effect, domain: 'minecraft_lifecycle', cost: 'none', audiences: ['owner_alone'], surfaces,

@@ -1,5 +1,6 @@
 import { PROACTIVE_GATE_V1 } from '@shannon/mind';
 import { localDateParts } from '../../infra/time/localDate.js';
+import { LIFECYCLE_OUTCOME_SOURCE_PREFIX } from '../../contracts/minecraftLifecycleContract.js';
 import type { InitiativeInbox, InitiativeMessage } from './store/initiativeStore.js';
 import type { InitiativeSource } from './store/initiativeSources.js';
 
@@ -16,7 +17,8 @@ import type { InitiativeSource } from './store/initiativeSources.js';
  * - **Text only** (`spoken: false`, a bubble and never a voice, on every body): a budget request (a system request, not her
  *   speech), a goal's state (neutral text), and a topic of the world that does not carry her own words.
  * - **Not judged**, as before: her own messages (`reach-out…`, which the body says only within five minutes), a look's answer
- *   (`body-look:`) and a due promise (`commitment:`): how he is told of what he asked for is still his to decide.
+ *   (`body-look:`), a due promise (`commitment:`) and the end of a Minecraft operation he asked for (`lifecycle-outcome:`): how he is
+ *   told of what he asked for is still his to decide.
  */
 export interface InitiativeFreshnessOptions {
   timeZone: string;
@@ -27,7 +29,7 @@ export interface InitiativeFreshnessOptions {
 export type InitiativeDelivery = 'voice' | 'text' | 'stale' | 'unjudged';
 
 const MINUTE = 60_000;
-const NOT_JUDGED = ['reach-out', 'body-look:', 'commitment:'];
+const NOT_JUDGED = ['reach-out', 'body-look:', 'commitment:', LIFECYCLE_OUTCOME_SOURCE_PREFIX];
 
 function dateOf(at: string, timeZone: string): { date: string; hour: number } {
   const local = localDateParts(new Date(Date.parse(at)), timeZone);

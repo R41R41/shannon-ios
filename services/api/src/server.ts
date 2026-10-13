@@ -14,7 +14,7 @@ import { handleRetiredVoiceRoute } from './surfaces/voice/retiredVoiceRoutes.js'
 import { createGeminiSpeechRoute } from './surfaces/voice/serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './surfaces/voice/serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './surfaces/voice/serverLiveVoiceStreamRoute.js';
-import { createLocalApiKernel } from './wiring/apiKernelWiring.js';
+import { configuredOperationOutcomes, createLocalApiKernel } from './wiring/apiKernelWiring.js';
 import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
@@ -194,6 +194,7 @@ const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new File
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
+const operationOutcomes = configuredOperationOutcomes(configuredDatabasePath(), { env: process.env, usageStore: persistentStore, now, body: bodyStore });
 const kernel = createLocalApiKernel(now, {
   conversationExtras: () => stage5.conversationExtras.ports, ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
@@ -235,7 +236,7 @@ const kernel = createLocalApiKernel(now, {
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
-  ...(mind ? { mind: mind.mind } : {}),
+  ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
@@ -279,7 +280,7 @@ const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
-const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
+const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, ...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
 if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
 const fca = configuredServerFca(process.env, { ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
@@ -481,7 +482,7 @@ function shutdown(): void {
     stopToolTraceSweep();
     rewardMood.stop(); autonomyAnnouncer.close();
     bodyStore.close();
-    await lifecycle?.close(); minecraft.close(); platformBridge?.close?.();
+    operationOutcomes.close(); await lifecycle?.close(); minecraft.close(); platformBridge?.close?.(); // Telling closes before the lifecycle.
     reachOuts.close(); reachOutReports.close();
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();

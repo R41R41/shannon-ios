@@ -13,7 +13,9 @@ export { DATA_FRAME_RULE, DATA_FRAME_THREAT, framedReport } from './dataFrames.j
  *
  * 1. `[いまの場]`: what attention holds, highest salience first. Text: at most 8 lines and 600 characters, the block's header
  *    included, with the `[ほか]` line for what attention let go (the owner alone). Voice: only items that are not someone's words,
- *    at a current salience of 0.6 or more, at most 2 lines and 160 characters with the header, notices among them.
+ *    at a current salience of 0.6 or more, at most 2 lines and 160 characters with the header, notices among them; the newest
+ *    current `【知らせ:作業終了】` comes first whatever its salience, in the first voice turn after it only and within 10 minutes
+ *    (2026-10-14).
  * 2. Notices with fixed markers (`【知らせ:触れた】`, `【知らせ:作業終了】`, `【知らせ:約束の時刻】`, `【知らせ:止められた】`), in the
  *    order they arrived: a new one is appended, an earlier one is never rewritten.
  * 3. Untrusted data frames `〔データ 出どころ=… id=…〕…〔/データ〕` after one fixed line that says they are data, not instructions
@@ -147,6 +149,23 @@ function bounded(header: string, lines: readonly string[], maximumLines: number,
   return kept.length ? [header, ...kept].join('\n') : '';
 }
 
+/** A task's end is put first in a voice turn for at most this long after it arrived, even if no voice turn is known to have had it. */
+export const VOICE_ENDED_FIRST_MINUTES = 10;
+
+/**
+ * The task's end a voice turn says first: the newest current `【知らせ:作業終了】`, while no earlier voice turn came after it (an
+ * utterance in voice that arrived after the notice and is not this turn's item: that turn already had it first) and for at most
+ * `VOICE_ENDED_FIRST_MINUTES`. Otherwise none, and the notice is ranked by its salience.
+ */
+function endedForVoice(scope: WorkspaceScope, notices: readonly WorkspaceItem[], turn: LayoutTurn): WorkspaceItem | null {
+  const newest = notices.filter(item => item.kind === 'task_outcome').at(-1);
+  if (!newest || Date.parse(turn.at) - Date.parse(newest.at) > VOICE_ENDED_FIRST_MINUTES * 60_000) return null;
+  // This turn's own utterance is known by its item only: `current` names the whole voice Talk, whose earlier turns count.
+  const heardSince = scope.held.some(item => item.surface === 'voice' && SPEECH_KINDS.has(item.kind) && item.seq > newest.seq
+    && item.id !== turn.currentItemId);
+  return heardSince ? null : newest;
+}
+
 /** The blocks to append after the turn's context, or '' when there is nothing to say. */
 export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutTurn): string {
   if (!scope) return '';
@@ -157,8 +176,13 @@ export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutT
   const notices = currentNotices(scope, turn.at).filter(item => shown(item) && (turn.noticeVisible?.(item) ?? true));
   if (turn.surface === 'voice') {
     const { lines, characters, minimumSalience } = PROMPT_LAYOUT_LIMITS.voice;
-    const strong = held.filter(entry => !SPEECH_KINDS.has(entry.item.kind) && entry.salience >= minimumSalience).map(entry => entry.item);
-    const out = strong.map(item => (NOTICE_KINDS.has(item.kind) ? noticeLine(item, turn.at) : placeLine(item, turn, null)));
+    // The end of a task she accepted (「終わったら知らせます」) enters at 0.5, below the voice line, so it was never in a voice turn
+    // (the 2026-10-14 incident). Only the newest one is put first, and only for the first voice turn after it (`endedForVoice`);
+    // after that it is ranked by salience like anything else, so it never keeps a promise's time or a touch out for an hour.
+    const ended = endedForVoice(scope, notices, turn);
+    const strong = held.filter(entry => !SPEECH_KINDS.has(entry.item.kind) && entry.salience >= minimumSalience
+      && entry.item.id !== ended?.id).map(entry => entry.item);
+    const out = [...(ended ? [ended] : []), ...strong].map(item => (NOTICE_KINDS.has(item.kind) ? noticeLine(item, turn.at) : placeLine(item, turn, null)));
     return bounded(WORKSPACE_PLACE_HEADER, out, lines + 1, characters);
   }
   const limits = PROMPT_LAYOUT_LIMITS.text;

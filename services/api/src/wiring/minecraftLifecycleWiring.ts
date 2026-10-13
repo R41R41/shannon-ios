@@ -4,7 +4,9 @@ import { opsLifecycleAuthorityAllowed } from '../infra/ops/store/opsLifecycleAut
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import { createMinecraftLifecycleRecovery } from './minecraftLifecycleRecoveryWiring.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
-import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
+import { createLifecycleRunner, type LifecycleSettlement } from './minecraftLifecycleRunner.js';
+import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
+import type { LifecycleOutcomeKind } from '../mind/action/respond/lifecycleOutcomeLine.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { stage4Enabled } from '../infra/config/stage4.js';
@@ -50,12 +52,24 @@ function setDayRefusal(kind: string, origin: string, ownerAlone: boolean, state:
   return state.otherPlayers === 0 ? null : 'ほかの参加者がいるか、人数を確かめられないので、時刻は変えません。';
 }
 
+/** How a settled operation ended for him: its accepted receipt's outcome, else unknown once its command was written, else never started. */
+export function settledOutcome(settlement: LifecycleSettlement): LifecycleOutcomeKind {
+  const outcome = settlement.receipt?.outcome;
+  if (outcome === 'completed' || outcome === 'refused' || outcome === 'cancelled') return outcome;
+  return settlement.issued ? 'unknown' : 'not_started';
+}
+
 /** Same paired operator, original action lease and autonomy gate in API and own-time worker. */
 export function configuredMinecraftLifecycle(values: Readonly<Record<string, string | undefined>>, parts: {
   path: string; autonomy: ShannonAutonomyService; actions?: ActionThreads | null; ownerAlone(): boolean;
   /** For agentTask, the common runtime rechecks the original admitted task's canonical sources. */
   ops?: { commands: OpsCommandStore; actions: ActionThreads; enabled(): boolean };
   taskAllowed(executionId: string): boolean; taskSources?(executionId: string): readonly string[] | null; now?(): string;
+  /**
+   * Tells him how a conversation's request ended, once it settles (owner decision 2026-10-14: she said 「終わったら知らせます」).
+   * Absent (the own-time worker, tests): only the 【知らせ:作業終了】 notice tells her.
+   */
+  told?: LifecycleOutcomeTeller;
 }) {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE')) return null;
   const configuration = configuredMinecraftBody(values);
@@ -92,7 +106,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   /**
    * The owner's conversation request (2026-10-13 TI-REQ): admitted under its own `minecraft` action and the body, answered
    * 「受け付けた」 at once, finished in the background; its late outcome reaches her as a 【知らせ:作業終了】 notice
-   * (`conversationLifecycleReports`). Busy, body held or an unresolved operation: a closed refusal now, nothing started.
+   * (`conversationLifecycleReports`), and him in her words when it settles (`told`, owner decision 2026-10-14). Busy, body held
+   * or an unresolved operation: a closed refusal now, nothing started.
    */
   /** The provenance a command is pinned to: the task's sources, or the conversation and the turn's words (hashed). */
   const sourcesOf = (kind: string | undefined, executionId: string, context: { threadId?: string; memory: { turnKey?: string } }): string[] => {
@@ -100,7 +115,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     if (kind !== 'respond' || !context.threadId) return [];
     return [`conversation:${context.threadId}`, `turn:${createHash('sha256').update(context.memory.turnKey ?? '').digest('hex')}`];
   };
-  const detached = async (request: { id: string; serverId: string; action: MinecraftLifecycleAction; sourceIds: readonly string[] },
+  const detached = async (request: { id: string; serverId: string; action: MinecraftLifecycleAction; sourceIds: readonly string[]; threadId: string | null },
     failure: (kind: 'unavailable' | 'refused' | 'conflict', text: string) => ToolRun): Promise<ToolRun> => {
     if (service.store.unresolved()) return failure('conflict', BUSY_TEXT.unresolved);
     const draft = { scopeKey: configuration.ownerScopeKey, kind: 'minecraft' as const, origin: 'owner_request' as const, sourceId: request.id };
@@ -113,7 +128,12 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       return failure('refused', '実行権・停止設定・現在の入力条件を確認できません。');
     }
     if (!await runner!.takeBody(own)) return failure('conflict', BUSY_TEXT.body);
-    void runner!.detach(own, { id: request.id, serverId: request.serverId, action: request.action, authority }, () => {});
+    // Its end is told to him in her words when it settles (`lifecycleOutcomeTellingWiring.ts`); the notice tells her either way. Not
+    // awaited: writing the line (up to 20 s) never holds the operation's close or a shutdown.
+    void runner!.detach(own, { id: request.id, serverId: request.serverId, action: request.action, authority }, settlement => {
+      void parts.told?.({ scopeKey: configuration.ownerScopeKey, threadId: request.threadId, operationId: request.id, action: request.action,
+        outcome: settledOutcome(settlement) });
+    });
     const accepted = toolOk(`受け付けました。まだ終わっていません（${request.action} を実行中）。終わったら知らせます。`);
     const target = { kind: 'minecraft_server' as const, id: request.serverId };
     const result = withToolEvidence(accepted, { outcome: 'queued', action: request.action, target, operationId: request.id });
@@ -151,7 +171,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       if (!identity) return failure('refused', '操作の元IDを確認できません。');
       const id = `lifecycle:${createHash('sha256').update(JSON.stringify([active.lease.id, identity, name, requested])).digest('hex')}`;
       const action = operation as MinecraftLifecycleAction;
-      if (row.kind === 'respond') return runner ? detached({ id, serverId: requested, action, sourceIds: authority.sourceIds }, failure)
+      const threadId = context.threadId ?? null;
+      if (row.kind === 'respond') return runner ? detached({ id, serverId: requested, action, sourceIds: authority.sourceIds, threadId }, failure)
         : failure('unavailable', 'マイクラ管理操作の作業枠を確かめられないので、受け付けられません。');
       const priorUnknown = active.stepOutcome === 'unknown';
       active.stepOutcome = 'unknown';
