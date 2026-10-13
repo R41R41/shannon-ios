@@ -93,8 +93,19 @@ queue and attack/death evidence — and the sandbox has no Minebot actuator yet;
 and the task would only test a refusal. Add it with a fake Minebot (see `tests/support/fcaIntegratedHarness.ts`) later.
 
 Known limits of the slice: TTS and real ASR are not in the loop (transcripts are injected); the memory recall runs without
-the OpenAI embedding gateway (deterministic full-text recall only); Jev is not called (the voice router uses its model
-fallback); spoken FCA reports are not read back, only report cards, task phases and conversation messages.
+the OpenAI embedding gateway (deterministic full-text recall only); Jev is not called (the voice router uses its Haiku
+fallback with production's 3 s timeout); spoken FCA reports are not read back, only report cards, task phases and conversation
+messages.
+
+**Without Jev the slice is not yet production-faithful (first live run, 2026-10-13):**
+
+- The voice router's Haiku fallback takes 1.4–2.5 s where Jev takes about 0.2 s, so voice first-audio numbers are about
+  1.2–2.3 s slower than production (subtract `route=` in a turn's timing line minus ~200 ms to compare).
+- Jev's tool menu is absent. With 20 or more offered tools and no menu, the Anthropic adapter loads no schema
+  (`anthropicChatModel.ts`): the model sees only `tool_open` (+ always-loaded names), and the device-actions capability line is
+  not in its prompt while the 「今はできないこと」 calendar/timer line is. Reminders, timers and calendar writes (D1–D3) are
+  therefore refused in the sandbox. A Jev stand-in (a chooser) is needed before D1–D3 measure production behaviour.
+- The Haiku router sends weather questions to `current_web` (an FCA research task) instead of `weather.forecast`.
 
 ## Adding a task from a production failure
 

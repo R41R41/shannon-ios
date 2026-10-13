@@ -116,7 +116,7 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
         await say(next, 'simulator');
       }
     }
-    await settle(task, watcher);
+    await settle(task, watcher, () => threadMessages(runtime).filter(message => message.reportCard).length);
   } catch (caught) {
     error = caught instanceof Error ? `${caught.name}: ${caught.message}`.slice(0, 400) : 'unknown';
     log(`trial failed: ${error}`);
@@ -134,8 +134,12 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
   return observation;
 }
 
-/** Watches research after the last reply: until each task ended and a short grace passed, or the task's settle time ran out. */
-async function settle(task: DailyEvalTask, watcher: ReturnType<typeof watchResearch>): Promise<void> {
+/**
+ * Watches research after the last reply: until each task ended, its report card reached the conversation and a short grace
+ * passed, or the task's settle time ran out. (Without waiting for the cards, a result that completed near the end of the
+ * grace was graded as never told: the first live run, 2026-10-13.)
+ */
+async function settle(task: DailyEvalTask, watcher: ReturnType<typeof watchResearch>, cards: () => number): Promise<void> {
   const started = performance.now(), limit = started + (task.settleSeconds ?? 0) * 1_000;
   let endedAt: number | null = null;
   while (performance.now() < limit) {
@@ -146,6 +150,8 @@ async function settle(task: DailyEvalTask, watcher: ReturnType<typeof watchResea
     if (!research.length) { if (performance.now() - started > 3_000) break; continue; }
     const open = research.some(item => !['completed', 'failed', 'stopped'].includes(item.phase));
     if (open) { endedAt = null; continue; }
+    // A completed task is told with a report card; wait for each one (a failed task may have none, so the limit bounds this).
+    if (cards() < research.filter(item => item.phase === 'completed').length) { endedAt = null; continue; }
     endedAt ??= performance.now();
     // A late failure notice is what this grace is for (the report card ticks every 5 s).
     if (performance.now() - endedAt > 7_000) break;

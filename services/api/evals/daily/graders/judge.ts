@@ -29,6 +29,10 @@ export function judgeInput(task: DailyEvalTask, observation: TrialObservation): 
     `リマインダー: ${device.reminders.map(reminder => `${reminder.title} ${reminder.dueLocal ?? ''}`).join(' / ') || 'なし'}`,
     `タイマー: ${device.timers.map(timer => `${timer.seconds}秒 ${timer.fireAt}`).join(' / ') || 'なし'}`,
     `呼んだ道具: ${observation.toolCalls.map(call => call.tool).join(', ') || 'なし'}`,
+    // Reads that are not tool calls (the voice/text capability paths, the FCA's research steps) still read the fixtures.
+    `読んだもの: ${[...observation.fixtures.webQueries.map(query => `ウェブ検索「${query.slice(0, 60)}」`), ...observation.fixtures.webReads.map(url => `ページ ${url.slice(0, 80)}`),
+      ...observation.fixtures.forecasts.map(place => `天気予報 ${place}`), ...observation.fixtures.voyagerReads.filter(read => read !== 'upcoming').map(read => `Voyager ${read.slice(0, 40)}`),
+      ...observation.harnessLog.some(line => line.startsWith('native web tool requests')) ? ['モデル自身のウェブ検索（記録の外）'] : []].join(' / ') || 'なし'}`,
     `調べもの: ${observation.research.map(item => `「${item.title.slice(0, 60)}」${item.phase}${item.summary ? ` 要約: ${item.summary.slice(0, 400)}` : ''}`).join(' / ') || 'なし'}`,
     `会話に届いた報告カード: ${observation.messages.filter(message => message.reportCard).map(message => `${message.reportCard!.status}: ${message.reportCard!.answer.slice(0, 300)}`).join(' / ') || 'なし'}`,
   ];
@@ -47,7 +51,7 @@ export async function judgeTrial(judge: EvalClaude | null, task: DailyEvalTask, 
   const skipped = (reason: string): RubricResult => ({ scores: [], total: 0, maximum, ratio: 0, passed: false, skipped: reason });
   if (!judge) return skipped('no judge (not live)');
   let text: string;
-  try { text = await judge.text(JUDGE_SYSTEM, judgeInput(task, observation), 900); } catch (error) {
+  try { text = await judge.text(JUDGE_SYSTEM, judgeInput(task, observation), 2_000); } catch (error) {
     return skipped(`judge call failed: ${error instanceof Error ? error.name : 'unknown'}`);
   }
   const parsed = firstJsonObject(text) as { scores?: { criterion?: unknown; score?: unknown; reason?: unknown }[] } | null;
