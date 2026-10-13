@@ -5,7 +5,7 @@ import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession } from '../src/in
 import { anthropicApiKey, sonnetRoutingAvailable, sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { AnthropicChatModel, FirstTokenLatency } from '../src/infra/models/anthropic/anthropicChatModel.js';
-import { SONNET_TEXT_LINES, SONNET_WEB_LINE, sonnetChatBody, sonnetTool, sonnetVoiceBody, structuredSchema } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { CLAUDE_TEXT_LINES, CLAUDE_WEB_LINE, claudeTextBody, claudeTool, claudeVoiceBody, structuredSchema } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
@@ -50,7 +50,7 @@ class Luna implements ShannonChatModel {
 describe('the Sonnet request', () => {
   it('offers her registry tools as strict tools with the same names and descriptions, the unsupported limits in words', () => {
     for (const tool of SHANNON_TOOLS) {
-      const strict = sonnetTool(tool);
+      const strict = claudeTool(tool);
       expect(strict.strict).toBe(true);
       expect(strict.name).toBe(tool.name.replace('.', '_'));
       expect(strict.description).toBe(tool.description);
@@ -58,7 +58,7 @@ describe('the Sonnet request', () => {
       expect(JSON.stringify(strict.input_schema)).not.toMatch(/"(?:minLength|maxLength|minimum|maximum)"/u);
       expect((strict.input_schema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
     }
-    expect(JSON.stringify(sonnetTool(shannonTool('study.search')!).input_schema)).toContain('1〜100字');
+    expect(JSON.stringify(claudeTool(shannonTool('study.search')!).input_schema)).toContain('1〜100字');
     // Luna's registry text is untouched.
     expect(shannonTool('study.search')!.input.properties.query).toMatchObject({ maxLength: 100, minLength: 1 });
   });
@@ -70,14 +70,14 @@ describe('the Sonnet request', () => {
 
   it('caches her prompt layers, puts the turn\'s context after his words, and starts with a user turn', () => {
     const tools = session();
-    const body = sonnetChatBody(settings, { ...base, tools: tools.value }, 'shannon-mac');
+    const body = claudeTextBody(settings, { ...base, tools: tools.value }, 'shannon-mac');
     expect(body.model).toBe('claude-sonnet-5-5');
     const system = body.system as Array<{ text: string; cache_control?: unknown }>;
     expect(system).toHaveLength(1);
     expect(system[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(system[0]!.text.startsWith('[シャノン]')).toBe(true);
     expect(system[0]!.text).toContain('[ライ氏のこと]');
-    expect(system[0]!.text.endsWith(SONNET_TEXT_LINES)).toBe(true);
+    expect(system[0]!.text.endsWith(CLAUDE_TEXT_LINES)).toBe(true);
     expect(body.messages.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'system']);
     expect(body.messages.at(-1)!.content).toBe('[いまの文脈]');
     // His two turns in a row are one user turn.
@@ -90,7 +90,7 @@ describe('the Sonnet request', () => {
   });
 
   it('never mixes native web citations with the structured final answer', () => {
-    const body = sonnetChatBody(settings, { ...base, useWebSearch: true, tools: session().value }, undefined);
+    const body = claudeTextBody(settings, { ...base, useWebSearch: true, tools: session().value }, undefined);
     expect(body.tools).toBeUndefined();
     expect(body.tool_choice).toBeUndefined();
     expect(body.output_config).toHaveProperty('format');
@@ -98,7 +98,7 @@ describe('the Sonnet request', () => {
   });
 
   it('speaks on voice with between_tools thinking at low effort and room for it', () => {
-    const body = sonnetVoiceBody(settings, { ...base, useWebSearch: false, conversationClass: 'direct' }, 1_200);
+    const body = claudeVoiceBody(settings, { ...base, useWebSearch: false, conversationClass: 'direct' }, 1_200);
     expect(body.thinking).toEqual({ type: 'between_tools' });
     expect(body.output_config).toEqual({ effort: 'low' });
     expect(body.max_tokens).toBe(2_200);

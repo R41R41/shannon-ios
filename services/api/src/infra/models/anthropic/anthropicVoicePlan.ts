@@ -5,12 +5,12 @@ import { VOICE_NATURAL_INSTRUCTIONS } from '../../../mind/action/respond/respond
 import { VOICE_REPLY_INSTRUCTIONS, type ShannonVoiceModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import { precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
-import type { SonnetSettings } from './anthropicConfig.js';
+import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu } from './anthropicForegroundMenu.js';
 import {
   cachedSystem, PLAN_NO_TOOLS_LINE, planned, planToolPair, splitCapabilityLines, splitSkillIndex, withTurnLines, type PlanEnvironment,
 } from './anthropicCachePlan.js';
-import { conversationEffort, SONNET_VOICE_LINES, sonnetMessages, sonnetTools } from './anthropicRequest.js';
+import { conversationEffort, CLAUDE_VOICE_LINES, sonnetMessages, claudeTools } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 
 /**
@@ -19,7 +19,7 @@ import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
  *
  * - tools: always the fixed pair `tool_open` / `tool_call` with `tool_choice: auto`; a turn without tools says so after the words.
  * - system: her identity without the turn's capability lines, then the voice instructions exactly as without the plan (answer
- *   first, short spoken sentences, natural wording, `SONNET_VOICE_LINES`). What she knows of the owner is in a voice turn only
+ *   first, short spoken sentences, natural wording, `CLAUDE_VOICE_LINES`). What she knows of the owner is in a voice turn only
  *   when the turn's skills ask for it, so it moves after the words with the skill index, the capability lines and the tool line.
  * - no output schema (voice is spoken text), thinking and effort as configured: nothing that changes from turn to turn.
  * - breakpoints: the transport's, as for text (`cachePlanMarkers.ts`): BP1 the system, BP2 the words, BP3 (5m) the tool result.
@@ -38,7 +38,7 @@ export function voicePlanCovers(request: Pick<ShannonVoiceModelRequest, 'useWebS
 
 /** The cached system of every voice turn of a Talk. */
 export function voiceStableSystem(systemPrompt: string): string {
-  return [splitCapabilityLines(systemPrompt).stable, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, SONNET_VOICE_LINES].join('\n\n');
+  return [splitCapabilityLines(systemPrompt).stable, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS, CLAUDE_VOICE_LINES].join('\n\n');
 }
 
 /** The voice turn's own lines, after its context: capability lines, what she knows of the owner, the skill index, the tool line. */
@@ -61,7 +61,7 @@ export function spokenWords(message: string): string {
 
 /** The voice turn's request under the plan (non-streaming shape; the stream sends the same body). */
 export function plannedVoiceBody(
-  settings: SonnetSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number,
+  settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number,
 ): Anthropic.MessageCreateParamsNonStreaming {
   const input = [
     ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -83,5 +83,5 @@ export function plannedVoiceBody(
   const offered = request.tools?.definitions.length ? request.tools : undefined;
   if (!offered) return planned(body, 'common');
   // A native 5.5 session always carries the menu here (`boundedToolMenu`); without its opener this throws, as for text.
-  return planned(appendForegroundMenu({ ...body, tools: sonnetTools(offered) }, toolInstructions(offered, true)), 'common');
+  return planned(appendForegroundMenu({ ...body, tools: claudeTools(offered) }, toolInstructions(offered, true)), 'common');
 }

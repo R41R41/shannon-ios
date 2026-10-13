@@ -386,12 +386,6 @@
       "complex-function": 1,
       "long-line": 5
     },
-    "services/api/src/infra/models/anthropic/anthropicRounds.ts": {
-      "long-function": 1,
-      "complex-function": 2,
-      "multi-statement-line": 6,
-      "long-line": 3
-    },
     "services/api/src/infra/models/anthropic/anthropicSchema.ts": {
       "complex-function": 1,
       "long-line": 2

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
-import { sonnetToolRounds } from '../src/infra/models/anthropic/anthropicRounds.js';
+import { claudeToolLoop } from '../src/infra/models/claude/claudeToolLoop.js';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
@@ -123,7 +123,7 @@ describe('the voice first-token watchdog (H3)', () => {
     let sends = 0;
     const session = { definitions: [], maximumCalls: 4, deadline: new TurnDeadline(TEXT_TURN_DEADLINE), call: async () => '' } as never;
     const send = async () => { sends += 1; throw timedOut; };
-    await expect(sonnetToolRounds({ model: 'm', max_tokens: 10, messages: [] }, { session, send, isAnswer: () => false, timedOutRound: 'fail' })).rejects.toBe(timedOut);
+    await expect(claudeToolLoop({ model: 'm', max_tokens: 10, messages: [] }, { session, send, isAnswer: () => false, timedOutRound: 'fail' })).rejects.toBe(timedOut);
     expect(sends).toBe(1);
   });
 });

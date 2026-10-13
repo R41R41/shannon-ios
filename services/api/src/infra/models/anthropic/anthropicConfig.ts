@@ -18,7 +18,7 @@ import { serverEnvironment } from '../../config/serverEnvironment.js';
 export type SonnetEffort = 'low' | 'medium' | 'high';
 export type SonnetThinking = 'adaptive' | 'between_tools';
 
-export interface SonnetSettings {
+export interface ClaudeChatSettings {
   model: string;
   effort: SonnetEffort;
   textThinking: SonnetThinking;
@@ -33,7 +33,7 @@ export function anthropicApiKey(environment: Environment = serverEnvironment()):
   return environment.SHANNON_ANTHROPIC_API_KEY?.trim() || environment.ANTHROPIC_API_KEY?.trim() || null;
 }
 
-export function sonnetSettings(environment: Environment = serverEnvironment()): SonnetSettings {
+export function sonnetSettings(environment: Environment = serverEnvironment()): ClaudeChatSettings {
   const pick = <T extends string>(value: string | undefined, allowed: readonly T[], fallback: T): T => {
     const text = value?.trim().toLowerCase();
     return text && (allowed as readonly string[]).includes(text) ? text as T : fallback;

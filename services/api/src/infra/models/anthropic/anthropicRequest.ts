@@ -5,7 +5,7 @@ import { RICH_TEXT_BLOCK_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS } from '../../
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
-import type { SonnetSettings } from './anthropicConfig.js';
+import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { appendForegroundMenu, stableForegroundMenu } from './anthropicForegroundMenu.js';
@@ -25,12 +25,12 @@ export { structuredSchema } from './anthropicSchema.js';
  * - Text: the structured reply through `output_config.format` (the same schema, in the subset Anthropic supports).
  * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default); Haiku at medium.
  */
-export const SONNET_TEXT_LINES = [
+export const CLAUDE_TEXT_LINES = [
   '[返答の形・Claude]',
   '最後の返事は指定のJSONの形だけで書く（前後に文を書かない）。道具を呼ぶ返事では文章を書かずに道具だけを呼ぶ。',
 ].join('\n');
-export const SONNET_VOICE_LINES = '[返答の形・Claude] 話す言葉だけを書く。考えたことや道具の名前は書かない。';
-export const SONNET_WEB_LINE = '[Web検索・Claude] この返事では、答える前に web_search で今の情報を調べ、調べた結果だけをもとに答える。';
+export const CLAUDE_VOICE_LINES = '[返答の形・Claude] 話す言葉だけを書く。考えたことや道具の名前は書かない。';
+export const CLAUDE_WEB_LINE = '[Web検索・Claude] この返事では、答える前に web_search で今の情報を調べ、調べた結果だけをもとに答える。';
 /** The structured answer after the auxiliary search: its evidence came from that search alone. */
 export const WEB_ANSWER_LINE = '[Web検索の回答] このターンの検索結果だけに基づいて答える。調べる予定だけで返事を終えない。確認できない情報は断定しない。';
 /** The field a turn that requires the web read answers with when it must ask for the missing target first. */
@@ -43,7 +43,7 @@ type Message = Anthropic.MessageParam;
 type ContentBlock = Anthropic.ContentBlockParam;
 
 /** A registry tool as a strict Anthropic tool: the same name and description, the constraints strict schemas lack moved into words. */
-export function sonnetTool(tool: ShannonToolDefinition): Anthropic.Tool {
+export function claudeTool(tool: ShannonToolDefinition): Anthropic.Tool {
   const properties = Object.fromEntries(Object.entries(tool.input.properties).map(([name, property]) => [name, strictProperty(property)]));
   return {
     name: providerToolName(tool.name), description: tool.description, strict: true,
@@ -88,8 +88,8 @@ export function sonnetMessages(input: readonly unknown[]): Message[] {
 }
 
 /** The function tools a session offers now (with the tool menu, the schemas sent this round). */
-export function sonnetTools(session: ShannonModelToolSession | undefined): Anthropic.Tool[] {
-  return session ? session.definitions.map(sonnetTool) : [];
+export function claudeTools(session: ShannonModelToolSession | undefined): Anthropic.Tool[] {
+  return session ? session.definitions.map(claudeTool) : [];
 }
 
 export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 {
@@ -104,19 +104,19 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
  */
 export const HAIKU_CONVERSATION_EFFORT = 'medium';
 
-export function conversationEffort(settings: SonnetSettings): SonnetSettings['effort'] {
+export function conversationEffort(settings: ClaudeChatSettings): ClaudeChatSettings['effort'] {
   return isHaikuModel(settings.model) ? HAIKU_CONVERSATION_EFFORT : settings.effort;
 }
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
-export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
+export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
   const luna = chatTurnRequestBody(settings.model, inline ? { ...request, tools: undefined, toolsWithheld: undefined } : request, agentHostHint);
   const web = !offersTools(request) && Boolean(request.useWebSearch || request.placeSearch);
   // Web evidence was obtained by the non-JSON auxiliary operation before this structured answer.
-  const tools: Anthropic.ToolUnion[] = offersTools(request) ? sonnetTools(request.tools) : [];
+  const tools: Anthropic.ToolUnion[] = offersTools(request) ? claudeTools(request.tools) : [];
   const schema = ((luna.text as { format?: { schema?: Record<string, unknown> } }).format?.schema) ?? {};
   if (request.requireWebSearch) {
     schema.properties = { ...schema.properties as object, webSearchNeedsInput: { ...WEB_SEARCH_NEEDS_INPUT } };
@@ -126,7 +126,7 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     model: settings.model,
     max_tokens: 16_000,
     // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
-    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
+    system: system([String(luna.instructions), CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
       ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
@@ -140,13 +140,13 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
 }
 
 /** The voice turn's request: the parts of luna's voice payload, spoken text only. */
-export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number): Anthropic.MessageCreateParamsNonStreaming {
+export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number): Anthropic.MessageCreateParamsNonStreaming {
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
   const inline = stableForegroundMenu(settings.model, toolsOffered);
   const instructions = [
     request.systemPrompt, VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS,
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
-    ...(request.profilePrompt ? [request.profilePrompt] : []), SONNET_VOICE_LINES, ...(request.useWebSearch ? [SONNET_WEB_LINE] : []),
+    ...(request.profilePrompt ? [request.profilePrompt] : []), CLAUDE_VOICE_LINES, ...(request.useWebSearch ? [CLAUDE_WEB_LINE] : []),
   ].join('\n\n');
   const input = [
     ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -155,7 +155,7 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
     { role: 'user', content: request.message },
   ];
   const complex = request.conversationClass === 'skill_complex';
-  const tools: Anthropic.ToolUnion[] = toolsOffered ? sonnetTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
+  const tools: Anthropic.ToolUnion[] = toolsOffered ? claudeTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
   const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     // Thinking counts toward the ceiling: room for it beside the spoken reply.
