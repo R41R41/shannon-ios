@@ -9,6 +9,7 @@ import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.
 import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
 import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
+import { WAITING_CUE_DELAY_MILLISECONDS } from './voiceWaitingCue.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -59,6 +60,14 @@ export function createLiveVoiceStreamRoute(
     let timing: TurnTiming | null = null;
     let outcome = 'error';
     const firstSegment = () => timing?.mark('firstSegment'); // Only the first mark counts; the waiting phrase is not a reply sentence.
+    // The plan's waiting phrase is a fallback for silence (`voiceWaitingCue.ts`): it is said only when none of her own words
+    // arrived within WAITING_CUE_DELAY_MILLISECONDS of the plan, and never once they have. At most one per turn.
+    let waitingTimer: ReturnType<typeof setTimeout> | null = null;
+    let waitingSaid = false;
+    const cancelWaiting = () => {
+      if (waitingTimer) clearTimeout(waitingTimer);
+      waitingTimer = null;
+    };
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
       timing = new TurnTiming('voice', turnTimingId(record(record(record(body)?.deviceContext)?.userUtterance)?.id));
@@ -69,6 +78,7 @@ export function createLiveVoiceStreamRoute(
           body, deviceId: principal.deviceId,
         }, {
           signal: controller.signal, timing: timing!,
+          waitingSaid: () => waitingSaid,
           onPlan: async plan => {
             if (controller.signal.aborted) return;
             const firstPlan = !receivedPlan;
@@ -76,13 +86,21 @@ export function createLiveVoiceStreamRoute(
             voicePlan = plan;
             startStream(response);
             await writeEvent(response, { type: 'plan', voicePlan: plan });
-            if (firstPlan && typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
-              await writeObservedVoiceSegment(response, plan.waitingPhrase, waitingSegmentPlan(plan), 'plan');
+            const phrase = typeof plan.waitingPhrase === 'string' ? plan.waitingPhrase.trim() : '';
+            if (firstPlan && phrase && !receivedDelta) {
+              const segmentPlan = waitingSegmentPlan(plan);
+              waitingTimer = setTimeout(() => {
+                waitingTimer = null;
+                if (controller.signal.aborted || receivedDelta || waitingSaid) return;
+                waitingSaid = true;
+                writeObservedVoiceSegment(response, phrase, segmentPlan, 'plan').catch(() => {});
+              }, WAITING_CUE_DELAY_MILLISECONDS);
             }
           },
           onTextDelta: async delta => {
             if (controller.signal.aborted) return;
             receivedDelta = true;
+            cancelWaiting();
             for (const segment of segmenter.append(delta)) {
               startStream(response);
               firstSegment();
@@ -91,6 +109,7 @@ export function createLiveVoiceStreamRoute(
             }
           },
         });
+        cancelWaiting();
         outcome = controller.signal.aborted ? 'aborted' : turnOutcome(apiResponse);
         if (controller.signal.aborted) return;
 
@@ -141,6 +160,7 @@ export function createLiveVoiceStreamRoute(
         response.end();
       }
     } finally {
+      cancelWaiting();
       timing?.finish(outcome);
       request.off('aborted', abort);
       response.off('close', abort);

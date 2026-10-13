@@ -64,12 +64,24 @@ export const jevWaitingQuestions = [
   }],
 ] as const;
 
-// Each category has a steady, warm, and lively wording. These are acknowledgements,
+/**
+ * The scenarios in which a lookup outside the conversation is about to run (owner feedback 2026-10-13: 「『前の話を確認しますね。』
+ * って必要ある？常に文脈は把握してほしい」). She always has the conversation, the time, her own day and her thoughts in mind, so a
+ * turn about those gets no fixed cue at all: she never says she is checking the earlier talk or organizing her thoughts.
+ */
+export const EXTERNAL_WAITING_SCENARIOS: ReadonlySet<VoiceWaitingScenario> = new Set<VoiceWaitingScenario>([
+  'web', 'weather', 'transit', 'aether', 'voyager', 'suite', 'agent',
+]);
+
+/**
+ * The fixed cue is a fallback for silence, not an opener: the stream route speaks it only when nothing of her own reply has
+ * been heard this long after the plan (`serverLiveVoiceStreamRoute.ts`). Her own first words always win.
+ */
+export const WAITING_CUE_DELAY_MILLISECONDS = 1_500;
+
+// Each external category has a steady, warm, and lively wording. These are acknowledgements,
 // never evidence that an external read or action has already succeeded.
-const phrases: Readonly<Record<VoiceWaitingScenario, Readonly<Record<VoiceWaitingVariant, string>>>> = {
-  general: {
-    steady: '少し確認してみますね。', warm: 'うん、ちょっと確かめますね。', lively: 'よし、さっと見てみますね。',
-  },
+const phrases: Readonly<Partial<Record<VoiceWaitingScenario, Readonly<Record<VoiceWaitingVariant, string>>>>> = {
   web: {
     steady: 'ちょっと最新の情報を調べてみますね。', warm: 'いまの情報を確かめますね。', lively: '新しい情報を見てきますね。',
   },
@@ -90,30 +102,6 @@ const phrases: Readonly<Record<VoiceWaitingScenario, Readonly<Record<VoiceWaitin
   },
   agent: {
     steady: '作業の進み具合を確認してきますね。', warm: '作業の記録を確かめますね。', lively: 'いまの作業状況を見てみますね。',
-  },
-  memory: {
-    steady: '前の話を確認しますね。', warm: 'これまでの話を少し確かめますね。', lively: '前に話した内容を探してみますね。',
-  },
-  daily_mind: {
-    steady: '今日の考えを確かめますね。', warm: '今日の気持ちを少し整理しますね。', lively: '今日のボクの考え、見てみますね。',
-  },
-  time: {
-    steady: 'いまの時刻を確認しますね。', warm: 'こちらの時刻を確かめますね。', lively: '時計を見てみますね。',
-  },
-  location: {
-    steady: '使える位置情報を確認しますね。', warm: '現在地を確かめますね。', lively: 'いまいる場所を見てみますね。',
-  },
-  support: {
-    steady: '少し言葉を選んで答えますね。', warm: 'うん、ちゃんと聞いています。', lively: '大切な話ですね。少し考えます。',
-  },
-  analysis: {
-    steady: '少し整理して答えますね。', warm: '考えをまとめてみますね。', lively: '順番に考えてみますね。',
-  },
-  planning: {
-    steady: '進め方を整理しますね。', warm: 'できる順番を考えますね。', lively: 'まず道筋を組み立てますね。',
-  },
-  troubleshooting: {
-    steady: '原因を切り分けてみますね。', warm: '何が起きたか順に確かめますね。', lively: '手がかりから見ていきますね。',
   },
 };
 
@@ -154,7 +142,9 @@ export function waitingDirectionFor(decision: VoiceTurnDecision): VoiceWaitingDi
   );
   const candidate = decision.waitingDirection;
   if (!candidate) return fallback;
-  return scenarioAllowed(candidate.scenario, decision.selectedSkills) ? candidate : {
+  // A cue names a lookup this turn really makes: a category the turn did not select, or one about what she already has in mind,
+  // gives way to the lookup its selected capabilities make (or to none).
+  return scenarioAllowed(candidate.scenario, decision.selectedSkills) && EXTERNAL_WAITING_SCENARIOS.has(candidate.scenario) ? candidate : {
     ...candidate, scenario: fallback.scenario,
   };
 }
@@ -164,7 +154,8 @@ export function waitingPhraseFor(
   direction = waitingDirectionFor(decision),
 ): string | undefined {
   if (!decision.shouldRespond || !needsWaitingPhrase(decision.latencyClass)) return undefined;
-  return phrases[direction.scenario][direction.variant];
+  if (!EXTERNAL_WAITING_SCENARIOS.has(direction.scenario)) return undefined;
+  return phrases[direction.scenario]?.[direction.variant];
 }
 
 function needsWaitingPhrase(latency: VoiceLatencyClass): boolean {

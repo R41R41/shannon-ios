@@ -17,7 +17,16 @@ export interface JevVoiceDecisionOptions {
   fetcher?: typeof fetch;
   nowMilliseconds?: () => number;
   fallbackGateway?: VoiceDecisionGateway;
+  /**
+   * The model fallback is asked only when Jev failed within this long; later, the local rules decide at once. The voice turn
+   * bounds its route (`TURN_STAGE_BOUNDS.route_timeout`, 2.5 s), so a model asked after a Jev timeout cannot answer in time and
+   * only delays the turn (2026-10-13: a Jev timeout at 1.4 s, then a model call cut off at 2.5 s).
+   */
+  fallbackStartMilliseconds?: number;
 }
+
+/** Room the model fallback needs inside the 2.5 s route bound. */
+export const JEV_FALLBACK_START_MILLISECONDS = 1_000;
 
 /**
  * The voice turn's router on Jev. Its call goes through the one Jev client (`infra/models/jev/jevChoice.ts`, Syzygy ADR-0008
@@ -129,7 +138,8 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
       }, questions);
       return parsedJevDecision(body, input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     } catch {
-      if (this.options.fallbackGateway) {
+      if (this.options.fallbackGateway
+        && this.nowMilliseconds() - startedAt <= (this.options.fallbackStartMilliseconds ?? JEV_FALLBACK_START_MILLISECONDS)) {
         const fallback = await this.options.fallbackGateway.decide(input);
         return { ...fallback, elapsedMilliseconds: Math.max(0, Math.round(this.nowMilliseconds() - startedAt)) };
       }

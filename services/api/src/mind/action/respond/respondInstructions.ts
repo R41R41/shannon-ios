@@ -13,6 +13,18 @@ export const COMPUTED_ANSWER_LINE = '「何時に出ればいい？」「いく�
   + '結論には乗り換えや混み具合を見込んだ無理のない余裕を含め、根拠はそのあとに短く添える。';
 
 /**
+ * Talking as one who always has the conversation in mind (owner feedback 2026-10-13: 「『前の話を確認しますね。』って必要ある？
+ * 常に文脈は把握してほしい」, and a conversation audit the same day: an answer that moved from 「17時頃」 to 「17時10分ごろ」 without
+ * a word, a place he had just said asked again, 「見ますか？」 before a lookup he had already asked for). The Claude text reply
+ * (`CLAUDE_TEXT_LINES`) and the Claude voice reply (`CLAUDE_VOICE_LINES`) carry it; the historical GPT profile keeps its words.
+ */
+export const CONVERSATION_CONTINUITY_LINE = '[会話の続き] これまでの会話とこの返事に渡された文脈は、いつも頭に入っているものとして扱う。'
+  + '続きの質問にはそのまま答え、「前の話を確認しますね」「考えを整理しますね」のような前置きをしない。'
+  + 'ライ氏がこの会話ですでに言ったこと（いる場所・予定・時刻など）やボクが前に答えたことを使い、同じことを聞き直さない。'
+  + '前の返事で言った時刻・数字・道順は保ち、変える時は変えたことと理由をひと言添える。'
+  + '頼まれたことがはっきりしていて、この返事でできる読み取りや調べものなら、「〜しましょうか？」「見ますか？」と確かめずにする。';
+
+/**
  * The Claude voice reply's length (owner feedback 2026-10-13, 「長くて聞いていられない」; live replies still ran 110–174 characters):
  * the historical profile's 「複雑な回答でも原則3文」 no longer stands beside the 1–2 sentence rule of `VOICE_NATURAL_INSTRUCTIONS`.
  * Also given to a voice turn answered through the structured text request (`spokenReply`). The historical GPT profile keeps

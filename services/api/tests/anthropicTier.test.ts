@@ -193,6 +193,38 @@ describe('a Sonnet turn', () => {
     expect(tools.calls).toEqual(['study_list']);
   });
 
+  it('says her own announcement when the plan\'s waiting phrase is still unsaid at her first words, and then no second phrase', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const call = anthropicFixture('tool-call');
+    const announced = message([{ type: 'text', text: '確認しますね。' }, ...call.content.filter(block => block.type === 'tool_use')], 'tool_use');
+    const { model } = sonnet([announced, message([{ type: 'text', text: 'メモが1つありますよ。' }], 'end_turn')]);
+    const heard: string[] = [];
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools, waitingSaid: () => false }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('確認しますね。メモが1つありますよ。');
+    expect(result.reply).toBe('確認しますね。メモが1つありますよ。');
+  });
+
+  it('leaves the silence before an external call to the plan\'s own cue while it is still pending', async () => {
+    const tools = session(['study.list']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'メモが1つありますよ。' }], 'end_turn')]);
+    const heard: string[] = [];
+    await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools, waitingSaid: () => false }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('メモが1つありますよ。');
+  });
+
+  it('adds no fixed phrase before a call to her own memory', async () => {
+    const tools = session(['memory.search']);
+    const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
+    const call = anthropicFixture('tool-call');
+    const toMemory = message(call.content.filter(block => block.type === 'tool_use').map(block => ({ ...block, name: 'memory_search', input: { query: '旅行' } })), 'tool_use');
+    const { model } = sonnet([toMemory, message([{ type: 'text', text: '沖縄の話でしたね。' }], 'end_turn')]);
+    const heard: string[] = [];
+    await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools }, delta => { heard.push(delta); });
+    expect(heard.join('')).toBe('沖縄の話でしたね。');
+  });
+
   it('says a reply that was only an announcement after all, never an empty one', async () => {
     const { model } = sonnet([message([{ type: 'text', text: '調べてみますね。' }], 'end_turn')]);
     const heard: string[] = [];

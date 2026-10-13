@@ -84,7 +84,8 @@ describe('Jev voice decision routing', () => {
       scopeKey: 'guest', transcript: '少し考えて', participantMode: 'guest',
       requestedLocation: false, hasFreshLocation: false,
     });
-    expect(voicePlanResponse(guest).waitingPhrase).toBe('よし、さっと見てみますね。');
+    // A category this turn did not select gives way to its own lookup; with none, nothing is said.
+    expect(voicePlanResponse(guest).waitingPhrase).toBeUndefined();
 
     const silent = { ...guest, shouldRespond: false };
     expect(voicePlanResponse(silent).waitingPhrase).toBeUndefined();
@@ -111,7 +112,7 @@ describe('Jev voice decision routing', () => {
     expect(voicePlanResponse(decision).waitingPhrase).toBe('いまの天気を確認しますね。');
   });
 
-  it('keeps a waiting acknowledgement gentle when grief overrides a playful Jev choice', async () => {
+  it('says no fixed acknowledgement when grief overrides a playful Jev choice', async () => {
     const decision = await new LocalVoiceDecisionGateway().decide({
       scopeKey: 'owner-a', transcript: '原因を調べて', participantMode: 'owner',
       requestedLocation: false, hasFreshLocation: false,
@@ -126,8 +127,8 @@ describe('Jev voice decision routing', () => {
         intensity: 0.9, delivery: 'energetic',
       },
     }, emotion);
-    expect(plan.waitingPhrase).toBe('うん、ちゃんと聞いています。');
-    expect(plan.waitingPerformance).toEqual({ affect: 'caring', intensity: 0.5, delivery: 'gentle' });
+    expect(plan.waitingPhrase).toBeUndefined();
+    expect(plan.waitingPerformance).toBeUndefined();
   });
 
   it('voices a kind newer than the apps\' fixed voice vocabulary with its nearest older one, and keeps the kind itself', async () => {
@@ -349,6 +350,37 @@ describe('OpenAI voice decision compatibility routing', () => {
     expect(decision.source).toBe('openai');
     expect(decision.solutionWantedProbability).toBe(0.2);
     expect(openAIFetcher).toHaveBeenCalledOnce();
+  });
+
+  it('decides by the local rules at once when Jev failed too late for the model fallback to answer within the route bound', async () => {
+    const openAIFetcher = vi.fn(async () => { throw new Error('must not be asked'); });
+    let now = 0;
+    const gateway = new JevVoiceDecisionGateway({
+      apiKey: 'jev-test', nowMilliseconds: () => now,
+      fetcher: vi.fn(async () => { now += 1_400; throw new Error('TimeoutError'); }) as typeof fetch,
+      fallbackGateway: new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'openai-test', fetcher: openAIFetcher as typeof fetch }),
+    });
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: 'なんとなく話したい', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
+    });
+    expect(decision.source).toBe('fallback');
+    expect(openAIFetcher).not.toHaveBeenCalled();
+  });
+
+  it('does not take a duration or a destination for a memory question (2026-10-13: a flight follow-up)', async () => {
+    const local = new LocalVoiceDecisionGateway();
+    const decide = (transcript: string) => local.decide({ scopeKey: 'owner-a', transcript, participantMode: 'owner', requestedLocation: false, hasFreshLocation: false });
+    for (const transcript of ['フライトが18:30なんだけど、どれくらい前に空港に着いてるべき？', '30分前に出ればいい？', '目的地まで何分？', '手続きの方法を教えて',
+      '1時間前に行っておけばいい？', '2日前に送っておけば間に合う？', '３０分くらい前に着いて見てればいい？', '何日前に頼めばいい？']) {
+      const decision = await decide(transcript);
+      expect(decision.selectedSkills, transcript).not.toContain('conversation_memory');
+      expect(voicePlanResponse(decision).waitingPhrase, transcript).toBeUndefined();
+    }
+    for (const transcript of ['前に話した旅行の件', '以前行った店の名前は？', 'この前の続きを話して', '前に言われたこと', '前に行ってたカフェ',
+      '前にやったゲーム', '前にもらった本', '前に会った人', '前に読んだ記事', '前に送ったリンク', '前に頼まれた件', '前に使ってたアプリ',
+      '前にお願いしたこと', '前に作ってくれたメモ', '前に観た映画']) {
+      expect((await decide(transcript)).selectedSkills, transcript).toContain('conversation_memory');
+    }
   });
 
   it('prefers Jev when configured, otherwise OpenAI, then deterministic rules', () => {

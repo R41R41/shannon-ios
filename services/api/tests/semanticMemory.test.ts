@@ -13,6 +13,7 @@ import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall, withMemorySearchLatency } from '../src/mind/recall/turnMemoryRecall.js';
 import type { VoiceTurnDecision } from '../src/mind/selectors/voiceDecision.js';
+import type { TreeKnowledgeRecall } from '../src/mind/recall/treeRecall.js';
 
 const at = '2026-09-30T03:00:00.000Z';
 const directories: string[] = [];
@@ -24,9 +25,13 @@ function store(): SQLiteShannonStore {
   return new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now: () => at });
 }
 
-function recall(persistent: SQLiteShannonStore, gateway: DeterministicMemoryModelGateway, config: Partial<SemanticMemoryConfig> = {}) {
-  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, persistent, { ...DEFAULT_SEMANTIC_MEMORY_CONFIG, ...config }));
+function recall(persistent: SQLiteShannonStore, gateway: DeterministicMemoryModelGateway, config: Partial<SemanticMemoryConfig> = {},
+  tree: TreeKnowledgeRecall | null = null) {
+  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, persistent, { ...DEFAULT_SEMANTIC_MEMORY_CONFIG, ...config }), null, tree);
 }
+
+/** Tree recall wired (stage 2), walking nothing: the voice recall of stage 2 without a knowledge walk. */
+const quietTree = { walksTree: () => false, watchAudience: () => {} } as unknown as TreeKnowledgeRecall;
 
 async function seeded() {
   const persistent = store();
@@ -192,20 +197,22 @@ function memoryDecision(): VoiceTurnDecision {
 }
 
 describe('voice memory turns', () => {
-  it('plays the waiting phrase before a semantic memory search and skips it for guests', async () => {
+  it('searches memory without a waiting phrase or a rewrite call, and skips it for guests', async () => {
     const { persistent } = await seeded();
     const gateway = new DeterministicMemoryModelGateway();
     const model = new RecordingChatModel();
     const api = createLocalApiKernel(() => at, {
       chatModel: model, stateStore: persistent, conversationStore: persistent,
       voiceDecision: { mode: 'jev', model: 'test-jev', decide: async () => memoryDecision() },
-      memoryRecall: recall(persistent, gateway),
+      memoryRecall: recall(persistent, gateway, {}, quietTree),
     });
     const owner = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: 'owner', transcript: '前に話した旅行の件、覚えてる？' } });
     expect(owner).toMatchObject({ status: 200, body: { voicePlan: { latencyClass: 'under_10s' } } });
-    expect((owner.body as { voicePlan: { waitingPhrase?: string } }).voicePlan.waitingPhrase).toBeTruthy();
+    // She always has the conversation in mind (owner feedback 2026-10-13): no 「前の話を確認しますね。」.
+    expect((owner.body as { voicePlan: { waitingPhrase?: string } }).voicePlan.waitingPhrase).toBeUndefined();
     expect(gateway.calls).toContain('embed');
+    expect(gateway.calls).not.toContain('rewrite'); // A voice turn searches with the spoken words.
     gateway.calls.splice(0);
     const guest = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: 'owner', transcript: '前に話した旅行の件、覚えてる？', participantMode: 'guest' } });

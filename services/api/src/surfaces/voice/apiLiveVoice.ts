@@ -109,6 +109,8 @@ export interface LiveVoiceStreamObserver {
   readonly timing?: TurnTiming; // The stream's own timing line (`turnTiming.ts`); absent, the delegation writes one itself.
   onPlan(plan: Record<string, unknown>): void | Promise<void>;
   onTextDelta(delta: string): void | Promise<void>;
+  /** Whether the plan's waiting phrase has been heard yet (the stream route says it only after a silence); absent, it was said with the plan. */
+  waitingSaid?(): boolean;
 }
 export function dispatchLiveVoiceRequest(
   request: ApiRequest,
@@ -220,7 +222,7 @@ async function completeLiveVoiceDelegation(
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
   const roomLook = voiceLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), threadId, turnId: deviceContext?.userUtterance?.id, guest: temporaryGuest, source: deviceContext?.userUtterance?.source,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
-  // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
+  // A turn that will search memory with a model is at least a >3 s turn (her memory gets no waiting phrase: `voiceWaitingCue.ts`).
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
   if (semanticMemoryTurn) decision = withMemorySearchLatency(decision);
@@ -256,7 +258,7 @@ async function completeLiveVoiceDelegation(
   let expressiveEmotion = provisionalExpressiveEmotion;
   let voicePlan = observedVoicePlan(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   await observer?.onPlan(voicePlan);
-  const waitingPhraseSaid = typeof voicePlan.waitingPhrase === 'string' && voicePlan.waitingPhrase.trim() !== '';
+  const waitingSaid = String(voicePlan.waitingPhrase ?? '').trim() ? { waitingSaid: observer?.waitingSaid?.bind(observer) ?? true as const } : {};
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
     return visibleVoiceResponse(() => ({
@@ -407,8 +409,8 @@ async function completeLiveVoiceDelegation(
     ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false, spokenReply: true })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(
-        // The stream route speaks the first plan's waiting phrase: the model's tool rounds then add no second one.
-        { ...modelRequest, threadKey: threadId, ...(waitingPhraseSaid ? { waitingSaid: true as const } : {}) },
+        // The stream route may speak the first plan's waiting phrase after a silence: once it has, the model's tool rounds add no second one.
+        { ...modelRequest, threadKey: threadId, ...waitingSaid },
         async delta => {
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
           timing.mark('firstToken');
