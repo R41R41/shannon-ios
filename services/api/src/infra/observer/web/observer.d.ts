@@ -58,3 +58,11 @@ export function createObserverSession(getStorage: () => Pick<Storage, 'getItem' 
 };
 export function createReceiptGate(): { accept(envelope: ObserverBatch): boolean; reset(): void };
 export function viewPrefs(value: unknown): { hidden: boolean; hint: boolean; level: 1 | 2 | 3 | null };
+export interface HistoryCall { key: string; span: ObservedSpan; state: ObservationState; inWindow: boolean }
+export function createNodeHistory(limit?: number): { observe(state: ObserverState): void; list(view: string, state: ObserverState): HistoryCall[]; clear(): void };
+export function spanToolName(span: ObservedSpan | undefined): string | null;
+export function runUsage(run: ObservedRun | undefined): { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null };
+export function runToolCalls(run: ObservedRun | undefined): { name: string; failed: boolean; open: boolean; key: string }[];
+export function turnFlow(run: ObservedRun | undefined): { view: string; key: string; text: string; failed?: boolean; tool?: boolean }[];
+export interface BlockAlert { span: ObservedSpan; view: string; status: ObservationState; key: string }
+export function blockAlerts(state: ObserverState): Map<string, { failed: BlockAlert[]; running: BlockAlert[]; unknown: BlockAlert[] }>;

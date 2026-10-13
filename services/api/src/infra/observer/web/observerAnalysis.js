@@ -136,3 +136,25 @@ export function createElapsedClock() {
     elapsed(span, now) { const start = span && arrivals.get(spanKey(span)); return start === undefined ? null : Math.max(0, now - start); },
   };
 }
+
+/** The spans that decided when a run finished (owner, 2026-10-14, 2A), from observed start, measured duration and explicit
+ * parent links only. Items are { key, parent, start, end } with measured, closed spans; anything open or unmeasured is
+ * left out, so nothing is inferred. From the end backwards: the child that finished last is on the path, then the child
+ * that finished last before it started, and so on, descending into each one the same way. Top-level spans are children of
+ * one implicit root that spans them all. Returns the set of keys on the path. */
+export function criticalPath(items, slackMs = 2) {
+  const valid = items.filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end >= item.start);
+  const keys = new Set(valid.map(item => item.key)), children = new Map(), path = new Set();
+  for (const item of valid) { const parent = keys.has(item.parent) ? item.parent : '#root'; children.set(parent, [...(children.get(parent) ?? []), item]); }
+  const walk = (key, start, end) => {
+    const kids = (children.get(key) ?? []).filter(kid => kid.end <= end + slackMs).sort((a, b) => b.end - a.end);
+    let cursor = end;
+    for (const kid of kids) {
+      if (kid.end > cursor + slackMs || kid.end < start - slackMs) continue;
+      path.add(kid.key); walk(kid.key, kid.start, kid.end); cursor = kid.start;
+    }
+  };
+  if (!valid.length) return path;
+  walk('#root', Math.min(...valid.map(item => item.start)), Math.max(...valid.map(item => item.end)));
+  return path;
+}

@@ -12,3 +12,4 @@ export function createElapsedClock(): { clear(): void; observe(spans: Iterable<O
 
 export interface MilestoneSummary { n: number; median: number | null; p95: number | null; }
 export function streamTimingSummary(spans: Iterable<ObservedSpan>): { completedRequests: number; firstVisible: MilestoneSummary; finalUsage: MilestoneSummary };
+export function criticalPath(items: { key: string; parent: string | null; start: number; end: number }[], slackMs?: number): Set<string>;
