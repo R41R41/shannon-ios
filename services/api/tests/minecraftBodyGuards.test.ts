@@ -56,7 +56,7 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     const path = databasePath();
     const now = () => START;
     const store = new SQLiteShannonStore({ path, now });
-    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION, SHANNON_FCA_RUNTIME: 'on' }, path);
+    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }, path);
     wiring.connect({ stateStore: store, conversationStore: store, background: new BackgroundUpdateCoordinator(store, store), now,
       chatModel: new LocalStubChatModel(), peopleStore: null, conversation: { textTurn: () => { throw new Error('not called'); } } });
     for (const [method, route] of [['POST', '/v1/chat'], ['PUT', '/v1/body/capabilities'], ['GET', '/v1/memories'], ['POST', '/v1/agent/host/steps/claim']]) {

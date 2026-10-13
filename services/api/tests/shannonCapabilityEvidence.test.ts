@@ -115,6 +115,10 @@ import { DeviceActions } from '../src/surfaces/device/deviceActions.js';
 import { createDeviceActionRoute } from '../src/surfaces/device/deviceActionRoutes.js';
 import { deviceActionExecutors } from '../src/mind/tools/shannonDeviceActionTools.js';
 
+/** Whether a part refuses to start, with its code first in the message (the common runtime is always on since ADR-0009 S9). */
+function refusesToStart(start: () => unknown, code: string): boolean {
+  try { start(); return false; } catch (error) { return error instanceof Error && error.message.startsWith(code); }
+}
 const voiceSkill = (skill: VoiceSkill) => (VOICE_SKILLS as readonly string[]).includes(skill);
 const exists = (...values: unknown[]) => values.every(value => typeof value === 'function');
 
@@ -134,7 +138,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   fca_shared_context: () => exists(createFcaSharedWiring, createFcaVoiceBridge, ShannonToolRunner.prototype.useMemory, fcaResearchTools, ShannonToolRunner.prototype.skillIndex, ShannonToolRunner.prototype.skillIndexSources)
     && ['memory.search', 'memory.read'].every(name => SHANNON_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_SHARED_CAPABILITY.text),
-  fca_tasks: () => exists(runFcaStep, executeTaskTool, createFcaConversationBridge) && configuredServerFca({}, {} as never) === null
+  fca_tasks: () => exists(runFcaStep, executeTaskTool, createFcaConversationBridge) && refusesToStart(() => configuredServerFca({}, {} as never), 'FCA_ACTION_THREADS_REQUIRED')
     && ['task.create', 'task.list', 'task.get', 'task.send'].every(name => TASK_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_TASK_CAPABILITY.text)
     && createInMemoryAutonomyService(() => '2026-10-09T00:00:00.000Z').tools.offered('text', 'owner_alone').every(tool => tool.domain !== 'task_runtime'),

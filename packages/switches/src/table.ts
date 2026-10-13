@@ -26,7 +26,6 @@ const STAGE1 = 'SHANNON_ADR8_STAGE1';
 const STAGE2 = 'SHANNON_ADR8_STAGE2';
 const STAGE3 = 'SHANNON_ADR8_STAGE3';
 const STAGE4 = 'SHANNON_ADR8_STAGE4';
-const FCA = 'SHANNON_FCA_RUNTIME';
 
 export const SWITCHES = [
   {
@@ -155,11 +154,7 @@ export const SWITCHES = [
     doc: 'ADR-0008 stage 5 ports: self interests, task trees, reply-bound feedback, gated self revision.',
   },
   {
-    name: FCA, default: 'off', kind: 'on_only', owner: 'fca', requires: [STAGE4],
-    doc: 'The common FCA task runtime (needs action threads; the server refuses to start without them).',
-  },
-  {
-    name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [FCA],
+    name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [STAGE4],
     doc: 'Touch reflexes run under the FCA runtime.',
   },
   {

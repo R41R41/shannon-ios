@@ -1,4 +1,3 @@
-import { switchOn } from '@shannon/switches';
 import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MINECRAFT_CONTROL_PATH } from '../contracts/minecraftControlContract.js';
@@ -41,7 +40,6 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } | null = null;
-  if (configuration && !switchOn(environment, 'SHANNON_FCA_RUNTIME')) throw new Error('FCA_MINECRAFT_CONFIG_REQUIRED');
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
