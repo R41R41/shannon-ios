@@ -46,3 +46,28 @@ describe('turn steps line', () => {
     expect(info.mock.calls.map(([line]) => String(line)).find(line => line.startsWith('Shannon turn steps'))).toMatch(/ model=\d+ms /u);
   });
 });
+
+describe('turn steps on the observer event', () => {
+  it('puts the closed step names and rounded numbers on the turn terminal event, and nothing for a run without steps', async () => {
+    const events: Array<{ node: string; kind: string; output?: unknown }> = [];
+    cleanups.push(installObserverSink(event => events.push(event)));
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    await withObserverRun({ scopeKey: 'owner', surface: 'text' }, async () => {
+      observedStep('identity', () => 1); observedStep('fcaContext', () => 2);
+      observerHandoff('context', 'native', { surface: 'text' });
+    });
+    const done = events.find(event => event.node === 'turn' && event.kind === 'run.completed')!;
+    const output = done.output as { status: string; steps: Record<string, number>; modelStartMs: number };
+    expect(output.status).toBe('completed');
+    expect(Object.keys(output.steps)).toEqual(['identity', 'fcaContext']);
+    for (const value of Object.values(output.steps)) expect(Number.isInteger(value)).toBe(true);
+    expect(Number.isInteger(output.modelStartMs)).toBe(true);
+    events.length = 0;
+    await withObserverRun({ scopeKey: 'owner', surface: 'autonomy' }, async () => {});
+    expect(events.find(event => event.kind === 'run.completed')!.output).toEqual({ status: 'completed' });
+    events.length = 0;
+    await expect(withObserverRun({ scopeKey: 'owner', surface: 'text' }, async () => { observedStep('replay', () => 1); throw new Error('boom'); })).rejects.toThrow('boom');
+    const failed = events.find(event => event.kind === 'span.failed')!.output as { status: string; steps: Record<string, number>; modelStartMs: null };
+    expect(failed).toMatchObject({ status: 'failed', modelStartMs: null }); expect(Object.keys(failed.steps)).toEqual(['replay']);
+  });
+});

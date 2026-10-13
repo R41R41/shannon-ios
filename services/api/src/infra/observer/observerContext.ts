@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { ObserverDraft, ObserverJson, ObserverNodeId, ObserverTaskLink } from '../../contracts/observerContract.js';
-import { beginTurnSteps, flushTurnSteps, markModelStart, timedStep, type TurnStep } from './turnSteps.js';
+import { beginTurnSteps, flushTurnSteps, markModelStart, timedStep, turnStepsSnapshot, type TurnStep } from './turnSteps.js';
 
 export type ObserverSink = (event: ObserverDraft) => void;
 type Run = ObserverTaskLink & { scopeKey: string; runId: string; parent: string | null; root: string; activeNode?:ObserverNodeId; activeSpan?:string; latest: Map<ObserverNodeId,string>; audience: 'owner' | 'others' };
@@ -88,6 +88,11 @@ export function withObserverRunSync<T>(options: RunOptions, work: () => T): T {
 export function currentObserverRunId(): string | null { return context.getStore()?.runId ?? null; }
 /** A synchronous step of the current turn, timed for its steps line (`turnSteps.ts`); outside an observed turn it only runs. */
 export function observedStep<T>(step: TurnStep, work: () => T): T { return timedStep(sink ? currentObserverRunId() : null, step, work); }
+/** The turn's measured steps (closed names, numbers only) ride on its terminal event as well as the log line. */
+function terminalSteps(runId: string): { [key: string]: ObserverJson } {
+  const value = turnStepsSnapshot(runId);
+  return value ? { steps: value.steps, modelStartMs: value.modelStartMs } : {};
+}
 export async function withObserverRun<T>(options:RunOptions,work:()=>Promise<T>):Promise<T> {
   if (!sink) return work();
   const inherited=context.getStore();
@@ -97,8 +102,10 @@ export async function withObserverRun<T>(options:RunOptions,work:()=>Promise<T>)
     const started=performance.now();
     beginTurnSteps(run.runId);
     emit(run,{spanId:run.root,node:'turn',kind:'run.started',input:projected(()=>({surface:options.surface,parentRunId:options.parentRunId??null}))});
-    try {const value=await context.run({...run,parent:run.root},work);emit(run,{spanId:run.root,node:'turn',kind:'run.completed',elapsedMs:performance.now()-started,output:{status:'completed'}});return value;}
-    catch(error){emit(run,{spanId:run.root,node:'turn',kind:'span.failed',elapsedMs:performance.now()-started,output:{status:'failed'}});throw error;}
+    const end=(kind:'run.completed'|'span.failed',status:string)=>
+      emit(run,{spanId:run.root,node:'turn',kind,elapsedMs:performance.now()-started,output:{status,...terminalSteps(run.runId)}});
+    try {const value=await context.run({...run,parent:run.root},work);end('run.completed','completed');return value;}
+    catch(error){end('span.failed','failed');throw error;}
     finally{flushTurnSteps(run.runId,options.surface,performance.now()-started);}
   });
 }

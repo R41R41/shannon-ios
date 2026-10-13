@@ -1,5 +1,22 @@
 # Mind Observer UI validation
 
+## Owner redesign (2026-10-13)
+
+Branch `observer-redesign` from `6b4919db`. Verified with headless Chrome against `scripts/observer-ui-smoke.ts`
+(real assets, pairing, routes and publisher; in-memory stores; controlled fixture values only). The new `turn`
+fixture command emits a current-architecture text turn: turn steps, 記憶の土台, parallel Jev router and semantic
+recall with Jev calls, FCA tool selection, two Haiku rounds with a gate and two tools (one failing with
+`TypeError`), decode and store; `fca-run` adds a real local FCA task tree. Timings are local sleeps, not provider
+latency. No console exceptions; `scrollWidth` equals the viewport at 1440 and 390.
+
+- [Timeline, base-step detail and FCA task tree (1440)](observer-evidence/redesign-desktop-timeline.jpg)
+- [Map, block level (1440)](observer-evidence/redesign-desktop-map-l1.jpg) and [box level](observer-evidence/redesign-desktop-map.jpg)
+- [目指す姿 map, dummy (1440)](observer-evidence/redesign-desktop-target-map.jpg)
+- [Timeline and failed-tool detail (390)](observer-evidence/redesign-phone-timeline.jpg), [map (390)](observer-evidence/redesign-phone-map.jpg)
+
+Production, device and Windows-app rendering of this branch are not yet verified.
+
+
 ## Common-FCA revision (2026-10-09)
 
 Branch: `codex/shannon/fca-observer`, base `eaf6b84f`. The owner's compact dark

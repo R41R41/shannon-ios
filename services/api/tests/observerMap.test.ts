@@ -1,121 +1,74 @@
 import { describe, expect, it } from 'vitest';
-import { LINKS, NODE_SPECS, createMapRouter, mapLayout, type MapBox, type MapLayout, type MapRoute } from '../src/infra/observer/web/observerMap.js';
+import { OBSERVER_NODES } from '../src/contracts/observerContract.js';
+import {
+  BLOCKS, CURRENT_LAYOUT, TARGET_BLOCKS, TARGET_LAYOUT, TARGET_LINKS, TARGET_NODES, TARGET_RUNS, VIEW_LINKS, VIEW_NODES,
+  blockRoutes, curvePath, dummyFields, mergeFields, routeTable, viewHandoff, viewNodeOf, type GridLayout,
+} from '../src/infra/observer/web/observerMap.js';
 
-type Point = [number, number];
-const adoptedRows = [
-  ['pcm', 'stt', 'join', 'perception', 'turn', 'jevv'],
-  ['taskHub', 'queue', 'fca', 'compact', 'wait', 'workspace'],
-  ['recall', 'context', 'native', 'llm', 'decode', 'emotion'],
-  [null, 'jevt', 'tools', 'gate', 'store', 'prediction'],
-  ['sentences', 'plan', 'tts', 'play'],
-  ['bodyObserve', 'reflex', 'reflexJev', 'reflexDecision', 'bodyControl', 'minecraft'],
-  ['memory', 'embedding', 'sleep', 'autonomy', 'agentHost'],
-];
-const loop = [['native', 'llm'], ['llm', 'gate'], ['gate', 'tools'], ['tools', 'native']] as const;
-
-function crosses(a: Point, b: Point, box: MapBox, padding = 0) {
-  const left = box.x - padding, right = box.x + box.w + padding;
-  const top = box.y - padding, bottom = box.y + box.h + padding;
-  return a[0] === b[0]
-    ? a[0] > left && a[0] < right && Math.max(a[1], b[1]) > top && Math.min(a[1], b[1]) < bottom
-    : a[1] > top && a[1] < bottom && Math.max(a[0], b[0]) > left && Math.min(a[0], b[0]) < right;
+function noOverlap(layout: GridLayout) {
+  const boxes = [...layout.boxes.values()], blocks = [...layout.blocks.values()];
+  for (const list of [boxes, blocks]) for (const [index, a] of list.entries()) for (const b of list.slice(index + 1))
+    expect(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y).toBe(true);
+  for (const box of boxes) { expect(box.x + box.w).toBeLessThanOrEqual(layout.width); expect(box.y + box.h).toBeLessThanOrEqual(layout.height); }
 }
 
-function portSide(point: Point, box: MapBox) {
-  if (point[0] === box.x && point[1] > box.y && point[1] < box.y + box.h) return 'left';
-  if (point[0] === box.x + box.w && point[1] > box.y && point[1] < box.y + box.h) return 'right';
-  if (point[1] === box.y && point[0] > box.x && point[0] < box.x + box.w) return 'top';
-  if (point[1] === box.y + box.h && point[0] > box.x && point[0] < box.x + box.w) return 'bottom';
-  return null;
-}
-
-function expectClearRoute(layout: MapLayout, route: MapRoute | null, from: string, to: string) {
-  expect(route, `${from}>${to} exists`).not.toBeNull();
-  const points = route!.points;
-  expect(points.length).toBeGreaterThanOrEqual(2);
-  expect(route!.path).not.toMatch(/NaN|undefined|Infinity/);
-  for (const point of points) {
-    expect(point[0]).toBeGreaterThanOrEqual(0); expect(point[0]).toBeLessThanOrEqual(layout.width);
-    expect(point[1]).toBeGreaterThanOrEqual(0); expect(point[1]).toBeLessThanOrEqual(layout.height);
-  }
-  for (const [id, point, adjacent] of [[from, points[0], points[1]], [to, points.at(-1)!, points.at(-2)!]] as const) {
-    const side = portSide(point, layout.boxes.get(id)!);
-    expect(side, `${from}>${to}: boundary port on ${id}`).not.toBeNull();
-    if (side === 'left') expect(adjacent[0]).toBeLessThan(point[0]);
-    if (side === 'right') expect(adjacent[0]).toBeGreaterThan(point[0]);
-    if (side === 'top') expect(adjacent[1]).toBeLessThan(point[1]);
-    if (side === 'bottom') expect(adjacent[1]).toBeGreaterThan(point[1]);
-  }
-  for (let index = 1; index < points.length; index += 1) {
-    const a = points[index - 1], b = points[index];
-    expect((a[0] === b[0]) !== (a[1] === b[1]), `${from}>${to}: orthogonal, nonzero segment`).toBe(true);
-    for (const [id, box] of layout.boxes) {
-      // Endpoint stems touch their own boundary only. Other boxes retain an 8 px
-      // clearance, greater than the 6 px rounded elbow radius and packet radius.
-      expect(crosses(a, b, box, id === from || id === to ? 0 : 8), `${from}>${to}: avoids ${id}`).toBe(false);
-    }
-  }
-}
-
-describe('adopted compact FCA lanes', () => {
-  it('retains all 38 processors and 49 links, with the chosen seven rows and no prototype padding rows', () => {
-    expect(NODE_SPECS).toHaveLength(38); expect(LINKS).toHaveLength(49);
-    expect(new Set(LINKS.map(([from, to]) => `${from}>${to}`)).size).toBe(49);
-    const layout = mapLayout(1088);
-    for (const [row, ids] of adoptedRows.entries()) for (const [col, id] of ids.entries()) {
-      if (id) expect(layout.boxes.get(id)).toMatchObject({ row, col });
-      else expect([...layout.boxes.values()].some(box => box.row === row && box.col === col)).toBe(false);
-    }
-    expect(layout.zones).toHaveLength(7);
-    expect(layout.zones[2].h).toBe(layout.pitch * 2 - 8);
-    expect(layout.zones[3].x).toBeGreaterThan(layout.boxes.get('decode')!.x);
-    expect(layout.height - Math.max(...[...layout.boxes.values()].map(box => box.y + box.h))).toBe(32);
-    expect(layout.height).toBe(1032);
+describe('current-architecture view of observed events', () => {
+  it('projects every contract node somewhere, with unique view ids and links between known boxes', () => {
+    const ids = VIEW_NODES.map(spec => spec[0]);
+    expect(new Set(ids).size).toBe(ids.length);
+    const sources = new Set(VIEW_NODES.flatMap(spec => spec[6]));
+    for (const node of OBSERVER_NODES) expect(sources.has(node), node).toBe(true);
+    for (const [from, to] of [...VIEW_LINKS]) { expect(ids).toContain(from); expect(ids).toContain(to); }
+    for (const spec of VIEW_NODES) expect(BLOCKS.map(block => block[0])).toContain(spec[1]);
+    // The processes the owner asked to see are blocks; display-only boxes carry no contract node.
+    expect(BLOCKS.map(block => block[2]).join(' ')).toMatch(/api.*worker.*autonomy worker.*world・agent-host/su);
+    for (const id of ['identity', 'executive', 'sqlite']) expect(VIEW_NODES.find(spec => spec[0] === id)![6]).toEqual([]);
   });
 
-  it.each([390, 1088, 1400, 1441, 1920])('routes every canonical link around boxes at viewport width %i with distinct ports', width => {
-    const layout = mapLayout(width), router = createMapRouter(layout), usedPorts = new Set<string>();
-    expect(layout.width).toBeGreaterThanOrEqual(1088);
-    for (const [from, to] of LINKS) {
-      const route = router.route(from, to);
-      expectClearRoute(layout, route, from, to);
-      for (const [id, point] of [[from, route!.points[0]], [to, route!.points.at(-1)!]] as const) {
-        const key = `${id}:${point.join(':')}`;
-        expect(usedPorts.has(key), `distinct ${key}`).toBe(false); usedPorts.add(key);
-      }
-    }
-    // These four centered, direct legs form the visible return loop, including tools→native.
-    for (const [from, to] of loop) expect(router.route(from, to)!.points).toHaveLength(2);
-    expect(router.route('native', 'llm')!.points[0][0]).toBe(router.route('gate', 'tools')!.points[1][0]);
-    expect(router.route('native', 'llm')!.points[1][0]).toBe(router.route('gate', 'tools')!.points[0][0]);
-    expect(router.route('llm', 'gate')!.points[0][0]).toBe(router.route('llm', 'gate')!.points[1][0]);
-    expect(router.route('tools', 'native')!.points[0][0]).toBe(router.route('tools', 'native')!.points[1][0]);
+  it('splits Jev and LLM nodes, and base from semantic recall, only from explicit payload fields', () => {
+    expect(viewNodeOf('turn')).toBe('admit');
+    expect(viewNodeOf('jevt', { surface: 'text', offeredTools: [], difficulty: 'normal' })).toBe('router');
+    expect(viewNodeOf('jevv', {})).toBe('router');
+    expect(viewNodeOf('jevt', { selector: 'fca', offeredCount: 3 })).toBe('fcaTool');
+    expect(viewNodeOf('jevt', { selector: 'reflex_entry' })).toBe('reflexJev');
+    expect(viewNodeOf('llm', { model: 'claude-haiku-5-5', round: 1 })).toBe('haiku');
+    expect(viewNodeOf('llm', { provider: 'jev', questionCount: 2 })).toBe('jevModel');
+    expect(viewNodeOf('llm', { provider: 'openai_decisions' })).toBe('jevModel');
+    expect(viewNodeOf('recall', { message: 'x', threadId: 't' })).toBe('base');
+    expect(viewNodeOf('recall', { message: 'x', semantic: true })).toBe('recall');
+    expect(viewNodeOf('recall', { strategy: 'deterministic', surface: 'voice' })).toBe('base');
+    expect(viewNodeOf('recall', { strategy: 'semantic', surface: 'voice' })).toBe('recall');
+    expect(viewNodeOf('recall', { phase: 'decision_packet', maximumWaitMs: 900 })).toBe('recall');
+    expect(viewNodeOf('recall', { phase: 'task_deterministic' })).toBe('base');
+    expect(viewNodeOf('pcm')).toBe('pcm'); expect(viewNodeOf('unknown-node')).toBeNull();
+    expect(viewHandoff({ fromNode: 'context', toNode: 'jevt', output: { phase: 'fca_selection', offeredCount: 4 } })).toEqual(['context', 'fcaTool']);
+    expect(viewHandoff({ fromNode: 'jevt', toNode: 'context', output: { tools: [] } })).toEqual(['router', 'context']);
+    expect(viewHandoff({ fromNode: 'native', toNode: 'llm', output: { model: 'claude-haiku-5-5', round: 1 } })).toEqual(['native', 'haiku']);
+    expect(viewHandoff({ fromNode: 'native', toNode: 'llm', output: { provider: 'openai_decisions' } })).toEqual(['native', 'jevModel']);
   });
 
-  it('adds real, noncanonical handoffs without moving existing wires, and forgets dynamic reservations on reset', () => {
-    const layout = mapLayout(1400), router = createMapRouter(layout), fresh = createMapRouter(layout);
-    const canonical = LINKS.map(([from, to]) => router.route(from, to));
-    for (const [from, to] of [['stt', 'perception'], ['join', 'fca'], ['tts', 'store'], ['play', 'turn'], ['sleep', 'fca'], ['bodyObserve', 'reflex']]) {
-      const route = router.route(from, to); expectClearRoute(layout, route, from, to);
-      expect(router.route(from, to)).toBe(route);
+  it('lays out blocks and boxes without overlap and routes every structural link', () => {
+    for (const layout of [CURRENT_LAYOUT, TARGET_LAYOUT]) noOverlap(layout);
+    for (const [layout, links] of [[CURRENT_LAYOUT, VIEW_LINKS], [TARGET_LAYOUT, TARGET_LINKS]] as const) {
+      const routes = routeTable(layout, links);
+      expect(routes.size).toBe(links.length);
+      for (const route of routes.values()) expect(curvePath(route.points)).not.toMatch(/NaN|undefined|Infinity/);
+      for (const route of blockRoutes(layout, links).values()) expect(route.from).not.toBe(route.to);
     }
-    expect(LINKS.map(([from, to]) => router.route(from, to))).toEqual(canonical);
-    expect(router.route('absent', 'llm')).toBeNull(); expect(router.route('llm', 'llm')).toBeNull();
-    router.reset();
-    expect(router.route('sleep', 'fca')).toEqual(fresh.route('sleep', 'fca'));
-    expect(LINKS.map(([from, to]) => router.route(from, to))).toEqual(canonical);
+    // A return route never hides under its outbound route.
+    const routes = routeTable(CURRENT_LAYOUT, VIEW_LINKS);
+    expect(routes.get('haiku>gate')!.points).not.toEqual(routes.get('tools>haiku')!.points);
   });
+});
 
-  it('does not reserve a source port when an observed handoff cannot be routed', () => {
-    const box = (x: number, y: number, w: number, h: number): MapBox => ({ x, y, w, h, col: 0, row: 0 });
-    // A malformed/custom layout traps b within c. Failure must not progressively
-    // consume a's ports or change the next independently routable handoff.
-    const layout: MapLayout = { width: 400, height: 240, pitch: 144, zones: [], boxes: new Map([
-      ['a', box(32, 64, 80, 64)], ['b', box(240, 88, 64, 48)], ['c', box(224, 64, 112, 112)],
-    ]) };
-    const router = createMapRouter(layout, []);
-    for (let attempt = 0; attempt < 20; attempt += 1) expect(router.route('a', 'b')).toBeNull();
-    expect(router.route('a', 'c')).toEqual(createMapRouter(layout, []).route('a', 'c'));
-    expect(router.route('a', 'c')).not.toBeNull();
+describe('target architecture (ADR-0009) dummy model', () => {
+  it('uses only its own boxes, closed dummy fields and overrides', () => {
+    const ids = new Set(TARGET_NODES.map(spec => spec[0]));
+    for (const [from, to] of TARGET_LINKS) { expect(ids.has(from)).toBe(true); expect(ids.has(to)).toBe(true); }
+    for (const run of TARGET_RUNS) for (const [id] of run.spans) expect(ids.has(id), id).toBe(true);
+    for (const spec of TARGET_NODES) expect(TARGET_BLOCKS.map(block => block[0])).toContain(spec[1]);
+    expect(dummyFields('完了 completion=1.0; 反応 owner=0.8')).toEqual([{ gloss: '完了', key: 'completion', value: '1.0' }, { gloss: '反応', key: 'owner', value: '0.8' }]);
+    expect(mergeFields(dummyFields('候補 candidates=7'), '候補 candidates=6; 理由 reason=1行').map(field => field.value)).toEqual(['6', '1行']);
+    expect(TARGET_NODES.find(spec => spec[0] === 'reward')![5]).toBe('完了35・反応35・予測20・自己10');
   });
 });

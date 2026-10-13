@@ -379,7 +379,7 @@
       "long-line": 3
     },
     "services/api/src/infra/models/anthropic/anthropicForegroundMenu.ts": {
-      "long-line": 3
+      "long-line": 1
     },
     "services/api/src/infra/models/anthropic/anthropicRequest.ts": {
       "complex-function": 1,
@@ -499,8 +499,8 @@
       "long-line": 5
     },
     "services/api/src/infra/observer/observerContext.ts": {
-      "multi-statement-line": 18,
-      "long-line": 16
+      "multi-statement-line": 17,
+      "long-line": 15
     },
     "services/api/src/infra/observer/observerRoutes.ts": {
       "multi-statement-line": 19,
