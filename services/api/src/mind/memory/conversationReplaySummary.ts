@@ -1,5 +1,5 @@
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { OWNER_AUDIENCE, type CompanionStateStore } from '@shannon/cognition';
 import {
   COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, mergedTemplate, renderedCompaction, summaryInput,
@@ -285,13 +285,23 @@ export const REPLAY_SUMMARY_INSTRUCTIONS = [
 export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
   private readonly model: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore }) {
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async update(scopeKey: string, input: { previousSummary: string | null; lines: readonly string[] }): Promise<string | null> {
+    if (this.claude) {
+      const answer = await completeStructured<string>('replay_summary', REPLAY_SUMMARY_INSTRUCTIONS,
+        JSON.stringify({ previousSummary: input.previousSummary, newMessages: input.lines }), null,
+        { claude: this.claude, scopeKey, maximumOutputTokens: 900, effort: 'none', signal: AbortSignal.timeout(60_000) });
+      if (!answer.ok) throw new Error(`OPENAI_REPLAY_SUMMARY_${answer.status}`);
+      return answer.value || null;
+    }
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -308,12 +318,17 @@ export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
-    validateResponseModelUsage(this.model, envelope);
     return extractOutputText(envelope) || null;
   }
 
   /** F7: the template's update (`REPLAY_TEMPLATE_INSTRUCTIONS`), strict JSON with every section a list or null. */
   async updateTemplate(scopeKey: string, input: ReplayTemplateInput): Promise<string | null> {
+    if (this.claude) {
+      const answer = await completeStructured('replay_template', REPLAY_TEMPLATE_INSTRUCTIONS, JSON.stringify(input), TEMPLATE_SCHEMA,
+        { claude: this.claude, scopeKey, maximumOutputTokens: 1_600, effort: 'none', signal: AbortSignal.timeout(60_000), read: text => text });
+      if (!answer.ok) throw new Error(`OPENAI_REPLAY_TEMPLATE_${answer.status}`);
+      return answer.value || null;
+    }
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -330,7 +345,6 @@ export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
-    validateResponseModelUsage(this.model, envelope);
     return extractOutputText(envelope) || null;
   }
 }

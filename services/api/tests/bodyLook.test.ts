@@ -706,7 +706,7 @@ describe('the frame is never kept', () => {
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
-    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'haikuConfig.ts', 'haikuResponses.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
+    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'claudeStructured.ts', 'haikuConfig.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);

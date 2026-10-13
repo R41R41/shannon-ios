@@ -1,6 +1,6 @@
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { base64Image, claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import {
   errorDetail,
   extractOutputText,
@@ -42,13 +42,16 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
   private readonly endpoint: string;
   private readonly timeoutMilliseconds: number;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: OpenAIVoiceVisionGatewayOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = boundedTimeout(options.timeoutMilliseconds);
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async analyze(request: VoiceVisionRequest): Promise<VoiceVisionResult> {
@@ -56,6 +59,25 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
       || !validImageSignature(request.image, request.mimeType)) {
       throw new VoiceVisionError('VOICE_VISION_INVALID_IMAGE');
     }
+    const answer = this.claude ? await this.claudeDescription(this.claude, request) : await this.openAIDescription(request);
+    if (!answer.description) throw new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED', answer.status, 'empty response');
+    return { description: answer.description, model: this.model };
+  }
+
+  private async claudeDescription(claude: ClaudeBackground, request: VoiceVisionRequest): Promise<{ description: string; status: number }> {
+    const failed = () => new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED');
+    const image = base64Image(request.mimeType, Buffer.from(request.image).toString('base64'));
+    if (!image) throw failed();
+    const input = [{ role: 'user' as const, content: [{ type: 'text' as const, text: PHOTO_REQUEST }, image] }];
+    const answer = await completeStructured<string>('voice_photo', photoInstructions(request), input, null, {
+      claude, scopeKey: request.scopeKey, maximumOutputTokens: 350, effort: 'none', signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      unsent: failed,
+    });
+    if (!answer.ok) throw new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED', answer.status, errorDetail({ error: answer.body }));
+    return { description: answer.value, status: 200 };
+  }
+
+  private async openAIDescription(request: VoiceVisionRequest): Promise<{ description: string; status: number }> {
     const imageURL = `data:${request.mimeType};base64,${Buffer.from(request.image).toString('base64')}`;
     let response: Response;
     try {
@@ -67,17 +89,11 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
         },
         body: JSON.stringify({
           model: this.model,
-          instructions: [
-            request.conversationContext,
-            '[One user-approved photo from camera or photo library; capture time is unknown]',
-            'Describe only what is reasonably visible. Distinguish observation from uncertainty.',
-            'Answer in concise natural Japanese for Shannon to paraphrase aloud.',
-            'Do not identify an unknown person, infer sensitive traits, or claim that an external action occurred.',
-          ].join('\n\n'),
+          instructions: photoInstructions(request),
           input: [{
             role: 'user',
             content: [
-              { type: 'input_text', text: 'いま共有された1枚の写真を見て、会話に役立つ内容を説明してください。' },
+              { type: 'input_text', text: PHOTO_REQUEST },
               { type: 'input_image', image_url: imageURL, detail: 'low' },
             ],
           }],
@@ -102,11 +118,20 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
     const usage = responseUsage(parsed);
     this.options.usageStore?.recordLlmUsage({ scopeKey: request.scopeKey, lane: 'chat', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
-    validateResponseModelUsage(this.model, parsed);
-    const description = extractOutputText(parsed);
-    if (!description) throw new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED', response.status, 'empty response');
-    return { description, model: this.model };
+    return { description: extractOutputText(parsed), status: response.status };
   }
+}
+
+const PHOTO_REQUEST = 'いま共有された1枚の写真を見て、会話に役立つ内容を説明してください。';
+
+function photoInstructions(request: VoiceVisionRequest): string {
+  return [
+    request.conversationContext,
+    '[One user-approved photo from camera or photo library; capture time is unknown]',
+    'Describe only what is reasonably visible. Distinguish observation from uncertainty.',
+    'Answer in concise natural Japanese for Shannon to paraphrase aloud.',
+    'Do not identify an unknown person, infer sensitive traits, or claim that an external action occurred.',
+  ].join('\n\n');
 }
 
 export class VoiceVisionError extends Error {

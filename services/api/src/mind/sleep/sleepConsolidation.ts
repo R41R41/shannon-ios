@@ -1,6 +1,6 @@
 import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { createHash } from 'node:crypto';
 import { isForgottenCommitmentEvidence } from '../memory/memoryVisibilityPorts.js';
 import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
@@ -137,6 +137,8 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMilliseconds: number;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: OpenAISleepMemoryAnalyzerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
@@ -144,7 +146,9 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     this.mode = isHaikuModel(this.model) ? 'anthropic' : 'openai';
     if (!/^[A-Za-z0-9._:-]{1,100}$/.test(this.model)) throw new Error('SHANNON_SLEEP_MODEL is invalid');
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    const { apiKey, fetcher, endpoint, usageStore } = options;
+    this.claude = claudeBackground(this.model, { apiKey, fetcher, endpoint, usageStore });
+    this.fetcher = options.fetcher ?? fetch;
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
   }
 
@@ -159,6 +163,32 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
       .slice(0, 24_000);
     return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey: context?.scopeKey ?? '', lane: 'sleep',
       maxOutputTokens: context?.stage5 ? 1200 : 400, signal: context?.signal, now: () => context?.occurredAt ?? current.toISOString() }, async accounted => {
+    const stage5 = context?.stage5 === true;
+    const request = {
+      instructions: SLEEP_INSTRUCTIONS + (stage5 ? SELF_INTEREST_SLEEP_INSTRUCTIONS : ''),
+      input: stage5 ? `${transcript}\n現在の自己関心（変更の基準。根拠にはしない）:\n${JSON.stringify(context?.selfInterests ?? [])}` : transcript,
+      schema: sleepMemorySchema(stage5), maximumOutputTokens: stage5 ? 1_200 : 400,
+      signal: AbortSignal.any([AbortSignal.timeout(this.timeoutMilliseconds), ...(context?.signal ? [context.signal] : [])]),
+    };
+    const output = this.claude ? await this.claudeOutput(this.claude, request, context, accounted) : await this.openAIOutput(request, context, accounted);
+    return sleepProposals(output, messages, context);
+    });
+  }
+
+  private async claudeOutput(claude: ClaudeBackground, request: SleepRequest, context: SleepAnalysisContext | undefined,
+    accounted: () => void): Promise<unknown> {
+    // Without a context nothing is booked, as before.
+    const route = context ? claude : { model: claude.model, client: claude.client };
+    const answer = await completeStructured<string>('sleep', request.instructions, request.input, request.schema, {
+      claude: route, scopeKey: context?.scopeKey ?? '', maximumOutputTokens: request.maximumOutputTokens, effort: 'none', signal: request.signal,
+      onBooked: accounted, requireUsage: Boolean(context?.signal), read: text => text, ...(context ? { at: () => context.occurredAt } : {}),
+    });
+    if (!answer.ok) throw Object.assign(new Error(`OPENAI_SLEEP_RESPONSE_${answer.status}`), { status: answer.status });
+    context?.signal?.throwIfAborted();
+    return parseJson(answer.value);
+  }
+
+  private async openAIOutput(request: SleepRequest, context: SleepAnalysisContext | undefined, accounted: () => void): Promise<unknown> {
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: {
@@ -167,8 +197,8 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: SLEEP_INSTRUCTIONS + (context?.stage5 ? SELF_INTEREST_SLEEP_INSTRUCTIONS : ''),
-        input: context?.stage5 ? `${transcript}\n現在の自己関心（変更の基準。根拠にはしない）:\n${JSON.stringify(context.selfInterests ?? [])}` : transcript,
+        instructions: request.instructions,
+        input: request.input,
         reasoning: { effort: 'none' },
         text: {
           verbosity: 'low',
@@ -176,57 +206,13 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
             type: 'json_schema',
             name: 'shannon_sleep_memories',
             strict: true,
-            schema: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                ...(context?.stage5 ? { selfInterests: SELF_INTEREST_SLEEP_SCHEMA } : {}),
-                facts: {
-                  type: 'array',
-                  maxItems: 8,
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                      statement: { type: 'string', maxLength: 160 },
-                      evidence: { type: 'string', maxLength: 240 },
-                    },
-                    required: ['statement', 'evidence'],
-                  },
-                },
-                relationships: {
-                  type: 'array',
-                  maxItems: 6,
-                  items: {
-                    type: 'object', additionalProperties: false,
-                    properties: {
-                      statement: { type: 'string', maxLength: 160 },
-                      evidence: { type: 'string', maxLength: 240 },
-                    },
-                    required: ['statement', 'evidence'],
-                  },
-                },
-                interests: {
-                  type: 'array',
-                  maxItems: 6,
-                  items: {
-                    type: 'object', additionalProperties: false,
-                    properties: {
-                      statement: { type: 'string', maxLength: 160 },
-                      evidence: { type: 'string', maxLength: 240 },
-                    },
-                    required: ['statement', 'evidence'],
-                  },
-                },
-              },
-              required: ['facts', 'relationships', 'interests', ...(context?.stage5 ? ['selfInterests'] : [])],
-            },
+            schema: request.schema,
           },
         },
-        max_output_tokens: context?.stage5 ? 1_200 : 400,
+        max_output_tokens: request.maximumOutputTokens,
         store: false,
       }),
-      signal: context?.signal ? AbortSignal.any([context.signal, AbortSignal.timeout(this.timeoutMilliseconds)]) : AbortSignal.timeout(this.timeoutMilliseconds),
+      signal: request.signal,
     });
     const raw = await response.text();
     const json = parseJson(raw);
@@ -245,22 +231,79 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     if (usage.unknownCostUpperBoundUsd) accounted();
     requireBackgroundUsage((json as { usage?: unknown })?.usage, context?.signal);
     accounted();
-    validateResponseModelUsage(this.model, json);
     context?.signal?.throwIfAborted();
-    const output = parseJson(extractOutputText(json));
-    if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
-    const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown; selfInterests?: unknown };
-    const facts = result.facts;
-    if (!Array.isArray(facts)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
-    const ownerProposals = deduplicateProposals([
-      ...parseProposalRows(facts, 'user-fact'),
-      ...parseProposalRows(result.relationships, 'relationship'),
-      ...parseProposalRows(result.interests, 'interest'),
-    ]).slice(0, 20);
-    return [...ownerProposals, ...(context?.stage5 ? parseSleepSelfInterests(result.selfInterests, messages, context.selfInterests ?? [])
-      .map(selfInterest => ({ kind: 'interest' as const, statement: selfInterest.proposal.title ?? '', evidence: selfInterest.evidence, selfInterest })) : [])];
-    });
+    return parseJson(extractOutputText(json));
   }
+}
+
+interface SleepRequest {
+  instructions: string;
+  input: string;
+  schema: Record<string, unknown>;
+  maximumOutputTokens: number;
+  signal: AbortSignal;
+}
+
+function sleepMemorySchema(stage5: boolean): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...(stage5 ? { selfInterests: SELF_INTEREST_SLEEP_SCHEMA } : {}),
+      facts: {
+        type: 'array',
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            statement: { type: 'string', maxLength: 160 },
+            evidence: { type: 'string', maxLength: 240 },
+          },
+          required: ['statement', 'evidence'],
+        },
+      },
+      relationships: {
+        type: 'array',
+        maxItems: 6,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            statement: { type: 'string', maxLength: 160 },
+            evidence: { type: 'string', maxLength: 240 },
+          },
+          required: ['statement', 'evidence'],
+        },
+      },
+      interests: {
+        type: 'array',
+        maxItems: 6,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            statement: { type: 'string', maxLength: 160 },
+            evidence: { type: 'string', maxLength: 240 },
+          },
+          required: ['statement', 'evidence'],
+        },
+      },
+    },
+    required: ['facts', 'relationships', 'interests', ...(stage5 ? ['selfInterests'] : [])],
+  };
+}
+
+function sleepProposals(output: unknown, messages: readonly DailyUserMessage[], context: SleepAnalysisContext | undefined): UserFactProposal[] {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
+  const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown; selfInterests?: unknown };
+  const facts = result.facts;
+  if (!Array.isArray(facts)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
+  const ownerProposals = deduplicateProposals([
+    ...parseProposalRows(facts, 'user-fact'),
+    ...parseProposalRows(result.relationships, 'relationship'),
+    ...parseProposalRows(result.interests, 'interest'),
+  ]).slice(0, 20);
+  return [...ownerProposals, ...(context?.stage5 ? parseSleepSelfInterests(result.selfInterests, messages, context.selfInterests ?? [])
+    .map(selfInterest => ({ kind: 'interest' as const, statement: selfInterest.proposal.title ?? '', evidence: selfInterest.evidence, selfInterest })) : [])];
 }
 
 export function createConfiguredSleepMemoryAnalyzer(

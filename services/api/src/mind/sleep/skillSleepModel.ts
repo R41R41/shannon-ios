@@ -1,6 +1,6 @@
 import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 
@@ -21,15 +21,20 @@ export interface SkillSleepModel {
 export class OpenAISkillSleepModel implements SkillSleepModel {
   readonly model: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore; timeoutMilliseconds?: number }) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? 'gpt-5.6-terra');
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
     return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 4000, signal }, async accounted => {
+    const timeout = AbortSignal.any([AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000), ...(signal ? [signal] : [])]);
+    if (this.claude) return this.claudeJson({ claude: this.claude, scopeKey, instructions, input, schema, signal, timeout, accounted });
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -40,7 +45,7 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
         max_output_tokens: 4_000, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.any([AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000), ...(signal ? [signal] : [])]),
+      signal: timeout,
     });
     const envelope = parseJson(await response.text());
     if (!response.ok) throw Object.assign(new Error(`OPENAI_SKILLS_${response.status}`), { status: response.status });
@@ -51,10 +56,20 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
     if (usage.unknownCostUpperBoundUsd) accounted();
     requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
     accounted();
-    validateResponseModelUsage(this.model, envelope);
     signal?.throwIfAborted();
     return parseJson(extractOutputText(envelope));
     });
+  }
+
+  private async claudeJson(call: { claude: ClaudeBackground; scopeKey: string; instructions: string; input: unknown;
+    schema: Readonly<Record<string, unknown>>; signal?: AbortSignal; timeout: AbortSignal; accounted: () => void }): Promise<unknown> {
+    const answer = await completeStructured<string>('skill_sleep', call.instructions, JSON.stringify(call.input), call.schema, {
+      claude: call.claude, scopeKey: call.scopeKey, maximumOutputTokens: 4_000, effort: 'low', signal: call.timeout,
+      onBooked: call.accounted, requireUsage: Boolean(call.signal), read: text => text,
+    });
+    if (!answer.ok) throw Object.assign(new Error(`OPENAI_SKILLS_${answer.status}`), { status: answer.status });
+    call.signal?.throwIfAborted();
+    return parseJson(answer.value);
   }
 }
 

@@ -1,7 +1,7 @@
 import { shannonPersonaPrompt } from '@shannon/cognition';
 import { DEFAULT_HAIKU_MODEL } from './anthropic/haikuConfig.js';
 import { anthropicApiKey } from './anthropic/anthropicConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from './anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from './claude/claudeStructured.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from './llmUsage.js';
 import { SPOKEN_REPORT_INSTRUCTIONS, spokenReportInput, type SpokenReportRequest, type SpokenReportSpeaker } from '../../mind/action/fca/fcaSpokenReport.js';
@@ -22,15 +22,25 @@ export class SpokenReportModel implements SpokenReportSpeaker {
   readonly model: string;
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: SpokenReportModelOptions) {
     if (!options.apiKey.trim()) throw new Error('SPOKEN_REPORT_API_KEY_REQUIRED');
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async speak(request: SpokenReportRequest): Promise<string> {
+    if (this.claude) {
+      const input = [{ role: 'user' as const, content: spokenReportInput(request) }];
+      const answer = await completeStructured<string>('spoken_report', this.instructions(), input, null,
+        { claude: this.claude, scopeKey: request.scopeKey, maximumOutputTokens: 200, effort: 'none', signal: request.signal });
+      if (!answer.ok) throw new Error(`SPOKEN_REPORT_UPSTREAM_${answer.status}`);
+      return answer.value;
+    }
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -40,14 +50,17 @@ export class SpokenReportModel implements SpokenReportSpeaker {
     const json = parseJson(await response.text());
     if (!response.ok) throw new Error(`SPOKEN_REPORT_UPSTREAM_${response.status}`);
     this.record(request.scopeKey, json);
-    validateResponseModelUsage(this.model, json);
     return extractOutputText(json);
+  }
+
+  private instructions(): string {
+    return `${shannonPersonaPrompt('owner')}\n\n${SPOKEN_REPORT_INSTRUCTIONS}`;
   }
 
   private body(request: SpokenReportRequest) {
     return {
       model: this.model,
-      instructions: `${shannonPersonaPrompt('owner')}\n\n${SPOKEN_REPORT_INSTRUCTIONS}`,
+      instructions: this.instructions(),
       input: [{ role: 'user', content: spokenReportInput(request) }],
       reasoning: { effort: 'none' },
       text: { verbosity: 'low' },

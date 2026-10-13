@@ -111,7 +111,7 @@ export interface ClaudeUsageRow {
 }
 
 /** One usage row: input = uncached + cache write + cache read; cached = cache read. */
-export function bookClaudeUsage(store: LlmUsageStore | undefined, row: ClaudeUsageRow): void {
+export function bookClaudeUsage(store: Pick<LlmUsageStore, 'recordLlmUsage'> | undefined, row: ClaudeUsageRow): void {
   const { counts } = row;
   const input = counts.input + counts.cacheWrite + counts.cacheRead;
   store?.recordLlmUsage({
@@ -160,4 +160,36 @@ export function bookConversationUsage(store: LlmUsageStore | undefined, entry: C
   const bound = unknownBill ? unknownCostUpperBound(entry.model, entry.maximumOutputTokens, counts.searches, input) : 0;
   const estimatedCostUsd = Math.max(estimatedAnthropicCostUsd(entry.model, counts), bound);
   bookClaudeUsage(store, { scopeKey: entry.scopeKey, lane: 'chat', model: entry.model, counts, estimatedCostUsd, at: entry.at });
+}
+
+/** All four counts known and their sum a safe integer: the bill of a closed response is known. */
+export function closedUsage(usage: Anthropic.Message['usage'] | null | undefined): boolean {
+  if (!nativeUsageComplete(usage)) return false;
+  return Number.isSafeInteger(usage!.input_tokens + usage!.cache_creation_input_tokens! + usage!.cache_read_input_tokens! + usage!.output_tokens);
+}
+
+export interface BackgroundUsage {
+  scopeKey: string;
+  lane: LlmUsageLane;
+  model: string;
+  usage: Anthropic.Message['usage'] | null | undefined;
+  maximumOutputTokens: number;
+  at: () => string;
+}
+
+/**
+ * A background route's row (`claudeStructured.ts`): the measured cost at the reported TTLs, and for a response whose bill is not
+ * known at least the unknown-cost bound of its input as reported (no server tool: the input cannot grow after it was counted).
+ */
+export function bookBackgroundUsage(store: Pick<LlmUsageStore, 'recordLlmUsage'> | undefined, entry: BackgroundUsage): void {
+  const usage = entry.usage;
+  const counts: AnthropicUsageCounts = {
+    input: knownCount(usage?.input_tokens), cacheWrite: knownCount(usage?.cache_creation_input_tokens),
+    cacheRead: knownCount(usage?.cache_read_input_tokens), output: knownCount(usage?.output_tokens), searches: 0,
+    cacheWrite5m: knownCount(usage?.cache_creation?.ephemeral_5m_input_tokens),
+    cacheWrite1h: knownCount(usage?.cache_creation?.ephemeral_1h_input_tokens),
+  };
+  const bound = closedUsage(usage) ? 0 : unknownCostUpperBound(entry.model, entry.maximumOutputTokens, 0, knownInput(usage));
+  const estimatedCostUsd = Math.max(bound, estimatedAnthropicCostUsd(entry.model, counts));
+  bookClaudeUsage(store, { scopeKey: entry.scopeKey, lane: entry.lane, model: entry.model, counts, estimatedCostUsd, at: entry.at });
 }

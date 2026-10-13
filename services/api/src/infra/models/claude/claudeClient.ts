@@ -15,7 +15,7 @@ export interface ClaudeClientOptions {
   apiKey: string;
   /** The SDK's own deadline of one request. */
   timeoutMilliseconds: number;
-  /** The client's fetch (tests: recorded responses; the background bridge: its endpoint override). */
+  /** The client's fetch (tests: recorded responses; the background route: its endpoint override). */
   fetch?: typeof fetch;
 }
 

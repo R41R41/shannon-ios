@@ -411,11 +411,6 @@
       "complex-function": 1,
       "long-line": 9
     },
-    "services/api/src/infra/models/anthropic/haikuResponses.ts": {
-      "complex-function": 4,
-      "multi-statement-line": 3,
-      "long-line": 9
-    },
     "services/api/src/infra/models/anthropic/observerProjection.ts": {
       "long-line": 1
     },
@@ -494,7 +489,7 @@
       "long-line": 6
     },
     "services/api/src/infra/models/turnChecker.ts": {
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/infra/observer/observerCatalog.ts": {
       "long-line": 3
@@ -1498,7 +1493,7 @@
     },
     "services/api/src/mind/recall/memoryModels.ts": {
       "multi-statement-line": 1,
-      "long-line": 5
+      "long-line": 4
     },
     "services/api/src/mind/recall/semanticMemoryRecall.ts": {
       "complex-function": 1
@@ -1608,8 +1603,7 @@
       "long-line": 2
     },
     "services/api/src/mind/sleep/sleepConsolidation.ts": {
-      "complex-function": 2,
-      "long-line": 1
+      "complex-function": 1
     },
     "services/api/src/mind/sleep/sleepConsolidationRules.ts": {
       "complex-function": 1,
@@ -1780,9 +1774,6 @@
       "complex-function": 3,
       "multi-statement-line": 1,
       "long-line": 12
-    },
-    "services/api/src/surfaces/body/bodyReactionModel.ts": {
-      "long-line": 1
     },
     "services/api/src/surfaces/body/bodyReactionPrompt.ts": {
       "complex-function": 1,
