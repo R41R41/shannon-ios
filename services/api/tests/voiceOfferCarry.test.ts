@@ -20,6 +20,8 @@ describe('a short yes to her own offer to look something up (owner decision 2026
     expect(carriedOffer(turn('いや、いいよ', '調べてみましょうか？'))).toBeNull();
     expect(carriedOffer(turn('エビは何種類いるの？', '調べてみましょうか？'))).toBeNull();
     expect(carriedOffer(turn('うん', 'ムツゴロウが有名です。食べてみたいものはありますか？'))).toBeNull();
+    // 「見ますか？」 about something that is not looked up (review 2026-10-13).
+    expect(carriedOffer(turn('うん', '昨日撮った写真見ますか？'))).toBeNull();
     expect(carriedOffer({ ...turn('お願い', ''), context: [] })).toBeNull();
   });
 

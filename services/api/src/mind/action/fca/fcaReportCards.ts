@@ -11,6 +11,8 @@ export const REPORT_CARD_SPOKEN_WAIT_MS = 25_000;
 export const REPORT_CARD_WINDOW_MS = 24 * 3_600_000;
 const SCANNED_TASKS = 40;
 const REMEMBERED = 512;
+/** Finished work whose report is held (quiet hours) is looked at again by id, so a long night of newer tasks cannot hide it. */
+const WAITING_KEPT = 256;
 
 /** The card's message id: one per task and report, a UUID so every client keeps it as the message's identity. */
 export function reportCardMessageId(scopeKey: string, taskId: string, reportId: string): string {
@@ -63,6 +65,7 @@ function answerOf(task: TaskView, report: NonNullable<TaskProgress['report']>, a
  */
 export function createReportCards(parts: CardParts) {
   const done = new Set<string>();
+  const waiting = new Set<string>();
   const remember = (key: string) => {
     done.add(key);
     if (done.size > REMEMBERED) done.delete(done.values().next().value!);
@@ -70,7 +73,10 @@ export function createReportCards(parts: CardParts) {
   /** True when the task needs no further look (written now, written before, or nothing to write). */
   const consider = (task: TaskView, at: number): boolean | null => {
     const progress = parts.shown(task.id), report = progress?.report;
+    // Shown without its report: held (or dropped) for now; looked at again by id until it is written or leaves the window.
+    if (progress && !report && waiting.size < WAITING_KEPT) waiting.add(task.id);
     if (!progress || !report?.text.trim()) return null;
+    waiting.delete(task.id);
     const key = `${task.id}:${report.id}`;
     if (done.has(key)) return null;
     const sources = parts.runtime.taskSources(parts.ownerScope, task.id);
@@ -93,6 +99,12 @@ export function createReportCards(parts: CardParts) {
       const at = parts.now();
       let tasks: TaskView[] = [], appended = 0;
       try { tasks = parts.runtime.list(parts.ownerScope, { order: 'recent', limit: SCANNED_TASKS }); } catch { return 0; }
+      const listed = new Set(tasks.map(task => task.id));
+      for (const id of waiting) {
+        const task = listed.has(id) ? null : parts.runtime.get(parts.ownerScope, id);
+        if (task && finishedOwnerWork(parts, task, at)) tasks.push(task);
+        else if (!listed.has(id)) waiting.delete(id);
+      }
       for (const task of tasks) {
         try {
           if (finishedOwnerWork(parts, task, at) && consider(task, at)) appended += 1;

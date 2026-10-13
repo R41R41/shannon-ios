@@ -11,9 +11,9 @@ import { sameRequest } from './fcaConversation.js';
  *
  * - A report said in the voice turn that asked for it (`heard`) keeps its card in the Talk at once (the sources and the full
  *   report stay on screen, owner request 2026-10-13) and is never said or announced again: the call drops it.
- * - `drop`, never delivered: a sibling for the same request (the same words, or admitted
- *   within `SAME_REQUEST_WINDOW_MS` of it under the same conversation) already delivered, or, for a failure, completed or still
- *   runs; a failure older than `REPORT_STALE_MS`; a result older than that while he has since talked about the same thing.
+ * - `drop`, never delivered: a sibling for the same request (the same words folded, `sameRequest`, or admitted by the same turn
+ *   with at least `TOPIC_OVERLAP` shared topic pieces) already delivered, or, for a failure, completed or still runs; a failure
+ *   older than `REPORT_STALE_MS`; a result older than that once he has, after it finished, talked about the same thing.
  * - `hold`, delivered later: owner-local quiet hours (23–7) while he has not talked in that Talk for `OWNER_ACTIVE_MS`.
  * - `deliver` otherwise.
  *
@@ -26,7 +26,8 @@ export type ReportGateDecision = 'deliver' | 'hold' | 'drop';
 export type ReportView = 'card' | 'call';
 
 export const REPORT_STALE_MS = 60 * 60_000;
-export const SAME_REQUEST_WINDOW_MS = 2 * 60_000;
+/** Distinct topic pieces two texts must share to be about the same thing. */
+export const TOPIC_OVERLAP = 2;
 export const OWNER_ACTIVE_MS = 10 * 60_000;
 
 export interface ReportGateParts {
@@ -39,8 +40,9 @@ export interface ReportGateParts {
 
 const ACTIVE = ['ready', 'executing', 'waiting'];
 
-/** Words too common to say two messages are about the same thing. */
-const COMMON = new Set(['今日', '明日', '昨日', '今週', '来週', '今夜', '時間', '何時', '自分', '大丈夫', 'ライ']);
+/** Pieces too common to say two messages are about the same thing (dates, times, generic nouns and verbs of asking). */
+const COMMON = new Set(['今日', '明日', '昨日', '今週', '来週', '今夜', '今朝', '今年', '時間', '時刻', '何時', '何分', '自分', '大丈夫', 'ライ',
+  '天気', '予定', '予報', '確認', '電車', '情報', '最新', '検索', '調査', '場所', '方法', '結果', '問題', '一番', '本当', '気分', '教え']);
 
 /**
  * What a later turn shares with a request about the same thing: two-character pieces of its kanji and katakana runs (「太宰府天満宮」
@@ -57,13 +59,28 @@ function failed(task: TaskView, progress: TaskProgress): boolean {
   return task.phase === 'failed' || progress.status === 'failed';
 }
 
-/** Siblings for the same request: the same words, or admitted within `SAME_REQUEST_WINDOW_MS` under the same conversation. */
+/** True when two texts share at least `TOPIC_OVERLAP` distinct topic pieces. */
+export function sameTopic(left: string, right: string): boolean {
+  const words = topicWords(left);
+  return [...topicWords(right)].filter(word => words.has(word)).length >= TOPIC_OVERLAP;
+}
+
+/** The conversation steps (turns) a task was admitted by. */
+function admittingSteps(parts: ReportGateParts, taskId: string): Set<string> {
+  return new Set(parts.runtime.taskSources(parts.ownerScope, taskId).map(source => source.stepId));
+}
+
+/**
+ * Siblings for the same request: the same words folded (`sameRequest`), or admitted by the same turn about the same thing
+ * (the router's research for his words and the model's `web.research` question). Never by time alone: 「明日の東京の天気調べて」
+ * and 「あと新幹線の時刻も調べて」 30 s later are two requests.
+ */
 function sameRequestSiblings(parts: ReportGateParts, task: TaskView): TaskView[] {
   if (!task.parentId) return [];
-  const created = Date.parse(task.createdAt);
+  const steps = admittingSteps(parts, task.id);
   return parts.runtime.list(parts.ownerScope, { parentId: task.parentId, order: 'recent', limit: 50 })
-    .filter(other => other.id !== task.id && other.origin === 'owner_request'
-      && (sameRequest(other.goal, task.goal) || Math.abs(Date.parse(other.createdAt) - created) <= SAME_REQUEST_WINDOW_MS));
+    .filter(other => other.id !== task.id && other.origin === 'owner_request' && (sameRequest(other.goal, task.goal)
+      || ([...admittingSteps(parts, other.id)].some(step => steps.has(step)) && sameTopic(other.goal, task.goal))));
 }
 
 /** One request, at most one notice: true when a sibling already answers it (or, for a failure, still works on it). */
@@ -81,14 +98,12 @@ function supersededBySibling(parts: ReportGateParts, task: TaskView, progress: T
   });
 }
 
-/** Older than `REPORT_STALE_MS`: a failure always, a result once he has since talked about the same thing in that Talk. */
+/** Older than `REPORT_STALE_MS`: a failure always, a result once he has talked about the same thing in that Talk after it finished. */
 function stale(task: TaskView, progress: TaskProgress, history: ReturnType<ReportGateParts['history']>, at: number): boolean {
-  const created = Date.parse(task.createdAt);
-  if (at - created <= REPORT_STALE_MS) return false;
+  if (at - Date.parse(task.createdAt) <= REPORT_STALE_MS) return false;
   if (failed(task, progress)) return true;
-  const words = topicWords(task.goal);
-  return history.some(message => message.role === 'user' && Date.parse(message.observedAt) > created
-    && [...topicWords(message.content)].some(word => words.has(word)));
+  const finished = Date.parse(progress.report!.updatedAt);
+  return history.some(message => message.role === 'user' && Date.parse(message.observedAt) > finished && sameTopic(message.content, task.goal));
 }
 
 /** Owner-local quiet hours while he has not talked in that Talk for `OWNER_ACTIVE_MS`. */

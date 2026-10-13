@@ -16,6 +16,9 @@ const AFFIRMATIVE = new RegExp('^(?:(?:うん|はい|ええ|おう|じゃあ|そ
 /** Her offer to look something up, as the question her reply ended on: 「調べてみましょうか？」「東京の天気も見ますか？」. */
 const OFFER = /(?:調べ|見|確認し|確かめ(?:直し)?|探し|検索し|チェックし)(?:て(?:み|お|き)?)?(?:ましょうか|ますか|ようか)[?？]?\s*$/u;
 
+/** A verb that is itself a lookup, whatever is looked up. */
+const LOOKUP_VERB = /(?:調べ|確認|確かめ|探し|検索|チェック)/u;
+
 /** Capabilities that are the owner's own memory or her day: never carried by an offer's wording. */
 const NOT_CARRIED = new Set<VoiceSkill>(['conversation_memory', 'daily_mind', 'device_context']);
 
@@ -43,6 +46,8 @@ export function carriedOffer(input: Pick<VoiceDecisionInput, 'transcript' | 'con
   if (!OFFER.test(offer)) return null;
   const named = (Object.entries(mandatorySkillPatterns) as Array<[VoiceSkill, RegExp]>)
     .filter(([skill, pattern]) => !NOT_CARRIED.has(skill) && pattern.test(offer)).map(([skill]) => skill);
+  // 「見ますか？」 alone is a lookup only about something looked up (天気, 運行, a place, notes, tasks): 「写真見ますか？」 is not.
+  if (!named.length && !LOOKUP_VERB.test(offer)) return null;
   const before = [...context].reverse().find(item => item.role === 'user')?.content ?? '';
   return { offer, before, skills: named.length ? named : ['current_web'] };
 }

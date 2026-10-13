@@ -58,11 +58,16 @@ function createdTaskId(result: ToolResult): string | undefined {
   } catch { return undefined; }
 }
 
-/** The same request: equal once spacing, punctuation and width are folded, or one wholly contains the other. */
+/** A contained request is the same one only when it is most of the other (「博多の天気」 inside 「明日の博多の天気を調べて」 is not). */
+const CONTAINED_SHARE = 0.6;
+
+/** The same request: equal once spacing, punctuation and width are folded, or one wholly contains the other and is most of it. */
 export function sameRequest(left: string, right: string): boolean {
   const fold = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
   const a = fold(left), b = fold(right);
-  return Boolean(a && b) && (a === b || a.includes(b) || b.includes(a));
+  if (!a || !b) return false;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return a === b || (longer.includes(shorter) && [...shorter].length >= CONTAINED_SHARE * [...longer].length);
 }
 
 /** A foreground adapter, with no timer, model client, copied conversation history, or execution lease of its own. */

@@ -115,7 +115,10 @@ describe('conversation plus ongoing work', () => {
   });
   it('folds spacing, punctuation and width when it decides a question is the same request', () => {
     expect(sameRequest('今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？', '今大濠公園にいるんだけど 17時に博多空港にいるためには何時に出ればいいかな')).toBe(true);
-    expect(sameRequest('博多の天気', '明日の博多の天気を調べて')).toBe(true);
+    // A contained request is the same only when it is most of the other (review 2026-10-13).
+    expect(sameRequest('明日の博多の天気', '明日の博多の天気を調べて')).toBe(true);
+    expect(sameRequest('博多の天気', '明日の博多の天気を調べて')).toBe(false);
+    expect(sameRequest('天気', '明日の博多の天気を調べて')).toBe(false);
     expect(sameRequest('大濠公園から博多空港まで17時着の出発時刻', '今大濠公園にいるんだけど、17時に博多空港にいるためには何時に出ればいいかな？')).toBe(false);
     expect(sameRequest('', '天気')).toBe(false);
   });

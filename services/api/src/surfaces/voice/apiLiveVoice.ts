@@ -433,7 +433,7 @@ async function completeLiveVoiceDelegation(
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
-  const heard = await researchHeardInTurn(fcaTurn, admitted, observer && (text => observer.onTextDelta(text)), observer?.signal); // Said if within 20 s.
+  const heard = await researchHeardInTurn(fcaTurn, admitted, { before: completion.reply, say: observer?.onTextDelta.bind(observer) }, observer?.signal);
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
   const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(completion.reply, work)}${heard}`;
   let feedbackRecordId: string | undefined;

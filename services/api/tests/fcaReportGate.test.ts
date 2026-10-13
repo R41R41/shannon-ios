@@ -20,14 +20,15 @@ function progress(text: string, updatedAt: number, status: TaskProgress['status'
   return { currentStep: 'fca.result', status, startedAt: iso(updatedAt), updatedAt: iso(updatedAt), findings: [],
     report: { id: `r-${text.length}-${updatedAt}`, text, updatedAt: iso(updatedAt), ...extra } };
 }
-function world(at: number, tasks: Array<[TaskView, TaskProgress | null]>, history: Array<{ role: 'user' | 'assistant'; content: string; observedAt: string }> = []) {
+function world(at: number, tasks: Array<[TaskView, TaskProgress | null]>, history: Array<{ role: 'user' | 'assistant'; content: string; observedAt: string }> = [],
+  steps: Record<string, string> = {}) {
   const parts: ReportGateParts = {
     ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => at, history: () => history,
     runtime: {
       get: (_scope, id) => tasks.find(([item]) => item.id === id)?.[0] ?? null,
       list: (_scope, options) => tasks.map(([item]) => item).filter(item => !options?.parentId || item.parentId === options.parentId),
       progress: (_scope, id) => tasks.find(([item]) => item.id === id)?.[1] ?? null,
-      taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(at), recalledMemoryIds: [] }],
+      taskSources: (_scope, id) => [{ stepId: steps[id] ?? 's', experienceId: 'e', threadId: 'thread', observedAt: iso(at), recalledMemoryIds: [] }],
     } as ReportGateParts['runtime'],
   };
   const decide = (id: string, view: 'card' | 'call' = 'card') => {
@@ -44,6 +45,7 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
       [task('a', '17時に博多空港にいるには何時に出ればいい？', asked), progress('地下鉄で16分です。', asked + minutes(1))],
       [task('b', '大濠公園から博多空港の出発時刻', asked + 10_000, 'failed'), progress('調べきれませんでした。', asked + minutes(11), 'failed')],
     ]);
+    // One turn's two tasks about the same thing (the router's for his words, the model's own question): one request.
     expect(answered.decide('b')).toBe('drop');
     expect(answered.decide('a')).toBe('deliver');
     const running = world(noon, [
@@ -56,6 +58,19 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
       [task('b', '明日の天気', asked + minutes(1), 'failed'), progress('止まりました。', asked + minutes(6), 'failed')],
     ]);
     expect([twice.decide('a'), twice.decide('b')]).toEqual(['drop', 'deliver']);
+  });
+
+  it('never takes two requests for one by time alone (review: the weather, then the shinkansen 30 s later)', () => {
+    const asked = noon - minutes(10);
+    const weather = task('a', '明日の東京の天気調べて', asked, 'executing'), train = task('b', 'あと新幹線の時刻も調べて', asked + 30_000);
+    const apart = world(noon, [[weather, null], [train, progress('のぞみは毎時6本です。', asked + minutes(2))]], [], { a: 's1', b: 's2' });
+    expect(apart.decide('b')).toBe('deliver');
+    const failedTrain = world(noon, [[weather, null], [{ ...train, phase: 'failed' } as TaskView, progress('止まりました。', asked + minutes(2), 'failed')]], [], { a: 's1', b: 's2' });
+    expect(failedTrain.decide('b')).toBe('deliver');
+    // Even in one turn, two different things are two requests.
+    const oneTurn = world(noon, [[{ ...weather, phase: 'completed' } as TaskView, progress('晴れです。', asked + minutes(1))],
+      [train, progress('のぞみは毎時6本です。', asked + minutes(2))]]);
+    expect([oneTurn.decide('a'), oneTurn.decide('b')]).toEqual(['deliver', 'deliver']);
   });
 
   it('gives one answer for one request: the first one; one said in its turn keeps its card and is never said again', () => {
@@ -75,13 +90,18 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
     expect(gatedProgress(heard.parts, id => heard.parts.runtime.progress!('owner', id), 'call')('a')?.report).toBeUndefined();
   });
 
-  it('drops a failure an hour late, and a late result once he has talked about the same thing since', () => {
-    const asked = noon - minutes(400);
+  it('drops a failure an hour late, and a late result once he has talked about the same thing after it finished', () => {
+    const asked = noon - minutes(400), finished = asked + minutes(10);
     expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked, 'failed'), progress('止まりました。', noon, 'failed')]]).decide('a')).toBe('drop');
     const later = [{ role: 'user' as const, content: '太宰府の由来ってなんだっけ', observedAt: iso(asked + minutes(200)) }];
-    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', noon)]], later).decide('a')).toBe('drop');
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', finished)]], later).decide('a')).toBe('drop');
+    // His asking message, and talk before the result existed, do not count; nor does one generic word in common.
+    const asking = [{ role: 'user' as const, content: '太宰府天満宮の太宰の語源を調べて', observedAt: iso(asked) }];
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', finished)]], asking).decide('a')).toBe('deliver');
+    const generic = [{ role: 'user' as const, content: '明日の天気を確認して', observedAt: iso(asked + minutes(200)) }];
+    expect(world(noon, [[task('a', '明日の天気を確認して時間を教えて', asked), progress('晴れです。', finished)]], generic).decide('a')).toBe('deliver');
     const other = [{ role: 'user' as const, content: 'お腹すいた', observedAt: iso(asked + minutes(200)) }];
-    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', noon)]], other).decide('a')).toBe('deliver');
+    expect(world(noon, [[task('a', '太宰府天満宮の太宰の語源', asked), progress('大宰府に由来します。', finished)]], other).decide('a')).toBe('deliver');
   });
 
   it('holds a result in his quiet hours until morning, unless he is talking in that Talk right now', () => {
@@ -112,18 +132,50 @@ describe('a voice turn\'s research', () => {
     const said: string[] = [], heard: string[] = [];
     const report = { id: 'r1', text: '## 経路\n- 大濠公園から福岡空港は地下鉄で16分ほどです。\n出典: https://example.com', updatedAt: iso(noon) };
     const turn = { awaitWork: async () => ({ taskId: 'w', title: '空港まで', report }), hearWork: (id: string, reportId: string) => { heard.push(`${id}:${reportId}`); return true; } } as unknown as FcaConversationTurn;
-    const spoken = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, text => { said.push(text); });
+    const say = (text: string) => { said.push(text); };
+    const spoken = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { before: 'ちょっと調べてみますね。', say });
     expect(spoken).toBe('大濠公園から福岡空港は地下鉄で16分ほどです。');
     expect(said).toEqual([spoken]);
     expect(heard).toEqual(['w:r1']);
-    const late = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() - 30_000 }, text => { said.push(text); });
+    // An acknowledgement left open is closed first, in the text and in what the stream cuts into sentences.
+    expect(await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { before: 'ちょっと調べてみますね', say }))
+      .toBe('。大濠公園から福岡空港は地下鉄で16分ほどです。');
+    const late = await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() - 30_000 }, { before: '', say });
     expect(late).toBe('');
-    expect(await researchHeardInTurn(turn, { work: null, admittedAt: performance.now() }, text => { said.push(text); })).toBe('');
-    expect(said).toHaveLength(1);
+    expect(await researchHeardInTurn(turn, { work: null, admittedAt: performance.now() }, { before: '', say })).toBe('');
+    expect(said).toHaveLength(2);
+    // Cut off while it was being said: not marked heard, so the card and the call still deliver it.
+    const controller = new AbortController();
+    heard.length = 0;
+    await researchHeardInTurn(turn, { work: { id: 'w' } as TaskView, admittedAt: performance.now() }, { before: '', say: () => { controller.abort(); } }, controller.signal);
+    expect(heard).toEqual([]);
   });
 
   it('never ends a turn whose research runs on with 「時間が足りなかった」', () => {
     expect(researchSaid(TURN_OUT_OF_TIME_LINE, { id: 'w' } as TaskView)).toBe(RESEARCH_UNDER_WAY_LINE);
     expect(researchSaid(TURN_OUT_OF_TIME_LINE, null)).toBe(TURN_OUT_OF_TIME_LINE);
+  });
+});
+
+describe('the card scan and a held report (review 2026-10-13)', () => {
+  it('writes a report held overnight even after forty newer tasks pushed it out of the recent scan', async () => {
+    const { createReportCards } = await import('../src/mind/action/fca/fcaReportCards.js');
+    const parent = { ...task('conversation', '', night), kind: 'conversation', parentId: null } as TaskView;
+    const held = task('held', 'アベンジャーズの最新作の公開日', night - minutes(30));
+    const newer = Array.from({ length: 40 }, (_, index) => ({ ...task(`n${index}`, `別件${index}`, night), phase: 'executing' }) as TaskView);
+    let morning = false, scanned: TaskView[] = [held];
+    const written: string[] = [];
+    const full = progress('12月18日公開です。', night, 'received', { spoken: '12月18日公開です。' });
+    const cards = createReportCards({
+      ownerScope: 'owner', now: () => night,
+      runtime: { list: () => scanned, get: (_scope: string, id: string) => id === 'conversation' ? parent : id === 'held' ? held : null,
+        taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(night), recalledMemoryIds: [] }] } as never,
+      conversations: { assistantMessage: () => null, appendReportCardOnce: (_scope: string, _thread: string, id: string) => { written.push(id); return true; } } as never,
+      shown: id => id !== 'held' ? null : morning ? full : { ...full, report: undefined },
+    });
+    expect(cards.tick()).toBe(0); // Held: seen without its report.
+    scanned = newer; morning = true;
+    expect(cards.tick()).toBe(1);
+    expect(written).toHaveLength(1);
   });
 });
