@@ -124,11 +124,30 @@ export function handedOverReportLine(task: { goal: string }): string {
 }
 
 /**
- * The spoken form without a model: the operator's line for a request the operator handed over (as its audit says, never as a
- * title reads: he may write anything at the start of his own request), a plain cut of the report otherwise.
+ * What is said when who asked cannot be told (the operator's audit could not be read and the title has no mark): neither his
+ * request nor the operator's, and no model is asked to word it.
  */
-export function plainSpokenReport(task: { goal: string; title: string }, report: string, handedOver: boolean): string {
-  return handedOver ? handedOverReportLine(task) : fallbackSpokenReport(report, task.title);
+export function neutralReportLine(task: { goal: string }): string {
+  const named = [...task.goal.replace(/\s+/gu, ' ').trim()].slice(0, 30).join('');
+  return `依頼「${named}」の結果が届いています。詳しくは画面にあります。`;
+}
+
+/**
+ * Who a request came from: the owner, the operator on his behalf, or unknown (the audit could not be read). Only `owner` is
+ * worded by a model or as his request; the other two get a fixed line.
+ */
+export type RequestedBy = 'owner' | 'operator' | 'unknown';
+export type RequesterOf = (task: { id: string; title: string }) => RequestedBy;
+
+/** The fixed line of a request that is not plainly his, or null for his own. */
+function fixedReportLine(task: { goal: string }, by: RequestedBy): string | null {
+  if (by === 'operator') return handedOverReportLine(task);
+  return by === 'unknown' ? neutralReportLine(task) : null;
+}
+
+/** The spoken form without a model: the fixed line of a request not plainly his, a plain cut of the report otherwise. */
+export function plainSpokenReport(task: { goal: string; title: string }, report: string, by: RequestedBy): string {
+  return fixedReportLine(task, by) ?? fallbackSpokenReport(report, task.title);
 }
 
 /** A short report needs no model: it is already what would be said. */
@@ -150,8 +169,8 @@ export function createSpokenReports(parts: {
   record(scopeKey: string, taskId: string, reportId: string, spoken: string): boolean;
   localTime(): string;
   timeoutMs?: number;
-  /** Whether the operator handed this task over for him (its accepted audit row); absent, none was. */
-  handedOver?(taskId: string): boolean;
+  /** Who the task came from (`operatorRequester`: the operator's audit, else the title's mark); absent, every task is his. */
+  requester?: RequesterOf;
 }) {
   const attempted = new Set<string>();
   const running = new Set<Promise<void>>();
@@ -180,7 +199,8 @@ export function createSpokenReports(parts: {
       if (!report || task.origin !== 'owner_request' || report.spoken || !report.text.trim()) return;
       if (attempted.has(key) || controller.signal.aborted) return;
       remember(key);
-      if (parts.handedOver?.(task.id)) return write(scopeKey, task.id, report.id, handedOverReportLine(task));
+      const fixed = fixedReportLine(task, parts.requester?.(task) ?? 'owner');
+      if (fixed) return write(scopeKey, task.id, report.id, fixed);
       const short = alreadyShort(report.text);
       if (short || !parts.speaker) return write(scopeKey, task.id, report.id, short ?? fallbackSpokenReport(report.text, task.title));
       const work = generate(scopeKey, task, report).finally(() => running.delete(work));

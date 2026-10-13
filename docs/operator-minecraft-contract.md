@@ -100,7 +100,9 @@ Who handed a request over is never written as the owner's words. It is marked in
 The Observer shows the admission as a run of surface `operator_cli`; the task itself appears in 「いま」 like any other.
 
 Its result is never told as something he asked for; whether a task is the operator's is read from the audit (an accepted
-`request` row naming it, `operatorHandedOver`), never from its title, so his own request that starts with the same words stays his. The spoken form of its report (what a call says, and a report card's short
+`request` row naming it, `operatorRequester`), never from its title, so his own request that starts with the same words stays his.
+When the audit cannot be read, the doubtful case never claims he asked: a title with 「（運用者経由）」 gets the operator's line,
+and any other task the neutral fixed line 「依頼「…」の結果が届いています。詳しくは画面にあります。」 (no model, no 「頼まれ」). The spoken form of its report (what a call says, and a report card's short
 answer) is the fixed line 「運用者がライ氏の代わりに渡した依頼「…」の結果が届いています。詳しくは画面にあります。」, written without a
 model (`handedOverReportLine`); the report itself stays on the screen. Such a request has no source Talk, so no report card is
 written for it.

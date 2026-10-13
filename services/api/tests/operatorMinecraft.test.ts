@@ -15,12 +15,12 @@ import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.
 import { underWriteLock } from '../src/infra/sqlite/lockWaits.js';
 import { admittedMinecraftRequest, fcaMinecraftRequests, MINECRAFT_REQUEST_CRITERIA } from '../src/wiring/fcaMinecraftRequests.js';
 import { OPERATOR_LIMITS, OPERATOR_NOTE_MARK, OPERATOR_TITLE_PREFIX, parseOperatorEnvelope } from '../src/contracts/operatorContract.js';
-import { createSpokenReports, handedOverReportLine, plainSpokenReport, SPOKEN_REPORT_CHARACTERS } from '../src/mind/action/fca/fcaSpokenReport.js';
+import { createSpokenReports, handedOverReportLine, neutralReportLine, plainSpokenReport, SPOKEN_REPORT_CHARACTERS } from '../src/mind/action/fca/fcaSpokenReport.js';
 import { inspectOperatorAudit, operatorLifecycleAllowed, OperatorAuditStore } from '../src/infra/ops/store/operatorAuditStore.js';
 import { operatorSocketPath, requestOperatorSocket, serveOperatorSocket } from '../src/infra/ops/operatorSocket.js';
 import { operatorEnvelope, runOperatorCli, type OperatorCliDeps } from '../src/infra/ops/operatorCli.js';
 import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftParts } from '../src/wiring/operatorMinecraftWiring.js';
-import { configuredOperatorAudit, operatorHandedOver } from '../src/wiring/operatorServerWiring.js';
+import { configuredOperatorAudit, operatorRequester } from '../src/wiring/operatorServerWiring.js';
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
 import { noticeLine } from '../src/mind/workspace/promptLayout.js';
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
@@ -411,7 +411,7 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
       argsJson: '{}', taskId: TASK });
     const recorded: string[] = [];
     const reports = createSpokenReports({ localTime: () => '', record: (_scope, _id, _report, text) => recorded.push(text) > 0,
-      handedOver: operatorHandedOver({ store: audit, enabled: true, close: () => {} }, 'owner'),
+      requester: operatorRequester({ store: audit, enabled: true, close: () => {} }, 'owner'),
       speaker: { speak: async () => { throw new Error('the model is not asked'); } } });
     reports.request('owner', handed, progress);
     // His own request whose words happen to start with the operator's mark is still his.
@@ -420,13 +420,31 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
     expect(recorded[0]).toBe('運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
     expect(recorded[1]).toBe('石を16個集めました。');
     expect(recorded[0]).not.toContain('頼まれ');
-    expect(operatorHandedOver(null, 'owner')(TASK)).toBe(false);
+    expect(operatorRequester(null, 'owner')(handed)).toBe('owner');
   });
 
   it('keeps the operator line within what a call says', () => {
     expect([...handedOverReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
-    expect(plainSpokenReport(handed, '長い報告。', true)).toContain('運用者がライ氏の代わりに渡した依頼');
-    expect(plainSpokenReport(handed, '石を集めました。', false)).toBe('石を集めました。');
+    expect(plainSpokenReport(handed, '長い報告。', 'operator')).toContain('運用者がライ氏の代わりに渡した依頼');
+    expect(plainSpokenReport(handed, '石を集めました。', 'owner')).toBe('石を集めました。');
+    expect(plainSpokenReport(handed, '石を集めました。', 'unknown')).toBe('依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
+    expect([...neutralReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
+  });
+
+  it('never claims he asked when the audit cannot be read: the title mark, else a neutral line, and no model', async () => {
+    const broken = { store: { requestOf: () => { throw new Error('SQLITE_BUSY'); } }, enabled: true, close: () => {} } as never;
+    const requester = operatorRequester(broken, 'owner');
+    expect(requester(handed)).toBe('operator');
+    expect(requester({ id: OTHER, title: '石を16個集めて' })).toBe('unknown');
+    const recorded: string[] = [];
+    const reports = createSpokenReports({ localTime: () => '', record: (_scope, _id, _report, text) => recorded.push(text) > 0, requester,
+      speaker: { speak: async () => { throw new Error('the model is not asked'); } } });
+    reports.request('owner', handed, progress);
+    reports.request('owner', { ...handed, id: OTHER, title: '石を16個集めて' }, { report: { id: 'r2', text: '長い報告です。', updatedAt: at } } as never);
+    await reports.idle();
+    expect(recorded).toEqual(['運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。',
+      '依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。']);
+    for (const line of recorded) expect(line).not.toContain('頼まれ');
   });
 });
 

@@ -53,7 +53,7 @@ import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/act
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
-import { configuredOperatorAudit, operatorHandedOver, startOperatorMinecraft, type OperatorHostParts } from './operatorServerWiring.js';
+import { configuredOperatorAudit, operatorRequester, startOperatorMinecraft, type OperatorHostParts } from './operatorServerWiring.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
@@ -182,14 +182,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),
       requests: minecraft && requests ? { ...requests.operator, wake } : null }) : null;
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
-      localTime: () => ownerLocalClock(new Date(), timeZone), handedOver: operatorHandedOver(operatorAudit, parts.ownerScope),
+      localTime: () => ownerLocalClock(new Date(), timeZone), requester: operatorRequester(operatorAudit, parts.ownerScope),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
     // Which report reaches him now (`fcaReportWiring.ts`): the card waits out quiet hours; neither repeats an answered request. Rich
     // chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
     const seen = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
       parts.ownerAlone);
     const reports = fcaReportWiring({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, conversations: parts.conversations, seen,
-      ownerAlone: parts.ownerAlone, log: line => console.warn(line), handedOver: operatorHandedOver(operatorAudit, parts.ownerScope) });
+      ownerAlone: parts.ownerAlone, log: line => console.warn(line), requester: operatorRequester(operatorAudit, parts.ownerScope) });
     const cardTimer = reports.cards
       ? setInterval((cards: { tick(): number }) => { timedTick('report_cards', () => cards.tick()); }, 5000, reports.cards).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,

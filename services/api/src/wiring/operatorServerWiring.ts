@@ -6,6 +6,8 @@ import { ensureOperatorDirectory, operatorSocketPath, serveOperatorSocket } from
 import { openDatabase, tableColumns } from '../infra/sqlite/sqliteOpen.js';
 import { autonomyDayKey, type AutonomyConfig } from '../mind/inhibition/autonomyBudget.js';
 import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyActivity.js';
+import type { RequesterOf } from '../mind/action/fca/fcaSpokenReport.js';
+import { OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
@@ -37,15 +39,18 @@ export function configuredOperatorAudit(values: Readonly<Record<string, string |
 }
 
 /**
- * Whether the operator handed a task over for him, as the audit says (an accepted `request` row naming it), never as its title
- * reads. Without an audit, or when it cannot be read, no task is: its report is then worded as any other owner request's.
+ * Who a task came from, as the audit says (an accepted `request` row naming it), never as its title reads while the audit can be
+ * read: his own request may start with any words. Without an audit no operator request exists, so every task is his. When the
+ * audit cannot be read, the doubtful case never claims he asked: the title's 「（運用者経由）」 makes it the operator's, and
+ * without it the request is `unknown` (a neutral fixed line, no model).
  */
-export function operatorHandedOver(audit: OperatorServerAudit | null, scopeKey: string): (taskId: string) => boolean {
-  return taskId => {
+export function operatorRequester(audit: OperatorServerAudit | null, scopeKey: string): RequesterOf {
+  return task => {
+    if (!audit) return 'owner';
     try {
-      return audit?.store.requestOf(scopeKey, taskId) != null;
+      return audit.store.requestOf(scopeKey, task.id) ? 'operator' : 'owner';
     } catch {
-      return false;
+      return task.title.startsWith(OPERATOR_TITLE_PREFIX) ? 'operator' : 'unknown';
     }
   };
 }
