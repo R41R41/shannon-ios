@@ -16,6 +16,8 @@ export interface BodyPresence {
   mood: {
     expression: string; feeling?: string; primary: string; intensity: number; fromConversation: boolean;
     valence: number; arousal: number; openness: number;
+    /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`), while her inner note is active: her true feeling shows through (a blush), and until when she means to. */
+    tell?: 'blush'; until?: string;
   };
   doing: BodyDoing;
   autonomy: { state: AutonomyControlLabel };

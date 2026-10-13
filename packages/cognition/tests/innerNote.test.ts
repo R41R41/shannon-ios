@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHARACTER_CORE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
+  CHARACTER_CORE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE, innerNoteExpressiveEmotionPrompt, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
   boundedUntil, buildExpressiveEmotionPrompt, gatedIntent, goodnightIn, innerNoteActive, innerNoteDay, innerNoteFace,
   innerNoteReflectionInput, innerNoteReflectionInstructions, innerNoteRouteSummary, innerNoteTouchBlock, innerNoteTurnBlock,
   lingeringFeelingLine, parsedInnerNoteReflection, settleInnerNote, teasingIn, withoutOwnApology,
@@ -156,9 +156,11 @@ describe('the reflection', () => {
 describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
   it('keeps the old wordings without the option', () => {
     const emotion = { ...INITIAL_SHANNON_EXPRESSIVE_EMOTION, primary: 'sulky' as const, intensity: 0.6 };
-    expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain('must stay light');
-    expect(buildExpressiveEmotionPrompt(emotion, 'owner', { innerNote: true })).toContain(INNER_NOTE_EXPRESSIVE_LINE);
-    expect(buildExpressiveEmotionPrompt(emotion, 'owner', { innerNote: true })).not.toContain('must stay light');
+    // The replaced line must exist verbatim, so the inner-note wording can never silently fail to apply.
+    expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain(LIGHT_SULKING_LINE);
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).toContain(INNER_NOTE_EXPRESSIVE_LINE);
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).not.toContain('must stay light');
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'others').replace(INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE)).toBe(buildExpressiveEmotionPrompt(emotion, 'others'));
     expect(INNER_NOTE_UNPLEASANT_LINE).toContain('心のメモ');
     expect(INNER_NOTE_UNPLEASANT_LINE).not.toContain('謝罪');
     expect(lingeringFeelingLine({ emotionClock: undefined, lingering: [] } as never, AT, undefined, { innerNote: true })).toBe('');

@@ -71,7 +71,7 @@ import { BODY_LIMITS, bodyIngestEnabled } from './contracts/bodyContract.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
 import { isFullBody } from './surfaces/body/bodyTouchOnly.js';
 import { bodyLookRequestBytes, closeBodyLookStores, configuredAppLookOptions, configuredBodyLookOptions } from './wiring/bodyLookWiring.js';
-import { closeBodyReactionStores, configuredBodyReactionOptions } from './wiring/bodyReactionWiring.js';
+import { closeBodyReactionStores, configuredBodyReactionOptions, configuredInnerNote } from './wiring/bodyReactionWiring.js';
 import { opsCommandsEnabled } from './contracts/opsCommandContract.js';
 import { opsIngestEnabled } from './contracts/opsContract.js';
 import { SQLiteOpsStore } from './infra/ops/store/opsStore.js';
@@ -194,6 +194,7 @@ const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStor
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
+const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
 const kernel = createLocalApiKernel(now, {
   conversationExtras: () => stage5.conversationExtras.ports, ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
@@ -224,8 +225,7 @@ const kernel = createLocalApiKernel(now, {
   ...(memoryPorts ? { memory: memoryPorts } : {}),
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
-  conversationOrchestration: conversationOrchestrationStore,
-  memoryRecall,
+  conversationOrchestration: conversationOrchestrationStore, memoryRecall, ...(innerNote ? { innerNote: innerNote.port } : {}),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { fcaTouch: () => fca?.touch ?? null, store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
@@ -367,7 +367,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (isSkillsPath(url.pathname)) { await skillsRoute(request, response, principal, url.pathname); return; }
-    if (await deviceActions.serve(request, response, principal, url)) return;
+    if (await deviceActions.serve(request, response, principal, url) || innerNote?.serve(request, response, principal, url)) return;
     if (await stage5.serve(request,response,principal,url)) return;
     if (handleRetiredVoiceRoute(url.pathname,response)) return;
     if (url.pathname === '/v1/voice/transcriptions') {
@@ -487,7 +487,7 @@ function shutdown(): void {
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
-    closeBodyLookStores(); closeBodyReactionStores();
+    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close();
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();

@@ -1,5 +1,5 @@
 import { SHANNON_EMOTION_KINDS, type ShannonEmotionKind, type ShannonExpressiveEmotion } from './types.js';
-import { isShannonEmotionKind } from './emotionState.js';
+import { buildExpressiveEmotionPrompt, isShannonEmotionKind } from './emotionState.js';
 
 /**
  * Her inner note (Syzygy ADR-0012 D1–D4), the pure part: its vocabulary, the gates that hold what one reflection may change,
@@ -427,4 +427,16 @@ export function asciiRouteSummary(value: unknown): string {
 /** A kind read from a reflection: one of hers, else neutral. */
 export function shownKind(value: unknown): ShannonEmotionKind {
   return typeof value === 'string' && isShannonEmotionKind(value) ? value : 'neutral';
+}
+
+/** The line of the expressive-emotion block that kept every sulk and anger light (`buildExpressiveEmotionPrompt`). */
+export const LIGHT_SULKING_LINE = 'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, '
+  + 'non-controlling, and never induce guilt.';
+/** Its place while her inner note is on (D5.1; owner 2026-10-14: no rule of how light). */
+export const INNER_NOTE_EXPRESSIVE_LINE = 'Do not force advice when companionship is wanted. '
+  + 'Her jealousy, sulking, anger and teasing are her own, as her inner note says.';
+
+/** `buildExpressiveEmotionPrompt` with that one line in its inner-note wording; every other line as it is. */
+export function innerNoteExpressiveEmotionPrompt(emotion: ShannonExpressiveEmotion, audience: 'owner' | 'guest' | 'others' = 'owner'): string {
+  return buildExpressiveEmotionPrompt(emotion, audience).replace(LIGHT_SULKING_LINE, INNER_NOTE_EXPRESSIVE_LINE);
 }

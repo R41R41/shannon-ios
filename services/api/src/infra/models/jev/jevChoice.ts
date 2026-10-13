@@ -79,6 +79,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   voiceRoute: 'voice_route.v1',
   /** The voice route that also asks about the weather (`routerSkills`, 2026-10-13 daily evals E2/E3). */
   voiceRouteWeather: 'voice_route.v2',
+  /** Syzygy ADR-0012: the voice route that also reads `shannon_inner` and chooses her performance from it (either set above, plus that). */
+  voiceRouteInner: 'voice_route.v3',
   toolMenu: 'tool_menu.v2',
   fcaToolMenu: 'fca_tool_menu.v1',
   reflexEntry: 'reflex_entry.v1',

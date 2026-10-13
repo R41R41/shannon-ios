@@ -164,6 +164,24 @@ export class SQLiteInnerNoteStore {
   }
 
   /**
+   * When her nightly sleep for this day (or a later one) completed after `since`, or null: her day may end there (D4). Read from the
+   * background jobs' own table; null where it does not exist.
+   */
+  sleepCompletedAfter(scopeKey: string, since: string, dayKey: string): string | null {
+    try {
+      const row = this.database.prepare(`SELECT MIN(completed_at) AS at FROM background_jobs WHERE scope_key = ? AND job_kind = 'sleep-consolidation'
+        AND status = 'completed' AND completed_at > ? AND json_extract(payload_json, '$.dayKey') >= ?`).get(scopeKey, since, dayKey) as Row | undefined;
+      return typeof row?.at === 'string' ? row.at : null;
+    } catch { return null; }
+  }
+
+  /** Closes her newest note as it stands (a closing reflection that failed): it is then a memory of its day, never carried on. */
+  markClosed(scopeKey: string, at: string): void {
+    this.database.prepare(`UPDATE shannon_inner_notes SET closed_at = ? WHERE scope_key = ? AND closed_at IS NULL
+      AND sequence = (SELECT MAX(sequence) FROM shannon_inner_notes WHERE scope_key = ?)`).run(at, scopeKey, scopeKey);
+  }
+
+  /**
    * Deletes the notes one of whose sources she was asked to forget (`visible` says no), with what they said. Returns how many.
    * The forgetting is the owner's: a note is not kept with the moment removed, since its words were written about that moment.
    */

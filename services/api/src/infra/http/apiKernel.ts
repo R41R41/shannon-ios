@@ -81,7 +81,7 @@ import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
-import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
+import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
@@ -134,7 +134,7 @@ export interface ShannonApiKernelOptions {
   peopleMemory?: PeopleMemoryStore;
   /** Syzygy ADR-0008 stage 3 (F5): the memory outbox's proposals and the owner's synchronous commands. Absent: switched off. */
   memory?: PeopleMemoryParts | null;
-  autonomy?: ShannonAutonomyService;
+  autonomy?: ShannonAutonomyService; innerNote?: import('../../mind/emotion/innerNotePorts.js').InnerNotePort; // ADR-0012; absent: as before.
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
   minecraftRequests?: ReportedWork | null;
@@ -180,7 +180,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null; private readonly innerNote: import('../../mind/emotion/innerNotePorts.js').InnerNotePort | null;
   private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
@@ -230,7 +230,7 @@ export class ShannonApiKernel {
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
-    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); // Stage 2, step 6: skill.read.
+    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body, options.innerNote); // Stage 2, step 6: skill.read.
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
@@ -336,8 +336,7 @@ export class ShannonApiKernel {
         return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
       }
       if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return badRequest('webSearch must be a boolean');
-      // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
-      const audience = chatAudienceTurn(body.audience);
+      const audience = chatAudienceTurn(body.audience); // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
       if (!audience || !validChatStream(body.stream)) return badRequest(audience ? 'stream is invalid' : 'audience is invalid');
       if (!audience.alone) this.toolServer.audience.noteOthers(body.scopeKey);
       const message = body.message.trim();
@@ -407,7 +406,7 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) })].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) }), innerNoteText.context(this.innerNote, body.scopeKey, audience.alone, Boolean(surface), occurredAt)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId, ...textTurnClock(occurredAt),
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
@@ -423,7 +422,7 @@ export class ShannonApiKernel {
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
-    const { messageEmotion, expressiveEmotion } = resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone);
+    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion);
     const response: ChatResponse = {
       mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
       snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
@@ -471,6 +470,7 @@ export class ShannonApiKernel {
     if (experience) {this.background.schedule(completedTurn, experience.id);observerHandoff('store','memory',{experienceId:experience.id,status:'scheduled'});}
     // Her stored feeling toward the owner moves only on a turn that is his alone.
     if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
+    innerNoteText.ended(this.innerNote, body.scopeKey, audience.alone && !surface, occurredAt, message, reply, expressiveEmotion, experience?.id);
     this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
     } catch (error) {
@@ -492,7 +492,7 @@ export class ShannonApiKernel {
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
       toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}), ...(this.feedback ? { feedback: this.feedback } : {}), ...(this.stage5Capabilities ? {stage5Capabilities:this.stage5Capabilities} : {}),
-      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
+      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}), ...(this.innerNote ? { innerNote: this.innerNote } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

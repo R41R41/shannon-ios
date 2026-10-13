@@ -106,6 +106,11 @@ export interface VoiceDecisionInput {
   turn?: VoiceTurnFacts;
   /** The turn came from an app that offers its camera (`voiceAppLook.ts`): the look is asked about in the app's terms, also with others present. */
   appLook?: true;
+  /**
+   * Syzygy ADR-0012 D5.4 (`SHANNON_INNER_NOTE`, owner alone only): one English line of how she is inside (her inner note's route
+   * summary, nothing personal). Present, Jev chooses her performance from it (`voice_route.v3`) instead of mirroring the speaker.
+   */
+  shannonInner?: string;
 }
 
 export interface VoiceTurnDecision {

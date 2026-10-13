@@ -5,6 +5,8 @@ import { SQLiteTouchExperiences } from '../mind/memory/store/bodyTouchMemory.js'
 import { touchPredictionEnabled } from '../mind/prediction/bodyTouchPrediction.js';
 import type { LlmUsageEvent } from '../infra/models/llmUsage.js';
 import type { ShannonBodyOptions } from '../surfaces/body/shannonBody.js';
+/** Syzygy ADR-0012: her inner note, which every touch she answers is told of (composed in `innerNoteWiring.ts`). */
+export { configuredInnerNote } from './innerNoteWiring.js';
 
 /**
  * What the API process gives the kernel for a touch: the three small tables, the switch and
