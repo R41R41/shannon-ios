@@ -13,7 +13,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiv
 import { presentCompanionState, resolveReplyEmotion } from '../../emotion/emotionPorts.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from '../../../contracts/contracts.js';
 import {
-  NO_CAPABILITY_CONTEXT, conversationCapabilityContext, readToolPlan, type ConversationCapabilityContext, type NotionTurnReader,
+  NO_CAPABILITY_CONTEXT, conversationCapabilityContext, noCapabilityContext, readToolPlan, type ConversationCapabilityContext, type NotionTurnReader,
 } from './conversationCapabilities.js';
 import { WEB_CAPABILITY_ENTRY } from '../../tools/toolsPorts.js';
 import { withToolMenu } from '../../tools/toolsPorts.js';
@@ -39,6 +39,7 @@ import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, t
 import type { ShannonToolRunner } from '../../tools/toolsPorts.js';
 import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
 import { TurnDeadline } from './turnDeadline.js';
+import { textStage } from '../../../infra/observer/observerContext.js';
 import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
 import { closedId, minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../perception/perceptionPorts.js';
 import { framedReport, type MindTurnPorts } from '../../workspace/workspacePorts.js';
@@ -269,6 +270,19 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
       ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities, collectReadSources);
   return { basePrompt, capabilityContext };
+}
+
+/**
+ * `textTurnIdentityAndCapability`, started before the turn awaits semantic recall so that the capability reads run beside it
+ * (2026-10-13: they waited for recall). The read keeps its stage bound and is always handed back as a promise, which never
+ * rejects unhandled while the turn waits for something else first.
+ */
+export function startTextIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, collectReadSources: boolean) {
+  const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(dependencies, input, begun, collectReadSources);
+  const capability = capabilityContext instanceof Promise
+    ? textStage('capability_timeout', capabilityContext, noCapabilityContext) : Promise.resolve(capabilityContext);
+  capability.catch(() => {});
+  return { basePrompt, capability };
 }
 
 /**
