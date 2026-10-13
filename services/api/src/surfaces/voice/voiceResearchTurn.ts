@@ -43,7 +43,7 @@ export function researchSaid(text: string, work: TaskView | null): string {
 
 /**
  * After her acknowledgement, the research's result if it arrives within the wait: said as the rest of this turn (one or two
- * short sentences, the report's spoken form or a plain cut of it), and marked heard so it is not delivered again. '' otherwise.
+ * short sentences, the report's spoken form or a plain cut of it), and marked heard: its card stays, no call says it again. '' otherwise.
  */
 export async function researchHeardInTurn(turn: FcaConversationTurn | null, admitted: { work: TaskView | null; admittedAt: number },
   say: ((text: string) => Promise<void> | void) | undefined, signal?: AbortSignal, waitMs = VOICE_RESEARCH_WAIT_MS): Promise<string> {

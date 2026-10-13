@@ -81,7 +81,7 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   recordProgress?(step: TaskStep, event: TaskProgressEvent): boolean;
   /** Writes the spoken form of the task's current report; false once that report was replaced or already has one. */
-  /** `heard`: the report was said in the voice turn that asked for it (`TaskProgressStore.hear`), so it is not delivered again. */
+  /** `heard`: the report was said in the voice turn that asked for it (`TaskProgressStore.hear`), so it is never said again (its card stays). */
   recordSpokenReport?(scopeKey: string, taskId: string, reportId: string, spoken: string, heard?: true): boolean;
   observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
   admitSleep(scopeKey: string, jobId: string): TaskView | null;

@@ -40,7 +40,7 @@ export interface FcaConversationTurn {
    * returns null when it failed, stopped, the signal aborted, or the owner is no longer alone).
    */
   awaitWork?(milliseconds: number, signal?: AbortSignal): Promise<{ taskId: string; title: string; report: NonNullable<TaskProgress['report']> } | null>;
-  /** The report was said in this turn: it is not delivered again (no card, no call report). */
+  /** The report was said in this turn: its card stays in the Talk, and it is never said or announced again. */
   hearWork?(taskId: string, reportId: string, spoken: string): boolean;
 }
 

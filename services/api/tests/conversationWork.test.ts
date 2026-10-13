@@ -194,7 +194,9 @@ describe('conversation plus ongoing work', () => {
     const report = f.driver.runtime.progress?.('owner', seen[0]!.result!.taskId)?.report;
     expect(report).toMatchObject({ heard: true, spoken: '地下鉄で16分ほどです。' });
     const gate = { runtime: f.driver.runtime, ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => Date.parse(at), history: () => [] };
-    expect(reportGateDecision(gate, f.driver.runtime.get('owner', seen[0]!.result!.taskId)!, f.driver.runtime.progress!('owner', seen[0]!.result!.taskId)!)).toBe('drop');
+    const said = [f.driver.runtime.get('owner', seen[0]!.result!.taskId)!, f.driver.runtime.progress!('owner', seen[0]!.result!.taskId)!] as const;
+    // Its card stays in the Talk with the full report and sources; the call never says it again.
+    expect([reportGateDecision(gate, ...said, 'card'), reportGateDecision(gate, ...said, 'call')]).toEqual(['deliver', 'drop']);
   });
 
   it('still admits web.research on its own when the turn admitted no research', async () => {

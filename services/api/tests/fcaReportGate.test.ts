@@ -30,7 +30,10 @@ function world(at: number, tasks: Array<[TaskView, TaskProgress | null]>, histor
       taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(at), recalledMemoryIds: [] }],
     } as ReportGateParts['runtime'],
   };
-  const decide = (id: string) => { const [item, seen] = tasks.find(([entry]) => entry.id === id)!; return reportGateDecision(parts, item, seen!); };
+  const decide = (id: string, view: 'card' | 'call' = 'card') => {
+    const [item, seen] = tasks.find(([entry]) => entry.id === id)!;
+    return reportGateDecision(parts, item, seen!, view);
+  };
   return { parts, decide };
 }
 
@@ -55,7 +58,7 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
     expect([twice.decide('a'), twice.decide('b')]).toEqual(['drop', 'deliver']);
   });
 
-  it('gives one answer for one request: the first one, or none after it was said in its turn', () => {
+  it('gives one answer for one request: the first one; one said in its turn keeps its card and is never said again', () => {
     const asked = noon - minutes(10);
     const two = world(noon, [
       [task('a', '明日の天気は？', asked), progress('晴れです。', asked + minutes(1))],
@@ -63,7 +66,13 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
     ]);
     expect([two.decide('a'), two.decide('b')]).toEqual(['deliver', 'drop']);
     const heard = world(noon, [[task('a', '明日の天気', asked), progress('晴れです。', asked + minutes(1), 'received', { heard: true })]]);
-    expect(heard.decide('a')).toBe('drop');
+    expect([heard.decide('a', 'card'), heard.decide('a', 'call')]).toEqual(['deliver', 'drop']);
+    // Said in a call at night: the card with its sources is in the Talk at once, not held for the morning.
+    const atNight = world(night, [[task('a', '明日の天気', night - minutes(1)), progress('晴れです。', night, 'received', { heard: true })]]);
+    expect([atNight.decide('a', 'card'), atNight.decide('a', 'call')]).toEqual(['deliver', 'drop']);
+    const said = gatedProgress(heard.parts, id => heard.parts.runtime.progress!('owner', id), 'card')('a');
+    expect(said?.report).toMatchObject({ text: '晴れです。', heard: true });
+    expect(gatedProgress(heard.parts, id => heard.parts.runtime.progress!('owner', id), 'call')('a')?.report).toBeUndefined();
   });
 
   it('drops a failure an hour late, and a late result once he has talked about the same thing since', () => {
@@ -83,8 +92,8 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
       [{ role: 'user', content: 'まだ起きてるよ', observedAt: iso(night - minutes(2)) }]);
     expect(talking.decide('a')).toBe('deliver');
     // The card waits; the call (only spoken while he is in it) does not hold, it only drops.
-    const card = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), true)('a');
-    const call = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), false)('a');
+    const card = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), 'card')('a');
+    const call = gatedProgress(quiet.parts, id => quiet.parts.runtime.progress!('owner', id), 'call')('a');
     expect(card?.report).toBeUndefined();
     expect(call?.report?.text).toBe('12月18日公開です。');
   });

@@ -9,7 +9,9 @@ import { sameRequest } from './fcaConversation.js';
  * an answer delivered at 5:20 in the morning, a 「調べきれなかった」 for a question answered 16 minutes earlier, three notices for
  * one request, a failure notice six hours late for a question re-asked and answered in another Talk).
  *
- * - `drop`, never delivered: said in the turn that asked for it; a sibling for the same request (the same words, or admitted
+ * - A report said in the voice turn that asked for it (`heard`) keeps its card in the Talk at once (the sources and the full
+ *   report stay on screen, owner request 2026-10-13) and is never said or announced again: the call drops it.
+ * - `drop`, never delivered: a sibling for the same request (the same words, or admitted
  *   within `SAME_REQUEST_WINDOW_MS` of it under the same conversation) already delivered, or, for a failure, completed or still
  *   runs; a failure older than `REPORT_STALE_MS`; a result older than that while he has since talked about the same thing.
  * - `hold`, delivered later: owner-local quiet hours (23–7) while he has not talked in that Talk for `OWNER_ACTIVE_MS`.
@@ -19,6 +21,9 @@ import { sameRequest } from './fcaConversation.js';
  * since a call is spoken only while he is in it.
  */
 export type ReportGateDecision = 'deliver' | 'hold' | 'drop';
+
+/** Where the report would go: the Talk's report card (rich, with sources), or the call that says it aloud (the 「いま」 route). */
+export type ReportView = 'card' | 'call';
 
 export const REPORT_STALE_MS = 60 * 60_000;
 export const SAME_REQUEST_WINDOW_MS = 2 * 60_000;
@@ -93,9 +98,10 @@ function quietNow(parts: ReportGateParts, history: ReturnType<ReportGateParts['h
   return !history.some(message => message.role === 'user' && at - Date.parse(message.observedAt) < OWNER_ACTIVE_MS);
 }
 
-export function reportGateDecision(parts: ReportGateParts, task: TaskView, progress: TaskProgress): ReportGateDecision {
+export function reportGateDecision(parts: ReportGateParts, task: TaskView, progress: TaskProgress, view: ReportView = 'card'): ReportGateDecision {
   if (!progress.report || task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind)) return 'deliver';
-  if (progress.report.heard || supersededBySibling(parts, task, progress)) return 'drop';
+  if (progress.report.heard) return view === 'card' ? 'deliver' : 'drop';
+  if (supersededBySibling(parts, task, progress)) return 'drop';
   const at = parts.now();
   const threadId = parts.runtime.taskSources(parts.ownerScope, task.id).find(source => source.threadId)?.threadId;
   const history = threadId ? parts.history(threadId) : [];
@@ -103,17 +109,17 @@ export function reportGateDecision(parts: ReportGateParts, task: TaskView, progr
   return quietNow(parts, history, at) ? 'hold' : 'deliver';
 }
 
-/** A progress view with its report left out unless the gate lets it through (`hold` too, unless only drops are applied). */
-export function gatedProgress(parts: ReportGateParts, shown: (taskId: string) => TaskProgress | null, holds: boolean) {
+/** A progress view with its report left out unless the gate lets it through for this view (the call never holds, it only drops). */
+export function gatedProgress(parts: ReportGateParts, shown: (taskId: string) => TaskProgress | null, view: ReportView) {
   return (taskId: string): TaskProgress | null => {
     const progress = shown(taskId);
     if (!progress?.report) return progress;
     let decision: ReportGateDecision = 'deliver';
     try {
       const task = parts.runtime.get(parts.ownerScope, taskId);
-      decision = task ? reportGateDecision(parts, task, progress) : 'deliver';
+      decision = task ? reportGateDecision(parts, task, progress, view) : 'deliver';
     } catch { decision = 'deliver'; }
-    if (decision === 'deliver' || (decision === 'hold' && !holds)) return progress;
+    if (decision === 'deliver' || (decision === 'hold' && view === 'call')) return progress;
     const { report: _withheld, ...rest } = progress;
     return rest;
   };
@@ -127,5 +133,5 @@ export function reportGates(parts: Omit<ReportGateParts, 'history'> & {
   const { conversations, ...rest } = parts;
   const gate: ReportGateParts = { ...rest, history: threadId => conversations?.recentMessages?.(parts.ownerScope, threadId, 40)
     ?? conversations?.conversationHistory(parts.ownerScope, threadId).slice(-40) ?? [] };
-  return { card: gatedProgress(gate, shown, true), call: gatedProgress(gate, shown, false) };
+  return { card: gatedProgress(gate, shown, 'card'), call: gatedProgress(gate, shown, 'call') };
 }
