@@ -109,18 +109,22 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const admitted = step;
       const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
       if (!budgeted.ok) {
-        // At its cap or without her budget: the task ends here with a report, before any paid call (E3).
-        stopForBudget(admitted, budgeted.report);
+        // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to settleFailedStep.
+        await stopForBudget(admitted, budgeted.report);
         await flushReceipts();
         return;
       }
-      stepPorts = options.stepPorts?.(runtime, admitted);
-      if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
-      observerHandoff('queue', 'fca', { stepId: admitted.id });
-      await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
-          ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
-          executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal))
-        .finally(() => options.budget?.after(task, active.execution.lease, budgeted.reservationId));
+      try {
+        stepPorts = options.stepPorts?.(runtime, admitted);
+        if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
+        observerHandoff('queue', 'fca', { stepId: admitted.id });
+        await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
+            ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
+            executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
+      } finally {
+        // The step's cost, and the release or settlement of its reservation (also when its ports could not be built): never its outcome.
+        await settleBudget(task, active.execution.lease, budgeted.reservationId);
+      }
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
     } catch (error) {
@@ -154,12 +158,33 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
     runtime.recover(scopeKey, classify);
   }
-  /** A task at its cap, or an own-time task without budget: failed with its report in the same commit (E3). */
-  function stopForBudget(step: TaskStep, report: string): void {
+  /**
+   * A task at its cap, or an own-time task without budget (E3): failed with its report in one commit. A task with unfinished
+   * children cannot fail while they run, so it and its children are stopped instead and this step closes as stopped. Any
+   * refusal is thrown to the caller, which closes the step through settleFailedStep.
+   */
+  async function stopForBudget(step: TaskStep, report: string): Promise<void> {
+    runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
+    const task = runtime.get(scopeKey, step.taskId);
+    const open = (id: string) => !['completed', 'failed', 'stopped', undefined].includes(runtime.get(scopeKey, id)?.phase);
+    if (task?.childIds.some(open)) {
+      const stopped = runtime.stop(scopeKey, step.taskId, 'fca_budget_capped');
+      for (const item of stopped) if (item.id !== step.taskId) running.get(item.id)?.controller.abort();
+      for (const live of runtime.activeSteps(scopeKey)) {
+        if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());
+      }
+      if (!runtime.recordStoppedStep(step)) throw new Error('FCA_BUDGET_STOP_UNRECORDED');
+      return;
+    }
+    if (!runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] })) throw new Error('FCA_BUDGET_COMMIT_REFUSED');
+  }
+  /** Cost recording never changes a step's outcome: a failure is logged as a closed code, and the step stands as committed. */
+  async function settleBudget(task: TaskView, lease: ActionLease, reservationId?: string): Promise<void> {
     try {
-      runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
-      runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] });
-    } catch { /* the step's lease ends unknown; nothing paid was sent */ }
+      await options.budget?.after(task, lease, reservationId);
+    } catch (error) {
+      console.log(`Shannon FCA budget not recorded task=${task.id} code=${fcaErrorCode(error)}`);
+    }
   }
   /** A known refusal fails the task in the same commit that tells its parent, and leaves a report the owner's call can speak. */
   function failRejectedStep(step: TaskStep): boolean {

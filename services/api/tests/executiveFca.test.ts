@@ -99,6 +99,17 @@ describe('one budget for FCA steps (E3)', () => {
     expect(allowed.calls).toEqual([`reserve:fca:action-1:1:${OWN_TIME_STEP_ESTIMATE_YEN}`, 'settle:fca:action-1:1:16']);
     expect(spends).toEqual([16]);
     expect(store.spent('t-own_time-research')).toMatchObject({ steps: 1, yen: 16 });
+    // A step that called no model is not a paid step: nothing is counted, and its reservation is released with 0.
+    await budget.before(task('own_time'), { ...lease, generation: 2 });
+    await budget.after(task('own_time'), { ...lease, generation: 2 }, 'fca:action-1:2');
+    expect(store.spent('t-own_time-research')).toMatchObject({ steps: 1, yen: 16 });
+    expect(allowed.calls.at(-1)).toBe('settle:fca:action-1:2:0');
+    // A record that fails still settles the reservation.
+    const broken = fcaBudget({ actions: allowed.actions, store: { ...store, spent: () => ({ steps: 0, yen: 0, cappedAt: null }), add: () => { throw new Error('SQLITE_BUSY'); } } as never, now, ownTime });
+    await broken.before(task('own_time'), { ...lease, generation: 3 });
+    await inActionExecution({ lease: { ...lease, generation: 3 }, signal: new AbortController().signal, permit: async () => {} } as never, async () => { broken.recordUsage(0.01); });
+    await expect(broken.after(task('own_time'), { ...lease, generation: 3 }, 'fca:action-1:3')).rejects.toThrow('SQLITE_BUSY');
+    expect(allowed.calls.at(-1)).toBe('settle:fca:action-1:3:2');
     const exhausted = fcaBudget({ actions: allowed.actions, store, now, ownTime: { ...ownTime, budget: () => ({ capYen: 2000, spentYen: 2000, exhausted: true }) } });
     expect(await exhausted.before(task('own_time'), lease)).toMatchObject({ ok: false, code: 'own_time_budget' });
   });

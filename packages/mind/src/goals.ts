@@ -36,6 +36,8 @@ const POSITIVE: ReadonlySet<GoalReaction> = new Set(['like', 'more', 'positive']
 export const GOAL_LIMITS = Object.freeze({
   /** Non-seed goals in progress at once (plan §3). */
   active: 8,
+  /** Open (active or resting) non-seed goals at most: room beyond the legacy ones, so new goals are not blocked by them. */
+  open: 64,
   /** The first reviews of migrated goals are spread over this many days, oldest first. */
   reviewSpreadDays: 7,
   /** A new goal is first reviewed after this many days. */

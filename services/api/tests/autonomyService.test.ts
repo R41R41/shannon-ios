@@ -326,9 +326,9 @@ describe("Shannon's own pursuits ledger", () => {
     expect(linked.pursuit?.links).toEqual([{ label: '下書き', url: 'aether://study/draft-1' }]);
     expect(service.updatePursuit(scope, added.pursuit!.id, { links: [{ label: '外', url: 'file:///etc/passwd' }] }).rejection).toBe('PURSUIT_INVALID');
     // Syzygy ADR-0009 stage 2 (E2): her "done" is a proposal; only evidence or the owner closes a goal.
-    expect(service.updatePursuit(scope, added.pursuit!.id, { status: 'done' }).pursuit?.status).toBe('active');
+    expect(service.updatePursuit(scope, added.pursuit!.id, { status: 'done' }).pursuit?.status).toBe('resting');
     expect(entries().filter(entry => entry.kind === 'pursuit').map(entry => entry.summary)).toEqual([
-      'やりたいこと「雨の日の短い物語」をやり終えたと考えました（確かめが済むまで続けます）。',
+      'やりたいこと「雨の日の短い物語」をやり終えたと考えました（確かめが済むまで休ませます）。',
       'やりたいこと「雨の日の短い物語」を続けることにしました。',
       'やりたいこと「人はなぜ泣ける話を読むのか」を台帳に書きました。',
       'やりたいこと「雨の日の短い物語」を台帳に書きました。',

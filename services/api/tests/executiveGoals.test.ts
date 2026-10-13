@@ -38,9 +38,13 @@ describe('goals: only evidence or the owner closes a goal (ADR-0009 stage 2, E2)
     const goal = add('雨の日の物語');
     expect(store.pursuits.goals.columns(scope).get(goal.id)).toMatchObject({ sourceKind: 'self', progress: 0, reviewAt: '2026-10-20T01:00:00.000Z' });
     const result = service.updatePursuit(scope, goal.id, { status: 'done' });
-    expect(result.pursuit?.status).toBe('active');
+    expect(result.pursuit?.status).toBe('resting');
     expect(events('propose_complete')).toHaveLength(1);
-    expect(service.activityDays(scope, 1)[0]!.entries[0]!.summary).toBe('やりたいこと「雨の日の物語」をやり終えたと考えました（確かめが済むまで続けます）。');
+    expect(store.pursuits.goals.columns(scope).get(goal.id)?.closedReason).toBe('proposed_complete');
+    // Asked again, it is not proposed twice.
+    service.updatePursuit(scope, goal.id, { status: 'done' });
+    expect(events('propose_complete')).toHaveLength(1);
+    expect(service.activityDays(scope, 1)[0]!.entries[0]!.summary).toBe('やりたいこと「雨の日の物語」をやり終えたと考えました（確かめが済むまで休ませます）。');
   });
 
   it('completes a goal when evidence meets its predicate, and not before', () => {

@@ -15,7 +15,7 @@ import type { OwnTimeBudgetPort } from './fcaBudgetWiring.js';
 /**
  * Own-time FCA tasks (Syzygy ADR-0009 stage 2, E4). The Executive admits one (origin `own_time`); the API process runs its steps
  * like any task, under these rules carried over from her own time:
- * - it runs only while the Executive is on, her own time is enabled and not paused, and her day's budget has room;
+ * - it runs only while her own time is enabled and not paused, and her day's budget has room (the Executive admits it);
  * - who is present does not hold it, because it sees nothing of a conversation: it inherits no source, has no memory, task or
  *   body tools, and reads public pages only (`web.search`, `web.read`), each call still checked for a secret of a conversation.
  */
@@ -41,9 +41,19 @@ export function ownTimeBudgetPort(parts: OwnTimeFcaParts, model: string): OwnTim
   };
 }
 
-export function ownTimeTaskAllowed(values: Readonly<Record<string, string | undefined>>, parts: OwnTimeFcaParts | undefined, budget: OwnTimeBudgetPort | null) {
+/**
+ * Whether an own-time task may run now. It does not read `SHANNON_EXECUTIVE` of this process: such a task exists only because the
+ * Executive of the own-time worker admitted it, so the gate is her own time's state (enabled, not paused, budget left), which both
+ * processes read from the same store. The switch is read here only to say at startup when this process's environment disagrees.
+ */
+export function ownTimeTaskAllowed(
+  values: Readonly<Record<string, string | undefined>>, parts: OwnTimeFcaParts | undefined, budget: OwnTimeBudgetPort | null,
+) {
+  if (parts && !switchOn(values, 'SHANNON_EXECUTIVE')) {
+    console.log('Shannon FCA: SHANNON_EXECUTIVE is off in this process; own-time tasks the worker admits still run under her own-time gate.');
+  }
   return (task: TaskView): boolean => {
-    if (!parts || !budget || !switchOn(values, 'SHANNON_EXECUTIVE') || !parts.config.enabled) return false;
+    if (!parts || !budget || !parts.config.enabled) return false;
     try {
       return !parts.store.control(task.scopeKey).paused && !budget.budget(task.scopeKey).exhausted;
     } catch { return false; }

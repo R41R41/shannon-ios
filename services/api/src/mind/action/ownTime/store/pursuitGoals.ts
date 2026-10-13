@@ -19,7 +19,7 @@ export type PursuitEventActor = 'shannon' | 'owner' | 'system';
 
 /** Why a goal last left `active` (or how it closed). */
 export type PursuitClosedReason =
-  | 'cap' | 'shannon_rest' | 'shannon_drop' | 'owner_rest' | 'owner_drop' | 'evidence' | 'owner_confirm' | 'legacy';
+  | 'cap' | 'shannon_rest' | 'shannon_drop' | 'owner_rest' | 'owner_drop' | 'evidence' | 'owner_confirm' | 'legacy' | 'proposed_complete';
 
 export interface PursuitEvent {
   readonly id: string;
@@ -138,8 +138,8 @@ export class PursuitGoalLedger {
   }
 
   /** After a status change by her or the owner: why it left `active`, the event, and the cap when it became active. */
-  statusChanged(scopeKey: string, pursuitId: string, change: { from: string; to: string; actor: 'shannon' | 'owner' }, at: string): void {
-    const reason: PursuitClosedReason | null = change.to === 'active' ? null
+  statusChanged(scopeKey: string, pursuitId: string, change: { from: string; to: string; actor: 'shannon' | 'owner'; proposed?: boolean }, at: string): void {
+    const reason: PursuitClosedReason | null = change.proposed ? 'proposed_complete' : change.to === 'active' ? null
       : change.to === 'resting' ? (change.actor === 'owner' ? 'owner_rest' : 'shannon_rest')
         : change.to === 'dropped' ? (change.actor === 'owner' ? 'owner_drop' : 'shannon_drop') : null;
     this.database.prepare(`UPDATE autonomy_pursuits SET closed_reason = ?, closed_at = ? WHERE scope_key = ? AND pursuit_id = ? AND origin <> 'seed'`)

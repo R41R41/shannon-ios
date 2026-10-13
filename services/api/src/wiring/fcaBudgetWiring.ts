@@ -12,6 +12,8 @@ import type { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudge
  */
 export const OWNER_TASK_CAP = Object.freeze({ yen: 300, steps: 40 });
 export const OWN_TIME_TASK_CAP = Object.freeze({ yen: 150, steps: 10 });
+/** Steps counted at once (each is removed when it settles; an abandoned one gives way to the newest). */
+const IN_FLIGHT = 32;
 /** The reservation of one own-time FCA step: a decision of the FCA model with its history (an upper estimate). */
 export const OWN_TIME_STEP_ESTIMATE_YEN = 30;
 
@@ -39,15 +41,19 @@ export function fcaBudget(options: { actions: ActionThreads; store: TaskBudgetSt
   const usd = new Map<string, number>();
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
   return {
+    // Only a step this budget opened is counted (calls outside a counted step are not kept), and at most a bounded few are in flight.
     recordUsage(cost) {
       const lease = currentActionExecution()?.lease.id;
-      if (lease && Number.isFinite(cost) && cost > 0) usd.set(lease, (usd.get(lease) ?? 0) + cost);
+      if (lease && usd.has(lease) && Number.isFinite(cost) && cost > 0) usd.set(lease, usd.get(lease)! + cost);
     },
     async before(task, lease) {
       if (!counted(task)) return { ok: true };
+      if (usd.size >= IN_FLIGHT) usd.delete(usd.keys().next().value!);
+      usd.set(lease.id, 0);
       const cap = task.origin === 'own_time' ? OWN_TIME_TASK_CAP : OWNER_TASK_CAP;
       const spent = options.store.spent(task.id);
       if (spent.steps >= cap.steps || spent.yen >= cap.yen) {
+        usd.delete(lease.id);
         options.store.capped(task.id, task.scopeKey, task.origin, options.now());
         return { ok: false, code: 'task_cap', report: capped(task, cap) };
       }
@@ -58,6 +64,7 @@ export function fcaBudget(options: { actions: ActionThreads; store: TaskBudgetSt
       const reserved = own && budget && !budget.exhausted
         && await options.actions.reserve(lease, reservationId, own.dayKey(options.now()), OWN_TIME_STEP_ESTIMATE_YEN, budget.capYen, budget.spentYen)
           .catch(() => false);
+      if (!reserved) usd.delete(lease.id);
       return reserved ? { ok: true, reservationId } : { ok: false, code: 'own_time_budget', report: '今日の自分の予算の残りが足りないので、ここで止めました。' };
     },
     async after(task, lease, reservationId) {
@@ -65,11 +72,15 @@ export function fcaBudget(options: { actions: ActionThreads; store: TaskBudgetSt
       usd.delete(lease.id);
       if (!counted(task)) return;
       const at = options.now();
-      const yen = options.ownTime?.yen(cost) ?? Math.ceil(cost * 160);
-      options.store.add(task.id, task.scopeKey, task.origin, yen, at);
-      if (task.origin !== 'own_time' || !reservationId) return;
-      try { options.ownTime?.recordSpend(task.scopeKey, at, { yen, usd: cost }); } catch { /* the reservation still settles */ }
-      await options.actions.settle(lease, reservationId, yen).catch(() => false);
+      const yen = cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160) : 0;
+      try {
+        // The cap counts paid steps only (owner answer 3): a step that called no model costs nothing and is not a step of it.
+        if (yen > 0) options.store.add(task.id, task.scopeKey, task.origin, yen, at);
+        if (yen > 0 && task.origin === 'own_time') options.ownTime?.recordSpend(task.scopeKey, at, { yen, usd: cost });
+      } finally {
+        // The reservation is settled (or released with 0) whatever the records did.
+        if (task.origin === 'own_time' && reservationId) await options.actions.settle(lease, reservationId, yen).catch(() => false);
+      }
     },
   };
 }
