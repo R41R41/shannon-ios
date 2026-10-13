@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { COMMON_TASK, ensureTaskKinds } from './taskKinds.js';
+import { deriveTaskKind } from '@shannon/mind';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskQuery, TaskRecord, TaskStatus } from '../../taskRuntime/taskRuntimePorts.js';
 import { underWriteLock } from '../../../../infra/sqlite/lockWaits.js';
@@ -15,35 +17,36 @@ import { refreshTaskState, writeTaskState } from './taskStore.js';
 export class SQLiteFcaTaskAuthority implements TaskAuthority {
   constructor(private readonly db: DatabaseSync) {
     applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP, ...TASK_STORE_STEPS]);
+    ensureTaskKinds(db);
   }
   transaction<T>(work: () => T): T {
     return underWriteLock(this.db, null, '', work, 'fca_task_authority');
   }
   get(scopeKey: string, id: string): TaskRecord | null {
-    const row = this.db.prepare('SELECT * FROM agent_tasks WHERE scope_key=? AND task_id=? AND fca_kind IS NOT NULL').get(scopeKey, id);
+    const row = this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND task_id=? AND ${COMMON_TASK}`).get(scopeKey, id);
     return row ? record(row) : null;
   }
   root(scopeKey: string): TaskRecord | null {
-    const row = this.db.prepare("SELECT * FROM agent_tasks WHERE scope_key=? AND fca_kind='root'").get(scopeKey);
+    const row = this.db.prepare("SELECT * FROM agent_tasks WHERE scope_key=? AND task_kind='root'").get(scopeKey);
     return row ? record(row) : null;
   }
   byRequest(scopeKey: string, requestKey: string): TaskRecord | null {
-    const row = this.db.prepare('SELECT * FROM agent_tasks WHERE scope_key=? AND start_idempotency_key=? AND fca_kind IS NOT NULL').get(scopeKey, requestKey);
+    const row = this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND start_idempotency_key=? AND ${COMMON_TASK}`).get(scopeKey, requestKey);
     return row ? record(row) : null;
   }
   list(scopeKey: string, query: TaskQuery = {}): TaskRecord[] {
     const parentClause = query.parentId === undefined ? '' : ' AND fca_parent_id IS ?';
     const args = query.parentId === undefined ? [scopeKey] : [scopeKey, query.parentId];
-    return this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND fca_kind IS NOT NULL${parentClause}
+    return this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND ${COMMON_TASK}${parentClause}
       ORDER BY ${query.order === 'recent' ? 'updated_at DESC' : 'created_at'},task_id LIMIT ? OFFSET ?`).all(...args, query.limit ?? 100, query.offset ?? 0).map(record);
   }
   /** `capability`: the Executive's capability an own-time task carries out (ADR-0009 stage 2, E4; column of step 008). */
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord {
     this.db.prepare(`INSERT INTO agent_tasks(task_id,scope_key,conversation_thread_id,start_idempotency_key,title,goal,status,summary,
-      created_at,updated_at,pause_reason,fca_kind,fca_parent_id,fca_origin,fca_completion_criteria,capability)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.id, input.scopeKey, `fca:${input.id}`, input.requestKey,
+      created_at,updated_at,pause_reason,fca_kind,fca_parent_id,fca_origin,fca_completion_criteria,capability,task_kind)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.id, input.scopeKey, `fca:${input.id}`, input.requestKey,
         input.title, input.goal, input.status, input.summary, input.createdAt, input.createdAt, input.pauseReason,
-        input.kind, input.parentId, input.origin, input.completionCriteria, input.capability ?? null);
+        input.kind, input.parentId, input.origin, input.completionCriteria, input.capability ?? null, commonTaskKind(input.kind));
     const payload = { parentId: input.parentId, origin: input.origin, ...(input.capability ? { capability: input.capability } : {}) };
     return this.event(input.scopeKey, input.id, 'fca_created', input.createdAt, {}, payload);
   }
@@ -73,4 +76,11 @@ function record(row: Record<string, unknown>): TaskRecord {
     title: String(row.title), goal: String(row.goal), completionCriteria: String(row.fca_completion_criteria),
     status: row.status as TaskStatus, pauseReason: row.pause_reason as string | null, summary: String(row.summary),
     revision: Number(row.latest_sequence), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+
+/** The task kind of a new common task; a kind the vocabulary does not know is refused before anything is written. */
+function commonTaskKind(kind: string): string {
+  const taskKind = deriveTaskKind(kind);
+  if (!taskKind || taskKind === 'codex') throw new Error('FCA_KIND');
+  return taskKind;
 }

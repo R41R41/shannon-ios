@@ -28,7 +28,7 @@ export class TaskOwnTimeStore {
       const requestKey = `fca:own:${requestId}`;
       const known = authority.byRequest(scopeKey, requestKey);
       if (known) return this.options.get(scopeKey, known.id)!;
-      const open = this.db.prepare(`SELECT fca_origin AS origin, COUNT(*) AS n FROM agent_tasks WHERE scope_key = ? AND fca_kind IS NOT NULL
+      const open = this.db.prepare(`SELECT fca_origin AS origin, COUNT(*) AS n FROM agent_tasks WHERE scope_key = ? AND task_kind <> 'codex'
         AND status NOT IN ('completed', 'failed', 'cancelled') GROUP BY fca_origin`).all(scopeKey);
       const count = (origin?: string) => open.filter(row => !origin || row.origin === origin).reduce((sum, row) => sum + Number(row.n), 0);
       if (count('own_time') >= OWN_TIME_OPEN_TASKS) throw new Error('FCA_OWN_TIME_LIMIT');

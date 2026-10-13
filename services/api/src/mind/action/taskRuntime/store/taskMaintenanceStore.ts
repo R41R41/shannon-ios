@@ -65,7 +65,7 @@ export class TaskMaintenanceStore {
       const parent = this.options.authority.get(scope, root.id)!;
       if (this.options.view(parent).phase !== 'waiting' && this.options.view(parent).phase !== 'ready'
         && this.options.view(parent).phase !== 'executing') return null;
-      const active = Number(this.db.prepare("SELECT COUNT(*) AS count FROM agent_tasks WHERE scope_key=? AND fca_kind IS NOT NULL AND status NOT IN ('completed','failed','cancelled')").get(scope)!.count);
+      const active = Number(this.db.prepare("SELECT COUNT(*) AS count FROM agent_tasks WHERE scope_key=? AND task_kind<>'codex' AND status NOT IN ('completed','failed','cancelled')").get(scope)!.count);
       if (active >= 256) throw new Error('FCA_ACTIVE_TASK_LIMIT');
       const task = this.options.authority.create({ id: randomUUID(), scopeKey: scope, parentId: root.id,
         kind: 'sleep', origin: 'maintenance', title: `睡眠整理 ${ticket.dayKey}`,

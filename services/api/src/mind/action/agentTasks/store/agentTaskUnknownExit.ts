@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { isHostTaskRow } from './taskKinds.js';
 import type { AgentEventTone } from '../agentTaskStore.js';
 import { writeTaskState } from './taskStore.js';
 
@@ -21,8 +22,8 @@ type AppendEvent = (taskId: string, type: string, title: string, detail: string 
 export function closeUnknownHostTasks(db: DatabaseSync, now: string, closedUnknown: ClosedUnknownHostTasks, appendEvent: AppendEvent): number {
   let closed = 0;
   for (const { taskId, closedAt } of closedUnknown(db)) {
-    const row = db.prepare('SELECT * FROM agent_tasks WHERE task_id = ?').get(taskId) as { fca_kind?: string | null } | undefined;
-    if (!row || row.fca_kind != null) continue;
+    const row = db.prepare('SELECT * FROM agent_tasks WHERE task_id = ?').get(taskId) as { task_kind?: string | null } | undefined;
+    if (!row || !isHostTaskRow(row)) continue;
     writeTaskState(db, taskId, { status: 'failed', pauseReason: null, currentAction: null, unknownSince: closedAt }, now);
     db.prepare('UPDATE agent_tasks SET summary = ?, current_action = NULL, pending_approval_json = NULL, updated_at = ? WHERE task_id = ?')
       .run(UNKNOWN_CLOSED_SUMMARY, now, taskId);

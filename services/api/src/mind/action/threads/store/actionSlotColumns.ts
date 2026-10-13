@@ -89,17 +89,18 @@ const NO_TASK: ActionTaskLink = Object.freeze({ taskId: null, taskKind: null });
 
 /**
  * The task an Agent Task action runs for: an FCA step's task by the scheduler's exact source (`fca:<task>:<n>`), or the Agent
- * Host task whose id is the source (a row without `fca_kind`). Any other action has none.
+ * Host task whose id is the source (a Codex row). Any other action has none.
  */
 export function actionTaskLink(db: DatabaseSync, action: { readonly kind: string; readonly sourceId: string }): ActionTaskLink {
   if (action.kind !== 'agentTask') return NO_TASK;
   const fcaTask = fcaTaskIdOf(action.sourceId);
   if (fcaTask) {
     const row = taskRow(db, fcaTask);
-    return { taskId: fcaTask, taskKind: row && typeof row.fca_kind === 'string' ? kindOfRow(row) : null };
+    const kind = row ? kindOfRow(row) : null;
+    return { taskId: fcaTask, taskKind: kind !== 'codex' ? kind : null };
   }
   const row = taskRow(db, action.sourceId);
-  if (!row || typeof row.fca_kind === 'string') return NO_TASK;
+  if (!row || kindOfRow(row) !== 'codex') return NO_TASK;
   return { taskId: action.sourceId, taskKind: kindOfRow(row) };
 }
 

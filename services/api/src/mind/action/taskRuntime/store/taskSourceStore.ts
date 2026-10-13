@@ -51,6 +51,7 @@ export class TaskSourceStore {
    * before, it waited ~12 s for a voice turn to finish). A failed turn still holds it, and stops it (`failConversation`).
    */
   runsOnPendingOrigin(taskId: string): boolean {
+    // `fca_kind` here is the common runtime's own subtype (research, not generic work), never a split between task models.
     const row = this.db.prepare(`SELECT m.text AS text FROM agent_tasks t JOIN fca_task_messages m
       ON m.target_task_id=t.task_id AND m.message_id='context:'||t.task_id WHERE t.task_id=? AND t.fca_kind='research'`).get(taskId);
     return typeof row?.text === 'string' && row.text.startsWith('[Conversation work]');

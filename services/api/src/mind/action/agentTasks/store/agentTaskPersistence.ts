@@ -24,7 +24,7 @@ import type {
 import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
 import { closedWithUnknownOutcome, hostEventIgnored, projectHostEventInBatch } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
-import { fcaHostPredicate } from './fcaHostPredicate.js';
+import { ensureTaskKinds, hostTaskPredicate, isHostTaskRow } from './taskKinds.js';
 import { TaskTreeStore } from './taskTreeStore.js';
 import { TASK_STORE_STEPS } from './taskExecutionColumns.js';
 import { writeTaskState } from './taskStore.js';
@@ -73,9 +73,10 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
     migrateAgentTasks(this.database);
     applySchemaSteps(this.database, TASK_STORE_STEPS);
+    ensureTaskKinds(this.database);
     if (options.taskTreeEnabled) {
       this.taskTrees = new TaskTreeStore(this.database, options.taskTreeCallbacks);
-      const rows = this.database.prepare(`SELECT * FROM agent_tasks WHERE ${fcaHostPredicate(this.database)}`).all() as unknown as AgentTaskRow[];
+      const rows = this.database.prepare(`SELECT * FROM agent_tasks WHERE ${hostTaskPredicate(this.database)}`).all() as unknown as AgentTaskRow[];
       this.transaction(() => { for (const row of rows) this.taskTrees!.ensure(this.inflate(row), row.scope_key, row.updated_at); });
       this.taskTrees.flushLearning();
     }
@@ -89,9 +90,9 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     this.transaction(() => {
       const existing = this.database.prepare(`
         SELECT * FROM agent_tasks WHERE scope_key = ? AND start_idempotency_key = ?
-      `).get(scopeKey, input.idempotencyKey) as unknown as { task_id: string; fca_kind?: string | null } | undefined;
+      `).get(scopeKey, input.idempotencyKey) as unknown as { task_id: string; task_kind?: string | null } | undefined;
       if (existing) {
-        if (existing.fca_kind != null) throw new Error('AGENT_TASK_ID_CONFLICT');
+        if (!isHostTaskRow(existing)) throw new Error('AGENT_TASK_ID_CONFLICT');
         taskId = existing.task_id;
         return;
       }
@@ -103,8 +104,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
           (task_id, scope_key, conversation_thread_id, source_message_id, cognitive_intent_id, start_idempotency_key,
            title, goal, status, summary, current_action, plan_json, pending_approval_json,
            changes_json, tests_json, created_at, updated_at, latest_sequence, assigned_host_id,
-           project_hint, model_id, reasoning_effort)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?, ?, ?, ?)
+           project_hint, model_id, reasoning_effort, task_kind)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?, ?, ?, ?, 'codex')
       `).run(
         taskId, scopeKey, input.conversationThreadID, input.sourceMessageID ?? null,
         input.cognitiveIntentID ?? null, input.idempotencyKey, input.title, input.goal, input.summary,
@@ -239,7 +240,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         UPDATE agent_task_commands
         SET status = 'pending', lease_owner = NULL, lease_until = NULL
         WHERE status = 'leased' AND lease_until <= ?
-          AND task_id IN (SELECT task_id FROM agent_tasks WHERE ${fcaHostPredicate(this.database)})
+          AND task_id IN (SELECT task_id FROM agent_tasks WHERE ${hostTaskPredicate(this.database)})
       `).run(now);
       const next = this.queue.nextCommand(hostId, now);
       if (!next || (expectedId && next !== expectedId)) return;
@@ -270,11 +271,11 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
             scope_key: string;
             assigned_host_id: string | null;
             status: AgentTaskStatus;
-            fca_kind?: string | null;
+            task_kind?: string | null;
             unknown_since?: string | null;
           } | undefined;
         if (!row) continue;
-        if (row.fca_kind != null || row.assigned_host_id !== hostId) throw new Error('AGENT_HOST_TASK_MISMATCH');
+        if (!isHostTaskRow(row) || row.assigned_host_id !== hostId) throw new Error('AGENT_HOST_TASK_MISMATCH');
         if (this.taskTrees && !this.taskTrees.acceptsEvent(row.scope_key, event)) continue;
         if (hostEventIgnored(row, event)) continue;
         projectHostEventInBatch(this.database, event, now, closedWithUnknownOutcome(row));
@@ -379,7 +380,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       ...(row.current_action ? { currentAction: row.current_action } : {}),
       ...pauseProjection(row),
       plan: parseArray<AgentPlanItem>(row.plan_json),
-      ...(this.taskTrees && row.fca_kind == null ? { taskTree: this.taskTrees.get(row.scope_key, row.task_id) ?? undefined } : {}),
+      ...(this.taskTrees && isHostTaskRow(row) ? { taskTree: this.taskTrees.get(row.scope_key, row.task_id) ?? undefined } : {}),
       timeline: eventRows.map(event => {
         const activity = timelineActivity(parseObject<Record<string, unknown>>(event.payload_json).activity);
         return {
@@ -435,9 +436,9 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
 
   private requireHostTask(scopeKey: string, taskId: string): void {
     const row = this.database.prepare('SELECT * FROM agent_tasks WHERE scope_key = ? AND task_id = ?')
-      .get(scopeKey, taskId) as { fca_kind?: string | null } | undefined;
+      .get(scopeKey, taskId) as { task_kind?: string | null } | undefined;
     if (!row) throw new Error('AGENT_TASK_NOT_FOUND');
-    if (row.fca_kind != null) throw new Error('AGENT_COMMAND_INVALID_EXECUTION_KIND');
+    if (!isHostTaskRow(row)) throw new Error('AGENT_COMMAND_INVALID_EXECUTION_KIND');
   }
 
   private command(commandId: string, fallbackLeaseUntil?: string): ClaimedAgentCommand | null {
