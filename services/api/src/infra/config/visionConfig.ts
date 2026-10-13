@@ -6,7 +6,7 @@ import { switchOn, type SwitchValues } from '@shannon/switches';
  * The vision worker's settings (Syzygy ADR-0011 stage 1). Every switch is off by default; the camera source needs the worker,
  * escalation needs the camera. The worker listens on loopback only, behind nginx's `/companion/v1/vision/` location.
  */
-export const VISION_DEFAULT_PORT = 4320;
+export const VISION_DEFAULT_PORT = 4331;
 
 export function visionWorkerEnabled(values: SwitchValues): boolean {
   return switchOn(values, 'SHANNON_VISION_WORKER');

@@ -75,10 +75,15 @@ export async function configuredVisionWorker(values: Readonly<Record<string, str
       .catch(() => { if (!response.headersSent) sendJson(response, 500, { error: 'VISION_FAILED' }); else response.destroy(); });
   });
   const port = options.port ?? visionWorkerPort(values);
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => resolve());
-  });
+  try {
+    await listenOrExplain(server, port, options.log);
+  } catch (error) {
+    fast.close();
+    slow.close();
+    auth.close();
+    if (db.isOpen) db.close();
+    throw error;
+  }
   const sweep = setInterval(() => frames.sweep(), 1_000);
   sweep.unref();
   options.log?.(`Shannon vision worker ready port=${(server.address() as { port: number }).port} camera=${visionSwitches(values).camera ? 'on' : 'off'}`);
@@ -95,4 +100,22 @@ export async function configuredVisionWorker(values: Readonly<Record<string, str
       if (db.isOpen) db.close();
     },
   };
+}
+
+/**
+ * Listens on loopback, or fails at once with a closed code. A port in use is another service's (on the VM 4320 is Voyager's API):
+ * the worker never shares it and says so, so systemd's log names the cause instead of a stack trace.
+ */
+async function listenOrExplain(server: Server, port: number, log?: (line: string) => void): Promise<void> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '127.0.0.1', () => resolve());
+    });
+  } catch (error) {
+    const inUse = (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+    const why = inUse ? 'the port is in use by another service; set SHANNON_VISION_PORT to a free port (ss -ltnp)' : 'listen failed';
+    log?.(`Shannon vision worker cannot listen on 127.0.0.1:${port}: ${why}`);
+    throw new Error(inUse ? 'VISION_PORT_IN_USE' : 'VISION_LISTEN_FAILED');
+  }
 }

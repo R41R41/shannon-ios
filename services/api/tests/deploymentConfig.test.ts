@@ -63,4 +63,15 @@ describe('Azure deployment contract', () => {
     expect(new Set(used.map(match => match[1])).size).toBe(4);
     expect(used.every(match => Number(match[2]) >= 6)).toBe(true);
   });
+
+  it('sends the vision worker to its own port, never Voyager\'s API (4320) or Shannon\'s API (4319)', async () => {
+    const { VISION_DEFAULT_PORT } = await import('../src/infra/config/visionConfig.js');
+    const configuration = readFileSync(new URL('../../../deploy/azure/nginx-location.conf', import.meta.url), 'utf8');
+    const upstream = /location \^~ \/companion\/v1\/vision\/ \{[^}]*proxy_pass http:\/\/127\.0\.0\.1:(\d+)\//u.exec(configuration)?.[1];
+    // Ports taken on azure-constant-server (ss -ltnp, 2026-10-14): 4319 Shannon's API, 4320 Voyager's API, 4322, 4329.
+    const taken = [4319, 4320, 4322, 4329];
+    expect(Number(upstream)).toBe(VISION_DEFAULT_PORT);
+    expect(taken).not.toContain(VISION_DEFAULT_PORT);
+    expect(readFileSync(new URL('../../../deploy/azure/api.env.example', import.meta.url), 'utf8')).toContain(`# SHANNON_VISION_PORT=${VISION_DEFAULT_PORT}`);
+  });
 });

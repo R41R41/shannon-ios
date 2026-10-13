@@ -75,7 +75,7 @@ On `azure-constant-server`:
 ## Processes
 
 - **Vision worker** (`services/api/src/visionWorker.ts`, `deploy/azure/shannon-ios-vision.service`, `SHANNON_VISION_WORKER`):
-  loopback HTTP on `SHANNON_VISION_PORT` (4320) behind nginx `location ^~ /companion/v1/vision/`, the same device tokens
+  loopback HTTP on `SHANNON_VISION_PORT` (4331; 4319 is the API, 4320 Voyager's API, 4322 and 4329 taken on the VM) behind nginx `location ^~ /companion/v1/vision/`, the same device tokens
   (`SQLiteDeviceAuthStore`), the owner's scope only, never the Minecraft body's token. It holds the budget ledger, the frames, the
   sessions/generations, one decision at a time per device, and the reflex loop's home (`createVisionReflexHost`, no source
   registered in stage 1).

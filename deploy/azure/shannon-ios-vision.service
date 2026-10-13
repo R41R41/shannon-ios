@@ -10,6 +10,7 @@ WorkingDirectory=/home/azureuser/shannon-ios
 Environment=NODE_ENV=production
 Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
 EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+# Listens on 127.0.0.1:4331 (SHANNON_VISION_PORT; 4320 is Voyager's API). A port in use stops it at once with a closed code.
 # Off unless SHANNON_VISION_WORKER=on: the entry then exits successfully at once (systemd 245 retries a skipped ExecCondition).
 ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/visionWorker.ts
 Restart=on-failure

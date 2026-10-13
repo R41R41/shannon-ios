@@ -117,3 +117,22 @@ describe('what the vision worker process loads', () => {
     expect(closure.filter(file => /^(mind\/(memory|recall|workspace|perception|emotion)\/|infra\/sqlite\/sqliteStore|infra\/models\/(chatModel|anthropic))/u.test(file))).toEqual([]);
   });
 });
+
+describe('the vision worker\'s port', () => {
+  it('fails at once with a closed code when another service holds it', async () => {
+    const { createServer } = await import('node:http');
+    const holder = createServer();
+    await new Promise<void>(resolve => holder.listen(0, '127.0.0.1', () => resolve()));
+    const port = (holder.address() as { port: number }).port;
+    const directory = mkdtempSync(join(tmpdir(), 'svp-'));
+    directories.push(directory);
+    const lines: string[] = [];
+    try {
+      await expect(configuredVisionWorker({ SHANNON_VISION_WORKER: 'on', SHANNON_AUTH_PEPPER: PEPPER }, join(directory, 'state.db'),
+        { port, decisions: null, log: line => lines.push(line) })).rejects.toThrow('VISION_PORT_IN_USE');
+      expect(lines.join('\n')).toContain('in use by another service');
+    } finally {
+      await new Promise<void>(resolve => holder.close(() => resolve()));
+    }
+  });
+});
