@@ -5,7 +5,7 @@ import { sessionMarked } from './autonomyLoopProvenance.js';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
-import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
+import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startMomentCycle, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomySession, SessionEndCode } from './store/autonomyLoopSessions.js';
 import { noteProvenance, shownLater } from './autonomyLoopProvenance.js';
@@ -125,6 +125,8 @@ export class ShannonAutonomyLoop {
   }
 
   private startCycleIfDue(at: string): AutonomyLoopCycle | AutonomyLoopTick {
+    const moment = startMomentCycle(this.dependencies, this.scopeKey, at); // A moment she wanted to speak of (owner decision 2026-10-14).
+    if (moment) return moment;
     if (this.dependencies.executive) return this.dependencies.executive.startIfDue(this.dependencies, this.scopeKey, at); // ADR-0009 E5.
     const { store, service, config, loop, showing } = this.dependencies;
     const dayKey = autonomyDayKey(at, config);

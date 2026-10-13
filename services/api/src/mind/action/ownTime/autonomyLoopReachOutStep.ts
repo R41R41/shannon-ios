@@ -74,6 +74,26 @@ export function intentArisenAt(dependencies: StepDependencies, cycle: AutonomyLo
   } catch { return at; }
 }
 
+/**
+ * A moment she perceived of the owner and wanted to speak of (owner decision 2026-10-14, `mind/attention/proactiveMoments.ts`):
+ * the reason and subject her message is gated under, when the moment arose, and the one fact line and the rules her message is
+ * written with. Never a line to say.
+ */
+export interface AutonomyMoment {
+  key: string;
+  reason: 'share' | 'wonder';
+  subject: string;
+  perceivedAt: string;
+  line: string;
+  rules: readonly string[];
+}
+
+/** Her moments: the newest she wanted, taken once; and one taken moment read again while it is still worth a word. */
+export interface AutonomyMoments {
+  take(scopeKey: string, at: string): AutonomyMoment | null;
+  get(scopeKey: string, key: string, at: string): AutonomyMoment | null;
+}
+
 /** The owner's upcoming items as bounded lines; `others` leaves out what he keeps from the people present. */
 export interface AutonomyUpcoming {
   lines(scopeKey: string, at: string, present: 'owner' | 'others'): readonly PromptUpcoming[];
@@ -108,6 +128,9 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   const { store, config, reachOuts, upcoming } = dependencies;
   const reason = step.reason;
   if (!reason || reason === 'follow_up' || !reachOuts || reachOutsRemaining(dependencies, cycle.scopeKey, at) < 1) return null;
+  // A moment she wanted to speak of (owner decision 2026-10-14): nothing to say once it is no longer worth a word.
+  const moment = step.moment ? momentOf(dependencies, cycle.scopeKey, step.moment, at) : null;
+  if (step.moment && !moment) return null;
   const others = reachOuts.audience(cycle.scopeKey, at);
   // With anyone else present, what she wrote after reading the owner's documents is not material for a message (ADR-0007).
   // In a session that is not marked, nothing marked either (`unmarkedOnly`).
@@ -127,16 +150,18 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   try {
     owned = dependencies.loop.ownerContext ? dependencies.ownerContext?.forMessage(cycle.scopeKey, at, notes.map(note => note.title).join(' '), others !== null)?.section ?? null : null;
   } catch { owned = null; }
-  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}), ...(dependencies.loop.ownerContext && dependencies.ownerContext ? { notesPrivate: true } : {}) });
+  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}), ...(dependencies.loop.ownerContext && dependencies.ownerContext ? { notesPrivate: true } : {}),
+    ...(moment ? { moment: { line: moment.line, rules: moment.rules } } : {}) });
   const model = resolveAutonomyModel('prose', store.modelPreferences(cycle.scopeKey), id => dependencies.model.canUse(id));
   if (!model) return null;
   const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: OUTPUT_TOKENS };
   const costUsd = autonomyModelCostUsd(model, estimate, config.modelPrices);
   if (costUsd === null) return null;
   const label = REACH_OUT_REASON_LABEL[reason];
-  const arisenAt = intentArisenAt(dependencies, cycle, at);
+  // A moment's intent arose when she perceived it, and is about the moment (or the story waiting), for the proactive gate.
+  const arisenAt = moment ? moment.perceivedAt : intentArisenAt(dependencies, cycle, at);
   // What it is about, for the proactive gate (stage 3 review M2): ids only.
-  const subject = reachOutSubject(store, cycle.scopeKey, reason, { shown, upcoming: items, since: cycle.startedAt });
+  const subject = moment ? moment.subject : reachOutSubject(store, cycle.scopeKey, reason, { shown, upcoming: items, since: cycle.startedAt });
   return {
     request: {
       domain: 'owner_message', summary: `持ち主に、自分から一言話しかけます（理由: ${label}）。`, tool: REACH_OUT_TOOL,
@@ -207,6 +232,10 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       };
     },
   };
+}
+
+function momentOf(dependencies: StepDependencies, scopeKey: string, key: string, at: string): AutonomyMoment | null {
+  try { return dependencies.moments?.get(scopeKey, key, at) ?? null; } catch { return null; }
 }
 
 function latestOf(reachOuts: AutonomyReachOuts, scopeKey: string): { id: string; at: string } | null {

@@ -4,6 +4,7 @@ import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.j
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, StateEventRequest } from '../../contracts/contracts.js';
 import type { InitiativeInbox } from '../../surfaces/outreach/store/initiativeStore.js';
+import type { InitiativeFreshness } from '../../surfaces/outreach/initiativeFreshness.js';
 import type { KnowledgeAnswer, KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import type { MemoryDashboard, ShannonMemoryStore } from '../../mind/memory/memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
@@ -20,7 +21,8 @@ export interface ApiDataRouteDependencies {
   conversationStore: ConversationStore;
   memoryStore: ShannonMemoryStore;
   knowledgeStore: KnowledgeStore | null;
-  initiativeInbox: InitiativeInbox | null;
+  /** With freshness at delivery for a body of hers (owner decision 2026-10-14, `initiativeFreshness.ts`) when the server gives it. */
+  initiativeInbox: (InitiativeInbox & Partial<InitiativeFreshness>) | null;
   aetherProposals: AetherProposalStore;
   personIdentities: PersonIdentityStore;
   worldSubscriptions: WorldSubscriptionReader | null;
@@ -183,7 +185,9 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
   if (request.method === 'GET' && request.path === '/v1/initiatives') {
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-    const messages = dependencies.initiativeInbox?.unreadMessages(scopeKey) ?? [];
+    // A body of hers is not handed what is no longer fresh to say aloud; it stays unread for the apps (`initiativeFreshness.ts`).
+    const held = dependencies.initiativeInbox?.heldFromBody?.(scopeKey, request.deviceId, dependencies.now()) ?? null;
+    const messages = (dependencies.initiativeInbox?.unreadMessages(scopeKey) ?? []).filter(message => !held?.has(message.id));
     return { status: 200, body: { unreadCount: messages.length, messages } };
   }
 
@@ -197,7 +201,11 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
       return badRequest('threadId is invalid');
     }
     const threadId = typeof rawThreadId === 'string' ? rawThreadId.trim() : undefined;
-    const markedRead = dependencies.initiativeInbox?.markRead(scopeKey, threadId, dependencies.now()) ?? 0;
+    // A body's read leaves unread what it was not handed, so the apps still show it as unread text.
+    const inbox = dependencies.initiativeInbox;
+    const held = inbox?.heldFromBody?.(scopeKey, request.deviceId, dependencies.now()) ?? null;
+    const markedRead = (held?.size && inbox?.markReadExcept ? inbox.markReadExcept(scopeKey, threadId, dependencies.now(), held)
+      : inbox?.markRead(scopeKey, threadId, dependencies.now())) ?? 0;
     return { status: 200, body: { markedRead } };
   }
 

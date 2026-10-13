@@ -10,6 +10,12 @@ import { PrivateReachOuts } from '../mind/attention/privateReachOuts.js';
 import { SQLiteReachOutClaims } from '../mind/attention/store/reachOutClaims.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../mind/attention/store/reachOutReports.js';
 import { bindScope, consumeDeviceAllowance, sendJson } from '../infra/http/serverHttp.js';
+import { switchOn } from '@shannon/switches';
+import { ownerTimeZone } from '../infra/time/localDate.js';
+import { freshInitiativeInbox, type InitiativeFreshness } from '../surfaces/outreach/initiativeFreshness.js';
+import { SQLiteInitiativeReadState } from '../surfaces/outreach/store/initiativeReadState.js';
+import type { InitiativeInbox } from '../surfaces/outreach/store/initiativeStore.js';
+import { MORNING_BRIEF_HOURS } from './dailyReadWiring.js';
 
 /**
  * The HTTP side of private listening. The scope is the device token's own, as on every paired route;
@@ -22,6 +28,11 @@ export interface PrivateListeningRoute {
   reachOuts: PrivateReachOuts;
   /** Her body's report store, with a body that did not show a message giving it back to the apps. */
   bodyReports: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
+  /**
+   * The initiative inbox with freshness at delivery (owner decision 2026-10-14, `initiativeFreshness.ts`): a body of hers is not
+   * handed what is no longer fresh to say aloud, and its read leaves that unread. `SHANNON_BODY_INITIATIVE_FRESHNESS=off`: as before.
+   */
+  freshInbox(inbox: InitiativeInbox): InitiativeInbox & InitiativeFreshness;
   close(): void;
 }
 
@@ -48,8 +59,13 @@ export function createPrivateListeningRoute(
     ...(options.calls ? { calls: options.calls } : {}),
   };
   const usage = new Map<string, { startedAt: number; count: number }>();
+  const readState = new SQLiteInitiativeReadState(databasePath);
   return {
     reachOuts,
+    freshInbox: inbox => freshInitiativeInbox(inbox, {
+      enabled: switchOn(environment, 'SHANNON_BODY_INITIATIVE_FRESHNESS'), isBody: options.isBody, readState,
+      options: { timeZone: ownerTimeZone(environment), morningHours: MORNING_BRIEF_HOURS },
+    }),
     bodyReports: {
       report: (scopeKey: string, deviceId: string, initiativeId: string, outcome: BodyReachOutDeliveryOutcome, at: string): ReachOutReportResult =>
         reachOuts.bodyReported(scopeKey, deviceId, initiativeId, outcome, at),
@@ -71,6 +87,6 @@ export function createPrivateListeningRoute(
       sendJson(response, result.status, result.body);
       return true;
     },
-    close: () => { store.close(); claims.close(); },
+    close: () => { store.close(); claims.close(); readState.close(); },
   };
 }
