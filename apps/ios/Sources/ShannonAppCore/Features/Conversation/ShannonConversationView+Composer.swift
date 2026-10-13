@@ -54,6 +54,13 @@ extension ShannonConversationView {
             .frame(minHeight: 40)
             .padding(.horizontal, 10)
             .focused($composerIsFocused)
+            // A vertical TextField never calls onSubmit: the keyboard's 送信 key inserts "\n" instead. A return
+            // typed at the end of the draft is the send key, so it sends; a newline typed mid-text stays.
+            .onChange(of: model.draft) { oldValue, newValue in
+                guard Self.isReturnKeySubmit(old: oldValue, new: newValue) else { return }
+                model.draft = oldValue
+                sendDraft()
+            }
             .onSubmit { sendDraft() }
             .submitLabel(.send)
             .accessibilityIdentifier("shannon.composer.field")

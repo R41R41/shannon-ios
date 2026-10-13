@@ -196,11 +196,20 @@ extension ShannonConversationView {
     }
 
     func sendDraft() {
+        // A send already accepted (the return key and onSubmit can both arrive for one press).
+        guard !composerIsSubmitting else { return }
         voiceModel.stopSpeaking()
-        guard !composerIsSubmitting,
-              !composerPhotoIsLoading,
-              model.canSendDraft(attachmentCount: composerAttachments.count + (composerHasPhoto ? 1 : 0))
-        else { return }
+        // Never a silent no-op: when something holds the send back, the composer says what.
+        if let reason = Self.sendBlockReason(
+            hasContent: composerHasSendableContent,
+            photoIsLoading: composerPhotoIsLoading,
+            isSending: model.isSending,
+            isLoadingHistory: model.isLoadingHistory
+        ) {
+            composerAttachmentError = reason
+            return
+        }
+        guard model.canSendDraft(attachmentCount: composerAttachments.count + (composerHasPhoto ? 1 : 0)) else { return }
         composerIsSubmitting = true
         let attachments = composerAttachments
         let usesWebSearch = composerUsesWebSearch
@@ -219,6 +228,26 @@ extension ShannonConversationView {
                 photoJPEGData: photoJPEGData
             )
         }
+    }
+
+    /// The keyboard's 送信 key on the multi-line composer: exactly one "\n" appended at the end of the draft.
+    /// A paste, a newline typed mid-text, or IME confirmation (no "\n") is not a send.
+    nonisolated static func isReturnKeySubmit(old: String, new: String) -> Bool {
+        new.count == old.count + 1 && new.hasSuffix("\n") && String(new.dropLast()) == old
+    }
+
+    /// Why a send with content cannot go now, in the composer's words; nil when it can (or there is nothing to send).
+    nonisolated static func sendBlockReason(
+        hasContent: Bool,
+        photoIsLoading: Bool,
+        isSending: Bool,
+        isLoadingHistory: Bool
+    ) -> String? {
+        guard hasContent else { return nil }
+        if photoIsLoading { return "写真の準備が終わってから送ってください。" }
+        if isSending { return "前のメッセージの返事を待っています。届いてから送ってください。" }
+        if isLoadingHistory { return "トークを読み込んでいます。少し待ってから送ってください。" }
+        return nil
     }
 
     var composerPhotoJPEGData: Data? {
