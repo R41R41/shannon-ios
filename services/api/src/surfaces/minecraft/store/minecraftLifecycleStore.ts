@@ -1,7 +1,25 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { ACTION_LIMITS } from '@shannon/mind';
 import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecycleReceipt } from '../../../contracts/minecraftLifecycleContract.js';
 
-/** Durable operation identity. Delivered/unknown work is retained and never issued again after restart. */
+/**
+ * When a native unknown receipt stops blocking new operations (Syzygy ADR-0009 D2, an exit for an outside effect left unknown):
+ * the same time a sent action's unknown outcome keeps its slot, counted from the later of its deadline and its receipt. The native
+ * operator has finished with the command once it sent a receipt; the next command is judged by the native's fresh state.
+ */
+export const LIFECYCLE_UNKNOWN_EXIT_MS = ACTION_LIMITS.unknownReleaseMs;
+
+function unknownExpired(commandJson: unknown, receiptJson: unknown, now: number): boolean {
+  if (typeof receiptJson !== 'string') return false;
+  const command = JSON.parse(String(commandJson)) as MinecraftLifecycleCommand, receipt = JSON.parse(receiptJson) as MinecraftLifecycleReceipt;
+  const ended = Math.max(Date.parse(command.deadlineAt), Date.parse(receipt.observedAt));
+  return Number.isFinite(ended) && Number.isFinite(now) && now >= ended + LIFECYCLE_UNKNOWN_EXIT_MS;
+}
+
+/**
+ * Durable operation identity. Delivered/unknown work is retained and never issued again after restart. An unknown native receipt
+ * blocks new operations until `LIFECYCLE_UNKNOWN_EXIT_MS` after it; it stays unknown, holds its original action, and is never resent.
+ */
 export class MinecraftLifecycleStore {
   constructor(private readonly db: DatabaseSync) {
     db.exec(`CREATE TABLE IF NOT EXISTS minecraft_lifecycle_operations (
@@ -32,7 +50,7 @@ export class MinecraftLifecycleStore {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if (this.command(command.id)) throw new Error('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');
-      if (this.unresolved()) throw new Error('MINECRAFT_LIFECYCLE_BUSY');
+      if (this.unresolved(Date.parse(command.issuedAt))) throw new Error('MINECRAFT_LIFECYCLE_BUSY');
       this.db.prepare('INSERT INTO minecraft_lifecycle_operations(id,server_id,execution_id,command_json) VALUES(?,?,?,?)')
         .run(command.id, command.serverId, command.authority.executionId, JSON.stringify(command));
       this.db.exec('COMMIT');
@@ -68,7 +86,9 @@ export class MinecraftLifecycleStore {
   safe(executionId: string): boolean {
     return !this.db.prepare("SELECT 1 FROM minecraft_lifecycle_operations WHERE execution_id=? AND (receipt_json IS NULL OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1").get(executionId);
   }
-  unresolved(): boolean {
-    return !!this.db.prepare("SELECT 1 FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1 LIMIT 1").get();
+  /** Whether an operation still blocks new ones at `now`: one without a receipt, or an unknown receipt before its exit. */
+  unresolved(now: number): boolean {
+    return this.db.prepare("SELECT command_json,receipt_json FROM minecraft_lifecycle_operations WHERE receipt_json IS NULL OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1").all()
+      .some(row => !unknownExpired(row.command_json, row.receipt_json, now));
   }
 }

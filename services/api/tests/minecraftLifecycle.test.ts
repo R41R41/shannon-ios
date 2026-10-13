@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecycleReceipt, MinecraftLifecycleRequest, MinecraftLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycle } from '../src/surfaces/minecraft/minecraftLifecycle.js';
-import { MinecraftLifecycleStore } from '../src/surfaces/minecraft/store/minecraftLifecycleStore.js';
+import { LIFECYCLE_UNKNOWN_EXIT_MS, MinecraftLifecycleStore } from '../src/surfaces/minecraft/store/minecraftLifecycleStore.js';
 
 const dbs: DatabaseSync[] = [];
 const directories: string[] = [];
@@ -144,6 +144,40 @@ describe('Minecraft lifecycle operator authority and receipts', () => {
     expect(f.service.poll(f.principal, f.poll({ receipts: [unknown] })).acknowledged).toEqual(['operation']);
     expect(f.service.receipt('operation')).toEqual(late);
     expect(f.service.poll(f.principal, f.poll({ receipts: [f.receipt({ code: 'error', outcome: 'cancelled' })] })).acknowledged).toEqual([]);
+  });
+  it('lets an unknown native receipt stop blocking new operations after its exit, keeping it unknown and never resent', async () => {
+    const f = fixture(), result = f.service.execute(f.request).catch(error => error.message);
+    expect(f.service.poll(f.principal, f.poll()).commands.map(c => c.id)).toEqual(['operation']);
+    const command = f.store.command('operation')!;
+    // 2026-10-13: a start whose turn ended mid-boot came back unknown (authority_revoked) and blocked every later operation.
+    const unknown = f.receipt({ outcome: 'unknown', inputsReleased: false, code: 'authority_revoked', observedAt: command.issuedAt, state: f.state({ running: 'unknown', otherPlayers: null, observedAt: command.issuedAt }) });
+    f.service.poll(f.principal, f.poll({ receipts: [unknown] }));
+    expect(await result).toContain('UNKNOWN');
+    const exit = Math.max(Date.parse(command.deadlineAt), Date.parse(unknown.observedAt)) + LIFECYCLE_UNKNOWN_EXIT_MS;
+    const login = { ...f.request, id: 'login', action: 'login' as const, authority: { ...f.request.authority, executionId: 'login_execution' } };
+    const runningAt = (at: number) => f.poll({ states: [f.state({ running: 'running', observedAt: new Date(at).toISOString() })] });
+    f.options.now = () => exit - 1; f.service.poll(f.principal, runningAt(exit - 1));
+    await expect(f.service.execute(login)).rejects.toThrow('BUSY');
+    f.options.now = () => exit; f.service.poll(f.principal, runningAt(exit));
+    const next = f.service.execute(login).catch(error => error.message);
+    const commands = f.service.poll(f.principal, runningAt(exit)).commands.map(c => c.id);
+    expect(commands).toEqual(['login']);
+    const joinedAt = new Date(exit + 1).toISOString();
+    const joined = f.state({ running: 'running', bot: 'joined', observedAt: joinedAt });
+    f.options.now = () => exit + 1;
+    f.service.poll(f.principal, f.poll({ states: [joined], receipts: [f.receipt({ id: 'login', action: 'login', observedAt: joinedAt, state: joined })] }));
+    expect((await next).outcome).toBe('completed');
+    expect(f.service.receipt('operation')).toEqual(unknown);
+    expect(f.service.safe('execution')).toBe(false);
+    await expect(f.service.execute(f.request)).rejects.toThrow('UNKNOWN');
+  });
+  it('keeps blocking on delivered work without any receipt, however long ago', async () => {
+    const f = fixture(), abort = new AbortController(), result = f.service.execute(f.request, abort.signal).catch(error => error.message);
+    f.service.poll(f.principal, f.poll()); abort.abort(); expect(await result).toContain('UNKNOWN');
+    const command = f.store.command('operation')!;
+    const later = Date.parse(command.deadlineAt) + 10 * LIFECYCLE_UNKNOWN_EXIT_MS;
+    f.options.now = () => later; f.service.poll(f.principal, f.poll({ states: [f.state({ observedAt: new Date(later).toISOString() })] }));
+    await expect(f.service.execute({ ...f.request, id: 'later', authority: { ...f.request.authority, executionId: 'later_execution' } })).rejects.toThrow('BUSY');
   });
   it('refuses stale/unbound/ambiguous state and wrong devices, preserving no player identities', () => {
     const f = fixture();

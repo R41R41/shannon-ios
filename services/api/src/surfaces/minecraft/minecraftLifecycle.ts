@@ -88,7 +88,7 @@ export class MinecraftLifecycle {
       deadlineAt: new Date(this.options.now() + (this.options.waitMilliseconds ?? 120_000)).toISOString() };
     if (!this.allowed(command)) throw new Error('MINECRAFT_LIFECYCLE_AUTHORITY_DENIED');
     // A new ID is not a retry path around an unresolved physical operation.
-    if (this.store.unresolved()) throw new Error('MINECRAFT_LIFECYCLE_BUSY');
+    if (this.store.unresolved(this.options.now())) throw new Error('MINECRAFT_LIFECYCLE_BUSY');
     this.store.insert(command);
     let cancellingAt: number | null = null;
     for (;;) {
