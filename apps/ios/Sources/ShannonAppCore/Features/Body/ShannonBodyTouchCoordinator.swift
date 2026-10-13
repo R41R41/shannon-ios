@@ -4,8 +4,10 @@ import Observation
 /// What a touch on her Live2D figure becomes. With 「体に起きたことをシャノンに伝える」 off
 /// (the default) it becomes nothing: the page animates and no request leaves the device.
 /// With it on, a finished touch is reported as a fact and, at the page's moment, she is asked
-/// whether she says something. Her line is shown near the figure; it is not spoken and no
-/// microphone opens (the app has no speech outside a call).
+/// whether she says something. On the phone a finger touch is mostly too short for the page's moment,
+/// so the app asks about such a finished touch itself (`Environment.asksAfterShortTouch`).
+/// Her line is shown near the figure; it is not spoken and no microphone opens (the app has no
+/// speech outside a call).
 @MainActor
 @Observable
 public final class ShannonBodyTouchCoordinator {
@@ -47,6 +49,13 @@ public final class ShannonBodyTouchCoordinator {
         public var invokeTouchGesture: @MainActor @Sendable (String) async -> Bool? = { gesture in
             await ShannonLive2DStage.shared.invokeTouchGesture(gesture)
         }
+        /// A finger on the phone (`docs/body-contract.md`, "A body that only feels touch"): a finished touch the page never
+        /// asks about (a stroke, a resting finger, a held hand or a tickle shorter than the page's 0.6 s) is asked about
+        /// by the app itself when it ends. Off for a mouse, whose touches are long enough for the page's own moment.
+        public var asksAfterShortTouch = false
+        /// The page's own rule for its question: none while her phase is not idle (a voice conversation, a text reply on
+        /// its way, a line of hers being said).
+        public var pageIsIdle: @MainActor @Sendable () -> Bool = { ShannonLive2DStage.shared.phase == .idle }
 
         public init(
             reportsTouch: @escaping @MainActor @Sendable () -> Bool = { ShannonBodyPreference.reportsTouch() },
@@ -70,6 +79,11 @@ public final class ShannonBodyTouchCoordinator {
     }
 
     public static let lineSeconds = 7.0
+    /// The page asks about a finished touch only from this long (`pet` and the rest; a `poke` always): the embed's
+    /// `README.md`, `askReaction`. Shorter ones, nearly every finger touch on a phone, it never asks about.
+    static let pageAsksAtEndMilliseconds = 600
+    /// At most one question in about 45 seconds, the page's spacing, counted over the page's questions and the app's own.
+    static let askSpacingSeconds: TimeInterval = 45
     static let pendingLimit = 50
     static let pendingMaximumAge: TimeInterval = 24 * 60 * 60
 
@@ -90,6 +104,10 @@ public final class ShannonBodyTouchCoordinator {
     @ObservationIgnored private var isAsking = false
     @ObservationIgnored private var lineTask: Task<Void, Never>?
     @ObservationIgnored private let touchReflex = ShannonTouchReflexExecutor()
+    /// The touches a question was already sent for (the page's or the app's), newest last, and when the last ones were sent.
+    @ObservationIgnored private var askedTouchIDs: [String] = []
+    @ObservationIgnored private var lastAskAt: Date?
+    @ObservationIgnored private var lastOwnAskAt: Date?
 
     public init(scopeKey: String = "local-owner", client: (any ShannonBodyServing)? = nil, environment: Environment = Environment()) {
         self.scopeKey = scopeKey
@@ -106,15 +124,49 @@ public final class ShannonBodyTouchCoordinator {
         case let .touch(touch):
             guard sends else { return nil }
             // Who was around is decided when the touch happens, not when it is delivered.
-            enqueue(ShannonBodyTouchEventDTO(touch: touch, audience: environment.audience()))
-            return Task { await self.flush() }
+            let audience = environment.audience()
+            let event = ShannonBodyTouchEventDTO(touch: touch, audience: audience)
+            guard asksItself(touch) else {
+                enqueue(event)
+                return Task { await self.flush() }
+            }
+            // The question goes first, so that it is the touch's first message (the one her feeling and her stance are
+            // taken from); the finished touch follows as its event with the same id, as after any question of the page.
+            noteAsked(touch.id, own: true)
+            let request = ShannonBodyReactionRequestDTO(scopeKey: scopeKey, touch: touch, audience: audience)
+            return Task {
+                await self.ask(request)
+                guard self.sends else { return }
+                self.enqueue(event)
+                await self.flush()
+            }
         case let .askReaction(touch):
             guard sends, !isAsking else { return nil }
+            // Inside the spacing of a question the app asked itself, the page's question is not sent: one in about 45 seconds.
+            if let lastOwnAskAt, environment.now().timeIntervalSince(lastOwnAskAt) < Self.askSpacingSeconds { return nil }
+            noteAsked(touch.id, own: false)
             let request = ShannonBodyReactionRequestDTO(scopeKey: scopeKey, touch: touch, audience: environment.audience())
             return Task { await self.ask(request) }
         default:
             return nil
         }
+    }
+
+    /// Whether the app asks about this finished touch itself: a finger on the phone, a touch the page asked nothing about
+    /// and never will (not a poke, shorter than its 0.6 s), outside the 45 s spacing, while the page would ask at all.
+    private func asksItself(_ touch: ShannonLive2DTouch) -> Bool {
+        guard environment.asksAfterShortTouch, !isAsking, !isSpeaking, !touch.ongoing, touch.kind != .poke, touch.kind != .carry,
+              touch.durationMs < Self.pageAsksAtEndMilliseconds, !askedTouchIDs.contains(touch.id), environment.pageIsIdle() else { return false }
+        if let lastAskAt, environment.now().timeIntervalSince(lastAskAt) < Self.askSpacingSeconds { return false }
+        return true
+    }
+
+    private func noteAsked(_ id: String, own: Bool) {
+        let now = environment.now()
+        lastAskAt = now
+        if own { lastOwnAskAt = now }
+        askedTouchIDs.append(id)
+        if askedTouchIDs.count > 32 { askedTouchIDs.removeFirst(askedTouchIDs.count - 32) }
     }
 
     /// The owner switched reporting off: her line goes, and what was waiting to be sent is dropped.

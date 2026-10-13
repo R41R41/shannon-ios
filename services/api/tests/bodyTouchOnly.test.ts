@@ -10,6 +10,7 @@ import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from '../src/surfac
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { promptOf } from './modelPrompt.js';
+import { HEHE, reactionHarness } from './bodyReactionHarness.js';
 
 const scope = 'owner';
 const START = '2026-10-03T01:00:00.000Z';
@@ -112,5 +113,24 @@ describe('a body that only feels touch', () => {
     h.clock.at = new Date(Date.parse(START) + 60_000).toISOString();
     expect((await h.touch('phone-2', 'owner', PHONE)).status).toBe(200);
     expect(h.othersPresent()).toBe(true);
+  });
+});
+
+describe('a finger touch on the phone, asked about when it ends (production 2026-10-13)', () => {
+  it('is answered as a touch of the desktop body is, and its event afterwards only brings it up to date', async () => {
+    // The page asks at a touch's end only from 0.6 s: the phone's finger strokes of 43–576 ms were never asked about,
+    // so they moved her feeling and no line came back. The app now asks about such a touch itself, before its event.
+    const h = await reactionHarness();
+    await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    const touch = { type: 'pet', durationMs: 223, strength: 0.2, ongoing: false, region: 'head', part: 'hair', gesture: 'stroke', input: 'press', reflex: 'none' };
+    const asked = await h.send('POST', '/v1/body/reactions', { id: 'finger-1', touch, audience: 'owner', occurredAt: h.clock.at }, PHONE);
+    expect(asked).toMatchObject({ status: 200, body: { id: 'finger-1', status: 'said', message: { text: HEHE } } });
+    expect(h.speaker.calls).toHaveLength(1);
+    expect(h.reactionStore.outcome(scope, 'finger-1')).toMatchObject({ said: true });
+    const { ongoing: _ongoing, ...event } = touch;
+    expect(await h.send('POST', '/v1/body/events', { events: [{ id: 'finger-1', audience: 'owner', occurredAt: h.clock.at, ...event }] }, PHONE))
+      .toMatchObject({ status: 200, body: { stored: 1 } });
+    // One touch, counted once: no second model call.
+    expect(h.speaker.calls).toHaveLength(1);
   });
 });
