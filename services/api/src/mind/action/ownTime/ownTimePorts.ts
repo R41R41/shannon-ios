@@ -14,6 +14,7 @@ export { type ListResult, type ReadResult, type SearchResult, type WriteResult }
 export { type HostFolderOperations, type HostRunOutcome } from './hostFolderOperations.js';
 export { type SQLiteAutonomyStore } from './store/autonomyStore.js';
 export { type HostOperation } from './store/hostFolderOperationsStore.js';
+export { type GoalRejection, type PursuitClosedReason, type PursuitEvent, type PursuitGoalColumns } from './store/pursuitGoals.js';
 export { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from './store/studyStore.js';
 
 export { studyWriteKey, syncedWithin } from './studyAether.js';

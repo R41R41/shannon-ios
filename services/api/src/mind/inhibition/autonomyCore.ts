@@ -3,6 +3,7 @@ import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
 import { MODEL_MODE_CORE_PATHS } from './modelModeCorePaths.js';
+import { EXECUTIVE_CORE_PATHS } from './executiveCorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
 /**
  * CORE, as code (Syzygy ADR-0002).
@@ -213,10 +214,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/scripts/peopleMigrationDryRun.ts',
   ]),
   approval_and_budget: Object.freeze([
-    ...FCA_CORE_PATHS,
+    ...FCA_CORE_PATHS, ...EXECUTIVE_CORE_PATHS,
     ...STAGE5_CORE_PATHS.approval_and_budget,
-    'services/api/src/mind/inhibition/autonomyCore.ts',
-    'services/api/src/mind/inhibition/stage4CorePaths.ts',
+    'services/api/src/mind/inhibition/autonomyCore.ts', 'services/api/src/mind/inhibition/stage4CorePaths.ts',
     'services/api/src/mind/inhibition/autonomyPaths.ts',
     'services/api/src/mind/inhibition/autonomyPolicy.ts',
     // The window other parts of the mind import the gate and the budget through (Syzygy ADR-0008 §10).
