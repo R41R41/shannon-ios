@@ -2,6 +2,10 @@
 
 Status: the original Observer is deployed. The common-FCA map and timing revision is implemented on `codex/shannon/fca-observer`, based on accepted main `eaf6b84f`; production reflection is a separate gate. The foreground stable-cache change is included from `codex/shannon/stable-foreground-cache`.
 
+## Full-viewport layout (owner feedback, 2026-10-13)
+
+After using production `31b52875`, the owner asked for the timeline and the map to use the whole browser window with every control floating above it and hideable. The timeline or the map now fills the viewport (no page scroll; the timeline scrolls inside itself, the map pans and zooms). All controls are translucent overlay panels: a top bar (connection, 現状/目指す姿, 時間割/地図, run picker, follow, failures, task tree and duration panels, disconnect), block chips bottom-left, and map zoom/fit with a dismissible hint bottom-right. 「隠す」, `H` and `Esc` hide or show all overlay UI (Esc first closes the drawer or an open panel); 「操作を表示」 stays in a corner while hidden. Only that view preference and the dismissed hint are kept, in this tab's `sessionStorage` (`shannon.observer.ui.v1:<base path>`), never credentials or observations. The detail is an overlay drawer (right on desktop, bottom sheet on phones) that opens on selection and closes with × or Esc; it never shrinks the canvas. The FCA task tree and the duration summary are floating panels. The map fits the area not covered by the overlays on load and on resize (unless zoomed in); block titles are sized to their blocks; wiring is faded except the routes touching the selected or running boxes, and links between boxes that are not neighbours run along the gutters instead of across boxes. Pairing, CSP, held view and data rules are unchanged.
+
 ## Owner redesign (2026-10-13)
 
 The owner chose, from side-by-side mocks, a per-turn **timeline as the main view** with a switch to the **layered map**, both with a 「現状 / 目指す姿」 switch. This supersedes the compact seven-lane map and the nine route buttons described below; the transport, pairing, credential, audience, receipt and bounds rules below are unchanged.

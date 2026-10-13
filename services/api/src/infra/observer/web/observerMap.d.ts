@@ -31,5 +31,9 @@ export type Curve = [[number, number], [number, number], [number, number], [numb
 export function edgeCurve(a: Box, b: Box, offset?: number): Curve;
 export function bezierAt(points: Curve, t: number): [number, number];
 export function curvePath(points: Curve): string;
-export function routeTable(layout: GridLayout, links: LinkSpec[]): Map<string, { from: string; to: string; background: boolean; points: Curve }>;
-export function blockRoutes(layout: GridLayout, links: LinkSpec[]): Map<string, { from: string; to: string; points: Curve }>;
+export type Route = { kind: 'curve'; points: Curve } | { kind: 'poly'; points: [number, number][] };
+export function gutterRoute(a: NodeBox, b: NodeBox, offset?: number): Route;
+export function routePath(route: Route): string;
+export function routePoint(route: Route, t: number): [number, number];
+export function routeTable(layout: GridLayout, links: LinkSpec[]): Map<string, Route & { from: string; to: string; background: boolean }>;
+export function blockRoutes(layout: GridLayout, links: LinkSpec[]): Map<string, Route & { from: string; to: string }>;

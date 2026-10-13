@@ -1,5 +1,16 @@
 # Mind Observer UI validation
 
+## Full-viewport layout (2026-10-13)
+
+Branch `observer-fullscreen` from `31b52875`, verified the same way (UI fixture server + headless Chrome; `fca-run` and
+`turn` fixture commands; controlled values only) at 1440×900, 1920×1080 and 390×844, light and dark, both views, with
+the overlay UI shown and hidden, the drawer open, and the task panel open. `scrollWidth`/`scrollHeight` equal the
+viewport in every capture; no console exceptions.
+
+- 1440: [timeline](observer-evidence/fullscreen-1440-light-timeline.jpg), [map](observer-evidence/fullscreen-1440-light-map.jpg), [map, box selected with drawer (dark)](observer-evidence/fullscreen-1440-dark-map-node.jpg), [map, UI hidden](observer-evidence/fullscreen-1440-light-map-hidden.jpg), [task panel](observer-evidence/fullscreen-1440-light-tasks.jpg), [目指す姿 map](observer-evidence/fullscreen-1440-light-target-map.jpg)
+- 1920: [timeline with drawer](observer-evidence/fullscreen-1920-light-timeline-drawer.jpg), [map (dark)](observer-evidence/fullscreen-1920-dark-map.jpg), [map, UI hidden](observer-evidence/fullscreen-1920-light-map-hidden.jpg), [timeline, UI hidden (dark)](observer-evidence/fullscreen-1920-dark-timeline-hidden.jpg)
+- 390: [timeline](observer-evidence/fullscreen-390-light-timeline.jpg), [map](observer-evidence/fullscreen-390-light-map.jpg), [map (dark)](observer-evidence/fullscreen-390-dark-map.jpg), [bottom-sheet drawer (dark)](observer-evidence/fullscreen-390-dark-timeline-drawer.jpg), [timeline, UI hidden](observer-evidence/fullscreen-390-light-timeline-hidden.jpg)
+
 ## Owner redesign (2026-10-13)
 
 Branch `observer-redesign` from `6b4919db`. Verified with headless Chrome against `scripts/observer-ui-smoke.ts`

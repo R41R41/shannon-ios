@@ -232,6 +232,30 @@ export function bezierAt(points, t) {
   return [0, 1].map(axis => u * u * u * points[0][axis] + 3 * u * u * t * points[1][axis] + 3 * u * t * t * points[2][axis] + t * t * t * points[3][axis]);
 }
 export const curvePath = points => `M${points[0].join(' ')} C${points[1].join(' ')} ${points[2].join(' ')} ${points[3].join(' ')}`;
+/** A link between boxes that are not neighbours travels in the gutters (column gaps, then just above/below the
+ * target row), never through another box; neighbours keep a short curve. Owner feedback 2026-10-13: fewer crossings. */
+export function gutterRoute(a, b, offset = 0) {
+  if (typeof a.col !== 'number' || typeof b.col !== 'number' || Math.abs(a.col - b.col) <= 1 && Math.abs(a.row - b.row) <= 1) return { kind: 'curve', points: edgeCurve(a, b, offset) };
+  const right = b.col >= a.col, gx = right ? a.x + a.w + 6 + offset : a.x - 6 + offset;
+  const down = b.row >= a.row, gy = down ? b.y - 5 + offset / 3 : b.y + b.h + 5 + offset / 3;
+  const tx = b.x + b.w / 2 + offset;
+  const points = [[right ? a.x + a.w : a.x, a.y + a.h / 2 + offset], [gx, a.y + a.h / 2 + offset], [gx, gy], [tx, gy], [tx, down ? b.y : b.y + b.h]];
+  return { kind: 'poly', points };
+}
+export function routePath(route) {
+  if (route.kind !== 'poly') return curvePath(route.points);
+  return `M${route.points.map(point => point.join(' ')).join(' L')}`;
+}
+export function routePoint(route, t) {
+  if (route.kind !== 'poly') return bezierAt(route.points, t);
+  const parts = route.points.slice(1).map((point, index) => Math.hypot(point[0] - route.points[index][0], point[1] - route.points[index][1]));
+  let distance = t * parts.reduce((sum, value) => sum + value, 0);
+  for (const [index, length] of parts.entries()) {
+    if (distance <= length || index === parts.length - 1) { const from = route.points[index], to = route.points[index + 1], f = length ? Math.min(1, distance / length) : 0; return [from[0] + (to[0] - from[0]) * f, from[1] + (to[1] - from[1]) * f]; }
+    distance -= length;
+  }
+  return route.points[0];
+}
 /** Structural routes with opposite pairs offset, so a return path never hides under its outbound path. */
 export function routeTable(layout, links) {
   const routes = new Map(), keys = new Set(links.map(([from, to]) => `${from}>${to}`));
@@ -239,7 +263,7 @@ export function routeTable(layout, links) {
     const a = layout.boxes.get(from), b = layout.boxes.get(to);
     if (!a || !b) continue;
     const offset = keys.has(`${to}>${from}`) ? (from < to ? -9 : 9) : 0;
-    routes.set(`${from}>${to}`, { from, to, background: Boolean(background), points: edgeCurve(a, b, offset) });
+    routes.set(`${from}>${to}`, { from, to, background: Boolean(background), ...gutterRoute(a, b, offset) });
   }
   return routes;
 }
@@ -256,7 +280,7 @@ export function blockRoutes(layout, links) {
     const one = layout.blocks.get(a), two = layout.blocks.get(b), ax = one.x + one.w / 2, ay = one.y + one.h / 2, bx = two.x + two.w / 2, by = two.y + two.h / 2;
     const length = Math.hypot(bx - ax, by - ay) || 1, shift = pairs.has(`${b}>${a}`) ? (a < b ? -12 : 12) : 0, nx = -(by - ay) / length * shift, ny = (bx - ax) / length * shift;
     const at = t => [ax + (bx - ax) * t + nx, ay + (by - ay) * t + ny];
-    routes.set(key, { from: a, to: b, points: [at(.3), at(.43), at(.57), at(.7)] });
+    routes.set(key, { from: a, to: b, kind: 'curve', points: [at(.3), at(.43), at(.57), at(.7)] });
   }
   return routes;
 }

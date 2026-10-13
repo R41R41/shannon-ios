@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OBSERVER_NODES } from '../src/contracts/observerContract.js';
 import {
   BLOCKS, CURRENT_LAYOUT, TARGET_BLOCKS, TARGET_LAYOUT, TARGET_LINKS, TARGET_NODES, TARGET_RUNS, VIEW_LINKS, VIEW_NODES,
-  blockRoutes, curvePath, dummyFields, mergeFields, routeTable, viewHandoff, viewNodeOf, type GridLayout,
+  blockRoutes, dummyFields, routePath, routePoint, mergeFields, routeTable, viewHandoff, viewNodeOf, type GridLayout,
 } from '../src/infra/observer/web/observerMap.js';
 
 function noOverlap(layout: GridLayout) {
@@ -52,8 +52,22 @@ describe('current-architecture view of observed events', () => {
     for (const [layout, links] of [[CURRENT_LAYOUT, VIEW_LINKS], [TARGET_LAYOUT, TARGET_LINKS]] as const) {
       const routes = routeTable(layout, links);
       expect(routes.size).toBe(links.length);
-      for (const route of routes.values()) expect(curvePath(route.points)).not.toMatch(/NaN|undefined|Infinity/);
+      for (const route of routes.values()) expect(routePath(route)).not.toMatch(/NaN|undefined|Infinity/);
       for (const route of blockRoutes(layout, links).values()) expect(route.from).not.toBe(route.to);
+    }
+    // Links between boxes that are not neighbours travel in the gutters, never through another box.
+    for (const route of routeTable(CURRENT_LAYOUT, VIEW_LINKS).values()) {
+      if (route.kind !== 'poly') continue;
+      for (let index = 1; index < route.points.length; index += 1) {
+        const [a, b] = [route.points[index - 1], route.points[index]];
+        expect(a[0] === b[0] || a[1] === b[1]).toBe(true);
+        for (const [id, box] of CURRENT_LAYOUT.boxes) {
+          if (id === route.from || id === route.to) continue;
+          const crosses = Math.max(a[0], b[0]) > box.x && Math.min(a[0], b[0]) < box.x + box.w && Math.max(a[1], b[1]) > box.y && Math.min(a[1], b[1]) < box.y + box.h;
+          expect(crosses, `${route.from}>${route.to} crosses ${id}`).toBe(false);
+        }
+      }
+      expect(routePoint(route, 0)).toEqual(route.points[0]); expect(routePoint(route, 1)).toEqual(route.points.at(-1));
     }
     // A return route never hides under its outbound route.
     const routes = routeTable(CURRENT_LAYOUT, VIEW_LINKS);

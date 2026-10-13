@@ -1,4 +1,4 @@
-import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, viewNodeOf, viewHandoff, CURRENT_LAYOUT, TARGET_LAYOUT, TARGET_BLOCKS, TARGET_NODES, TARGET_LINKS, TARGET_RUNS, dummyFields, mergeFields, routeTable, blockRoutes, edgeCurve, bezierAt, curvePath } from './observerMap.js';
+import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, viewNodeOf, viewHandoff, CURRENT_LAYOUT, TARGET_LAYOUT, TARGET_BLOCKS, TARGET_NODES, TARGET_LINKS, TARGET_RUNS, dummyFields, mergeFields, routeTable, blockRoutes, edgeCurve, routePath, routePoint } from './observerMap.js';
 import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
@@ -395,6 +395,12 @@ function mountObserver() {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, priorCatalog = null;
   let mode = 'cur', view = 'timeline', selectedTask = null, selectedStep = null, selectedKey = null, selectedView = null, focusBlock = null;
+  // Owner feedback 2026-10-13: the canvas fills the viewport and every control floats above it. Only this view preference is kept per tab.
+  const uiKey = `shannon.observer.ui.v1:${observerBasePath(window.location.pathname)}`;
+  const readUi = () => { try { const value = JSON.parse(window.sessionStorage.getItem(uiKey) ?? 'null'); return record(value) ? value : {}; } catch { return {}; } };
+  const writeUi = value => { try { window.sessionStorage.setItem(uiKey, JSON.stringify({ hidden: Boolean(value.hidden), hint: Boolean(value.hint) })); } catch { /* storage may be unavailable */ } };
+  const ui = { hidden: readUi().hidden === true, hint: readUi().hint === true }, panels = { tasks: false, metrics: false };
+  let drawerOpen = false, topPad = 120;
   const elapsedClock = createElapsedClock(); let clockTimer = null;
   let viewRuns = null, viewId = null, linkedView;
   const currentRun = () => {
@@ -527,7 +533,7 @@ function mountObserver() {
   }
 
   /* ---------- Detail (shared by both views) ---------- */
-  function select(key, id) { selectedKey = key; selectedView = id; for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
+  function select(key, id) { selectedKey = key; selectedView = id; setDrawer(true); for (const [rowKey, item] of barElements) item.element.setAttribute('aria-pressed', String(rowKey === key)); renderDetail(); highlightMapSelection(); $('announcement').textContent = `${labelFor(viewModel(), id)}の入力と出力を表示しました。`; }
   function table(title, rows, parent) {
     const box = el('div', 'io', null, parent); el('h4', '', title, box);
     if (!rows.length) { el('p', 'hint', 'なし', box); return; }
@@ -661,7 +667,7 @@ function mountObserver() {
       const box = layout.blocks.get(id); if (!box) continue;
       const group = sv('g', { class: 'block' }, groups); role(group, blockRole); blockElements.set(id, group);
       sv('rect', { class: 'block-box', x: box.x, y: box.y, width: box.w, height: box.h, rx: 10 }, group);
-      sv('text', { class: 'block-head', x: box.x + 12, y: box.y + 19 }, group).textContent = label;
+      sv('text', { class: 'block-head', x: box.x + 12, y: box.y + 19, 'font-size': Math.min(12, (box.w - 24) / [...label].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .58 : 1), 0)).toFixed(1) }, group).textContent = label;
       sv('text', { class: 'block-process', x: box.x + box.w - 10, y: box.y + box.h - 4, 'text-anchor': 'end' }, group).textContent = process;
       const far = sv('g', { class: 'far' }, group), cx = box.x + box.w / 2, cy = box.y + box.h / 2;
       const width = text => [...text].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .58 : 1), 0);
@@ -670,8 +676,9 @@ function mountObserver() {
       const count = sv('text', { class: 'far-count', x: cx, y: cy + 32, 'text-anchor': 'middle' }, far); counts.set(id, count);
       group.addEventListener('click', () => { if (map.level === 1) zoomTo(cx, cy, Math.min(2.4, fitK(box.w + 40, box.h + 40))); });
     }
-    for (const route of blockLines.values()) { const path = sv('path', { class: 'block-edge', d: curvePath(route.points) }, blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); }
-    for (const route of routes.values()) { const path = sv('path', { class: `edge${route.background ? ' background' : ''}`, d: curvePath(route.points) }, edges); role(path, roleFor(model, route.from)); }
+    for (const route of blockLines.values()) { const path = sv('path', { class: 'block-edge', d: routePath(route) }, blockEdges); role(path, blockSpec(model, route.from)?.[3] ?? 'own'); }
+    const edgeElements = [];
+    for (const route of routes.values()) { const path = sv('path', { class: `edge${route.background ? ' background' : ''}`, d: routePath(route) }, edges); edgeElements.push([route.from, route.to, path]); role(path, roleFor(model, route.from)); }
     for (const spec of model.nodes) {
       const [id] = spec, box = layout.boxes.get(id), group = sv('g', { class: 'node', tabindex: 0, role: 'button', 'aria-label': spec[4] }, nodes); role(group, roleFor(model, id));
       if (mode === 'cur' && (id === 'executive' || id === 'sqlite' || id === 'identity')) group.classList.add('static');
@@ -685,17 +692,26 @@ function mountObserver() {
       group.addEventListener('click', event => { event.stopPropagation(); pick(); });
       group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); } });
     }
-    map = { svg, model, layout, routes, blockLines, packets, nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: layout.width / 2, cy: layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
+    map = { svg, model, layout, routes, blockLines, packets, edgeElements, nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: layout.width / 2, cy: layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
     applyView(); highlightMapSelection();
   }
   const mapSize = () => { const rect = map.svg.getBoundingClientRect(); return [rect.width || 360, rect.height || 420]; };
-  const baseScale = () => { const [width, height] = mapSize(); return Math.min(width / map.layout.width, height / map.layout.height); };
-  const fitK = (width, height) => { const [w, h] = mapSize(); return Math.min(w / width, h / height) / baseScale(); };
+  /** The part of the viewport not covered by the overlay controls; fitting and centring use it. */
+  const insets = () => {
+    if (ui.hidden) return { t: 12, b: 12, l: 12, r: 12 };
+    const tools = $('map-tools').getBoundingClientRect(), chips = $('block-chips').getBoundingClientRect(), [, height] = mapSize();
+    return { t: topPad + 8, b: Math.max(12, height - Math.min(tools.top || height, chips.top || height) + 8), l: 12, r: 12 };
+  };
+  const inner = () => { const [width, height] = mapSize(), edge = insets(); return { width, height, edge, w: Math.max(80, width - edge.l - edge.r), h: Math.max(80, height - edge.t - edge.b) }; };
+  const baseScale = () => { const area = inner(); return Math.min(area.w / map.layout.width, area.h / map.layout.height); };
+  const fitK = (width, height) => { const area = inner(); return Math.min(area.w / width, area.h / height) / baseScale(); };
+  const viewOrigin = (scale, area = inner()) => [map.cx - (area.edge.l + area.w / 2) / scale, map.cy - (area.edge.t + area.h / 2) / scale];
   function applyView() {
     if (!map) return;
-    const [width, height] = mapSize(), scale = baseScale() * map.k, vw = width / scale, vh = height / scale;
+    const area = inner(), scale = baseScale() * map.k;
     map.cx = Math.max(0, Math.min(map.layout.width, map.cx)); map.cy = Math.max(0, Math.min(map.layout.height, map.cy));
-    map.svg.setAttribute('viewBox', `${map.cx - vw / 2} ${map.cy - vh / 2} ${vw} ${vh}`);
+    const [x, y] = viewOrigin(scale, area);
+    map.svg.setAttribute('viewBox', `${x} ${y} ${area.width / scale} ${area.height / scale}`);
     const level = map.k < 1.7 ? 1 : map.k < 3 ? 2 : 3;
     if (level !== map.level) { map.level = level; map.svg.dataset.level = String(level); for (const button of document.querySelectorAll('#zoom-levels button')) button.setAttribute('aria-current', String(Number(button.dataset.level) === level)); }
   }
@@ -734,6 +750,9 @@ function mountObserver() {
         if (!row) sv('text', { class: 'field field-key', x: box.x + 8, y: box.y + 32 }, fields).textContent = mode === 'cur' && map.model.index.get(id)?.[6]?.length === 0 ? '観察イベントなし' : 'この一回では未観測';
       }
     }
+    // Faded wiring; the selected box and the boxes now running keep their routes emphasised.
+    const hot = new Set([...active.keys(), ...(selectedView ? [selectedView] : [])]);
+    for (const [from, to, path] of map.edgeElements) path.classList.toggle('hot', hot.has(from) || hot.has(to));
     for (const [id, count] of map.counts) {
       const value = blockActive.get(id) ?? 0, nodes = map.model.nodes.filter(spec => spec[1] === id).length, text = value ? `● 処理中 ${value}` : `${nodes} 処理`;
       if (count.textContent !== text) count.textContent = text;
@@ -746,7 +765,7 @@ function mountObserver() {
     if (!map || view !== 'map' || reduceMotion.matches || document.hidden || map.particles.length >= 24) return;
     const a = map.layout.boxes.get(from), b = map.layout.boxes.get(to);
     if (!a || !b || from === to) return;
-    map.particles.push({ from, to, started: performance.now(), points: map.routes.get(`${from}>${to}`)?.points ?? edgeCurve(a, b) });
+    map.particles.push({ from, to, started: performance.now(), route: map.routes.get(`${from}>${to}`) ?? { kind: 'curve', points: edgeCurve(a, b) } });
     requestFrame();
   }
   function glow(id) {
@@ -760,9 +779,9 @@ function mountObserver() {
     map.particles = map.particles.filter(item => now - item.started < 650);
     for (const item of map.particles) {
       const t = (now - item.started) / 650, a = map.layout.boxes.get(item.from), b = map.layout.boxes.get(item.to);
-      let points = item.points, radius = 4.5;
-      if (map.level === 1) { if (a.block === b.block) continue; points = map.blockLines.get(`${a.block}>${b.block}`)?.points; if (!points) continue; radius = 7; }
-      const [x, y] = bezierAt(points, t), dot = sv('circle', { class: 'packet', cx: x, cy: y, r: radius }, map.packets); role(dot, roleFor(map.model, item.from));
+      let route = item.route, radius = 4.5;
+      if (map.level === 1) { if (a.block === b.block) continue; route = map.blockLines.get(`${a.block}>${b.block}`); if (!route) continue; radius = 7; }
+      const [x, y] = routePoint(route, t), dot = sv('circle', { class: 'packet', cx: x, cy: y, r: radius }, map.packets); role(dot, roleFor(map.model, item.from));
     }
     return map.particles.length > 0;
   }
@@ -819,7 +838,7 @@ function mountObserver() {
   function renderTasks() {
     const tasks = observedTasks(state);
     if (selectedTask && !tasks.some(task => task.id === selectedTask)) { selectedTask = null; selectedStep = null; }
-    $('task-count').textContent = tasks.length ? `${tasks.length} 件（保持範囲）` : 'なし';
+    $('task-count').textContent = String(tasks.length);
     $('task-empty').hidden = tasks.length > 0; $('clear-task').disabled = !selectedTask;
     const signature = JSON.stringify([tasks.map(task => [task.id, task.parentId, task.lastSequence, task.phase]), selectedTask, selectedStep, state.transport]);
     if (signature === taskSignature) return;
@@ -840,7 +859,7 @@ function mountObserver() {
   }
   let metricSignature = '';
   function renderMetrics() {
-    if (!$('metrics').open) return;
+    if ($('metrics').hidden) return;
     const spans = $('metric-scope').value === 'window' ? [...state.runs.values()].flatMap(run => [...run.spans.values()]) : [...(currentRun()?.spans.values() ?? [])].filter(span => !span.linked);
     const signature = JSON.stringify([state.cursor, state.selectedRunId, selectedTask, selectedStep, $('metric-scope').value, spans.length]);
     if (signature === metricSignature) return; metricSignature = signature;
@@ -856,11 +875,28 @@ function mountObserver() {
     }
   }
 
+  /* ---------- Overlay controls ---------- */
+  function setDrawer(open) { drawerOpen = open; $('drawer').hidden = !open; root.dataset.drawer = open ? 'open' : 'closed'; highlightMapSelection(); }
+  function measureTop() {
+    const bar = $('topbar').getBoundingClientRect(), next = ui.hidden || !bar.height ? 12 : Math.round(bar.bottom);
+    if (next === topPad) return; topPad = next; document.documentElement.style.setProperty('--top-pad', `${topPad}px`); applyView();
+  }
+  function setUi(hidden) {
+    ui.hidden = hidden; writeUi(ui); root.dataset.ui = hidden ? 'hidden' : 'shown';
+    if (!hidden) requestAnimationFrame(measureTop);
+    if (map && map.k <= 1.01) Object.assign(map, { cx: map.layout.width / 2, cy: map.layout.height / 2 });
+    applyView(); (hidden ? $('ui-show') : $('ui-hide')).focus({ preventScroll: true });
+  }
+  function togglePanel(name) { panels[name] = !panels[name]; if (panels[name]) { for (const other of Object.keys(panels)) if (other !== name) panels[other] = false; } metricSignature = ''; render(); }
+
   /* ---------- Render and modes ---------- */
   function render() {
     root.dataset.mode = mode; root.dataset.view = view;
-    $('live-controls').hidden = mode !== 'cur'; $('target-controls').hidden = mode !== 'tgt'; $('tasks').hidden = mode !== 'cur'; $('metrics').hidden = mode !== 'cur';
-    $('timeline-view').hidden = view !== 'timeline'; $('map-view').hidden = view !== 'map';
+    $('live-controls').hidden = mode !== 'cur'; $('target-controls').hidden = mode !== 'tgt';
+    $('tasks').hidden = mode !== 'cur' || !panels.tasks; $('metrics').hidden = mode !== 'cur' || !panels.metrics;
+    $('tasks-toggle').setAttribute('aria-expanded', String(!$('tasks').hidden)); $('metrics-toggle').setAttribute('aria-expanded', String(!$('metrics').hidden));
+    $('timeline-view').hidden = view !== 'timeline'; $('map-view').hidden = view !== 'map'; $('map-tools').hidden = view !== 'map'; $('map-hint').hidden = ui.hint;
+    $('drawer').hidden = !drawerOpen; root.dataset.drawer = drawerOpen ? 'open' : 'closed'; root.dataset.ui = ui.hidden ? 'hidden' : 'shown';
     for (const button of document.querySelectorAll('#mode-seg button')) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
     for (const button of document.querySelectorAll('#view-seg button')) button.setAttribute('aria-pressed', String(button.dataset.view === view));
     if (mode === 'cur') { renderTasks(); renderRuns(); renderMetrics(); }
@@ -893,7 +929,7 @@ function mountObserver() {
     runSignature = ''; taskSignature = ''; timelineSignature = ''; metricSignature = ''; viewRuns = null; linkedView = undefined;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
     if (map) { map.particles = []; map.packets.replaceChildren(); map.fieldSignature = new Map(); }
-    $('pair-code').value = ''; $('pair-token').value = '';
+    $('pair-code').value = ''; $('pair-token').value = ''; drawerOpen = false;
     render();
   }
   function tick() {
@@ -949,13 +985,30 @@ function mountObserver() {
   // Controls.
   for (const button of document.querySelectorAll('#mode-seg button')) button.addEventListener('click', () => setMode(button.dataset.mode));
   for (const button of document.querySelectorAll('#view-seg button')) button.addEventListener('click', () => setView(button.dataset.view));
+  $('ui-hide').addEventListener('click', () => setUi(true));
+  $('ui-show').addEventListener('click', () => setUi(false));
+  $('drawer-close').addEventListener('click', () => setDrawer(false));
+  $('tasks-toggle').addEventListener('click', () => togglePanel('tasks'));
+  $('metrics-toggle').addEventListener('click', () => togglePanel('metrics'));
+  for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => { panels[button.dataset.close] = false; render(); });
+  $('map-hint-close').addEventListener('click', () => { ui.hint = true; writeUi(ui); $('map-hint').hidden = true; applyView(); });
+  document.addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.target.closest?.('input, select, textarea')) return;
+    if (!$('connect-panel').hidden && event.key !== 'Escape') return;
+    if (event.key === 'h' || event.key === 'H') { event.preventDefault(); setUi(!ui.hidden); }
+    else if (event.key === 'Escape') {
+      if (drawerOpen && !ui.hidden) setDrawer(false);
+      else if (Object.values(panels).some(Boolean) && !ui.hidden) { for (const name of Object.keys(panels)) panels[name] = false; render(); }
+      else setUi(!ui.hidden);
+    }
+  });
   $('target-play').addEventListener('click', () => { target.playing = !target.playing; target.last = 0; renderTargetRuns(); if (target.playing) requestFrame(); });
   for (const button of document.querySelectorAll('#zoom-levels button')) button.addEventListener('click', () => { if (!map) return; const level = Number(button.dataset.level); zoomTo(level === 1 ? map.layout.width / 2 : map.cx, level === 1 ? map.layout.height / 2 : map.cy, level === 1 ? 1 : level === 2 ? 2.2 : 3.6); });
   for (const button of document.querySelectorAll('[data-zoom]')) button.addEventListener('click', () => { if (!map) return; const step = Number(button.dataset.zoom); if (!step) zoomTo(map.layout.width / 2, map.layout.height / 2, 1); else zoomTo(map.cx, map.cy, map.k * (step > 0 ? 1.5 : 1 / 1.5)); });
   const svgMap = $('map'), pointers = new Map(); let pinch = null, moved = 0;
   svgMap.addEventListener('wheel', event => { if (!map) return; event.preventDefault(); const rect = svgMap.getBoundingClientRect(), scale = baseScale() * map.k, px = event.clientX - rect.left, py = event.clientY - rect.top;
-    const wx = map.cx + (px - rect.width / 2) / scale, wy = map.cy + (py - rect.height / 2) / scale, k = Math.max(1, Math.min(5, map.k * Math.exp(-event.deltaY * .0018))), next = baseScale() * k;
-    Object.assign(map, { k, cx: wx - (px - rect.width / 2) / next, cy: wy - (py - rect.height / 2) / next }); applyView(); }, { passive: false });
+    const area = inner(), [ox, oy] = viewOrigin(scale, area), wx = ox + px / scale, wy = oy + py / scale, k = Math.max(1, Math.min(5, map.k * Math.exp(-event.deltaY * .0018))), next = baseScale() * k;
+    Object.assign(map, { k, cx: wx - px / next + (area.edge.l + area.w / 2) / next, cy: wy - py / next + (area.edge.t + area.h / 2) / next }); applyView(); }, { passive: false });
   svgMap.addEventListener('pointerdown', event => { pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); moved = 0; if (pointers.size === 2 && map) { const [a, b] = [...pointers.values()]; pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y), k: map.k }; } });
   svgMap.addEventListener('pointermove', event => { const point = pointers.get(event.pointerId); if (!point || !map) return; const dx = event.clientX - point.x, dy = event.clientY - point.y; point.x = event.clientX; point.y = event.clientY; moved += Math.abs(dx) + Math.abs(dy);
     if (pointers.size === 2 && pinch) { const [a, b] = [...pointers.values()]; map.k = Math.max(1, Math.min(5, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.distance)); applyView(); return; }
@@ -963,11 +1016,12 @@ function mountObserver() {
   const release = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; };
   svgMap.addEventListener('pointerup', release); svgMap.addEventListener('pointercancel', release);
   svgMap.addEventListener('click', event => { if (moved > 4) { event.stopPropagation(); event.preventDefault(); } }, true);
-  if (typeof ResizeObserver === 'function') new ResizeObserver(() => applyView()).observe(svgMap);
+  // Fit to the viewport on load and on resize unless the owner has zoomed in.
+  const refit = () => { if (!map) return; if (map.k <= 1.01) Object.assign(map, { k: 1, cx: map.layout.width / 2, cy: map.layout.height / 2 }); applyView(); };
+  if (typeof ResizeObserver === 'function') { new ResizeObserver(refit).observe(svgMap); new ResizeObserver(measureTop).observe($('topbar')); } else window.addEventListener('resize', () => { measureTop(); refit(); });
   $('clear-task').addEventListener('click', () => { selectedTask = null; selectedStep = null; selectedKey = null; render(); });
   $('step-picker').addEventListener('change', () => { selectedStep = $('step-picker').value || null; selectedKey = null; render(); });
   $('metric-scope').addEventListener('change', () => { metricSignature = ''; renderMetrics(); });
-  $('metrics').addEventListener('toggle', () => { metricSignature = ''; renderMetrics(); });
   $('failure-jump').addEventListener('click', () => {
     const failed = [...state.runs.values()].flatMap(run => [...run.spans.values()].filter(span => span.state === 'failed')).sort((a, b) => b.lastSequence - a.lastSequence)[0];
     if (!failed) return;
@@ -983,7 +1037,7 @@ function mountObserver() {
   window.addEventListener('pagehide', () => client.pause());
   window.addEventListener('pageshow', event => { if (event.persisted && !document.hidden) client.resume(); });
   reduceMotion.addEventListener('change', () => { if (map) map.particles = []; });
-  render();
+  render(); requestAnimationFrame(measureTop);
   if (document.hidden) client.pause();
   if (desktopBridge) {
     let desktopEpoch = -1;
