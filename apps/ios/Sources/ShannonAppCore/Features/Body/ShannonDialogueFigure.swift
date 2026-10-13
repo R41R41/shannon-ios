@@ -9,6 +9,10 @@ import SwiftUI
 struct ShannonDialogueFigure: View {
     let face: ShannonFace
     let activity: ShannonDialogueActivity
+    /// The iPhone's Talk frames her itself (上半身 in talk and call, option C of 2026-10-13); nil follows 映し方.
+    var framing: ShannonLive2DLayout.Mode? = nil
+    /// How far the stage reaches under the floating header: her line for a touch stays below it.
+    var topInset: CGFloat = 0
 
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @State private var hostID = UUID()
@@ -24,11 +28,12 @@ struct ShannonDialogueFigure: View {
     private var adjustment: ShannonLive2DLayout { bodyModel?.figureAdjustment ?? ShannonLive2DLayout() }
 
     private var layout: ShannonLive2DLayout {
-        ShannonLive2DLayout(
-            mode: ShannonLive2DLayout.Mode(rawValue: layoutModeRawValue) ?? .full,
+        let mode = framing ?? ShannonLive2DLayout.Mode(rawValue: layoutModeRawValue) ?? .full
+        return ShannonLive2DLayout(
+            mode: mode,
             scale: adjustment.scale, offsetX: adjustment.offsetX, offsetY: adjustment.offsetY,
             // 上半身 is fitted to the width as well: on a tall frame the height alone would cut her shoulders.
-            contained: layoutModeRawValue == ShannonLive2DLayout.Mode.bust.rawValue
+            contained: mode == .bust
         )
     }
 
@@ -62,7 +67,7 @@ struct ShannonDialogueFigure: View {
         .overlay(alignment: .top) {
             if showsLive2D {
                 ShannonBodyLineBubble(maxWidth: max(0, min(340, stageSize.width - 2 * ShannonSpacing.large)))
-                    .padding(.top, ShannonSpacing.small)
+                    .padding(.top, ShannonSpacing.small + topInset)
             }
         }
         .overlay(alignment: .bottom) { status(palette) }
