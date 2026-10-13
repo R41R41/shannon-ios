@@ -10,7 +10,8 @@ import type { EmitMindEvent } from '../contracts/mindInboxContract.js';
 import type { CompanionStateSnapshot } from '@shannon/cognition';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import {
-  agentTaskOutcomeNotices, lateFolderOutcomeNotices, lifecycleOutcomeNotices, promiseDueNotices, type EndedTask, type LateFolderReport, type ProducedNotice,
+  agentTaskOutcomeNotices, lateFolderOutcomeNotices, lifecycleOutcomeNotices, promiseDueNotices,
+  type EndedTask, type LateFolderReport, type LifecycleReport, type ProducedNotice,
 } from '../mind/perception/noticeProducers.js';
 
 /**
@@ -116,10 +117,7 @@ function producedNotices(database: DatabaseSync, inbox: SQLiteMindInbox, sources
   safely('promises', () => { const state = sources.snapshot(scopeKey); return state ? promiseDueNotices(state, at) : []; });
   safely('tasks', () => agentTaskOutcomeNotices(sources.tasks(scopeKey), at));
   safely('folder', () => lateFolderOutcomeNotices(lateFolderReports(database, scopeKey, at), at));
-  const hourAgo = new Date(Date.parse(at) - 60 * 60_000).toISOString();
-  const since = Date.parse(hourAgo);
-  const lifecycleReports = () => new ActionLeaseReader(database).ownLifecycleReceipts(scopeKey).filter(row => Date.parse(row.observedAt) >= since);
-  safely('minecraft', () => lifecycleOutcomeNotices(lifecycleReports(), at));
+  safely('minecraft', () => lifecycleOutcomeNotices(lifecycleReports(database, scopeKey, at), at));
   let written = 0;
   for (const notice of produced) {
     try {
@@ -140,4 +138,19 @@ function lateFolderReports(database: DatabaseSync, scopeKey: string, at: string)
     WHERE scope_key = ? AND origin = 'autonomy' AND finished_at IS NOT NULL AND finished_at >= ? AND (waiter_gone = 1 OR status = 'expired')
   `).all(scopeKey, since) as Array<{ op_id: string; tool: string; status: string; finished_at: string }>)
     .map(row => ({ id: row.op_id, tool: row.tool, status: row.status, finishedAt: row.finished_at }));
+}
+
+/**
+ * The Minecraft lifecycle operations she answered with 「受け付けました」 in a conversation, within the last hour: their accepted
+ * receipt, or that they never started (`lifecycle_not_started:<action>:<reason>`, with its closed reason).
+ */
+function lifecycleReports(database: DatabaseSync, scopeKey: string, at: string): LifecycleReport[] {
+  const since = Date.parse(at) - 60 * 60_000;
+  const leases = new ActionLeaseReader(database);
+  const received = leases.ownLifecycleReceipts(scopeKey).filter(row => Date.parse(row.observedAt) >= since);
+  const notStarted = leases.notStartedLifecycle(scopeKey).filter(row => Date.parse(row.at) >= since).flatMap(row => {
+    const [, action, reason] = row.result.split(':');
+    return action && reason ? [{ id: row.id, action, outcome: 'failed', observedAt: row.at, notStarted: reason }] : [];
+  });
+  return [...received, ...notStarted];
 }

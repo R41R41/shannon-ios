@@ -103,6 +103,18 @@ export class ActionLeaseReader {
     return { stepId: row.step_id, leaseJson: row.lease_json, stopRequested: row.stop_requested, action: leaseRecord(row) };
   }
 
+  /**
+   * A conversation's lifecycle actions (source `lifecycle:<sha256>`) that closed without starting their operation
+   * (`lifecycle_not_started:<action>:<reason>`), newest first, at most 50: the operation's id, the result code and when.
+   */
+  notStartedLifecycle(scopeKey: string): Array<{ id: string; result: string; at: string }> {
+    const tables = this.db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='mind_actions'").get();
+    if (!tables) return [];
+    return this.db.prepare(`SELECT source_id,result,updated_at FROM mind_actions WHERE scope_key=? AND kind='minecraft'
+      AND source_id LIKE 'lifecycle:%' AND result LIKE 'lifecycle_not_started:%' ORDER BY updated_at DESC LIMIT 50`).all(scopeKey)
+      .map(row => ({ id: String(row.source_id), result: String(row.result), at: String(row.updated_at) }));
+  }
+
   /** Whether the action left `unknown` at its one exit (ADR-0009 D2, S5): its slot is free and nothing of it is resent. */
   unknownExited(id: string): boolean {
     const tables = this.db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='mind_actions'").get();

@@ -4,12 +4,14 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configuredMinecraftLifecycle } from '../src/wiring/minecraftLifecycleWiring.js';
+import { createLifecycleRunner } from '../src/wiring/minecraftLifecycleRunner.js';
 import { configuredRetainedResources } from '../src/wiring/configuredActionResourceProof.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ActionLeaseReader } from '../src/mind/action/threads/store/actionLeaseReader.js';
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
+import { noticeLine } from '../src/mind/workspace/promptLayout.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -85,6 +87,27 @@ describe('a conversation lifecycle request holds its own Minecraft action, not t
     expect(reports).toEqual([{ id: command.id, action: 'login', outcome: 'completed', observedAt: f.at() }]);
     expect(lifecycleOutcomeNotices(reports, f.at())).toEqual([{ at: f.at(), draft: { kind: 'task_outcome', code: 'done', audience: 'owner',
       source: 'api', sourceId: expect.stringMatching(/^minecraft-lifecycle:[a-f0-9]{64}@\d+$/u), tool: 'minecraft.login' } }]);
+  });
+
+  it('keeps 「終わったら知らせます」 when an accepted operation cannot start: a closed failure notice with its reason', async () => {
+    const f = fixture();
+    // An unresolved operation that appeared between 「受け付けました」 and the start (a race): the service refuses as busy.
+    const service = { execute: async () => { throw new Error('MINECRAFT_LIFECYCLE_BUSY'); }, receipt: () => null, store: { command: () => null } };
+    const runner = createLifecycleRunner({ actions: f.actions, service: service as never, deviceId: 'operator' })!;
+    const sourceId = `lifecycle:${'b'.repeat(64)}`;
+    const own = (await runner.admit({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId }, true))!;
+    expect(await runner.takeBody(own)).toBe(true);
+    let settled: unknown = null;
+    await runner.detach(own, { id: sourceId, serverId: 'home', action: 'login', authority: {} as never }, value => { settled = value; });
+    expect(settled).toEqual({ receipt: null, issued: false });
+    const leases = new ActionLeaseReader(f.db);
+    const [row] = leases.notStartedLifecycle('owner');
+    expect(row).toMatchObject({ id: sourceId, result: 'lifecycle_not_started:login:busy' });
+    expect(f.store.get(own.view.id)).toMatchObject({ state: 'failed' });
+    const notices = lifecycleOutcomeNotices([{ id: row!.id, action: 'login', outcome: 'failed', observedAt: row!.at, notStarted: 'busy' }], row!.at);
+    expect(notices[0]!.draft).toMatchObject({ kind: 'task_outcome', code: 'failed', tool: 'minecraft.login', reason: 'lifecycle_not_started.busy' });
+    expect(noticeLine({ kind: 'task_outcome', at: row!.at, detail: notices[0]!.draft } as never, row!.at))
+      .toContain('受け付けた〈minecraft.login〉を始められなかった（前の操作の結果がまだ確かめられていない）');
   });
 
   it('keeps a delivered command while the operator is busy and its frames pause (the Ops login of 16:49)', async () => {

@@ -41,6 +41,13 @@ const TOUCH_WORD: Readonly<Record<string, string>> = Object.freeze({
   pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '持ち上げられた', holdHand: '手をにぎられた',
 });
 const TASK_WORD: Readonly<Record<string, string>> = Object.freeze({ done: '終わった', failed: 'うまくいかずに終わった', cancelled: '取りやめになった' });
+/** Why an accepted Minecraft lifecycle operation never started (`lifecycle_not_started.<reason>`). */
+const NOT_STARTED_WORD: Readonly<Record<string, string>> = Object.freeze({
+  'lifecycle_not_started.busy': '前の操作の結果がまだ確かめられていない',
+  'lifecycle_not_started.unavailable': 'マイクラ管理の新しい状態が届いていない',
+  'lifecycle_not_started.not_allowed': '実行の条件がそろわなかった',
+  'lifecycle_not_started.error': '思わぬ理由',
+});
 
 export interface LayoutTurn {
   surface: 'text' | 'voice';
@@ -92,11 +99,19 @@ function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null
   return `${head}できごと`;
 }
 
+/** A task's end; an accepted Minecraft lifecycle operation that never started says so, with its closed reason. */
+function taskOutcomeLine(item: WorkspaceItem, ago: string): string {
+  const tool = item.detail?.tool ?? '作業';
+  const notStarted = NOT_STARTED_WORD[item.detail?.reason ?? ''];
+  if (notStarted) return `${NOTICE_MARKERS.task_outcome}${ago}、受け付けた〈${tool}〉を始められなかった（${notStarted}）`;
+  return `${NOTICE_MARKERS.task_outcome}${ago}、〈${tool}〉が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
+}
+
 /** One notice, with its fixed marker. */
 export function noticeLine(item: WorkspaceItem, now: string): string {
   const ago = agoLabel(item.at, now);
   if (item.kind === 'touch') return `${NOTICE_MARKERS.touch}${ago}、体${item.body ? `（${item.body}）` : ''}で${TOUCH_WORD[item.detail?.code ?? ''] ?? '触れられた'}`;
-  if (item.kind === 'task_outcome') return `${NOTICE_MARKERS.task_outcome}${ago}、〈${item.detail?.tool ?? '作業'}〉が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
+  if (item.kind === 'task_outcome') return taskOutcomeLine(item, ago);
   if (item.kind === 'promise_due') {
     const minutes = Math.round((Date.parse(now) - Date.parse(item.at)) / 60_000);
     return `${NOTICE_MARKERS.promise_due}約束の時刻${minutes < 0 ? `まであと${-minutes}分` : minutes === 0 ? 'になった' : `を${minutes}分過ぎた`}`;
