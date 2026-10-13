@@ -43,6 +43,9 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
     private var touchEnabled = true
     private var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
     private var tracker = ShannonLive2DGestureTracker()
+    /// The screen's scrolling, held while a finger that landed on her is down (`ShannonFigureScrollHold`).
+    private var scrollHold = ShannonFigureScrollHold()
+    private weak var heldScroll: UIScrollView?
     private lazy var pinch = UIPinchGestureRecognizer(target: self, action: #selector(gestureChanged))
     private lazy var pan: UIPanGestureRecognizer = {
         let recognizer = UIPanGestureRecognizer(target: self, action: #selector(gestureChanged))
@@ -65,7 +68,10 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         pan.delegate = self
         addGestureRecognizer(pinch)
         addGestureRecognizer(pan)
-        let fingers = ShannonFingerObserver { ShannonLive2DStage.shared.setFingerDown($0) }
+        let fingers = ShannonFingerObserver { [weak self] down in
+            ShannonLive2DStage.shared.setFingerDown(down)
+            self?.fingersChanged(down: down)
+        }
         fingers.delegate = self
         addGestureRecognizer(fingers)
     }
@@ -79,12 +85,34 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         self.onLayoutChange = onLayoutChange
         pinch.isEnabled = onLayoutChange != nil
         pan.isEnabled = onLayoutChange != nil
+        if !touchEnabled { fingersChanged(down: false) }
         ShannonLive2DStage.shared.update(host: hostID, layout: layout, touchEnabled: touchEnabled)
+    }
+
+    /// In a screen that scrolls, a finger on her holds the scrolling until it lifts: the stroke reaches the page instead of
+    /// being taken (and cancelled) by the scroll. The scroll is always given back: on the lift, when touch is switched off,
+    /// and when she leaves the window.
+    private func fingersChanged(down: Bool) {
+        let scroll = down ? (ShannonFigureScrollHold.applies(to: priority) ? enclosingScrollView : nil) : heldScroll
+        guard let enabled = scrollHold.fingers(down: down, touchEnabled: touchEnabled, inScroll: scroll != nil) else { return }
+        if !enabled { heldScroll = scroll }
+        heldScroll?.panGestureRecognizer.isEnabled = enabled
+        if enabled { heldScroll = nil }
+    }
+
+    private var enclosingScrollView: UIScrollView? {
+        var view = superview
+        while let current = view {
+            if let scroll = current as? UIScrollView { return scroll }
+            view = current.superview
+        }
+        return nil
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
+            fingersChanged(down: false)
             ShannonLive2DStage.shared.detach(host: hostID)
         } else {
             ShannonLive2DStage.shared.attach(host: hostID, container: self, priority: priority, layout: layout, touchEnabled: touchEnabled)

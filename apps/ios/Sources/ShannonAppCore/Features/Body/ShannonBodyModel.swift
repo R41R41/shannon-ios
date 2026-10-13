@@ -93,7 +93,8 @@ public final class ShannonBodyModel {
         scopeKey: String, client: (any ShannonBodyServing)?,
         isDesignPreview: @escaping @MainActor @Sendable () -> Bool,
         othersMayBeListening: @escaping @MainActor @Sendable () -> Bool,
-        voice: ShannonBodyVoice? = nil
+        voice: ShannonBodyVoice? = nil,
+        call: ShannonBodyTouchCoordinator.CallLine? = nil
     ) {
         guard !isConnected else { return }
         isConnected = true
@@ -110,6 +111,8 @@ public final class ShannonBodyModel {
         // A finger: strokes and resting touches end before the page's 0.6 s, so the app asks about them itself.
         touch.environment.asksAfterShortTouch = true
         #endif
+        // A touch during a voice conversation here: asked about by the app, and her line said in the call.
+        touch.environment.call = call
         self.voice = voice
         if let voice {
             voice.mayAnswerInVoice = { [weak self] in self?.answersInVoice ?? false }
@@ -240,7 +243,7 @@ struct ShannonBodyAttachment: ViewModifier {
             scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonBodyServing,
             isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true },
             othersMayBeListening: { [weak voice] in Self.othersMayBeListening(voice) },
-            voice: bodyVoice()
+            voice: bodyVoice(), call: callLine()
         )
         refreshDoing()
         refreshWords()
@@ -261,6 +264,29 @@ struct ShannonBodyAttachment: ViewModifier {
         )
         speaker.listen = listen
         return speaker
+    }
+
+    /// The voice conversation of the iPhone, for a touch during it. His next utterance names the reaction (the link is
+    /// armed while her line sounds), so the model hears her line before his words and the Talk keeps it before them.
+    /// Not on the Mac: its figure beside Talk keeps the page's moments during a call.
+    private func callLine() -> ShannonBodyTouchCoordinator.CallLine? {
+#if os(iOS)
+        guard !conversation.isDesignPreview else { return nil }
+        let call = voice
+        return .init(
+            isLive: { [weak call] in Self.callIsActive(call) },
+            mayHear: { [weak call] in call?.mayHearTouchLine ?? false },
+            say: { [weak call] line in
+                guard let call else { return false }
+                ShannonBodyReactionLink.shared.arm(reactionID: line.reactionID, listenSeconds: line.listenSeconds)
+                let sounded = await call.sayTouchLine(line.text)
+                if !sounded { ShannonBodyReactionLink.shared.disarm() }
+                return sounded
+            }
+        )
+#else
+        nil
+#endif
     }
 
     private static func callIsActive(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {

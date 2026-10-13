@@ -16,7 +16,8 @@ import { bookBackgroundUsage, closedUsage } from './claudeUsage.js';
  *
  * - The request: the fixed transport protocol (one 1h breakpoint, no automatic marker on the unique tail: `cacheOneShotRequest`),
  *   the caller's instructions, its input, adaptive thinking at the caller's effort (`none`/`minimal` → `low`), its JSON schema in
- *   the supported subset (`structuredSchema`), and an output ceiling of at least 1,024 tokens.
+ *   the supported subset (`structuredSchema`), and an output ceiling of at least 1,024 tokens. A caller that must answer within a
+ *   few seconds (a touch) asks for no thinking (`thinking: 'disabled'`): its ceiling is then its own.
  * - Usage: one row in the route's lane, booked before anything is checked (`bookBackgroundUsage`), a cache receipt (`background`).
  * - A provider refusal with a status returns `{ ok: false, status }` and books nothing, so the caller keeps its own error.
  * - A response that is not a whole answer throws its closed code after its usage was booked: missing cache evidence
@@ -98,6 +99,12 @@ export interface StructuredOptions<T = unknown> {
    * one-hour breakpoint of their own after the protocol prefix, so the whole fixed part is read from the cache. Unset: as before.
    */
   cacheSystem?: true;
+  /**
+   * `disabled`: no thinking at all, and the caller's own output ceiling (no 1,024 floor, which exists for thinking). For a caller
+   * raced against a deadline of a few seconds (a touch, 2026-10-14: adaptive thinking at `low` took 2.1–4 s and ran past the
+   * touch's 3.8 s). Unset: adaptive thinking at the caller's effort, as before.
+   */
+  thinking?: 'disabled';
 }
 
 /** A provider refusal carries its status and the provider's error body (data, never logged here). */
@@ -113,7 +120,7 @@ export async function completeStructured<T = unknown>(route: BackgroundRoute, sy
   const unsent = options.unsent ?? ((error: unknown) => error);
   if (signal?.aborted) throw unsent(stopped(signal));
   const body = observeSync('native', { route }, () => structuredBody(claude.model, system, input, schema, options.effort, options.maximumOutputTokens,
-    options.cacheSystem === true),
+    options.cacheSystem === true, options.thinking),
     observedAnthropicRequest, { model: claude.model });
   let message: Anthropic.Message;
   try {
@@ -148,13 +155,14 @@ function stopped(signal: AbortSignal): unknown {
 
 /** The request as it leaves: the protocol prefix (`cacheOneShotRequest`), the instructions, the input and the format. */
 export function structuredBody(model: string, system: string, input: StructuredInput, schema: StructuredSchema | null,
-  effort: BackgroundEffort, maximumOutputTokens: number, cacheSystem = false): Anthropic.MessageCreateParamsNonStreaming {
+  effort: BackgroundEffort, maximumOutputTokens: number, cacheSystem = false, thinking?: 'disabled'): Anthropic.MessageCreateParamsNonStreaming {
   const format = schema ? { format: { type: 'json_schema' as const, schema: structuredSchema(schema) as Record<string, unknown> } } : {};
   const cached = { type: 'ephemeral' as const, ttl: '1h' as const };
   const instructions = cacheSystem && system ? [{ type: 'text' as const, text: system, cache_control: cached }] : system;
+  const thinks = thinking !== 'disabled';
   return cacheOneShotRequest({
-    model, max_tokens: Math.max(1_024, maximumOutputTokens), ...(system ? { system: instructions } : {}), messages: structuredMessages(input),
-    thinking: { type: 'adaptive' }, output_config: { effort: NATIVE_EFFORT[effort], ...format },
+    model, max_tokens: thinks ? Math.max(1_024, maximumOutputTokens) : maximumOutputTokens, ...(system ? { system: instructions } : {}),
+    messages: structuredMessages(input), thinking: { type: thinks ? 'adaptive' : 'disabled' }, output_config: { effort: NATIVE_EFFORT[effort], ...format },
   });
 }
 

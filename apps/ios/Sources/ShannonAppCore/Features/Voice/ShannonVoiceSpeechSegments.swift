@@ -11,6 +11,7 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
         var open = true
         var stoppedAt: TimeInterval?
         var transcribed = false
+        var startedAt: TimeInterval?
     }
 
     /// What a transcript arriving now is.
@@ -48,8 +49,14 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
 
     mutating func started(itemID: String?, at now: TimeInterval) {
         knowsOnsets = true
-        segments.append(Segment(itemID: itemID))
+        segments.append(Segment(itemID: itemID, startedAt: now))
         prune(at: now)
+    }
+
+    /// Someone is speaking now: a segment began less than `recent` seconds ago and has not stopped (an onset whose end
+    /// never came stops counting after that, so a lost event cannot hold her quiet for the rest of the call).
+    func hearsSpeech(at now: TimeInterval, recent: TimeInterval = 20) -> Bool {
+        segments.contains { $0.open && now - ($0.startedAt ?? -.infinity) < recent }
     }
 
     mutating func stopped(itemID: String?, at now: TimeInterval) {

@@ -159,10 +159,12 @@ public struct ShannonGeminiLiveVoiceView: View {
                 ShannonVoiceGuestModeNotice(palette: palette)
                     .frame(maxWidth: 560)
             }
-            // The call's own per-turn emotion; before the first reply, the thread's last face.
+            // The call's own per-turn emotion; before the first reply, the thread's last face. One finger on her is a touch
+            // (owner decision 2026-10-14 「触れるようにする」): the in-call rules of `ShannonBodyTouchCoordinator` decide whether
+            // she is asked and her line is said in the call; a finger that lands on her holds the scrolling until it lifts.
             ShannonBodyView(
                 expression: model.callFace?.expression ?? expression, activity: eyeActivity, size: eyeSize,
-                feeling: model.callFace?.feeling, allowsTouch: false, showsLine: false, priority: .voice
+                feeling: model.callFace?.feeling, allowsTouch: true, showsLine: false, priority: .voice
             )
                 .frame(maxWidth: 440)
             VStack(spacing: ShannonSpacing.medium) {

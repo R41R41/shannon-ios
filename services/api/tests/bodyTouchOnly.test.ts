@@ -134,3 +134,37 @@ describe('a finger touch on the phone, asked about when it ends (production 2026
     expect(h.speaker.calls).toHaveLength(1);
   });
 });
+
+describe('a touch on the phone during its own voice conversation (production 2026-10-13 22:58–23:00Z)', () => {
+  it('is answered while the call runs, and his next utterance in the call answers her line', async () => {
+    // Eight touches during a call on the phone reached the server as events only: the app asked about none of them.
+    // The app now asks while the call listens and says her line in the call; the server needs nothing new for it: the
+    // phone's own call refuses nothing of its own, and the call's next turn names the reaction (`reactionId`).
+    const h = await reactionHarness();
+    await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    await h.send('POST', '/v1/body/events', { events: [{ id: 'call-1', type: 'callStarted', audience: 'owner', occurredAt: h.clock.at }] }, PHONE);
+    const first = await h.send('POST', '/v1/voice/gemini/cascade/delegations', { transcript: '今日は少し疲れたよ' }, PHONE);
+    expect(first.status).toBe(200);
+    const { threadId } = first.body as { threadId: string };
+    expect((await h.send('POST', '/v1/voice/gemini/cascade/turns',
+      { userTranscript: '今日は少し疲れたよ', shannonTranscript: h.chatModel.voiceReply, threadId }, PHONE)).status).toBe(201);
+
+    h.advance(20_000);
+    const touch = { type: 'pet', durationMs: 353, strength: 0.2, ongoing: false, region: 'head' };
+    const asked = await h.send('POST', '/v1/body/reactions', { id: 'in-call-1', touch, audience: 'owner', occurredAt: h.clock.at }, PHONE);
+    expect(asked).toMatchObject({ status: 200, body: { status: 'said', message: { text: HEHE, threadId } } });
+    // A conversation is in progress: her words are chosen knowing what was just said in the call.
+    expect(h.speaker.prompts[0]).toContain('今日は少し疲れたよ');
+
+    // The call said her line; his next utterance names it, and the model answering him heard her line first.
+    h.advance(4_000);
+    const answer = await h.send('POST', '/v1/voice/gemini/cascade/delegations', { transcript: 'ふふ、ごめんね', threadId, reactionId: 'in-call-1' }, PHONE);
+    expect(answer.status).toBe(200);
+    expect(h.chatModel.voiceRequests.at(-1)!.precedingReply).toBe(HEHE);
+    await h.send('POST', '/v1/voice/gemini/cascade/turns',
+      { userTranscript: 'ふふ、ごめんね', shannonTranscript: 'いえいえ。', threadId, reactionId: 'in-call-1' }, PHONE);
+    expect(h.messages(threadId).slice(2)).toEqual([
+      { role: 'assistant', content: HEHE }, { role: 'user', content: 'ふふ、ごめんね' }, { role: 'assistant', content: 'いえいえ。' },
+    ]);
+  });
+});
