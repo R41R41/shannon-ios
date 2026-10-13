@@ -15,7 +15,7 @@ import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
 import type { SelfInterestContextPort } from '../../self/selfPorts.js';
 import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
 import { preparePhoneCall, type AutonomyPhone } from './autonomyLoopPhoneStep.js';
-import { prepareReachOut, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
+import { prepareReachOut, type AutonomyMoments, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
 import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
@@ -83,6 +83,11 @@ export interface StepDependencies {
   looks?: AutonomyRoomLooks;
   /** Speaking up to the owner on her own; absent, a reach-out is never planned. */
   reachOuts?: AutonomyReachOuts;
+  /**
+   * Moments she perceived of the owner and wanted to speak of (owner decision 2026-10-14): her loop takes one as a cycle of one
+   * reach-out step. Absent (`SHANNON_PROACTIVE_MOMENTS` off, no proactive gate), there are none and every cycle is what it was.
+   */
+  moments?: AutonomyMoments;
   /** Phoning the owner's iPhone; absent, a call is never planned and no prompt speaks of one. */
   phone?: AutonomyPhone;
   /** The owner's upcoming items, for a reach-out; absent, there are none. */

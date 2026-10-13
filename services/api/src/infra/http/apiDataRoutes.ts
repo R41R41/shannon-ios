@@ -4,6 +4,7 @@ import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.j
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, StateEventRequest } from '../../contracts/contracts.js';
 import type { InitiativeInbox } from '../../surfaces/outreach/store/initiativeStore.js';
+import type { InitiativeBodyDelivery } from '../../surfaces/outreach/initiativeFreshness.js';
 import type { KnowledgeAnswer, KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import type { MemoryDashboard, ShannonMemoryStore } from '../../mind/memory/memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
@@ -20,7 +21,8 @@ export interface ApiDataRouteDependencies {
   conversationStore: ConversationStore;
   memoryStore: ShannonMemoryStore;
   knowledgeStore: KnowledgeStore | null;
-  initiativeInbox: InitiativeInbox | null;
+  /** With a body's spoken delivery (owner decision 2026-10-14, `initiativeFreshness.ts`) when the server gives it. */
+  initiativeInbox: (InitiativeInbox & Partial<InitiativeBodyDelivery>) | null;
   aetherProposals: AetherProposalStore;
   personIdentities: PersonIdentityStore;
   worldSubscriptions: WorldSubscriptionReader | null;
@@ -183,7 +185,10 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
   if (request.method === 'GET' && request.path === '/v1/initiatives') {
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-    const messages = dependencies.initiativeInbox?.unreadMessages(scopeKey) ?? [];
+    const inbox = dependencies.initiativeInbox;
+    const unread = inbox?.unreadMessages(scopeKey) ?? [];
+    // Only a body's own poll (`for=body`) is judged for spoken delivery; every other list is as it was (`initiativeFreshness.ts`).
+    const messages = request.query?.get('for') === 'body' && inbox?.forBody ? inbox.forBody(scopeKey, unread, dependencies.now()) : unread;
     return { status: 200, body: { unreadCount: messages.length, messages } };
   }
 

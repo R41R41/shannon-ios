@@ -29,7 +29,7 @@ export const BACKGROUND_ROUTES = Object.freeze({
   voice_router: 'voice', memory_rewrite: 'memory', memory_rerank: 'memory', memory_sections: 'memory',
   replay_summary: 'memory_background', replay_template: 'memory_background', person_facts: 'memory_background',
   impressions: 'memory_background', platform_summary: 'memory_background', knowledge: 'memory_background',
-  skill_sleep: 'memory_background', sleep: 'sleep', daily_mind: 'sleep',
+  skill_sleep: 'memory_background', sleep: 'sleep', daily_mind: 'sleep', commitment_line: 'sleep',
 } as const satisfies Readonly<Record<string, LlmUsageLane>>);
 
 export type BackgroundRoute = keyof typeof BACKGROUND_ROUTES;

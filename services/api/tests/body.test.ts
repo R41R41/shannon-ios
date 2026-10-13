@@ -1,20 +1,20 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/mind/inhibition/store/autonomyActivity.js';
 import {
   BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES,
-  BODY_TOUCH_VOCABULARY, bodyIngestEnabled, isBodyGameEvent, type BodyNudge,
+  BODY_TOUCH_VOCABULARY, bodyIngestEnabled, isBodyGameEvent,
 } from '../src/contracts/bodyContract.js';
 import { BODY_TOUCH_PARTS, bodyTouchPartWord } from '../src/surfaces/body/bodyTouchWords.js';
 import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/contracts/bodyLookContract.js';
-import { bodyNudgeCandidates } from '../src/surfaces/body/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { FULL_PLAN, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceFiles } from './support/sources.js';
 
 const MINUTE = 60_000;
 const START = '2026-10-02T01:00:00.000Z';
@@ -392,53 +392,36 @@ describe('GET /v1/body/presence', () => {
   });
 });
 
-describe('GET /v1/body/nudges', () => {
-  const scenes = (nudges: readonly BodyNudge[]) => nudges.map(nudge => nudge.scene);
-
-  it('offers fixed lines with the limits the body must respect', async () => {
-    const { get } = harness();
-    const result = await get('/v1/body/nudges');
-    expect(result.status).toBe(200);
-    const body = result.body as BodyNudges;
-    expect(body).toMatchObject({
-      schemaVersion: 1, generatedAt: START, quietUntil: null,
-      limits: { notDuringConversation: true, quietAfterConversationMinutes: 15, maximumPerHour: 2, maximumPerDay: 10 },
-    });
-    // 10:00 in Tokyo: neither morning nor late night, and nothing is awaiting a reaction.
-    expect(scenes(body.nudges)).toEqual(['ownerReturned', 'longQuiet']);
-    expect(body.nudges[0]).toEqual({
-      id: 'seed-ownerReturned-1', scene: 'ownerReturned', audience: 'any', text: 'おかえりなさい、ライ氏。', expression: 'joyful',
-      voice: { affect: 'happy', intensity: 0.5, delivery: 'conversational' }, expiresAt: '2026-10-02T01:30:00.000Z',
-    });
-  });
-
-  it('offers the morning, late-night and awaiting-reaction lines only when they apply', () => {
-    expect(scenes(bodyNudgeCandidates('2026-10-01T22:30:00.000Z', 0))).toEqual(['ownerReturned', 'longQuiet', 'morning']);
-    expect(scenes(bodyNudgeCandidates('2026-10-02T15:00:00.000Z', 0))).toEqual(['ownerReturned', 'longQuiet', 'lateNight']);
-    expect(scenes(bodyNudgeCandidates('2026-10-02T19:30:00.000Z', 0))).toEqual(['ownerReturned', 'longQuiet']);
-    const awaiting = bodyNudgeCandidates(START, 2);
-    expect(scenes(awaiting)).toEqual(['ownerReturned', 'longQuiet', 'awaitingReaction']);
-    // It says she has written something, so it is not for a stream.
-    expect(awaiting.at(-1)).toMatchObject({ audience: 'owner', text: 'ライ氏、読んでほしいものがあります。' });
-    const all = [...bodyNudgeCandidates('2026-10-01T22:30:00.000Z', 1), ...bodyNudgeCandidates('2026-10-02T15:00:00.000Z', 0)];
-    expect(new Set(scenes(all))).toEqual(new Set(BODY_NUDGE_SCENES));
-    for (const nudge of all) {
-      expect(nudge.text.length, nudge.text).toBeLessThanOrEqual(40);
-      expect(nudge.text, nudge.text).toMatch(/ライ氏/u);
-      expect(nudge.text, nudge.text).toMatch(/(?:ます|ません|ますか|ませんか|なさい、ライ氏)。$|ます、ライ氏。$/u);
-      expect(nudge.voice.intensity).toBeLessThanOrEqual(1);
+describe('GET /v1/body/nudges (retired, owner decision 2026-10-14)', () => {
+  it('keeps its shape for bodies that still ask, and answers no line at any hour', async () => {
+    const { get, advance } = harness();
+    for (let hour = 0; hour < 24; hour += 1) {
+      const result = await get('/v1/body/nudges');
+      expect(result.status).toBe(200);
+      const body = result.body as BodyNudges;
+      expect(body).toMatchObject({
+        schemaVersion: 1, quietUntil: null,
+        limits: { notDuringConversation: true, quietAfterConversationMinutes: 15, maximumPerHour: 2, maximumPerDay: 10 },
+      });
+      expect(body.nudges).toEqual([]);
+      advance(60 * MINUTE);
     }
   });
 
-  it('offers nothing during a conversation and for fifteen minutes after it', async () => {
-    const { get, chat, advance } = harness();
+  it('answers no line after a conversation either', async () => {
+    const { get, chat } = harness();
     await chat('こんにちは');
-    const quiet = (await get('/v1/body/nudges')).body as BodyNudges;
-    expect(quiet).toMatchObject({ nudges: [], quietUntil: '2026-10-02T01:15:00.000Z' });
-    advance(14 * MINUTE);
-    expect(((await get('/v1/body/nudges')).body as BodyNudges).nudges).toEqual([]);
-    advance(MINUTE);
-    expect((await get('/v1/body/nudges')).body).toMatchObject({ quietUntil: null, nudges: [{ scene: 'ownerReturned' }, { scene: 'longQuiet' }] });
+    expect(((await get('/v1/body/nudges')).body as BodyNudges)).toMatchObject({ nudges: [], quietUntil: null });
+  });
+
+  it('has no fixed line left in the server: the old file is gone and no source carries its sentences', () => {
+    const root = new URL('../src/', import.meta.url);
+    expect(existsSync(new URL('surfaces/body/bodyNudges.ts', root))).toBe(false);
+    const sources = apiSourceFiles().map(path => ({ path, text: readFileSync(path, 'utf8') }));
+    // The five retired lines, as they were written (ボク's greetings to ライ氏); the morning brief he asked for is his, not a nudge.
+    for (const line of ['おかえりなさい、ライ氏', '少し休憩しませんか', 'おはようございます、ライ氏', 'そろそろ休みませんか', '読んでほしいものがあります']) {
+      expect(sources.filter(source => source.text.includes(line)).map(source => source.path), line).toEqual([]);
+    }
   });
 });
 

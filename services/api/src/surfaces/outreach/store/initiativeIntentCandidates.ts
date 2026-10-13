@@ -80,24 +80,23 @@ export function intentInitiativeCandidateIsCurrent(
     && ['waiting_approval', 'paused', 'failed', 'completed'].includes(String(task.status)));
 }
 
+/**
+ * The state of a goal and its task, as neutral text (owner decision 2026-10-14): no fixed line in her voice. It is shown as text and
+ * never said aloud by a body (`initiativeFreshness.ts`); how he is told of what he asked for is still his to decide.
+ */
 function intentInitiativeMessage(title: string, status: string, row: Record<string, unknown>): string {
   const current = typeof row.current_action === 'string' && row.current_action.trim()
     ? row.current_action.trim() : typeof row.next_step === 'string' ? row.next_step.trim() : '';
+  const next = current ? `（次: ${current}）` : '';
   if (status === 'waiting_approval') {
     const approval = safeObject(row.pending_approval_json);
     const approvalTitle = typeof approval?.title === 'string' ? approval.title.trim() : '操作内容';
-    return `「${title}」の作業で「${approvalTitle}」の確認が必要です。内容を見て決めますか？`;
+    return `「${title}」: 「${approvalTitle}」の確認待ち`;
   }
-  if (status === 'failed') {
-    return `「${title}」の作業で問題が見つかりました。${current ? `いま分かっているのは「${current}」です。` : ''}修正方針を一緒に決めませんか？`;
-  }
-  if (status === 'paused') {
-    return `「${title}」の作業は一時停止中です。${current ? `次は「${current}」です。` : ''}続けますか？`;
-  }
-  if (status === 'completed') {
-    return `「${title}」に結び付いた作業は、検証まで終わっています。結果を確認して、目的も完了にしますか？`;
-  }
-  return `「${title}」という目的を覚えています。${current ? `次の一手は「${current}」です。` : ''}今、少し進めますか？`;
+  if (status === 'failed') return `「${title}」: 作業で問題あり${current ? `（${current}）` : ''}`;
+  if (status === 'paused') return `「${title}」: 一時停止中${next}`;
+  if (status === 'completed') return `「${title}」: 作業は検証まで完了`;
+  return `「${title}」: 続いている目的${next}`;
 }
 
 function safeObject(value: unknown): Record<string, unknown> | null {

@@ -15,7 +15,7 @@ import { readApiSource } from './support/sources.js';
 const SHANNON_VOICE_SOURCES = [
   'conversationCommands.ts', 'commitmentCommands.ts', 'conversationOrganize.ts', 'memoryForgetCommand.ts',
   'conversationReference.ts', 'initiativeStore.ts', 'initiativeIntentCandidates.ts', 'pushNotificationStore.ts',
-  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncerStore.ts', 'autonomyShowing.ts', 'bodyNudges.ts', 'bodyLookLines.ts',
+  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncerStore.ts', 'autonomyShowing.ts', 'bodyLookLines.ts',
 ];
 
 // Casual sentence endings, second-person あなた, and third-person self-reference in her own speech.

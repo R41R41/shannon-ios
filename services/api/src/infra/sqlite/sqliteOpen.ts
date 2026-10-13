@@ -40,6 +40,8 @@ export const SQLITE_PROFILES = Object.freeze({
    * the API's event loop waits with it; a busy batch is tried again later.
    */
   executionBackfill: profile({ busyTimeoutMs: 250, wal: true }),
+  /** Her moments and the read of her initiatives' sources (`proactiveMomentStore.ts`, `initiativeSources.ts`), as their siblings open. */
+  outreach: profile({ wal: true, synchronous: 'NORMAL' }),
   /** The sleep worker's read-only view of task proofs (`wiring/configuredWorkerFeedback.ts`). */
   readOnly: profile({ readOnly: true }),
 });

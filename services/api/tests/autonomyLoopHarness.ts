@@ -149,6 +149,8 @@ export interface LoopHarnessOptions {
   toolResults?: AutonomyToolResults;
   /** Syzygy ADR-0008 stage 3: the one function she is handed of the mind; absent, nothing is written. */
   emitMindEvent?: StepDependencies['emitMindEvent'];
+  /** Moments she perceived and wanted to speak of (owner decision 2026-10-14); absent, none. */
+  moments?: StepDependencies['moments'];
   /** Syzygy ADR-0006/0008: the write-only taps of the prediction record; absent, as with their switches off. */
   prediction?: AutonomyPredictionTap;
   /** Syzygy ADR-0008 stage 1: the decision trace writer; absent, as with `SHANNON_DECISION_TRACES=off`. */
@@ -206,6 +208,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
     ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),
     ...(options.emitMindEvent ? { emitMindEvent: options.emitMindEvent } : {}), ...(options.executive ? { executive: options.executive } : {}),
+    ...(options.moments ? { moments: options.moments } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

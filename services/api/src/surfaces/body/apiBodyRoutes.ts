@@ -20,7 +20,7 @@ const LOCAL_DEVICE = 'local';
 
 /**
  * Routes of Shannon's body (`docs/body-contract.md`). The body reports facts, reads a
- * snapshot, registers what it can express, and reads fixed nudge lines. No route here
+ * snapshot, and registers what it can express; the old fixed nudge lines answer none (owner decision 2026-10-14). No route here
  * carries text from the body into a prompt. Two routes call a model: the answer to a look,
  * which writes as Shannon (`bodyLook.ts`), and a touch she may answer with one line
  * (`bodyReaction.ts`), which is kept out of the conversation unless the owner answers it.

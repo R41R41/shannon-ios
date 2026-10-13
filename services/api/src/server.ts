@@ -207,7 +207,7 @@ const kernel = createLocalApiKernel(now, {
     persistentStore, undefined, initiativeStore, dailyMindStore,
   ),
   knowledgeStore: persistentStore,
-  initiativeInbox: initiativeStore,
+  initiativeInbox: privateListeningRoute.freshInbox(initiativeStore),
   aetherContext,
   aetherProposals: aetherPorts.proposals ?? undefined,
   agentTasks: agentTaskStore,
