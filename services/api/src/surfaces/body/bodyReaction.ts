@@ -337,7 +337,7 @@ export class BodyReactions {
     if (!this.innerNote) return;
     // The touch as she remembers it (the burst is its experience): its forgetting and its retention take the notes it prompted.
     this.innerNote.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${burstId}`,
-      phrase: bodyTouchLine(request.touch, request.audience),
+      phrase: bodyTouchLine(request.touch, request.audience), kind: request.touch.type,
       ...(decision?.stance ? { stance: decision.stance } : {}), ...(request.touch.reflex ? { reflex: request.touch.reflex } : {}),
       ...(decision?.say ? { said: decision.text } : {}) });
   }

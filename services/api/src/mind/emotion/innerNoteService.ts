@@ -10,6 +10,7 @@ import { emotionTiming } from './emotionTiming.js';
 import type { InnerNoteReflector } from './innerNoteReflection.js';
 import type { InnerNotePort, InnerNoteTouch, InnerNoteTurn } from './innerNotePorts.js';
 import { eventVisible, forgetIndex, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
+import { InnerNoteTouchSessions } from './innerNoteTouchSessions.js';
 import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteStore.js';
 
 /**
@@ -26,6 +27,9 @@ import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteSto
  * - **Forgetting and retention (D3).** A note whose lineage holds a forgotten moment is deleted on the next sweep, and never read
  *   in the meantime; a reflection whose events were forgotten while it ran is discarded. Notes older than `retentionDays` (the touches'
  *   retention) are deleted.
+ * - **Touches are sessions.** A run of touches is reflected on at its start, when its kind or her stance changes, at most every
+ *   `touchRefreshMilliseconds`, and at its end; reflections on touches alone take at most `touchReflectionsPerDay` (see
+ *   `innerNoteTouchSessions.ts`), so an hour of petting never leaves his apology without a reflection.
  * - **Cost.** At most `reflectionsPerDay` attempts a day, failures and timeouts counted.
  * Owner scope only. Without a reflector (no Haiku key) nothing is written; the character core and the prompt cleanup still apply.
  */
@@ -69,10 +73,13 @@ export class InnerNoteService implements InnerNotePort {
   private latestCache = new Map<string, StoredInnerNote | null>();
   private chain: Promise<void> = Promise.resolve();
   private sweeper: ReturnType<typeof setInterval> | null = null;
+  private readonly touches: InnerNoteTouchSessions;
 
   constructor(private readonly dependencies: InnerNoteServiceDependencies) {
     this.timeZone = dependencies.timeZone;
     this.limits = { ...INNER_NOTE_SERVICE_LIMITS, ...dependencies.limits };
+    this.touches = new InnerNoteTouchSessions({ quietMilliseconds: this.limits.touchQuietMilliseconds,
+      refreshMilliseconds: this.limits.touchRefreshMilliseconds, held: this.limits.touchHeld });
   }
 
   start(): () => void {
@@ -100,7 +107,7 @@ export class InnerNoteService implements InnerNotePort {
 
   pending(scopeKey: string): readonly InnerNoteEvent[] {
     const snapshot = this.dependencies.state.snapshot(scopeKey);
-    return [...this.reflecting.get(scopeKey) ?? [], ...this.waiting.get(scopeKey)?.entries ?? []]
+    return [...this.reflecting.get(scopeKey) ?? [], ...this.touches.waiting(scopeKey), ...this.waiting.get(scopeKey)?.entries ?? []]
       .filter(entry => this.entryVisible(snapshot, entry)).map(entry => entry.event);
   }
 
@@ -117,8 +124,11 @@ export class InnerNoteService implements InnerNotePort {
     try {
       // ADR-0005 decision 6: a touch anyone else may have made leaves her no note.
       if (touch.scopeKey !== this.dependencies.ownerScope || touch.audience !== 'owner') return;
-      this.enqueue(touch.scopeKey, { kind: 'touch', at: touch.at, touch: { phrase: touch.phrase, ...(touch.stance ? { stance: touch.stance } : {}),
-        ...(touch.reflex ? { reflex: touch.reflex } : {}), ...(touch.said ? { said: touch.said } : {}) } }, touch.sourceId);
+      const entry = { event: { kind: 'touch' as const, at: touch.at, touch: { phrase: touch.phrase, ...(touch.stance ? { stance: touch.stance } : {}),
+        ...(touch.reflex ? { reflex: touch.reflex } : {}), ...(touch.said ? { said: touch.said } : {}) } },
+        ...(touch.sourceId ? { source: touch.sourceId } : {}) };
+      const now = this.touches.arrive(touch.scopeKey, entry, `${touch.kind ?? ''}|${touch.stance ?? ''}`, Date.parse(touch.at));
+      for (const next of now) this.enqueue(touch.scopeKey, next.event, next.source);
     } catch (error) { this.log('touch', error); }
   }
 
@@ -146,9 +156,10 @@ export class InnerNoteService implements InnerNotePort {
     return this.schedule(async () => {
       this.retain(scopeKey);
       this.forget(scopeKey);
+      const at = this.dependencies.now();
+      for (const held of this.touches.ended(scopeKey, Date.parse(at))) this.enqueue(scopeKey, held.event, held.source);
       const note = this.latest(scopeKey);
       if (!note || note.closedAt) return;
-      const at = this.dependencies.now();
       if (at >= note.dayEndsAt) return await this.closeDay(scopeKey, 'three');
       if (innerNoteExpired(note, at)) return this.settleExpired(scopeKey, note, at);
       if (this.calmSettling(scopeKey, note, at)) this.enqueue(scopeKey, { kind: 'until', at }, undefined);
@@ -191,6 +202,8 @@ export class InnerNoteService implements InnerNotePort {
 
   private enqueue(scopeKey: string, event: InnerNoteEvent, source: string | undefined): void {
     const waiting = this.waiting.get(scopeKey) ?? { entries: [], timer: null, firstAt: Date.now() };
+    // A reflection on anything but a touch takes the touches a session holds (they are part of what happened).
+    if (event.kind !== 'touch') waiting.entries.push(...this.touches.fold(scopeKey));
     waiting.entries.push({ event, ...(source ? { source } : {}) });
     this.waiting.set(scopeKey, waiting);
     if (this.dependencies.manual) return;
@@ -211,7 +224,9 @@ export class InnerNoteService implements InnerNotePort {
     if (!note || note.closedAt) return;
     const at = this.dependencies.now();
     const waiting = this.waiting.get(scopeKey);
-    const ofDay = waiting?.entries.filter(entry => entry.event.at < note.dayEndsAt) ?? [];
+    const held = this.touches.fold(scopeKey);
+    this.touches.carry(scopeKey, held.filter(entry => entry.event.at >= note.dayEndsAt));
+    const ofDay = [...held.filter(entry => entry.event.at < note.dayEndsAt), ...waiting?.entries.filter(entry => entry.event.at < note.dayEndsAt) ?? []];
     if (waiting) waiting.entries = waiting.entries.filter(entry => entry.event.at >= note.dayEndsAt);
     if (waiting && !waiting.entries.length) {
       if (waiting.timer) clearTimeout(waiting.timer);
@@ -250,7 +265,7 @@ export class InnerNoteService implements InnerNotePort {
     if (!closing && previousNote && !previousNote.closedAt && !innerNoteCurrent(previousNote, at)) await this.closeDay(scopeKey, 'three');
     const open = this.latest(scopeKey);
     const previous = open && !open.closedAt && (closing !== null || innerNoteCurrent(open, at)) ? open : null;
-    if (!closing && !this.attempt(scopeKey, previous?.dayKey ?? innerNoteDay(at, this.timeZone).dayKey)) return false;
+    if (!closing && !this.attempt(scopeKey, previous?.dayKey ?? innerNoteDay(at, this.timeZone).dayKey, visible)) return false;
     this.reflecting.set(scopeKey, visible);
     try {
       return await withObserverRun({ scopeKey, surface: 'inner_note', runId: randomUUID() }, () =>
@@ -262,8 +277,17 @@ export class InnerNoteService implements InnerNotePort {
     }
   }
 
-  /** Counts an attempt against the day's cap in the database (a restart keeps it), whatever becomes of it: failures cost too. */
-  private attempt(scopeKey: string, dayKey: string): boolean {
+  /**
+   * Counts an attempt against the day's cap in the database (a restart keeps it), whatever becomes of it: failures cost too. A
+   * reflection on touches alone first takes one of the touches' own (`<day>/touch`); past it, the touches wait for his words.
+   */
+  private attempt(scopeKey: string, dayKey: string, entries: readonly Entry[]): boolean {
+    const touchesOnly = entries.every(entry => entry.event.kind === 'touch');
+    if (touchesOnly && !this.dependencies.store.attempt(scopeKey, `${dayKey}/touch`, this.limits.touchReflectionsPerDay)) {
+      this.dependencies.log?.('inner_note_touch_cap');
+      this.touches.carry(scopeKey, entries);
+      return false;
+    }
     if (this.dependencies.store.attempt(scopeKey, dayKey, this.limits.reflectionsPerDay)) return true;
     this.dependencies.log?.('inner_note_daily_cap');
     return false;

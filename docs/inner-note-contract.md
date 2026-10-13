@@ -19,6 +19,13 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)
   are one reflection; reflections, the sweep and forgetting run one at a time on one queue, after the turn; at most 96 attempts a day,
   failures and timeouts counted, kept in the database (`shannon_inner_note_attempts`, step `emotion/003`) so a restart keeps the count.
+- **Touches are sessions** (`innerNoteTouchSessions.ts`). The iPhone asks for a reaction after every short touch (up to once per
+  45 s); one reflection a touch would spend the day's cap on an hour of petting. A run of touches is one session: she reflects on its
+  first touch, again when the kind of touch or the stance she took changes, at most every 20 minutes while it goes on, and once on what
+  it held when it ends (5 minutes without a touch). The touches held in between (the last 8) ride along with any reflection on his
+  words or her day's end. Reflections on touches alone take at most 24 of the day's 96 (`<day>/touch` in the same table); past that,
+  touches wait for the next reflection on his words. His apology, kind word, tease, her `until` and her day's end are never held back
+  by touches. An hour of petting at 45 s costs four or five reflections.
 - **Gates (code, not prompt).** An event moves `intent` at most one step toward letting go. An ordinary sulk lasts at most an hour
   **from the start of its episode** (`episode_started_at`), however its notes rewrite `until`: a later `until` is cut to it, a note
   written past it ends the sulk (`capEnded`), and a sulk with no `until` stops showing at the hour. A `day` sulk needs a reason of a
