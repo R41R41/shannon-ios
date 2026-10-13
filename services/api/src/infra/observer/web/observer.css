@@ -219,6 +219,7 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 .badge-sample { font-size: 11px; font-weight: 700; color: #fff; border-radius: 999px; padding: 0 7px; background: var(--c-memory); }
 .badge-sample.bad { background: var(--bad); } .badge-sample.unk { background: var(--c-action); }
 /* Waterfall (2A) with notes (1C) */
+.waterfall { display: flex; flex-direction: column; gap: 2px; }
 .crit-hint { margin: 6px 0 0 var(--lane-w); }
 .lane .lane-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 1px; padding-bottom: 1px; }
 .lane .bar-label { display: none; }

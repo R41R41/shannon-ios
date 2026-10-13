@@ -1,5 +1,13 @@
 # Mind Observer UI validation
 
+## Re-review follow-ups (2026-10-14)
+
+Same fixture and CDP method at 1600×900. A finished turn's hint names the path as what finished the run; the held FCA run
+(root open) says 「ここまで」 and that the run has not finished. In that open run, 10 of 12 row elements were reused after the
+fixture's next step (20 rows after). A block mark focused and opened with Enter right after a box drag opened its list.
+After three zoom-in steps, eight ArrowRight presses from 受付 reached 声の計画, each selected box stayed inside the view
+outside the detail, and the zoom stayed the same. No console exceptions.
+
 ## Flow, waterfall, marks and phone bar (2026-10-14)
 
 Same fixture and CDP method; `fca-run` (held FCA tasks, so running marks), then two `turn` commands, before pairing. At

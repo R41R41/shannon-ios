@@ -557,46 +557,39 @@ function mountObserver() {
     const domains = { server: placed.filter(row => row.origin === 'server'), client: placed.filter(row => row.origin === 'client') };
     const extent = list => Math.max(1, ...list.map(row => row.offset + (row.duration ?? 0)));
     const scale = { server: extent(domains.server), client: extent(domains.client) };
-    const signature = JSON.stringify([focusBlock, toolNameFilter, rows.map(row => [row.key, row.state, row.offset, row.duration === null, row.open ? 0 : Math.round(row.duration ?? -1)]), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
+    const signature = JSON.stringify([focusBlock, toolNameFilter, rows.length, rows.map(row => `${row.key}:${row.state}:${row.offset}:${row.open ? 'o' : Math.round(row.duration ?? -1)}`).join('|'), Math.round(scale.server / 250), Math.round(scale.client / 250)]);
     $('timeline-empty').hidden = rows.length > 0;
     $('timeline-empty').textContent = state.transport === 'live' ? 'この一回の処理をまだ観測していません。会話や作業が始まると、ここに時間割が出ます。' : '接続すると、届いた処理を時間割で表示します。';
     if (signature !== timelineSignature) {
-      timelineSignature = signature; barElements = new Map();
-      host.replaceChildren(); head.replaceChildren(); axis.replaceChildren();
+      timelineSignature = signature;
+      // The row containers stay attached; only the small pieces around them (marker, notes, unplaced list) are redrawn.
+      for (const child of [...host.children]) if (child !== rowsHost.server && child !== rowsHost.client) child.remove();
+      if (host.firstElementChild !== rowsHost.server) host.prepend(rowsHost.server);
+      if (rowsHost.server.nextElementSibling !== rowsHost.client) rowsHost.server.after(rowsHost.client);
+      head.replaceChildren(); axis.replaceChildren();
+      for (const [key, item] of [...barElements]) if (item.root) barElements.delete(key);
       const roots = rows.filter(row => row.root);
       if (roots.length) {
         el('span', 'lane-name', '一回', head).title = 'run（ターンや作業の一回）';
         const track = el('div', 'track run-track', null, head);
-        for (const row of roots) bar(row, track, scale.server, 0, model);
+        for (const row of roots) { bar(row, track, scale.server, 0, model); barElements.get(row.key).root = true; }
         const steps = roots.map(row => row.span?.output).find(output => record(output) && typeof output.modelStartMs === 'number');
         const rootRow = roots.find(row => record(row.span?.output) && typeof row.span.output.modelStartMs === 'number');
         if (steps && rootRow && rootRow.offset !== null) marker(host, (rootRow.offset + steps.modelStartMs) / scale.server, `モデルへ ${fmt(steps.modelStartMs)} ms`);
       }
       // Waterfall (owner, 2026-10-14, 2A): one row per span in start order. The critical path is taken from observed start,
-      // measured duration and explicit parent links only (`criticalPath`); open or unmeasured spans never join it.
+      // measured duration and explicit parent links only (`criticalPath`); open or unmeasured spans never join it. While the
+      // run has not closed (its root open or unmeasured), the path is only the path so far, and says so.
       const measured = placed.filter(row => row.origin === 'server' && row.measured && !row.open && row.duration !== null);
       const crit = criticalPath(measured.map(row => ({ key: row.key, parent: row.span?.parentSpanId ? `${row.span.runId}/${row.span.parentSpanId}` : null, start: row.offset, end: row.offset + row.duration })));
+      const finished = roots.length ? roots.every(row => row.span?.endedAt && row.measured && !row.open) : placed.length > 0 && placed.every(row => row.span?.endedAt && !row.open);
       $('crit-hint').hidden = !crit.size;
+      $('crit-hint').textContent = finished ? '太い棒＝この一回を終わらせるまで続いた段（観測した開始・所要と親子だけで決めています）。' : '太い棒＝ここまでに終わった段のつながり（この一回はまだ終わっていません。観測した開始・所要と親子だけで決めています）。';
+      // Rows are kept by span and rebuilt only when what they show changed; a moved scale only re-places them.
       for (const origin of ['server', 'client']) {
         const list = placed.filter(row => !row.root && row.origin === origin).sort((a, b) => a.offset - b.offset || a.span.firstSequence - b.span.firstSequence);
-        if (!list.length) continue;
-        if (origin === 'client') el('p', 'hint', '端末の時計（サーバーとは別の目盛り）', host);
-        const total = scale[origin];
-        for (const row of list) {
-          const blockId = blockOf(model, row.view), spec = blockSpec(model, blockId), onPath = crit.has(row.key);
-          const line = el('div', `lane${onPath ? ' crit' : crit.size && origin === 'server' ? ' off-path' : ''}`, null, host); role(line, roleFor(model, row.view)); line.dataset.block = blockId ?? '';
-          if (focusBlock && focusBlock !== blockId) line.classList.add('dim');
-          if (toolNameFilter && rowMentions(row, toolNameFilter)) line.classList.add('match');
-          const name = el('button', 'lane-name', labelFor(model, row.view), line); name.type = 'button'; name.title = `${labelFor(model, row.view)}（${spec?.[1] ?? ''}）`;
-          name.addEventListener('click', () => select(row.key, row.view));
-          const track = el('div', 'track', null, line);
-          bar(row, track, total, 0, model);
-          const text = barNote(row, onPath);
-          if (text && row.duration !== null && !row.open) {
-            const start = row.offset / total * 100, end = (row.offset + row.duration) / total * 100, note = el('span', 'bar-note', text, track);
-            if (end > 70) { note.classList.add('before'); note.style.setProperty('right', `${Math.max(0, 100 - start + .6)}%`); } else note.style.setProperty('left', `${end + .6}%`);
-          }
-        }
+        if (origin === 'client' && list.length) host.insertBefore(el('p', 'hint', '端末の時計（サーバーとは別の目盛り）'), rowsHost.client);
+        syncRows(rowsHost[origin], list, scale[origin], crit, origin);
       }
       if (unplaced.length) {
         const line = el('p', 'unplaced', '開始を観測していない処理：', host);
@@ -614,6 +607,42 @@ function mountObserver() {
     }
     $('run-summary').textContent = runSummary(data.run, rows);
     return rows;
+  }
+  const rowsHost = { server: document.createElement('div'), client: document.createElement('div') }, rowCache = new Map();
+  rowsHost.server.className = 'waterfall'; rowsHost.client.className = 'waterfall';
+  /** One waterfall row per span, reused while its look is unchanged (long FCA runs have hundreds of spans). */
+  function syncRows(container, list, total, crit, origin) {
+    const keep = new Set(), elements = [];
+    for (const row of list) {
+      const onPath = crit.has(row.key), offPath = !onPath && crit.size > 0 && origin === 'server', blockId = blockOf(model, row.view);
+      const look = [row.state, row.offset, row.open ? 'o' : row.duration, onPath, offPath, Boolean(focusBlock && focusBlock !== blockId), Boolean(toolNameFilter && rowMentions(row, toolNameFilter)), row.linked].join(':');
+      let entry = rowCache.get(row.key);
+      if (!entry || entry.look !== look) {
+        const spec = blockSpec(model, blockId), line = document.createElement('div');
+        line.className = `lane${onPath ? ' crit' : offPath ? ' off-path' : ''}`; role(line, roleFor(model, row.view)); line.dataset.block = blockId ?? '';
+        if (focusBlock && focusBlock !== blockId) line.classList.add('dim');
+        if (toolNameFilter && rowMentions(row, toolNameFilter)) line.classList.add('match');
+        const name = el('button', 'lane-name', labelFor(model, row.view), line); name.type = 'button'; name.title = `${labelFor(model, row.view)}（${spec?.[1] ?? ''}）`;
+        name.addEventListener('click', () => select(row.key, row.view));
+        const track = el('div', 'track', null, line);
+        bar(row, track, total, 0, model);
+        const text = barNote(row, onPath), note = text && row.duration !== null && !row.open ? el('span', 'bar-note', text, track) : null;
+        entry = { look, line, note, total: null, origin };
+        rowCache.set(row.key, entry);
+      }
+      if (entry.total !== total) { placeRow(entry, row, total); entry.total = total; }
+      keep.add(row.key); elements.push(entry.line);
+    }
+    for (const [key, entry] of rowCache) if (!keep.has(key) && entry.origin === origin) { rowCache.delete(key); barElements.delete(key); }
+    const current = container.children;
+    if (current.length !== elements.length || elements.some((line, index) => current[index] !== line)) container.replaceChildren(...elements);
+  }
+  function placeRow(entry, row, total) {
+    const item = barElements.get(row.key); if (item) { item.total = total; item.element.style.setProperty('left', `${row.offset / total * 100}%`); }
+    if (!entry.note) return;
+    const start = row.offset / total * 100, end = (row.offset + (row.duration ?? 0)) / total * 100;
+    entry.note.classList.toggle('before', end > 70); entry.note.style.removeProperty('left'); entry.note.style.removeProperty('right');
+    if (end > 70) entry.note.style.setProperty('right', `${Math.max(0, 100 - start + .6)}%`); else entry.note.style.setProperty('left', `${end + .6}%`);
   }
   /** The few annotations worth reading on a bar (1C): the decision a box made, and how long a step on the critical path took. */
   function barNote(row, onPath) {
@@ -860,7 +889,7 @@ function mountObserver() {
           if (along <= 1) continue;
           const score = along + across * 2; if (score < bestScore) { bestScore = score; best = other; }
         }
-        if (best) { const next = map.nodeElements.get(best); next.focus({ preventScroll: true }); next.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false })); }
+        if (best) { const next = map.nodeElements.get(best); next.focus({ preventScroll: true }); next.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false })); revealBox(best); }
       });
     }
     map = { svg, groups, layout: model.layout, frame: { width: model.layout.width, height: model.layout.height }, routes: new Map(), blockLines: new Map(), blockEdges, edges, packets, edgeElements: [], nodeElements, blockElements, counts, times, fieldGroups, k: 1, cx: model.layout.width / 2, cy: model.layout.height / 2, level: 0, particles: [], fieldSignature: new Map(), animation: null };
@@ -951,6 +980,16 @@ function mountObserver() {
       Object.assign(map, { k: from.k + (k - from.k) * e, cx: from.cx + (cx - from.cx) * e, cy: from.cy + (cy - from.cy) * e }); applyView(); if (t >= 1) map.animation = null; };
     requestFrame();
   }
+  /** Pans (never zooms) just enough to bring a box into the part of the view not covered by the overlays or the detail. */
+  function revealBox(id) {
+    const box = map?.layout.boxes.get(id); if (!box) return;
+    const area = inner(), scale = baseScale() * map.k, [ox, oy] = viewOrigin(scale, area), edge = { ...area.edge };
+    const drawer = $('drawer'); if (drawerOpen && !drawer.hidden) { const rect = drawer.getBoundingClientRect(), svg = map.svg.getBoundingClientRect(); if (rect.top > svg.top + svg.height / 2) edge.b = Math.max(edge.b, svg.bottom - rect.top + 8); else edge.r = Math.max(edge.r, svg.right - rect.left + 8); }
+    const margin = 16 / scale, left = ox + edge.l / scale + margin, right = ox + (area.width - edge.r) / scale - margin, top = oy + edge.t / scale + margin, bottom = oy + (area.height - edge.b) / scale - margin;
+    const dx = box.x < left ? box.x - left : box.x + box.w > right ? Math.min(box.x - left, box.x + box.w - right) : 0;
+    const dy = box.y < top ? box.y - top : box.y + box.h > bottom ? Math.min(box.y - top, box.y + box.h - bottom) : 0;
+    if (dx || dy) zoomTo(map.cx + dx, map.cy + dy, map.k);
+  }
   function highlightMapSelection() { if (!map) return; for (const [id, group] of map.nodeElements) group.classList.toggle('selected', id === selectedView); }
   /** 3C: the block's marks, right-aligned in its title strip: 失敗 N (red), ● N running (green), 不明 N (amber). */
   function drawBadges(parts, entry) {
@@ -962,7 +1001,7 @@ function mountObserver() {
       const width = textWidth(text, 10) + 12; x -= width;
       const badge = sv('g', { class: `block-badge ${kind}`, role: 'button', tabindex: 0, 'aria-label': `${text}、一覧を開く` }, parts.badges);
       sv('rect', { x, y: 0, width, height: 16, rx: 8 }, badge); sv('text', { x: x + width / 2, y: 12, 'text-anchor': 'middle' }, badge).textContent = text;
-      badge.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); badge.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+      badge.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); moved = 0; badge.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
       x -= 4;
     }
   }
@@ -1182,7 +1221,8 @@ function mountObserver() {
   function setView(next) { if (next === view) return; view = next; timelineSignature = ''; render(); if (view === 'map') { buildMap(); render(); } }
 
   function clearPrivateView() {
-    state = createObserverState(); history.clear(); openHistory.clear(); blockListId = null; alerts = new Map(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
+    state = createObserverState(); history.clear(); openHistory.clear(); blockListId = null; alerts = new Map();
+    rowCache.clear(); barElements = new Map(); rowsHost.server.replaceChildren(); rowsHost.client.replaceChildren(); catalog = null; priorCatalog = null; selectedKey = null; selectedView = null; selectedTask = null; selectedStep = null;
     runSignature = ''; taskSignature = ''; timelineSignature = ''; metricSignature = ''; viewRuns = null; linkedView = undefined;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
     if (map) { map.particles = []; map.packets.replaceChildren(); map.fieldSignature = new Map(); }
