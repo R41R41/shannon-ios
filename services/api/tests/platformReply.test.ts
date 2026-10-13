@@ -267,8 +267,7 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
   it('(2) is set only for a surface turn, by the surface\'s switch, which only game chat turns on', () => {
     const source = (name: string) => readApiSource(name);
     const kernel = source('apiTextTurn.ts');
-    // The app's chat passes its audience's selection untouched (but for naming her device tools, `withDeviceActions`); only a surface
-    // (game chat, a platform reply) sets ownOutreach.
+    // The app's chat passes its audience's selection untouched; only a surface (game chat, a platform reply) sets ownOutreach.
     expect(kernel).toContain('surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities');
     for (const name of ['apiKernel.ts', 'apiLiveVoice.ts', 'chatAudience.ts', 'platformSurface.ts', 'platformReply.ts', 'minecraftBody.ts']) {
       expect(source(name), name).not.toMatch(/ownOutreach:\s*(?:'guarded'|surfaceOwnOutreach)/u);

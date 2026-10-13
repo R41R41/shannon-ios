@@ -7,6 +7,8 @@ import { clip, neutralMarkers, type ToolExecutionContext, type ToolExecutor, typ
 import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
 import { withToolEvidence } from './toolEvidence.js';
 import { DEVICE_ACTION_TOOLS } from './deviceActionToolDefinitions.js';
+import { ownerTimeZone } from '../../infra/time/localDate.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * The executors of her device tools (`deviceActionToolDefinitions.ts`; `docs/device-actions-contract.md`). Each call writes one
@@ -43,7 +45,9 @@ function validLocal(value: string, day: boolean): boolean {
 function reminderPayload(input: ToolInput, now: string): Built {
   const due = words(input, 'due'), inMinutes = numberInput(input, 'inMinutes');
   if (!due && inMinutes === undefined) return { problem: '期限（due か inMinutes）がない' };
-  if (due && !validLocal(due, false)) return { problem: 'due は YYYY-MM-DDTHH:mm で書く' };
+  if (due && !validLocal(due, false)) return { problem: `due は YYYY-MM-DDTHH:mm で書く。いまは ${localNow(now).minute}` };
+  const past = due ? pastDay(due, now) : null;
+  if (past) return { problem: past };
   const dueAt = inMinutes !== undefined ? new Date(Date.parse(now) + inMinutes * 60_000).toISOString() : undefined;
   const when = dueAt ? { dueAt } : { due };
   return { payload: { title: words(input, 'title'), ...when, ...optional('notes', words(input, 'notes')) } };
@@ -54,9 +58,26 @@ function timerPayload(input: ToolInput, now: string): Built {
   return { payload: { seconds, fireAt: new Date(Date.parse(now) + seconds * 1_000).toISOString(), ...optional('label', words(input, 'label')) } };
 }
 
-function eventPayload(input: ToolInput): Built {
+/**
+ * The owner's local date and minute now (`SHANNON_AUTONOMY_TIMEZONE`), for a date that is already past: 2026-10-13 daily evals D2
+ * put 「明日の朝9時」 on 2026-01-01 after a refused first call. A past day is refused with today's date, so the retry is right.
+ */
+function localNow(now: string): { day: string; minute: string } {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: ownerTimeZone(serverEnvironment()), year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now)).map(part => [part.type, part.value]));
+  const day = `${parts.year}-${parts.month}-${parts.day}`;
+  return { day, minute: `${day}T${parts.hour}:${parts.minute}` };
+}
+const pastDay = (value: string, now: string) => {
+  const today = localNow(now);
+  return value.slice(0, 10) < today.day ? `${value.slice(0, 10)} はもう過ぎた日（いまは ${today.minute}。「明日」はその次の日）` : null;
+};
+
+function eventPayload(input: ToolInput, now: string): Built {
   const start = words(input, 'start'), end = words(input, 'end'), allDay = LOCAL_DAY.test(start);
-  if (!validLocal(start, allDay)) return { problem: 'start は YYYY-MM-DDTHH:mm（終日なら YYYY-MM-DD）で書く' };
+  if (!validLocal(start, allDay)) return { problem: `start は YYYY-MM-DDTHH:mm（終日なら YYYY-MM-DD）で書く。いまは ${localNow(now).minute}` };
+  const past = pastDay(start, now);
+  if (past) return { problem: past };
   if (end && (!validLocal(end, allDay) || end < start)) return { problem: 'end は start と同じ形で、start より後に書く' };
   const duration = numberInput(input, 'durationMinutes');
   return { payload: {
@@ -87,7 +108,7 @@ function payloadFor(kind: DeviceActionKind, input: ToolInput, now: string): Buil
   switch (kind) {
     case 'reminder.create': return reminderPayload(input, now);
     case 'timer.start': return timerPayload(input, now);
-    case 'calendar.create_event': return eventPayload(input);
+    case 'calendar.create_event': return eventPayload(input, now);
     case 'music.search': return { payload: { query: words(input, 'query'), scope: words(input, 'scope') || 'catalog', type: words(input, 'type') || 'song' } };
     case 'music.recent': return { payload: {} };
     case 'music.play': return playPayload(input);

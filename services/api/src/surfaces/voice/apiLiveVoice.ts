@@ -59,7 +59,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, deviceActionsAvailable, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -321,7 +321,7 @@ async function completeLiveVoiceDelegation(
     ? NO_CAPABILITY_CONTEXT
     : await timing.measure('capability', () => bounded('capability_timeout', conversationCapabilityContext(scopeKey, transcript, dependencies, {
       aetherNotes: selectedSkills.has('aether_notes'),
-      voyagerTasks: selectedSkills.has('voyager_tasks'), deviceActions: deviceActionsAvailable(dependencies.autonomy, scopeKey, alone && !temporaryGuest),
+      voyagerTasks: selectedSkills.has('voyager_tasks'),
       notion: notionTurn, upcoming: temporaryGuest ? false : alone ? true : 'guarded',
     }, Boolean(fca && fcaInput && !uncertainTranscript)), () => NO_CAPABILITY_CONTEXT));
   const capabilityPrompt = capability.prompt;

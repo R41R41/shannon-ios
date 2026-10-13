@@ -131,6 +131,11 @@ describe('her device tools in a conversation', () => {
     const { call, actions } = conversation();
     expect((await call('reminder.create', { title: '牛乳' }))).toMatchObject({ ok: false, failure: 'invalid_input' });
     expect((await call('calendar.create_event', { title: '歯医者', start: '2026-13-01T10:00' }))).toMatchObject({ ok: false, failure: 'invalid_input' });
+    // A day already past is refused with today's date, so that the retry lands on the right day (2026-10-13 daily evals D2).
+    const past = await call('calendar.create_event', { title: '歯医者', start: '2026-01-01T09:00' });
+    expect(past).toMatchObject({ ok: false, failure: 'invalid_input' });
+    expect(past.text).toContain('2026-01-01 はもう過ぎた日（いまは 2026-10-13T18:00');
+    expect((await call('reminder.create', { title: '牛乳', due: '2026-10-12T09:00' })).text).toContain('もう過ぎた日');
     const queued = (await call('reminder.create', { title: '牛乳を買う', inMinutes: 30 }));
     expect(queued.ok).toBe(true);
     expect(queued.text).toContain('済んだとは言わない');
@@ -180,9 +185,10 @@ describe('her device tools in a conversation', () => {
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, true)).toBe('asked');
     expect(voiceToolOffer('3分のタイマーお願い', {}, OWNER, 'thread', false, false, false)).toBeNull();
     // 2026-10-13 daily evals D1: an hour, an alarm and 「起こして」 are timers too.
-    for (const words of ['1時間後に起こして', '一時間後に起こして', '30秒後に教えて', 'アラームかけて', '目覚ましお願い', '明日7時に起こして']) {
+    for (const words of ['1時間後に起こして', '一時間後に起こして', '30秒後に教えて', 'アラームかけて', '目覚ましお願い', '明日7時に起こして', '明日の朝起こして']) {
       expect(asksForDeviceAction(words), words).toBe(true);
     }
+    for (const words of ['問題を起こしてごめん', '事故を起こしてしまった']) expect(asksForDeviceAction(words), words).toBe(false);
   });
 });
 
@@ -221,14 +227,32 @@ describe('her device tools as the turn asks for them (2026-10-13 daily evals D1�
     }
   });
 
-  it('tells the reply to use the device for a timer or a reminder, and the old boundary only without the device', () => {
+  it('tells the reply to use the device only in a turn that offers its timer and reminder; otherwise the honest boundary stays', () => {
+    const owner = shannonCapabilityPrompt('owner');
     const selection = { aetherNotes: false, voyagerTasks: false };
-    for (const words of ['1時間後に起こして', '明日8時に起こして']) {
-      expect(conversationCapabilityPrompt(OWNER, words, {}, { ...selection, deviceActions: true }), words).toBe(DEVICE_REMINDER_BOUNDARY);
-      expect(conversationCapabilityPrompt(OWNER, words, {}, selection), words).toContain('cannot');
+    const exactTime = (words: string) => conversationCapabilityPrompt(OWNER, words, {}, selection) as string;
+    const honest = exactTime('1時間後に起こして');
+    expect(honest).toContain('cannot');
+    const request = (definitions: Array<{ name: string; domain?: string }>, turnContext = honest) =>
+      withToolCapabilityLines({ systemPrompt: owner, turnContext, tools: { definitions } });
+    const offered = request([{ name: 'timer.start', domain: 'device_action' }, { name: 'reminder.create', domain: 'device_action' }]);
+    expect(offered.turnContext).toBe(DEVICE_REMINDER_BOUNDARY);
+    expect(request([{ name: 'reminder.create', domain: 'device_action' }], exactTime('明日8時に起こして')).turnContext).toBe(DEVICE_REMINDER_BOUNDARY);
+    // Only the device's reads (a turn whose words could not be trusted offers no write), or no device tool: the honest lines stay.
+    for (const definitions of [[{ name: 'music.search', domain: 'device_action' }], [{ name: 'weather.forecast', domain: 'daily_read' }]]) {
+      const kept = request(definitions);
+      expect(kept.turnContext).toBe(honest);
+      expect(kept.systemPrompt).not.toContain(SHANNON_DEVICE_ACTIONS_CAPABILITY.text);
+      expect(kept.systemPrompt).toContain(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'exact_time_alarm')!.text}`);
     }
+    // A spoken turn whose words could not be trusted is offered no device write, so its request keeps the honest boundary.
+    const uncertain = conversationTools({ tools: runner }, OWNER, 'voice', true, server, 'thread\n1時間後に起こして', new TurnDeadline(TEXT_TURN_DEADLINE),
+      { trust: 'uncertain' }).tools!;
+    expect(withToolCapabilityLines({ systemPrompt: owner, turnContext: honest, tools: uncertain }).turnContext).toBe(honest);
+    // A web or place turn sends no tools: the request is left as it is.
+    expect(withToolCapabilityLines({ systemPrompt: owner, turnContext: honest, useWebSearch: true,
+      tools: { definitions: [{ name: 'timer.start', domain: 'device_action' }] } }).turnContext).toBe(honest);
     expect(DEVICE_REMINDER_BOUNDARY).toContain('timer_start');
-    expect(conversationCapabilityPrompt(OWNER, '明日プレゼンの練習しよう', {}, { ...selection, deviceActions: true })).toBe('');
   });
 });
 

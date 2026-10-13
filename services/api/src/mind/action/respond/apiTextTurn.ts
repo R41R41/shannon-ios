@@ -15,8 +15,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiv
 import { presentCompanionState, resolveReplyEmotion } from '../../emotion/emotionPorts.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from '../../../contracts/contracts.js';
 import {
-  NO_CAPABILITY_CONTEXT, OWNER_CAPABILITY_SELECTION, conversationCapabilityContext, noCapabilityContext, readToolPlan, type ConversationCapabilityContext,
-  type ConversationCapabilitySelection, type NotionTurnReader,
+  NO_CAPABILITY_CONTEXT, conversationCapabilityContext, noCapabilityContext, readToolPlan, type ConversationCapabilityContext, type NotionTurnReader,
 } from './conversationCapabilities.js';
 import { WEB_CAPABILITY_ENTRY } from '../../tools/toolsPorts.js';
 import { withToolMenu } from '../../tools/toolsPorts.js';
@@ -38,7 +37,7 @@ import type { PeopleMemory } from '../../memory/memoryPorts.js';
 import { heardByEveryoneHere } from '../../memory/platformPeoplePorts.js';
 import type { PersonIdentityStore } from '../../memory/memoryPorts.js';
 import type { ShannonBody } from '../../../surfaces/body/shannonBody.js';
-import { deviceActionsAvailable, startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../tools/toolsPorts.js';
+import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../tools/toolsPorts.js';
 import type { ShannonToolRunner } from '../../tools/toolsPorts.js';
 import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
 import { TurnDeadline } from './turnDeadline.js';
@@ -272,16 +271,8 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const basePrompt: LayeredIdentityPrompt = { ...identity, identity: withStage5Capabilities(dependencies.autonomy.identityProjection(body.scopeKey, identity.identity), audience.alone ? dependencies.stage5Capabilities : undefined) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
-      ownOutreach: dependencies.ownOutreach },
-    withDeviceActions(surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities,
-      // Her device tools for the owner alone in the app's chat: the reminder boundary then names them (2026-10-13 daily evals D1).
-      !surface && deviceActionsAvailable(dependencies.autonomy, body.scopeKey, audience.alone)), collectReadSources);
+      ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities, collectReadSources);
   return { basePrompt, capabilityContext };
-}
-
-/** The selection with her device tools named, or the selection as it is. */
-function withDeviceActions(selection: ConversationCapabilitySelection | undefined, available: boolean): ConversationCapabilitySelection | undefined {
-  return available ? { ...(selection ?? OWNER_CAPABILITY_SELECTION), deviceActions: true } : selection;
 }
 
 /**

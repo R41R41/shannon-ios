@@ -189,6 +189,31 @@ export function withDeviceActionsCapability(prompt: string): string {
   return rewritten.includes(block) ? rewritten : `${rewritten}${block}`;
 }
 
+/** The reminder boundaries of a turn (`reminderCapabilityBoundary` in the API): without her device's timer and reminder. */
+export const NO_TIMER_BOUNDARY = '[Reminder capability] The owner asked to be alerted after an exact interval or by a timer/alarm. '
+  + 'Shannon has no timer or clock alarm and cannot speak at an exact time; nothing was stored for this request. '
+  + 'Say plainly, in です・ます, that she cannot notify at that exact time, and suggest the Clock app timer. Do not say she will tell them later.';
+export const PROMISE_SLOT_BOUNDARY = '[Reminder capability] The owner asked for something at a clock time. Shannon cannot speak at an exact time. '
+  + 'The request is kept as a promise and she mentions it inside her once-a-day message slot, which may be later than the requested time. '
+  + 'Say this limit plainly, in です・ます. Do not promise to wake, call or notify them at that time.';
+
+/** The boundary when the turn offers her device's timer and reminder tools: what to call, and when it is done. */
+export const DEVICE_REMINDER_BOUNDARY = '[Reminder capability] The owner asked to be alerted after an interval or at a clock time. '
+  + 'Do it on his device now: timer_start for an interval (「1時間後に起こして」 is 3600 seconds), reminder_create for a clock time or a named reminder. '
+  + 'Do not ask whether to do it, and do not suggest the Clock app unless the device refused. '
+  + 'Confirm the time in one short sentence once the tool accepted it; '
+  + 'the device reports when it is done.';
+
+/**
+ * The turn's context with the device boundary in place of the honest one, for a turn whose offered tools include the device's timer
+ * or reminder (2026-10-13 daily evals D1: the boundary said 「no timer」 beside the timer tool). Decided by the tools this turn really
+ * offers (`withToolCapabilityLines` in the API), never by availability alone: a turn whose words could not be trusted, or with anyone else
+ * there, keeps the honest boundary.
+ */
+export function withDeviceReminderBoundary(turnContext: string): string {
+  return turnContext.replace(NO_TIMER_BOUNDARY, DEVICE_REMINDER_BOUNDARY).replace(PROMISE_SLOT_BOUNDARY, DEVICE_REMINDER_BOUNDARY);
+}
+
 /** Capabilities the API may add to the description while it has them. */
 export const SHANNON_STAGE5_CAPABILITIES = Object.freeze([
   {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライ氏は「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},

@@ -18,7 +18,7 @@ import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/tur
 import { MEMORY_TOOLS } from '../src/mind/tools/memoryToolDefinitions.js';
 import type { FcaConversationTurn } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { reportGateDecision } from '../src/mind/action/fca/fcaReportGate.js';
-import { asksWorkProgress } from '../src/surfaces/voice/voiceConversationHint.js';
+import { asksResearchProgress, asksWorkProgress, followUp } from '../src/surfaces/voice/voiceConversationHint.js';
 
 const at = '2026-10-10T00:00:00.000Z';
 const closes: Array<() => Promise<void> | void> = [];
@@ -231,6 +231,20 @@ describe('conversation plus ongoing work', () => {
   it('reads a progress question in his words, and nothing else as one', () => {
     for (const words of ['どうなった？', 'で、結果は？', '終わった？', '調べもの、どんな感じ？', '進み具合は？', 'まだかな']) expect(asksWorkProgress(words), words).toBe(true);
     for (const words of ['明日の天気どうなるかな', '結果的にはよかった', '終わったら教えて', 'まだ時間ある']) expect(asksWorkProgress(words), words).toBe(false);
+  });
+
+  it('follows only research the question is about: not Codex work, a task or a note, and by topic when it names one (review of a4ff16e7)', () => {
+    for (const words of ['Codexの作業どうなった？', 'ビルドどうなった？', 'Voyagerのタスクどうなった？', 'さっきのメモ、結果は？']) expect(asksResearchProgress(words), words).toBe(false);
+    for (const words of ['どうなった？', '調べもの、どうなった？', '太宰府の行き方どうなった？']) expect(asksResearchProgress(words), words).toBe(true);
+    const task = { id: 'r', title: '博多駅から太宰府までの行き方', goal: '博多駅から太宰府までの行き方、調べといて' };
+    const asked: boolean[] = [];
+    const turn = { followWork: (accepts?: (task: never) => boolean) => { const ok = accepts ? accepts(task as never) : true; asked.push(ok); return ok ? task : null; } } as unknown as FcaConversationTurn;
+    const admitted = { work: null, admittedAt: 0 };
+    expect(followUp(turn, '太宰府の行き方どうなった？', admitted).admitted).toMatchObject({ work: { id: 'r' } });
+    expect(followUp(turn, '天神のランチどうなった？', admitted).admitted).toBe(admitted);
+    expect(followUp(turn, 'どうなった？', admitted).admitted).toMatchObject({ work: { id: 'r' } });
+    expect(followUp(turn, 'Codexの作業どうなった？', admitted)).toEqual({ hint: '', admitted });
+    expect(asked).toEqual([true, false, true]);
   });
 
   it('follows nothing when no research of the conversation is running', async () => {

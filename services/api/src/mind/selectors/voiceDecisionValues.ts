@@ -22,10 +22,7 @@ export function applyMandatorySkillFloors(
   if (asksInternalSuiteStatus(input.transcript)) scores.current_web = 0;
   // A short yes to her own offer to look something up carries the offer's capabilities (`voiceOfferCarry.ts`).
   for (const skill of carriedOffer(input)?.skills ?? []) scores[skill] = 1;
-  // A forecast question is her weather tool's, not research (2026-10-13 daily evals E2/E3), wherever that tool is offered: the
-  // owner alone. With anyone else there, or a question beyond a forecast (警報, 台風, news), the web stays.
-  if (scores.weather >= 1 && input.participantMode === 'owner' && input.turn?.othersPresent !== true
-    && !WEATHER_BEYOND_FORECAST.test(input.transcript)) scores.current_web = 0;
+  if (scores.weather >= 1) scores.current_web = weatherWebScore(scores.current_web, input);
   if (input.requestedLocation) scores.device_context = 1;
   if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {
@@ -35,6 +32,15 @@ export function applyMandatorySkillFloors(
     scores.voyager_tasks = 0;
     scores.agent_status = 0;
   }
+}
+
+/**
+ * The web's score beside a forecast question: none for the owner alone, whose weather tool reads it (2026-10-13 daily evals E2/E3);
+ * as it was with anyone else there (the tool is the owner's alone); always beside news, warnings or an event's fate (「雨で花火大会は中止？」).
+ */
+function weatherWebScore(score: number, input: VoiceDecisionInput): number {
+  if (WEATHER_BEYOND_FORECAST.test(input.transcript)) return 1;
+  return input.participantMode === 'owner' && input.turn?.othersPresent !== true ? 0 : score;
 }
 
 /** True for "エーテルとボイジャーの最新の開発状況", false once the owner asks for the web explicitly. */

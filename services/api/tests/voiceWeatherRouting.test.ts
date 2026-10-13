@@ -41,6 +41,9 @@ describe('a forecast question is her weather tool\'s, not research', () => {
     // With anyone else there her weather tool is not offered: the web stays. A question beyond a forecast keeps the web too.
     expect((await local.decide(input('明日の天気は？', true))).selectedSkills).toEqual(expect.arrayContaining(['weather', 'current_web']));
     expect((await local.decide(input('台風の警報、明日の天気はどう？'))).selectedSkills).toEqual(expect.arrayContaining(['weather', 'current_web']));
+    for (const words of ['雨で花火大会は中止？', '雪で新幹線は見合わせてる？', '明日の雨で試合は延期かな']) {
+      expect((await local.decide(input(words))).selectedSkills, words).toContain('current_web');
+    }
     expect((await local.decide({ ...input('明日の天気は？'), participantMode: 'guest' })).selectedSkills).toContain('current_web');
     expect((await local.decide(input('元気？'))).selectedSkills).not.toContain('weather');
   });

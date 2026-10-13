@@ -292,9 +292,10 @@ function commonVoiceOffer(runner: ShannonToolRunner, scopeKey: string, words: st
 const MUSIC_REQUEST = /(?<![作編])(?:音楽|曲|BGM|プレイリスト|アルバム)[^。！？!?\n]{0,12}?(?:かけて|かけよう|流して|再生して|聴かせて|聞かせて|止めて|とめて|変えて|替えて|スキップ|飛ばして)|(?:次|前)の曲/iu;
 const REMINDER_REQUEST = /リマインド|リマインダー|忘れないように|[0-9０-９一二三四五六七八九十]+時(?:[0-9０-９一二三四五六七八九十]+分|半)?に(?:教えて|知らせて|声をかけて|声かけて|起こして)|通知して/u;
 // 「1時間後に起こして」 and an alarm are a timer too (2026-10-13 daily evals D1: only minutes were read, and she had no timer).
-const TIMER_REQUEST = /タイマー|アラーム|目覚まし|[0-9０-９一二三四五六七八九十]+(?:分|時間|秒)半?(?:後に|後で|後、|たったら|経ったら)|起こして/u;
+// 「起こして」 only with a time (「朝」「明日」「〜後」「〜時」): 「問題を起こして」 is no alarm.
+const TIMER_REQUEST = /タイマー|アラーム|目覚まし|[0-9０-９一二三四五六七八九十]+(?:分|時間|秒)半?(?:後に|後で|後、|たったら|経ったら)|(?:朝|明日|あした|あさって|後|時|分|半)[にはでも、]?\s*起こして/u;
 const CALENDAR_REQUEST = /予定(?:を|に)?(?:入れて|入れといて|入れておいて|追加)|カレンダーに/u;
-const WEATHER_REQUEST = /天気|天候|予報|気温|降水|傘|雨|雪/u;
+const WEATHER_REQUEST = /天気|天候|予報|気温|降水|傘|雨|雪|晴れ|曇り|くもり/u;
 
 /**
  * The tools his words ask for by name (registry names), loaded with the turn wherever it offers them: a timer, a reminder, an
@@ -323,14 +324,6 @@ const proposesMusic = (reply: string) => /曲|音楽|かけ(?:ましょう|よ�
 /** Whether the runner has her device tools for this scope (the owner's, switched on). */
 function offersDevice(runner: ShannonToolRunner | undefined, scopeKey: string): boolean {
   try { return runner?.offered('voice', 'owner_alone', scopeKey).some(tool => tool.domain === 'device_action') ?? false; } catch { return false; }
-}
-
-/**
- * Whether a conversation turn of the owner alone has her device tools (`docs/device-actions-contract.md`): the switch is on and
- * his app is paired. Her capability text and the reminder boundary follow this (2026-10-13 daily evals D1–D3).
- */
-export function deviceActionsAvailable(autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, ownerAlone: boolean): boolean {
-  return ownerAlone && ownToolsEnabled() && offersDevice(autonomy?.tools, scopeKey);
 }
 
 /** Whether a spoken turn of the owner alone has her weather tool (its port is wired and her tools are on). */

@@ -3,7 +3,7 @@
  * it. The turn's routing (`mind/action/respond/turnRouting.ts`) reads what her tools did in a turn here, as closed values; since
  * stage 3 (S1) the follow-up window of a tool turn too.
  */
-export { deviceActionsAvailable, startTurnToolMenu, turnOffersWrites, turnToolResults, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from './shannonToolSession.js';
+export { startTurnToolMenu, turnOffersWrites, turnToolResults, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from './shannonToolSession.js';
 export { WEB_CAPABILITY_ENTRY, toolDoing } from './shannonTools.js';
 export { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
 export { type ToolInput } from './shannonToolInput.js';

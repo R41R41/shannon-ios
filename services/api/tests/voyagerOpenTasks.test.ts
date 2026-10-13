@@ -99,6 +99,18 @@ describe('due dates beside a keyword search (2026-10-13 daily evals M4: 「納�
     expect(prompt).toContain('dueAt and priority come from the open-task read');
   });
 
+  it('never lets a slow open read hold the search beyond its bound', async () => {
+    vi.useFakeTimers();
+    try {
+      const reader: VoyagerCatalog = { searchTasks: async () => [searched], listOpenTasks: () => new Promise(() => {}), listProjects: async () => [] };
+      const pending = conversationCapabilityPrompt('', '「申告書」のタスク', { voyagerCatalog: reader }, owner);
+      await vi.advanceTimersByTimeAsync(2_600);
+      const prompt = await pending;
+      expect(prompt).toContain('"id":"synthetic-task"');
+      expect(prompt).not.toContain('timed out');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('keeps the search when the open read fails or does not exist', async () => {
     const failing: VoyagerCatalog = { searchTasks: async () => [searched], listOpenTasks: async () => { throw new OrganizeError('DESTINATION_TIMEOUT', 503, true); }, listProjects: async () => [] };
     const older: VoyagerCatalog = { searchTasks: async () => [searched], listProjects: async () => [] };

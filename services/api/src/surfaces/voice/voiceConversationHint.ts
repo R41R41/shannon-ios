@@ -4,6 +4,7 @@ import { baseToolSession, withToolMenu } from '../../mind/tools/toolsPorts.js';
 import type { FcaConversationTurn } from '../../mind/action/fca/fcaConversationPorts.js';
 import type { TaskView } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import { VOICE_RESEARCH_WAIT_MS } from './voiceResearchTurn.js';
+import { mandatorySkillPatterns } from '../../contracts/voiceDecisionContract.js';
 
 /** A routing hint, never a permission decision. The stable opener can recover any still-allowed tool. */
 export function plainVoiceHint(decision: VoiceTurnDecision, message: string, uncertain: boolean): boolean {
@@ -29,6 +30,22 @@ export function webForWeather(skills: Set<string>, weatherTool: boolean): Set<st
 /** 「どうなった？」「結果は？」「終わった？」: he asks how the work he asked for is going. */
 const WORK_PROGRESS = /(?:どうなった|どうなってる|どんな感じ|結果(?:は|って|出た|どう)|終わった[？?か]|まだ(?:かな|[？?])|わかった[？?]|分かった[？?]|進み具合|進捗)/u;
 export const asksWorkProgress = (transcript: string): boolean => WORK_PROGRESS.test(transcript);
+/**
+ * A progress question about her research, not about other work: Codex or agent work, a build, Voyager's tasks, Aether's notes
+ * (「Codexの作業どうなった？」 must not hear a web research's result; review of a4ff16e7).
+ */
+export function asksResearchProgress(transcript: string): boolean {
+  return asksWorkProgress(transcript) && !OTHER_WORK.some(pattern => pattern?.test(transcript));
+}
+const OTHER_WORK = [mandatorySkillPatterns.agent_status, mandatorySkillPatterns.voyager_tasks, mandatorySkillPatterns.aether_notes,
+  /(?:codex|コーデックス|エージェント|作業|実装|ビルド|デプロイ|リリース|配信|testflight|テストフライト|PR|プルリク|修正|改修)/iu];
+
+/** The content words of a progress question (kanji, katakana, Latin), without the progress words themselves. */
+function topicWords(transcript: string): string[] {
+  const content = transcript.replace(WORK_PROGRESS, ' ').replace(/(?:調べもの|調べ物|調べ|検索|リサーチ|結果|さっき|あれ|それ)/gu, ' ');
+  return [...new Set(content.match(/[\p{Script=Han}\p{Script=Katakana}ー]{2,}|[A-Za-z0-9]{2,}/gu) ?? [])];
+}
+
 /** How long a followed research may still be said in the turn that asked how it is going. */
 export const FOLLOWED_WORK_WAIT_MS = 15_000;
 /** The canonical state answers a progress question (2026-10-13 daily evals R5: a finished research was called 「まだ」). */
@@ -43,8 +60,10 @@ export const WORK_PROGRESS_HINT = '[Progress question] He asks how the work he a
  */
 export function followUp<T extends { work: TaskView | null; admittedAt: number }>(turn: FcaConversationTurn | null, transcript: string,
   admitted: T): { hint: string; admitted: T | { work: TaskView; admittedAt: number } } {
-  if (admitted.work || !turn || !asksWorkProgress(transcript)) return { hint: '', admitted };
-  const followed = turn.followWork?.() ?? null;
+  if (admitted.work || !turn || !asksResearchProgress(transcript)) return { hint: '', admitted };
+  const words = topicWords(transcript);
+  // A question that names something (「太宰府の行き方どうなった？」) follows only the research about it; a bare one, the newest.
+  const followed = turn.followWork?.(task => !words.length || words.some(word => `${task.title}\n${task.goal}`.includes(word))) ?? null;
   // The research turn's window is `VOICE_RESEARCH_WAIT_MS` from its admission: a followed one has `FOLLOWED_WORK_WAIT_MS` from now.
   const admittedAt = performance.now() - (VOICE_RESEARCH_WAIT_MS - FOLLOWED_WORK_WAIT_MS);
   return { hint: WORK_PROGRESS_HINT, admitted: followed ? { work: followed, admittedAt } : admitted };

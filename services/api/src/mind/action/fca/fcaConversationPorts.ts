@@ -41,7 +41,7 @@ export interface FcaConversationTurn {
    */
   awaitWork?(milliseconds: number, signal?: AbortSignal): Promise<{ taskId: string; title: string; report: NonNullable<TaskProgress['report']> } | null>;
   /** A turn that asks how the work is going and admitted none: follow the newest research still running (then `awaitWork` waits for it). */
-  followWork?(): TaskView | null;
+  followWork?(accepts?: (task: TaskView) => boolean): TaskView | null;
   /** The report was said in this turn: its card stays in the Talk, and it is never said or announced again. */
   hearWork?(taskId: string, reportId: string, spoken: string): boolean;
 }

@@ -193,7 +193,7 @@ export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>
  * Weather words that are no forecast question (警報・台風・地震, news): the web stays for them. Everything else a weather question
  * needs is in her weather tool.
  */
-export const WEATHER_BEYOND_FORECAST = /(?:警報|注意報|台風|地震|津波|災害|避難|ニュース|花粉|黄砂|運行|遅延|運休|電車|バス|イベント|営業時間)/u;
+export const WEATHER_BEYOND_FORECAST = /(?:警報|注意報|台風|地震|津波|災害|避難|ニュース|花粉|黄砂|運行|遅延|運休|電車|バス|イベント|営業時間|中止|開催|延期|欠航|見合わせ|通行止め)/u;
 
 /**
  * Words that ask for something on the public web. `最新` is deliberately absent: on its own it

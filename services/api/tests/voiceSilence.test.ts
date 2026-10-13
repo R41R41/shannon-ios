@@ -259,6 +259,13 @@ describe('settling the router\'s answer against the rules', () => {
     // Nothing asked of her (no capability, no concrete answer wanted): the router's silence stands as before.
     expect(settleOwnerVoiceTurn(await base({ ...silentModel, selectedSkills: [], solutionWantedProbability: 0.2 }),
       { transcript: '明日の会議、どうなるかな', facts: alone, uncertain: false }).shouldRespond).toBe(false);
+    // A capability chosen by a fixed word in a statement (a call, the TV, his remark) is not a request (review of a4ff16e7).
+    for (const transcript of ['明日雨らしいよ', 'うん、約束したんだって', '私の番号はあとで送ります']) {
+      const statement = await base({ ...silentModel, selectedSkills: ['weather', 'conversation_memory'], solutionWantedProbability: 0.3 });
+      expect(settleOwnerVoiceTurn(statement, { transcript, facts: alone, uncertain: false }).shouldRespond, transcript).toBe(false);
+    }
+    expect(settleOwnerVoiceTurn(await base({ ...silentModel, selectedSkills: ['weather'], solutionWantedProbability: 0.3 }),
+      { transcript: '今日、博多でやってるイベントある', facts: alone, uncertain: false }).shouldRespond).toBe(true);
   });
 
   it('a router that is nearly sure no reply is needed is believed even when its class says otherwise', async () => {
