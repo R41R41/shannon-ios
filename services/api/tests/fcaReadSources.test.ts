@@ -12,6 +12,7 @@ import { toolSessionMemory, type PreparedToolCall } from '../src/mind/tools/shan
 import type { HostFolderOperations } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { readToolPorts } from '../src/wiring/skillRoutingWiring.js';
 import { fcaReadReceiptSources } from '../src/mind/action/fca/fcaConversationSources.js';
+import { MemoryWithholding } from '../src/mind/memory/memoryVisibilityPorts.js';
 
 const at = '2026-10-09T00:00:00.000Z', cleanup: Array<() => void> = [];
 afterEach(() => cleanup.splice(0).forEach(close => close()));
@@ -134,5 +135,31 @@ describe('FCA private read receipts', () => {
     loads.mockClear(); f.setConnected(true);
     expect(f.visible('owner', 'aether-document://doc-1', later)).toBe(true);
     expect(loads).toHaveBeenCalledTimes(1); // A new job loads them again.
+  });
+  it('asks the skill reader once per skill and revision in one walk, and still compares each receipt\'s time with the corrections', () => {
+    // 2026-10-13: a report's walk asked the skill reader for every memory and receipt (1,280 times for 16 skills, ~0.7 s).
+    const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
+    const asked: string[] = [];
+    let exists = true;
+    const visible = createFcaReadSources({ ownerScope: 'owner', ownerAlone: () => true, state, conversations,
+      skill: (_scope, id, revision) => { asked.push(`${id}/${revision ?? ''}`); return exists && id === 'skill-1' ? { body: 'Bounded skill text' } : null; } });
+    const boundary = '2026-10-09T12:00:00.000Z';
+    state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: 'shannon-skill://skill-1', kind: 'experience', status: 'active',
+      pinned: false, overrideText: 'Corrected skill', contextInvalidatedAt: boundary, updatedAt: boundary, changeReason: 'owner' } });
+    const walk = () => { const snapshot = state.snapshot('owner'); return { state: snapshot, withholding: new MemoryWithholding(snapshot, conversations, 'owner') }; };
+    const times = Array.from({ length: 40 }, (_, index) => new Date(Date.parse(at) + index * 30 * 60_000).toISOString());
+    const one = walk();
+    const answers = times.map(time => visible('owner', 'shannon-skill://skill-1', time, one));
+    expect(answers).toEqual(times.map(time => time > boundary)); // A receipt read before the correction stays hidden.
+    expect(visible('owner', 'shannon-skill://skill-1/revision/rev-1', times.at(-1)!, one)).toBe(true);
+    expect(visible('owner', 'shannon-skill://skill-2', times.at(-1)!, one)).toBe(false);
+    expect(asked).toEqual(['skill-1/', 'skill-1/rev-1', 'skill-2/']);
+    // A skill gone since is seen by the next walk at once, and a check without a walk asks every time, as before.
+    exists = false;
+    expect(visible('owner', 'shannon-skill://skill-1', times.at(-1)!, walk())).toBe(false);
+    exists = true;
+    expect(visible('owner', 'shannon-skill://skill-1', times.at(-1)!)).toBe(true);
+    expect(visible('owner', 'shannon-skill://skill-1', times.at(-1)!)).toBe(true);
+    expect(asked.slice(3)).toEqual(['skill-1/', 'skill-1/', 'skill-1/']);
   });
 });
