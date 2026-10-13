@@ -89,6 +89,8 @@ export interface VoiceTurnFacts {
   /** Someone other than the owner may be speaking or listening (同席者あり). */
   othersPresent: boolean;
   source?: 'speech' | 'typed' | 'camera';
+  /** His previous utterance in the call asked her for something (a question or a request). Local rules only; never sent to a router. */
+  ownerAskedBefore?: true;
 }
 
 /** Why a turn is left unanswered. `model`: the router chose silence and no local rule had an opinion. */

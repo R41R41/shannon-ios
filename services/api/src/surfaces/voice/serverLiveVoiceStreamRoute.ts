@@ -10,6 +10,7 @@ import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
 import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { WAITING_CUE_DELAY_MILLISECONDS } from './voiceWaitingCue.js';
+import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -45,7 +46,10 @@ export function createLiveVoiceStreamRoute(
       if (activeScopes.get(scopeKey) === lease) activeScopes.delete(scopeKey);
     };
     const controller = new AbortController();
+    // The turn's action (respond), once the turn runs under it: told when the caller goes away (`interruptedTurn`).
+    let turnExecution: ActionExecution | undefined;
     const abort = () => {
+      if (turnExecution) turnExecution.interrupted = true;
       controller.abort();
       release();
     };
@@ -59,7 +63,12 @@ export function createLiveVoiceStreamRoute(
     // One content-free line per turn (`turnTiming.ts`): written when the last sentence is out, or when the turn fails.
     let timing: TurnTiming | null = null;
     let outcome = 'error';
-    const firstSegment = () => timing?.mark('firstSegment'); // Only the first mark counts; the waiting phrase is not a reply sentence.
+    const firstSegment = () => {
+      timing?.mark('firstSegment'); // Only the first mark counts; the waiting phrase is not a reply sentence.
+      // The turn's action learns that she has spoken: cut off now, it closes as interrupted after speech (`interruptedTurn`).
+      turnExecution ??= currentActionExecution();
+      if (turnExecution) turnExecution.spoken = true;
+    };
     // The plan's waiting phrase is a fallback for silence (`voiceWaitingCue.ts`): it is said only when none of her own words
     // arrived within WAITING_CUE_DELAY_MILLISECONDS of the plan, and never once they have. At most one per turn.
     let waitingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,6 +91,7 @@ export function createLiveVoiceStreamRoute(
           signal: controller.signal, timing: timing!,
           waitingSaid: () => waitingSaid,
           onPlan: async plan => {
+            turnExecution ??= currentActionExecution();
             if (controller.signal.aborted) return;
             const firstPlan = !receivedPlan;
             receivedPlan = true;

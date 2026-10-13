@@ -20,6 +20,12 @@ export interface UserUtterance {
   id: string; text: string;
   source?: 'speech' | 'typed' | 'camera';
   rawText?: string;
+  /** The client's own recognition confidence, 0…1 (from the STT provider's log-probabilities); absent from clients that have none. */
+  confidence?: number;
+  /** What opened the microphone (`wake`: her wake word), as a closed code; recorded only, content-free. */
+  trigger?: string;
+  /** The client's id of an earlier utterance this one continues, its words sent again with the rest (`voiceContinuation.ts`). */
+  continues?: string;
   /** Native history commits preserve this exact utterance id, including a kept interrupted prefix. */
   historyReceipt?: 'utterance-id';
 }

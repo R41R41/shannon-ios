@@ -18,7 +18,8 @@ export class TaskConversationDeliveryStore {
   get(scope: string, thread: string, utterance: string): TaskConversationDelivery | null {
     const row = this.db.prepare('SELECT * FROM fca_conversation_deliveries WHERE scope_key=? AND thread_id=? AND utterance_id=?').get(scope, thread, utterance);
     return row ? { scopeKey: scope, threadId: thread, utteranceId: utterance, deviceId: String(row.device_id), inputDigest: String(row.input_digest),
-      taskId: String(row.task_id), stepId: String(row.step_id), state: row.state as TaskConversationDelivery['state'], experienceId: row.experience_id as string | null } : null;
+      taskId: String(row.task_id), stepId: String(row.step_id), state: row.state as TaskConversationDelivery['state'], experienceId: row.experience_id as string | null,
+      ...(typeof row.created_at === 'string' ? { createdAt: row.created_at } : {}) } : null;
   }
   begin(scope: string, thread: string, lease: ActionLease, input: TaskConversationDeliveryInput): TaskConversationDeliveryBegin {
     identity(input); bounded(scope, 160); bounded(thread, 160);

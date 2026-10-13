@@ -68,7 +68,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };
   const fca = dependencies.fcaVoice?.(), receipt = utteranceId && request.deviceId ? { scopeKey, threadId,
-    deviceId: request.deviceId, utteranceId, userTranscript: userMessage, companionPresent: 'audience' in companion } : null;
+    deviceId: request.deviceId, utteranceId, userTranscript: userMessage, shannonReply, companionPresent: 'audience' in companion } : null;
   const delivery = receipt ? fca?.history(receipt) : null;
   const stored = delivery?.status === 'duplicate' ? dependencies.conversationStore.experiencesById?.(scopeKey, [delivery.experienceId])[0] : null;
   const experience = stored ?? dependencies.background.recordTurn(turn);
