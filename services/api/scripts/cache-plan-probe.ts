@@ -28,9 +28,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { serverEnvironment } from '../src/infra/config/serverEnvironment.js';
 import { plannedChatBody } from '../src/infra/models/anthropic/anthropicCachePlan.js';
-import { anthropicApiKey, type SonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicApiKey, type ClaudeChatSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { offerRefusal } from '../src/infra/models/anthropic/anthropicRejection.js';
-import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
 import { cachePlanRequest } from '../src/infra/models/anthropic/cachePlanMarkers.js';
 import { cacheHaikuRequest } from '../src/infra/models/anthropic/haikuCache.js';
@@ -45,8 +45,8 @@ import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
 type Body = Anthropic.MessageCreateParamsNonStreaming;
 
 const MAXIMUM_OUTPUT_TOKENS = 256;
-const HAIKU: SonnetSettings = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' };
-const SONNET: SonnetSettings = { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'between_tools' };
+const HAIKU: ClaudeChatSettings = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' };
+const SONNET: ClaudeChatSettings = { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'between_tools' };
 const CAPS: Readonly<Record<string, number>> = { [HAIKU.model]: 0.03, [SONNET.model]: 0.05 };
 const OFFERS = { minimal: [], typical: ['study_list', 'study_read'],
   heavy: ['study_list', 'study_read', 'aether_search', 'aether_read', 'folder_list', 'folder_read'] } as const;
@@ -67,13 +67,13 @@ function offer(chosen: readonly string[]): ShannonModelToolSession {
 
 interface Probe {
   name: string;
-  body(settings: SonnetSettings): Body;
+  body(settings: ClaudeChatSettings): Body;
   /** The same turn without the plan, for the format comparison. */
   request?: ShannonChatModelRequest;
 }
 
-const planned = (request: ShannonChatModelRequest) => (settings: SonnetSettings) => cachePlanRequest(plannedChatBody(settings, request, undefined));
-const without = (request: ShannonChatModelRequest) => (settings: SonnetSettings) => cacheHaikuRequest(sonnetChatBody(settings, request, undefined));
+const planned = (request: ShannonChatModelRequest) => (settings: ClaudeChatSettings) => cachePlanRequest(plannedChatBody(settings, request, undefined));
+const without = (request: ShannonChatModelRequest) => (settings: ClaudeChatSettings) => cacheHaikuRequest(claudeTextBody(settings, request, undefined));
 
 function probes(compare: boolean): Probe[] {
   const tools = (chosen: readonly string[]) => ({ ...base, tools: offer(chosen) });
@@ -106,10 +106,10 @@ function cost(model: string, usage: Anthropic.Message['usage']): number {
     output: counts.output!, searches: 0, cacheWrite5m: counts.creation5m!, cacheWrite1h: counts.creation1h! });
 }
 
-async function send(client: Anthropic, settings: SonnetSettings, probe: Probe, spent: { usd: number }): Promise<void> {
+async function send(client: Anthropic, settings: ClaudeChatSettings, probe: Probe, spent: { usd: number }): Promise<void> {
   const body = { ...probe.body(settings), max_tokens: MAXIMUM_OUTPUT_TOKENS };
   const format = JSON.stringify(body.output_config?.format ?? null);
-  const off = probe.request ? JSON.stringify(sonnetChatBody(settings, probe.request, undefined).output_config?.format ?? null) : null;
+  const off = probe.request ? JSON.stringify(claudeTextBody(settings, probe.request, undefined).output_config?.format ?? null) : null;
   const line = { model: settings.model, request: probe.name, strict: strictRequestUsage(body), schemaChars: format.length,
     ...(off === null ? {} : { sameFormatAsOff: off === format }) };
   if (spent.usd >= CAPS[settings.model]!) {
@@ -127,7 +127,7 @@ async function send(client: Anthropic, settings: SonnetSettings, probe: Probe, s
   }
 }
 
-async function run(settings: SonnetSettings, apiKey: string | null, compare: boolean): Promise<number> {
+async function run(settings: ClaudeChatSettings, apiKey: string | null, compare: boolean): Promise<number> {
   if (!apiKey) {
     console.log(JSON.stringify({ model: settings.model, skipped: 'no_key' }));
     return 0;

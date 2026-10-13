@@ -12,9 +12,9 @@ import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMe
 import { providerToolName } from '../../../mind/tools/shannonTools.js';
 import { chatTurnResult, offeredFeelingAnswered, offersTools, parsedChatTurn, type ParsedChatTurn } from '../chatModelTurn.js';
 import type { LlmUsageStore } from '../llmUsage.js';
-import type { SonnetSettings } from './anthropicConfig.js';
-import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
-import { sonnetToolRounds, type SonnetRoundOptions, type SonnetRoundResult } from './anthropicRounds.js';
+import type { ClaudeChatSettings } from './anthropicConfig.js';
+import { claudeTextBody, claudeVoiceBody } from './anthropicRequest.js';
+import { claudeToolLoop, type ClaudeToolLoopOptions, type ClaudeToolLoopResult } from '../claude/claudeToolLoop.js';
 import { isAppendOnlyAnthropicModel, isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
@@ -77,7 +77,7 @@ export class FirstTokenLatency {
 
 export interface AnthropicChatModelOptions {
   apiKey: string;
-  settings: SonnetSettings;
+  settings: ClaudeChatSettings;
   /** The client's fetch (tests: recorded responses). */
   fetch?: typeof fetch;
   usageStore?: LlmUsageStore;
@@ -145,21 +145,11 @@ export class AnthropicChatModel implements ShannonChatModel {
     const signal = AbortSignal.any([AbortSignal.timeout(milliseconds), ...(input.signal ? [input.signal] : [])]);
     const maximumUses = Number.isSafeInteger(input.maxUses) ? Math.min(3, Math.max(1, input.maxUses!)) : 3;
     const body = nativeWebSearchBody(input.query.slice(0, 2_000), maximumUses, input.filters);
-    const turns: Anthropic.Message[] = [];
     const send = this.sender({ scopeKey: input.scopeKey, route: 'web_search' }, () => null, signal);
     try {
       // At most the existing three pause continuations: <= 4 requests * maxUses searches, never a retry of unknown work.
-      for (let round = 0; round < 4; round++) {
-        signal.throwIfAborted();
-        const message = await send(body, null, round);
-        signal.throwIfAborted();
-        turns.push(message);
-        if (message.stop_reason !== 'pause_turn' || round === 3) return nativeWebSearchResult(turns, maximumUses);
-        // Signed thinking and encrypted web results are retained whole; tools/system/max_uses never change.
-        body.messages = [...body.messages, { role: 'assistant', content: message.content }];
-      }
+      return nativeWebSearchResult(await serverToolRounds(body, send, signal), maximumUses);
     } catch { input.signal?.throwIfAborted(); return webSearchFailure('unknown'); }
-    return webSearchFailure('unknown');
   };
 
   /** Deep research: one page read with the native fetch tool (`anthropicWebRead.ts`), through the same transport and booking. */
@@ -172,7 +162,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     const body = nativeWebReadBody(url, (input.focus ?? '').slice(0, 500));
     const send = this.sender({ scopeKey: input.scopeKey, route: 'web_search' }, () => null, signal);
     try {
-      return nativeWebReadResult(await pausedServerRounds(body, send, signal));
+      return nativeWebReadResult(await serverToolRounds(body, send, signal));
     } catch {
       input.signal?.throwIfAborted();
       return webSearchFailure('unknown');
@@ -210,9 +200,9 @@ export class AnthropicChatModel implements ShannonChatModel {
     } : null, watch?.signal, this.textFirstTokenLatency, watch?.first);
     const usable = (message: Anthropic.Message) => { try { parsedChatTurn({ output_text: textOf(message) }); return true; } catch { return false; } };
     const plan = this.planTurn(request);
-    let result: SonnetRoundResult;
+    let result: ClaudeToolLoopResult;
     try {
-      result = await sonnetToolRounds(body, { session: offersTools(request) ? request.tools : undefined,
+      result = await claudeToolLoop(body, { session: offersTools(request) ? request.tools : undefined,
         send: async (body, time, round) => {
           const message = await send(body, time ?? (searched ? { milliseconds: Math.max(1, searchDeadline.forAnswer()), answer: () => searchDeadline.forAnswer() } : null), round);
           // Provider attempts also include calls skipped before the session by time/call ceilings. This grants no authority.
@@ -270,11 +260,11 @@ export class AnthropicChatModel implements ShannonChatModel {
     const listen = onTextDelta ? (delta: string) => speak(delta).then(() => request.useWebSearch ? '' : delta) : null;
     const target = { scopeKey: request.scopeKey, route: 'voice' as const, ...(request.threadKey === undefined ? {} : { thread: request.threadKey }) };
     const send = this.sender(target, listen, stop, this.firstTokenLatency, watch?.first, bounds);
-    let result: SonnetRoundResult;
+    let result: ClaudeToolLoopResult;
     try {
-      result = await sonnetToolRounds(body, {
+      result = await claudeToolLoop(body, {
         session: tools, send: (body, time, round) => { voiceRequests++; return send(body, time, round); }, isAnswer: () => false, ...(stop ? { signal: stop } : {}), timedOutRound: isHaikuModel(this.model) ? 'answer' : 'fail',
-        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: sonnetVoiceBody(this.options.settings, { ...request, tools: undefined }, ceiling) } : {}),
+        ...(usesOneHourAnthropicCache(this.model) ? { plainBody: claudeVoiceBody(this.options.settings, { ...request, tools: undefined }, ceiling) } : {}),
         // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
         onCalls: async names => { watch?.first(); if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
         ...plan.rounds,
@@ -307,13 +297,13 @@ export class AnthropicChatModel implements ShannonChatModel {
 
   /** The text turn's request: the cache plan's (`anthropicCachePlan.ts`) or the one before it, byte for byte. */
   private textBody(request: ShannonChatModelRequest, plan = this.cachePlan): Anthropic.MessageCreateParamsNonStreaming {
-    const build = plan ? plannedChatBody : sonnetChatBody;
+    const build = plan ? plannedChatBody : claudeTextBody;
     return build(this.options.settings, request, this.options.agentHostHint);
   }
 
   /** The voice turn's request: the voice plan's (`anthropicVoicePlan.ts`) or the one before it, byte for byte. */
   private voiceBody(request: ShannonVoiceModelRequest, ceiling: number, plan: boolean): Anthropic.MessageCreateParamsNonStreaming {
-    return (plan ? plannedVoiceBody : sonnetVoiceBody)(this.options.settings, request, ceiling);
+    return (plan ? plannedVoiceBody : claudeVoiceBody)(this.options.settings, request, ceiling);
   }
 
   /**
@@ -321,7 +311,7 @@ export class AnthropicChatModel implements ShannonChatModel {
    * and a refused first request is asked again in the shape without the plan. A turn with a native web search keeps that shape
    * (`voice:web_exception`). Nothing here adds a request to an ordinary turn.
    */
-  private voicePlanTurn(request: ShannonVoiceModelRequest, ceiling: number): { planned: boolean; rounds: Partial<SonnetRoundOptions> } {
+  private voicePlanTurn(request: ShannonVoiceModelRequest, ceiling: number): { planned: boolean; rounds: Partial<ClaudeToolLoopOptions> } {
     if (!this.voicePlan) return { planned: false, rounds: {} };
     if (!voicePlanCovers(request)) {
       notePlanEvent('voice', 'web_exception');
@@ -343,7 +333,7 @@ export class AnthropicChatModel implements ShannonChatModel {
    * first request falls back to the shape without the plan, and what happened is counted; and, with or without the plan, whether
    * an offered feeling was answered (F4).
    */
-  private planTurn(request: ShannonChatModelRequest): { rounds: Partial<SonnetRoundOptions>; answered(structured: ParsedChatTurn): void } {
+  private planTurn(request: ShannonChatModelRequest): { rounds: Partial<ClaudeToolLoopOptions>; answered(structured: ParsedChatTurn): void } {
     let rejected = false;
     const answered = (structured: ParsedChatTurn) => {
       const feeling = offeredFeelingAnswered(request, structured);
@@ -376,18 +366,19 @@ export class AnthropicChatModel implements ShannonChatModel {
   }
 }
 
-/** A server-tool request and at most three pause continuations (signed content appended whole; tools/system never change). */
-async function pausedServerRounds(body: Anthropic.MessageCreateParamsNonStreaming, send: ClaudeSend, signal: AbortSignal): Promise<Anthropic.Message[]> {
-  const turns: Anthropic.Message[] = [];
-  for (let round = 0; round < 4; round++) {
+/**
+ * A server-tool request (a web search, a page read) through the one tool loop: at most three pause continuations, the signed
+ * content appended whole, tools/system never changed; the caller reads a refusal itself.
+ */
+async function serverToolRounds(body: Anthropic.MessageCreateParamsNonStreaming, send: ClaudeSend,
+  signal: AbortSignal): Promise<readonly Anthropic.Message[]> {
+  const stopped: ClaudeSend = async (request, time, round) => {
     signal.throwIfAborted();
-    const message = await send(body, null, round);
+    const message = await send(request, time, round);
     signal.throwIfAborted();
-    turns.push(message);
-    if (message.stop_reason !== 'pause_turn') break;
-    body.messages = [...body.messages, { role: 'assistant', content: message.content }];
-  }
-  return turns;
+    return message;
+  };
+  return (await claudeToolLoop(body, { session: undefined, send: stopped, isAnswer: () => true, refusal: 'final' })).turns;
 }
 
 /** The text of a response's `text` blocks, in order (thinking blocks and tool calls are not text). */
@@ -396,7 +387,7 @@ export function textOf(message: Anthropic.Message): string {
 }
 
 /** The pages her web searches found in the turn, without duplicates, at most eight. */
-export function webSourcesOf(result: Pick<SonnetRoundResult, 'turns'>): ShannonWebSource[] {
+export function webSourcesOf(result: Pick<ClaudeToolLoopResult, 'turns'>): ShannonWebSource[] {
   const seen = new Set<string>();
   const sources: ShannonWebSource[] = [];
   for (const message of result.turns) {

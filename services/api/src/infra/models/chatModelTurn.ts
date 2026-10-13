@@ -40,15 +40,7 @@ export function chatTurnRequestBody(
 ): Record<string, unknown> {
   return {
     model,
-    instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
-      GENERATED_ARTIFACT_INSTRUCTIONS,
-      INTENT_PLAN_INSTRUCTIONS,
-      agentTaskInstructions(agentHostHint),
-      THREAD_SUMMARY_INSTRUCTIONS,
-      ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
-      ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
-      ...(request.profilePrompt ? [request.profilePrompt] : []),
-    ].join('\n\n'),
+    instructions: chatTurnInstructions(request, agentHostHint),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
       ...turnContextMessage(chatTurnContextBlocks(request)),
@@ -71,91 +63,7 @@ export function chatTurnRequestBody(
         type: 'json_schema',
         name: 'shannon_chat_turn',
         strict: true,
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            reply: { type: 'string', description: 'ユーザーに見せる自然な日本語の返答' },
-            // After `reply`, so the first sentence of a streamed reply never waits for it (chatReplyStreamDecoder.ts).
-            ...(request.offerReplyFeeling ? { feeling: REPLY_FEELING_SCHEMA } : {}),
-            threadSummary: {
-              type: ['string', 'null'],
-              description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
-            },
-            // Always in the schema, so the schema (part of the cached prefix) is the same on the turn that asks for a title
-            // and on every other; only that turn's `[トークタイトル]` block asks for one, and only then is it read.
-            threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル。[トークタイトル]で求められた時だけ書き、それ以外はnull' },
-            taskDecision: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                disposition: { type: 'string', enum: ['none', 'clarify', 'propose'] },
-                reason: { type: 'string', description: '判定理由。内部監査用に短く具体的に書く' },
-              },
-              required: ['disposition', 'reason'],
-            },
-            taskProposal: {
-              anyOf: [
-                { type: 'null' },
-                {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: {
-                    title: { type: 'string' },
-                    goal: { type: 'string' },
-                    hostHint: { type: ['string', 'null'] },
-                    projectHint: { type: ['string', 'null'] },
-                    risk: { type: ['string', 'null'] },
-                  },
-                  required: ['title', 'goal', 'hostHint', 'projectHint', 'risk'],
-                },
-              ],
-            },
-            intentPlan: {
-              anyOf: [
-                { type: 'null' },
-                {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: {
-                    nextStep: { type: 'string', description: '目的に対する直近の具体的な一手' },
-                    steps: {
-                      type: 'array', minItems: 1, maxItems: 5,
-                      items: { type: 'string', description: '短く検証可能な計画段階' },
-                    },
-                  },
-                  required: ['nextStep', 'steps'],
-                },
-              ],
-            },
-            artifacts: {
-              anyOf: [
-                { type: 'null' },
-                {
-                  type: 'array',
-                  maxItems: 2,
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                      name: { type: 'string', description: '拡張子を含む安全で短いファイル名' },
-                      mimeType: {
-                        type: 'string',
-                        enum: ['text/plain', 'text/markdown', 'application/json', 'text/csv', 'text/x-source-code'],
-                      },
-                      content: { type: 'string', description: 'ユーザーが保存できるUTF-8テキスト生成物' },
-                      summary: { type: ['string', 'null'], description: '生成物の内容を表す短い説明' },
-                    },
-                    required: ['name', 'mimeType', 'content', 'summary'],
-                  },
-                },
-              ],
-            },
-            ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
-            ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
-          },
-          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle'],
-        },
+        schema: chatTurnSchema(request),
       },
     },
     max_output_tokens: 2_200,
@@ -172,6 +80,111 @@ export function chatTurnRequestBody(
     store: false,
     prompt_cache_key: stableScopeIdentifier(request.scopeKey),
     safety_identifier: stableScopeIdentifier(request.scopeKey),
+  };
+}
+
+/**
+ * Her prompt layers for a text turn, in this order: her identity, the fixed blocks of the text surface, the blocks fixed for a
+ * Talk (her reply's feeling, her tools) and what she knows of the owner. Shared by the OpenAI adapter and the Claude request.
+ */
+export function chatTurnInstructions(request: ShannonChatModelRequest, agentHostHint: string | undefined): string {
+  return [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
+    GENERATED_ARTIFACT_INSTRUCTIONS,
+    INTENT_PLAN_INSTRUCTIONS,
+    agentTaskInstructions(agentHostHint),
+    THREAD_SUMMARY_INSTRUCTIONS,
+    ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
+    ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+    ...(request.profilePrompt ? [request.profilePrompt] : []),
+  ].join('\n\n');
+}
+
+/** The structured reply of a text turn: the base fields and the ones this turn offers. Key order is part of the request. */
+export function chatTurnSchema(request: ShannonChatModelRequest): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      reply: { type: 'string', description: 'ユーザーに見せる自然な日本語の返答' },
+      // After `reply`, so the first sentence of a streamed reply never waits for it (chatReplyStreamDecoder.ts).
+      ...(request.offerReplyFeeling ? { feeling: REPLY_FEELING_SCHEMA } : {}),
+      threadSummary: {
+        type: ['string', 'null'],
+        description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
+      },
+      // Always in the schema, so the schema (part of the cached prefix) is the same on the turn that asks for a title
+      // and on every other; only that turn's `[トークタイトル]` block asks for one, and only then is it read.
+      threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル。[トークタイトル]で求められた時だけ書き、それ以外はnull' },
+      taskDecision: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          disposition: { type: 'string', enum: ['none', 'clarify', 'propose'] },
+          reason: { type: 'string', description: '判定理由。内部監査用に短く具体的に書く' },
+        },
+        required: ['disposition', 'reason'],
+      },
+      taskProposal: {
+        anyOf: [
+          { type: 'null' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              goal: { type: 'string' },
+              hostHint: { type: ['string', 'null'] },
+              projectHint: { type: ['string', 'null'] },
+              risk: { type: ['string', 'null'] },
+            },
+            required: ['title', 'goal', 'hostHint', 'projectHint', 'risk'],
+          },
+        ],
+      },
+      intentPlan: {
+        anyOf: [
+          { type: 'null' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              nextStep: { type: 'string', description: '目的に対する直近の具体的な一手' },
+              steps: {
+                type: 'array', minItems: 1, maxItems: 5,
+                items: { type: 'string', description: '短く検証可能な計画段階' },
+              },
+            },
+            required: ['nextStep', 'steps'],
+          },
+        ],
+      },
+      artifacts: {
+        anyOf: [
+          { type: 'null' },
+          {
+            type: 'array',
+            maxItems: 2,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string', description: '拡張子を含む安全で短いファイル名' },
+                mimeType: {
+                  type: 'string',
+                  enum: ['text/plain', 'text/markdown', 'application/json', 'text/csv', 'text/x-source-code'],
+                },
+                content: { type: 'string', description: 'ユーザーが保存できるUTF-8テキスト生成物' },
+                summary: { type: ['string', 'null'], description: '生成物の内容を表す短い説明' },
+              },
+              required: ['name', 'mimeType', 'content', 'summary'],
+            },
+          },
+        ],
+      },
+      ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
+      ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
+    },
+    required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle'],
   };
 }
 

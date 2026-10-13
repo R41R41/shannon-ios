@@ -7,7 +7,7 @@ import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/tur
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { requestStrictTools, strictRequestFits, strictRequestUsage, TOOL_CALL_JSON_CHARACTERS } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
 import { bridgedAnthropicSession } from '../src/infra/models/anthropic/anthropicToolBridge.js';
-import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
 
 const request = { scopeKey: 'owner', systemPrompt: 'Synthetic owner context', history: [], message: 'マイクラを起動して' };
@@ -146,7 +146,7 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
   });
   it('counts final output unions together with strict tools and rejects capacity before any provider call', () => {
     const t = session(SHANNON_TOOLS, []);
-    const body = sonnetChatBody(settings, { ...request, tools: t.tools }, undefined);
+    const body = claudeTextBody(settings, { ...request, tools: t.tools }, undefined);
     expect(strictRequestUsage(body).unions).toBe(9);
     const extra: Anthropic.Tool = { name: 'fixture', strict: true, input_schema: { type: 'object', properties: Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`field${i}`, { anyOf: [{ type: 'string' }, { type: 'null' }] }])), required: [], additionalProperties: false } };
     expect(strictRequestFits(body, [extra])).toBe(false);

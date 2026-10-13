@@ -1,4 +1,4 @@
-import { READ_RECOVERY_NOTE } from '../src/infra/models/anthropic/anthropicRounds.js';
+import { READ_RECOVERY_NOTE } from '../src/infra/models/claude/claudeToolLoop.js';
 import { describe, expect, it } from 'vitest';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';

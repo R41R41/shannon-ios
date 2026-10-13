@@ -5,6 +5,8 @@ import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
 import { estimatedAnthropicCostUsd, knownCount, knownInput, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { sendClaudeOnce } from '../claude/claudeOnce.js';
+import { claudeToolLoop } from '../claude/claudeToolLoop.js';
+import type { ClaudeSend } from '../claude/claudeTransport.js';
 import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
 import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { observeSync } from '../../observer/observerContext.js';
@@ -123,9 +125,10 @@ export class AnthropicFcaModel implements FcaModel {
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     try {
-      message = await sendClaudeOnce({
-        body, receipt: 'fca', message: value => value,
-        span: { handoff: { model: this.model }, input: observedFcaRequest(body), project: observedFcaResponse, model: this.model },
+      // The one tool loop, one request: the runner executes the calls and returns their results in the next decision.
+      const send: ClaudeSend = request => sendClaudeOnce({
+        body: request, receipt: 'fca', message: value => value,
+        span: { handoff: { model: this.model }, input: observedFcaRequest(request), project: observedFcaResponse, model: this.model },
         dispatching: () => {
           // The runner just rechecked audience, sources and its awaited lease permit. Keep dispatch synchronous.
           combined.throwIfAborted();
@@ -134,9 +137,10 @@ export class AnthropicFcaModel implements FcaModel {
           execution.modelOutcome = 'unknown';
           delete execution.modelUsage;
         },
-        dispatch: () => this.client.messages.create(body, { signal: combined, maxRetries: 0,
+        dispatch: () => this.client.messages.create(request, { signal: combined, maxRetries: 0,
           ...(input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) }),
       });
+      message = (await claudeToolLoop(body, { session: undefined, send, isAnswer: () => true, refusal: 'final', maxRounds: 1 })).final!;
     } catch (error) {
       // No hidden resend, including after an abort. Never expose provider error text containing request material.
       if (!dispatched) throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_NOT_DISPATCHED');

@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { BetaRequestToolAdditionBlock, BetaRequestToolRemovalBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import type { FcaModelInput } from '../../../mind/action/fca/fcaPorts.js';
 import { providerToolName, toolOpenDefinition, TOOL_OPEN_NAME } from '../../../mind/tools/toolRegistryPorts.js';
-import { sonnetTool } from './anthropicRequest.js';
+import { claudeTool } from './anthropicRequest.js';
 
 export const FCA_MENU_INSTRUCTIONS = `The current user context contains the full allowed tool catalog by provider name and description.
 Only selected tools currently have loaded schemas. If another catalog tool is needed, call tool_open with its provider name first; its definition is available from the next decision.
@@ -10,7 +10,7 @@ Opening a definition executes nothing and grants no new authority. An unavailabl
 
 /** Stable opening schema: the runner validates the name against the current catalog, independent of cached declarations. */
 const open = toolOpenDefinition([]);
-const openTool = sonnetTool({ ...open, input: { ...open.input,
+const openTool = claudeTool({ ...open, input: { ...open.input,
   properties: { name: { type: 'string', description: 'The provider name of a tool in the current allowed catalog.' } } } });
 
 type Change = BetaRequestToolAdditionBlock | BetaRequestToolRemovalBlock;
@@ -33,7 +33,7 @@ export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic
     const tool: Anthropic.Tool = definition.nativeInputSchema ? {
       name: providerToolName(definition.name), description: definition.description, strict: false,
       input_schema: definition.nativeInputSchema as Anthropic.Tool.InputSchema,
-    } : { ...sonnetTool(definition), strict: false };
+    } : { ...claudeTool(definition), strict: false };
     if (names.get(tool.name) !== definition.name || selected.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     selected.set(tool.name, tool);
   }

@@ -1,5 +1,5 @@
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
@@ -39,15 +39,33 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
   readonly model: string;
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: OpenAIBodyReactionSpeakerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async decide(request: BodyReactionSpeakRequest): Promise<BodyReactionDecision> {
+    const decision = parsedBodyReaction(this.claude ? await this.claudeDecision(this.claude, request) : await this.openAIDecision(request));
+    if (!decision) throw new Error('BODY_REACTION_EMPTY');
+    return decision;
+  }
+
+  private async claudeDecision(claude: ClaudeBackground, request: BodyReactionSpeakRequest): Promise<unknown> {
+    const answer = await completeStructured('touch', request.prompt, [{ role: 'user', content: TOUCHED }], schemaOf(request), {
+      claude, scopeKey: request.scopeKey, maximumOutputTokens: 160, effort: 'none', signal: request.signal,
+      unsent: () => new Error('BODY_REACTION_UPSTREAM_FAILED'),
+    });
+    if (!answer.ok) throw new Error(`BODY_REACTION_UPSTREAM_${answer.status}`);
+    return answer.value;
+  }
+
+  private async openAIDecision(request: BodyReactionSpeakRequest): Promise<unknown> {
     let response: Response;
     try {
       response = await this.fetcher(this.endpoint, {
@@ -56,9 +74,9 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
         body: JSON.stringify({
           model: this.model,
           instructions: request.prompt,
-          input: [{ role: 'user', content: 'いま、体に触れられました。' }],
+          input: [{ role: 'user', content: TOUCHED }],
           reasoning: { effort: 'none' },
-          text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_body_reaction', strict: true, schema: request.stance ? BODY_REACTION_SCHEMA_WITH_STANCE : BODY_REACTION_SCHEMA } },
+          text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_body_reaction', strict: true, schema: schemaOf(request) } },
           max_output_tokens: 160,
           store: false,
           prompt_cache_key: stableScopeIdentifier(request.scopeKey),
@@ -77,11 +95,14 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
-    validateResponseModelUsage(this.model, json);
-    const decision = parsedBodyReaction(parseJson(extractOutputText(json)));
-    if (!decision) throw new Error('BODY_REACTION_EMPTY');
-    return decision;
+    return parseJson(extractOutputText(json));
   }
+}
+
+const TOUCHED = 'いま、体に触れられました。';
+
+function schemaOf(request: BodyReactionSpeakRequest) {
+  return request.stance ? BODY_REACTION_SCHEMA_WITH_STANCE : BODY_REACTION_SCHEMA;
 }
 
 /** Uses the conversation model and its key. Without a key she feels and remembers a touch and stays quiet. */

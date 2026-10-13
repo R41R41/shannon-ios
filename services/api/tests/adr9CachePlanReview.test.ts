@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { fieldsLines } from '../src/infra/models/anthropic/anthropicCachePlan.js';
-import { sonnetChatBody } from '../src/infra/models/anthropic/anthropicRequest.js';
+import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { cacheReceiptsView, resetCacheReceipts } from '../src/infra/models/anthropic/cacheReceipts.js';
 import { bookConversationUsage, unknownCostUpperBound } from '../src/infra/models/claude/claudeUsage.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
@@ -73,7 +73,7 @@ describe('F1: a refused plan request falls back to the shape without the plan, o
     expect(result.reply).toBe('書斎にはメモが1つあります。');
     const second = h.recorder.requests[1]!.body as Body;
     expect(second.tools).toBeUndefined();
-    expect(second.output_config).toEqual(sonnetChatBody(HAIKU, { ...turn, tools: undefined }, undefined).output_config);
+    expect(second.output_config).toEqual(claudeTextBody(HAIKU, { ...turn, tools: undefined }, undefined).output_config);
     expect(events()).toMatchObject({ 'text:plain_recovery': 1, 'text:recovered': 1 });
   });
 });
@@ -93,7 +93,7 @@ describe('a grammar refusal of a plan turn with tools (M4 grammar fix)', () => {
     expect((await planChat(twice.run, HAIKU).generate(turn)).reply).toBe('書斎にはメモが1つあります。');
     const last = twice.recorder.requests[2]!.body as Body;
     expect(last.tools).toBeUndefined();
-    expect(last.output_config).toEqual(sonnetChatBody(HAIKU, { ...turn, tools: undefined }, undefined).output_config);
+    expect(last.output_config).toEqual(claudeTextBody(HAIKU, { ...turn, tools: undefined }, undefined).output_config);
   });
 });
 

@@ -126,9 +126,6 @@
    "cachedInputTokens": 0,
    "outputTokens": 40,
    "totalTokens": 760,
-   "cacheCreationInputTokens": 600,
-   "cacheCreationInputTokens5m": 0,
-   "cacheCreationInputTokens1h": 600,
    "estimatedCostUsd": 0.000152,
    "occurredAt": "2026-10-12T03:00:00.000Z"
   }

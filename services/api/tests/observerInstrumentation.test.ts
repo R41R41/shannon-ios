@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
-import { responseModelFetcher } from '../src/infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured } from '../src/infra/models/claude/claudeStructured.js';
 import { JevChoiceClient, JevChooser } from '../src/infra/models/jev/jevChoice.js';
 import { JevTurnChooser } from '../src/mind/selectors/turnChoices.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
@@ -85,14 +85,13 @@ describe('real provider and tool observation', () => {
     } finally { restore(); }
   });
 
-  it('does not serialize background extraction text through the native Responses adapter', async () => {
+  it('does not serialize background extraction text through the background route', async () => {
     const transport = scriptedAnthropic([paid(message([{ type: 'thinking', thinking: 'PRIVATE_THINKING', signature: 'PRIVATE_SIGNATURE' },
       { type: 'text', text: '{"memory":"PRIVATE_EXTRACTED_MEMORY"}' }], 'end_turn'))]);
-    const fetcher = responseModelFetcher({ model: settings.model, apiKey: 'PRIVATE_API_KEY', fetcher: transport.fetcher });
-    const run = await observed(async () => (await fetcher('https://unused.example', { method: 'POST', body: JSON.stringify({
-      model: settings.model, input: 'PRIVATE_MEMORY_INPUT', instructions: 'PRIVATE_SYSTEM', max_output_tokens: 100,
-    }) })).json());
-    expect(run.value).toMatchObject({ output_text: '{"memory":"PRIVATE_EXTRACTED_MEMORY"}' });
+    const claude = claudeBackground(settings.model, { apiKey: 'PRIVATE_API_KEY', fetcher: transport.fetcher })!;
+    const run = await observed(() => completeStructured('impressions', 'PRIVATE_SYSTEM', 'PRIVATE_MEMORY_INPUT', null,
+      { claude, scopeKey: 'owner', maximumOutputTokens: 100, effort: 'none' }));
+    expect(run.value).toMatchObject({ ok: true, value: '{"memory":"PRIVATE_EXTRACTED_MEMORY"}' });
     expect(transport.bodies).toHaveLength(1);
     expect(completed(run.events, 'native')).toHaveLength(1);
     expect(completed(run.events, 'llm')).toHaveLength(1);

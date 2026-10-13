@@ -1,5 +1,5 @@
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
-import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
+import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 import { EVIDENCE_DECAY_V1, IDENTITY_TIERS_V1, identify, identityChoice, identityNameKey, joinedEpisodes, resolvedFact, type FactJudgement, type IdentityMenuItem, type IdentityOutcome, type IdentityPerson, type TemporalFact } from '@shannon/mind';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
@@ -92,18 +92,37 @@ const JUDGE_SCHEMA = {
 export class OpenAIPersonFactJudge implements PersonFactJudge {
   private readonly model: string;
   private readonly fetcher: typeof fetch;
+  /** The background route of a Claude model (`claudeStructured.ts`); null keeps the OpenAI Responses request. */
+  private readonly claude: ClaudeBackground | null;
 
   constructor(private readonly options: {
     apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore;
     usage?: { backgroundLlmCostUsd(monthKey: string): number }; backgroundBudgetUsd?: number;
   }) {
     this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
-    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+    this.claude = claudeBackground(this.model, options);
+    this.fetcher = options.fetcher ?? fetch;
   }
 
   async judge(scopeKey: string, input: PersonFactJudgeInput): Promise<PersonFactJudgeAnswer | null> {
     // Inside the shared background budget: spent, the rule decides.
     if (this.options.usage && this.options.usage.backgroundLlmCostUsd(utcMonthKey(new Date())) >= (this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd())) return null;
+    const answer = this.claude ? await this.claudeJudgement(this.claude, scopeKey, input) : await this.openAIJudgement(scopeKey, input);
+    const output = answer as { judgements?: unknown } | null;
+    if (!output || !Array.isArray(output.judgements)) return null;
+    const strings = (value: unknown) => (Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []);
+    return { judgements: output.judgements.flatMap(item => (item && typeof (item as { key?: unknown }).key === 'string'
+      ? [{ key: (item as { key: string }).key, duplicates: strings((item as { duplicates?: unknown }).duplicates), contradicts: strings((item as { contradicts?: unknown }).contradicts) }] : [])) };
+  }
+
+  private async claudeJudgement(claude: ClaudeBackground, scopeKey: string, input: PersonFactJudgeInput): Promise<unknown> {
+    const answer = await completeStructured('person_facts', JUDGE_INSTRUCTIONS, JSON.stringify(input), JUDGE_SCHEMA,
+      { claude, scopeKey, maximumOutputTokens: 300, effort: 'none', signal: AbortSignal.timeout(30_000) });
+    if (!answer.ok) throw new Error(`OPENAI_PERSON_FACTS_${answer.status}`);
+    return answer.value;
+  }
+
+  private async openAIJudgement(scopeKey: string, input: PersonFactJudgeInput): Promise<unknown> {
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -120,12 +139,7 @@ export class OpenAIPersonFactJudge implements PersonFactJudge {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
-    validateResponseModelUsage(this.model, envelope);
-    const output = parseJson(extractOutputText(envelope)) as { judgements?: unknown } | null;
-    if (!output || !Array.isArray(output.judgements)) return null;
-    const strings = (value: unknown) => (Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []);
-    return { judgements: output.judgements.flatMap(item => (item && typeof (item as { key?: unknown }).key === 'string'
-      ? [{ key: (item as { key: string }).key, duplicates: strings((item as { duplicates?: unknown }).duplicates), contradicts: strings((item as { contradicts?: unknown }).contradicts) }] : [])) };
+    return parseJson(extractOutputText(envelope));
   }
 }
 
