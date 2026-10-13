@@ -51,6 +51,9 @@ public struct ShannonConversationView: View {
     /// The measured height of the dialogue display's last reply, so its bubble is as tall as the words.
     @State var dialogueReplyContentHeight: CGFloat = 0
     @State var dialogueActivity: ShannonDialogueActivity = .idle
+    /// The owner scrolled back to read the conversation in the Live2D dialogue display: she waits in the corner
+    /// (`ShannonDialogueStage.read`).
+    @State var dialogueReads = false
     @State var selectedAgentTaskID: UUID?
     @State var composerAttachments: [ShannonChatAttachmentDTO] = []
     @State var composerUsesWebSearch = false

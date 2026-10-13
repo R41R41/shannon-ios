@@ -65,6 +65,9 @@ public struct ShannonFigureSettingsSection: View {
             .accessibilityHint(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) ?? "")
             .accessibilityIdentifier("settings-body-kind")
 
+            // The iPhone's Talk frames her itself (上半身 while she talks, her face in the corner while he reads;
+            // option C, owner pick 2026-10-13): 映し方 has nothing to change there.
+#if !os(iOS)
             Picker(selection: $layoutModeRawValue) {
                 Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                 Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
@@ -74,6 +77,7 @@ public struct ShannonFigureSettingsSection: View {
             .disabled(!offersLayoutMode)
             .accessibilityHint(!usesLive2D ? ShannonBodyCopy.layoutOnlyLive2D : offersLayoutMode ? "" : ShannonBodyCopy.layoutOnlyHuman)
             .accessibilityIdentifier("settings-body-layout")
+#endif
 
             Button {
                 bodyModel?.figureAdjustment = ShannonLive2DLayout()

@@ -9,7 +9,10 @@ import AppKit
 extension ShannonConversationView {
     func composer(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-            ShannonNowCompact(model: now)
+            // In the Live2D dialogue display the work in progress is the one line over the composer instead.
+            if !usesGirlDialogue {
+                ShannonNowCompact(model: now)
+            }
             composerContext(palette)
 
             ShannonAdaptiveComposerLayout(

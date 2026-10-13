@@ -32,7 +32,7 @@ public struct ShannonActionThreadsCapsule: View {
     }
 }
 
-private struct ShannonActionThreadsList: View {
+struct ShannonActionThreadsList: View {
     let model: ShannonActionThreadsModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme

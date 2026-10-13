@@ -93,6 +93,8 @@ extension ShannonConversationView {
                 .pickerStyle(.menu)
             }
             // Her eyes alone are not framed: the page sizes and places them only.
+            // The iPhone's Talk frames her itself (上半身, option C of 2026-10-13): 映し方 is the Mac's.
+#if !os(iOS)
             if ShannonLive2DBody.displayed(rawValue: ShannonPersonaPreset.body(legacy: figureBodyRawValue, preset: presetRawValue).rawValue).hasCharacterRig {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
                     Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
@@ -100,6 +102,7 @@ extension ShannonConversationView {
                 }
                 .pickerStyle(.menu)
             }
+#endif
             Button {
                 bodyModel.figureAdjustment = ShannonLive2DLayout()
             } label: {
@@ -144,7 +147,10 @@ extension ShannonConversationView {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                ShannonActionThreadsCapsule(model: actionThreads)
+                // In the Live2D dialogue display 裏の作業 is part of the one line over the composer (option C).
+                if !usesGirlDialogue {
+                    ShannonActionThreadsCapsule(model: actionThreads)
+                }
                 if let task = model.latestAgentTaskNotice {
                     ShannonAgentTaskCapsule(
                         task: task,
@@ -200,8 +206,32 @@ extension ShannonConversationView {
                     .transition(.opacity)
                 }
 #endif
+#if os(iOS)
+                if usesGirlDialogue {
+                    // Option C (owner pick 2026-10-13): one line of work in progress over the composer, and in a
+                    // call the call's controls in place of the composer.
+                    let stage = dialogueStageNow
+                    if stage.showsActivityLine {
+                        ShannonDialogueActivityLine(now: now, threads: actionThreads)
+                            .transition(.opacity)
+                    }
+                    if stage.showsComposer {
+                        composer(palette)
+                            .transition(.opacity)
+                    } else {
+                        dialogueCallControls(palette)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                } else {
+                    composer(palette)
+                }
+#else
                 composer(palette)
+#endif
             }
+#if os(iOS)
+            .animation(dialogueStageAnimation, value: usesGirlDialogue ? dialogueStageNow : .talk)
+#endif
             // No panel behind the composer: the conversation stays visible under it, and the composer floats.
         }
         .modifier(ShannonFloatingTalkChrome())
@@ -209,6 +239,16 @@ extension ShannonConversationView {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.id)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.attention?.key)
+    }
+
+    /// Talk's dialogue display in the Live2D form, where she is large, reads back from the corner and fills the
+    /// screen in a call (`ShannonDialogueStage`, iPhone).
+    var usesGirlDialogue: Bool {
+#if os(iOS)
+        selectedPage == .talk && displayMode == .dialogue && dialogueShowsLive2D
+#else
+        false
+#endif
     }
 
     /// Empty scroll-mode conversation with nothing typed yet.

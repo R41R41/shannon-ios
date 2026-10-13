@@ -316,6 +316,10 @@ extension ShannonConversationView {
     func performVoicePrimaryAction() {
         composerIsFocused = false
         voiceModel.cancel()
+#if os(iOS)
+        // The Live2D dialogue display holds the call itself, with her filling the screen (option C).
+        if startCallInDialogue() { return }
+#endif
         showsGeminiLiveVoice = true
     }
 
