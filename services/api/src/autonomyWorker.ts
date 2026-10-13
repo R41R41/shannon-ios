@@ -55,6 +55,8 @@ import { configuredMindInbox } from './wiring/mindInboxWiring.js';
 import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 import { configuredProactiveMoments } from './wiring/proactiveMomentsWiring.js';
+import { unannouncedShowing } from './mind/action/ownTime/autonomyShowing.js';
+import { switchOn } from '@shannon/switches';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -95,7 +97,9 @@ const proactiveGate = configuredProactiveGate(process.env, {
 });
 const reachOuts = new SQLiteReachOutSpeaker(databasePath, othersAroundBody, proactiveGate?.gate ?? null);
 // Telling him a piece is ready passes the same gate (point share, its subject the piece; review M1).
-const showing = new SQLiteStudyShowing(databasePath, undefined, proactiveGate?.gate ?? null);
+const showingStore = new SQLiteStudyShowing(databasePath, undefined, proactiveGate?.gate ?? null);
+// Owner decision 2026-10-14: telling him a piece writes no fixed line unless SHANNON_STUDY_SHOWING_LINE=on (`unannouncedShowing`).
+const showing = switchOn(process.env, 'SHANNON_STUDY_SHOWING_LINE') ? showingStore : unannouncedShowing(showingStore);
 // After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
@@ -188,6 +192,7 @@ const moments = configuredProactiveMoments(process.env, {
     others: othersAroundBody,
   },
   ownerActiveSince: (scopeKey, since) => showing.ownerActiveSince(scopeKey, since),
+  ownerLastActiveAt: scopeKey => showingStore.ownerLastActiveAt(scopeKey),
   awaiting: scopeKey => {
     const piece = service.study.overview(scopeKey).pieces.find(card => card.awaitingReaction && card.version !== null);
     return piece ? { pieceId: piece.id, version: piece.version! } : null;
@@ -289,7 +294,7 @@ try {
   lookHand.close();
   lookStore.close();
   bodyStore.close();
-  showing.close();
+  showingStore.close();
   announcer.close();
   observation?.close();
   store.close();
@@ -311,6 +316,11 @@ function momentBlocked(scopeKey: string, at: string): string | null {
     if (last && Date.parse(at) - Date.parse(last) < loopConfig.reachOutSpacingMilliseconds) return 'spacing';
     const hold = Math.max(loopConfig.ownerActiveMilliseconds, 10 * 60_000);
     if (showing.ownerActiveSince(scopeKey, new Date(Date.parse(at) - hold).toISOString())) return 'owner_active';
+    // Infrastructure privacy guard, not a persona rule: nothing of a moment while anyone else may see or hear her (a stream included).
+    if (othersAroundBody(scopeKey, at)) return 'others_present';
+    // A voice call with her body is under way (its newest call event of the last three hours started one).
+    const callSince = new Date(Date.parse(at) - 3 * 60 * 60_000).toISOString();
+    if (bodyStore.latestOfTypes(scopeKey, ['callStarted', 'callEnded'], callSince, at)?.type === 'callStarted') return 'in_call';
     return store.loop.openCycle(scopeKey) ? 'cycle_open' : null;
   } catch { return 'error'; }
 }

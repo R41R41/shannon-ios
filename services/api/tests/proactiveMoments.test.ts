@@ -12,6 +12,8 @@ import {
   type ProactiveMomentFacts, type ProactiveMomentState,
 } from '../src/mind/attention/proactiveMoments.js';
 import { SQLiteProactiveMoments } from '../src/mind/attention/store/proactiveMomentStore.js';
+import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { inboxPerception } from '../src/mind/perception/inboxPerception.js';
 import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
@@ -21,7 +23,9 @@ import { configuredWithheldActions } from '../src/wiring/withheldWiring.js';
 import { momentFacts } from '../src/wiring/proactiveMomentsWiring.js';
 import { apiSourceFile } from './support/sources.js';
 import { REACH_OUT_TOOL } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
-import { FakeModel, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { unannouncedShowing } from '../src/mind/action/ownTime/autonomyShowing.js';
+import { authoredWorldOpening } from '../src/integrations/world/worldInterestRelevance.js';
 
 /**
  * Moments instead of scripted lines (owner decision 2026-10-14): the body's fixed lines are gone, the situations behind them are
@@ -38,7 +42,7 @@ let databases = 0;
 function facts(overrides: Partial<ProactiveMomentFacts> = {}): ProactiveMomentFacts {
   return {
     at: START, localHour: 12, localDate: '2026-10-02', eveningDate: '2026-10-02', windowVisible: true, owner: 'unknown', returned: null,
-    quietLong: false, presenceSteady: false, awaiting: null, ...overrides,
+    quietLong: false, presenceSteady: false, lastOwnerActiveAt: null, awaiting: null, ...overrides,
   };
 }
 
@@ -59,9 +63,13 @@ describe('perceiving moments', () => {
     expect(perceiveMoments(facts({ at: later, ...returnedAt(START) }))).toEqual([]);
   });
 
-  it('perceives a long quiet only when he was there the whole time, once per two hours of a day', () => {
+  it('perceives a long quiet only when he was there the whole time, once per quiet (keyed on his last word)', () => {
     expect(perceiveMoments(facts({ quietLong: true, presenceSteady: false }))).toEqual([]);
-    expect(perceiveMoments(facts({ quietLong: true, presenceSteady: true, localHour: 13 }))).toEqual([{ kind: 'long_quiet', key: 'quiet:2026-10-02:6', minutes: 120 }]);
+    const last = '2026-10-02T00:30:00.000Z';
+    const at13 = perceiveMoments(facts({ quietLong: true, presenceSteady: true, localHour: 13, lastOwnerActiveAt: last }));
+    const at17 = perceiveMoments(facts({ quietLong: true, presenceSteady: true, localHour: 17, lastOwnerActiveAt: last }));
+    expect(at13).toEqual([{ kind: 'long_quiet', key: `quiet:${last}`, minutes: 120 }]);
+    expect(at17.map(moment => moment.key)).toEqual(at13.map(moment => moment.key));
   });
 
   it('perceives the morning and the late night once each, a night keeping the date it began', () => {
@@ -85,10 +93,13 @@ describe('perceiving moments', () => {
         latestReturn: () => ({ id: 'r9', occurredAt: START, minutesAway: 25 }),
         latestOfTypes: (_scope, _types, since) => (since <= START ? { type: 'ownerReturned', occurredAt: START } : null),
       },
-      ownerActiveSince: () => false,
+      ownerActiveSince: () => false, ownerLastActiveAt: () => '2026-10-01T20:00:00.000Z',
       awaiting: () => null,
     }, scope, new Date(Date.parse(START) + 2 * MINUTE).toISOString());
-    expect(read).toMatchObject({ localHour: 10, localDate: '2026-10-02', eveningDate: '2026-10-02', owner: 'returned', quietLong: true, presenceSteady: false });
+    expect(read).toMatchObject({
+      localHour: 10, localDate: '2026-10-02', eveningDate: '2026-10-02', owner: 'returned', quietLong: true, presenceSteady: false,
+      lastOwnerActiveAt: '2026-10-01T20:00:00.000Z',
+    });
     expect(perceiveMoments(read).map(moment => moment.kind)).toEqual(['owner_returned']);
   });
 });
@@ -159,6 +170,52 @@ describe('perception events', () => {
   });
 });
 
+describe('with anyone else there, a stream included (an infrastructure privacy guard, not a persona rule)', () => {
+  it('perceives nothing and hands the mind nothing while others may see or hear her', async () => {
+    const asked: ProactiveMomentState[] = [];
+    const desk = deskWorld({ facts: () => facts({ ...returnedAt(START), localHour: 7 }), others: () => true, ask: async state => { asked.push(state); return 1; } });
+    await desk.moments.consider(scope, START);
+    expect(desk.emitted).toEqual([]);
+    expect(desk.status('returned:r1')).toBeUndefined();
+    expect(asked).toEqual([]);
+    desk.close();
+  });
+
+  it('waits on a moment when someone comes, and never hands her loop a moment while they are there', async () => {
+    let others = false;
+    const desk = deskWorld({ facts: () => facts(returnedAt(START)), others: () => others, ask: async () => 0.9 });
+    desk.moments.perceive(scope, START);
+    others = true;
+    await desk.moments.decideNewest(scope, START);
+    expect(desk.status('returned:r1')).toBe('perceived');
+    others = false;
+    await desk.moments.decideNewest(scope, START);
+    expect(desk.status('returned:r1')).toBe('wanted');
+    others = true;
+    expect(desk.moments.take(scope, START)).toBeNull();
+    others = false;
+    const taken = desk.moments.take(scope, START)!;
+    others = true;
+    expect(desk.moments.get(scope, taken.key, START)).toBeNull();
+    desk.close();
+  });
+
+  it('reads a live stream as others: the body reports `others` on its presence reads while its stream output is on', async () => {
+    const path = join(directory, `stream-${databases += 1}.sqlite`);
+    const body = new SQLiteBodyStore(path);
+    body.noteAudience(scope, 'windows-body', 'others', START);
+    const streaming = () => body.othersPresent(scope, START, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
+    const desk = deskWorld({ facts: () => facts({ ...returnedAt(START), localHour: 7 }), others: streaming, ask: async () => 1 });
+    await desk.moments.consider(scope, START);
+    expect(desk.emitted).toEqual([]);
+    body.noteAudience(scope, 'windows-body', 'owner', START);
+    await desk.moments.consider(scope, START);
+    expect(desk.emitted.map(draft => draft.code)).toEqual(['owner_returned', 'morning']);
+    desk.close();
+    body.close();
+  });
+});
+
 describe('the decision', () => {
   it('waits while he is active and decides once he is not; Jev decides, a failure keeps her quiet', async () => {
     let blocked: string | null = 'owner_active';
@@ -185,8 +242,13 @@ describe('the decision', () => {
     second.close();
   });
 
-  it('leaves the decision to her message\'s writer without Jev, and drops a moment that is no longer fresh', async () => {
-    const desk = deskWorld({ facts: () => facts(returnedAt(START)) });
+  it('stays quiet without Jev (fail closed), and drops a wanted moment that is no longer fresh', async () => {
+    const quiet = deskWorld({ facts: () => facts(returnedAt(START)) });
+    await quiet.moments.consider(scope, START);
+    expect(quiet.status('returned:r1')).toBe('quiet');
+    expect(quiet.moments.take(scope, START)).toBeNull();
+    quiet.close();
+    const desk = deskWorld({ facts: () => facts(returnedAt(START)), ask: async () => 0.9 });
     await desk.moments.consider(scope, START);
     expect(desk.status('returned:r1')).toBe('wanted');
     expect(desk.moments.take(scope, new Date(Date.parse(START) + 11 * MINUTE).toISOString())).toBeNull();
@@ -286,5 +348,33 @@ describe('speaking of a moment: her own words, through the proactive gate', () =
     await w.loop.tick();
     expect(w.model.kinds()).toEqual(['think']);
     w.close();
+  });
+});
+
+describe('the templated lines are retired (owner decision 2026-10-14)', () => {
+  it('makes a piece readable and shown without writing any line, even at night or with the day\'s slot used', async () => {
+    const showing = new FakeShowing();
+    showing.may = 'quiet-hours';
+    const { loop, model, store, advance } = loopHarness({ showing: unannouncedShowing(showing) as FakeShowing, loop: { cycleIntervalMilliseconds: 60 * MINUTE, cyclesPerDay: 6 } });
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }];
+    await runUntilIdle(loop);
+    const piece = store.study.list(scope)[0]!;
+    advance(60 * MINUTE);
+    model.plans = [{ thought: '見せます。', steps: [{ action: 'ready', pieceId: piece.id }] }];
+    await runUntilIdle(loop);
+    expect(showing.told).toEqual([]);
+    expect(store.study.get(scope, piece.id)).toMatchObject({ status: 'shown', readableVersion: 1 });
+    expect(await loop.tick()).not.toBe('stepped');
+    expect(showing.told).toEqual([]);
+  });
+
+  it('writes a topic of the world only in her own words, and a goal\'s state as neutral text', () => {
+    expect(authoredWorldOpening('写真の光の捉え方、ちょっと気になる。', '写真の撮り方', '写真')).toBe('写真の光の捉え方、ちょっと気になる。');
+    expect(authoredWorldOpening('昨日の写真の話とつながっていた。', '写真の撮り方', '写真')).toBeNull();
+    const initiatives = readFileSync(apiSourceFile('initiativeStore.ts'), 'utf8');
+    const intents = readFileSync(apiSourceFile('initiativeIntentCandidates.ts'), 'utf8');
+    for (const fixed of ['これ、少し気になりました', 'に近くて、これが少し気になりました', '目的を覚えています', '一緒に確認しませんか', '修正方針を一緒に決めませんか']) {
+      expect(initiatives + intents, fixed).not.toContain(fixed);
+    }
   });
 });

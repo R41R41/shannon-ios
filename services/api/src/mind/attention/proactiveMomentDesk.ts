@@ -11,9 +11,9 @@ import type { ProactiveMomentDecision, SQLiteProactiveMoments, StoredProactiveMo
  * 1. **Perceive.** The facts of the instant (her body's window, the owner's away and return, how long he has been quiet, the hour,
  *    a story waiting) become moments, each once; each new one is handed to the mind's inbox as a closed row (`moment`), so a
  *    conversation's workspace knows it too.
- * 2. **Decide, cheaply.** The free checks first (she may speak up at all now: not paused, budget left, no conversation within ten
- *    minutes, the reach-out spacing, no session of hers open, the day's caps). Then one small Jev question: would she want to say
- *    something now? Without Jev her message's writer decides, and may stay silent. A Jev that fails decides quiet.
+ * 2. **Decide, cheaply.** The free checks first (she may speak up at all now: nobody else may see or hear her, not paused, budget
+ *    left, no conversation within ten minutes, no call with her body, the reach-out spacing, no session of hers open, the day's
+ *    caps). Then one small Jev question: would she want to say something now? Without Jev, or when Jev fails, she stays quiet.
  * 3. **Speak, maybe.** A moment she wanted is taken by her loop as a one-step cycle (`autonomyLoop.ts`), whose reach-out step writes
  *    a message in her own words with the moment as a fact in front of her, through the proactive gate (owner active, intent expiry,
  *    the same intent within 30 minutes, topic reuse) and the activity record, inside her daily budget.
@@ -55,7 +55,7 @@ export interface TakenProactiveMoment {
 }
 
 /** The codes after which a moment waits for the next poll (while fresh) rather than being dropped. */
-const WAIT_CODES = new Set(['owner_active', 'spacing', 'cycle_open', 'in_call']);
+const WAIT_CODES = new Set(['owner_active', 'spacing', 'cycle_open', 'in_call', 'others_present']);
 const DAY = 24 * 60 * 60_000;
 
 export class ProactiveMoments {
@@ -74,8 +74,9 @@ export class ProactiveMoments {
   /** Notes each moment of this instant once and hands each new one to the mind. Returns the new ones. */
   perceive(scopeKey: string, at: string): StoredProactiveMoment[] {
     const facts = this.ports.facts(scopeKey, at);
-    if (!facts) return [];
-    const audience = this.safeOthers(scopeKey, at) ? 'others' : 'owner';
+    // Infrastructure privacy guard (not a persona rule): no moment arises while anyone else may see or hear her, a stream included.
+    if (!facts || this.safeOthers(scopeKey, at)) return [];
+    const audience = 'owner';
     const fresh: StoredProactiveMoment[] = [];
     for (const moment of perceiveMoments(facts)) {
       if (!this.ports.store.note(scopeKey, moment, audience, at)) continue;
@@ -93,7 +94,7 @@ export class ProactiveMoments {
     const { store } = this.ports;
     const moment = store.undecided(scopeKey, at);
     if (!moment) return null;
-    const blocked = this.ports.blocked(scopeKey, at);
+    const blocked = this.safeOthers(scopeKey, at) ? 'others_present' : this.ports.blocked(scopeKey, at);
     if (blocked && WAIT_CODES.has(blocked)) {
       store.waiting(scopeKey, moment.key, blocked);
       return 'perceived';
@@ -101,7 +102,8 @@ export class ProactiveMoments {
     if (blocked) return this.settle(scopeKey, moment, { status: 'skipped', reason: blocked }, at);
     const usage = store.usage(scopeKey, new Date(Date.parse(at) - DAY).toISOString());
     if (usage.taken >= this.ports.maximumMessagesPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'message_cap' }, at);
-    if (!this.ports.ask) return this.settle(scopeKey, moment, { status: 'wanted', decider: 'writer' }, at);
+    // Without Jev nothing decides that she wants to speak: fail closed, quiet.
+    if (!this.ports.ask) return this.settle(scopeKey, moment, { status: 'quiet', reason: 'no_decider' }, at);
     if (usage.decisions >= this.ports.maximumDecisionsPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'decision_cap' }, at);
     const wanted = await this.asked(this.state(scopeKey, moment, at), signal);
     const costUsd = this.ports.usdPerDecision;
@@ -112,6 +114,7 @@ export class ProactiveMoments {
   /** The newest moment she wanted, for her loop: taken once, while fresh. */
   take(scopeKey: string, at: string): TakenProactiveMoment | null {
     try {
+      if (this.safeOthers(scopeKey, at)) return null;
       const moment = this.ports.store.take(scopeKey, at);
       return moment ? taken(moment) : null;
     } catch { return null; }
@@ -120,6 +123,7 @@ export class ProactiveMoments {
   /** A moment her loop took, read again when its step is prepared: null once it is no longer worth a word. */
   get(scopeKey: string, key: string, at: string): TakenProactiveMoment | null {
     try {
+      if (this.safeOthers(scopeKey, at)) return null;
       const moment = this.ports.store.get(scopeKey, key);
       return moment && moment.status === 'taken' && momentFresh(moment.kind, moment.perceivedAt, at) ? taken(moment) : null;
     } catch { return null; }

@@ -46,9 +46,17 @@ function containsTerm(text: string, term: string): boolean {
 
 /** Keep personality wording only when visibly anchored; never invent shared recollection. */
 export function groundedWorldOpening(opening: string | undefined, title: string, interest: string | null): string {
+  return authoredWorldOpening(opening, title, interest) ?? 'これ、少し気になりました。';
+}
+
+/**
+ * The daily mind's own line about a topic when it is grounded in the topic and claims no shared past, or null. Owner decision
+ * 2026-10-14: a topic of the world is said in her own words or not at all, so the initiative loop writes no fixed line instead.
+ */
+export function authoredWorldOpening(opening: string | undefined, title: string, interest: string | null): string | null {
   const text = opening?.replace(/\s+/gu, ' ').trim().slice(0, 280);
   const claimsSharedPast = text && /昨日|前に|この前|さっき|覚えて|(?:話|会話).*(?:つなが|繋が|重な)|(?:君|あなた).*(?:好き|興味)/u.test(text);
   const anchored = text && (normalized(text).includes(normalized(title))
     || (interest && normalized(text).includes(normalized(interest))));
-  return text && anchored && !claimsSharedPast ? text : 'これ、少し気になりました。';
+  return text && anchored && !claimsSharedPast ? text : null;
 }

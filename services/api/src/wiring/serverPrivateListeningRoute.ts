@@ -12,8 +12,8 @@ import type { ReachOutReportResult, SQLiteReachOutReports } from '../mind/attent
 import { bindScope, consumeDeviceAllowance, sendJson } from '../infra/http/serverHttp.js';
 import { switchOn } from '@shannon/switches';
 import { ownerTimeZone } from '../infra/time/localDate.js';
-import { freshInitiativeInbox, type InitiativeFreshness } from '../surfaces/outreach/initiativeFreshness.js';
-import { SQLiteInitiativeReadState } from '../surfaces/outreach/store/initiativeReadState.js';
+import { freshInitiativeInbox, type InitiativeBodyDelivery } from '../surfaces/outreach/initiativeFreshness.js';
+import { SQLiteInitiativeSources } from '../surfaces/outreach/store/initiativeSources.js';
 import type { InitiativeInbox } from '../surfaces/outreach/store/initiativeStore.js';
 import { MORNING_BRIEF_HOURS } from './dailyReadWiring.js';
 
@@ -29,10 +29,10 @@ export interface PrivateListeningRoute {
   /** Her body's report store, with a body that did not show a message giving it back to the apps. */
   bodyReports: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
   /**
-   * The initiative inbox with freshness at delivery (owner decision 2026-10-14, `initiativeFreshness.ts`): a body of hers is not
-   * handed what is no longer fresh to say aloud, and its read leaves that unread. `SHANNON_BODY_INITIATIVE_FRESHNESS=off`: as before.
+   * The initiative inbox with a body's spoken delivery (owner decision 2026-10-14, `initiativeFreshness.ts`), asked for only by the
+   * body's own poll (`for=body`). `SHANNON_BODY_INITIATIVE_FRESHNESS=off`: the body's answer is the list as it was.
    */
-  freshInbox(inbox: InitiativeInbox): InitiativeInbox & InitiativeFreshness;
+  freshInbox(inbox: InitiativeInbox): InitiativeInbox & InitiativeBodyDelivery;
   close(): void;
 }
 
@@ -59,11 +59,11 @@ export function createPrivateListeningRoute(
     ...(options.calls ? { calls: options.calls } : {}),
   };
   const usage = new Map<string, { startedAt: number; count: number }>();
-  const readState = new SQLiteInitiativeReadState(databasePath);
+  const sources = new SQLiteInitiativeSources(databasePath);
   return {
     reachOuts,
     freshInbox: inbox => freshInitiativeInbox(inbox, {
-      enabled: switchOn(environment, 'SHANNON_BODY_INITIATIVE_FRESHNESS'), isBody: options.isBody, readState,
+      enabled: switchOn(environment, 'SHANNON_BODY_INITIATIVE_FRESHNESS'), sources: (scopeKey, ids) => sources.sources(scopeKey, ids),
       options: { timeZone: ownerTimeZone(environment), morningHours: MORNING_BRIEF_HOURS },
     }),
     bodyReports: {
@@ -87,6 +87,6 @@ export function createPrivateListeningRoute(
       sendJson(response, result.status, result.body);
       return true;
     },
-    close: () => { store.close(); claims.close(); readState.close(); },
+    close: () => { store.close(); claims.close(); sources.close(); },
   };
 }

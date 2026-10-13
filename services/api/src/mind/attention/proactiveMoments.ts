@@ -49,13 +49,15 @@ export interface ProactiveMomentFacts {
   quietLong: boolean;
   /** No away or return event within `longQuietMinutes`: he has been there the whole time. */
   presenceSteady: boolean;
+  /** When he last wrote or spoke (the start of a quiet), or null when he never has: a long quiet is perceived once per quiet. */
+  lastOwnerActiveAt: string | null;
   /** The newest story of hers the owner can read and has not reacted to. */
   awaiting: { pieceId: string; version: number } | null;
 }
 
 export interface ProactiveMoment {
   kind: ProactiveMomentKind;
-  /** Once per key: a return event, a two-hour quiet of a day, a morning, a night, a version of a story. */
+  /** Once per key: a return event, a quiet (by when it began), a morning, a night, a version of a story. */
   key: string;
   /** Minutes he was away (`owner_returned`) or has been quiet (`long_quiet`); otherwise null. */
   minutes: number | null;
@@ -90,8 +92,8 @@ export function perceiveMoments(facts: ProactiveMomentFacts): ProactiveMoment[] 
   const back = returnedMoment(facts);
   if (back) moments.push(back);
   if (facts.quietLong && facts.presenceSteady) {
-    const slot = Math.floor(facts.localHour / 2);
-    moments.push({ kind: 'long_quiet', key: `quiet:${facts.localDate}:${slot}`, minutes: PROACTIVE_MOMENTS_V1.longQuietMinutes });
+    // Keyed on when the quiet began (his last word), so one quiet is one moment however long it lasts.
+    moments.push({ kind: 'long_quiet', key: `quiet:${facts.lastOwnerActiveAt ?? 'never'}`, minutes: PROACTIVE_MOMENTS_V1.longQuietMinutes });
   }
   if (inHours(facts.localHour, PROACTIVE_MOMENTS_V1.morningHours)) moments.push({ kind: 'morning', key: `morning:${facts.localDate}`, minutes: null });
   if (inHours(facts.localHour, PROACTIVE_MOMENTS_V1.lateNightHours)) moments.push({ kind: 'late_night', key: `night:${facts.eveningDate}`, minutes: null });

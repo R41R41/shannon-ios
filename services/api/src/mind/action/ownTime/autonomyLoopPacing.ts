@@ -65,6 +65,11 @@ export function startMomentCycle(dependencies: StepDependencies, scopeKey: strin
   return store.loop.startCycle(scopeKey, autonomyDayKey(at, config), 'show', [{ kind: 'reach_out', reason: moment.reason, moment: moment.key }], at);
 }
 
+/** Whether a ready piece may be shown now: always when showing writes no line (owner decision 2026-10-14), else when she may message. */
+export function mayShowNow(showing: StepDependencies['showing'], scopeKey: string, at: string): boolean {
+  return showing.announces === false || showing.mayMessageNow(scopeKey, at) === 'ok';
+}
+
 /** The owner wrote or spoke within the quiet window: her own activity stands back. */
 export function ownerTalking(dependencies: Pick<StepDependencies, 'loop' | 'showing' | 'concurrentActions'>, scopeKey: string, at: string): boolean {
   if(dependencies.concurrentActions)return false;

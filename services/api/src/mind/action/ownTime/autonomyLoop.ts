@@ -5,7 +5,7 @@ import { sessionMarked } from './autonomyLoopProvenance.js';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
-import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startMomentCycle, startSessionIfDue } from './autonomyLoopPacing.js';
+import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, mayShowNow, startMomentCycle, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomySession, SessionEndCode } from './store/autonomyLoopSessions.js';
 import { noteProvenance, shownLater } from './autonomyLoopProvenance.js';
@@ -133,7 +133,7 @@ export class ShannonAutonomyLoop {
     // A piece she called 「見せてもいい」 but has not told him about: one step of its own, when she may speak.
     const untold = store.study.list(this.scopeKey).find(piece => piece.kind === 'story' && piece.status === 'ready');
     // A marked story waits while anyone else may see her words (ADR-0007), rather than starting a step that would only wait.
-    if (untold && showing.mayMessageNow(this.scopeKey, at) === 'ok' && !shownLater(this.dependencies, { id: '', scopeKey: this.scopeKey }, untold.id, at)) {
+    if (untold && mayShowNow(showing, this.scopeKey, at) && !shownLater(this.dependencies, { id: '', scopeKey: this.scopeKey }, untold.id, at)) {
       return store.loop.startCycle(this.scopeKey, dayKey, 'show', [{ kind: 'show', pieceId: untold.id }], at);
     }
     if (loop.pacing === 'sessions') return startSessionIfDue(this.dependencies, this.scopeKey, at);

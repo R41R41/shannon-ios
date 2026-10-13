@@ -13,8 +13,8 @@ import { SQLiteProactiveMoments } from '../mind/attention/store/proactiveMomentS
  * table is created, nothing is perceived and her loop is handed nothing.
  *
  * The decision asks Jev (`TYPESAFE_API_KEY`, the endpoint, model and price settings the other Jev callers read; 3 s in the
- * background unless `SHANNON_PROACTIVE_MOMENTS_JEV_TIMEOUT_MS`), one call per moment at most. Without a key her message's writer
- * decides and may stay silent. The day's caps: `SHANNON_PROACTIVE_MOMENTS_MAX_DECISIONS` (24) and
+ * background unless `SHANNON_PROACTIVE_MOMENTS_JEV_TIMEOUT_MS`), one call per moment at most. Without a key she stays quiet.
+ * The day's caps: `SHANNON_PROACTIVE_MOMENTS_MAX_DECISIONS` (24) and
  * `SHANNON_PROACTIVE_MOMENTS_MAX_MESSAGES` (8); every message is also inside her daily budget, as any step of hers.
  */
 export interface ProactiveMomentParts {
@@ -30,6 +30,8 @@ export interface ProactiveMomentParts {
   };
   /** Whether the owner wrote or spoke since an instant (the conversation's table, a timestamp). */
   ownerActiveSince: (scopeKey: string, since: string) => boolean;
+  /** When the owner last wrote or spoke, or null (a timestamp). */
+  ownerLastActiveAt: (scopeKey: string) => string | null;
   /** The newest story of hers the owner can read and has not reacted to. */
   awaiting: (scopeKey: string) => { pieceId: string; version: number } | null;
   /** The free checks before a decision (`ProactiveMomentPorts.blocked`). */
@@ -84,7 +86,7 @@ function momentAsk(environment: Readonly<Record<string, string | undefined>>, fe
 
 /** The facts of the instant (`ProactiveMomentFacts`), read from her body's reports, the conversation's timestamps and her study. */
 export function momentFacts(
-  parts: Pick<ProactiveMomentParts, 'timeZone' | 'body' | 'ownerActiveSince' | 'awaiting'>, scopeKey: string, at: string,
+  parts: Pick<ProactiveMomentParts, 'timeZone' | 'body' | 'ownerActiveSince' | 'ownerLastActiveAt' | 'awaiting'>, scopeKey: string, at: string,
 ): ProactiveMomentFacts {
   const time = Date.parse(at);
   const local = localDateParts(new Date(time), parts.timeZone);
@@ -99,6 +101,7 @@ export function momentFacts(
     returned: parts.body.latestReturn(scopeKey, hourAgo, at),
     quietLong: !parts.ownerActiveSince(scopeKey, quietSince),
     presenceSteady: parts.body.latestOfTypes(scopeKey, ['ownerAway', 'ownerReturned'], quietSince, at) === null,
+    lastOwnerActiveAt: parts.ownerLastActiveAt(scopeKey),
     awaiting: parts.awaiting(scopeKey),
   };
 }
