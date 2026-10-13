@@ -394,6 +394,17 @@ describe('the third review (N6, N9)', () => {
     expect(store.since(OWNER, '2026-10-14T00:00:00.000Z', 10).map(note => note.sourceIds)).toEqual([['experience:early']]);
   });
 
+  it('forgets a short turn by its words when it has no source id (D1: events use the containment check)', async () => {
+    const { service, store, setSnapshot } = setup();
+    service.turnEnded({ scopeKey: OWNER, surface: 'voice', alone: true, at: T0, userMessage: 'ごめん、出来心で', reply: 'しばらく口ききません', feeling: null });
+    await service.flush(OWNER);
+    expect(store.latest(OWNER)!.sourceIds).toEqual([]);
+    setSnapshot({ ...createInitialCompanionState(OWNER, T0), memoryControls: [forgotten('e-voice', 'ごめん、出来心で')] });
+    expect(service.current(OWNER, T0)).toBeNull();
+    await service.sweep();
+    expect(store.latest(OWNER)).toBeNull();
+  });
+
   it('matches only forgotten words, and only a quote of twelve characters or more (N9)', async () => {
     const { service, store, setSnapshot } = setup([draft({ text: { ...draft().text, honne: 'おはようって言われて、来週の京都旅行で行くお寺の話を思い出した。' } })]);
     service.touched(touch());

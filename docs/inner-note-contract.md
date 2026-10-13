@@ -78,7 +78,8 @@ written after, and — for the first note of a day — the summary of the day be
 whatever the cap). A closing note keeps its own day's sources only, so nothing reaches back further than one day; at most 64 sources a
 note. A note is forgotten when one of its sources is, when the words of a forgotten turn are among its events, or when its own words
 quote one (a backstop); it is then not read and is deleted on the queue. Deleting a note deletes every later note of the same day
-(each read the one before, whatever its capped lineage still lists) and every day that read a deleted summary. The word match counts
+(each read the one before, whatever its capped lineage still lists) and every day that read a deleted summary. An event's words (the turn itself, often short and
+without a source id) are matched as the memory boundary matches evidence. The backstop on the note's own words counts
 only items the owner had her forget or rejected (a correction keeps its moment), and only a shared run of 12 characters or more (a
 greeting is not a quote; evidence is read up to 400 characters).
 Reads check against an index of the owner's forgetting built once per state; the sweep scans the stored notes only when that changed.

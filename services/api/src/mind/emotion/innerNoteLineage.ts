@@ -1,5 +1,5 @@
 import {
-  apologyIn, goodnightIn, soothingIn, teasingIn, visibleMemoryText,
+  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, visibleMemoryText,
   type CompanionStateSnapshot, type InnerNoteEvent,
 } from '@shannon/cognition';
 import type { InnerNoteTurn } from './innerNotePorts.js';
@@ -71,9 +71,12 @@ function forgottenQuotes(snapshot: CompanionStateSnapshot, gone: CompanionStateS
   return quotes;
 }
 
-/** Whether an event's words (his, hers, her line after a touch) may still be read. */
+/**
+ * Whether an event's words (his, hers, her line after a touch) may still be read. They are the turn itself, often short and without a
+ * source id (a voice client without an utterance id): the memory boundary's own containment check, not the 12-character quote window.
+ */
 export function eventVisible(snapshot: CompanionStateSnapshot, event: InnerNoteEvent): boolean {
-  return wordsVisible(snapshot, [event.words, event.reply, event.touch?.said]);
+  return !forgetIndex(snapshot).any || [event.words, event.reply, event.touch?.said].every(text => !text || isMemoryEvidenceVisible(snapshot, text));
 }
 
 /** Whether a source may still be read: an experience the owner did not have her forget (anything else is kept). */
