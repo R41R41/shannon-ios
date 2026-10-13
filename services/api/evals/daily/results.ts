@@ -18,6 +18,8 @@ export interface TrialResult {
   replies: string[];
   /** Shannon's model calls by model name. */
   modelCalls?: Record<string, number>;
+  /** Shannon's usage by model (tokens and USD; see `ModelUsage`). */
+  usage?: Record<string, { calls: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd: number }>;
   /** Sonnet mode: turns Sonnet did not finish (fell back to luna, or ended with her fixed line), with the reasons. */
   sonnetFallbacks?: { toLuna: number; fixedLine: number; reasons: string[] };
   error?: string;

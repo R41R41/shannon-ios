@@ -22,6 +22,8 @@ export interface ResearchObservation {
   summary: string;
 }
 
+export interface ModelUsage { calls: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd: number }
+
 export interface ThreadMessage { role: string; content: string; observedAt: string; reportCard?: { status: string; title: string; answer: string } }
 
 export interface TrialObservation {
@@ -44,6 +46,8 @@ export interface TrialObservation {
   durationMs: number;
   /** Shannon's model calls by model name (from the recorded usage): whether Sonnet actually answered. */
   modelCallsByModel?: Record<string, number>;
+  /** Shannon's recorded usage by model: calls, tokens (input includes what the call wrote to the cache) and spend in USD. */
+  usageByModel?: Record<string, ModelUsage>;
   /** Sonnet-mode turns that Sonnet did not finish (`TieredChatModel`): fell back to luna, or ended with her fixed line. Set by the runner. */
   sonnetFallbacks?: { toLuna: number; fixedLine: number; reasons: string[] };
   /** Requests that asked Anthropic for its own server-side web tools (set by the runner; they bypass the fixtures). */
@@ -136,6 +140,12 @@ export async function runTrial(task: DailyEvalTask, trial: number, options: {
     research, device: structuredClone(runtime.device), fixtures: structuredClone(runtime.fixtures), messages,
     shannonCostUsd: runtime.usage.reduce((sum, event) => sum + event.estimatedCostUsd, 0), modelCalls: runtime.usage.length,
     modelCallsByModel: runtime.usage.reduce<Record<string, number>>((counts, event) => ({ ...counts, [event.model]: (counts[event.model] ?? 0) + 1 }), {}),
+    usageByModel: runtime.usage.reduce<Record<string, ModelUsage>>((totals, event) => {
+      const total = totals[event.model] ?? { calls: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costUsd: 0 };
+      totals[event.model] = { calls: total.calls + 1, inputTokens: total.inputTokens + event.inputTokens, cachedInputTokens: total.cachedInputTokens + event.cachedInputTokens,
+        outputTokens: total.outputTokens + event.outputTokens, costUsd: Math.round((total.costUsd + event.estimatedCostUsd) * 1e6) / 1e6 };
+      return totals;
+    }, {}),
     fcaComposed: runtime.fcaComposed, harnessLog, durationMs: Math.round(performance.now() - origin), ...(error ? { error } : {}),
   };
   try { await runtime.close(); } catch (caught) { log(`close failed: ${caught instanceof Error ? caught.message : 'unknown'}`); }

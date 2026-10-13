@@ -98,7 +98,7 @@ for (const task of selected) {
     observation.nativeWebRequests = networkLog.nativeWebRequests - nativeBefore;
     if (observation.nativeWebRequests > 0) observation.harnessLog.push(`native web tool requests: ${observation.nativeWebRequests} (bypassed fixtures)`);
     observations.push(observation);
-    const graded = { ...await gradeTrial(task, observation, judge, { useJudge }), modelCalls: observation.modelCallsByModel ?? {},
+    const graded = { ...await gradeTrial(task, observation, judge, { useJudge }), modelCalls: observation.modelCallsByModel ?? {}, usage: observation.usageByModel ?? {},
       ...(modelMode === 'sonnet' ? { sonnetFallbacks: observation.sonnetFallbacks } : {}) };
     trials.push(graded);
     say(`  ${task.id} trial ${trial + 1}/${k}: ${graded.passed ? 'PASS' : 'FAIL'}  first audio ${graded.firstAudioMs.map(value => value ?? '—').join('/')}ms`
