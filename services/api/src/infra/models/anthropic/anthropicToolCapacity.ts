@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ShannonToolDefinition } from '../../../mind/tools/shannonTools.js';
+import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../config/serverEnvironment.js';
 
 /** Provider limits apply to the complete request, including inline definitions and the final JSON schema. */
@@ -71,7 +72,7 @@ export const ANTHROPIC_GRAMMAR_BUDGET = Object.freeze({ tools: 8, optional: 12, 
  * text, whose output schema stays strict: 3.8 s instead of 7.6 s). Every executor validates its input anyway.
  */
 export function strictConversationTools(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
-  return environment.SHANNON_STRICT_CONVERSATION_TOOLS?.trim().toLowerCase() === 'on';
+  return switchOn(environment, 'SHANNON_STRICT_CONVERSATION_TOOLS');
 }
 
 /** A conversation tool as it is sent: strict only while `strictConversationTools()`. */

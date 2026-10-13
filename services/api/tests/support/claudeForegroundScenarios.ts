@@ -29,7 +29,10 @@ export const SCENARIO_TIME = '2026-10-12T03:00:00.000Z';
 export const HAIKU = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } as const;
 export const SONNET = { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'between_tools' } as const;
 
-export type Settings = typeof HAIKU | typeof SONNET;
+/** Haiku as production builds it (`createConfiguredChatModel`): voice without thinking, `SHANNON_HAIKU_VOICE_THINKING` off. */
+export const HAIKU_PRODUCTION = { ...HAIKU, voiceThinking: 'disabled' } as const;
+
+export type Settings = typeof HAIKU | typeof SONNET | typeof HAIKU_PRODUCTION;
 
 /** A recorded response with complete one-hour cache usage (the shape a Haiku or Sonnet 5.5 request requires). */
 export function cached(value: AnthropicMessage, model: string, write = 1_800, read = 0): AnthropicMessage {

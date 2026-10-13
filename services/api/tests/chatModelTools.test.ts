@@ -535,7 +535,8 @@ describe('the second waiting phrase after her own lead-in', () => {
 
 describe('one waiting phrase a spoken turn (2026-10-13)', () => {
   it('tells an announcement of a look from an answer', () => {
-    for (const said of ['ちょっと調べてみますね、ライ氏。', '少し確認してみますね。', 'ライ氏、ちょっと見てきますね！', 'うん、書いてみますね。']) {
+    for (const said of ['ちょっと調べてみますね、ライ氏。', '少し確認してみますね。', 'ライ氏、ちょっと見てきますね！', 'うん、書いてみますね。',
+      '調べますね。', '確認しますね。', '検索してみますね！', '見てみますね。', 'では、天気を調べてみましょう。']) {
       expect(isWaitingAnnouncement(said), said).toBe(true);
     }
     for (const said of ['書斎にメモが1つありますね。', '調べてみたら晴れでしたね。', '16時半ごろ出れば余裕です。', 'それなら明日一緒に見てみますね、映画の話の続きも楽しみです。']) {

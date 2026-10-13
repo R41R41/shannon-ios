@@ -63,9 +63,14 @@ export function voiceWaitingPhrase(providerName: string): string {
   return /(?:create|update|rename|move|delete|restore)$/u.test(providerName) ? 'ちょっと書いてみますね。' : 'ちょっと見てみますね。';
 }
 
-/** A sentence that only announces a look or a write (「ちょっと調べてみますね、ライ氏。」), as her fixed waiting phrase does. */
+/**
+ * A sentence that only announces a look or a write (「ちょっと調べてみますね、ライ氏。」「確認しますね。」「検索してみますね！」), as her
+ * fixed waiting phrase does. The whole sentence must be the announcement; a sentence with content stays.
+ */
+const ANNOUNCED_VERB = '(?:見て(?:み|き)?|見|調べ(?:て(?:み|き)?)?|確認し(?:て(?:み|き)?)?|確かめ(?:て(?:み|き)?)?|探し(?:て(?:み|き)?)?'
+  + '|検索し(?:て(?:み|き)?)?|チェックし(?:て(?:み|き)?)?|書いて(?:み)?|書き|読んで(?:み)?|読み|開いて(?:み)?|のぞいて(?:み)?|覗いて(?:み)?)';
 const WAITING_ANNOUNCEMENT = new RegExp('^\\s*(?:(?:うん|よし|はい|じゃあ|では|了解(?:です)?|わかりました)[、。！!]?\\s*)?(?:ライ氏[、,]?\\s*)?'
-  + '[^。！？!?\\n]{0,16}?(?:見て|調べて|確認して|確かめて|探して|書いて|読んで|開いて|のぞいて|覗いて)(?:み|き)?ます(?:ね|よ)?'
+  + `[^。！？!?\\n]{0,16}?${ANNOUNCED_VERB}(?:ます(?:ね|よ)?|ましょう(?:か|ね)?)`
   + '(?:[、,]\\s*ライ氏)?[。．.！!…〜ー\\s]*$', 'u');
 
 export function isWaitingAnnouncement(sentence: string): boolean {
@@ -80,8 +85,10 @@ export function isWaitingAnnouncement(sentence: string): boolean {
 export class VoiceWaitingEcho {
   private armed = false;
   private held = '';
+  /** The last announcement left unsaid: spoken after all when it turns out to be the whole reply. */
+  private unsaid = '';
 
-  /** A tool call follows words already said: the model's next sentence is checked. */
+  /** Words were already said (a waiting phrase, or her words before a call): the model's next sentence is checked. */
   arm(): void {
     this.armed = true;
     this.held = '';
@@ -97,7 +104,9 @@ export class VoiceWaitingEcho {
     const rest = this.held.slice(end + 1);
     this.armed = false;
     this.held = '';
-    return isWaitingAnnouncement(sentence) ? rest.replace(/^\s+/u, '') : `${sentence}${rest}`;
+    if (!isWaitingAnnouncement(sentence)) return `${sentence}${rest}`;
+    this.unsaid = sentence;
+    return rest.replace(/^\s+/u, '');
   }
 
   /** Before another call or at the end of the reply: what is held is decided as it stands. */
@@ -105,7 +114,18 @@ export class VoiceWaitingEcho {
     const held = this.held;
     this.armed = false;
     this.held = '';
-    return held && !isWaitingAnnouncement(held) ? held : '';
+    if (held && isWaitingAnnouncement(held)) {
+      this.unsaid = held;
+      return '';
+    }
+    return held;
+  }
+
+  /** At the end of a reply that said nothing else: the announcement left unsaid, so the reply is never empty. */
+  leftUnsaid(): string {
+    const unsaid = this.unsaid;
+    this.unsaid = '';
+    return unsaid;
   }
 }
 

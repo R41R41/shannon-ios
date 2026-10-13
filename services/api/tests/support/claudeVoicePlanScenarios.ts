@@ -5,7 +5,7 @@ import { SKILL_INDEX_HEADER } from '../../src/mind/memory/skillDocument.js';
 import { message } from './anthropicFixtures.js';
 import { providerError } from './claudeRequestRecorder.js';
 import {
-  answer, cached, HAIKU, SONNET, spoken, text, toolCall, tools, voice, webSpoken, type ClaudeScenario, type ScenarioContext, type Settings,
+  answer, cached, HAIKU, HAIKU_PRODUCTION, SONNET, spoken, text, toolCall, tools, voice, webSpoken, type ClaudeScenario, type ScenarioContext, type Settings,
 } from './claudeForegroundScenarios.js';
 import { planChat } from './claudePlanScenarios.js';
 
@@ -73,6 +73,9 @@ export const VOICE_PLAN_SCENARIOS: readonly ClaudeScenario[] = [
   { name: 'plan-voice-rejected-fallback', script: [providerError(400, 'invalid_request_error', {}, 'The compiled grammar is too large'),
     spoken(HAIKU.model)], run: c => said(c, HAIKU, planVoice) },
   { name: 'plan-sonnet-voice', script: [spoken(SONNET.model)], run: c => said(c, SONNET, { ...planVoice, tier: 'sonnet' }) },
+  // The production voice body (2026-10-13): no thinking, non-strict tools, the plan's waiting phrase already heard.
+  { name: 'plan-voice-production', script: [toolCall(HAIKU_PRODUCTION.model), spoken(HAIKU_PRODUCTION.model)],
+    run: c => said(c, HAIKU_PRODUCTION, { ...planVoice, conversationClass: 'skill_simple', tools: tools(['study.list']), waitingSaid: true }) },
   { name: VOICE_PLAN_TALK_SCENARIO, script: [
     spoken(HAIKU.model, reply(1)), toolCall(HAIKU.model), spoken(HAIKU.model, reply(2)), spoken(HAIKU.model, reply(3)),
   ], run: talk },

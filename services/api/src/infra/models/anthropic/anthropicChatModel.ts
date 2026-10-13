@@ -256,6 +256,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     const speak = async (text: string) => { if (!text) return; spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
     const echo = new VoiceWaitingEcho(); // One waiting phrase a turn: a repeated announcement after a call is not said again.
     const waitingSaid = request.waitingSaid === true;
+    // The plan's waiting phrase was heard: an announcement she writes before her first call (or instead of one) is not said again.
+    if (waitingSaid && onTextDelta && !request.useWebSearch) echo.arm();
     const watch = watchdog(request.firstTokenBudgetMs);
     const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
@@ -286,7 +288,11 @@ export class AnthropicChatModel implements ShannonChatModel {
       if (request.useWebSearch && !signal?.aborted && !declinedBeforeWork) { const failed = webSearchFailure('unknown'); await onTextDelta?.(failed.text); return { mode: this.mode, model: this.model, reply: failed.text }; }
       throw watch?.timedOut() && !signal?.aborted ? new SonnetFirstTokenTimeout() : error;
     } finally { watch?.clear(); }
-    if (onTextDelta) await speak(echo.flush());
+    if (onTextDelta) {
+      await speak(echo.flush());
+      // A reply that was only the announcement is said after all, never left empty.
+      if (!spoken.trim()) await speak(echo.leftUnsaid());
+    }
     if (result.outOfTime || !result.final) {
       const standing = request.useWebSearch ? '' : completeSpokenSentences(spoken.trim()) || '';
       if (onTextDelta) { if (request.useWebSearch) await onTextDelta(TURN_OUT_OF_TIME_LINE); else await speak(TURN_OUT_OF_TIME_LINE); }

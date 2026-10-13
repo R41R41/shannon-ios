@@ -181,4 +181,16 @@ describe('strict bridge preserves the original offer and validation', () => {
     expect(t.calls.map(item => item.name)).toEqual(['minecraft_login']);
     expect(t.notes()).toBe(1);
   });
+
+  it('takes argumentsJson written as the object itself (no strict decoding) as the same input, and still refuses an array or a number', async () => {
+    const t = session(SHANNON_TOOLS.filter(tool => ['minecraft.start', 'minecraft.login'].includes(tool.name)), ['minecraft.start']);
+    const wrapped = bridgedAnthropicSession(t.tools, new Set(['tool_open', 'tool_call', 'minecraft_start']));
+    expect(JSON.parse(wrapped.meta!('tool_open', '{"name":"minecraft_login"}')!).ok).toBe(true);
+    for (const argumentsJson of [[], 1, null]) {
+      expect(JSON.parse(await wrapped.call('tool_call', JSON.stringify({ name: 'minecraft_login', argumentsJson }))).ok).toBe(false);
+    }
+    expect(t.calls).toEqual([]);
+    expect(JSON.parse(await wrapped.call('tool_call', JSON.stringify({ name: 'minecraft_login', argumentsJson: {} }))).ok).toBe(true);
+    expect(t.calls.map(item => item.name)).toEqual(['minecraft_login']);
+  });
 });
