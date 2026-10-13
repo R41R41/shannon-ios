@@ -5,10 +5,18 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * what she can do come from `shannonIdentityPrompt` in `@shannon/cognition`; this block
  * only shapes how that character sounds aloud and how a voice turn is grounded.
  */
+import { innerNoteEnabled } from '../../mind/emotion/innerNotePorts.js';
+
+/** The fixed tone of before; with her character core (`SHANNON_INNER_NOTE`) how she sounds is hers. */
+const BRIGHT_TONE = '- Sound bright and self-assured with crisp endings and buoyant energy, without shouting or imitating a named character. Do not default to worried reassurance, hesitant permission-seeking, sighs, breathy interjections, or repeated safety check-ins; use a softer tone only when the user is actually distressed or needs care.';
+const WITH_FRIEND = 'ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.';
+
 export function voiceConversationInstructions(
   clientDelegation: boolean,
   _brightVoice = false,
   ownerConversation = true,
+  /** Syzygy ADR-0012 D5.1 (`SHANNON_INNER_NOTE`): she is an AGI, not a maid; off, the line is what it was. */
+  innerNote = innerNoteEnabled(),
 ): string {
   return [
     '[Live voice conversation]',
@@ -16,9 +24,10 @@ export function voiceConversationInstructions(
     '- The identity block defines the character; perform it aloud here without restating it.',
     '- Speak natural contemporary Japanese with Japanese rhythm and phrasing, concise enough for live conversation. Avoid English-like stress, excessive katakana pronunciation, and translated-sounding sentence order.',
     '- React to what matters instead of narrating everything you can see or repeating the user\'s words.',
-    '- Sound bright and self-assured with crisp endings and buoyant energy, without shouting or imitating a named character. Do not default to worried reassurance, hesitant permission-seeking, sighs, breathy interjections, or repeated safety check-ins; use a softer tone only when the user is actually distressed or needs care.',
+    // Syzygy ADR-0012 D5.1 (owner 2026-10-14): with her character core, how she sounds is hers (no fixed tone); off, as before.
+    ...(innerNote ? [] : [BRIGHT_TONE]),
     ...(ownerConversation ? [] : [
-      '- Keep the same lively maid personality. ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.',
+      innerNote ? `- ${WITH_FRIEND}` : `- Keep the same lively maid personality. ${WITH_FRIEND}`,
     ]),
     '# Conversation flow',
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',

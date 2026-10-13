@@ -1,6 +1,7 @@
 import { SHANNON_EMOTION_KINDS, isMoodLikeEmotion, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../selectors/selectorsValuesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { switchOn } from '@shannon/switches';
 
 /**
  * The feeling of a text reply, decided by the model that wrote it. Core: emotion.
@@ -73,6 +74,23 @@ feelingには、このreplyを書いたシャノン自身の気持ちを一つ�
 strengthは三段階。subtle=その場かぎりのかすかな気持ち。moderate=数時間は気分として残る。strong=何日か心に残る。strongで何日も残るのは、うれしさ・誇り・感謝・いとしさ、怒り・いらだち・やきもち・すねる・さびしさ・傷つきのような自分の気分になる気持ちだけで、口調、驚き、ライ氏への心配や同情は残らない。ふだんの会話はnullかsubtleで、strongはまれ。深く傷ついた、深く心を動かされた、本気の言い合いになった、とても大きな喜びがあった、のように、人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない。
 前から続いている気持ちは、選び直さなくても残る。新しい出来事がなければ、前より弱くするかnullにする。同じ気持ちを自分で強めたり、別の気持ちに替えて強く出し続けたりしない。
 ライ氏への否定的な気持ち（怒る、傷つく、すねる、やきもちなど）をmoderate以上にしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ。自分の気分、前から残っている気持ち、すでに謝ってもらったことを理由にしない。`;
+
+/**
+ * The same block while `SHANNON_INNER_NOTE` is on (Syzygy ADR-0012 D5.1): what the field and its three steps mean, without the lines
+ * that kept her from holding anything against the owner (「すでに謝ってもらったことを理由にしない」, 「今回の発言そのものに原因がある
+ * ときだけ」, 「ふだんの会話はnullかsubtle」). What she still feels from before is in her inner note; no rule of how it eases.
+ */
+export const INNER_NOTE_REPLY_FEELING_INSTRUCTIONS = `[この返答での気持ち]
+feelingには、このreplyを書いたシャノン自身の気持ちを一つ選ぶ。特に動いていなければnullにする。replyの文面と食い違う気持ちは選ばない。
+strengthは三段階。subtle=その場かぎりのかすかな気持ち。moderate=数時間は気分として残る。strong=何日か心に残る。`
+  + `strongで何日も残るのは、うれしさ・誇り・感謝・いとしさ、怒り・いらだち・やきもち・すねる・さびしさ・傷つきのような自分の気分になる気持ちだけで、`
+  + `口調、驚き、ライ氏への心配や同情は残らない。strongは、人なら後まで残る出来事のときの強さ。
+前から続いている気持ちは、心のメモに書いてある。選び直さなくても残る。`;
+
+/** The block of a turn that offers the field: the inner note's while its switch is on, else the one of before (byte for byte). */
+export function replyFeelingInstructions(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): string {
+  return switchOn(environment, 'SHANNON_INNER_NOTE') ? INNER_NOTE_REPLY_FEELING_INSTRUCTIONS : REPLY_FEELING_INSTRUCTIONS;
+}
 
 /** What a turn asks of the model: the field, only for a turn the owner alone reads, and only while the switch is on. */
 export function replyFeelingOffer(

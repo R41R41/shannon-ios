@@ -20,9 +20,13 @@ import {
 // Moved to the pure package in Syzygy ADR-0008 stage 3 (S3), unchanged; re-exported for its readers.
 export { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export { emotionTiming };
 import { decidedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
+// Syzygy ADR-0012: the reply paths' hooks of her inner note, from the one module they already import of her feeling.
+export { innerNoteText, innerNoteVoice, type InnerNotePort } from './innerNotePorts.js';
 export { replyFeelingOffer } from './chatReplyFeeling.js';
 
 const SHARED_TIME_LOOKBACK_MILLISECONDS = 31 * 24 * 60 * 60_000;
@@ -102,7 +106,8 @@ export function feelingBeforeTurn(snapshot: CompanionStateSnapshot, now: string,
  * no companion-state block (the slim voice path). Empty when nothing is left and under the kill switch.
  */
 export function stillFeltLine(snapshot: CompanionStateSnapshot, now: string): string {
-  return lingeringFeelingLine(snapshot, now, emotionTiming());
+  // Syzygy ADR-0012 D5.1 (`SHANNON_INNER_NOTE`): what she still holds eases as her inner note says, not by an apology.
+  return lingeringFeelingLine(snapshot, now, emotionTiming(), switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? { innerNote: true } : {});
 }
 
 /** Her feeling for one completed reply, with this process's emotion timing. Callers on the server use this, not the pure function. */

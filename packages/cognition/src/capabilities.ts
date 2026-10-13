@@ -317,14 +317,22 @@ const answeringRules = (audience: ShannonAudience) => [
 ];
 
 /** One description for text and voice. Guests see only capabilities that need no owner data. */
-export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner'): string {
+/** The guest's line; with her character core (ADR-0012, owner 2026-10-14) the owner is named ライ氏, not 持ち主. */
+function guestLine(core: boolean): string {
+  const owner = core ? 'ライ氏' : '持ち主';
+  return `この場では、${owner}の個人的なことは、話す前に「この場の人がまだ知らない個人情報にならないか」を自分で確かめ、なるなら話さない。`
+    + '内緒と言われたことは知らされていない。記憶・タスク・ノートを作る、消す、作業を始めるといった操作はしない。'
+    + `この場で聞いた名前と話したことは覚える（${owner}が通話の後で「今回は残さない」を選べば残さない）。`;
+}
+
+export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner', options: { characterCore?: boolean } = {}): string {
   const capabilities = SHANNON_CAPABILITIES.filter(item => audience === 'owner' || item.audience === 'everyone');
   return [
     '[ボクにできること・できないこと]',
     'できること（頼み方）:',
     ...capabilities.map(item => `- ${item.text}`),
     ...(audience === 'guest'
-      ? ['この場では、持ち主の個人的なことは、話す前に「この場の人がまだ知らない個人情報にならないか」を自分で確かめ、なるなら話さない。内緒と言われたことは知らされていない。記憶・タスク・ノートを作る、消す、作業を始めるといった操作はしない。この場で聞いた名前と話したことは覚える（持ち主が通話の後で「今回は残さない」を選べば残さない）。']
+      ? [guestLine(options.characterCore === true)]
       : []),
     '今はできないこと:',
     ...SHANNON_LIMITATIONS.map(item => `- ${item.text}`),

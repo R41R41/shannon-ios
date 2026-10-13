@@ -90,7 +90,7 @@ export interface BodyReactionAnswer {
   status: 'said' | 'quiet';
   message: BodyReactionMessage | null;
   /** Her face after the touch (and after her line, when she said one). */
-  mood: { expression: ShannonExpression; feeling?: ShannonFeeling };
+  mood: { expression: ShannonExpression; feeling?: ShannonFeeling; tell?: 'blush'; until?: string };
   /** Present only when the touch was not taken in: its fields name something that cannot be a touch (`isImpossibleTouch`). */
   ignored?: 'not_a_touch';
 }

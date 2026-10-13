@@ -149,6 +149,7 @@ A read-only snapshot of what the body should show. Reading it changes nothing of
 | --- | --- | --- |
 | `mood.expression` | one of the 22 faces (`joyful`, `calm`, `neutral`, …) | 「いま」: `presentCompanionState(...).presence.mood`, the same value `GET /v1/state` returns. |
 | `mood.feeling` | `proud` \| `flustered` \| `apologetic`, optional | same |
+| `mood.tell`, `mood.until` | `blush`, optional; an instant, optional | Added 2026-10-14 (Syzygy ADR-0012, only while `SHANNON_INNER_NOTE` is on and her inner note is active): `expression`/`feeling` are then the face of what she shows, `tell: blush` asks for a blush laid over it (her true feeling showing through; ADR-0012 §7, a body without a cheek layer ignores it), and `until` is until when she means to keep it (not a deadline). A body that does not know them ignores them. |
 | `mood.primary` | the conversational emotion (`happy`, `shy`, `sleepy`, …), `neutral` once it has settled | `currentShannonEmotion` |
 | `mood.intensity` | 0–1 in steps of 0.1; 0 once settled | same |
 | `mood.fromConversation` | boolean; false once the last conversational feeling has settled | 「いま」 |
@@ -546,7 +547,7 @@ The answer is `200`:
 | `message.expression`, `message.feeling` | the `presence` vocabulary; `feeling` optional | The face for the line. |
 | `message.threadId` | string \| `null` | The Talk a spoken answer would continue (the most recent one); `null` when she has no Talk yet. |
 | `message.listenSeconds` | integer, 0–30 (default 6) | How long the body keeps its microphone open for his answer. |
-| `mood.expression`, `mood.feeling` | the `presence` vocabulary | Her face **after** the touch (and after her line). Present for both statuses, so the body can show the feeling at once instead of waiting for the next presence poll. No cause is returned. |
+| `mood.expression`, `mood.feeling` | the `presence` vocabulary | Her face **after** the touch (and after her line). Present for both statuses, so the body can show the feeling at once instead of waiting for the next presence poll. No cause is returned. `mood.tell` and `mood.until` as on presence (ADR-0012). |
 | `ignored` | `not_a_touch`, absent otherwise | Added 2026-10-06. The request named something that cannot be a touch (see [Touch vocabulary 2](#touch-vocabulary-2)): the answer is `quiet`, and the touch moved no feeling, left no memory and called no model. Nothing is kept under the `id` and the request is not counted against the 12 a minute; the same request is answered the same way every time, whatever its `id` was used for before. |
 
 What the body does:

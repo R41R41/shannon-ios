@@ -54,7 +54,7 @@ import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestC
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
-import { emotionTiming, feelingBeforeTurn, stillFeltLine } from '../../mind/emotion/companionPresence.js';
+import { emotionTiming, feelingBeforeTurn, innerNoteVoice, stillFeltLine, type InnerNotePort } from '../../mind/emotion/companionPresence.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
@@ -62,7 +62,7 @@ import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { perceptionOrActionRequest } from './voiceRecallScope.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnToolResults, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -81,7 +81,7 @@ import { finishTurnTiming, TurnTiming, turnStages, turnTimingId } from '../../in
 import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT, webForWeather, followUp } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
-  looks?: VoiceLooks;
+  looks?: VoiceLooks; innerNote?: InnerNotePort; // Syzygy ADR-0012 (SHANNON_INNER_NOTE): her inner note; absent, every prompt as before.
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel; auxiliaryChatModel?: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
@@ -207,6 +207,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' as const : 'owner' as const,
     context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
+    ...innerNoteVoice.route(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt), // ADR-0012: voice_route.v3 sees her.
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined, ...dependencies.looks?.routing,
   };
   let decision = await timing.measure('route', () => bounded('route_timeout', router.decide(routeInput), () => localRules.decide(routeInput)));
@@ -262,8 +263,8 @@ async function completeLiveVoiceDelegation(
   const provisionalExpressiveEmotion = emotionWith();
   let expressiveEmotion = provisionalExpressiveEmotion;
   // Its timing line is noted too (`silence`, `chars`).
-  const planFor = voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing,
-    trigger: deviceContext?.userUtterance?.trigger });
+  const planFor = innerNoteVoice.planner(voicePlanner(decision, voiceMood, { ownerAlone: alone && !temporaryGuest, transcript, timing,
+    trigger: deviceContext?.userUtterance?.trigger }), dependencies.innerNote, scopeKey, occurredAt, alone && !temporaryGuest); // ADR-0012 D5.2
   let voicePlan = planFor(expressiveEmotion);
   await observer?.onPlan(voicePlan);
   const waitingSaid = String(voicePlan.waitingPhrase ?? '').trim() ? { waitingSaid: observer?.waitingSaid?.bind(observer) ?? true as const } : {};
@@ -304,8 +305,8 @@ async function completeLiveVoiceDelegation(
   // Fixed first, what changes last (`ShannonPromptLayers`): her profile follows the fixed blocks, the state opens the turn's context.
   // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
   // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
-  const identity = temporaryGuest ? identityOnly(shannonIdentityPrompt('guest')) : selectedSkills.has('conversation_memory') && alone
-    ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner', { othersPresent: !alone }));
+  const identity = innerNoteVoice.identity(temporaryGuest ? identityOnly(shannonIdentityPrompt('guest')) : selectedSkills.has('conversation_memory') && alone
+    ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner', { othersPresent: !alone })), dependencies.innerNote);
   const basePrompt = temporaryGuest
     ? [identity.identity, voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions].join('\n\n')
     : [withStage5Capabilities(dependencies.autonomy?.identityProjection(scopeKey, identity.identity) ?? identity.identity, alone ? dependencies.stage5Capabilities : undefined), voiceConversationInstructions(true)].join('\n\n');
@@ -339,17 +340,17 @@ async function completeLiveVoiceDelegation(
     temporaryGuest ? '' : alone ? dependencies.autonomy?.pursuitPrompt(scopeKey)
       : guardedShannonSeenPrompt(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '', focusGate.unlabelledMarker),
     taskPrompt,
-    capabilityPrompt,
+    capabilityPrompt, innerNoteVoice.context(dependencies.innerNote, scopeKey, alone, temporaryGuest, occurredAt), // ADR-0012: her inner note.
     [
       '[Voice route]',
       `Conversation class: ${decision.conversationClass}. Expected latency: ${decision.latencyClass}.`,
       `Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
       `Concrete-solution probability: ${decision.solutionWantedProbability.toFixed(2)}.`,
       decision.solutionWantedProbability < 0.4
-        ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
+        ? innerNoteVoice.presence(dependencies.innerNote)
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
-    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
+    innerNoteVoice.expressive(dependencies.innerNote)(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
     alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
@@ -442,7 +443,7 @@ async function completeLiveVoiceDelegation(
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
   if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = emotionWith(reply);
-  voicePlan = planFor(expressiveEmotion);
+  voicePlan = planFor(expressiveEmotion, turnToolResults(toolOffer.tools).some(call => !call.ok)); // A failed tool keeps her apology.
   // Her stored feeling toward the owner moves only on his own words.
   if (alone) dependencies.stateStore.apply(scopeKey, { type: 'expressive-emotion-updated', emotion: expressiveEmotion });
   let completedIntent = provisionalIntent;
@@ -469,6 +470,8 @@ async function completeLiveVoiceDelegation(
       ...taskProposal,
     }];
   }
+  innerNoteVoice.ended(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt, transcript, reply, expressiveEmotion,
+    deviceContext?.userUtterance?.id); // ADR-0012
   stageFcaVoice(fcaTurn);
   dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
   return visibleVoiceResponse(() => ({

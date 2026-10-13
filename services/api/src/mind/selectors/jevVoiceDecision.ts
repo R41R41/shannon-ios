@@ -27,6 +27,13 @@ export interface JevVoiceDecisionOptions {
   weatherSkill?: boolean;
 }
 
+/**
+ * `voice_route.v3` (Syzygy ADR-0012 D5.4): with `shannon_inner` in the state, her performance comes from how she is inside, not from
+ * the speaker's feeling (2026-10-14: his apology made her sound apologetic three times in fifteen minutes).
+ */
+export const INNER_AFFECT_INSTRUCTIONS = 'Choose the primary emotional performance for Shannon\'s spoken reply from her own state in shannon_inner, '
+  + 'rather than by mirroring the speaker\'s emotion.';
+
 /** Room the model fallback needs inside the 2.5 s route bound. */
 export const JEV_FALLBACK_START_MILLISECONDS = 1_000;
 
@@ -96,7 +103,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
         }],
         ['affect', {
           type: 'choice',
-          instructions: 'Choose the primary emotional performance for Shannon\'s spoken reply.',
+          instructions: input.shannonInner ? INNER_AFFECT_INSTRUCTIONS : 'Choose the primary emotional performance for Shannon\'s spoken reply.',
           criteria: {
             ...voiceAffectInstructions,
           },
@@ -137,6 +144,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
         has_fresh_location: input.hasFreshLocation,
         recent_context: input.context ?? [],
         raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
+        ...(input.shannonInner ? { shannon_inner: input.shannonInner } : {}),
       }, questions);
       return parsedJevDecision(body, input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     } catch {

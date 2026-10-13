@@ -11,7 +11,11 @@
  * (`SHANNON_JEV_MODEL`), so this check is the one that holds for every name here.
  */
 import { createHash } from 'node:crypto';
-import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
+import {
+  CHARACTER_CORE, characterCoreBlock, looksSecret, shannonCapabilityPrompt, shannonOneLineVoice, shannonPersonaPrompt, shannonSuitePrompt,
+} from '@shannon/cognition';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 import { configuredAutonomy } from '../../mind/inhibition/autonomyBudget.js';
 import { ownerDocumentsEnabled } from '../../mind/action/ownTime/autonomyLoopConfig.js';
 import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from '../../mind/action/ownTime/autonomyModels.js';
@@ -97,14 +101,16 @@ export interface SelfDiagnosisSources {
 }
 
 /** The persona text, the suite roles and what she can and cannot do (owner and guest), as one canonical JSON array. */
-export function personaHashSource(): string {
+export function personaHashSource(innerNote = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE')): string {
+  // Syzygy ADR-0012: with the switch on, the persona she is given is her character core's; off, the text of before (the same hash).
+  const core = innerNote ? { characterCore: characterCoreBlock(CHARACTER_CORE) } : {};
   return JSON.stringify([
-    ['persona.owner', shannonPersonaPrompt('owner')],
-    ['persona.guest', shannonPersonaPrompt('guest')],
+    ['persona.owner', shannonPersonaPrompt('owner', core)],
+    ['persona.guest', shannonPersonaPrompt('guest', core)],
     ['suite', shannonSuitePrompt()],
-    ['capabilities.owner', shannonCapabilityPrompt('owner')],
-    ['capabilities.guest', shannonCapabilityPrompt('guest')],
-    ['oneLineVoice', SHANNON_ONE_LINE_VOICE],
+    ['capabilities.owner', shannonCapabilityPrompt('owner', innerNote ? { characterCore: true } : {})],
+    ['capabilities.guest', shannonCapabilityPrompt('guest', innerNote ? { characterCore: true } : {})],
+    ['oneLineVoice', shannonOneLineVoice(innerNote)],
   ]);
 }
 

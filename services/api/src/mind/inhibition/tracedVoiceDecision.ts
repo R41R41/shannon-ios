@@ -1,4 +1,5 @@
 import { emptyJevProbe, withJevProbe } from '../../infra/models/jev/jevClient.js';
+import { JEV_QUESTION_SETS } from '../../infra/models/jev/jevChoice.js';
 import type { VoiceDecisionGateway, VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from '../../contracts/decisionTraceContract.js';
 
@@ -38,7 +39,9 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
     try {
       const trace = voiceRouteTrace(this.inner, input, decision, probe, Math.max(0, clock() - started), at, this.options.usdPerJevCall);
       const set = this.options.questionSet;
-      this.write(input.scopeKey, set ? { ...trace, answers: { ...trace.answers, qv: [set.id], ql: set.language } } : trace);
+      // Syzygy ADR-0012: a turn that gave Jev her inner line asked `voice_route.v3`.
+      const id = set && input.shannonInner ? JEV_QUESTION_SETS.voiceRouteInner : set?.id;
+      this.write(input.scopeKey, set ? { ...trace, answers: { ...trace.answers, qv: [id!], ql: set.language } } : trace);
     } catch { /* a trace never fails a turn */ }
     return decision;
   }

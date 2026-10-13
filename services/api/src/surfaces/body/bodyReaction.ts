@@ -11,13 +11,14 @@ import {
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
 } from '../../contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
-import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, bodyTouchLine, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { reflexPartWord } from './bodyTouchReflex.js';
 import { bodyTouchPartWord, bodyTouchRegionWord, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './store/bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from '../../mind/emotion/bodyTouch.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../../mind/memory/memoryVisibility.js';
+import { innerNoteMood, innerNoteTouchContext, type InnerNotePort } from '../../mind/emotion/innerNotePorts.js';
 
 /**
  * When she is touched: the reflex from a touch to her answer (Syzygy ADR-0003, reflex layer).
@@ -78,8 +79,17 @@ export class BodyReactions {
   private readonly inflight = new Map<string, { hash: string; answer: Promise<BodyReactionAnswer> }>();
   private readonly requests = new Map<string, number[]>();
   private readonly pruned = new Map<string, number>();
+  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note, read by the touch prompt and told of the touch, and the face on presence. */
+  private port: InnerNotePort | null = null;
 
   constructor(private readonly dependencies: BodyReactionDependencies) {}
+
+  /** The kernel hands her inner note once, at composition; null (the switch off): every prompt and face as before. */
+  useInnerNote(port: InnerNotePort | null): void {
+    this.port = port;
+  }
+
+  get innerNote(): InnerNotePort | null { return this.port; }
 
   get enabled(): boolean { return this.dependencies.config.enabled && this.dependencies.ingestEnabled; }
 
@@ -181,6 +191,7 @@ export class BodyReactions {
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);
+      if (felt) this.noteTouch(scopeKey, request, decision, at, felt.burst.id);
       // Syzygy ADR-0006 stage 2: her stance is the outcome of the touch, and its prediction error moves her.
       const prediction = felt?.prediction;
       const settled = felt && prediction ? this.settle(scopeKey, felt, decision) : null;
@@ -285,6 +296,7 @@ export class BodyReactions {
       ...(stage2 ? { asksStance: true } : {}), ...(history ? { history } : {}),
       touch: request.touch, audience: request.audience, feeling: presentShannonFeeling(felt.snapshot, at, emotionTiming()),
       burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at, ...(surface ? { surface } : {}),
+      ...(this.innerNote ? { inner: { block: innerNoteTouchContext(this.innerNote, scopeKey, request.audience, at) } } : {}),
     });
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -320,6 +332,16 @@ export class BodyReactions {
     } catch { /* the answer stands without its row */ }
   }
 
+  /** Syzygy ADR-0012: her inner note is told of the touch (it decides whether to reflect; others present: nothing). Never throws. */
+  private noteTouch(scopeKey: string, request: BodyReactionRequest, decision: BodyReactionDecision | null, at: string, burstId: string): void {
+    if (!this.innerNote) return;
+    // The touch as she remembers it (the burst is its experience): its forgetting and its retention take the notes it prompted.
+    this.innerNote.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${burstId}`,
+      phrase: bodyTouchLine(request.touch, request.audience),
+      ...(decision?.stance ? { stance: decision.stance } : {}), ...(request.touch.reflex ? { reflex: request.touch.reflex } : {}),
+      ...(decision?.say ? { said: decision.text } : {}) });
+  }
+
   /** The last lines of the Talk, only while a conversation with the owner alone is in progress. */
   private conversation(scopeKey: string, request: BodyReactionRequest, snapshot: CompanionStateSnapshot, at: string): readonly { role: 'user' | 'assistant'; content: string }[] {
     if (request.audience !== 'owner') return [];
@@ -345,7 +367,10 @@ export class BodyReactions {
   /** Her face now, without its cause: the body may be on a stream. */
   private mood(snapshot: CompanionStateSnapshot, at: string): BodyReactionAnswer['mood'] {
     const mood = presentShannonMood(snapshot, at, emotionTiming());
-    return { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) };
+    // Syzygy ADR-0012: her note's face while it is active, never over an override (safety, grief, an emergency).
+    const overridden = presentShannonFeeling(snapshot, at, emotionTiming()).overrideReason !== undefined;
+    const face = { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) };
+    return innerNoteMood(this.innerNote, snapshot.scopeKey, at, face, overridden);
   }
 
   private allowed(scopeKey: string, at: string): boolean {

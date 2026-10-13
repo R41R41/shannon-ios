@@ -1,6 +1,6 @@
 import { placeSearchInstructions, placeSearchSchema } from '../../integrations/places/placeDiscovery.js';
 import type { ShannonChatModelRequest, ShannonChatModelResult } from './chatModel.js';
-import { REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA } from '../../mind/emotion/chatReplyFeeling.js';
+import { REPLY_FEELING_SCHEMA, replyFeelingInstructions } from '../../mind/emotion/chatReplyFeeling.js';
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
@@ -93,7 +93,7 @@ export function chatTurnInstructions(request: ShannonChatModelRequest, agentHost
     INTENT_PLAN_INSTRUCTIONS,
     agentTaskInstructions(agentHostHint),
     THREAD_SUMMARY_INSTRUCTIONS,
-    ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
+    ...(request.offerReplyFeeling ? [replyFeelingInstructions()] : []),
     ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []),
   ].join('\n\n');
@@ -260,7 +260,7 @@ export function offeredReplyFields(request: ShannonChatModelRequest): TurnReplyF
 
 /** The instructions `chatTurnRequestBody` adds to the system for what this turn offers (the reply's feeling). */
 export function offerInstructions(request: ShannonChatModelRequest): string[] {
-  return request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : [];
+  return request.offerReplyFeeling ? [replyFeelingInstructions()] : [];
 }
 
 /** The request whose instructions hold only what every turn has: no offer's instructions, no tools, no withheld line. */

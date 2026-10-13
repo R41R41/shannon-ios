@@ -1,5 +1,6 @@
 import {
-  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, isShannonEmotionKind, shannonTemperament,
+  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME, isShannonEmotionKind,
+  shannonTemperament,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
 import type { BodyAudience } from '../../contracts/bodyContract.js';
@@ -46,6 +47,11 @@ export interface BodyReactionPromptInput {
    * part before, newest first (empty: the first time). Facts, not rules.
    */
   history?: { closeness: number; part?: string; stances?: readonly BodyTouchStance[] };
+  /**
+   * Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): present, her one-line voice without a fixed register, her character core's short form in
+   * place of the temperament line, and her inner note's block (`innerNoteTouchContext`; empty without a current note). Absent: as before.
+   */
+  inner?: { block: string };
 }
 
 /** A touch while it is going on, and once it is over. */
@@ -121,7 +127,8 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
   const others = input.sitting.filter(burst => burst.id !== input.burst.id);
   const conversation = input.audience === 'owner' ? input.conversation.slice(-BODY_REACTION_LIMITS.contextMessages) : [];
   return [
-    SHANNON_ONE_LINE_VOICE,
+    input.inner ? SHANNON_ONE_LINE_VOICE_INNER : SHANNON_ONE_LINE_VOICE,
+    ...(input.inner?.block ? [input.inner.block] : []),
     [
       '[体に触れられた]',
       `${bodyPlace(input.surface)}に、いま触れられた。`,
@@ -147,7 +154,8 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
     ].join('\n')] : []),
     // Her temperament, from the one persona source (`shannonTemperament`; owner decision "a" and scope (a), 2026-10-06): the
     // touch prompt carries no identity block, so it states it once here, worded for who is there. Outside the stage-2 switch.
-    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), `- ${shannonTemperament(input.audience === 'owner' ? 'owner' : 'others')}`, ...(input.asksStance || asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`] : []),
+    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), ...(input.inner ? [] : [`- ${shannonTemperament(input.audience === 'owner' ? 'owner' : 'others')}`]),
+      ...(input.asksStance || asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`] : []),
       ...(input.audience === 'others' ? [`- ${BODY_REACTION_OTHERS_RULE}`] : [])].join('\n'),
   ].join('\n\n');
 }

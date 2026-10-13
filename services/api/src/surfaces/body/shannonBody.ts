@@ -29,6 +29,7 @@ import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
+import { innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
 export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 
 /**
@@ -357,13 +358,13 @@ export class ShannonBody {
     // This read is what tells her the window is visible; an open look for this device rides on the snapshot.
     const looking = this.looks.presence(scopeKey, deviceId, at);
     const content = {
-      mood: {
+      mood: innerNoteMood(this.reactions.innerNote, scopeKey, at, { // Syzygy ADR-0012: while her inner note is active, the face it shows.
         expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}),
         primary: mood.fromConversation ? current.primary : 'neutral',
         intensity: mood.fromConversation ? round(current.intensity, 1) : 0,
         fromConversation: mood.fromConversation,
         valence: round(snapshot.emotion.valence, 2), arousal: round(snapshot.emotion.arousal, 2), openness: round(snapshot.emotion.openness, 2),
-      },
+      }, current.overrideReason !== undefined),
       doing: bodyDoing(overview.loop.state, this.dependencies.autonomy.activityDays(scopeKey, 2), at),
       autonomy: { state: overview.control.state },
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },

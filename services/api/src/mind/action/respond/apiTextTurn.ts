@@ -1,6 +1,7 @@
 import { ownerTimeZone } from '../../../infra/time/localDate.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { randomUUID } from 'node:crypto';
+import { withCharacterCore, type InnerNotePort } from '../../emotion/innerNotePorts.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from '../../../integrations/aether/aetherContext.js';
@@ -68,6 +69,8 @@ export interface TextTurnDependencies {
   personIdentities: PersonIdentityStore; cognitiveIntents: CognitiveIntentStore; conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall: TurnMemoryRecall | null; people: PeopleMemory; toolServer: ConversationToolServer; now: CompanionClock;
   body: Pick<ShannonBody, 'ownerContext'>;
+  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note; the identity then carries her character core. Absent: as before. */
+  innerNote?: InnerNotePort;
   /** What her Minecraft body (and, `devicePromptBlock`, the owner's devices) reported of what they were asked, for a turn the owner alone reads. */
   minecraftRequests: ReportedWork | null;
   /** Syzygy ADR-0008 stage 3: the mind of the turn, when there is one (its data frames frame the reports a turn builds itself). */
@@ -269,7 +272,8 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const body = input.body;
   const { captured, explicitCommand } = begun;
   // Her Minecraft body's capability line is added to the model request when its tools include `minecraft.request`.
-  const identity = audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(body.scopeKey) ?? companionIdentityPrompt(captured));
+  const projected = audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(body.scopeKey) ?? companionIdentityPrompt(captured));
+  const identity = withCharacterCore(projected, dependencies.innerNote); // Syzygy ADR-0012 D6: her character core, behind the switch.
   const basePrompt: LayeredIdentityPrompt = { ...identity, identity: withStage5Capabilities(dependencies.autonomy.identityProjection(body.scopeKey, identity.identity), audience.alone ? dependencies.stage5Capabilities : undefined) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,

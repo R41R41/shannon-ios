@@ -1,6 +1,7 @@
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
 import { base64Image, claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
-import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
+import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES, shannonOneLineVoice } from '@shannon/cognition';
+import { switchOn } from '@shannon/switches';
 import { BODY_LOOK_LIMITS, type BodyLookImage } from '../../contracts/bodyLookContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
@@ -38,7 +39,7 @@ export function roomLookInstructions(context: readonly RoomLookContextLine[], ap
     return `${item.role === 'user' ? SHANNON_OWNER_NAME : SHANNON_FIRST_PERSON}: ${clipped}`;
   });
   return [
-    SHANNON_ONE_LINE_VOICE,
+    shannonOneLineVoice(switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE')), // Syzygy ADR-0012 D5.1: her core's, behind the switch.
     app ? `[アプリのカメラで見た]\n${SHANNON_OWNER_NAME}が使っているアプリの${app.camera === 'front' ? `内側のカメラ（${SHANNON_OWNER_NAME}自身のほう）` : `外側のカメラ（${SHANNON_OWNER_NAME}が向けている先）`}で一度だけ見た。添付の1枚が、いま見えたもの。直前の会話に合うことを中心に、気づいたことを1〜3文で${SHANNON_OWNER_NAME}に話す。`
       : `[部屋を見た]\n${SHANNON_OWNER_NAME}に許されて、体のカメラで部屋を一度だけ見た。添付の1枚が、いま見えたもの。直前の会話に合うことを中心に、気づいたことを1〜3文で${SHANNON_OWNER_NAME}に話す。`,
     // The outer camera is aimed at something else: a person in view there is not taken to be the owner.

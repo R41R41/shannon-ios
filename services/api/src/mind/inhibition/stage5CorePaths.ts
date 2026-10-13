@@ -1,8 +1,14 @@
-/** ADR-0008 stage 5: new writers, authority, learning and composition remain subject to core approval. */
+import { INNER_NOTE_CORE_PATHS } from './innerNoteCorePaths.js';
+
+/**
+ * ADR-0008 stage 5: new writers, authority, learning and composition remain subject to core approval. Syzygy ADR-0012 stage 1 rides
+ * here too (her character core and her inner note: persona and emotion), so `autonomyCore.ts` keeps its imports.
+ */
 export const STAGE5_CORE_PATHS = Object.freeze({
   purpose: Object.freeze([] as string[]),
-  persona: Object.freeze([] as string[]),
+  persona: Object.freeze([...INNER_NOTE_CORE_PATHS.persona] as string[]),
   emotion: Object.freeze([
+    ...INNER_NOTE_CORE_PATHS.emotion,
     'services/api/src/wiring/feedbackWiring.ts',
     'services/api/src/wiring/stage5FeedbackWiring.ts',
     'services/api/src/wiring/configuredWorkerFeedback.ts',

@@ -349,6 +349,12 @@ export function lingeringMeaning(feeling: ShannonLingeringFeeling, strength: num
 }
 
 /**
+ * The unpleasant line while her inner note is on: no rule of how it eases (an apology does not undo it by rule; owner 2026-10-14:
+ * no rules of behavior in her prompt). How she holds it is in her inner note.
+ */
+export const INNER_NOTE_UNPLEASANT_LINE = 'どう表に出すか、いつほどくかは、心のメモに書いたとおりの自分の気持ち。';
+
+/**
  * The prompt line for what she still feels from before this conversation, for a turn with the
  * owner alone. Empty when nothing is left, without a clock, and under `clock: 'wall'`.
  */
@@ -356,6 +362,8 @@ export function lingeringFeelingLine(
   state: Pick<CompanionStateSnapshot, 'emotionClock' | 'lingering'>,
   now: string | undefined,
   timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
+  /** Syzygy ADR-0012 D5.1 (`SHANNON_INNER_NOTE`): her inner note, not an apology, says how what she holds eases. */
+  options: { innerNote?: boolean } = {},
 ): string {
   if (!now) return '';
   const living = livingLingering(state, now, timing).slice(0, 2);
@@ -364,7 +372,8 @@ export function lingeringFeelingLine(
   return [
     `まだ残っている気持ち: ${living.map(item => `${lingeringMeaning(item.feeling, item.strength, now)}（${item.feeling.kind} / 強さ ${item.strength.toFixed(2)}）`).join('、')}。`,
     unpleasant
-      ? '表に出てもよいが、責めたり罪悪感を誘ったりはしない。謝罪ややさしい言葉、起きて過ごす時間で自然にほどけてよい。'
+      ? options.innerNote ? INNER_NOTE_UNPLEASANT_LINE
+        : '表に出てもよいが、責めたり罪悪感を誘ったりはしない。謝罪ややさしい言葉、起きて過ごす時間で自然にほどけてよい。'
       : '自然ににじんでよい。',
   ].join('');
 }
