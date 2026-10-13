@@ -215,7 +215,7 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     chatModel: model, auxiliaryChatModel: modelModes ? chat : model, voiceDecision: configuredVoiceDecision(options.live ? environment : {}, usage, null), // As `server.ts` builds it (no traces in a trial).
     stateStore: store, conversationStore: store, background: new DurableBackgroundDispatcher(store, store), knowledgeStore: store,
     agentTasks, voyagerCatalog, upcoming: ownerUpcoming.upcoming, memoryRecall, autonomy,
-    minecraftRequests: deviceActions.reports(null), ...(readTools ? { readTools } : {}), ...(memoryPorts ? { memory: memoryPorts } : {}),
+    minecraftRequests: deviceActions.reports(), ...(readTools ? { readTools } : {}), ...(memoryPorts ? { memory: memoryPorts } : {}),
     mind: { perceive: () => null, foreground: foregroundRunner(threads.actions) },
     fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
     // Stage 2 (`server.ts`): Jev's tool menu for the turn while its key is set (no decision traces in a trial).
@@ -287,6 +287,7 @@ function seedInnerNotes(path: string, initial: InitialState): void {
           until: seed.untilMinutes === undefined ? null : new Date(clock + seed.untilMinutes * 60_000).toISOString(),
           routeSummary: 'Shannon is acting a little sulky and cool.' },
         triggers: ['touch'], events: [], sourceIds: [], flags: {}, changeReason: null, summary: null, coreVersion: CHARACTER_CORE.version,
+        episodeStartedAt: seed.intent === 'none' ? null : createdAt,
         coreHash: CHARACTER_CORE.hash, usage: null, elapsedMs: 0, createdAt, closing: false });
     }
   } finally { store.close(); }
