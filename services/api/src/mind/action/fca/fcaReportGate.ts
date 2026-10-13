@@ -169,11 +169,14 @@ export function gatedProgress(parts: ReportGateParts, shown: (taskId: string) =>
 
 /** The two views of a progress the server hands out: the card's (holds and drops) and the call's (drops only). */
 export function reportGates(parts: Omit<ReportGateParts, 'history'> & {
-  conversations?: { recentMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
+  conversations?: { recentThreadMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
+    recentMessages?(scopeKey: string, threadId: string, limit: number): ReturnType<ReportGateParts['history']>;
     conversationHistory(scopeKey: string, threadId?: string): ReturnType<ReportGateParts['history']> } | undefined;
 }, shown: (taskId: string) => TaskProgress | null) {
   const { conversations, ...rest } = parts;
-  const gate: ReportGateParts = { ...rest, history: threadId => conversations?.recentMessages?.(parts.ownerScope, threadId, 40)
+  // A read only where the store has one: the gate is asked on every scan that looks at a report, and must not move the default Talk.
+  const gate: ReportGateParts = { ...rest, history: threadId => conversations?.recentThreadMessages?.(parts.ownerScope, threadId, 40)
+    ?? conversations?.recentMessages?.(parts.ownerScope, threadId, 40)
     ?? conversations?.conversationHistory(parts.ownerScope, threadId).slice(-40) ?? [] };
   return {
     card: gatedProgress(gate, shown, 'card'), call: gatedProgress(gate, shown, 'call'),

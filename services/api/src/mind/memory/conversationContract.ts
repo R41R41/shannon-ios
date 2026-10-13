@@ -196,6 +196,11 @@ export interface ConversationStore {
   threadSummaryLineage?(scopeKey: string, threadId: string): ThreadSummaryLineage;
   /** Completed turns by ID, including ones older than the recent candidate window. */
   experiencesById?(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[];
+  /**
+   * `recentMessages` of that very thread as a read only: no thread is created and the default Talk is not moved (`recentMessages`
+   * resolves the thread as the app does, making it the default). For checks that run every few seconds (the report-card scan).
+   */
+  recentThreadMessages?(scopeKey: string, threadId: string, limit: number): readonly StoredConversationMessage[];
   /** The newest `limit` messages of a thread, oldest first. Absent: the displayed history is used. */
   recentMessages?(scopeKey: string, threadId: string, limit: number): readonly StoredConversationMessage[];
   replaySummary?(scopeKey: string, threadId: string): ReplaySummaryRecord | undefined;

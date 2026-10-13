@@ -41,7 +41,7 @@ export function reportCardOf(task: Pick<TaskView, 'id' | 'title' | 'phase'>, pro
 type CardParts = {
   runtime: Pick<TaskRuntime, 'list' | 'get' | 'taskSources'> & Partial<Pick<TaskRuntime, 'progress'>>;
   ownerScope: string;
-  conversations: Pick<ConversationStore, 'assistantMessage' | 'appendReportCardOnce'> & Partial<Pick<ConversationStore, 'recentMessages'>>;
+  conversations: Pick<ConversationStore, 'assistantMessage' | 'appendReportCardOnce'> & Partial<Pick<ConversationStore, 'recentThreadMessages'>>;
   /**
    * What the owner may see of a task's progress now (null: not visible); asking may start its spoken form. With `gate` this is
    * the visibility view alone (the gate is asked first); without it, the view the report gate already holds and drops in.
@@ -95,8 +95,9 @@ function scanOf(parts: CardParts, at: number) {
   let quiet: boolean | undefined;
   // A failed read differs from every real one: a decision made on a real read is asked again once (the gate, cheap).
   const safely = (read: () => string) => { try { return read(); } catch { return '\u0000unread'; } };
+  // A read only (`recentThreadMessages`): watching a Talk every few seconds creates no thread and never moves the default Talk.
   const threadMark = (threadId: string) => safely(() => {
-    const last = parts.conversations.recentMessages?.(parts.ownerScope, threadId, 1).at(-1);
+    const last = parts.conversations.recentThreadMessages?.(parts.ownerScope, threadId, 1).at(-1);
     return last ? `${last.id}\u0000${last.observedAt}` : '';
   });
   const siblingsMark = (parentId: string) => safely(() => parts.runtime.list(parts.ownerScope, { parentId, order: 'recent', limit: SIBLINGS_LISTED })
@@ -133,7 +134,10 @@ function watchFired(watch: Watch | undefined, scan: Scan): boolean {
  *
  * With `gate`, the report gate is asked first, on the stored progress: a dropped report is settled until the task, its stored
  * progress or (for a sibling's drop) its siblings change; a held one is asked again when the quiet hours end or something is said
- * in its Talk; the sources are walked only for a report the gate delivers. The same reports reach him at the same moments.
+ * in its Talk; the sources are walked only for a report the gate delivers. What differs from asking every 60-120 s: a result
+ * dropped as stale stays dropped (only time or his later words made it stale, and neither goes back); a report released at
+ * 7:00 or by his words is written at the next scan instead of within the next 60-120 s, but, its spoken form being asked for
+ * only then, its card may wait for it up to `REPORT_CARD_SPOKEN_WAIT_MS` (typically a few seconds, ~20 s at worst).
  */
 export function createReportCards(parts: CardParts) {
   const done = new Set<string>();
@@ -161,18 +165,24 @@ export function createReportCards(parts: CardParts) {
   };
   const recheck = (task: TaskView, at: number) => at + REPORT_CARD_RECHECK_MS + spreadOf(task.id);
   /**
-   * Reports the gate held, by task and report: 0 while held, then when it was first let through. Its spoken form is asked for only
-   * once it is delivered (never under the walk of a held report), so the card waits for it from then, as for a new report.
+   * When the scan first found each report deliverable (by task and report). A report it first meets long after it was written (held
+   * for the night, or met again after a restart of the API) has its spoken form asked for only then, so its card waits for that form
+   * from then, as for a new report, instead of taking a plain cut at once.
    */
-  const held = new Map<string, number>();
-  const hold = (key: string) => {
-    if (held.has(key)) return;
-    held.set(key, 0);
-    if (held.size > REMEMBERED) held.delete(held.keys().next().value!);
+  const delivering = new Map<string, number>();
+  const sinceOf = (key: string, report: NonNullable<TaskProgress['report']>, at: number) => {
+    if (!delivering.has(key)) {
+      delivering.set(key, at);
+      if (delivering.size > REMEMBERED) delivering.delete(delivering.keys().next().value!);
+    }
+    const written = Date.parse(report.updatedAt), first = delivering.get(key)!;
+    return first - written < REPORT_CARD_SPOKEN_WAIT_MS ? written : first;
   };
   /** The gate's own decision of a report it holds or drops (true: decided here); false for one it delivers, or without a gate. */
   const gated = (task: TaskView, read: Read, scan: Scan): boolean => {
-    if (!parts.gate || !parts.runtime.progress) return false;
+    if (!parts.gate) return false;
+    // A gate without the stored progress cannot judge: closed, nothing is delivered (asked again after a while).
+    if (!parts.runtime.progress) return decide(task, read.mark, recheck(task, scan.at)) === null;
     const report = read.stored?.report;
     // No report yet: nothing to show or walk; asked again when one is written (the mark), or after a while.
     if (!report?.text.trim()) {
@@ -185,10 +195,9 @@ export function createReportCards(parts: CardParts) {
     if (verdict.decision === 'deliver') return false;
     keepWaiting(task.id);
     if (verdict.decision === 'hold') {
-      hold(`${task.id}:${report.id}`);
       const watch: Watch = { kind: 'quiet', ...(verdict.threadId ? { threadId: verdict.threadId } : {}), thread: scan.thread(verdict.threadId) };
       // Without a way to see his words in the Talk, a hold is asked again after a while, as before.
-      return decide(task, read.mark, parts.conversations.recentMessages ? Infinity : recheck(task, scan.at), watch) === null;
+      return decide(task, read.mark, parts.conversations.recentThreadMessages ? Infinity : recheck(task, scan.at), watch) === null;
     }
     const siblings: Watch | undefined = verdict.reason === 'sibling' && task.parentId
       ? { kind: 'siblings', parentId: task.parentId, siblings: scan.siblings(task.parentId) } : undefined;
@@ -205,7 +214,6 @@ export function createReportCards(parts: CardParts) {
     waiting.delete(task.id);
     const key = `${task.id}:${report.id}`;
     if (done.has(key)) return decide(task, read.mark, Infinity);
-    if (held.get(key) === 0) held.set(key, scan.at);
     return write(task, progress, read.mark, scan.at);
   };
   /** The card of a shown report: written once its short answer is ready (then settled), or looked at again when it may be. */
@@ -214,7 +222,7 @@ export function createReportCards(parts: CardParts) {
     const sources = parts.runtime.taskSources(parts.ownerScope, task.id);
     const threadId = sources.find(source => source.threadId)?.threadId;
     const messageId = reportCardMessageId(parts.ownerScope, task.id, report.id);
-    const since = Math.max(Date.parse(report.updatedAt), held.get(`${task.id}:${report.id}`) ?? 0);
+    const since = sinceOf(`${task.id}:${report.id}`, report, at);
     const answer = threadId && !parts.conversations.assistantMessage?.(parts.ownerScope, threadId, messageId) ? answerOf(task, report, at, since) : '';
     // Waiting for the spoken form: its writing changes the mark; else the plain cut once the wait is over.
     if (answer === null) return decide(task, mark, since + REPORT_CARD_SPOKEN_WAIT_MS);

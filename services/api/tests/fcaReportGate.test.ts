@@ -210,13 +210,13 @@ function gateFirst(start: number, entries: Array<[TaskView, TaskProgress | null]
     progress: (_scope: string, id: string) => find(id)?.[1] ?? null,
     taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(start), recalledMemoryIds: [] }],
   } as unknown as ReportGateParts['runtime'];
-  const recentMessages = (_scope: string, _thread: string, limit: number) => messages.slice(-limit);
+  const recentThreadMessages = (_scope: string, _thread: string, limit: number) => messages.slice(-limit);
   const gates = reportGates({ runtime, ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => clock.at,
-    conversations: { recentMessages, conversationHistory: () => messages } }, id => runtime.progress!('owner', id));
+    conversations: { recentThreadMessages, conversationHistory: () => messages } }, id => runtime.progress!('owner', id));
   const counts = { shown: 0, verdicts: 0 }, shown: string[] = [], written: string[] = [], lines: string[] = [];
   const cards = createReportCards({ runtime: runtime as never, ownerScope: 'owner', now: () => clock.at, ownerAlone: () => true,
     conversations: { assistantMessage: () => null, appendReportCardOnce: (_scope: string, _thread: string, _id: string, note: { card: { taskId: string } }) => {
-      written.push(note.card.taskId); return true; }, recentMessages } as never,
+      written.push(note.card.taskId); return true; }, recentThreadMessages } as never,
     shown: id => { counts.shown += 1; shown.push(id); return walk ? walk(id) : runtime.progress!('owner', id); },
     gate: { verdict: (item, seen) => { counts.verdicts += 1; return gates.cardGate.verdict(item, seen); }, quiet: gates.cardGate.quiet },
     log: line => lines.push(line) });
@@ -300,6 +300,9 @@ describe('the card scan asks the gate first (2026-10-13: 160–1,300 ms a scan f
     entries[1]![0] = { ...entries[1]![0], phase: 'failed', updatedAt: iso(w.clock.at) } as TaskView;
     w.scan(1);
     expect(w.counts).toEqual({ shown: 1, verdicts: 4 });
+    // Its spoken form is asked for only now (it was dropped until now): the card waits for it as for a new report.
+    expect(w.written).toEqual([]);
+    w.scan(REPORT_CARD_SPOKEN_WAIT_MS / 5_000);
     expect(w.written).toEqual(['failure']);
   });
 
@@ -363,5 +366,42 @@ describe('the card scan asks the gate first (2026-10-13: 160–1,300 ms a scan f
     w.shown.length = 0;
     w.scan(1);
     expect(w.shown.sort()).toEqual(['broken', 'hidden']);
+  });
+
+  it('waits for the spoken form after a restart across 7:00 too, not a plain cut at once of a report written in the night', () => {
+    // Review of 90bffd77 (Low-1): the scan's memory of what it held is gone after a restart.
+    const entry: [TaskView, TaskProgress | null] = [task('held', about(80), night), progress('長い報告です。\n- 一つ目\n- 二つ目', night)];
+    const w = gateFirst(morning + minutes(1), [entry]); // A new scan, first run at 7:01.
+    w.scan(1);
+    expect(w.counts.shown).toBe(1);
+    expect(w.written).toEqual([]);
+    w.clock.at = morning + minutes(1) + REPORT_CARD_SPOKEN_WAIT_MS - 1_000;
+    w.scan(1);
+    expect(w.written).toEqual([]);
+    w.clock.at = morning + minutes(1) + REPORT_CARD_SPOKEN_WAIT_MS;
+    w.scan(1);
+    expect(w.written).toEqual(['held']); // No spoken form came: the plain cut, after the same wait as for a new report.
+    // A report met within its wait (the usual case) still waits from when it was written, as before.
+    const fresh: [TaskView, TaskProgress | null] = [task('fresh', about(81), noon - minutes(5)), progress('長い報告です。\n- 一つ目', noon - 10_000)];
+    const v = gateFirst(noon, [fresh]);
+    v.scan(1);
+    v.clock.at = noon - 10_000 + REPORT_CARD_SPOKEN_WAIT_MS;
+    v.scan(1);
+    expect(v.written).toEqual(['fresh']);
+  });
+
+  it('delivers nothing when the gate cannot read the stored progress (closed), and asks again after a while', () => {
+    // Review of 90bffd77 (Low-3): without `runtime.progress` the card's gate cannot judge.
+    let shown = 0, at = night;
+    const parent = { ...task('conversation', '', night), kind: 'conversation', parentId: null } as TaskView;
+    const held = task('held', about(82), night - minutes(30));
+    const cards = createReportCards({ ownerScope: 'owner', now: () => at, ownerAlone: () => true,
+      runtime: { list: () => [held], get: (_scope: string, id: string) => id === parent.id ? parent : held,
+        taskSources: () => [{ stepId: 's', experienceId: 'e', threadId: 'thread', observedAt: iso(night), recalledMemoryIds: [] }] } as never,
+      conversations: { assistantMessage: () => null, appendReportCardOnce: () => { throw new Error('no card may be written'); } } as never,
+      shown: () => { shown += 1; return progress('答え。', night, 'received', { spoken: '答え。' }); },
+      gate: { verdict: () => ({ decision: 'deliver', reason: 'deliver' }), quiet: () => true } });
+    for (let scan = 0; scan < 40; scan++) { expect(cards.tick()).toBe(0); at += 5_000; }
+    expect(shown).toBe(0);
   });
 });

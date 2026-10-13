@@ -1,4 +1,4 @@
-import { reportGates } from '../mind/action/fca/fcaReportGate.js';
+import { fcaReportWiring } from './fcaReportWiring.js';
 import { timedTick } from '../infra/observer/eventLoopWatch.js';
 import { minecraftGoalBinding } from './fcaMinecraftGoalBinding.js';
 import { createFcaProgressTools } from '../mind/action/fca/fcaProgressTools.js';
@@ -51,7 +51,6 @@ import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
-import { createReportCards } from '../mind/action/fca/fcaReportCards.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
 
@@ -177,19 +176,17 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
-    // Which report reaches him now (`fcaReportGate.ts`): the card waits out quiet hours; neither repeats an answered request.
+    // Which report reaches him now (`fcaReportWiring.ts`): the card waits out quiet hours; neither repeats an answered request. Rich
+    // chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
     const seen = progressWithSpokenReports(runtime.runtime, parts.ownerScope, id => visible?.progress?.(parts.ownerScope, id) ?? null, spoken,
       parts.ownerAlone);
-    const shown = reportGates({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, now: Date.now, conversations: parts.conversations }, seen);
-    // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk. The card's gate
-    // first, on the stored progress; the sources are walked (`seen`) only for a report it delivers.
-    const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
-      conversations: parts.conversations, shown: seen, gate: shown.cardGate, ownerAlone: parts.ownerAlone, now: Date.now,
-      log: line => console.warn(line) }) : null;
+    const reports = fcaReportWiring({ runtime: runtime.runtime, ownerScope: parts.ownerScope, timeZone, conversations: parts.conversations, seen,
+      ownerAlone: parts.ownerAlone, log: line => console.warn(line) });
+    const reportCards = reports.cards;
     const cardTimer = reportCards ? setInterval(() => { timedTick('report_cards', () => reportCards.tick()); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
-      progress: shown.call, spokenReports: true });
+      progress: reports.call, spokenReports: true });
     const lifecycleTask = (executionId: string) => {
       const taskId = new ActionLeaseReader(db).fcaTaskOf(executionId, parts.ownerScope);
       return taskId && visible?.(parts.ownerScope, taskId) ? runtime.runtime.taskSources(parts.ownerScope, taskId) : null;
