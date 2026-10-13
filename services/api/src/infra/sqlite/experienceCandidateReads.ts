@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { dataVersion } from './sqliteOpen.js';
 
 /**
  * The remembered turns as last read, per scope, kept with the database's change mark at that read. 2026-10-13: one text turn read
@@ -6,7 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
  * and the FCA report scan again every few seconds: 0.5-2 s of the API's one thread per turn on the VM.
  *
  * The mark changes nothing and reads no rows: every row this connection changed (`total_changes()`, triggers and rolled-back work
- * included) and every commit by any other connection (`PRAGMA data_version`) moves it, so a read kept under the same mark is the
+ * included) and every commit by any other connection (`dataVersion`) moves it, so a read kept under the same mark is the
  * read the database would give now.
  */
 const reads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unknown }>>();
@@ -26,6 +27,5 @@ export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, 
 
 function changeMark(database: DatabaseSync): string {
   const changes = database.prepare('SELECT total_changes() AS changes').get() as { changes: number };
-  const version = database.prepare('PRAGMA data_version').get() as { data_version: number };
-  return `${changes.changes}:${version.data_version}`;
+  return `${changes.changes}:${dataVersion(database)}`;
 }
