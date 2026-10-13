@@ -85,20 +85,36 @@ public final class ShannonYousuModel {
     public let now: ShannonNowModel
     /// 「学び」 (Syzygy ADR-0008 §13): her skills, 手応え and the value table's version.
     public let learning: ShannonLearningModel
-    /// The page of ようす on screen: いま／学び／気分. Kept here so it is the same when ようす is opened again.
+    /// 「目標」 and 「点検」 (Syzygy ADR-0009 stage 2, E7): her goals and choices, the daily counts and her capabilities.
+    public let executive: ShannonExecutiveModel
+    /// The page of ようす on screen: いま／目標／学び／気分／点検. Kept here so it is the same when ようす is opened again.
     public var tab: ShannonYousuTab = .now
+    /// Someone besides the owner may see or hear (the body's audience, a call others may hear): 目標 and 点検 are not offered.
+    public var othersPresent = false {
+        didSet { if othersPresent, Self.ownerOnly.contains(tab) { tab = .now } }
+    }
+
+    /// The pages shown only while the owner is alone.
+    static let ownerOnly: Set<ShannonYousuTab> = [.goals, .inspection]
 
     /// `defaults` keeps, per scope, only whether a report of 運用 has ever arrived (its mark's rule).
     public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)? = ShannonAPIClient(), defaults: UserDefaults? = nil) {
         ops = ShannonOpsModel(scopeKey: scopeKey, client: client, defaults: defaults)
         now = ShannonNowModel(scopeKey: scopeKey, client: client)
         learning = ShannonLearningModel(scopeKey: scopeKey, client: client)
+        executive = ShannonExecutiveModel(scopeKey: scopeKey, client: client)
     }
 
     /// The tabs offered: 学び only once a read of it has answered on this device (it is the owner's alone), never before.
+    /// 目標 and 点検 go with 学び (the owner's device), and only while the owner is alone.
     public var tabs: [ShannonYousuTab] {
-        learning.isOffered || (tab == .learning && !learning.isUnavailable) ? ShannonYousuTab.allCases : [.now, .mood]
+        let ownerDevice = learning.isOffered || (Self.ownerPages.contains(tab) && !learning.isUnavailable)
+        guard ownerDevice else { return [.now, .mood] }
+        return ShannonYousuTab.allCases.filter { !othersPresent || !Self.ownerOnly.contains($0) }
     }
+
+    /// The pages that need the owner's device.
+    static let ownerPages: Set<ShannonYousuTab> = [.goals, .learning, .inspection]
 
     /// The 運用 mark (top-left button, 設定 tile, 運用 row): something in 運用 deserves a look.
     public var needsAttention: Bool { ops.needsAttention }

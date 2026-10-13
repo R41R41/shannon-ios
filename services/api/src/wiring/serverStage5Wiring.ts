@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { switchOn } from '@shannon/switches';
 import type { DatabaseSync } from 'node:sqlite';
 import { dayBand } from '../contracts/cognitionLedgerContract.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
@@ -18,6 +19,7 @@ import { taskFeedbackWiring } from './taskFeedbackWiring.js';
 import { taskTreeWiring } from './taskTreeWiring.js';
 import { configuredConversationExtras } from './conversationExtrasWiring.js';
 import { selfRewriteRuntimeWiring, type SelfRewriteRuntimeOptions } from './selfRewriteRuntimeWiring.js';
+import { executiveRouteWiring } from './executiveRouteWiring.js';
 
 /** Stage5 is composed here. The HTTP server receives one dispatcher and keeps its existing auth and streaming paths. */
 export function configuredServerStage5(environment: Readonly<Record<string, string | undefined>>, parts: {
@@ -30,6 +32,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
   let selfRewriteRoute: ((request: ApiRequest) => Promise<ApiResponse | undefined>) | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
   let selfRewrite: ReturnType<typeof selfRewriteRuntimeWiring> | null = null;
+  let executive: ReturnType<typeof executiveRouteWiring> | null = null;
   const ownerAlone = (scope: string) => { try {return audience?.(scope) === true;} catch {return false;} };
   let reportVisible: ((taskId: string) => boolean) | null = null;
   const callbacks: TaskTreeLearningCallbacks = {
@@ -70,6 +73,9 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
       selfRewriteRoute?: (request: ApiRequest) => Promise<ApiResponse | undefined>}) {
       audience = options.ownerAlone; audiencePresence = options.presence ?? null; reportVisible = options.reportVisible ?? null;
       selfRewriteRoute = options.selfRewriteRoute ?? null;
+      // The owner's Executive routes (ADR-0009 stage 2, E1/E2), with or without Stage5: goals, confirm, catalog, choices, inspection.
+      executive = executiveRouteWiring({ path: parts.path, ownerScope: parts.ownerScope, now: parts.now, store: parts.store,
+        autonomy: options.autonomy, autonomyStore: options.autonomyStore, config: options.config, executive: switchOn(environment, 'SHANNON_EXECUTIVE') });
       if (!enabled) return;
       selfRewrite = selfRewriteRuntimeWiring({environment,path:parts.path,ownerScope:parts.ownerScope,now:parts.now,
         config:options.config,autonomy:options.autonomy,autonomyStore:options.autonomyStore,tasks,actions:options.actions});
@@ -84,6 +90,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
     afterHost: async () => {await taskFeedback?.refresh();},
     async serve(request: IncomingMessage, response: ServerResponse, principal: {scopeKey:string}|null, url: URL): Promise<boolean> {
       if (url.pathname === FEEDBACK_PATH) {await feedbackRoute(request, response, principal); return true;}
+      if (await executive?.serve(request, response, principal, url)) return true;
       if (await conversationExtras.serve(request, response, principal, url)) return true;
       if (!privatePath(url.pathname)) return false;
       if (!principal || principal.scopeKey !== parts.ownerScope) {sendJson(response,403,{error:'STAGE5_OWNER_ONLY'});return true;}
@@ -99,6 +106,6 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
       else sendJson(response,result.status,result.body);
       return true;
     },
-    close() {if (timer) clearInterval(timer);clearInterval(unknownExit);selfRewrite?.close();tasks.close();},
+    close() {if (timer) clearInterval(timer);clearInterval(unknownExit);selfRewrite?.close();executive?.close();tasks.close();},
   };
 }

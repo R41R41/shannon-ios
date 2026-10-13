@@ -24,7 +24,9 @@ export interface AutonomyOverview {
 }
 
 
-export function pursuitStatusPhrase(status: ShannonPursuitStatus): string {
+/** `asked` done but not done: she proposed it (Syzygy ADR-0009 stage 2, E2: only evidence or the owner closes a goal). */
+export function pursuitStatusPhrase(status: ShannonPursuitStatus, asked?: ShannonPursuitStatus): string {
+  if (asked === 'done' && status !== 'done') return 'やり終えたと考えました（確かめが済むまで休ませます）';
   return { active: '続けることにしました', resting: '休ませました', done: 'やり終えました', dropped: 'やめました' }[status];
 }
 

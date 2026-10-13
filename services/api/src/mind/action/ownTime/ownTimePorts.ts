@@ -5,7 +5,8 @@
  * handed interfaces, and its imports are pinned (`autonomyLoopPrivacy.test.ts`).
  */
 export { hostFolderPath, HOST_STEP_CODES, hostFolderLabel, hostStepContentDigest, ROOM_LOOK_GUARD, roomLookGuard, type HostStepCode } from './autonomyHostFolderPath.js';
-export { type AutonomyNotionReader } from './autonomyLoopSteps.js';
+export { type AutonomyNotionReader, type ExecutivePort, type PreparedStep, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
+export { type AutonomyLoopCycle, type AutonomyPlannedStep } from './store/autonomyLoopState.js';
 export { configuredAutonomyModelPrices, type AutonomyModelPrices } from './autonomyModels.js';
 export { type RecordedDecision, type ShannonAutonomyService } from './autonomyService.js';
 export { type AutonomyLoopHeartbeat } from './store/autonomyLoopState.js';
@@ -14,6 +15,8 @@ export { type ListResult, type ReadResult, type SearchResult, type WriteResult }
 export { type HostFolderOperations, type HostRunOutcome } from './hostFolderOperations.js';
 export { type SQLiteAutonomyStore } from './store/autonomyStore.js';
 export { type HostOperation } from './store/hostFolderOperationsStore.js';
+export { type DeliberationDispatch, type DeliberationOutcome, type DeliberationRecord, type DeliberationTrigger } from './store/deliberationLedger.js';
+export { type GoalRejection, type PursuitClosedReason, type PursuitEvent, type PursuitGoalColumns } from './store/pursuitGoals.js';
 export { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from './store/studyStore.js';
 
 export { studyWriteKey, syncedWithin } from './studyAether.js';

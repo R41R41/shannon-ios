@@ -133,3 +133,4 @@ export {
   type TierDecision,
 } from './difficultyPolicy.js';
 export { FEEDBACK_POLICY, feedbackServe, feedbackReward } from './feedback.js';
+export * from './executiveReward.js';

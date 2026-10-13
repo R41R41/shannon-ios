@@ -55,7 +55,17 @@ export interface AutonomyNotionReader {
 /** A free read domain with its own daily count (`SHANNON_AUTONOMY_MAX_NOTION_READS`). */
 export const NOTION_READ_DOMAIN = 'notion_read';
 
+/**
+ * Syzygy ADR-0009 stage 2 (E5): with the Executive on (`SHANNON_EXECUTIVE`), it alone starts her cycles, and its deliberation is
+ * the cycle's thought: one capability, then the step or task it dispatched. Handed in by wiring; the loop imports nothing of it.
+ */
+export interface ExecutivePort {
+  startIfDue(dependencies: StepDependencies, scopeKey: string, at: string): AutonomyLoopCycle | 'idle' | 'owner-active' | 'budget';
+  prepare(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null;
+}
+
 export interface StepDependencies {
+  executive?: ExecutivePort;
   actionSteps?: import('../../../contracts/actionThreadContract.js').ActionStepPort;
   /** Only true after the scheduler owns this loop's execution rights; outreach still uses its existing gate. */
   concurrentActions?: boolean;
@@ -203,7 +213,8 @@ const OUTPUT_TOKENS: Readonly<Record<'note' | 'draft' | 'revise', number>> = Obj
 /** Null when the step cannot be carried out at all (nothing to note, an unknown piece, no usable model); it is then skipped unasked. */
 export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   switch (step.kind) {
-    case 'think': return prepareThinking(dependencies, cycle, step, at);
+    case 'think': return dependencies.executive
+      ? dependencies.executive.prepare(dependencies, cycle, step, at) : prepareThinking(dependencies, cycle, step, at);
     case 'read': return prepareReading(dependencies, cycle, step);
     case 'notion': return prepareNotion(dependencies, cycle, step);
     case 'note': return prepareNote(dependencies, cycle, step, at);

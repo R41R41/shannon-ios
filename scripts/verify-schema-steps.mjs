@@ -56,15 +56,24 @@ export const SLOT_SEEDS = Object.freeze({
 
 /**
  * What the S3 and S4 steps add (Syzygy ADR-0009 stage 1): columns appended by ALTER TABLE (008, 009, 010), and two new tables
- * with their indexes (009). Step 011 changes only rows.
+ * with their indexes (009). Step 011 changes only rows. Also the additive objects of ADR-0009 stage 2 (E2, E3, E5), which may be
+ * there on either side of a deploy.
  */
 export const S3_ADDITIONS = Object.freeze({
   columns: Object.freeze({
     agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
       'exec_state_at TEXT', 'exec_starting INTEGER'],
     mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
+    // Syzygy ADR-0009 stage 2 (E2): her goals' lifecycle, added by her own time's store (not a step of the ledger).
+    autonomy_pursuits: ['source_kind TEXT', 'source_ref TEXT', 'interest_id TEXT', 'expected_value REAL', 'expected_score REAL',
+      'completion_predicate TEXT', 'review_at TEXT', 'progress REAL', 'last_worked_at TEXT', 'evidence_json TEXT', 'closed_reason TEXT',
+      'closed_at TEXT'],
   }),
-  tables: Object.freeze(['mind_action_slot_pools', 'mind_action_slot_classes']),
+  tables: Object.freeze([
+    'mind_action_slot_pools', 'mind_action_slot_classes',
+    // Stage 2 (E2, E3, E5): goal events and the migration mark, the FCA task budget, the Executive's deliberations; each made on first use.
+    'autonomy_pursuit_events', 'autonomy_pursuit_marks', 'fca_task_budget', 'executive_deliberations',
+  ]),
 });
 
 /** A schema line without what the S3 steps add: null for an object of theirs, the table's SQL without their columns. */

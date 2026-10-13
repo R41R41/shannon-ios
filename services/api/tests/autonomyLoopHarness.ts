@@ -160,6 +160,8 @@ export interface LoopHarnessOptions {
   /** Syzygy ADR-0008 §14: told each step the gate did not allow, and the 「止められたこと」 of a thought; absent, as with stage 2 off. */
   withheld?: AutonomyServiceDependencies['withheld'];
   withheldFacts?: (scopeKey: string, at: string) => string | null;
+  /** Syzygy ADR-0009 stage 2 (E5): the Executive; absent, as with `SHANNON_EXECUTIVE=off`, the loop thinks as before. */
+  executive?: StepDependencies['executive'];
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -203,7 +205,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
     ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),
-    ...(options.emitMindEvent ? { emitMindEvent: options.emitMindEvent } : {}),
+    ...(options.emitMindEvent ? { emitMindEvent: options.emitMindEvent } : {}), ...(options.executive ? { executive: options.executive } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);
