@@ -4,7 +4,7 @@ Status: the original Observer is deployed. The common-FCA map and timing revisio
 
 ## Detail level independent of zoom (owner feedback, 2026-10-13)
 
-The map's 塊 / 処理 / 入出力 buttons choose what is drawn at any zoom; zooming only scales (text may become small). 「自動」 (the default) follows the zoom as before. A picked level sticks across zoom, pan, resize and reload until changed, kept with the other view preferences in this tab's `sessionStorage` (`{hidden, hint, level}`, parsed by `viewPrefs`; nothing else is accepted). Input/output rows are laid out to fit their box (`ioRows`: as many rows as fit the height, each cut to the width with …), box titles are sized to leave room for the duration, and block connectors keep a constant on-screen width.
+The map's 塊 / 処理 / 入出力 buttons choose what is drawn at any zoom; zooming only scales (text may become small). 「自動」 (the default) follows the zoom as before. A picked level sticks across zoom, pan, resize and reload until changed, kept with the other view preferences in this tab's `sessionStorage` (`{hidden, hint, level}`, parsed by `viewPrefs`; nothing else is accepted). Input/output rows are laid out to fit their box (`ioRows`: as many rows as fit the height, each cut to the width with …), box titles are sized to leave room for the duration, block connectors keep a constant on-screen width, and at 塊 each block is named once, in its centre.
 
 ## Full-viewport layout (owner feedback, 2026-10-13)
 

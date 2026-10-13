@@ -147,7 +147,8 @@ select { border: 1px solid var(--line); border-radius: 7px; background: var(--su
 #map .field-key { fill: var(--muted); }
 #map .io-mark { font-size: 6px; font-weight: 700; fill: var(--c); }
 .packet { fill: var(--c); stroke: var(--surface); stroke-width: 1.5; }
-[data-level="1"] .node, [data-level="1"] .edge { display: none; }
+/* At 塊 each block is named once, in its centre. */
+[data-level="1"] .node, [data-level="1"] .edge, [data-level="1"] .block-head, [data-level="1"] .block-process { display: none; }
 [data-level="2"] .far, [data-level="3"] .far, [data-level="2"] .block-edge, [data-level="3"] .block-edge { display: none; }
 [data-level="2"] .node-fields, [data-level="1"] .node-time, [data-level="2"] .node-time { display: none; }
 [data-level="3"] .node-role { display: none; }

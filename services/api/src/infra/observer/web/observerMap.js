@@ -294,8 +294,9 @@ export function detailLevel(picked, zoom) {
 /** Rough SVG text width: monospace Latin is .6 em, Japanese is 1 em. Used only to keep text inside its box. */
 export function textWidth(text, size) { return [...String(text)].reduce((sum, char) => sum + (char.charCodeAt(0) < 256 ? .6 : 1), 0) * size; }
 export function fitText(text, size, width) {
-  const chars = [...String(text)];
   if (textWidth(text, size) <= width) return String(text);
+  // Pre-trim to what could fit at the narrowest glyph, so the loop below stays short for long values.
+  const chars = [...String(text)].slice(0, Math.max(0, Math.ceil(width / (size * .6))) + 1);
   while (chars.length && textWidth(`${chars.join('')}…`, size) > width) chars.pop();
   return chars.length ? `${chars.join('')}…` : '';
 }
@@ -303,8 +304,8 @@ export const IO_FONT = 6.8, IO_PITCH = 8.5;
 /** Input/output rows laid out inside a box: at most as many rows as fit its height, every row cut to its width. */
 export function ioRows(box, input, output) {
   const top = box.y + 28, bottom = box.y + box.h - 3, budget = Math.max(0, Math.floor((bottom - top - 2) / IO_PITCH) + 1);
-  const inputs = Math.min(input.length, output.length ? Math.max(1, budget - Math.min(output.length, budget - 1)) : budget);
-  const outputs = Math.min(output.length, budget - inputs);
+  const inputs = Math.min(budget, input.length, output.length ? Math.max(1, budget - Math.min(output.length, budget - 1)) : budget);
+  const outputs = Math.max(0, Math.min(output.length, budget - inputs));
   const rows = [], width = box.w - 17 - 6;
   let y = top;
   for (const [mark, list] of [['入', input.slice(0, inputs)], ['出', output.slice(0, outputs)]]) {

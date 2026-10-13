@@ -113,3 +113,13 @@ describe('detail level is independent of zoom (owner, 2026-10-13)', () => {
     }
   });
 });
+
+describe('I/O rows edge cases', () => {
+  it('draws nothing in a box too short for a row, and cuts a very long value quickly', async () => {
+    const { ioRows, fitText, textWidth } = await import('../src/infra/observer/web/observerMap.js');
+    const field = { gloss: '意味', key: 'key', value: 'v' };
+    expect(ioRows({ x: 0, y: 0, w: 134, h: 20 }, [field], [field])).toEqual([]);
+    const long = 'x'.repeat(200_000), cut = fitText(long, 6.8, 100);
+    expect(cut.endsWith('…')).toBe(true); expect(textWidth(cut, 6.8)).toBeLessThanOrEqual(100);
+  });
+});
