@@ -1,5 +1,14 @@
 # Mind Observer UI validation
 
+## Detail level independent of zoom (2026-10-13)
+
+Branch `observer-detail-level` from `bf511d16`, same fixture method. At 1440×900 and 390×844 each level was picked and
+captured at the fitted (minimum) zoom and after five zoom-in steps (maximum, ×5); the level stayed as picked, survived a
+reload, and 「自動」 returned to zoom-following. No page overflow or console exceptions.
+
+- 1440: [塊 min](observer-evidence/level-1440-level1-min.jpg) / [max](observer-evidence/level-1440-level1-max.jpg), [処理 min](observer-evidence/level-1440-level2-min.jpg) / [max](observer-evidence/level-1440-level2-max.jpg), [入出力 min](observer-evidence/level-1440-level3-min.jpg) / [max](observer-evidence/level-1440-level3-max.jpg), [入出力 ×3.4 dark](observer-evidence/level-1440-dark-level3-mid.jpg)
+- 390: [塊 min](observer-evidence/level-390-level1-min.jpg) / [max](observer-evidence/level-390-level1-max.jpg), [処理 min](observer-evidence/level-390-level2-min.jpg) / [max](observer-evidence/level-390-level2-max.jpg), [入出力 min](observer-evidence/level-390-level3-min.jpg) / [max](observer-evidence/level-390-level3-max.jpg)
+
 ## Full-viewport layout (2026-10-13)
 
 Branch `observer-fullscreen` from `31b52875`, verified the same way (UI fixture server + headless Chrome; `fca-run` and

@@ -65,9 +65,9 @@
 
   <div id="block-chips" class="overlay chips corner-left" role="group" aria-label="塊を選んで強調"></div>
   <div id="map-tools" class="overlay corner-right" hidden>
-    <p id="map-hint" class="map-hint"><span>ホイール・ピンチで拡大、ドラッグで移動。塊や箱を押すとそこへ寄ります。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
+    <p id="map-hint" class="map-hint"><span>塊・処理・入出力は拡大とは別に選べます。ホイール・ピンチで拡大、ドラッグで移動。点は届いた受け渡しです。</span><button type="button" class="button close" id="map-hint-close" aria-label="説明を閉じる">×</button></p>
     <div class="map-buttons">
-      <div id="zoom-levels" class="levels" role="group" aria-label="拡大の段"><button type="button" data-level="1" aria-current="true">塊</button><button type="button" data-level="2" aria-current="false">処理</button><button type="button" data-level="3" aria-current="false">入出力</button></div>
+      <div id="zoom-levels" class="levels" role="group" aria-label="表示の細かさ（拡大とは別）"><button type="button" data-level="auto" aria-current="true" title="拡大に合わせて切り替える">自動</button><button type="button" data-level="1" aria-current="false">塊</button><button type="button" data-level="2" aria-current="false">処理</button><button type="button" data-level="3" aria-current="false">入出力</button></div>
       <button type="button" class="button square" data-zoom="-1" aria-label="縮小">−</button><button type="button" class="button square" data-zoom="1" aria-label="拡大">＋</button><button type="button" class="button" data-zoom="0">全体</button>
     </div>
   </div>

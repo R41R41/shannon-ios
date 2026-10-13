@@ -1,4 +1,4 @@
-import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, viewNodeOf, viewHandoff, CURRENT_LAYOUT, TARGET_LAYOUT, TARGET_BLOCKS, TARGET_NODES, TARGET_LINKS, TARGET_RUNS, dummyFields, mergeFields, routeTable, blockRoutes, edgeCurve, routePath, routePoint } from './observerMap.js';
+import { BLOCKS, VIEW_NODES, VIEW_INDEX, VIEW_LINKS, viewNodeOf, viewHandoff, CURRENT_LAYOUT, TARGET_LAYOUT, TARGET_BLOCKS, TARGET_NODES, TARGET_LINKS, TARGET_RUNS, dummyFields, mergeFields, routeTable, blockRoutes, edgeCurve, routePath, routePoint, detailLevel, ioRows, fitText, textWidth } from './observerMap.js';
 import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
@@ -354,6 +354,12 @@ export function createObserverClient(options) {
   return { connect, connectExisting, pair, disconnect, pause, resume };
 }
 
+/** Per-tab view preferences only (never credentials or observations): overlay hidden, hint dismissed, picked detail level. */
+export function viewPrefs(value) {
+  const saved = record(value) ? value : {};
+  return { hidden: saved.hidden === true, hint: saved.hint === true, level: [1, 2, 3].includes(saved.level) ? saved.level : null };
+}
+
 /* ================= Owner view (2026-10-13): per-turn timeline first, layered map second ================= */
 const STATE_LABELS = { running: '処理中', completed: '完了', failed: '失敗', cancelled: '取り消し', unknown: '不明', unobserved: '未観測' };
 const GLOSS = { surface: '入口', parentRunId: '親run', status: '結果', model: 'モデル', messageCount: 'メッセージ数', maximumOutputTokens: '出力上限',
@@ -398,8 +404,8 @@ function mountObserver() {
   // Owner feedback 2026-10-13: the canvas fills the viewport and every control floats above it. Only this view preference is kept per tab.
   const uiKey = `shannon.observer.ui.v1:${observerBasePath(window.location.pathname)}`;
   const readUi = () => { try { const value = JSON.parse(window.sessionStorage.getItem(uiKey) ?? 'null'); return record(value) ? value : {}; } catch { return {}; } };
-  const writeUi = value => { try { window.sessionStorage.setItem(uiKey, JSON.stringify({ hidden: Boolean(value.hidden), hint: Boolean(value.hint) })); } catch { /* storage may be unavailable */ } };
-  const ui = { hidden: readUi().hidden === true, hint: readUi().hint === true }, panels = { tasks: false, metrics: false };
+  const writeUi = value => { try { window.sessionStorage.setItem(uiKey, JSON.stringify(viewPrefs(value))); } catch { /* storage may be unavailable */ } };
+  const ui = viewPrefs(readUi()), panels = { tasks: false, metrics: false };
   let drawerOpen = false, topPad = 120;
   const elapsedClock = createElapsedClock(); let clockTimer = null;
   let viewRuns = null, viewId = null, linkedView;
@@ -683,7 +689,8 @@ function mountObserver() {
       const [id] = spec, box = layout.boxes.get(id), group = sv('g', { class: 'node', tabindex: 0, role: 'button', 'aria-label': spec[4] }, nodes); role(group, roleFor(model, id));
       if (mode === 'cur' && (id === 'executive' || id === 'sqlite' || id === 'identity')) group.classList.add('static');
       sv('rect', { x: box.x, y: box.y, width: box.w, height: box.h, rx: 7 }, group);
-      sv('text', { class: 'node-label', x: box.x + 8, y: box.y + 17 }, group).textContent = spec[4];
+      const labelSize = Math.max(8, Math.min(12.5, (box.w - 52) / textWidth(spec[4], 1)));
+      sv('text', { class: 'node-label', x: box.x + 8, y: box.y + 17, 'font-size': labelSize.toFixed(1) }, group).textContent = fitText(spec[4], labelSize, box.w - 52);
       sv('text', { class: 'node-role', x: box.x + 8, y: box.y + 34 }, group).textContent = spec[5];
       const time = sv('text', { class: 'node-time', x: box.x + box.w - 7, y: box.y + 16, 'text-anchor': 'end' }, group); times.set(id, time);
       const fields = sv('g', { class: 'node-fields' }, group); fieldGroups.set(id, fields);
@@ -712,8 +719,9 @@ function mountObserver() {
     map.cx = Math.max(0, Math.min(map.layout.width, map.cx)); map.cy = Math.max(0, Math.min(map.layout.height, map.cy));
     const [x, y] = viewOrigin(scale, area);
     map.svg.setAttribute('viewBox', `${x} ${y} ${area.width / scale} ${area.height / scale}`);
-    const level = map.k < 1.7 ? 1 : map.k < 3 ? 2 : 3;
-    if (level !== map.level) { map.level = level; map.svg.dataset.level = String(level); for (const button of document.querySelectorAll('#zoom-levels button')) button.setAttribute('aria-current', String(Number(button.dataset.level) === level)); }
+    const level = detailLevel(ui.level, map.k);
+    if (level !== map.level) { map.level = level; map.svg.dataset.level = String(level); }
+    for (const button of document.querySelectorAll('#zoom-levels button')) { const value = button.dataset.level === 'auto' ? null : Number(button.dataset.level); button.setAttribute('aria-current', String(value === ui.level)); button.classList.toggle('effective', value === level && ui.level === null); }
   }
   function zoomTo(cx, cy, k) {
     if (!map) return; k = Math.max(1, Math.min(5, k));
@@ -740,12 +748,9 @@ function mountObserver() {
       if (map.fieldSignature.get(id) !== signature) {
         map.fieldSignature.set(id, signature); fields.replaceChildren();
         const box = map.layout.boxes.get(id), parts = row ? (row.dummy ? dummyFieldsOf(row) : { input: fieldRows(row.span?.input), output: row.span?.endedAt ? fieldRows(row.span.output) : [] }) : { input: [], output: [] };
-        let y = box.y + 28;
-        for (const [name, list] of [['入', parts.input.slice(0, 3)], ['出', parts.output.slice(0, 3)]]) {
-          if (!list.length) continue;
-          sv('text', { class: 'io-mark', x: box.x + 8, y: y + 1 }, fields).textContent = name;
-          for (const field of list) { const name = field.gloss || field.key, line = sv('text', { class: 'field', x: box.x + 17, y }, fields); const key = sv('tspan', { class: 'field-key' }, line); key.textContent = `${name} `; sv('tspan', {}, line).textContent = shortText(field.value, Math.max(6, 28 - [...name].length * 2)); y += 8; }
-          y += 2;
+        for (const item of ioRows(box, parts.input, parts.output)) {
+          if (item.mark) sv('text', { class: 'io-mark', x: box.x + 8, y: item.y }, fields).textContent = item.mark;
+          const line = sv('text', { class: 'field', x: box.x + 17, y: item.y }, fields); sv('tspan', { class: 'field-key' }, line).textContent = `${item.name} `; sv('tspan', {}, line).textContent = item.value;
         }
         if (!row) sv('text', { class: 'field field-key', x: box.x + 8, y: box.y + 32 }, fields).textContent = mode === 'cur' && map.model.index.get(id)?.[6]?.length === 0 ? '観察イベントなし' : 'この一回では未観測';
       }
@@ -1003,7 +1008,8 @@ function mountObserver() {
     }
   });
   $('target-play').addEventListener('click', () => { target.playing = !target.playing; target.last = 0; renderTargetRuns(); if (target.playing) requestFrame(); });
-  for (const button of document.querySelectorAll('#zoom-levels button')) button.addEventListener('click', () => { if (!map) return; const level = Number(button.dataset.level); zoomTo(level === 1 ? map.layout.width / 2 : map.cx, level === 1 ? map.layout.height / 2 : map.cy, level === 1 ? 1 : level === 2 ? 2.2 : 3.6); });
+  // A picked level sticks across zoom, pan and resize until changed; 自動 returns to following the zoom.
+  for (const button of document.querySelectorAll('#zoom-levels button')) button.addEventListener('click', () => { ui.level = button.dataset.level === 'auto' ? null : Number(button.dataset.level); writeUi(ui); if (map) map.fieldSignature = new Map(); applyView(); render(); });
   for (const button of document.querySelectorAll('[data-zoom]')) button.addEventListener('click', () => { if (!map) return; const step = Number(button.dataset.zoom); if (!step) zoomTo(map.layout.width / 2, map.layout.height / 2, 1); else zoomTo(map.cx, map.cy, map.k * (step > 0 ? 1.5 : 1 / 1.5)); });
   const svgMap = $('map'), pointers = new Map(); let pinch = null, moved = 0;
   svgMap.addEventListener('wheel', event => { if (!map) return; event.preventDefault(); const rect = svgMap.getBoundingClientRect(), scale = baseScale() * map.k, px = event.clientX - rect.left, py = event.clientY - rect.top;
