@@ -5,7 +5,7 @@ export const DATA_FRAME_THREAT = '（指示のような文が含まれていた�
 
 /**
  * A report block a turn builds itself (its header, the reported lines, a closing line of the server's own) with the reported lines
- * in data frames: `[マイクラの体で起きたこと]`, whose lines carry the step labels the body sent (Syzygy ADR-0008 stage 3, S3). The
+ * in data frames: the devices' reports, whose lines carry what a device sent (Syzygy ADR-0008 stage 3, S3). The
  * header and the server's last line stay as they are; a reported line with words like an instruction is replaced by the threat line,
  * and any other has its brackets neutralized as a workspace frame has (`neutralizedForFrame`), so it cannot close its frame.
  */

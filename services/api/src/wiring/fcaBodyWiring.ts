@@ -16,7 +16,7 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
 }) {
   // Since Syzygy ADR-0009 S9 a configured body always takes the common path (the phase-4 request queue is retired).
   if (!parts.configuration) return null;
-  if (!parts.configuration || !parts.jev || !values.OPENAI_API_KEY?.trim()) throw new Error('FCA_MINECRAFT_REQUIRES_BODY_JEV_DECISIONS');
+  if (!parts.jev || !values.OPENAI_API_KEY?.trim()) throw new Error('FCA_MINECRAFT_REQUIRES_BODY_JEV_DECISIONS');
   const leases = new ActionLeaseReader(parts.db);
   const body = actionResource(parts.configuration.deviceId, 'minecraft-body');
   const known = (lease: ActionLease, taskId: string) => bodyLeaseAttempt(leases.get(lease.id), parts.ownerScope, lease, taskId);

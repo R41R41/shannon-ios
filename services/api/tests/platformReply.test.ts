@@ -144,7 +144,6 @@ describe('POST /v1/platform/reply', () => {
     expect(promptOf(request)).toContain('[Speak-time privacy check');
     expect(promptOf(request)).toContain('「テストサーバー」');
     expect(request.tools).toBeUndefined();
-    expect(promptOf(request)).not.toContain('[マイクラの体で起きたこと]');
     await background.waitForIdle('owner');
     const kept = store.experienceCandidates('owner').find(item => item.userMessage === '転職とカメラの話をして');
     expect(kept?.disclosure?.audience).toEqual(groupAudience(channelThread));
@@ -213,7 +212,6 @@ describe('one mind on Discord: requests to her Minecraft body', () => {
     expect(model.requests.at(-1)!.tools).toBeUndefined();
     await reply({ requestId: 'mc-4', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
-    expect(promptOf(model.requests.at(-1)!)).not.toContain('[マイクラの体で起きたこと]');
     expect(requests!.recent('owner')).toHaveLength(1);
     await close();
   });
