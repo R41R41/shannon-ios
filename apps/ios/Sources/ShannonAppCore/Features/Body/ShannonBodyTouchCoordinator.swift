@@ -6,8 +6,9 @@ import Observation
 /// With it on, a finished touch is reported as a fact and, at the page's moment, she is asked
 /// whether she says something. On the phone a finger touch is mostly too short for the page's moment,
 /// so the app asks about such a finished touch itself (`Environment.asksAfterShortTouch`).
-/// Her line is shown near the figure; it is not spoken and no microphone opens (the app has no
-/// speech outside a call).
+/// Her line is shown near the figure, and spoken where the surface answers in voice. During a voice
+/// conversation on this device the page asks nothing, so the app asks about a finished touch itself and
+/// her line is said in the call (`Environment.call`, `docs/body-contract.md`).
 @MainActor
 @Observable
 public final class ShannonBodyTouchCoordinator {
@@ -56,6 +57,8 @@ public final class ShannonBodyTouchCoordinator {
         /// The page's own rule for its question: none while her phase is not idle (a voice conversation, a text reply on
         /// its way, a line of hers being said).
         public var pageIsIdle: @MainActor @Sendable () -> Bool = { ShannonLive2DStage.shared.phase == .idle }
+        /// The voice conversation on this device, where there is one (the iPhone). Nil: no call is known here.
+        public var call: CallLine?
 
         public init(
             reportsTouch: @escaping @MainActor @Sendable () -> Bool = { ShannonBodyPreference.reportsTouch() },
@@ -75,6 +78,28 @@ public final class ShannonBodyTouchCoordinator {
             self.capabilities = capabilities
             self.express = express
             self.now = now
+        }
+    }
+
+    /// A voice conversation on this device, seen from a touch (owner, 2026-10-14: 「音声会話中に触っても反応がない」).
+    /// While it runs the page asks about no touch (its phase is not idle), so the app asks about a finished one itself,
+    /// and her answer is said in the call, in the call's voice, as her next words: never over his words or her reply.
+    public struct CallLine: Sendable {
+        /// A call is running on this device (also while it connects, thinks or speaks).
+        public var isLive: @MainActor @Sendable () -> Bool
+        /// Her line could be said in it now: an owner call that is listening, no words of his being heard or waiting
+        /// for her reply, no reply of hers under way, nobody else around.
+        public var mayHear: @MainActor @Sendable () -> Bool
+        /// Says the line in the call. True when any of it sounded.
+        public var say: @MainActor @Sendable (Line) async -> Bool
+
+        public init(
+            isLive: @escaping @MainActor @Sendable () -> Bool, mayHear: @escaping @MainActor @Sendable () -> Bool,
+            say: @escaping @MainActor @Sendable (Line) async -> Bool
+        ) {
+            self.isLive = isLive
+            self.mayHear = mayHear
+            self.say = say
         }
     }
 
@@ -126,7 +151,7 @@ public final class ShannonBodyTouchCoordinator {
             // Who was around is decided when the touch happens, not when it is delivered.
             let audience = environment.audience()
             let event = ShannonBodyTouchEventDTO(touch: touch, audience: audience)
-            guard asksItself(touch) else {
+            guard asksItself(touch, audience: audience) else {
                 enqueue(event)
                 return Task { await self.flush() }
             }
@@ -152,11 +177,18 @@ public final class ShannonBodyTouchCoordinator {
         }
     }
 
-    /// Whether the app asks about this finished touch itself: a finger on the phone, a touch the page asked nothing about
-    /// and never will (not a poke, shorter than its 0.6 s), outside the 45 s spacing, while the page would ask at all.
-    private func asksItself(_ touch: ShannonLive2DTouch) -> Bool {
-        guard environment.asksAfterShortTouch, !isAsking, !isSpeaking, !touch.ongoing, touch.kind != .poke, touch.kind != .carry,
-              touch.durationMs < Self.pageAsksAtEndMilliseconds, !askedTouchIDs.contains(touch.id), environment.pageIsIdle() else { return false }
+    /// Whether the app asks about this finished touch itself, outside the 45 s spacing: during a voice conversation on this
+    /// device any finished touch, while her line could be said in the call now (the page asks nothing then); otherwise a
+    /// finger on the phone, a touch the page asked nothing about and never will (not a poke, shorter than its 0.6 s), while
+    /// the page would ask at all.
+    private func asksItself(_ touch: ShannonLive2DTouch, audience: ShannonBodyAudience) -> Bool {
+        guard !isAsking, !isSpeaking, !touch.ongoing, touch.kind != .carry, !askedTouchIDs.contains(touch.id) else { return false }
+        if let call = environment.call, call.isLive() {
+            guard audience == .owner, call.mayHear() else { return false }
+        } else {
+            guard environment.asksAfterShortTouch, touch.kind != .poke, touch.durationMs < Self.pageAsksAtEndMilliseconds,
+                  environment.pageIsIdle() else { return false }
+        }
         if let lastAskAt, environment.now().timeIntervalSince(lastAskAt) < Self.askSpacingSeconds { return false }
         return true
     }
@@ -315,6 +347,19 @@ public final class ShannonBodyTouchCoordinator {
         return touchVocabulary < ShannonBodyTouchVocabulary.detailed
     }
 
+    /// Who says her line aloud, if anyone. In a voice conversation on this device: the call, when it could hear her line
+    /// now (otherwise the bubble only: never over his words or her reply). Outside one: voice mode, the owner alone and
+    /// nothing else holding the sound, then a moment in which he may answer. Otherwise nobody: the bubble only.
+    private func voiceFor(audience: ShannonBodyAudience) -> (@MainActor @Sendable (Line, _ heard: @escaping @MainActor (Bool) -> Void) async -> Void)? {
+        guard audience == .owner, !isSpeaking else { return nil }
+        if let call = environment.call, call.isLive() {
+            guard call.mayHear() else { return nil }
+            return { line, heard in heard(await call.say(line)) }
+        }
+        guard let speak = environment.speak, environment.repliesInVoice() else { return nil }
+        return speak
+    }
+
     private func show(_ answer: ShannonBodyReactionAnswerDTO, audience: ShannonBodyAudience) {
         let message = answer.status == "said" ? answer.message : nil
         if let expression = message?.expression ?? answer.mood?.expression {
@@ -322,18 +367,16 @@ public final class ShannonBodyTouchCoordinator {
         }
         guard let message, !message.text.isEmpty else { return }
         let face = message.expression.flatMap(ShannonExpressionDTO.known).map { ShannonFace(expression: $0, feelingName: message.feeling) }
-        // Voice mode, the owner alone, and nothing else holding the sound: the bubble and her voice, then a moment
-        // in which he may answer. Otherwise the bubble only.
-        let speaks = audience == .owner && environment.speak != nil && !isSpeaking && environment.repliesInVoice()
+        let voice = voiceFor(audience: audience)
         let shown = Line(
             id: message.id, text: String(message.text.prefix(120)), face: face,
             reactionID: answer.id, threadID: message.threadId, listenSeconds: min(30, max(0, message.listenSeconds ?? 0)),
-            audience: audience, isSpoken: speaks)
+            audience: audience, isSpoken: voice != nil)
         line = shown
-        if speaks, let speak = environment.speak {
+        if let voice {
             isSpeaking = true
             Task { [weak self] in
-                await speak(shown) { [weak self] heard in
+                await voice(shown) { [weak self] heard in
                     // Not said aloud after all (her voice came too late, or the sound was taken): VoiceOver reads the bubble.
                     guard let self, !heard, self.line == shown else { return }
                     self.line?.isSpoken = false

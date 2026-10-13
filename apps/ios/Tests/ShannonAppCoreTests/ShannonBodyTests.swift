@@ -975,6 +975,137 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(calls, ["register", "events:m:owner:223"])
     }
 
+    /// Production 2026-10-13 22:58:48–23:00:45Z (「iphoneではシャノンと音声会話中に触っても反応がない」): eight touches during a call on
+    /// the phone reached the server as events only. The page asks nothing while her phase is not idle, and the app's own
+    /// question waited for an idle page too, so nothing during a voice conversation was ever asked about.
+    private func callCoordinator(_ client: FakeBodyClient, clock: PhoneClock, call: CallBox,
+                                 audience: AudienceBox = AudienceBox(), earphone: LineBox? = nil) -> ShannonBodyTouchCoordinator {
+        let coordinator = phoneCoordinator(client, clock: clock, idle: FlagBox(false))
+        coordinator.environment.audience = { audience.value }
+        coordinator.environment.call = .init(
+            isLive: { call.isLive }, mayHear: { call.nextHears() },
+            say: { line in
+                call.said.append(line)
+                return call.sounds
+            })
+        // The earphone path is never the one that speaks during a call.
+        coordinator.environment.repliesInVoice = { true }
+        coordinator.environment.speak = { line, heard in
+            earphone?.values.append(line)
+            heard(true)
+        }
+        return coordinator
+    }
+
+    private static func herLine(_ id: String) -> ShannonBodyReactionAnswerDTO {
+        .init(id: id, status: "said",
+              message: .init(id: "m-\(id)", text: "わっ、くすぐったいです。", expression: "bashful", feeling: nil, threadId: "call-thread", listenSeconds: 6),
+              mood: .init(expression: "bashful", feeling: nil))
+    }
+
+    func testDuringAVoiceConversationATouchIsAskedAboutAndHerLineIsSaidInTheCall() async {
+        let client = FakeBodyClient()
+        await client.setAnswer(Self.herLine("c1"))
+        let clock = PhoneClock()
+        let call = CallBox()
+        let earphone = LineBox()
+        let coordinator = callCoordinator(client, clock: clock, call: call, earphone: earphone)
+        // 22:59:13: a stroke of 353 ms while the call listens. Asked about first, then reported as its event.
+        await coordinator.handle(.touch(Self.fingerTouch("c1", durationMs: 353)))?.value
+        // Her line is said in the call, by the call's voice, once; the earphone speaker says nothing over the call.
+        for _ in 0..<20 where call.said.isEmpty { await Task.yield() }
+        XCTAssertEqual(call.said.map(\.text), ["わっ、くすぐったいです。"])
+        XCTAssertEqual(call.said.first?.reactionID, "c1")
+        XCTAssertEqual(call.said.first?.threadID, "call-thread")
+        XCTAssertEqual(earphone.values, [])
+        XCTAssertEqual(coordinator.line?.isSpoken, true)
+        // Inside the 45 s spacing the next touch is only reported; after it, a poke and a long stroke are asked about too
+        // (the page asks about neither during a call).
+        clock.advance(10)
+        await coordinator.handle(.touch(Self.fingerTouch("c2", durationMs: 449)))?.value
+        clock.advance(50)
+        await coordinator.handle(.touch(Self.fingerTouch("c3", .poke, durationMs: 0)))?.value
+        clock.advance(50)
+        await coordinator.handle(.touch(Self.fingerTouch("c4", durationMs: 907)))?.value
+        let calls = await client.calls.filter { $0 != "register" }
+        XCTAssertEqual(calls, ["ask:c1:owner:ended", "events:c1:owner:353", "events:c2:owner:449",
+                               "ask:c3:owner:ended", "events:c3:owner:0", "ask:c4:owner:ended", "events:c4:owner:907"])
+    }
+
+    func testDuringAVoiceConversationNothingIsSaidOverHisWordsOrHerReply() async {
+        // The call cannot hear her line now (he is speaking, his words wait for her reply, or she is replying): the touch
+        // is only reported, as before.
+        let client = FakeBodyClient()
+        await client.setAnswer(Self.herLine("b1"))
+        let clock = PhoneClock()
+        let busy = CallBox()
+        busy.hears = [false]
+        let coordinator = callCoordinator(client, clock: clock, call: busy)
+        await coordinator.handle(.touch(Self.fingerTouch("b1")))?.value
+        var calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:b1:owner:223"])
+
+        // He began to speak while her answer was on its way: the bubble only, nothing said in the call.
+        let late = FakeBodyClient()
+        await late.setAnswer(Self.herLine("b2"))
+        let call = CallBox()
+        call.hears = [true, false]
+        let earphone = LineBox()
+        let asked = callCoordinator(late, clock: PhoneClock(), call: call, earphone: earphone)
+        await asked.handle(.touch(Self.fingerTouch("b2")))?.value
+        calls = await late.calls
+        XCTAssertEqual(calls, ["register", "ask:b2:owner:ended", "events:b2:owner:223"])
+        XCTAssertEqual(asked.line?.text, "わっ、くすぐったいです。")
+        XCTAssertEqual(asked.line?.isSpoken, false)
+        XCTAssertEqual(call.said, [])
+        XCTAssertEqual(earphone.values, [])
+
+        // Someone else may be listening (「友人も一緒」, or the five minutes after it): reported as seen by others, not asked.
+        let guest = FakeBodyClient()
+        let others = AudienceBox()
+        others.value = .others
+        let shared = callCoordinator(guest, clock: PhoneClock(), call: CallBox(), audience: others)
+        await shared.handle(.touch(Self.fingerTouch("g1")))?.value
+        calls = await guest.calls
+        XCTAssertEqual(calls, ["register", "events:g1:others:223"])
+    }
+
+    func testAfterTheCallEndsThePhoneAsksAsBefore() async {
+        // No call running: the rules of an idle page again (a short stroke is asked about, a poke is the page's own).
+        let client = FakeBodyClient()
+        let clock = PhoneClock()
+        let call = CallBox()
+        call.isLive = false
+        let coordinator = callCoordinator(client, clock: clock, call: call)
+        coordinator.environment.pageIsIdle = { true }
+        await coordinator.handle(.touch(Self.fingerTouch("p", .poke, durationMs: 0)))?.value
+        await coordinator.handle(.touch(Self.fingerTouch("s")))?.value
+        let calls = await client.calls.filter { $0 != "register" }
+        XCTAssertEqual(calls, ["events:p:owner:0", "ask:s:owner:ended", "events:s:owner:223"])
+        XCTAssertEqual(call.said, [])
+    }
+
+    func testAnUtteranceStillBeingHeardHoldsHerLineAndALostEndDoesNotHoldItForever() {
+        var segments = ShannonVoiceSpeechSegments()
+        XCTAssertFalse(segments.hearsSpeech(at: 100))
+        segments.started(itemID: "u1", at: 100)
+        XCTAssertTrue(segments.hearsSpeech(at: 103))
+        segments.stopped(itemID: "u1", at: 104)
+        XCTAssertFalse(segments.hearsSpeech(at: 104))
+        // An onset whose end never came stops counting after 20 seconds.
+        segments.started(itemID: "u2", at: 200)
+        XCTAssertTrue(segments.hearsSpeech(at: 219))
+        XCTAssertFalse(segments.hearsSpeech(at: 221))
+    }
+
+    func testAnIdleCallObjectCannotHearHerLine() {
+        // Before a call is live (no transport, not listening) nothing is ever said in it.
+        let model = ShannonGeminiLiveSessionModel()
+        XCTAssertFalse(model.mayHearTouchLine)
+        model.phase = .listening
+        XCTAssertFalse(model.mayHearTouchLine)
+    }
+
     func testAQuietAnswerShowsHerFaceAndNoLine() async {
         let client = FakeBodyClient()
         await client.setAnswer(.init(id: "t1", status: "quiet", message: nil, mood: .init(expression: "bashful", feeling: "flustered")))
@@ -1594,6 +1725,16 @@ private final class PhoneClock: @unchecked Sendable {
     private var value = Date(timeIntervalSince1970: 1_791_924_375)
     var now: Date { lock.withLock { value } }
     func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
+}
+
+/// A voice conversation on the phone, seen from a touch: whether it runs, what it answers to "could she be heard now"
+/// (in turn; the last answer stays), and the lines said in it.
+@MainActor private final class CallBox: Sendable {
+    var isLive = true
+    var hears: [Bool] = [true]
+    var sounds = true
+    var said: [ShannonBodyTouchCoordinator.Line] = []
+    func nextHears() -> Bool { hears.count > 1 ? hears.removeFirst() : hears[0] }
 }
 
 @MainActor private final class FlagBox: Sendable {
