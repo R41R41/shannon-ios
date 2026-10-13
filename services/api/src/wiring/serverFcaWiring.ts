@@ -1,4 +1,5 @@
 import { reportGates } from '../mind/action/fca/fcaReportGate.js';
+import { timedTick } from '../infra/observer/eventLoopWatch.js';
 import { minecraftGoalBinding } from './fcaMinecraftGoalBinding.js';
 import { createFcaProgressTools } from '../mind/action/fca/fcaProgressTools.js';
 import { createFcaTaskObservationMonitor } from './fcaTaskObservationWiring.js';
@@ -172,7 +173,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
     const wake = () => { try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
-    const timer = setInterval(wake, 1000); timer.unref();
+    const timer = setInterval(() => timedTick('fca_wake', wake), 1000); timer.unref();
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
@@ -183,7 +184,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     // Rich chat (docs/rich-chat-contract.md): a finished piece of work he asked for leaves a report card in its Talk.
     const reportCards = parts.conversations?.appendReportCardOnce ? createReportCards({ runtime: runtime.runtime, ownerScope: parts.ownerScope,
       conversations: parts.conversations, shown: shown.card, now: Date.now, log: line => console.warn(line) }) : null;
-    const cardTimer = reportCards ? setInterval(() => { reportCards.tick(); }, 5000).unref() : null;
+    const cardTimer = reportCards ? setInterval(() => { timedTick('report_cards', () => reportCards.tick()); }, 5000).unref() : null;
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake,
       visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0,
       progress: shown.call, spokenReports: true });

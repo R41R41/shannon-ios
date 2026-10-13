@@ -8,7 +8,23 @@ export interface RecallCandidate {
   observedAt: string;
 }
 
-function normalizedPieces(value: string): Set<string> {
+/**
+ * The pieces of a text, kept for the texts last asked (a pure function of the text; the sets are only read). Every turn scored the
+ * same remembered summaries again: on the VM the deterministic recall took 0.5-0.6 s of a text turn (2026-10-13).
+ */
+const PIECES = new Map<string, ReadonlySet<string>>();
+const PIECES_KEPT = 4_096;
+
+function normalizedPieces(value: string): ReadonlySet<string> {
+  const known = PIECES.get(value);
+  if (known) return known;
+  const pieces = computedPieces(value);
+  if (PIECES.size >= PIECES_KEPT) PIECES.delete(PIECES.keys().next().value!);
+  PIECES.set(value, pieces);
+  return pieces;
+}
+
+function computedPieces(value: string): Set<string> {
   const text = value.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 1_000);
   const pieces = new Set<string>();
   for (const word of text.match(/[a-z0-9]{2,}|[ぁ-んァ-ヶ一-龠]{2,}/gu) ?? []) {

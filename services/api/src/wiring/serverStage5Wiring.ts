@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { timedTick } from '../infra/observer/eventLoopWatch.js';
 import { switchOn } from '@shannon/switches';
 import type { DatabaseSync } from 'node:sqlite';
 import { dayBand } from '../contracts/cognitionLedgerContract.js';
@@ -85,7 +86,7 @@ export function configuredServerStage5(environment: Readonly<Record<string, stri
         flush:() => tasks.taskTrees?.flushLearning()});
       // Retries a durable receipt only, never a Host command or a model call.
       void taskFeedback.refresh();
-      timer = setInterval(() => {void taskFeedback?.refresh();}, 5000); timer.unref();
+      timer = setInterval(() => {timedTick('task_feedback', () => void taskFeedback?.refresh());}, 5000); timer.unref();
     },
     afterHost: async () => {await taskFeedback?.refresh();},
     async serve(request: IncomingMessage, response: ServerResponse, principal: {scopeKey:string}|null, url: URL): Promise<boolean> {

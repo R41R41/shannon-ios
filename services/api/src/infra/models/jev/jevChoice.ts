@@ -41,6 +41,32 @@ export interface JevChoiceOptions {
 export const JEV_DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 export const JEV_DEFAULT_MODEL = 'jev-latest';
 export const JEV_DEFAULT_TIMEOUT_MILLISECONDS = 900;
+/**
+ * A timeout that fires late because the API's one thread was busy is not Jev's: its answer may already be waiting to be read, and
+ * the timer would win against it (timers run before the reads). Then the call gets this much more time, once (2026-10-13: both
+ * Jev calls of a voice turn "timed out" together at 1.2 s and 1.4 s while Jev itself answered in 0.2-0.4 s).
+ */
+export const JEV_STALL_GRACE_MILLISECONDS = 200;
+/** How late the timer must fire to count as the thread having been busy, not as Jev being slow. */
+export const JEV_STALL_LATE_MILLISECONDS = 100;
+
+/** `AbortSignal.timeout`, except that a timer fired late (the thread was blocked) first gives the call one short grace. */
+export function stallTolerantTimeout(milliseconds: number, now: () => number = () => performance.now()): { signal: AbortSignal; clear(): void } {
+  const controller = new AbortController(), started = now();
+  let graced = false;
+  const fire = () => {
+    if (!graced && now() - started - milliseconds >= JEV_STALL_LATE_MILLISECONDS) {
+      graced = true;
+      timer = setTimeout(fire, JEV_STALL_GRACE_MILLISECONDS);
+      timer.unref?.();
+      return;
+    }
+    controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+  };
+  let timer = setTimeout(fire, milliseconds);
+  timer.unref?.();
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
 /** How long a usable answer stands for the same input (model, state, questions), and how many inputs are kept. */
 export const JEV_CACHE_MILLISECONDS = 60_000;
 export const JEV_CACHE_ENTRIES = 128;
@@ -86,7 +112,8 @@ export class JevChoiceClient {
    */
   async ask(state: unknown, questions: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted();
-    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMilliseconds)]) : AbortSignal.timeout(this.timeoutMilliseconds);
+    const timeout = stallTolerantTimeout(this.timeoutMilliseconds);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
     return observeAsync('llm', { provider: 'jev', questionCount: Object.keys(questions).length }, async () => {
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
@@ -105,7 +132,7 @@ export class JevChoiceClient {
     if (signal) requestSignal.throwIfAborted();
     if (!response.ok) throw new Error(`JEV_RESPONSE_${response.status}`);
     return body;
-    }, () => ({ provider: 'jev', answered: true }), { model: this.model });
+    }, () => ({ provider: 'jev', answered: true }), { model: this.model }).finally(() => timeout.clear());
   }
 }
 

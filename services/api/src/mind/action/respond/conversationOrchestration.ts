@@ -268,3 +268,22 @@ function compact(value: string, maximum: number): string {
 }
 
 function key(scopeKey: string, threadId: string): string { return `${scopeKey}\u0000${threadId}`; }
+
+const ADDS_TO_PROPOSAL = /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u;
+
+/**
+ * True when this voice turn's own words made (or changed) a pending implementation request, or added to a proposed one: only that
+ * turn is answered through the structured (unstreamed) request that can carry a task proposal. 2026-10-13: a pending 「…して」
+ * stayed in the Talk, every later voice turn of it (「元気？」) was answered unstreamed, its first word only after the whole reply
+ * (7-12 s), and a Sonnet turn always ran past its first-token budget.
+ */
+export function voiceTurnSetsImplementation(prior: ConversationOrchestrationState | null, state: ConversationOrchestrationState | null,
+  transcript: string): boolean {
+  const pending = state?.pendingAction;
+  if (pending?.kind !== 'implement') return false;
+  if (pending.status === 'proposed') return ADDS_TO_PROPOSAL.test(transcript);
+  if (pending.status !== 'pending') return false;
+  const before = prior?.pendingAction;
+  return !before || before.kind !== pending.kind || before.status !== pending.status || before.summary !== pending.summary
+    || prior?.resumeToken !== state?.resumeToken;
+}

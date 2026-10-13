@@ -77,10 +77,17 @@ function admittingSteps(parts: ReportGateParts, taskId: string): Set<string> {
  */
 function sameRequestSiblings(parts: ReportGateParts, task: TaskView): TaskView[] {
   if (!task.parentId) return [];
-  const steps = admittingSteps(parts, task.id);
-  return parts.runtime.list(parts.ownerScope, { parentId: task.parentId, order: 'recent', limit: 50 })
-    .filter(other => other.id !== task.id && other.origin === 'owner_request' && (sameRequest(other.goal, task.goal)
-      || ([...admittingSteps(parts, other.id)].some(step => steps.has(step)) && sameTopic(other.goal, task.goal))));
+  // The words first: a task's provenance is read (and parsed) only for a sibling about the same thing (2026-10-13: reading every
+  // sibling's sources for each finished task of the day blocked the API's one thread for seconds).
+  let steps: Set<string> | null = null;
+  return parts.runtime.list(parts.ownerScope, { parentId: task.parentId, order: 'recent', limit: 50 }).filter(other => {
+    if (other.id === task.id || other.origin !== 'owner_request') return false;
+    if (sameRequest(other.goal, task.goal)) return true;
+    if (!sameTopic(other.goal, task.goal)) return false;
+    steps ??= admittingSteps(parts, task.id);
+    const mine = steps;
+    return [...admittingSteps(parts, other.id)].some(step => mine.has(step));
+  });
 }
 
 /** One request, at most one notice: true when a sibling already answers it (or, for a failure, still works on it). */

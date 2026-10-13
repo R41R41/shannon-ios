@@ -60,6 +60,17 @@ describe('which report reaches him (owner decision 2026-10-13)', () => {
     expect([twice.decide('a'), twice.decide('b')]).toEqual(['drop', 'deliver']);
   });
 
+  it('reads a sibling\'s provenance only when it is about the same thing (2026-10-13: the scan read every sibling\'s sources)', () => {
+    const tasks: Array<[TaskView, TaskProgress | null]> = [[task('a', '明日の東京の天気を調べる', noon - minutes(30)), progress('晴れ。', noon - minutes(20))]];
+    for (let index = 0; index < 30; index++) tasks.push([task(`o${index}`, `新幹線の時刻その${index}を探す`, noon - minutes(40)), progress('x', noon - minutes(35))]);
+    const { parts, decide } = world(noon, tasks);
+    const read: string[] = [];
+    const sources = parts.runtime.taskSources;
+    parts.runtime.taskSources = (scope, id, ...rest) => { read.push(id); return sources(scope, id, ...rest); };
+    expect(decide('a')).toBe('deliver');
+    expect(read.filter(id => id !== 'a')).toEqual([]);
+  });
+
   it('never takes two requests for one by time alone (review: the weather, then the shinkansen 30 s later)', () => {
     const asked = noon - minutes(10);
     const weather = task('a', '明日の東京の天気調べて', asked, 'executing'), train = task('b', 'あと新幹線の時刻も調べて', asked + 30_000);

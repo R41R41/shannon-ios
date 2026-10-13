@@ -111,6 +111,20 @@ describe('the voice first-token watchdog (H3)', () => {
     expect(luna.seen).toEqual([]);
   });
 
+  it('streams a structured Sonnet turn that has a first-token budget, so the budget times its first token, not the whole reply', async () => {
+    const seen: boolean[] = [];
+    const recording = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push((JSON.parse(String(init?.body)) as { stream?: boolean }).stream === true);
+      return slowAnthropic(5).fetcher(url, init);
+    }) as typeof fetch;
+    const luna = new Luna();
+    const result = await new TieredChatModel(luna, model(recording), () => undefined).generate({ ...base, tier: 'sonnet', firstTokenBudgetMs: 2_000 });
+    expect(result.model).toBe('claude-sonnet-5-5');
+    expect(luna.seen).toEqual([]);
+    await model(recording).generate(base); // No budget: the request is as it was, unstreamed.
+    expect(seen).toEqual([true, false]);
+  });
+
   it('keeps voice first-token samples apart from text ones', async () => {
     const sonnet = model(slowAnthropic(1).fetcher);
     for (let index = 0; index < 3; index += 1) await sonnet.generateStreaming(base, () => undefined);

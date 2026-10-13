@@ -42,6 +42,7 @@ import {
   recordConversationProposal,
   recordConversationReceipt,
   type ConversationOrchestrationStore,
+  voiceTurnSetsImplementation,
 } from '../../mind/action/respond/conversationOrchestration.js';
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import { validatedVoiceDeviceContext, type VoiceDeviceContext } from './voiceDeviceContext.js';
@@ -231,8 +232,9 @@ async function completeLiveVoiceDelegation(
   const notionTurn = alone && !temporaryGuest && decision.shouldRespond && asksAboutNotion(transcript);
   if (notionTurn && dependencies.notion?.connected) decision = withMemorySearchLatency(decision);
   // A turn that was not his words to her (overheard, an echo, a fragment) writes no orchestration state and runs no command.
+  const priorState = alone && !uncertainTranscript && !notHisWordsToHer(decision) ? dependencies.conversationOrchestration.read(scopeKey, threadId) : null;
   let orchestrationState = !alone || uncertainTranscript || notHisWordsToHer(decision) ? null : observeConversationTurn({
-    previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
+    previous: priorState,
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
   });
@@ -402,10 +404,7 @@ async function completeLiveVoiceDelegation(
   let streamedReplyPrefix = '';
   observer?.signal?.addEventListener('abort', () => roomLook.cutOff(threadId, streamedReplyPrefix), { once: true });
   let streamedEmotionUpdated = false;
-  const requiresStructuredTaskDecision = orchestrationState?.pendingAction?.kind === 'implement'
-    && (orchestrationState.pendingAction.status === 'pending'
-      || (orchestrationState.pendingAction.status === 'proposed'
-        && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
+  const requiresStructuredTaskDecision = voiceTurnSetsImplementation(priorState, orchestrationState, transcript);
   const completion = await observeFcaConversation(fcaTurn, () => placeSkill || (!work && provisionalIntent) || requiresStructuredTaskDecision || confirmedImplementationRequest
     ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false, spokenReply: true })
     : observer && dependencies.chatModel.generateVoiceStreaming
@@ -498,3 +497,4 @@ async function completeLiveVoiceDelegation(
   }));
   } catch (error) { try { fcaTurn?.abort(); } catch { /* Pending source stays ineligible. */ } throw error; }
 }
+

@@ -70,21 +70,36 @@ export function createReportCards(parts: CardParts) {
     done.add(key);
     if (done.size > REMEMBERED) done.delete(done.values().next().value!);
   };
+  /**
+   * Finished work already settled (its card written now or before, or nothing to write), by the task as it was then: its next scan
+   * asks nothing of it until the task itself changes. 2026-10-13: every 5 s scan asked the report gate again for each of the day's
+   * finished tasks (each a walk over every sibling's provenance), blocking the API's one thread for 2-3 s every 5 s.
+   */
+  const settled = new Map<string, string>();
+  const settledMark = (task: TaskView) => `${task.updatedAt}\u0000${task.phase}`;
+  const settle = (task: TaskView): null => {
+    settled.delete(task.id);
+    settled.set(task.id, settledMark(task));
+    if (settled.size > REMEMBERED) settled.delete(settled.keys().next().value!);
+    return null;
+  };
   /** True when the task needs no further look (written now, written before, or nothing to write). */
   const consider = (task: TaskView, at: number): boolean | null => {
+    if (settled.get(task.id) === settledMark(task)) return null;
     const progress = parts.shown(task.id), report = progress?.report;
     // Shown without its report: held (or dropped) for now; looked at again by id until it is written or leaves the window.
     if (progress && !report && waiting.size < WAITING_KEPT) waiting.add(task.id);
     if (!progress || !report?.text.trim()) return null;
     waiting.delete(task.id);
     const key = `${task.id}:${report.id}`;
-    if (done.has(key)) return null;
+    if (done.has(key)) return settle(task);
     const sources = parts.runtime.taskSources(parts.ownerScope, task.id);
     const threadId = sources.find(source => source.threadId)?.threadId;
     const messageId = reportCardMessageId(parts.ownerScope, task.id, report.id);
     const answer = threadId && !parts.conversations.assistantMessage?.(parts.ownerScope, threadId, messageId) ? answerOf(task, report, at) : '';
     if (answer === null) return null;
     remember(key);
+    settle(task);
     const card = threadId && answer ? reportCardOf(task, progress, answer) : null;
     if (!card || !threadId) return false;
     const recalledMemoryIds = sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]);

@@ -69,6 +69,23 @@ describe('report cards (rich chat)', () => {
     expect(note.recalledMemoryIds).toEqual(['turn-1', 'memory-1']);
   });
 
+  it('asks nothing more of settled work on later scans until the task itself changes (2026-10-13: 2-3 s blocks every 5 s)', () => {
+    harness(); // The file's store, closed after each test.
+    const task = { id: 'task-1', parentId: 'conversation-1', kind: 'research', origin: 'owner_request', title: '調べる',
+      phase: 'completed', updatedAt: new Date(AT - 5_000).toISOString() } as TaskView;
+    const parent = { id: 'conversation-1', kind: 'conversation' } as TaskView;
+    let asked = 0;
+    const cards = createReportCards({ runtime: { list: () => [task], get: (_scope, id) => id === parent.id ? parent : task, taskSources: () => [] },
+      ownerScope: 'owner', conversations: { assistantMessage: () => null, appendReportCardOnce: () => null } as never, now: () => AT,
+      shown: () => { asked += 1; return { currentStep: 'fca.result', status: 'received', startedAt: task.updatedAt, updatedAt: task.updatedAt, findings: [],
+        report: { id: 'report-1', text: '答え。', updatedAt: task.updatedAt, spoken: '答え。' } }; } });
+    cards.tick(); cards.tick(); cards.tick();
+    expect(asked).toBe(1); // No Talk: nothing to write, settled at once.
+    task.updatedAt = new Date(AT).toISOString();
+    cards.tick();
+    expect(asked).toBe(2);
+  });
+
   it('survives a restart of the scan without a second card', () => {
     const { threadId, cards } = harness({ spoken: '近いのはA店です。' });
     cards.tick();

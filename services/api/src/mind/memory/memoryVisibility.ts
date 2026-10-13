@@ -17,6 +17,9 @@ import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
 
+/** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
+const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
+
 /** A Shannon reply (or the Shannon side of an experience summary) as the withholding rule sees it. */
 export interface WithholdableReply {
   experienceId?: string;
@@ -90,9 +93,19 @@ export class MemoryWithholding {
 
   /** Experiences that are the source of a withheld item or quote its evidence. */
   private hidden(): readonly ShannonExperience[] {
-    this.hiddenExperiences ??= this.inactive || !this.store ? [] : (this.candidates ??= this.store.experienceCandidates(this.scopeKey))
-      .filter(item => !visibleMemoryText(this.state, item.id, item.summary) || !isMemoryEvidenceVisible(this.state, item.userMessage));
-    return this.hiddenExperiences;
+    if (this.hiddenExperiences) return this.hiddenExperiences;
+    if (this.inactive || !this.store) return this.hiddenExperiences = [];
+    const candidates = this.candidates ??= this.store.experienceCandidates(this.scopeKey);
+    // The same remembered turns (the store keeps one read while the database is unchanged) under the same state snapshot are
+    // judged once: each check of a turn used to filter every remembered turn again.
+    const known = HIDDEN_BY_READ.get(candidates)?.get(this.state);
+    if (known) return this.hiddenExperiences = known;
+    const hidden = Object.freeze(candidates.filter(item => !visibleMemoryText(this.state, item.id, item.summary)
+      || !isMemoryEvidenceVisible(this.state, item.userMessage)));
+    let byState = HIDDEN_BY_READ.get(candidates);
+    if (!byState) HIDDEN_BY_READ.set(candidates, byState = new WeakMap());
+    byState.set(this.state, hidden);
+    return this.hiddenExperiences = hidden;
   }
 
   /** A recalled ID that is itself withheld: the reply was generated from the withheld content. */

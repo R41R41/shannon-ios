@@ -198,7 +198,9 @@ export class AnthropicChatModel implements ShannonChatModel {
       if ((read && read.status !== 'results') || (searchRequested && !searched && !read)) return null;
       written += text;
       return Promise.resolve(onReplyText(text)).then(() => text);
-    } : null, watch?.signal, this.textFirstTokenLatency, watch?.first);
+    // A first-token budget needs a first token to see: without a listener the request is still streamed (taking no words), else
+    // the budget would time the whole reply (2026-10-13: an unstreamed Sonnet voice turn always ran past it, then luna started over).
+    } : watch ? () => null : null, watch?.signal, this.textFirstTokenLatency, watch?.first);
     const usable = (message: Anthropic.Message) => { try { parsedChatTurn({ output_text: textOf(message) }); return true; } catch { return false; } };
     const plan = this.planTurn(request);
     let result: ClaudeToolLoopResult;

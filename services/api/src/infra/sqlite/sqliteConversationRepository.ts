@@ -18,6 +18,7 @@ import {
 } from '../../mind/memory/store/conversationStore.js';
 import type { ActivityItem } from '../../mind/memory/memoryService.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../surfaces/text/threadTitle.js';
+import { readWhileUnchanged } from './experienceCandidateReads.js';
 import {
   conciseThreadTitle,
   freezeStoredMessage,
@@ -76,7 +77,6 @@ function experienceFromRow(row: Pick<EventRow, 'event_id' | 'observed_at' | 'pay
 
 export class SQLiteConversationRepository implements ConversationStore {
   constructor(private readonly context: SQLiteStoreContext) {}
-
   listThreads(scopeKey: string): readonly ConversationThread[] {
     const rows = this.context.database.prepare(`
       SELECT thread_id, title, created_at, updated_at, summary,
@@ -265,7 +265,7 @@ export class SQLiteConversationRepository implements ConversationStore {
     });
   }
 
-  experienceCandidates(scopeKey: string): readonly ShannonExperience[] {
+  experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return readWhileUnchanged(this.context.database, scopeKey, () => {
     const rows = this.context.database.prepare(`
       SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json
       FROM experience_events
@@ -274,7 +274,7 @@ export class SQLiteConversationRepository implements ConversationStore {
       LIMIT ?
     `).all(scopeKey, this.context.maximumExperiences) as unknown as EventRow[];
     return Object.freeze(rows.reverse().flatMap(experienceFromRow));
-  }
+  }); }
 
   experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
     const ids = [...new Set(experienceIds)].slice(0, 200);

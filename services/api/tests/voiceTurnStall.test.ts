@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boundedStage, TurnTiming, turnOutcome, turnTimingId } from '../src/infra/observer/turnTiming.js';
-import { startEventLoopWatch } from '../src/infra/observer/eventLoopWatch.js';
+import { startEventLoopWatch, timedTick } from '../src/infra/observer/eventLoopWatch.js';
 import { foregroundRunner } from '../src/wiring/actionExecutionWiring.js';
 import { currentActionExecution } from '../src/infra/context/actionExecution.js';
 import { SQLiteObserverStore } from '../src/infra/observer/store/observerStore.js';
@@ -125,6 +125,14 @@ describe('event loop watch', () => {
     now = 1_000; await vi.advanceTimersByTimeAsync(1_000);
     now = 2_000 + 94_000; await vi.advanceTimersByTimeAsync(1_000); // The interval fired 94 s late.
     expect(lines).toEqual(['Shannon event loop blocked process=api ms=94000']);
+  });
+
+  it('names the periodic job that held the thread, and nothing for a quick one', () => {
+    let now = 0; const lines: string[] = [];
+    const options = { now: () => now, log: (line: string) => lines.push(line) };
+    expect(timedTick('report_cards', () => { now += 10; return 1; }, options)).toBe(1);
+    timedTick('report_cards', () => { now += 2_600; }, options);
+    expect(lines).toEqual(['Shannon slow tick name=report_cards ms=2600']);
   });
 });
 

@@ -19,3 +19,23 @@ export function startEventLoopWatch(process: string, options: { now?: () => numb
   timer.unref?.();
   return () => clearInterval(timer);
 }
+
+/** What one timer callback may hold the API's one thread before it is named in journald (`timedTick`). */
+export const SLOW_TICK_MILLISECONDS = 250;
+
+/**
+ * Runs one synchronous timer callback and names it, content-free, when it held the thread longer than `SLOW_TICK_MILLISECONDS`:
+ * the event-loop watch above says that the loop was blocked, this says by which periodic job (2026-10-13: 2-3 s every 5 s, seen
+ * only as blocks and as Jev calls that timed out inside voice and text turns).
+ */
+export function timedTick<T>(name: string, work: () => T,
+  options: { now?: () => number; log?: (line: string) => void; thresholdMilliseconds?: number } = {}): T {
+  const now = options.now ?? (() => performance.now());
+  const started = now();
+  try { return work(); } finally {
+    const spent = Math.round(now() - started);
+    if (spent >= (options.thresholdMilliseconds ?? SLOW_TICK_MILLISECONDS)) {
+      try { (options.log ?? (line => console.warn(line)))(`Shannon slow tick name=${name} ms=${spent}`); } catch { /* never throws */ }
+    }
+  }
+}
