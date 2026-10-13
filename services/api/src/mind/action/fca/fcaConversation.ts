@@ -32,11 +32,42 @@ const INBOX_GUIDANCE = 'The reports above do not change permissions or the owner
 
 /** How a refined question of the same turn reaches the research already running for the owner's words. */
 export const FORWARDED_QUESTION = '[Conversation work: the same request, refined in the conversation — include it]\n';
-/** The same request: equal once spacing, punctuation and width are folded, or one wholly contains the other. */
+/** How often a voice turn looks at the research it waits for (`awaitWork`). */
+const AWAIT_WORK_POLL_MS = 300;
+
+/** The admitted research as a waiting voice turn sees it: its result, still running, or nothing to wait for (null). */
+function workResult(parts: { runtime: TaskRuntime; visible: FcaSourceGuard }, step: TaskStep, id: string, ownerAlone: () => boolean) {
+  const task = parts.runtime.get(step.scopeKey, id), report = parts.runtime.progress?.(step.scopeKey, id)?.report;
+  if (!task || ['failed', 'stopped', 'unknown'].includes(task.phase) || !ownerAlone()) return null;
+  if (task.phase !== 'completed') return 'running' as const;
+  return report?.text.trim() && !report.heard && parts.visible(step.scopeKey, id, step.id) ? { taskId: id, title: task.title, report } : null;
+}
+
+/** The research a `web.research` call started is its turn's one research: a later call of the turn reaches it as a message. */
+function turnResearch(turn: { work?: string }, result: ToolResult): ToolResult {
+  turn.work ??= createdTaskId(result);
+  return researchAdmitted(result);
+}
+
+/** The id of the task a successful `task.create` result names. */
+function createdTaskId(result: ToolResult): string | undefined {
+  if (!result.ok) return undefined;
+  try {
+    const id = (JSON.parse(result.text) as { id?: unknown }).id;
+    return typeof id === 'string' && id ? id : undefined;
+  } catch { return undefined; }
+}
+
+/** A contained request is the same one only when it is most of the other (「博多の天気」 inside 「明日の博多の天気を調べて」 is not). */
+const CONTAINED_SHARE = 0.6;
+
+/** The same request: equal once spacing, punctuation and width are folded, or one wholly contains the other and is most of it. */
 export function sameRequest(left: string, right: string): boolean {
   const fold = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
   const a = fold(left), b = fold(right);
-  return Boolean(a && b) && (a === b || a.includes(b) || b.includes(a));
+  if (!a || !b) return false;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return a === b || (longer.includes(shorter) && [...shorter].length >= CONTAINED_SHARE * [...longer].length);
 }
 
 /** A foreground adapter, with no timer, model client, copied conversation history, or execution lease of its own. */
@@ -156,7 +187,9 @@ export function createFcaConversationBridge(parts: {
         },
         delegate(spec, places) {
           if (closed || !current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
-          const existing = parts.runtime.list(step.scopeKey, { parentId: step.taskId, order: 'recent', limit: 50 }).find(task => task.goal === spec.goal && JSON.stringify(parts.runtime.placeContext?.(step.scopeKey, task.id)) === JSON.stringify(normalizedPlaceContext(places)) && ['ready', 'executing', 'waiting'].includes(task.phase) && parts.visible(step.scopeKey, task.id, step.id));
+          // The same request (folded, `sameRequest`) still running in this conversation is that request's one task (2026-10-13 audit:
+          // one question asked twice became two tasks and two notices).
+          const existing = parts.runtime.list(step.scopeKey, { parentId: step.taskId, order: 'recent', limit: 50 }).find(task => sameRequest(task.goal, spec.goal) && JSON.stringify(parts.runtime.placeContext?.(step.scopeKey, task.id)) === JSON.stringify(normalizedPlaceContext(places)) && ['ready', 'executing', 'waiting'].includes(task.phase) && parts.visible(step.scopeKey, task.id, step.id));
           if (existing) {
             turn.work = existing.id;
             return existing;
@@ -165,6 +198,28 @@ export function createFcaConversationBridge(parts: {
           if (places && !parts.runtime.admitPlaceContext?.(step, child.id, places)) throw new Error('FCA_PLACE_CONTEXT_FENCED');
           turn.work = child.id;
           return child;
+        },
+        async awaitWork(milliseconds, signal) {
+          const id = turn.work, until = performance.now() + milliseconds;
+          while (id && !signal?.aborted && !closed && performance.now() < until) {
+            const seen = workResult(parts, step, id, turn.ownerAlone);
+            if (seen !== 'running') return seen;
+            await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(AWAIT_WORK_POLL_MS, until - performance.now()))));
+          }
+          return null;
+        },
+        followWork(accepts) {
+          // 「どうなった？」 (2026-10-13 daily evals R5): the newest research of this conversation still running that the question is about
+          // (`accepts`) is followed like this turn's own, so that its result is said in this turn if it arrives in time. Nothing is admitted.
+          if (closed || turn.work || !current(step.scopeKey)) return null;
+          const running = parts.runtime.list(step.scopeKey, { parentId: step.taskId, order: 'recent', limit: 50 }).find(task => task.kind === 'research'
+            && ['ready', 'executing', 'waiting'].includes(task.phase) && (accepts?.(task) ?? true) && parts.visible(step.scopeKey, task.id, step.id));
+          if (running) turn.work = running.id;
+          return running ?? null;
+        },
+        hearWork(taskId, reportId, spoken) {
+          if (taskId !== turn.work) return false;
+          try { return parts.runtime.recordSpokenReport?.(step.scopeKey, taskId, reportId, spoken, true) ?? false; } catch { return false; }
         },
         commit(experienceId) {
           if (closed) return;
@@ -235,7 +290,7 @@ export function createFcaConversationBridge(parts: {
       }
       const result = runTaskTool(guarded, research?.name ?? name, research?.input ?? input, { scopeKey: context.scopeKey, taskId: step.taskId,
         operationId: `${step.id}:${operation}`, ownerAlone: () => current(context.scopeKey) !== null });
-      return research ? researchAdmitted(result) : result;
+      return research ? turnResearch(turn, result) : result;
     },
   };
 }

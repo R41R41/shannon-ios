@@ -32,6 +32,17 @@ export const TOOL_CALL_CAP_MILLISECONDS = 10_000;
 /** What she says when the turn ran out before she could answer. Plain, in her voice; the turn is still saved. */
 export const TURN_OUT_OF_TIME_LINE = '時間が足りなかったので、続きはもう一度言ってください。';
 
+/**
+ * What a voice turn whose research was admitted says instead (owner decision 2026-10-13): a 「調べて」 never ends with 「時間が
+ * 足りなかった」; the research runs on as work and its result is told when it arrives.
+ */
+export const RESEARCH_UNDER_WAY_LINE = 'ちょっと調べてみますね。';
+
+/** A spoken delta or reply of a turn whose research runs on: her out-of-time line becomes the research line. */
+export function withResearchUnderWay(text: string): string {
+  return text.endsWith(TURN_OUT_OF_TIME_LINE) ? `${text.slice(0, -TURN_OUT_OF_TIME_LINE.length)}${RESEARCH_UNDER_WAY_LINE}` : text;
+}
+
 export class TurnDeadline {
   private readonly startedAt: number;
 

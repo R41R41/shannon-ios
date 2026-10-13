@@ -59,7 +59,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
@@ -73,9 +73,9 @@ import { conversationFcaProvenance, observeFcaConversation } from '../../mind/ac
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
-import { admitConversationWork, admittedWorkContext } from '../../mind/action/fca/conversationWork.js';
+import { admittedWorkContext, admitVoiceResearch, researchHeardInTurn, researchSaid, voiceTurnClock } from './voiceResearchTurn.js';
 import { finishTurnTiming, TurnTiming, turnStages, turnTimingId } from '../../infra/observer/turnTiming.js';
-import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT } from './voiceConversationHint.js';
+import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT, webForWeather, followUp } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
   looks?: VoiceLooks;
@@ -273,7 +273,7 @@ async function completeLiveVoiceDelegation(
     }));
   }
   const contextStartedAt = performance.now();
-  const selectedSkills = new Set(decision.selectedSkills);
+  const selectedSkills = webForWeather(new Set(decision.selectedSkills), weatherToolAvailable(dependencies.autonomy, scopeKey, alone && !temporaryGuest));
   const backendInstructions = voiceTurnGrounding({ temporaryGuest, alone, legacyGuest, selectedSkills, at: dependencies.now(), deviceContext });
   // Refresh after the classifier await so a concurrent forget/hide is respected.
   const captured = dependencies.stateStore.snapshot(scopeKey);
@@ -369,12 +369,12 @@ async function completeLiveVoiceDelegation(
     readSourceIds: capability.readSourceIds, ownerAlone: () => dependencies.toolServer?.audience.othersKnown(scopeKey) === false }) : null;
   try {
   const placeContext = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript) ? { ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? { latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude } : {}), spoken: true } : undefined;
-  const work = admitConversationWork(fcaTurn, { message: transcript, research: selectedSkills.has('current_web') || Boolean(placeContext), places: placeContext,
-    at: occurredAt, ...(deviceContext?.timeZoneIdentifier ? { timeZone: deviceContext.timeZoneIdentifier } : {}) });
+  const admitted = admitVoiceResearch(fcaTurn, { transcript, route: routeInput, research: selectedSkills.has('current_web') || Boolean(placeContext),
+    places: placeContext, at: occurredAt, timeZone: deviceContext?.timeZoneIdentifier }), work = admitted.work, next = followUp(fcaTurn, transcript, admitted);
   const placeSkill = !work && placeContext ? await bounded('places_timeout', runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: placeContext }), () => null) : null;
   observer?.signal?.throwIfAborted();
   const directHint = Boolean(fcaTurn) && plainVoiceHint(decision, transcript, uncertainTranscript);
-  const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), directHint ? PLAIN_VOICE_HINT : ''].filter(Boolean).join('\n\n');
+  const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), next.hint, directHint ? PLAIN_VOICE_HINT : ''].filter(Boolean).join('\n\n');
   if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
   const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
@@ -391,6 +391,7 @@ async function completeLiveVoiceDelegation(
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
+    ...voiceTurnClock(occurredAt, deviceContext?.timeZoneIdentifier), // His clock: 今日 and 明日 are his days (`turnClockLine`).
     useWebSearch: !work && !placeSkill && selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,
@@ -415,7 +416,7 @@ async function completeLiveVoiceDelegation(
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
           timing.mark('firstToken');
           streamedReplyPrefix = `${streamedReplyPrefix}${delta}`.slice(0, 2_000);
-          await observer.onTextDelta(delta);
+          await observer.onTextDelta(researchSaid(delta, work));
           if (!streamedEmotionUpdated && /[。！？!?\n]/u.test(streamedReplyPrefix)) {
             streamedEmotionUpdated = true;
             expressiveEmotion = emotionWith(streamedReplyPrefix);
@@ -432,10 +433,9 @@ async function completeLiveVoiceDelegation(
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   timing.mark('firstToken'); // Unstreamed, the whole reply is its first token.
-  const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? {
-    title: '依頼された機能の実装', goal: confirmedImplementationRequest,
-  } : undefined);
-  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  const heard = await researchHeardInTurn(fcaTurn, next.admitted, { before: completion.reply, say: observer?.onTextDelta.bind(observer) }, observer?.signal);
+  const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
+  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(completion.reply, work)}${heard}`;
   let feedbackRecordId: string | undefined;
   const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, feedbackReplySuffix: placeReply('', placeSkill?.places ?? []), completion, tier, tools: toolOffer.tools, deadline, at: occurredAt, onFeedbackRecord: id=>{feedbackRecordId=id;} }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.

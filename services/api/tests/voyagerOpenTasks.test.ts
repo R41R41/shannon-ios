@@ -84,3 +84,48 @@ describe('Voyager bounded open read', () => {
       SHANNON_VOYAGER_INTEGRATION_TOKEN: 'synthetic', SHANNON_VOYAGER_WORKSPACE_ID: 'synthetic' }).listOpenTasks).toBeTypeOf('function');
   });
 });
+
+describe('due dates beside a keyword search (2026-10-13 daily evals M4: 「納期は？」 could not be answered)', () => {
+  const searched = { id: 'synthetic-task', title: '申告書を提出する', details: 'data only', status: 'pending', projectIds: [], revision: 3, updatedAt: '2026-10-09T00:00:00Z' };
+
+  it('adds dueAt and priority from the open-task read to the search hits, within the search contract', async () => {
+    const reader: VoyagerCatalog = { searchTasks: vi.fn(async () => [searched, { ...searched, id: 'closed-task', status: 'done' }]),
+      listOpenTasks: vi.fn(async () => ({ items: [task], hasMore: false })), listProjects: async () => [] };
+    const prompt = await conversationCapabilityPrompt('', '「申告書」のタスクの期限は？', { voyagerCatalog: reader }, owner);
+    expect(prompt).toContain('Keyword searched: "申告書"');
+    expect(prompt).toContain('"status":"pending","dueAt":"2026-10-10T00:00:00Z","priority":4');
+    // A hit that is not open has no due date from that read, and says so.
+    expect(prompt).toContain('"id":"closed-task","title":"申告書を提出する","details":"data only","status":"done","revision":3');
+    expect(prompt).toContain('dueAt and priority come from the open-task read');
+  });
+
+  it('never lets a slow open read hold the search beyond its bound', async () => {
+    vi.useFakeTimers();
+    try {
+      const reader: VoyagerCatalog = { searchTasks: async () => [searched], listOpenTasks: () => new Promise(() => {}), listProjects: async () => [] };
+      const pending = conversationCapabilityPrompt('', '「申告書」のタスク', { voyagerCatalog: reader }, owner);
+      await vi.advanceTimersByTimeAsync(2_600);
+      const prompt = await pending;
+      expect(prompt).toContain('"id":"synthetic-task"');
+      expect(prompt).not.toContain('timed out');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps the search when the open read fails or does not exist', async () => {
+    const failing: VoyagerCatalog = { searchTasks: async () => [searched], listOpenTasks: async () => { throw new OrganizeError('DESTINATION_TIMEOUT', 503, true); }, listProjects: async () => [] };
+    const older: VoyagerCatalog = { searchTasks: async () => [searched], listProjects: async () => [] };
+    for (const reader of [failing, older]) {
+      const prompt = await conversationCapabilityPrompt('', '「申告書」のタスク', { voyagerCatalog: reader }, owner);
+      expect(prompt).toContain('"id":"synthetic-task"');
+      expect(prompt).not.toContain('dueAt');
+    }
+  });
+
+  it('reads 「Aether と Voyager の納期は？」 as the open tasks with their due dates, not a search for the word', async () => {
+    const searchTasks = vi.fn(async () => []);
+    const reader: VoyagerCatalog = { searchTasks, listOpenTasks: async () => ({ items: [task], hasMore: false }), listProjects: async () => [] };
+    const prompt = await conversationCapabilityPrompt('', 'Aether と Voyager の納期は？', { voyagerCatalog: reader }, owner);
+    expect(prompt).toContain('"dueAt":"2026-10-10T00:00:00Z"');
+    expect(searchTasks).not.toHaveBeenCalled();
+  });
+});

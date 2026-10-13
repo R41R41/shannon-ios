@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, withDeviceActionsCapability, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, withDeviceActionsCapability, withDeviceReminderBoundary, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -218,7 +218,12 @@ export function documentText(document: AetherDocument): string {
  * while her Aether tools are offered, Aether's (`withAetherAccessCapability`). A request without them is returned as it is,
  * and so is one that searches the web or places: the adapter sends no tools then (`offersTools`, `voiceTools` in `chatModel.ts`).
  */
-export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string; domain?: string }[]; menu?: { offered: readonly { name: string; domain?: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
+/** The device tools that act: her device line and the limitations it answers follow these; the reminder boundary the first two. */
+const DEVICE_WRITES: ReadonlySet<string> = new Set(['timer.start', 'reminder.create', 'calendar.create_event', 'music.play', 'music.control',
+  'music.playlist_create']);
+const DEVICE_ALERTS: ReadonlySet<string> = new Set(['timer.start', 'reminder.create']);
+
+export function withToolCapabilityLines<T extends { systemPrompt: string; turnContext?: string; tools?: { definitions: readonly { name: string; domain?: string }[]; menu?: { offered: readonly { name: string; domain?: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
   if (request.useWebSearch || request.placeSearch) return request;
   const body = withMinecraftToolLine(request);
   const lifecycleOffered = body.tools?.menu?.offered ?? body.tools?.definitions;
@@ -233,9 +238,12 @@ export function withToolCapabilityLines<T extends { systemPrompt: string; tools?
     ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
   // Her skills (stage 2, step 6): their line only in a turn that offers `skill.read`.
   const withSkills = offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;
-  // Her device tools (`docs/device-actions-contract.md`): their line and limitations, only in a turn that offers them.
-  const withDevice = offered?.some(tool => tool.domain === 'device_action')
-    ? { ...withSkills, systemPrompt: withDeviceActionsCapability(withSkills.systemPrompt) } : withSkills;
+  // Her device tools (`docs/device-actions-contract.md`): their line, the limitations they answer and the reminder boundary, only in a
+  // turn that offers the device's writes (a turn whose words could not be trusted offers none of them, and keeps the honest lines).
+  const deviceLine = offered?.some(tool => DEVICE_WRITES.has(tool.name)) ? { ...withSkills, systemPrompt: withDeviceActionsCapability(withSkills.systemPrompt) }
+    : withSkills;
+  const withDevice = deviceLine.turnContext && offered?.some(tool => DEVICE_ALERTS.has(tool.name))
+    ? { ...deviceLine, turnContext: withDeviceReminderBoundary(deviceLine.turnContext) } : deviceLine;
   const withTasks = offered?.some(tool => tool.domain === 'task_runtime') ? { ...withDevice, systemPrompt: `${withDevice.systemPrompt}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}` } : withDevice;
   return offered?.some(tool => tool.domain === 'memory_read') ? { ...withTasks, systemPrompt: `${withTasks.systemPrompt}\n\n${SHANNON_FCA_SHARED_CAPABILITY.text}` } : withTasks;
 }

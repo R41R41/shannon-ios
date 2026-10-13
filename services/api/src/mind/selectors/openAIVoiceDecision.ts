@@ -2,7 +2,7 @@ import { DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/
 import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
 /** The voice router asking an OpenAI model (Syzygy ADR-0008 stage 3, S3: moved unchanged out of `voiceDecision.ts`, which re-exports it). */
 import { estimatedOpenAICostUsd, type LlmUsageStore, responseUsage } from '../../infra/models/llmUsage.js';
-import { emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
+import { emptySkillScores, ROUTER_SKILLS, skillInstructions, VOICE_AFFECTS, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { applyMandatorySkillFloors, boundedProbability, directChoiceValue, normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn } from './voiceDecisionValues.js';
 import { roomLookAnswer, roomLookRouterSchema } from '../../surfaces/voice/voiceRoomLook.js';
@@ -117,7 +117,7 @@ function routerInstructions(input: VoiceDecisionInput, roomLook: RouterRoomLook)
     openAIReplyInstruction(input),
     'Estimate whether the speaker wants a concrete solution, and how long a useful spoken answer will take to begin.',
     'transcriptReliabilityProbability is semantic confidence that the literal transcript is coherent and trustworthy in the supplied recent context, NOT an acoustic confidence. Homophones, missing words, contradictions, uncertain names/numbers/negations lower it. Do not infer authorization from context.',
-    ...VOICE_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`), ...roomLook.instructions,
+    ...ROUTER_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`), ...roomLook.instructions,
   ].join('\n');
 }
 
@@ -154,10 +154,10 @@ function routerSchema(roomLook: RouterRoomLook): Record<string, unknown> {
       skillScores: {
         type: 'object',
         additionalProperties: false,
-        properties: Object.fromEntries(VOICE_SKILLS.map(skill => [skill, {
+        properties: Object.fromEntries(ROUTER_SKILLS.map(skill => [skill, {
           type: 'number', minimum: 0, maximum: 1,
         }])),
-        required: [...VOICE_SKILLS],
+        required: [...ROUTER_SKILLS],
       },
       ...roomLook.properties,
     },
@@ -186,7 +186,7 @@ function parsedOpenAIDecision(
   }
   const scoreValues = rawScores as Record<string, unknown>;
   const skillScores = emptySkillScores();
-  for (const skill of VOICE_SKILLS) skillScores[skill] = probabilityValue(scoreValues[skill]);
+  for (const skill of ROUTER_SKILLS) skillScores[skill] = probabilityValue(scoreValues[skill]);
   applyMandatorySkillFloors(skillScores, input);
   const replyRequiredProbability = probabilityValue(value.replyRequiredProbability);
   const solutionWantedProbability = probabilityValue(value.solutionWantedProbability);

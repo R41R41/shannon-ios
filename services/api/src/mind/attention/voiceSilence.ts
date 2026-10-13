@@ -281,6 +281,10 @@ export function settleOwnerVoiceTurn(
   const verdict = ownerTurnVerdict(turn.transcript, turn.facts, rules);
   if (verdict?.respond) return answered(decision);
   if (verdict) return silenced(decision, verdict.category);
+  // Alone with him, words that ask her for something are answered even when the router chose silence (2026-10-13 daily evals
+  // V1/R3: 「東京都 博多の天気」 and 「今日、博多でやってるイベントある」 got no reply at all). Garbled words get her one short
+  // question through the interpretation prompt; a silence rule above (a hold, an echo, a backchannel) still stands.
+  if (asksHerSomething(decision, turn.facts, turn.transcript)) return answered(decision);
   // No rule has an opinion: the router's own answer stands, and silence is no longer overturned
   // just because the transcript is unclear. Asking to repeat is for an utterance that was addressed to her.
   if (!decision.shouldRespond) return silenced(decision, decision.silence ?? 'model');
@@ -290,6 +294,25 @@ export function settleOwnerVoiceTurn(
   if (rules.has('unfinished') && reliability !== undefined && reliability < fragmentReliability(environment)
     && decision.replyRequiredProbability < FRAGMENT_REPLY_BELOW && characters(bareText(turn.transcript)) <= fragmentCharacters(environment)) return silenced(decision, 'unfinished');
   return decision;
+}
+
+/** Above this the router itself says he wants a concrete answer: with the owner alone that is never silence. */
+const SOLUTION_WANTED_ANSWERED = 0.7;
+/**
+ * Words in the form of a question that lost its mark or its particle (「博多の天気」「イベントある」「明日は」), not a statement
+ * (「明日雨らしいよ」「約束したんだ」). Read only together with a capability chosen for them.
+ */
+const BARE_QUESTION = /(?:天気|予報|気温|ある|ない|いる|いい|できる|どう|どこ|いつ|何|なに|は)$/u;
+
+/**
+ * The owner alone asked her for something: the router itself says he wants a concrete answer, or a capability was chosen for words
+ * in the form of a bare question. A capability chosen by a fixed word alone (私の, 約束, 雨, 何時) is not enough: speech not meant for
+ * her (a call, the TV, 「明日雨らしいよ」) has such words too. Not with anyone else there: then she answers only when addressed.
+ */
+export function asksHerSomething(decision: VoiceTurnDecision, facts: VoiceTurnFacts, transcript: string): boolean {
+  if (facts.othersPresent) return false;
+  return decision.solutionWantedProbability >= SOLUTION_WANTED_ANSWERED
+    || (decision.selectedSkills.length > 0 && BARE_QUESTION.test(bareText(transcript)));
 }
 
 /** The third tier: what the local rules alone decide. `quiet` false with no `silence` means "answer". */

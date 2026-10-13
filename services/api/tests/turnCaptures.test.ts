@@ -163,6 +163,22 @@ describe('what Shannon took in is visible per turn', () => {
   });
 });
 
+describe('a timer or a reminder her device took (2026-10-13 daily evals D1)', () => {
+  it('leaves out the 「時刻ちょうどは…」 notice and promise beside it, and keeps them when the device took nothing', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-captures-'));
+    directories.push(directory);
+    const store = new SQLiteShannonStore({ path: join(directory, 'fixture.sqlite'), now: () => at });
+    const processor = new TurnRefinementProcessor(store, store);
+    const run = (words: string) => { const turn = store.appendTurn('owner', 'thread', words, 'セットしました。', at); processor.process('owner', words, turn.id, at); return turn.id; };
+    const plain = [run('30分後に教えて'), run('明日8時に起こして')];
+    expect(store.turnCaptures('owner', plain).map(item => item.kind).sort()).toEqual(['commitment', 'notice']);
+    store.saveToolTrace('owner', { turnId: 'unstored:alert', threadId: 'thread', recordedAt: at, asked: false,
+      calls: [{ tool: 'timer.start', ok: true }, { tool: 'reminder.create', ok: true }] });
+    expect(store.turnCaptures('owner', [run('1時間後に起こして'), run('明日8時に起こして')])).toEqual([]);
+    store.close();
+  });
+});
+
 describe('exact-time requests are answered honestly (AB-06)', () => {
   it('tells the reply lane that no alarm exists before the reply is generated', () => {
     const declined = conversationCapabilityPrompt('owner', '30分後に教えて', {}, { aetherNotes: false, voyagerTasks: false });

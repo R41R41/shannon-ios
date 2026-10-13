@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { providerToolName, type ShannonToolDefinition, type ToolInputProperty } from '../../../mind/tools/shannonTools.js';
 import type { ShannonChatModelRequest, ShannonConversationItem, ShannonVoiceModelRequest } from '../chatModel.js';
 import {
-  COMPUTED_ANSWER_LINE, CONVERSATION_CONTINUITY_LINE, RICH_TEXT_BLOCK_INSTRUCTIONS, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE,
+  COMPUTED_ANSWER_LINE, CONVERSATION_CONTINUITY_LINE, RICH_TEXT_BLOCK_INSTRUCTIONS, turnClockLine, SHORT_VOICE_REPLY_INSTRUCTIONS, SPOKEN_STRUCTURED_REPLY_LINE,
   VOICE_NATURAL_INSTRUCTIONS,
 } from '../../../mind/action/respond/respondInstructions.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
@@ -103,7 +103,12 @@ export function claudeTurnMessages(turn: TurnConversation): Message[] {
 /** A text turn's conversation: its context blocks (`chatTurnContextBlocks`) and the owner's words with an attachment's projection. */
 export function textTurnConversation(request: ShannonChatModelRequest): TurnConversation {
   const words = request.attachments?.length ? [request.message, attachmentProjection(request.attachments)] : request.message;
-  return { history: request.history, context: chatTurnContextBlocks(request), precedingReply: request.precedingReply, words };
+  return { history: request.history, context: [...chatTurnContextBlocks(request), ...clockContext(request)], precedingReply: request.precedingReply, words };
+}
+
+/** The owner's clock as the turn's last context block, when the turn carries it (`turnClockLine`). */
+export function clockContext(request: Pick<ShannonChatModelRequest, 'clock'>): string[] {
+  return request.clock ? [turnClockLine(request.clock)] : [];
 }
 
 /** The function tools a session offers now (with the tool menu, the schemas sent this round). */
@@ -173,7 +178,7 @@ export function claudeVoiceBody(settings: ClaudeChatSettings, request: ShannonVo
     ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), CLAUDE_VOICE_LINES, ...(request.useWebSearch ? [CLAUDE_WEB_LINE] : []),
   ].join('\n\n');
-  const context = [...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])];
+  const context = [...(request.turnContext ? [request.turnContext] : []), ...clockContext(request), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])];
   const complex = request.conversationClass === 'skill_complex';
   const tools: Anthropic.ToolUnion[] = toolsOffered ? claudeTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
   const body: Anthropic.MessageCreateParamsNonStreaming = {

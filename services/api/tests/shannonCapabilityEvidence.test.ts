@@ -256,8 +256,11 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && ['reminder.create', 'timer.start', 'calendar.create_event', 'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create']
       .every(name => SHANNON_TOOLS.some(tool => tool.name === name && tool.domain === 'device_action' && tool.surfaces.join() === 'text,voice' && tool.audiences.join() === 'owner_alone'))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_DEVICE_ACTIONS_CAPABILITY.text)
-    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).startsWith(shannonCapabilityPrompt('owner'))
-    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).endsWith(SHANNON_DEVICE_ACTIONS_CAPABILITY.text),
+    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).endsWith(SHANNON_DEVICE_ACTIONS_CAPABILITY.text)
+    // In that turn the timer and the calendar entry are no longer in 「今はできないこと」 (2026-10-13 daily evals D1–D3).
+    && !withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'exact_time_alarm')!.text}`)
+    && !withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'calendar_mail')!.text}`)
+    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes('- カレンダーの予定の変更・削除、メールやメッセージの送信'),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };
@@ -323,7 +326,8 @@ describe('Shannon capability description', () => {
     expect(limitations.has('calendar_mail')).toBe(true);
     expect(sources).not.toMatch(/EventKit|caldav|icalendar|smtp|sendmail|nodemailer/iu);
     // Not machine-checked: commitment reminders go through the throttled initiative loop,
-    // approvals stay explicit, and no speaker identification exists. Reviewed by hand.
+    // approvals stay explicit, and no speaker identification exists. Reviewed by hand. While her device tools are offered the
+    // timer and calendar parts are taken out of these lines (`withDeviceActionsCapability`, checked in `device_actions` above).
     for (const id of ['exact_time_alarm', 'owner_content_write', 'speaker_identification'] as const) {
       expect(limitations.has(id)).toBe(true);
     }

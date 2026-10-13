@@ -51,6 +51,8 @@ export const JEV_CACHE_ENTRIES = 128;
  */
 export const JEV_QUESTION_SETS = Object.freeze({
   voiceRoute: 'voice_route.v1',
+  /** The voice route that also asks about the weather (`routerSkills`, 2026-10-13 daily evals E2/E3). */
+  voiceRouteWeather: 'voice_route.v2',
   toolMenu: 'tool_menu.v2',
   fcaToolMenu: 'fca_tool_menu.v1',
   reflexEntry: 'reflex_entry.v1',

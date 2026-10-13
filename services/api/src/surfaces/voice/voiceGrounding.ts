@@ -32,7 +32,12 @@ export function voiceTurnGrounding(turn: {
       '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
       '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
     ] : []),
-    ...(turn.selectedSkills.has('device_context') || turn.selectedSkills.has('current_web')
+    ...(turn.selectedSkills.has('weather') && !turn.selectedSkills.has('current_web') ? [
+      '- For the weather, read the forecast with weather_forecast now (no place named: his home), one call per place, and do not hand it to research. '
+        + 'Say the conclusion first (傘はいる・いらない, 晴れ・雨) with one reason such as the chance of rain. '
+        + 'If the place sounds garbled (「東京都 博多」), answer both places or ask which in one short question.',
+    ] : []),
+    ...(['device_context', 'current_web', 'weather'].some(skill => turn.selectedSkills.has(skill))
       ? [voiceDeviceContextPrompt(turn.at, turn.deviceContext)] : []),
   ].join('\n');
 }

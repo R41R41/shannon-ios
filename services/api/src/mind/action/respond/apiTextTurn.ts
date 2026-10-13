@@ -1,3 +1,5 @@
+import { ownerTimeZone } from '../../../infra/time/localDate.js';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { randomUUID } from 'node:crypto';
 import { withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
@@ -410,4 +412,9 @@ export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts:
   const choices = startTurnToolMenu(modelTurn ? chooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
     toolOptions, plan && !parts.autonomy.tools?.knownTool(WEB_CAPABILITY_ENTRY.name) ? [WEB_CAPABILITY_ENTRY] : []);
   return { toolAudience, toolOptions, choices };
+}
+
+/** The owner's clock of a text turn (`turnClockLine`): the configured zone of his days. */
+export function textTurnClock(at: string): { clock: { at: string; timeZone: string } } {
+  return { clock: { at, timeZone: ownerTimeZone(serverEnvironment()) } };
 }

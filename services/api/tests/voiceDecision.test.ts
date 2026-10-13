@@ -8,6 +8,7 @@ import {
   VOICE_AFFECTS,
   VOICE_SKILLS,
 } from '../src/mind/selectors/voiceDecision.js';
+import { ROUTER_SKILLS } from '../src/contracts/voiceDecisionContract.js';
 import { voicePlanResponse } from '../src/mind/emotion/voiceEmotionPlan.js';
 
 function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -35,7 +36,8 @@ describe('Jev voice decision routing', () => {
       scopeKey: 'owner-a', transcript: '近くのカフェを探して、今日の天気も教えて',
       participantMode: 'owner', requestedLocation: true, hasFreshLocation: true,
     });
-    expect(decision.selectedSkills).toEqual(expect.arrayContaining(['current_web', 'place_discovery', 'device_context']));
+    // The weather is her weather tool's (2026-10-13 daily evals E2/E3); the cafes are the place search's.
+    expect(decision.selectedSkills).toEqual(expect.arrayContaining(['weather', 'place_discovery', 'device_context']));
     expect(decision.conversationClass).toBe('skill_complex');
   });
 
@@ -180,8 +182,8 @@ describe('Jev voice decision routing', () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body));
       expect(Object.keys(request.questions).filter(key => key.startsWith('skill__')).sort())
-        .toEqual(VOICE_SKILLS.map(skill => `skill__${skill}`).sort());
-      expect(VOICE_SKILLS.every(skill => request.questions[`skill__${skill}`].type === 'noul')).toBe(true);
+        .toEqual(ROUTER_SKILLS.map(skill => `skill__${skill}`).sort());
+      expect(ROUTER_SKILLS.every(skill => request.questions[`skill__${skill}`].type === 'noul')).toBe(true);
       return new Response(JSON.stringify({
         model: 'jev-latest',
         answers: jevAnswers({
@@ -270,7 +272,10 @@ describe('Jev voice decision routing', () => {
       scopeKey: 'owner-a', transcript: '今日の天気を調べて', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
     });
     expect(current.source).toBe('fallback');
-    expect(current.selectedSkills).toContain('current_web');
+    expect(current.selectedSkills).toContain('weather');
+    expect((await gateway.decide({
+      scopeKey: 'owner-a', transcript: '今日のニュースを調べて', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
+    })).selectedSkills).toContain('current_web');
 
     const guest = await new LocalVoiceDecisionGateway().decide({
       scopeKey: 'guest-session', transcript: 'AetherのメモとVoyagerのタスクを見せて', participantMode: 'guest',
@@ -288,7 +293,7 @@ describe('OpenAI voice decision compatibility routing', () => {
       expect(request.model).toBe('gpt-5.6-terra');
       expect(request.reasoning).toEqual({ effort: 'none' });
       expect(request.store).toBe(false);
-      expect(request.text.format.schema.properties.skillScores.required).toEqual(VOICE_SKILLS);
+      expect(request.text.format.schema.properties.skillScores.required).toEqual(ROUTER_SKILLS);
       return new Response(JSON.stringify({
         output_text: JSON.stringify({
           replyRequiredProbability: 0.94,

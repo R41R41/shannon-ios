@@ -2,9 +2,10 @@ import { mentionsSuiteProduct } from '@shannon/cognition';
 import { memoNotForAether } from '../action/respond/memoPlacePorts.js';
 import { wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
 import {
-  explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
+  explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS, WEATHER_BEYOND_FORECAST,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
 } from '../../contracts/voiceDecisionContract.js';
+import { carriedOffer } from './voiceOfferCarry.js';
 
 export function applyMandatorySkillFloors(
   scores: Record<VoiceSkill, number>,
@@ -19,6 +20,9 @@ export function applyMandatorySkillFloors(
   // Aether/Voyager/Shannon status lives in the owner's own notes, tasks and agent work, not on
   // the public web. A freshness word next to a product name must not send the turn to web search.
   if (asksInternalSuiteStatus(input.transcript)) scores.current_web = 0;
+  // A short yes to her own offer to look something up carries the offer's capabilities (`voiceOfferCarry.ts`).
+  for (const skill of carriedOffer(input)?.skills ?? []) scores[skill] = 1;
+  if (scores.weather >= 1) scores.current_web = weatherWebScore(scores.current_web, input);
   if (input.requestedLocation) scores.device_context = 1;
   if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {
@@ -28,6 +32,15 @@ export function applyMandatorySkillFloors(
     scores.voyager_tasks = 0;
     scores.agent_status = 0;
   }
+}
+
+/**
+ * The web's score beside a forecast question: none for the owner alone, whose weather tool reads it (2026-10-13 daily evals E2/E3);
+ * as it was with anyone else there (the tool is the owner's alone); always beside news, warnings or an event's fate (「雨で花火大会は中止？」).
+ */
+function weatherWebScore(score: number, input: VoiceDecisionInput): number {
+  if (WEATHER_BEYOND_FORECAST.test(input.transcript)) return 1;
+  return input.participantMode === 'owner' && input.turn?.othersPresent !== true ? 0 : score;
 }
 
 /** True for "エーテルとボイジャーの最新の開発状況", false once the owner asks for the web explicitly. */

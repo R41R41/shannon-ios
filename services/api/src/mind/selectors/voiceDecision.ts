@@ -23,6 +23,8 @@ export function createConfiguredVoiceDecisionGateway(
   usageStore?: LlmUsageStore,
   /** The fetch the Jev client uses; decision traces pass one that counts the calls (`infra/models/jev/jevClient.ts`). */
   jevFetcher?: typeof fetch,
+  /** The server's own parts: whether her weather tool exists, so that Jev is asked about the weather (`routerSkills`). */
+  parts: { weatherSkill?: boolean } = {},
 ): VoiceDecisionGateway {
   const skillThreshold = optionalProbability(
     environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
@@ -43,7 +45,7 @@ export function createConfiguredVoiceDecisionGateway(
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
     fallbackGateway: modelFallback,
-    ...(jevFetcher ? { fetcher: jevFetcher } : {}),
+    ...(jevFetcher ? { fetcher: jevFetcher } : {}), ...(parts.weatherSkill ? { weatherSkill: true } : {}),
   }));
   if (modelFallback) return observedVoiceGateway(modelFallback);
   return observedVoiceGateway(new LocalVoiceDecisionGateway(skillThreshold));

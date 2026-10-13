@@ -65,7 +65,9 @@ const NOT_OPENABLE = JSON.stringify({ ok: false, text: 'その名前の道具は
 export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[], options?: { deferMemoryReads?: boolean }): ShannonModelToolSession {
   const offered = base.definitions;
   // What Jev chose, and always the ways to stop and to ask for approval (`alwaysLoadedToolNames`) when the turn offers them.
-  const loaded = alwaysLoadedToolNames(offered);
+  // And the tools his words asked for by name (`askedToolNames`: a timer, an event, music, the weather), so that no `tool_open`
+  // round comes before the call (2026-10-13 daily evals D1).
+  const loaded = [...alwaysLoadedToolNames(offered), ...(base as { preload?: readonly string[] }).preload ?? []];
   const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (loaded.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
   const open = toolOpenDefinition(offered);
   const current = () => [...offered.filter(tool => visible.has(tool.name)), open];
@@ -73,6 +75,8 @@ export function withToolMenu(base: ShannonModelToolSession, chosen: readonly str
   Object.defineProperty(session, 'definitions', { enumerable: true, get: current });
   const hidden = (name: string, value: unknown) => Object.defineProperty(session, name, { enumerable: false, value });
   hidden('deadline', base.deadline);
+  const preload = (base as { preload?: readonly string[] }).preload;
+  if (preload) hidden('preload', preload);
   if (base.writesWithheld) hidden('writesWithheld', true);
   if (base.othersPresent) hidden('othersPresent', true);
   if (base.guestTurn) hidden('guestTurn', true);

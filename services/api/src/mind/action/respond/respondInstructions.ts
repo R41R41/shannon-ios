@@ -65,3 +65,21 @@ export const VOICE_NATURAL_INSTRUCTIONS = '[音声の自然さ]\n'
   + '内容が本当に長くて声では言い切れない時だけ、要点のあとに「詳しくは画面に出しておくね」と添える。短く言える時は添えない。'
   + '「受け付けました」「結果がそろいました」「少しお待ちください」のような状況報告の決まり文句や、検索結果の抜粋だという毎回の断り書きは言わない。'
   + '不確かさは答えが変わる時だけ短く添える。相づちや感想には、それ自体に応える。';
+
+/**
+ * The owner's clock for a turn (owner decision 2026-10-13: at 2:40 at night she took 「明日」 for the day after the date had
+ * changed and then "corrected" the right answer). The Claude text and voice requests say it in the turn's context; from 0:00 to
+ * 4:00 his 「明日」 may still mean the day that has just begun.
+ */
+export function turnClockLine(clock: { at: string; timeZone: string }): string {
+  let zone = clock.timeZone;
+  try { new Intl.DateTimeFormat('ja-JP', { timeZone: zone }); } catch { zone = 'Asia/Tokyo'; }
+  const at = new Date(clock.at);
+  const local = new Intl.DateTimeFormat('ja-JP', { timeZone: zone, dateStyle: 'full', timeStyle: 'short' }).format(at);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zone, month: 'numeric', day: 'numeric', hour: 'numeric', hourCycle: 'h23' })
+    .formatToParts(at).map(part => [part.type, part.value]));
+  const line = `[いま] ${local}（${zone}）。「今日」「明日」「今夜」はこの日付と時刻で数える。`;
+  if (Number(parts.hour) >= 4) return line;
+  return `${line}いまは深夜なので、相手の「明日」は日付が変わったばかりの今日（${parts.month}月${parts.day}日）のことかもしれない。`
+    + '「明日」の答えが日によって変わる時は、どちらの日かを短いひと言で確かめるか、手軽なら両方の日に答える。';
+}

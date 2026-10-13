@@ -151,7 +151,10 @@ export class TurnRefinementProcessor {
         subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'conversation', ...(this.stage5 ? { provenance: 'owner_explicit' } : {}) }, episodeIds: episodes });
       else this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
+    // A timer or a reminder her device took in this turn answers the clock: no 「時刻ちょうどは…」 promise or notice beside it.
+    const deviceAlert = deviceAlertSet(this.conversationStore, scopeKey, sourceTime);
     for (const promise of extractPromiseCaptures(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
+      if (deviceAlert && promise.note) continue;
       const memory = { ...promise.memory, ...labelled(`${promise.memory.summary}\n${promise.memory.evidence ?? ''}`) };
       if (proposals) proposals.propose({ opId: opId(`promise:${memory.id}`), scopeKey, kind: 'promise.capture', origin: 'turn', subjectKey: `promise:${memory.id}`,
         payload: { memory }, episodeIds: episodes, disclosure: memory.disclosure ?? null });
@@ -164,7 +167,7 @@ export class TurnRefinementProcessor {
     // The response lane owns the intention ledger; this records only that the turn stated a goal.
     const goal = extractExplicitUserIntent(userMessage, '', sourceTime);
     if (goal) capture('intent', intentCaptureKey(goal.title), goal.title, { itemId: intentCaptureKey(goal.title) });
-    if (requestsExactTimeAlert(userMessage)) capture('notice', 'exact-time', EXACT_TIME_DECLINED);
+    if (requestsExactTimeAlert(userMessage) && !deviceAlert) capture('notice', 'exact-time', EXACT_TIME_DECLINED);
     if (proposals && captures.length) {
       // What the turn stated as a goal is its own op (the intention ledger reads it); the rest of the turn's captures are one.
       for (const intent of captures.filter(item => item.kind === 'intent')) proposals.propose({ opId: opId(`capture:${intent.id}`), scopeKey, kind: 'intent.capture',
@@ -197,6 +200,27 @@ export class TurnRefinementProcessor {
     // Last, so the slow traits are recalibrated from what this turn just stored.
     this.stateStore.apply(scopeKey, sharedTimeEvent(candidates, sourceTime, source?.timeZone ?? timeZone));
   }
+}
+
+/** The device's timer and reminder (`deviceActionToolDefinitions.ts`). */
+const DEVICE_ALERT_TOOLS: ReadonlySet<string> = new Set(['timer.start', 'reminder.create']);
+/** How far before the turn's time a call of it may have been traced (a voice turn is stored after she spoke). */
+const DEVICE_ALERT_WINDOW_MILLISECONDS = 3 * 60_000;
+
+/**
+ * Whether her device took a timer or a reminder in this turn, from her tool traces (2026-10-13 daily evals D1: the background notice
+ * 「時刻ちょうどにお知らせすることは、まだできません」 appeared under a reply whose timer the device had set). A store without traces: no.
+ */
+export function deviceAlertSet(store: unknown, scopeKey: string, at: string): boolean {
+  const traces = store as { toolTraces?: (scopeKey: string, threadId: string | null, query: { since?: string }) => readonly {
+    recordedAt: string; calls: readonly { tool: string; ok: boolean }[] }[] };
+  if (typeof traces.toolTraces !== 'function' || !Number.isFinite(Date.parse(at))) return false;
+  const since = new Date(Date.parse(at) - DEVICE_ALERT_WINDOW_MILLISECONDS).toISOString();
+  try {
+    const until = Date.parse(at) + 60_000; // Not a later turn's.
+    return traces.toolTraces(scopeKey, null, { since }).some(record => Date.parse(record.recordedAt) <= until
+      && record.calls.some(call => call.ok && DEVICE_ALERT_TOOLS.has(call.tool)));
+  } catch { return false; }
 }
 
 export class BackgroundUpdateCoordinator implements TurnBackgroundService {
