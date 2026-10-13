@@ -482,7 +482,7 @@ function shutdown(): void {
     stopToolTraceSweep();
     rewardMood.stop(); autonomyAnnouncer.close();
     bodyStore.close();
-    await lifecycle?.close(); minecraft.close(); platformBridge?.close?.();
+    operationOutcomes.close(); await lifecycle?.close(); minecraft.close(); platformBridge?.close?.(); // Telling closes before the lifecycle.
     reachOuts.close(); reachOutReports.close();
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();
@@ -491,7 +491,7 @@ function shutdown(): void {
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();
-    autonomyStore.close(); modelModes.close(); operationOutcomes.close();
+    autonomyStore.close(); modelModes.close();
     persistentStore.close();
     process.exitCode = 0;
   });

@@ -15,10 +15,14 @@ import { LIFECYCLE_OUTCOME_SOURCE_PREFIX } from '../../../contracts/minecraftLif
 export interface LifecycleOutcomeMessage { id: string; threadId: string; initiativeId: string }
 
 export class SQLiteLifecycleOutcomeSpeaker {
-  private readonly database: DatabaseSync;
+  private opened: DatabaseSync | null = null;
 
-  constructor(path: string) {
-    this.database = openDatabase(path, 'outreach');
+  /** The connection is opened at the first message, so a server without the lifecycle never opens it. */
+  constructor(private readonly path: string) {}
+
+  private get database(): DatabaseSync {
+    this.opened ??= openDatabase(this.path, 'outreach');
+    return this.opened;
   }
 
   /** Whether this operation's end was already told. */
@@ -59,7 +63,8 @@ export class SQLiteLifecycleOutcomeSpeaker {
   }
 
   close(): void {
-    if (this.database.isOpen) this.database.close();
+    if (this.opened?.isOpen) this.opened.close();
+    this.opened = null;
   }
 
   /** The Talk it was asked in while it is open, otherwise the most recent open one, otherwise a new one. */

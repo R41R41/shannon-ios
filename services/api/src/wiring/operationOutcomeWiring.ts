@@ -23,8 +23,9 @@ export function configuredOperationOutcomes(databasePath: string, telling?: {
   const others = (scopeKey: string, at: string) => telling!.body.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds,
     BODY_LIMITS.audienceEventWindowMilliseconds);
   const told = telling ? configuredLifecycleOutcomeTelling(telling.env, { databasePath, usageStore: telling.usageStore, now: telling.now, others }) : null;
-  let opened: { database: DatabaseSync; reader: ActionLeaseReader } | null = null;
+  let opened: { database: DatabaseSync; reader: ActionLeaseReader } | null = null, closed = false;
   const reader = (): ActionLeaseReader => {
+    if (closed) throw new Error('OPERATION_OUTCOMES_CLOSED');
     if (!opened) {
       const database = openDatabase(databasePath, 'readOnly');
       opened = { database, reader: new ActionLeaseReader(database) };
@@ -41,6 +42,7 @@ export function configuredOperationOutcomes(databasePath: string, telling?: {
       }
     },
     close() {
+      closed = true;
       told?.close();
       const closing = opened;
       opened = null;

@@ -46,12 +46,16 @@ export function lifecycleOutcomeTeller(parts: LifecycleOutcomeTellingParts): Lif
     if (telling.has(report.operationId)) return;
     telling.add(report.operationId);
     try {
-      if (parts.speaker.told(report.scopeKey, report.operationId)) return;
+      // A shutdown under way: an end it interrupted is not what he asked about, and the one message is not spent on it.
+      if (parts.signal?.aborted || parts.speaker.told(report.scopeKey, report.operationId)) return;
       const facts: LifecycleOutcomeFacts = { action: report.action, outcome: report.outcome, others: others(report.scopeKey) };
-      let line = await parts.writer?.write(report.scopeKey, facts, parts.signal).catch(() => null) ?? null;
+      // With anyone else there the model is never asked: the private-safe neutral line, always.
+      let line = facts.others ? null : await parts.writer?.write(report.scopeKey, facts, parts.signal).catch(() => null) ?? null;
       // Someone came while it was written: the line for him alone is not said in front of them.
-      if (!facts.others && others(report.scopeKey)) line = neutralLifecycleOutcomeLine({ ...facts, others: true });
-      parts.speaker.say(report.scopeKey, report.threadId, report.operationId, line ?? neutralLifecycleOutcomeLine(facts),
+      const privately = facts.others || others(report.scopeKey);
+      if (privately) line = null;
+      if (parts.signal?.aborted) return;
+      parts.speaker.say(report.scopeKey, report.threadId, report.operationId, line ?? neutralLifecycleOutcomeLine({ ...facts, others: privately }),
         report.outcome === 'completed', parts.now());
     } catch { /* telling never fails the operation */ } finally {
       telling.delete(report.operationId);

@@ -59,21 +59,51 @@ describe('her line about how an operation he asked for ended', () => {
     expect(groundedLifecycleOutcomeLine(42, facts())).toBeNull();
   });
 
-  it('with anyone else there names neither the operation nor Minecraft, and the request does not give them', () => {
-    expect(groundedLifecycleOutcomeLine('マイクラにログインできました。', facts({ others: true }))).toBeNull();
-    expect(groundedLifecycleOutcomeLine('頼まれていたこと、結果が出ましたよ。', facts({ others: true }))).not.toBeNull();
-    expect(JSON.parse(lifecycleOutcomeRequest(facts({ others: true })))).toEqual({ others_present: true, ended: expect.any(String) });
-    expect(JSON.parse(lifecycleOutcomeRequest(facts()))).toMatchObject({ others_present: false, operation: expect.stringContaining('ログイン') });
+  it('refuses every line the review of 1cffa192 found misstating the end (and any line of hers with anyone else there)', () => {
+    const misstated: Array<[LifecycleOutcomeFacts, string]> = [
+      [facts({ outcome: 'refused' }), '入ったよ！ダメかと思った'],
+      [facts({ outcome: 'refused' }), 'ログインしたよ。断られるかと思ったけど'],
+      [facts({ action: 'start', outcome: 'cancelled' }), '起動しておいたよ。中止にはならなかった'],
+      [facts({ outcome: 'refused' }), 'サーバーは起動したけど、ログインはできなかった'],
+      [facts(), 'ログインしようとしたけど、うまくいかなかった'],
+      [facts(), 'マイクラに入れなかったみたい'],
+      // More of the same kinds: a plain past tense or a success word for an end that is not done, a failure word for a done one.
+      [facts({ outcome: 'not_started' }), 'ログイン、ばっちりです。始められないかと思いました'],
+      [facts({ outcome: 'unknown' }), 'ログインは無事に済んだはず。わからないけど'],
+      [facts({ action: 'stop', outcome: 'refused' }), 'サーバー止めたよ、断られなかった'],
+      [facts({ action: 'set_day', outcome: 'cancelled' }), '昼にしたよ。キャンセルはされなかった'],
+      [facts({ action: 'stop' }), 'サーバーの停止、残念ながらしくじりました'],
+      [facts(), 'ログインはいけなかったです'],
+      [facts(), 'ログイン、だめでした'],
+      [facts(), 'ログインのこと、伝えますね'], // no cue of its end at all
+      [facts({ action: 'logout' }), 'ログインし直してからログアウトしました'], // another operation
+    ];
+    for (const [given, line] of misstated) expect(groundedLifecycleOutcomeLine(line, given), `${given.outcome}: ${line}`).toBeNull();
+    // With anyone else there no line of hers is used, whatever it says.
+    for (const line of ['頼まれていたこと、結果が出ましたよ。', 'マイクラにログインできました。', '終わりました！', '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。']) {
+      expect(groundedLifecycleOutcomeLine(line, facts({ others: true })), line).toBeNull();
+    }
+    // The writer is only ever asked while he is alone: its request names the operation and the end, nothing of an audience.
+    expect(JSON.parse(lifecycleOutcomeRequest(facts()))).toEqual({ operation: expect.stringContaining('ログイン'), ended: expect.any(String) });
   });
 
-  it('has a neutral factual line for every operation and end, which its own check accepts', () => {
+  it('keeps her words when they state the end as it is', () => {
+    expect(groundedLifecycleOutcomeLine('マイクラにログインしたよ、ライ氏。', facts())).not.toBeNull();
+    expect(groundedLifecycleOutcomeLine('サーバー、起動しておきました！', facts({ action: 'start' }))).not.toBeNull();
+    expect(groundedLifecycleOutcomeLine('サーバーを起動しました！', facts({ action: 'start' }))).not.toBeNull();
+    expect(groundedLifecycleOutcomeLine('マイクラの時刻、昼にしました。', facts({ action: 'set_day' }))).not.toBeNull();
+    expect(groundedLifecycleOutcomeLine('ログインは取りやめになりました。', facts({ outcome: 'cancelled' }))).not.toBeNull();
+    expect(groundedLifecycleOutcomeLine('ログイン、始められませんでした。', facts({ outcome: 'not_started' }))).not.toBeNull();
+  });
+
+  it('has a neutral factual line for every operation and end: for him alone its own check accepts it, with others it names nothing', () => {
     const outcomes: LifecycleOutcomeKind[] = ['completed', 'refused', 'cancelled', 'not_started', 'unknown'];
-    for (const action of MINECRAFT_LIFECYCLE_ACTIONS) for (const outcome of outcomes) for (const others of [false, true]) {
-      const line = neutralLifecycleOutcomeLine({ action, outcome, others });
-      expect(groundedLifecycleOutcomeLine(line, { action, outcome, others }), `${action} ${outcome} ${others}`).toBe(line);
+    for (const action of MINECRAFT_LIFECYCLE_ACTIONS) for (const outcome of outcomes) {
+      const line = neutralLifecycleOutcomeLine({ action, outcome, others: false });
+      expect(groundedLifecycleOutcomeLine(line, { action, outcome, others: false }), `${action} ${outcome}`).toBe(line);
+      expect(neutralLifecycleOutcomeLine({ action, outcome, others: true })).toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
     }
     expect(neutralLifecycleOutcomeLine(facts())).toBe('マイクラにログインしました。');
-    expect(neutralLifecycleOutcomeLine(facts({ others: true }))).not.toMatch(/マイクラ|ログイン/u);
   });
 });
 
@@ -108,6 +138,26 @@ describe('telling him how it ended', () => {
       'マイクラのサーバーの停止は、結果を確かめられませんでした。', 'マイクラのログインは、体に断られてできませんでした。',
       '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。', '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。',
     ]);
+  });
+
+  it('never asks the model with anyone else there, and says nothing once a shutdown began (the one message is kept)', async () => {
+    const d = database();
+    let asked = 0;
+    const writer = { write: async () => { asked += 1; return 'マイクラにログインしたよ。'; } };
+    await lifecycleOutcomeTeller({ speaker: d.speaker, others: () => true, now: () => at, writer })(report());
+    expect(asked).toBe(0);
+    expect(d.messages().map(row => row.content)).toEqual(['頼まれていた作業の結果が出ました（内容はアプリで確認できます）。']);
+
+    const stopping = new AbortController();
+    const second = `lifecycle:${'f'.repeat(64)}`;
+    stopping.abort();
+    await lifecycleOutcomeTeller({ speaker: d.speaker, others: () => false, now: () => at, writer, signal: stopping.signal })(report({ operationId: second }));
+    // Aborted while her line was written: not said either.
+    const during = new AbortController();
+    await lifecycleOutcomeTeller({ speaker: d.speaker, others: () => false, now: () => at, signal: during.signal,
+      writer: { write: async () => { during.abort(); return null; } } })(report({ operationId: second, outcome: 'unknown' }));
+    expect(d.messages()).toHaveLength(1);
+    expect(d.speaker.told('owner', second)).toBe(false);
   });
 
   it('falls back to the most recent open Talk when the one it was asked in is gone, and never throws', async () => {
