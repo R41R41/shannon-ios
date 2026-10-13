@@ -422,7 +422,7 @@ export class ShannonApiKernel {
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
-    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion);
+    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone);
     const response: ChatResponse = {
       mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
       snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.

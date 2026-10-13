@@ -11,6 +11,7 @@ import {
   type ShannonExpression, type ShannonFeeling,
 } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
+import { decidedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
@@ -141,9 +142,10 @@ export const INNER_NOTE_PRESENCE_LINE = 'Be present with what was said without t
 export const innerNoteText = Object.freeze({
   context: (port: InnerNotePort | null, scopeKey: string, alone: boolean, platform: boolean, at: string) =>
     innerNoteTurnContext(port, scopeKey, audienceOf(alone, platform), at),
+  /** D5.2 on a text reply's feeling; an apology she decided herself (the decided feeling, owner alone only) stays. */
   reply: (port: InnerNotePort | null, scopeKey: string, at: string, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, message: string,
-    completion: { replyFeeling?: { kind: string; intensity: number } }) => innerNoteReplyEmotion(port, scopeKey, at, resolved, snapshot, message,
-    completion.replyFeeling ? { primary: completion.replyFeeling.kind, intensity: completion.replyFeeling.intensity } : undefined),
+    completion: { replyFeeling?: ChatReplyFeeling }, alone: boolean) => innerNoteReplyEmotion(alone ? port : null, scopeKey, at, resolved, snapshot,
+    message, decidedReplyFeeling(completion, alone).decided),
   ended: (port: InnerNotePort | null, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string, feeling: ShannonExpressiveEmotion,
     experienceId?: string) => port?.turnEnded({ scopeKey, surface: 'text', alone, at, userMessage, reply,
     feeling: { kind: feeling.primary, intensity: feeling.intensity }, ...(experienceId ? { sourceId: `experience:${experienceId}` } : {}) }),

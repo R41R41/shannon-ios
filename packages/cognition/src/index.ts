@@ -363,7 +363,7 @@ export { INNER_NOTE_UNPLEASANT_LINE } from './emotionContinuity.js';
 export {
   INNER_NOTE_DAY_REASONS, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_INTENTS, INNER_NOTE_LIMITS, INNER_NOTE_SCALES, INNER_NOTE_SHOWN_KINDS,
   INNER_NOTE_TELLS, INNER_NOTE_TRIGGERS, LIGHT_SULKING_LINE,
-  asciiRouteSummary, boundedUntil, clippedNoteText, gatedIntent, goodnightIn, innerNoteActive, innerNoteCurrent, innerNoteDay,
+  apologyIn, asciiRouteSummary, boundedUntil, clippedNoteText, gatedIntent, goodnightIn, innerNoteActive, innerNoteCurrent, innerNoteDay,
   innerNoteEventLine, innerNoteExpressiveEmotionPrompt, innerNoteFace, innerNoteRouteSummary, innerNoteTextLines, innerNoteTouchBlock,
   innerNoteTurnBlock, isInnerNoteDayReason, isInnerNoteIntent, isInnerNoteScale, isInnerNoteTell, isInnerNoteTrigger, localClock,
   settleInnerNote, shownKind, teasingIn, withoutOwnApology, zonedParts,

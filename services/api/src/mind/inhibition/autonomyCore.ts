@@ -4,6 +4,7 @@ import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
 import { MODEL_MODE_CORE_PATHS } from './modelModeCorePaths.js';
 import { EXECUTIVE_CORE_PATHS } from './executiveCorePaths.js';
+import { INNER_NOTE_CORE_PATHS } from './innerNoteCorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
 /**
  * CORE, as code (Syzygy ADR-0002).
@@ -32,7 +33,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyLoopOwnerContext.ts',
   ]),
   persona: Object.freeze([
-    ...STAGE5_CORE_PATHS.persona,
+    ...STAGE5_CORE_PATHS.persona, ...INNER_NOTE_CORE_PATHS.persona,
     'packages/cognition/src/persona.ts',
     'packages/cognition/src/capabilities.ts',
     'packages/cognition/src/autonomy.ts',
@@ -45,7 +46,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/body/bodyReactionPrompt.ts',
   ]),
   emotion: Object.freeze([
-    ...STAGE5_CORE_PATHS.emotion,
+    ...STAGE5_CORE_PATHS.emotion, ...INNER_NOTE_CORE_PATHS.emotion,
     'packages/cognition/src/affect.ts',
     'packages/cognition/src/emotionState.ts',
     // Her awake clock, the one table of how long feelings last, and what stays underneath the feeling of the moment.

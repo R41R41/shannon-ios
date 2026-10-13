@@ -3,7 +3,7 @@ import {
   CHARACTER_CORE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE, innerNoteExpressiveEmotionPrompt, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
   boundedUntil, buildExpressiveEmotionPrompt, gatedIntent, goodnightIn, innerNoteActive, innerNoteDay, innerNoteFace,
   innerNoteReflectionInput, innerNoteReflectionInstructions, innerNoteRouteSummary, innerNoteTouchBlock, innerNoteTurnBlock,
-  lingeringFeelingLine, parsedInnerNoteReflection, settleInnerNote, teasingIn, withoutOwnApology,
+  apologyIn, lingeringFeelingLine, parsedInnerNoteReflection, settleInnerNote, teasingIn, withoutOwnApology,
   type InnerNote, type InnerNoteDraft,
 } from '../src/index.js';
 
@@ -169,6 +169,9 @@ describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
   it('reads a tease and a goodnight in short messages only', () => {
     expect(teasingIn('ほんとポンコツだなあ')).toBe(true);
     expect(teasingIn('今日の天気は？')).toBe(false);
+    expect(apologyIn('ごめん、出来心で')).toBe(true);
+    expect(apologyIn('出来心だったんです、ごめん')).toBe(true);
+    expect(apologyIn('今日の予定は？')).toBe(false);
     expect(goodnightIn('じゃあ、おやすみ')).toBe(true);
     expect(goodnightIn('そろそろ寝るね')).toBe(true);
     expect(goodnightIn('昨日おやすみって言ったけど、まだ起きてる')).toBe(false);

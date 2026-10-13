@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  CHARACTER_CORE, SHANNON_EMOTION_CONTINUITY, goodnightIn, innerNoteCurrent, innerNoteDay, livingLingering, presentShannonFeeling,
+  CHARACTER_CORE, SHANNON_EMOTION_CONTINUITY, apologyIn, goodnightIn, innerNoteCurrent, innerNoteDay, livingLingering, presentShannonFeeling,
   settleInnerNote, shannonEmotionSign, soothingIn, teasingIn, visibleMemoryText,
   type CompanionStateSnapshot, type InnerNote, type InnerNoteDayEnd, type InnerNoteEvent, type InnerNoteReflectionFacts,
 } from '@shannon/cognition';
@@ -274,7 +274,7 @@ export class InnerNoteService implements InnerNotePort {
 /** The one event a finished turn is, if any: his apology, his kind word, a tease, or a reply she felt strongly. */
 function turnEvent(turn: InnerNoteTurn): InnerNoteEvent | null {
   const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200) };
-  const soothing = soothingIn(turn.userMessage);
+  const soothing = soothingIn(turn.userMessage) ?? (apologyIn(turn.userMessage) ? 'apology' : null);
   if (soothing) return { kind: soothing, ...base };
   if (teasingIn(turn.userMessage)) return { kind: 'teasing', ...base };
   const feeling = turn.feeling;

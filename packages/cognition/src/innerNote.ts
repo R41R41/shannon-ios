@@ -324,6 +324,17 @@ export function localClock(at: string, timeZone = 'Asia/Tokyo'): string {
 const TEASING = /(?:ポンコツ|ぽんこつ|チョロ|ちょろい|子供扱い|子ども扱い|お子様|ばーか|バカ|ばか|アホ|あほ|ドジ|へっぽこ|天才(?:\(笑\)|（笑）|w))/u;
 const GOODNIGHT = /^(?:じゃあ|じゃ|それじゃあ?|では|よし)?[、,\s]*(?:そろそろ)?[、,\s]*(?:おやすみ|お休み|寝る(?:ね|よ|わ)?|ねる(?:ね|よ)?|寝ます)/u;
 
+const APOLOGY = /(?:ごめん|ゴメン|すまん|すみません|申し訳|悪かった|謝る|許して)/u;
+
+/**
+ * An apology in the owner's words, for her inner note only (a short message that apologizes anywhere in it: 「ごめん、出来心で」).
+ * Wider than `soothingIn`, which eases her feeling by its table and stays as it is.
+ */
+export function apologyIn(message: string): boolean {
+  const text = message.trim();
+  return Array.from(text).length <= 60 && APOLOGY.test(text);
+}
+
 /** A tease of hers in the owner's words (a short message only). Unsure means no. */
 export function teasingIn(message: string): boolean {
   const text = message.trim();
