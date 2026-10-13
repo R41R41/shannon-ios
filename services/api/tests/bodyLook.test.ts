@@ -732,9 +732,9 @@ describe('the frame is never kept', () => {
     const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice|jevVoice|openAIVoice|localVoice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
     expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
-      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
+      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']);
     // The voice side handles words and a probability: it has no room for a frame either.
-    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.

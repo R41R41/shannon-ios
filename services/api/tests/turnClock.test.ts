@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ownerSubjectLine, turnClockLine } from '../src/mind/action/respond/respondInstructions.js';
 import { clockContext, textTurnConversation } from '../src/infra/models/anthropic/anthropicRequest.js';
-import { ANSWER_FIRST_LINE, answerFirstLine, SPOKEN_SCHEDULE_LINE, spokenReplyLines, spokenScheduleLine } from '../src/surfaces/voice/voiceConversationInstructions.js';
+import {
+  ANSWER_FIRST_LINE, answerFirstLine, NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE, SPOKEN_SCHEDULE_LINE, spokenReplyLines, spokenScheduleLine,
+} from '../src/surfaces/voice/voiceConversationInstructions.js';
 import { RESEARCH_UNDER_WAY_LINE, TURN_OUT_OF_TIME_LINE, withResearchUnderWay } from '../src/mind/action/respond/turnDeadline.js';
 
 describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
@@ -52,8 +54,8 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
     for (const words of ['今日は雨で大変だったよ', '晴れてて気持ちよかった', 'ただいま']) expect(answerFirstLine(words, weather), words).toBe('');
     expect(answerFirstLine('明日って傘いる？', [])).toBe('');
     expect(spokenReplyLines('明日って傘いる？', items, { definitions: [{ name: 'tool.open' }], menu: { offered: [{ name: 'weather.forecast' }] } }))
-      .toEqual([ANSWER_FIRST_LINE, SPOKEN_SCHEDULE_LINE]);
-    expect(spokenReplyLines('ただいま', none, undefined)).toEqual([]);
+      .toEqual([ANSWER_FIRST_LINE, SPOKEN_SCHEDULE_LINE, NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE]);
+    expect(spokenReplyLines('ただいま', none, undefined)).toEqual([NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE]);
   });
 
   it('puts the clock in the Claude turn context only when the turn carries it (the historical GPT profile never reads it)', () => {

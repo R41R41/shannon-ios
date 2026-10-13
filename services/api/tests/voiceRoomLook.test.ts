@@ -18,7 +18,7 @@ import {
   type VoiceDecisionGateway, type VoiceDecisionInput,
 } from '../src/mind/selectors/voiceDecision.js';
 import {
-  VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, lookRequest, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
+  VOICE_ROOM_LOOK_CONFIRM_PROMPT, VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, lookRequest, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
 } from '../src/surfaces/voice/voiceRoomLook.js';
 import { promptOf } from './modelPrompt.js';
 
@@ -258,18 +258,20 @@ describe('the owner asks her to look, aloud', () => {
     expect(performance.now() - started).toBeLessThan(200);
   });
 
-  it('a gateway that is sure no look is wanted sets the fixed rule aside, and she says that she could look', async () => {
+  it('a gateway that is sure no look is wanted sets the fixed rule aside, and she asks once instead of looking', async () => {
     const h = harness({ voiceDecision: gateway({ roomLookProbability: 0.05, transcriptReliabilityProbability: 0.95 }) });
     await h.ready();
     const turn = await h.say('部屋を見て。');
-    expect(turn.prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+    // His words asked: never 「見てと言われたら見られる」 (owner's Windows call, 2026-10-14).
+    expect(turn.prompt).toContain(VOICE_ROOM_LOOK_CONFIRM_PROMPT);
+    expect(turn.prompt).not.toContain(VOICE_ROOM_LOOK_READY_PROMPT);
     expect(h.lookStore.waiting(scope)).toEqual([]);
   });
 
   it('his words open nothing when a model tier could not trust the transcript; with no model\'s score they are taken as heard', async () => {
     const distrusted = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.3 }) });
     await distrusted.ready();
-    expect((await distrusted.say('部屋を見て。')).prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+    expect((await distrusted.say('部屋を見て。')).prompt).toContain(VOICE_ROOM_LOOK_CONFIRM_PROMPT);
     expect(distrusted.lookStore.waiting(scope)).toEqual([]);
     // The local tier alone: words that say it plainly (himself as what is looked at, leave to use the camera) open the look...
     for (const transcript of ['僕のこと見れる?', 'もちろん、そう、カメラ使っていいよ、自由に。']) {
@@ -282,9 +284,31 @@ describe('the owner asks her to look, aloud', () => {
     for (const transcript of ['部屋を見て。', 'こっち見て', 'カメラで見てみて', '何が見える?']) {
       const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
       await local.ready();
-      expect((await local.say(transcript)).prompt, transcript).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+      expect((await local.say(transcript)).prompt, transcript).toContain(VOICE_ROOM_LOOK_CONFIRM_PROMPT);
       expect(local.lookStore.waiting(scope), transcript).toEqual([]);
     }
+  });
+
+  it('a request to look from first word to last opens it under a low transcript score when the gateway agrees (owner\'s Windows call, 2026-10-14)', async () => {
+    // Production: transcript scores .44–.84, roomLook .75 and .83, and she twice said she would look only when asked.
+    for (const [transcript, reliability, look] of [['僕のこと見える？', 0.44, 0.75], ['部屋を見て。', 0.3, 0.83]] as const) {
+      const h = harness({ voiceDecision: gateway({ roomLookProbability: look, transcriptReliabilityProbability: reliability }) });
+      await h.ready();
+      const turn = await h.say(transcript);
+      expect(turn.prompt, transcript).toContain(voiceRoomLookPrompt(true));
+      expect(turn.prompt, transcript).not.toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+      expect(h.lookStore.waiting(scope), transcript).toHaveLength(1);
+    }
+    // Below the gateway's half it is not taken on doubtful words: she asks once, and a bare 「見て」 then opens it.
+    const doubtful = harness({ voiceDecision: gateway({ roomLookProbability: 0.4, transcriptReliabilityProbability: 0.3 }) });
+    await doubtful.ready();
+    expect((await doubtful.say('部屋を見て。')).prompt).toContain(VOICE_ROOM_LOOK_CONFIRM_PROMPT);
+    expect(doubtful.lookStore.waiting(scope)).toEqual([]);
+    // Talk about the camera that asks for nothing keeps the ready line.
+    const mentioned = harness({ voiceDecision: gateway({ roomLookProbability: 0.6, transcriptReliabilityProbability: 0.3 }) });
+    await mentioned.ready();
+    expect((await mentioned.say('新しいカメラを買ったんだ。')).prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+    expect(mentioned.lookStore.waiting(scope)).toEqual([]);
   });
 
   it('a bare 「見て」 opens the look as the answer to her own offer, or when the gateway is fairly sure', async () => {

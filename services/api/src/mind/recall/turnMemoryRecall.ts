@@ -61,6 +61,9 @@ export interface TurnMemoryRecall {
   watchAudience?(watch: { othersKnown(scopeKey: string): boolean }): void;
 }
 
+/** A voice turn's rerank cap when `SHANNON_VOICE_RERANK_TIMEOUT_MS` is unset or invalid. */
+export const VOICE_RERANK_MILLISECONDS = 1_200;
+
 const semanticGuidance = '[Semantic recall] Memories with cue "semantic" are search candidates, not confirmed facts. Use one only when its date and content fit the current message; if unsure, say so briefly or ask.';
 
 export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
@@ -70,7 +73,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
     private readonly knowledge: ShannonKnowledgeStore | null = null,
     /** Syzygy ADR-0008 stage 2, step 8 (`SHANNON_TREE_RECALL`): absent, recall is what it was. */
     private readonly tree: TreeKnowledgeRecall | null = null,
-    private readonly options: { temporalKnowledge?: boolean } = {},
+    /** `voiceRerankMilliseconds`: the cap of a voice turn's rerank (`SHANNON_VOICE_RERANK_TIMEOUT_MS`); absent, 1,200. */
+    private readonly options: { temporalKnowledge?: boolean; voiceRerankMilliseconds?: number } = {},
   ) {}
 
   walksTree(conversationClass: string | undefined): boolean { return this.tree?.walksTree(conversationClass) ?? false; }
@@ -100,6 +104,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
       // rerank one after another before the model started). Without it, the recall requests stay those of ca7cf519
       // (`stage2SwitchedOffRecall.test.ts`).
       ...(this.tree ? { withoutRewrite: true } : {}),
+      // A voice turn waits for its rerank at most this long; then the similarity order stands.
+      ...(input.voiceClass !== undefined ? { rerankTimeoutMilliseconds: this.options.voiceRerankMilliseconds ?? VOICE_RERANK_MILLISECONDS } : {}),
     }) : { status: 'skipped', hits: [], modelCalls: 0, elapsedMilliseconds: 0 };
     // A hit with others present carries its marker at its start; with only open items allowed a marked one is left out whole.
     const experienceHits = outcome.hits.filter(hit => !hit.id.startsWith('knowledge:') && !(context.openOnly && hit.summary.includes('【機微:')));
@@ -172,8 +178,10 @@ export function createConfiguredTurnMemoryRecall(
   /** Syzygy ADR-0008 stage 2, step 8: tree recall (`wiring/treeRecallWiring.ts`); null with `SHANNON_TREE_RECALL` off. */
   tree: TreeKnowledgeRecall | null = null,
 ): TurnMemoryRecall {
+  const rerank = Number(environment.SHANNON_VOICE_RERANK_TIMEOUT_MS);
+  const voiceRerankMilliseconds = Number.isInteger(rerank) && rerank >= 200 && rerank <= 15_000 ? rerank : VOICE_RERANK_MILLISECONDS;
   return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index, tree,
-    { temporalKnowledge: switchOn(environment, 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL') });
+    { temporalKnowledge: switchOn(environment, 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL'), voiceRerankMilliseconds });
 }
 
 export function configuredMemoryModelGateway(

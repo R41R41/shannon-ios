@@ -1969,7 +1969,7 @@
       "long-line": 7
     },
     "services/api/src/surfaces/voice/voiceTranscriptContext.ts": {
-      "long-line": 5
+      "long-line": 4
     },
     "services/api/src/surfaces/voice/voiceWaitingCue.ts": {
       "complex-function": 1,

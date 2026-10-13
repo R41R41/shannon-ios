@@ -195,7 +195,7 @@ describe('the facts of the moment', () => {
     expect(ownerVoiceTurnFacts({ history, newest: { role: 'assistant', observedAt: START }, at: '2026-10-02T09:02:01.000Z', othersPresent: false }).sheAsked).toBe(false);
     expect(ownerVoiceTurnFacts({ history: [{ role: 'assistant', content: 'わかりました。' }], at, othersPresent: false })).toMatchObject({ sheAsked: false, followsShannon: true });
     expect(ownerVoiceTurnFacts({ history: [...history, { role: 'user', content: 'ラーメン？' }], at, othersPresent: true }))
-      .toEqual({ sheAsked: false, followsShannon: false, shannonLastLine: '何にしますか？', othersPresent: true });
+      .toEqual({ sheAsked: false, followsShannon: false, shannonLastLine: '何にしますか？', othersPresent: true, ownerAskedBefore: true });
     expect(ownerVoiceTurnFacts({ history: [], at, othersPresent: false })).toEqual({ sheAsked: false, followsShannon: false, othersPresent: false });
   });
 });

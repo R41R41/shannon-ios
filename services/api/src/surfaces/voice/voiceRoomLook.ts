@@ -183,8 +183,18 @@ const AFTERWARDS = '見えたものはこの返事のあとで別の発言とし
 export const voiceRoomLookPrompt = (asked: boolean) => `[部屋を見る]（${asked
   ? `${SHANNON_OWNER_NAME}に見てと言われたので、この返事のあと体のカメラで部屋を一度だけ見る。`
   : 'いまの話から自分で見たくなったので、この返事のあと体のカメラで部屋を一度だけ見る。'}${AFTERWARDS}）`;
-/** The camera was mentioned, nobody chose a look, and she could take one. */
+/** The camera was mentioned (not asked for), nobody chose a look, and she could take one. */
 export const VOICE_ROOM_LOOK_READY_PROMPT = `[部屋を見る]（いまは体のカメラで部屋を一度見られる状態。この返事では見ない。${SHANNON_OWNER_NAME}に見てと言われたら見られる、と伝えてよい。見えたものや、カメラの許可・接続の不具合を作って言わない）`;
+/**
+ * His words ask her to look, but nothing settled it (a score too low, or none). Never the ready wording (owner's Windows call,
+ * 2026-10-14: 「見てと言われたら見られる」 twice while he was asking): she asks once, and a bare 「見て」 then opens it.
+ */
+export const VOICE_ROOM_LOOK_CONFIRM_PROMPT = `[部屋を見る]（${SHANNON_OWNER_NAME}はカメラで見てほしいと言ったのかもしれない。この返事ではまだ見ない。`
+  + '「見ましょうか？」のように短く一度だけ確かめる。「見てと言われたら見られる」とは言わない。見えたものや、カメラの許可・接続の不具合を作って言わない）';
+/** Whether a prompt of this module opened no look (the ready or the confirming one). */
+export const roomLookUndecided = (prompt: string): boolean => prompt === VOICE_ROOM_LOOK_READY_PROMPT || prompt === VOICE_ROOM_LOOK_CONFIRM_PROMPT;
+/** A look asked for with a verb (「これ見て」「部屋見える？」), not the camera merely named (「カメラを買った」). */
+export const LOOK_VERB_ASK = /(?:部屋|まわり|周り|こっち|ここ|これ|机|外|カメラ)[^。！？\n]{0,12}(?:見て|見える|見えて|見れる|見られる|のぞいて|写して)|見て(?:みて|ほしい|くれ)/u;
 
 export type VoiceRoomLookUnavailable = BodyLookUnavailable;
 /** She cannot look: the server's own reason, and nothing else, in one short sentence. */
@@ -231,7 +241,7 @@ export function voiceRoomLookTurn(
   const state = looks.voiceTurn(turn.scopeKey, turn.at, turn.audience);
   if (!turn.decision.shouldRespond) return NO_LOOK;
   const score = turn.decision.roomLookProbability;
-  // Words a model tier scored as unreliable open nothing.
+  // Words a model tier scored as unreliable open nothing by themselves (`turn.uncertain` is the `converse` judgement).
   const distrusted = turn.uncertain && turn.decision.transcriptReliabilityProbability !== undefined;
   const request = lookRequest(turn.transcript);
   const loose = asksToLook(turn.transcript);
@@ -241,20 +251,25 @@ export function voiceRoomLookTurn(
   // His words ask for it: plainly (then only a model tier that is sure of the opposite sets it aside); or in words that need
   // a model tier's judgement not to disagree, which the local tier cannot give; or loosely, when the gateway is fairly sure;
   // or with a bare 「見て」 while her offer stands: a turn of this Talk in the last minute was told that she could look.
-  const asked = !distrusted && turn.audience === 'owner' && (
+  // A look only reads: words that ask for it from first to last, with the gateway at least as sure as not, are asked even when the
+  // transcript scored low (owner's Windows call, 2026-10-14: 「僕のこと見える？」 at .75 and .83 was refused twice).
+  const asked = turn.audience === 'owner' && ((!distrusted && (
     (request === 'plain' && (score ?? 1) >= ASKED_CONTRADICTED_BELOW)
     || (request === 'ambiguous' && score !== undefined && score >= ASKED_CONTRADICTED_BELOW)
     || ((loose || bare) && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM)
-    || (bare && offerStands(looks, offer, time) && (score ?? 1) >= ASKED_CONTRADICTED_BELOW));
+    || (bare && offerStands(looks, offer, time) && (score ?? 1) >= ASKED_CONTRADICTED_BELOW)))
+    || (request !== null && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM));
   // Her own wish to look comes only from the gateway's judgement, and not from words it could not trust.
   const judged = !turn.uncertain && (score ?? 0) >= lookThreshold(environment);
   const mentioned = asked || judged || request !== null || loose;
   if (!mentioned) return NO_LOOK;
   if (state.unavailable) return cannot(state.unavailable);
   if (!asked && !judged) {
-    // She is told that she could look, and may offer it: for a minute a bare 「見て」 in this Talk is the answer.
+    // She is told that she could look, and may offer it: for a minute a bare 「見て」 in this Talk is the answer. When his words
+    // already asked, she asks once instead of saying that she would look if asked.
     offerStands(looks, offer, time, true);
-    return { ...NO_LOOK, prompt: VOICE_ROOM_LOOK_READY_PROMPT };
+    const asking = request !== null || bare || LOOK_VERB_ASK.test(turn.transcript.normalize('NFKC'));
+    return { ...NO_LOOK, prompt: asking ? VOICE_ROOM_LOOK_CONFIRM_PROMPT : VOICE_ROOM_LOOK_READY_PROMPT };
   }
   let settled = false;
   return {

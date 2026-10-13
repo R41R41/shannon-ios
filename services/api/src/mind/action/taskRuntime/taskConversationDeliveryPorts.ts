@@ -6,6 +6,8 @@ export interface TaskConversationDeliveryInput { utteranceId: string; deviceId: 
 export interface TaskConversationDelivery extends TaskConversationDeliveryInput {
   scopeKey: string; threadId: string; taskId: string; stepId: string;
   state: 'generating' | 'staged' | 'bound' | 'failed'; experienceId: string | null;
+  /** When the delivery began (absent from a store that does not say). */
+  createdAt?: string;
 }
 export type TaskConversationDeliveryBegin = { status: 'started'; step: TaskStep } | { status: 'duplicate' | 'conflict' | 'unavailable' };
 export interface TaskConversationDeliveryStage {

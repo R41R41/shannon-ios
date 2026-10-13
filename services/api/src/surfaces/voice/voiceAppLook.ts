@@ -4,7 +4,7 @@ import {
 } from '../../mind/perception/lookPorts.js';
 import { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 import type { VoiceLooks } from '../../mind/perception/conversationLooks.js';
-import { VOICE_ROOM_LOOK_READY_PROMPT, voiceRoomLookPrompt, voiceRoomLookTurn, type VoiceRoomLookTurn } from './voiceRoomLook.js';
+import { roomLookUndecided, voiceRoomLookPrompt, voiceRoomLookTurn, type VoiceRoomLookTurn } from './voiceRoomLook.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type { VoiceLooks } from '../../mind/perception/conversationLooks.js';
@@ -105,7 +105,7 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
       { ...turn, audience: 'owner', ...(!guarded && score === undefined && plainAsk ? { decision: { ...turn.decision, roomLookProbability: 1 } } : {}) },
       { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on' });
     const withAsk = () => (ask ? { appLook: ask } : {});
-    if (chosen.prompt && chosen.prompt !== VOICE_ROOM_LOOK_READY_PROMPT) {
+    if (chosen.prompt && !roomLookUndecided(chosen.prompt)) {
       // Decided before the reply: she is told that she looks, and the look follows whatever her words are.
       return { prompt: voiceAppLookPrompt(chosen.prompt === voiceRoomLookPrompt(true), camera), open: chosen.open, cutOff: chosen.cutOff, ask: withAsk };
     }

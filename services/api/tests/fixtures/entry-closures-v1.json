@@ -704,6 +704,7 @@
     "surfaces/voice/voiceIdentity.ts",
     "surfaces/voice/voiceIntroductionInstructions.ts",
     "surfaces/voice/voiceObservation.ts",
+    "surfaces/voice/voiceRecallScope.ts",
     "surfaces/voice/voiceResearchTurn.ts",
     "surfaces/voice/voiceRoomLook.ts",
     "surfaces/voice/voiceSessionProjection.ts",

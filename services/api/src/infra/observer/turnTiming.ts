@@ -11,6 +11,10 @@
 export const TURN_TIMING_STAGES = ['admit', 'route', 'recall', 'capability', 'fca', 'firstToken', 'firstSegment', 'total'] as const;
 export type TurnTimingStage = typeof TURN_TIMING_STAGES[number];
 
+/** The notes a line may carry, in this order, after the outcome (`TurnTiming.note`). */
+export const TURN_TIMING_NOTES = ['silence', 'chars'] as const;
+export type TurnTimingNote = typeof TURN_TIMING_NOTES[number];
+
 /** Closed outcome codes; anything else is reported as `error`. */
 const OUTCOME = /^[a-z][a-z0-9_]{0,47}$/u;
 
@@ -18,6 +22,7 @@ export class TurnTiming {
   private readonly startedAt: number;
   private readonly values = new Map<TurnTimingStage, number>();
   private readonly timeouts = new Set<string>();
+  private readonly notes = new Map<TurnTimingNote, string>();
   private logged = false;
 
   constructor(readonly surface: 'voice' | 'text', readonly id: string, private readonly clock: () => number = () => performance.now(),
@@ -51,11 +56,22 @@ export class TurnTiming {
   /** A bounded stage gave up waiting: named in the line as `timeouts=<code>,...`. */
   timedOut(code: string): void { if (OUTCOME.test(code)) this.timeouts.add(code); }
 
+  /**
+   * A content-free fact of the turn for its line (owner's Windows call, 2026-10-14: an unanswered turn left no trace of why):
+   * `silence` the closed category that kept her quiet, `chars` how many characters his words had. Anything else is dropped.
+   */
+  note(key: TurnTimingNote, value: string | number): void {
+    const text = String(value);
+    if (key === 'chars' ? /^\d{1,6}$/u.test(text) : OUTCOME.test(text)) this.notes.set(key, text);
+  }
+
   line(outcome: string): string {
     if (!this.values.has('total')) this.values.set('total', this.elapsed());
     const stages = TURN_TIMING_STAGES.map(stage => `${stage}=${this.values.has(stage) ? `${this.values.get(stage)}ms` : '-'}`);
     const timeouts = this.timeouts.size ? ` timeouts=${[...this.timeouts].join(',')}` : '';
-    return `Shannon turn timing surface=${this.surface} id=${this.id} ${stages.join(' ')} outcome=${OUTCOME.test(outcome) ? outcome : 'error'}${timeouts}`;
+    const notes = TURN_TIMING_NOTES.filter(key => this.notes.has(key)).map(key => ` ${key}=${this.notes.get(key)}`).join('');
+    const closed = OUTCOME.test(outcome) ? outcome : 'error';
+    return `Shannon turn timing surface=${this.surface} id=${this.id} ${stages.join(' ')} outcome=${closed}${timeouts}${notes}`;
   }
 
   /** Writes the line once; later calls do nothing. */

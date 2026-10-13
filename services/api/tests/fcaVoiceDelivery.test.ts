@@ -31,12 +31,12 @@ function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>;
   const authority = new SQLiteFcaTaskAuthority(h.db);
   const makeRuntime = () => new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => false,
     conversationLeaseValid(scope, lease) { const action = h.store.check(lease, at); return action?.scopeKey === scope && action.kind === 'respond'; } });
-  let runtime = makeRuntime(), alone = true;
+  let runtime = makeRuntime(), alone = true, clock = at;
   const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   const thread = conversations.threadId('owner'), service = createInMemoryAutonomyService(() => at), tools = service.tools;
   const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => alone });
   const bridge = createFcaConversationBridge({ runtime, ownerScope: 'owner', visible });
-  let voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone });
+  let voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone, now: () => clock });
   tools.useTaskRuntime({ available: scope => bridge.taskToolsAvailable(scope), execute: (name, input, context) => bridge.executeTaskTool(name, input, context),
     observeRead: (scope, receipt) => { bridge.observeRead(scope, receipt); } });
   let calls = 0, decisions = 0, turns = 0, children: string[] = [], offered: string[][] = [], contexts: string[] = [];
@@ -74,7 +74,8 @@ function fixture(options: { fail?: boolean; pause?: ReturnType<typeof deferred>;
   cleanup.push(() => kernel.waitForBackground('owner'));
   return { ...h, runtime: () => runtime, state, conversations, thread, bridge, visible, kernel, body, turn, stored, foreground,
     calls: () => calls, decisions: () => decisions, children: () => children, offered: () => offered, contexts: () => contexts,
-    alone(value: boolean) { alone = value; }, restart() { runtime = makeRuntime(); voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone }); } };
+    alone(value: boolean) { alone = value; }, restart() { runtime = makeRuntime(); voice = createFcaVoiceBridge({ conversation: bridge, runtime, conversations, ownerScope: 'owner', ownerAlone: () => alone, now: () => clock }); },
+    advance(milliseconds: number) { clock = new Date(Date.parse(clock) + milliseconds).toISOString(); } };
 }
 
 describe('FCA voice uses existing sentence and visible-history delivery', () => {
@@ -106,6 +107,37 @@ describe('FCA voice uses existing sentence and visible-history delivery', () => 
     const first = await f.stored(), second = await f.stored();
     expect((first.body as { turnId: string }).turnId).toBe((second.body as { turnId: string }).turnId);
     expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(2);
+  });
+
+  it('takes a reused utterance id for a new utterance once the earlier one is settled or the words differ (Windows, 2026-10-14)', async () => {
+    const f = fixture(); expect((await f.turn()).status).toBe(200); await f.stored();
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1')?.state).toBe('bound');
+    // The same id and words again after the first was stored: a new utterance, not a 409 and not dropped.
+    expect((await f.turn()).status).toBe(200); expect(f.calls()).toBe(2);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('staged');
+    const second = await f.stored({ shannonTranscript: '二回目の返事です。' });
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('bound');
+    expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(4);
+    // A retry of its history receipt is still a duplicate.
+    const retried = await f.stored({ shannonTranscript: '二回目の返事です。' });
+    expect((retried.body as { turnId: string }).turnId).toBe((second.body as { turnId: string }).turnId);
+    expect(f.conversations.conversationHistory('owner', f.thread)).toHaveLength(4);
+  });
+
+  it('delivers different words under a reused id at once, and settles a stale in-flight id after two minutes', async () => {
+    const f = fixture(); expect((await f.turn()).status).toBe(200);
+    const other = 'シャノン、今日はどんな一日だった？';
+    const reused = f.body('utterance-1', {});
+    reused.transcript = other;
+    reused.deviceContext.userUtterance = { ...reused.deviceContext.userUtterance, text: other, rawText: other };
+    expect((await f.foreground(() => f.kernel.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', deviceId: 'device-1', body: reused }))).status).toBe(200);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1#2')?.state).toBe('staged');
+    // The first is still staged: the same words again within two minutes are its retry...
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1')?.state).toBe('staged');
+    f.advance(30_000); expect((await f.turn('utterance-2')).status).toBe(200); expect((await f.turn('utterance-2')).status).toBe(409);
+    // ...and after two minutes with no history receipt, a new utterance.
+    f.advance(121_000); expect((await f.turn('utterance-2')).status).toBe(200);
+    expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-2#2')).not.toBeNull();
   });
 
   it('reserves only rendered inbox reports while history is pending and never clears a newer active turn when binding', async () => {

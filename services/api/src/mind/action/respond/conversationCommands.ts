@@ -20,6 +20,8 @@ export interface UserUtterance {
   id: string; text: string;
   source?: 'speech' | 'typed' | 'camera';
   rawText?: string;
+  /** The client's own recognition confidence, 0…1 (from the STT provider's log-probabilities); absent from clients that have none. */
+  confidence?: number;
   /** Native history commits preserve this exact utterance id, including a kept interrupted prefix. */
   historyReceipt?: 'utterance-id';
 }

@@ -8,6 +8,7 @@ import { voicePlanResponse } from '../../mind/emotion/voiceEmotionPlan.js';
 import { observeAsync, observeSync, observerHandoff } from '../../infra/observer/observerContext.js';
 import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
 import { writeEvent } from '../../infra/http/ndjsonStream.js';
+import type { TurnTiming } from '../../infra/observer/turnTiming.js';
 
 /** Both HTTP streaming and direct delegation use the same conservative audience and explicit utterance ID. */
 export function voiceObservationOptions(scopeKey: string, body: unknown) {
@@ -47,13 +48,31 @@ export function perceiveVoiceTurn(mind: MindPerceiver | undefined, scopeKey: str
     () => mind.perceive(scopeKey, voicePerception(input)), value => ({ perceived: value !== null })); } catch { return null; }
 }
 
-/** Closed device-visible decisions only: no emotion causes, prompts, memories or drafts. */
-export function observedVoicePlan(...args: Parameters<typeof voicePlanResponse>): Record<string, unknown> {
-  return observeSync('plan', { surface: 'voice' }, () => voicePlanResponse(...args), value => ({
+type PlanArguments = Parameters<typeof voicePlanResponse>;
+
+/**
+ * Closed device-visible decisions only: no emotion causes, prompts, memories or drafts. An unanswered turn's span names the
+ * category that kept her silent, and `characters` (when given) how long his words were: never the words.
+ */
+export function observedVoicePlan(decision: PlanArguments[0], emotion?: PlanArguments[1], mood?: PlanArguments[2], options?: PlanArguments[3],
+  characters?: number): Record<string, unknown> {
+  return observeSync('plan', { surface: 'voice' }, () => voicePlanResponse(decision, emotion, mood, options), value => ({
     shouldRespond: value.shouldRespond, conversationClass: value.conversationClass, latencyClass: value.latencyClass,
     affect: value.affect, affectIntensity: value.affectIntensity, delivery: value.delivery,
     selectedSkills: value.selectedSkills, decisionSource: value.decisionSource,
+    ...(value.silenceCategory ? { silence: value.silenceCategory } : {}), ...(characters !== undefined ? { characterCount: characters } : {}),
   }));
+}
+
+/**
+ * The plans of one turn, for its feeling of the moment (`observedVoicePlan`). Its timing line is told, once, how many characters
+ * his words had and, when she stays silent, the category that decided it (`silence=<category> chars=<n>`).
+ */
+export function voicePlanner(decision: PlanArguments[0], mood: PlanArguments[2], turn: { ownerAlone: boolean; transcript: string; timing?: TurnTiming }) {
+  const characters = Array.from(turn.transcript).length;
+  turn.timing?.note('chars', characters);
+  if (!decision.shouldRespond) turn.timing?.note('silence', decision.silence ?? 'unspecified');
+  return (emotion?: PlanArguments[1]) => observedVoicePlan(decision, emotion, mood, { ownerAlone: turn.ownerAlone }, characters);
 }
 
 export function visibleVoiceResponse(work: () => ApiResponse): ApiResponse {

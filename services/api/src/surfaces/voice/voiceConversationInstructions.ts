@@ -1,3 +1,5 @@
+import { SHANNON_OWNER_NAME } from '@shannon/cognition';
+
 /**
  * Spoken delivery notes for live voice. Who Shannon is, what the suite products are, and
  * what she can do come from `shannonIdentityPrompt` in `@shannon/cognition`; this block
@@ -74,11 +76,29 @@ export const SPOKEN_SCHEDULE_LINE = '[Spoken schedule] This reply is heard, not 
   + 'between them. The full list stays in his calendar; read it all only when he asks for every item.';
 
 /**
- * The spoken-reply lines of a voice turn, for the Claude voice requests only (`spokenLines`, beside his clock): the historical GPT profile
- * and the stage-2 switched-off proof never read them (review of 1a647abc: in the turn context they changed ca7cf519's bytes).
+ * Owner's Windows call, 2026-10-14: an apology or a bit of chit-chat ran three or four sentences (11–22 s of speech). A social turn
+ * (a greeting, or a direct reply with no capability and no concrete answer wanted) is one or two sentences.
+ */
+export const SOCIAL_LENGTH_LINE = '[声の長さ] あいさつ・雑談・お礼やお詫びへの返事は1〜2文で終える。説明や謝罪を重ねない。';
+/** The same call: nearly every reply opened with 「ライ氏、」. */
+export const NAME_PREFIX_LINE = `[呼びかけ] 返事を毎回「${SHANNON_OWNER_NAME}、」で始めない。名前で呼ぶのはときどきにして、たいていは名前なしで話し始める。`;
+/** The same call: 「慌てたような声」 (she hears no tone) and a link to Minecraft nobody had made. */
+export const PERCEPTION_HONESTY_LINE = '[知覚の正直さ] 届いているのは言葉の文字起こしだけで、声の調子・表情・見た目は分からない。'
+  + 'それらや、この文脈に書かれていないこと（話に出ていないゲームや話題など）を感じ取った・結びつけたように言わない。';
+
+/** A greeting, or a direct reply that needs no capability and no concrete answer. */
+const socialTurn = (turn: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }) =>
+  (turn.conversationClass === 'greeting' || turn.conversationClass === 'direct') && !turn.selectedSkills.length && turn.solutionWantedProbability < 0.4;
+
+/**
+ * The spoken-reply lines of a voice turn, for the Claude voice requests only (`spokenLines`, beside his clock, after the cached
+ * prefix): the historical GPT profile and the stage-2 switched-off proof never read them (review of 1a647abc: in the turn context
+ * they changed ca7cf519's bytes). How she speaks, never who she is: the persona stays in `persona.ts`.
  */
 export function spokenReplyLines(words: string, capabilityPrompt: string,
-  tools: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } } | undefined): string[] {
+  tools: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } } | undefined,
+  turn?: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }): string[] {
   const offered = (tools?.menu?.offered ?? tools?.definitions ?? []).map(tool => tool.name);
-  return [answerFirstLine(words, offered), spokenScheduleLine(capabilityPrompt)].filter(Boolean);
+  return [answerFirstLine(words, offered), spokenScheduleLine(capabilityPrompt), turn && socialTurn(turn) ? SOCIAL_LENGTH_LINE : '',
+    NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE].filter(Boolean);
 }

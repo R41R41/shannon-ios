@@ -281,9 +281,14 @@ export class ShannonToolRunner {
         const combined=active?signal?AbortSignal.any([signal,active.signal]):active.signal:signal;
         context.beforeExecution?.();
         observerHandoff('gate', 'tools', { name: tool.name });
-        return observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
+        // Until a write returns acknowledged, an interrupted turn cannot say what it did (`writeInFlight`, actionExecutionWiring.ts).
+        const writing = tool.effect === 'write' ? active : undefined;
+        if (writing) writing.writeInFlight = true;
+        const ran = await observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
           () => call.run(combined), run => ({ ...observedToolResult(tool.name, run.result, run.apply ? 'awaiting_commit' : 'returned'),
             acknowledged: run.acknowledged ?? null, commitPending: Boolean(run.apply) }));
+        if (writing && ran.acknowledged !== false) writing.writeInFlight = false;
+        return ran;
       }}};
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };

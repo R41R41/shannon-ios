@@ -12,6 +12,8 @@ export interface OpenAITranscriptionSession {
   model: string;
   expiresAt: string;
   inputUsdPerMinute: number;
+  /** The session sends per-token log-probabilities with each transcript (the client's `userUtterance.confidence`). */
+  transcriptionLogprobs: boolean;
 }
 
 export type OpenAITranscriptionFailureCode =
@@ -28,6 +30,17 @@ export class OpenAITranscriptionError extends Error {
   }
 }
 
+/**
+ * How the transcription session decides that he finished an utterance (owner's Windows call, 2026-10-14: a 360 ms silence split
+ * his sentences). `semantic`: OpenAI's `semantic_vad`, which waits while the words sound unfinished, at `eagerness`; `server`: the
+ * volume-based `server_vad` with `silenceDurationMilliseconds` (650 ms by default). A session the provider refuses with semantic
+ * detection is minted again at once with the server one, and this gateway keeps to the server one from then on.
+ */
+export type TranscriptionTurnDetection = 'semantic' | 'server';
+export type SemanticVadEagerness = 'low' | 'medium' | 'high' | 'auto';
+const EAGERNESS: readonly SemanticVadEagerness[] = ['low', 'medium', 'high', 'auto'];
+export const DEFAULT_TRANSCRIPTION_SILENCE_MILLISECONDS = 650;
+
 interface OpenAITranscriptionGatewayOptions {
   apiKey: string;
   model?: string;
@@ -37,6 +50,8 @@ interface OpenAITranscriptionGatewayOptions {
   secretLifetimeSeconds?: number;
   silenceDurationMilliseconds?: number;
   inputUsdPerMinute?: number;
+  turnDetection?: TranscriptionTurnDetection;
+  eagerness?: SemanticVadEagerness;
 }
 
 /// Mints a short-lived Realtime client secret whose session is fixed to Japanese
@@ -48,6 +63,15 @@ export class OpenAITranscriptionGateway {
   private readonly now: () => Date;
   private readonly secretLifetimeSeconds: number;
   private readonly silenceDurationMilliseconds: number;
+  private readonly eagerness: SemanticVadEagerness;
+  /** `semantic` until the provider refuses a session with it. */
+  private turnDetection: TranscriptionTurnDetection;
+  /**
+   * Whether sessions ask for the transcript's log-probabilities (`include: item.input_audio_transcription.logprobs`), from which
+   * the iOS and Windows clients compute `userUtterance.confidence`. They come with the transcript itself: no extra request, and
+   * no price of their own. Dropped, like semantic detection, only if the provider refuses a session with them.
+   */
+  private logprobs = true;
   readonly inputUsdPerMinute: number;
 
   constructor(private readonly options: OpenAITranscriptionGatewayOptions) {
@@ -57,7 +81,9 @@ export class OpenAITranscriptionGateway {
     this.fetcher = options.fetcher ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.secretLifetimeSeconds = boundedNumber(options.secretLifetimeSeconds, 30, 3_600, 300);
-    this.silenceDurationMilliseconds = boundedNumber(options.silenceDurationMilliseconds, 200, 2_000, 360);
+    this.silenceDurationMilliseconds = boundedNumber(options.silenceDurationMilliseconds, 200, 2_000, DEFAULT_TRANSCRIPTION_SILENCE_MILLISECONDS);
+    this.turnDetection = options.turnDetection === 'server' ? 'server' : 'semantic';
+    this.eagerness = options.eagerness && EAGERNESS.includes(options.eagerness) ? options.eagerness : 'medium';
     this.inputUsdPerMinute = boundedNumber(
       options.inputUsdPerMinute,
       0,
@@ -66,7 +92,55 @@ export class OpenAITranscriptionGateway {
     );
   }
 
+  /** The turn detection sessions are minted with now: `semantic` until the provider refused it once. */
+  get detection(): TranscriptionTurnDetection { return this.turnDetection; }
+
+  private turnDetectionBody(): Record<string, unknown> {
+    return this.turnDetection === 'semantic'
+      ? { type: 'semantic_vad', eagerness: this.eagerness }
+      : { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: this.silenceDurationMilliseconds };
+  }
+
   async createSession(): Promise<OpenAITranscriptionSession> {
+    let response = await this.requestSecret();
+    // A session the provider refuses (400) is minted again at once with less: first the server detection instead of the semantic
+    // one, then without log-probabilities; this gateway keeps to what was accepted from then on. Never a broken call.
+    while (response.status === 400 && this.downgrade()) response = await this.requestSecret();
+    return this.secretFrom(response);
+  }
+
+  /** One step down after a refused session; false when nothing is left to drop. */
+  private downgrade(): boolean {
+    if (this.turnDetection === 'semantic') {
+      this.turnDetection = 'server';
+      console.warn('Shannon transcription session: semantic turn detection refused, using server_vad');
+      return true;
+    }
+    if (!this.logprobs) return false;
+    this.logprobs = false;
+    console.warn('Shannon transcription session: transcript logprobs refused, minting without them');
+    return true;
+  }
+
+  private async secretFrom(response: { ok: boolean; status: number; text: string }): Promise<OpenAITranscriptionSession> {
+    if (!response.ok) {
+      throw new OpenAITranscriptionError(
+        'OPENAI_TRANSCRIPTION_TOKEN_FAILED',
+        response.status,
+        safeUpstreamCode(response.text),
+      );
+    }
+    const secret = clientSecret(response.text, this.now(), this.secretLifetimeSeconds);
+    return Object.freeze({
+      token: secret.token,
+      model: this.model,
+      expiresAt: secret.expiresAt,
+      inputUsdPerMinute: this.inputUsdPerMinute,
+      transcriptionLogprobs: this.logprobs,
+    });
+  }
+
+  private async requestSecret(): Promise<{ ok: boolean; status: number; text: string }> {
     let response: Response;
     try {
       response = await this.fetcher(this.endpoint, {
@@ -79,16 +153,12 @@ export class OpenAITranscriptionGateway {
           expires_after: { anchor: 'created_at', seconds: this.secretLifetimeSeconds },
           session: {
             type: 'transcription',
+            ...(this.logprobs ? { include: ['item.input_audio_transcription.logprobs'] } : {}),
             audio: {
               input: {
                 format: { type: 'audio/pcm', rate: 24_000 },
                 transcription: { model: this.model, language: 'ja', prompt: TRANSCRIPTION_PROMPT },
-                turn_detection: {
-                  type: 'server_vad',
-                  threshold: 0.5,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: this.silenceDurationMilliseconds,
-                },
+                turn_detection: this.turnDetectionBody(),
               },
             },
           },
@@ -97,21 +167,7 @@ export class OpenAITranscriptionGateway {
     } catch {
       throw new OpenAITranscriptionError('OPENAI_TRANSCRIPTION_TOKEN_FAILED');
     }
-    const responseText = await response.text();
-    if (!response.ok) {
-      throw new OpenAITranscriptionError(
-        'OPENAI_TRANSCRIPTION_TOKEN_FAILED',
-        response.status,
-        safeUpstreamCode(responseText),
-      );
-    }
-    const secret = clientSecret(responseText, this.now(), this.secretLifetimeSeconds);
-    return Object.freeze({
-      token: secret.token,
-      model: this.model,
-      expiresAt: secret.expiresAt,
-      inputUsdPerMinute: this.inputUsdPerMinute,
-    });
+    return { ok: response.ok, status: response.status, text: await response.text() };
   }
 }
 
@@ -127,6 +183,9 @@ export function createConfiguredOpenAITranscriptionGateway(
     secretLifetimeSeconds: optionalNumber(environment.SHANNON_VOICE_CALL_SECRET_SECONDS),
     silenceDurationMilliseconds: optionalNumber(environment.SHANNON_VOICE_CALL_SILENCE_MS),
     inputUsdPerMinute: optionalNumber(environment.SHANNON_VOICE_CALL_USD_PER_MINUTE),
+    // `server` keeps the volume-based detection; anything else (unset included) is semantic.
+    turnDetection: environment.SHANNON_VOICE_CALL_TURN_DETECTION?.trim().toLowerCase() === 'server' ? 'server' : 'semantic',
+    eagerness: environment.SHANNON_VOICE_CALL_VAD_EAGERNESS?.trim().toLowerCase() as SemanticVadEagerness | undefined,
   });
 }
 
