@@ -42,6 +42,8 @@ export interface TrialObservation {
   fcaComposed: boolean;
   harnessLog: string[];
   durationMs: number;
+  /** Requests that asked Anthropic for its own server-side web tools (set by the runner; they bypass the fixtures). */
+  nativeWebRequests?: number;
   error?: string;
 }
 

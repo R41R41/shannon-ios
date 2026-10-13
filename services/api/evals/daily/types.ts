@@ -182,6 +182,8 @@ export interface DailyEvalTask {
   budgets?: Budgets;
   /** Seconds to keep watching after the last reply for research results and late notices (default 0; research tasks ≥ 45). */
   settleSeconds?: number;
+  /** The model's own server-side web search bypasses the fixtures and fails the trial (`fixturesOnly`) unless allowed here. */
+  nativeWebSearch?: 'allowed';
 }
 
 export const DEFAULT_BUDGETS: Required<Budgets> = Object.freeze({

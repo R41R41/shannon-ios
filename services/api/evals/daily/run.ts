@@ -6,6 +6,7 @@ import { yenPerUsd } from './graders/budgets.js';
 import { gradeTrial } from './graders/grade.js';
 import { installEvalClock, resetEvalClock } from './harness/clock.js';
 import { installNetworkGuard, networkLog } from './harness/network.js';
+import { JEV_DEFAULT_ENDPOINT } from '../../src/infra/models/jev/jevChoice.js';
 import { runTrial, type TrialObservation } from './harness/trial.js';
 import { realNow, resultsDirectory, summaryMarkdown, taskResult, writeResults, type RunResult, type TrialResult } from './results.js';
 import { ALL_TASKS, DROPPED_TASKS, tasksOf } from './tasks/index.js';
@@ -56,7 +57,9 @@ if (!evalClaudeKey(process.env)) fail('SHANNON_EVALS_LIVE=1 needs an Anthropic k
 if (!selected.length) fail('no task selected');
 
 const startedAt = realNow();
-installNetworkGuard();
+// Jev's origin is reachable only while its key is set (the key itself is read by the runtime, never printed).
+const jevOrigins = process.env.TYPESAFE_API_KEY?.trim() ? [new URL(process.env.SHANNON_JEV_ENDPOINT?.trim() || JEV_DEFAULT_ENDPOINT).origin] : [];
+installNetworkGuard(jevOrigins);
 installEvalClock();
 const useJudge = !values['no-judge'];
 const judge: EvalClaude | null = useJudge ? createEvalClaude(process.env) : null;
@@ -73,7 +76,7 @@ async function quietly<T>(sink: string[], work: () => Promise<T>): Promise<T> {
 
 const observations: TrialObservation[] = [];
 const taskResults = [];
-say(`daily evals: --set ${set} --k ${k}, ${selected.length} task(s), judge ${judge?.model ?? 'off'}`);
+say(`daily evals: --set ${set} --k ${k}, ${selected.length} task(s), judge ${judge?.model ?? 'off'}, Jev ${jevOrigins.length ? 'on' : 'off'}`);
 for (const task of selected) {
   const trials: TrialResult[] = [];
   for (let trial = 0; trial < k; trial += 1) {
@@ -83,7 +86,8 @@ for (const task of selected) {
     resetEvalClock();
     observation.harnessLog.push(...serverLog.map(line => `server: ${line}`));
     if (networkLog.refused.length > refusedBefore) observation.harnessLog.push(`network refused: ${[...new Set(networkLog.refused.slice(refusedBefore))].join(', ')}`);
-    if (networkLog.nativeWebRequests > nativeBefore) observation.harnessLog.push(`native web tool requests: ${networkLog.nativeWebRequests - nativeBefore} (bypassed fixtures)`);
+    observation.nativeWebRequests = networkLog.nativeWebRequests - nativeBefore;
+    if (observation.nativeWebRequests > 0) observation.harnessLog.push(`native web tool requests: ${observation.nativeWebRequests} (bypassed fixtures)`);
     observations.push(observation);
     const graded = await gradeTrial(task, observation, judge, { useJudge });
     trials.push(graded);

@@ -18,9 +18,13 @@ One trial runs Shannon **in this process, through the real turn paths**, from a 
   at real speed), the owner's location (voice GPS), the iPhone (`device.ts`: polls the outbox and keeps fake reminders, timers,
   calendar and music), recorded web search and page reads, the Open-Meteo weather/geocoding API, and Voyager's task catalog
   (`fixtures.ts`). Only the model is live.
-- **Isolation**: the eval process may reach only `api.anthropic.com` (`network.ts`). Aether, Notion, Voyager, Jev, OpenAI and
-  every other integration is removed from the environment before a trial. All fixtures are synthetic (`validate.ts` refuses
-  e-mail addresses, phone numbers and non-`example.*` URLs).
+- **Isolation**: the eval process may reach only `api.anthropic.com` and, while `TYPESAFE_API_KEY` is set, Jev (the origin of
+  `SHANNON_JEV_ENDPOINT` or Jev's default; owner decision 2026-10-13, 「評価からもJevを呼ぶ」) (`network.ts`). With its key Jev
+  is the voice router and chooses the turn's tool menu, as in production; without it the router is the Haiku fallback and there
+  is no menu. Aether, Notion, Voyager, OpenAI and every other integration is removed from the environment before a trial. The
+  model's own server-side web search reads the live web, so it fails the trial (`fixturesOnly`) unless the task sets
+  `nativeWebSearch: 'allowed'`. All fixtures are synthetic (`validate.ts` refuses e-mail addresses, phone numbers and
+  non-`example.*` URLs).
 
 Each trial is graded by (`graders/`):
 
@@ -44,7 +48,8 @@ with a hidden goal and a knowledge boundary; live only.
 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --validate
 
 # Live (paid): needs SHANNON_EVALS_LIVE=1 and an Anthropic key in the environment
-# (SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY; never printed).
+# (SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY; never printed). Add TYPESAFE_API_KEY
+# (and any SHANNON_JEV_*) for Jev; the first summary line says whether Jev is on.
 SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --k 3
 SHANNON_EVALS_LIVE=1 pnpm -C services/api exec tsx evals/daily/run.ts --set regression --k 1 --task E3 --task D2
 # The package script also loads the repository's ignored .env:
@@ -93,28 +98,10 @@ queue and attack/death evidence — and the sandbox has no Minebot actuator yet;
 and the task would only test a refusal. Add it with a fake Minebot (see `tests/support/fcaIntegratedHarness.ts`) later.
 
 Known limits of the slice: TTS and real ASR are not in the loop (transcripts are injected); the memory recall runs without
-the OpenAI embedding gateway (deterministic full-text recall only); Jev is not called (the voice router uses its Haiku
-fallback with production's 3 s timeout); spoken FCA reports are not read back, only report cards, task phases and conversation
-messages.
+the OpenAI embedding gateway (deterministic full-text recall only); spoken FCA reports are not read back, only report cards,
+task phases and conversation messages.
 
-**Without Jev the slice is not yet production-faithful (first live run, 2026-10-13):**
-
-- The voice router's Haiku fallback takes 1.4–2.5 s where Jev takes about 0.2 s, so voice first-audio numbers are about
-  1.2–2.3 s slower than production (subtract `route=` in a turn's timing line minus ~200 ms to compare).
-- Jev's tool menu is absent. With 20 or more offered tools and no menu, the Anthropic adapter loads no schema
-  (`anthropicChatModel.ts`): the model sees only `tool_open` (+ always-loaded names), and the device-actions capability line is
-  not in its prompt while the 「今はできないこと」 calendar/timer line is. Reminders, timers and calendar writes (D1–D3) are
-  therefore refused in the sandbox. A Jev stand-in (a chooser) is needed before D1–D3 measure production behaviour.
-- The Haiku router sends weather questions to `current_web` (an FCA research task) instead of `weather.forecast`.
-
-## Adding a task from a production failure
-
-1. Describe the failure in words in `failureShape` — never paste the owner's words or data. Rebuild the situation with
-   synthetic fixtures: clock, location, prior threads, calendar/reminders, web results (`example.org` URLs), weather, Voyager.
-2. Create `tasks/regression/<ID>.ts` with `defineTask({...})` and add it to `tasks/index.ts` (the definition test fails on a
-   file that is not registered).
-3. Prefer **state checks** over wording: what must exist (or must not) after the turn. Add reply patterns only for the core
-   of the failure (e.g. the first sentence must contain a time). Put the rest in 2–4 rubric criteria.
-4. Set budgets only when the task needs a stricter one than the defaults. Research tasks need `settleSeconds` ≥ 45.
-5. Run `--validate`, then one live trial with `--k 1 --task <ID>`; read the transcript to see that the checks measure what
-   you meant before relying on pass^3.
+**Without Jev** (no `TYPESAFE_API_KEY`) the voice path is not production-faithful (first live run, 2026-10-13): the router is
+the Haiku fallback (production's 3 s timeout; 1.4–2.5 s where Jev takes about 0.2 s, so first audio is that much slower); with no
+tool menu and 20 or more offered tools the Anthropic adapter loads no schema (`anthropicChatModel.ts`), and the fallback router
+sends weather questions to `current_web` research instead of `weather.forecast`. Run the regression set with Jev.

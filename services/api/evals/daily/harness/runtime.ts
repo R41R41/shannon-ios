@@ -22,7 +22,7 @@ import { configuredDeviceActions } from '../../../src/wiring/deviceActionWiring.
 import { memoryPortsOf } from '../../../src/wiring/memoryOutboxWiring.js';
 import { configuredOwnerUpcoming } from '../../../src/wiring/ownerUpcomingWiring.js';
 import { configuredServerFca } from '../../../src/wiring/serverFcaWiring.js';
-import { readToolPorts } from '../../../src/wiring/skillRoutingWiring.js';
+import { readToolPorts, skillRoutingParts } from '../../../src/wiring/skillRoutingWiring.js';
 import { stage5MemoryStoreOptions } from '../../../src/wiring/stage5MemoryWiring.js';
 import type { DailyEvalTask, InitialState } from '../types.js';
 import { localInstant } from './clock.js';
@@ -37,7 +37,11 @@ export const OWNER_SCOPE = 'owner';
  * integration that could reach the owner's real data (Aether, Notion, Voyager, Jev, OpenAI memory) is absent.
  */
 const PASSED_THROUGH = ['SHANNON_HAIKU_API_KEY', 'SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY', 'SHANNON_HAIKU_VOICE_THINKING',
-  'SHANNON_CLAUDE_CACHE_PLAN', 'SHANNON_CLAUDE_CACHE_PLAN_VOICE', 'SHANNON_STRICT_CONVERSATION_TOOLS'] as const;
+  'SHANNON_CLAUDE_CACHE_PLAN', 'SHANNON_CLAUDE_CACHE_PLAN_VOICE', 'SHANNON_STRICT_CONVERSATION_TOOLS',
+  // Jev (owner decision 2026-10-13, 「評価からもJevを呼ぶ」): the voice router and the turn's tool menu, as in production.
+  'TYPESAFE_API_KEY'] as const;
+/** Jev's settings (`SHANNON_JEV_MODEL`, `_ENDPOINT`, `_TIMEOUT_MS`, …) pass through with its key. */
+const PASSED_THROUGH_PREFIXES = ['SHANNON_JEV_'] as const;
 /** Names removed from this process's environment before a trial, so no default reader (`serverEnvironment()`) finds them. */
 const WITHHELD_PREFIXES = ['SHANNON_AETHER_', 'SHANNON_NOTION_', 'SHANNON_VOYAGER_', 'SHANNON_JEV_', 'SHANNON_AGENT_', 'SHANNON_MINECRAFT_',
   'SHANNON_PLATFORM_', 'SHANNON_DATABASE_PATH', 'SHANNON_MIND_SOCKET', 'OPENAI_', 'GEMINI_', 'GOOGLE_', 'ELEVENLABS_', 'TYPESAFE_'];
@@ -45,6 +49,9 @@ const WITHHELD_PREFIXES = ['SHANNON_AETHER_', 'SHANNON_NOTION_', 'SHANNON_VOYAGE
 export function evalEnvironment(source: Readonly<Record<string, string | undefined>>, initial: InitialState): Record<string, string> {
   const environment: Record<string, string> = {};
   for (const name of PASSED_THROUGH) if (source[name]?.trim()) environment[name] = source[name]!;
+  if (environment.TYPESAFE_API_KEY) {
+    for (const [name, value] of Object.entries(source)) if (PASSED_THROUGH_PREFIXES.some(prefix => name.startsWith(prefix)) && value?.trim()) environment[name] = value;
+  }
   const model = source.SHANNON_EVALS_MODEL?.trim();
   if (model) environment.SHANNON_LLM_MODEL = model;
   Object.assign(environment, {
@@ -54,7 +61,7 @@ export function evalEnvironment(source: Readonly<Record<string, string | undefin
     SHANNON_FCA_RUNTIME: 'on', SHANNON_ADR8_STAGE4: 'on', SHANNON_FCA_SLEEP: 'off', SHANNON_FCA_TOUCH: 'off', SHANNON_FCA_MINECRAFT: 'off',
     SHANNON_DEVICE_ACTIONS: 'on', SHANNON_AUTONOMY_ENABLED: 'off', SHANNON_MORNING_BRIEF: 'off', SHANNON_SONNET_ROUTING: 'off',
     SHANNON_CALENDAR_INGEST: 'on',
-    // Jev is absent, so the voice router is its Haiku fallback. Production gives that fallback 3 s (deploy env); the code default
+    // The voice router's Haiku fallback (used without Jev, or when Jev fails) gets production's 3 s (deploy env); the code default
     // of 1.2 s times out on almost every turn and routes by keywords only, which offers no tools (first live smoke, 2026-10-13).
     SHANNON_VOICE_ROUTER_TIMEOUT_MS: source.SHANNON_VOICE_ROUTER_TIMEOUT_MS?.trim() || '3000',
   });
@@ -180,6 +187,8 @@ export async function createEvalRuntime(task: DailyEvalTask, environment: Record
     minecraftRequests: deviceActions.reports(null), ...(readTools ? { readTools } : {}), ...(memoryPorts ? { memory: memoryPorts } : {}),
     mind: { perceive: () => null, foreground: foregroundRunner(threads.actions) },
     fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
+    // Stage 2 (`server.ts`): Jev's tool menu for the turn while its key is set (no decision traces in a trial).
+    ...(options.live ? skillRoutingParts(environment, { trace: null, now }) : {}),
   });
   const threadId = seedConversation(store, initial);
   const device = seededDeviceState(initial);
