@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FcaExternalTools, FcaToolDefinition } from './fcaPorts.js';
 import type { FcaGoalBinding, FcaGoalCondition, FcaGoalVerification, FcaProgress, FcaProgressHooks } from './fcaProgressPorts.js';
-import { toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
+import { providerToolName, toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
 
 const empty = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 const definition = (name: string, description: string, properties: Record<string, unknown>, required: string[]): FcaToolDefinition => ({
@@ -14,7 +14,13 @@ const conditionSchema = { type: 'object', properties: {
   expected: { type: ['string', 'number', 'boolean', 'null'] },
 }, required: ['id', 'tool', 'input', 'path', 'operator'], additionalProperties: false };
 export const FCA_PROGRESS_TOOLS: readonly FcaToolDefinition[] = [
-  definition('goal.set_conditions', '達成を確かめる観測条件の案を保存する。条件の案だけで元の目的の達成を証明できるわけではない。無料の読み取り道具だけを指定する。path は JSON のドット区切り、空なら結果全文。', { conditions: { type: 'array', minItems: 1, maxItems: 8, items: conditionSchema } }, ['conditions']),
+  definition('goal.set_conditions', [
+    '達成を確かめる観測条件の案を保存する。条件の案だけで元の目的の達成を証明できるわけではない。',
+    'tool には、いま提示されている無料の読み取り道具の名前を道具一覧と同じ表記で書く（書き込みや有料の道具は使えない）。',
+    'path は結果 JSON のドット区切り、空なら結果全文。operator は eq・gte・contains・exists。',
+    '例: {"id":"saved","tool":"<読み取り道具の名前>","input":{},"path":"status","operator":"eq","expected":"done"}。',
+    'progress に binding があれば、その条件は元の依頼に結び付いた検証としてすでに保存されているので、出し直さなくてよい。',
+  ].join(''), { conditions: { type: 'array', minItems: 1, maxItems: 8, items: conditionSchema } }, ['conditions']),
   definition('goal.verify', '保存された達成条件を新しい観測で検証する。操作の受付だけを成功の証拠にしない。目的との対応が信頼された条件だけが verified になる。', {}, []),
   definition('task.replan', '結果が分かっている失敗の操作 id に結びつけて次の進め方を保存する。最大3回。結果不明の書き込みや有料呼び出しを再送する許可にはならない。', {
     failureOperationId: { type: 'string', minLength: 1, maxLength: 240 }, summary: { type: 'string', minLength: 1, maxLength: 1000 },
@@ -32,7 +38,8 @@ export function createFcaProgressTools(base: FcaExternalTools, options: {
     : JSON.parse(JSON.stringify(prior)) as FcaProgress;
   if (!validState(state)) throw new Error('FCA_PROGRESS_CHECKPOINT_INVALID');
   delete state.binding;
-  const eligible = (name: string) => base.definitions.find(tool => tool.name === name && tool.effect === 'read' && tool.cost === 'none');
+  const readable = () => base.definitions.filter(tool => tool.effect === 'read' && tool.cost === 'none');
+  const eligible = (name: string) => readable().find(tool => tool.name === name);
   const binding = options.binding ? JSON.parse(JSON.stringify(options.binding)) as FcaGoalBinding : undefined;
   if (binding && (!text(binding.id, 160) || !validConditions(binding.conditions))) throw new Error('FCA_GOAL_BINDING_INVALID');
   if (state.verification?.bindingId !== (binding?.id ?? null)) state.verification = null;
@@ -59,6 +66,31 @@ export function createFcaProgressTools(base: FcaExternalTools, options: {
       bindingId: binding?.id ?? null, checks: trusted, suggestedChecks: suggested };
     state.verification = verification; return verification;
   };
+  /**
+   * The model names tools as its menu shows them (the provider form, `mc_goal-evidence` for `mc.goal-evidence`; Minebot lane run 1,
+   * 2026-10-14: every condition was refused for that alone). A name is taken in either form and stored as the registry name; a
+   * refusal says which condition failed and which free reads there are.
+   */
+  const setConditions = (input: Record<string, unknown>) => {
+    const conditions = Array.isArray(input.conditions) ? input.conditions.map(resolvedCondition) : input.conditions;
+    const unknown = Array.isArray(conditions) ? conditions.flatMap(row => object(row) && !eligible(String(object(row)!.tool)) ? [String(object(row)!.id)] : []) : [];
+    if (Object.keys(input).length !== 1 || !validConditions(conditions) || unknown.length) return conditionRefusal(unknown);
+    state.conditions = JSON.parse(JSON.stringify(conditions)) as FcaGoalCondition[];
+    state.verification = null;
+    return toolOk(JSON.stringify({ accepted: true, authority: 'suggested', conditions: state.conditions }));
+  };
+  const resolvedCondition = (value: unknown) => {
+    const row = object(value);
+    if (!row || typeof row.tool !== 'string' || eligible(row.tool)) return value;
+    const matches = readable().filter(tool => providerToolName(tool.name) === row.tool);
+    return matches.length === 1 ? { ...row, tool: matches[0]!.name } : value;
+  };
+  const conditionRefusal = (unknown: readonly string[]) => {
+    const names = readable().map(tool => providerToolName(tool.name));
+    const offered = names.length ? `使える無料の読み取り道具: ${names.slice(0, 40).join(', ')}${names.length > 40 ? ' ほか' : ''}。` : '無料の読み取り道具が提示されていません。';
+    const which = unknown.length ? `条件 ${unknown.slice(0, 8).join(', ')} の tool は無料の読み取り道具ではありません。` : '条件の形が合いません（id・tool・input・path・operator、exists 以外は expected）。';
+    return toolFailure('invalid_input', `${which}${offered}`, { retryable: false });
+  };
   const progress: FcaProgressHooks = {
     context: () => JSON.parse(JSON.stringify({ ...state, ...(binding ? { binding } : {}) })) as FcaProgress,
     observed(operationId, name, result) {
@@ -76,11 +108,7 @@ export function createFcaProgressTools(base: FcaExternalTools, options: {
       await options.permit(); call.signal.throwIfAborted();
       const input = object(call.input);
       if (!input) return toolFailure('invalid_input', '引数の形式が合いません。', { retryable: false });
-      if (call.name === 'goal.set_conditions') {
-        if (Object.keys(input).length !== 1 || !validConditions(input.conditions) || input.conditions.some(condition => !eligible(condition.tool))) return toolFailure('invalid_input', '条件には、利用できる無料の読み取り道具と有効な述語を指定してください。', { retryable: false });
-        state.conditions = JSON.parse(JSON.stringify(input.conditions)) as FcaGoalCondition[]; state.verification = null;
-        return toolOk(JSON.stringify({ accepted: true, authority: 'suggested', conditions: state.conditions }));
-      }
+      if (call.name === 'goal.set_conditions') return setConditions(input);
       if (call.name === 'goal.verify') {
         if (Object.keys(input).length) return toolFailure('invalid_input', '検証に引数は不要です。', { retryable: false });
         return toolOk(JSON.stringify(await verify(call)));

@@ -744,8 +744,8 @@
       "long-line": 1
     },
     "services/api/src/mind/action/fca/fcaProgressTools.ts": {
-      "multi-statement-line": 9,
-      "complex-function": 3,
+      "multi-statement-line": 8,
+      "complex-function": 2,
       "long-line": 12
     },
     "services/api/src/mind/action/fca/fcaRecallContext.ts": {

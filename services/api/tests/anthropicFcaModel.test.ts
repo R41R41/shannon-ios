@@ -51,6 +51,15 @@ describe('native one-step FCA model', () => {
     expect(JSON.parse(String((fixture.bodies[1]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('Updated compact skill index');
     expect((fixture.bodies[1]!.messages as unknown[]).slice(0, replay.length)).toEqual(replay);
   });
+  it('states in the dynamic context, not the cached prefix, that nobody can answer the task (Minebot lane run 1)', async () => {
+    const fixture = harness([answer([call('task_list', 'list-1')]), answer([call('task_list', 'list-2')], nativeUsage(0, 700))]);
+    await fixture.model.decide({ ...input(), waiting: { replyPossible: false, refusedWaits: 1, refusalLimit: 2 } }, signal());
+    await fixture.model.decide(input(), signal());
+    const current = (index: number) => JSON.parse(String((fixture.bodies[index]!.messages as Array<{ content: unknown }>).at(-1)!.content));
+    expect(current(0).waiting).toMatchObject({ replyPossible: false, refusedWaits: 1, refusalLimit: 2, rule: expect.stringContaining('fca_wait is turned away') });
+    expect(current(1)).not.toHaveProperty('waiting');
+    expect(fixture.bodies[0]!.system).toEqual(fixture.bodies[1]!.system);
+  });
   it('makes one call, offers the existing schemas (only controls strict), maps provider names and returns only appended native history', async () => {
     const signed = { type: 'thinking', thinking: 'Synthetic private thinking', signature: 'opaque-signature' };
     const redacted = { type: 'redacted_thinking', data: 'opaque-redacted-data' };
