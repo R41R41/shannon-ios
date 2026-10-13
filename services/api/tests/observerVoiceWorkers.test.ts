@@ -7,6 +7,7 @@ import { installObserverSink, withObserverRun } from '../src/infra/observer/obse
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { streamSpeech } from '../src/surfaces/voice/serverGeminiSpeechRoute.js';
 import { createLiveVoiceStreamRoute } from '../src/surfaces/voice/serverLiveVoiceStreamRoute.js';
+import { WAITING_CUE_DELAY_MILLISECONDS } from '../src/surfaces/voice/voiceWaitingCue.js';
 import type { LiveVoiceStreamObserver } from '../src/surfaces/voice/apiLiveVoice.js';
 import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
@@ -95,6 +96,7 @@ describe('observed voice and background work', () => {
     }) as unknown as ServerResponse;
     const kernel = { streamLiveVoiceDelegation: async (_request: unknown, observer: LiveVoiceStreamObserver) => {
       await observer.onPlan({ waitingPhrase: '確認しますね。', shouldRespond: true });
+      await new Promise(resolve => setTimeout(resolve, WAITING_CUE_DELAY_MILLISECONDS + 50)); // The waiting line follows a silence.
       await observer.onTextDelta('答え');
       await observer.onTextDelta('です。PRIVATE_DISCARDED_TAIL');
       return { status: 200, body: { threadId: 'thread', reply: '答えです。', truncated: true } };

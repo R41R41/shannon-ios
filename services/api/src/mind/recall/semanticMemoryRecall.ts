@@ -49,6 +49,11 @@ export interface SemanticRecallInput {
   signal?: AbortSignal;
   /** Additional eligibility for derived sources such as Shannon knowledge. */
   isEligible?: (candidate: StoredEmbeddingCandidate) => boolean;
+  /**
+   * Embed the words as spoken, without the model's query rewrite: a voice turn cannot wait for a model call before its search
+   * (2026-10-13: the rewrite was 1.5 s of a 4.2 s recall on a simple follow-up). The rerank still runs.
+   */
+  withoutRewrite?: boolean;
 }
 
 /**
@@ -85,7 +90,7 @@ export class SemanticMemoryRecall {
     const gateway = this.gateway;
     try {
       const budget = Math.min(3, this.config.maximumModelCallsPerTurn);
-      const rewrites = budget >= 3 ? (modelCalls += 1, await gateway.rewriteQuery(input.scopeKey, input.query, signal)) : [];
+      const rewrites = budget >= 3 && !input.withoutRewrite ? (modelCalls += 1, await gateway.rewriteQuery(input.scopeKey, input.query, signal)) : [];
       signal.throwIfAborted();
       const queries = [input.query, ...rewrites].slice(0, 4);
       modelCalls += 1;

@@ -146,9 +146,16 @@ export const voiceAffectInstructions: Readonly<Record<VoiceAffect, string>> = Ob
   gentle: 'Soft consideration.', relaxed: 'At ease.', content: 'Quiet satisfaction.', quietCompanion: 'Comfortable presence without fixing.', tender: 'Close careful warmth.', apologetic: 'Owning a mistake or disappointment.',
 });
 
+/**
+ * 「前に」「以前」 as memory only with a past act after them (「前に話した」「以前行った店」): 「どれくらい前に着くべき？」「30分前に出る」
+ * are durations, and 「目的地」「手続き」 are not memory either (2026-10-13: a flight follow-up was routed to memory search).
+ */
+const PAST_ACT_BEFORE = '(?:前に|以前)[^。？！?!]{0,10}?'
+  + '(?:話|言っ|聞い|教え|約束|決め|頼ん|伝え|相談|行った|来た|食べた|見た|買った|作った|書いた)';
+
 export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>>> = {
   current_web: /(?:最新|天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート)/iu,
-  conversation_memory: /(?:覚えて|前に|以前|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的|続き|踏まえて|今まで)/iu,
+  conversation_memory: new RegExp(`(?:覚えて|${PAST_ACT_BEFORE}|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的(?!地)|(?<!手)続き|踏まえて|今まで)`, 'iu'),
   daily_mind: /(?:今日は何を考えて|今日.{0,8}考えてた|今日の関心|今日の気分)/iu,
   aether_notes: new RegExp(`(?:${suiteProductPattern('aether').source}|ノート|メモ)`, 'iu'),
   voyager_tasks: new RegExp(`(?:${suiteProductPattern('voyager').source}|タスク|to.?do|やること)`, 'iu'),

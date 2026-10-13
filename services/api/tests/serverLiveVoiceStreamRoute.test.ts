@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonApiKernel } from '../src/infra/http/apiKernel.js';
 import type { ShannonDevicePrincipal } from '../src/infra/auth/deviceAuth.js';
 import { createLiveVoiceStreamRoute, SpokenSentenceSegmenter } from '../src/surfaces/voice/serverLiveVoiceStreamRoute.js';
+import { WAITING_CUE_DELAY_MILLISECONDS } from '../src/surfaces/voice/voiceWaitingCue.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -13,20 +14,26 @@ function deferred<T>() {
 }
 
 describe('live voice sentence streaming', () => {
-  it('speaks one waiting line with its own acting plan before the answer', async () => {
+  // Owner feedback 2026-10-13: the fixed line is a fallback for silence, said only when none of her words came within the delay.
+  async function waitingRun(silenceMilliseconds: number) {
     const answerPlan = {
       shouldRespond: true, affect: 'focused', affectIntensity: 0.3, delivery: 'focused',
       waitingPhrase: '空模様を確かめますね。',
       waitingPerformance: { affect: 'caring', intensity: 0.6, delivery: 'gentle' },
     };
+    const heardBeforeAnswer: boolean[] = [];
     const kernel = {
       streamLiveVoiceDelegation: async (_request: unknown, observer: {
         onPlan(plan: Record<string, unknown>): Promise<void>;
         onTextDelta(delta: string): Promise<void>;
+        waitingSaid?(): boolean;
       }) => {
         await observer.onPlan(answerPlan);
         await observer.onPlan(answerPlan);
+        await vi.advanceTimersByTimeAsync(silenceMilliseconds);
+        heardBeforeAnswer.push(observer.waitingSaid?.() === true);
         await observer.onTextDelta('答えです。');
+        await vi.advanceTimersByTimeAsync(WAITING_CUE_DELAY_MILLISECONDS * 2);
         return { status: 200, body: { threadId: 'thread', reply: '答えです。' } };
       },
     } as unknown as ShannonApiKernel;
@@ -39,13 +46,21 @@ describe('live voice sentence streaming', () => {
       write(value: string) { output += value; return true; },
       end() {},
     }) as unknown as ServerResponse;
-
-    await createLiveVoiceStreamRoute(kernel, () => true)(
-      request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal,
-    );
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await createLiveVoiceStreamRoute(kernel, () => true)(
+        request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal,
+      );
+    } finally { vi.useRealTimers(); }
     const segments = output.trim().split('\n').map(line => JSON.parse(line) as {
       type: string; text?: string; voicePlan?: Record<string, unknown>;
     }).filter(event => event.type === 'segment');
+    return { segments, heardBeforeAnswer: heardBeforeAnswer[0] };
+  }
+
+  it('speaks one waiting line with its own acting plan only after a silence before the answer', async () => {
+    const { segments, heardBeforeAnswer } = await waitingRun(WAITING_CUE_DELAY_MILLISECONDS + 100);
+    expect(heardBeforeAnswer).toBe(true);
     expect(segments.map(segment => segment.text)).toEqual(['空模様を確かめますね。', '答えです。']);
     expect(segments[0]?.voicePlan).toMatchObject({
       affect: 'caring', affectIntensity: 0.6, delivery: 'gentle',
@@ -53,6 +68,12 @@ describe('live voice sentence streaming', () => {
     expect(segments[1]?.voicePlan).toMatchObject({
       affect: 'focused', affectIntensity: 0.3, delivery: 'focused',
     });
+  });
+
+  it('says no waiting line when her own words come first', async () => {
+    const { segments, heardBeforeAnswer } = await waitingRun(WAITING_CUE_DELAY_MILLISECONDS - 500);
+    expect(heardBeforeAnswer).toBe(false);
+    expect(segments.map(segment => segment.text)).toEqual(['答えです。']);
   });
 
   it('ends a reply cut at its length limit as completed, after its last complete sentence', async () => {

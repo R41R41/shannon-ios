@@ -58,8 +58,12 @@ export const VOICE_TOOL_OUTPUT_TOKENS = 2_400;
 export const VOICE_SECOND_PHRASE_AFTER_MILLISECONDS = 15_000;
 export const VOICE_SECOND_PHRASE = 'もう少し待ってくださいね。';
 
-/** What she says in voice when a round begins a call and she has said nothing yet: a fixed phrase, in her voice. */
+/**
+ * What she says in voice when a round begins a call and she has said nothing yet: a fixed phrase, in her voice. Her own memory
+ * and skills are what she already has in mind (owner feedback 2026-10-13): a call to them gets no phrase ('').
+ */
 export function voiceWaitingPhrase(providerName: string): string {
+  if (/^(?:memory|skill)_/u.test(providerName)) return '';
   return /(?:create|update|rename|move|delete|restore)$/u.test(providerName) ? 'ちょっと書いてみますね。' : 'ちょっと見てみますね。';
 }
 

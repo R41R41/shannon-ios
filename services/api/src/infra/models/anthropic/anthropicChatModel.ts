@@ -255,14 +255,17 @@ export class AnthropicChatModel implements ShannonChatModel {
     let voiceRequests = 0;
     const speak = async (text: string) => { if (!text) return; spoken += text; if (!request.useWebSearch) await onTextDelta?.(text); };
     const echo = new VoiceWaitingEcho(); // One waiting phrase a turn: a repeated announcement after a call is not said again.
-    const waitingSaid = request.waitingSaid === true;
-    // The plan's waiting phrase was heard: an announcement she writes before her first call (or instead of one) is not said again.
-    if (waitingSaid && onTextDelta && !request.useWebSearch) echo.arm();
+    const waitingSaid = () => typeof request.waitingSaid === 'function' ? request.waitingSaid() : request.waitingSaid === true;
+    // The plan's waiting phrase was heard before her first words: an announcement she writes before her first call (or instead
+    // of one) is not said again. Decided at her first words, since the stream route says the phrase only after a silence.
+    let firstWords = true;
     const watch = watchdog(request.firstTokenBudgetMs);
     const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
     if (request.useWebSearch) bounds.firstOutputMilliseconds = Math.max(bounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS);
     const listen = onTextDelta ? (delta: string) => {
+      if (firstWords && !request.useWebSearch && waitingSaid()) echo.arm();
+      firstWords = false;
       const said = request.useWebSearch ? delta : echo.take(delta);
       return speak(said).then(() => request.useWebSearch ? '' : said);
     } : null;
@@ -278,8 +281,9 @@ export class AnthropicChatModel implements ShannonChatModel {
           watch?.first();
           if (!onTextDelta) return;
           await speak(echo.flush());
-          if (!spoken && !waitingSaid && names[0]) await speak(voiceWaitingPhrase(names[0]));
-          if (spoken || waitingSaid) echo.arm();
+          if (!spoken && !waitingSaid() && names[0]) await speak(voiceWaitingPhrase(names[0]));
+          if (spoken || waitingSaid()) echo.arm();
+          if (spoken || waitingSaid()) firstWords = false;
         },
         ...plan.rounds,
       });

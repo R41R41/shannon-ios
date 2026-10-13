@@ -143,7 +143,7 @@ Unchanged. The whole request must arrive within 30 seconds. The model call has o
 | Line | Fields | Meaning |
 | --- | --- | --- |
 | `plan` | `voicePlan` | The acting plan of the turn; it may be sent again, reconciled with the first sentence. |
-| `segment` | `text`, `voicePlan` | One complete spoken sentence (the waiting phrase is the first, with its own acting plan). |
+| `segment` | `text`, `voicePlan` | One complete spoken sentence (a waiting phrase, when one is said after 1.5 s of silence before an external lookup, is the first, with its own acting plan). |
 | `completed` | `response` | Terminal. `response` is the body of `POST /v1/voice/gemini/cascade/delegations` for this turn. |
 | `error` | `status`, optional `code` | Terminal. The reply failed. `code: "content_filter"`: the provider withheld it, and a client drops what it was saying. Without a code, sentences already said may be kept as a reply cut off (the iPhone does so from Build 137). A `502` before any line carries the same optional `code` in its JSON body. |
 

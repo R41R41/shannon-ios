@@ -82,9 +82,10 @@ export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPr
   threadKey?: string;
   /**
    * The owner already heard this turn's waiting phrase (the voice plan's `waitingPhrase`): no fixed phrase is added before a
-   * tool call, and a sentence that only announces the look again is not said. Never sent to a model.
+   * tool call, and a sentence that only announces the look again is not said. A function says it as of now (the stream route
+   * speaks the phrase only after a silence). Never sent to a model.
    */
-  waitingSaid?: true;
+  waitingSaid?: true | (() => boolean);
 }
 
 export interface ShannonWebSource {

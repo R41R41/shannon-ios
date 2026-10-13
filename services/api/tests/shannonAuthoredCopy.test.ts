@@ -60,7 +60,7 @@ describe('sentences authored as Shannon', () => {
     const source = readApiSource('voiceWaitingCue.ts');
     const phrases = [...source.matchAll(/(?:steady|warm|lively): '([^']+)'/gu)].map(match => match[1]!)
       .filter(phrase => /[ぁ-ん]/u.test(phrase));
-    expect(phrases).toHaveLength(48);
+    expect(phrases).toHaveLength(21); // External lookups only (owner feedback 2026-10-13): seven categories, three wordings each.
     for (const phrase of phrases) expect(phrase, phrase).toMatch(/(?:ます|ますね|です|ですね)。$/u);
   });
 });
