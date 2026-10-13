@@ -46,6 +46,8 @@ const NORMALIZED = new Map<string, string>();
 const NORMALIZED_KEPT = 4_096, NORMALIZED_CHARACTERS = 2_000_000;
 let normalizedCharacters = 0;
 function normalized(value: string): string {
+  // A short text is normalized faster than it is looked up and kept.
+  if (value.length < 256) return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
   const known = NORMALIZED.get(value);
   if (known !== undefined) return known;
   const result = value.normalize('NFKC').toLocaleLowerCase('ja-JP');
