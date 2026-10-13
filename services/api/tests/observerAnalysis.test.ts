@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createObserverState, reduceObserverEnvelope, spanState, effectiveObservedSpans, type ObservedSpan } from '../src/infra/observer/web/observer.js';
 import { createElapsedClock, observedTasks, taskRunView, timelineRows, timingGroups, timingSummary, streamTimingSummary } from '../src/infra/observer/web/observerAnalysis.js';
-import { NODE_SPECS, LINKS, mapLayout, routeIncludes, circuitFor } from '../src/infra/observer/web/observerMap.js';
-import { OBSERVER_NODES, type ObserverBatch, type ObserverEvent } from '../src/contracts/observerContract.js';
+import type { ObserverBatch, ObserverEvent } from '../src/contracts/observerContract.js';
 const at='2026-10-09T00:00:00.000Z';
 const span=(id:string,extra:Partial<ObservedSpan>={}):ObservedSpan=>({ id,runId:'r',node:'llm',parentSpanId:null,startedAt:at,endedAt:at,state:'completed',firstSequence:1,lastSequence:2,origin:'server',...extra });
 const event=(sequence:number,extra:Partial<ObserverEvent>={}):ObserverEvent=>({sequence,runId:'r',spanId:`s${sequence}`,parentSpanId:null,node:'fca',kind:'span.started',at,...extra});
@@ -115,21 +114,5 @@ describe('retained FCA observation analysis',()=>{
     expect(observedTasks(held)).toEqual([]);expect(timingSummary([...held.runs.values()].flatMap(run=>[...run.spans.values()])).n).toBe(0);
     const clock=createElapsedClock(),active=span('local',{endedAt:null,state:'running'});clock.observe([active],100);expect(clock.elapsed(active,350)).toBe(250);clock.clear();expect(clock.elapsed(active,350)).toBeNull();
     clock.observe([active],500);clock.observe([],600);expect(clock.elapsed(active,700)).toBeNull();
-  });
-});
-describe('detailed shared processing map',()=>{
-  it('keeps every canonical processor distinct, with complete links and stable role colours',()=>{
-    const ids=NODE_SPECS.map(spec=>spec[0]);expect(new Set(ids).size).toBe(ids.length);expect([...ids].sort()).toEqual([...OBSERVER_NODES].sort());
-    for(const [from,to] of LINKS){expect(ids).toContain(from);expect(ids).toContain(to);}
-    expect(circuitFor('jevt')).toBe('judgment');expect(circuitFor('tools')).toBe('action');expect(circuitFor('play')).toBe('output');
-  });
-  it('keeps a readable horizontal lane on narrow screens and no boxes overlap',()=>{
-    for(const width of [390,1080,1600]){
-      const layout=mapLayout(width),boxes=[...layout.boxes.values()];expect(layout.width).toBeGreaterThanOrEqual(1080);
-      for(const [index,a] of boxes.entries())for(const b of boxes.slice(index+1))expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);
-    }
-  });
-  it('dims unrelated links without manufacturing task execution or hiding tool inspection',()=>{
-    expect(routeIncludes('voice','tts','play')).toBe(true);expect(routeIncludes('voice','sleep','memory')).toBe(false);expect(routeIncludes('all','sleep','memory')).toBe(true);expect(routeIncludes('tool','tools')).toBe(true);
   });
 });

@@ -37,6 +37,18 @@ export function markModelStart(runId: string | null, clock: () => number = () =>
   if (steps && steps.model === null) steps.model = Math.max(0, clock() - steps.started);
 }
 
+/**
+ * The same closed step names and rounded milliseconds for the turn's terminal observer event, so the owner's observer can
+ * show them (Syzygy TI-REQ 2026-10-13). Read before the line is flushed; null when the turn measured no step.
+ */
+export function turnStepsSnapshot(runId: string): { steps: { [step: string]: number }; modelStartMs: number | null } | null {
+  const steps = runs.get(runId);
+  if (!steps || !steps.values.size) return null;
+  const values: { [step: string]: number } = {};
+  for (const step of TURN_STEPS) if (steps.values.has(step)) values[step] = Math.round(steps.values.get(step)!);
+  return { steps: values, modelStartMs: steps.model === null ? null : Math.round(steps.model) };
+}
+
 /** Writes the turn's line once and forgets it; nothing when the turn measured no step. */
 export function flushTurnSteps(runId: string, surface: string, totalMs: number, log: (line: string) => void = line => console.info(line)): void {
   const steps = runs.get(runId);

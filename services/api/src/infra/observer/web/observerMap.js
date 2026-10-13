@@ -1,232 +1,262 @@
-// Canonical processors remain individually inspectable; layout never creates an event.
-export const NODE_SPECS = [
-  ['pcm',0,0,'CLIENT / CONVERTER','PCM CONVERTER','マイク → 音声チャンク'],
-  ['stt',1,0,'TRANSCRIPTION / MODEL','TRANSCRIPTION','音声 → 文字起こし'],
-  ['join',2,0,'CLIENT / CONVERTER','UTTERANCE','発話結合・語彙正規化'],
-  ['perception',3,0,'API / CONVERTER','PERCEPTION','知覚 → MindEvent'],
-  ['turn',4,0,'API / RUN','TURN','実リクエストの範囲'],
-  ['jevv',5,0,'JEV / VOICE ROUTER','JEV · VOICE','既存音声の返答・能力選択'],
-  ['taskHub',0,1,'COMMON / TASK REGISTRY','TASK HUB','親子タスク・状態の記録'],
-  ['queue',1,1,'COMMON / ADMISSION','ADMISSION','実行枠・leaseの受付'],
-  ['fca',2,1,'COMMON / STEP','FCA STEP','同じエンジンで各taskを実行'],
-  ['compact',3,1,'COMMON / CONVERTER','COMPACTION','作業履歴を圧縮'],
-  ['wait',4,1,'COMMON / CHECKPOINT','WAIT STATE','待機状態の確定・待ち時間ではない'],
-  ['workspace',5,1,'MIND / PROJECTION','WORKSPACE','共有の場・実行枠の投影'],
-  ['recall',0,2,'SHARED / RETRIEVAL','RECALL','関連する記憶を想起'],
-  ['context',1,2,'SHARED / CONVERTER','CONTEXT','知覚・想起・選択を統合'],
-  ['jevt',1,3,'JEV / TOOL CHOOSER','JEV · TOOLS','道具・難易度の選択'],
-  ['native',2,2,'SHARED / CONVERTER','MODEL I/O','Messages・道具定義へ変換'],
-  ['llm',3,2,'PROVIDER / LLM','LLM','実モデル呼出・cache usage'],
-  ['decode',4,2,'SHARED / CONVERTER','REPLY DECODER','構造化回答・検証'],
-  ['gate',3,3,'SHARED / POLICY','TOOL GATE','許可・入力・実行条件'],
-  ['tools',2,3,'EXECUTOR / EXPANDABLE','TOOL ▾','道具一覧・実行結果を開く'],
-  ['store',4,3,'SHARED / STORE','RESULT STORE','会話・task結果の保存'],
-  ['emotion',5,2,'SHARED / STATE','EMOTION','感情状態の投影・更新'],
-  ['prediction',5,3,'SHARED / LEDGER','PREDICTION','観測できる予測・結果'],
-  ['agentHost',4,6,'HOST / EXTERNAL','AGENT HOST','外部作業・内部は未計測'],
-  ['sentences',0,4,'OUTPUT / CONVERTER','SENTENCE SPLIT','生成途中の文を取り出す'],
-  ['plan',1,4,'OUTPUT / CONVERTER','VOICE PLAN','感情・読み方へ投影'],
-  ['tts',2,4,'VOICE / TTS MODEL','TTS','文ごとの音声合成'],
-  ['play',3,4,'CLIENT / AUDIO','PCM PLAYBACK','enqueue・完了報告／発音開始は未計測'],
-  ['bodyObserve',0,5,'BODY / PERCEPTION','BODY OBSERVE','身体からの実観測'],
-  ['reflex',1,5,'BODY / CONTROL','REFLEX','反射処理の範囲'],
-  ['reflexJev',2,5,'JEV / REFLEX','JEV · REFLEX','反射の小モデル判断'],
-  ['reflexDecision',3,5,'BODY / CHOICE','REFLEX DECISION','Decisions / Jev → 候補選択'],
-  ['bodyControl',4,5,'BODY / ACK','BODY CONTROL','stop・execute・return応答'],
-  ['minecraft',5,5,'BODY / EXTERNAL','MINECRAFT','外部の身体・内部は未計測'],
-  ['memory',0,6,'SHARED / WRITER','MEMORY WRITER','返答後の記憶更新'],
-  ['embedding',1,6,'SHARED / MODEL','EMBEDDING','想起用のベクトル更新'],
-  ['sleep',2,6,'MAINTENANCE / WORKER','SLEEP / LEARN','共通FCAまたは既存の記憶整理'],
-  ['autonomy',3,6,'LEGACY / WORKER','OWN-TIME','既存自律活動・FCA移行は別'],
+// The owner's view of the current architecture (owner choice 2026-10-13: per-turn timeline first, zoomable layered map second).
+// View nodes are a projection of contract nodes and their observed payloads. Layout and classification never create an event.
+
+/** Blocks are processes or subsystems: [id, label, process, role]. Order is the timeline lane order. */
+export const BLOCKS = [
+  ['client', '端末で聞く', 'iPhone・Mac（端末の報告）', 'input'],
+  ['conv', '会話の経路', 'api', 'judgment'],
+  ['fca', '共通 FCA の実行', 'api・worker', 'action'],
+  ['voice', '声の出力', 'api → 端末', 'output'],
+  ['mind', '心の後処理', 'mind・worker', 'memory'],
+  ['own', '自分の時間', 'autonomy worker', 'own'],
+  ['db', '共有 SQLite', '全プロセスが読み書き', 'store'],
+  ['world', '外の体と反射', 'world・agent-host（今はまれ）', 'own'],
 ];
-export const LANES = ['INPUT / 入力・知覚', 'TASK / タスクの受付', 'FCA LOOP / 判断 ⇄ 道具', 'SHARED', 'OUTPUT / 返答・音声', 'BODY / 身体・反射', 'MEMORY / 記憶・外部経路'];
-const CIRCUITS = {
-  input:['pcm','stt','join','perception','bodyObserve'],
-  judgment:['turn','fca','jevv','jevt','context','native','llm','reflexJev','reflexDecision'],
-  action:['taskHub','queue','wait','workspace','gate','tools','autonomy','minecraft','agentHost','reflex','bodyControl'],
-  output:['decode','plan','sentences','tts','play'],
-  memory:['compact','recall','store','memory','sleep','embedding','emotion','prediction'],
-};
-export const circuitFor = node => Object.entries(CIRCUITS).find(([, nodes]) => nodes.includes(node))?.[0] ?? 'neutral';
-// Structural routes are subdued; only received explicit handoffs become receipt paths.
-export const LINKS = [
-  ['pcm','stt'],['stt','join'],['join','perception'],['perception','taskHub'],['turn','context'],['perception','jevv'],['jevv','context'],
-  ['taskHub','queue'],['queue','fca'],['fca','compact'],['compact','context'],['fca','recall'],['store','wait'],['workspace','context'],
-  ['recall','context'],['context','native'],['context','jevt'],['jevt','context'],['jevt','native'],['native','llm'],['llm','decode'],['llm','gate'],['gate','tools'],['tools','native'],
-  ['llm','store'],['tools','store'],['decode','store'],['decode','sentences'],['sentences','plan'],['plan','tts'],['tts','play'],['store','memory'],
-  ['fca','reflex'],['fca','reflexJev'],['reflexJev','fca'],['reflex','reflexJev'],['reflexJev','reflex'],['bodyObserve','reflexDecision'],['reflexDecision','bodyControl'],['reflex','fca'],['bodyControl','minecraft',true],
-  ['emotion','context',true],['prediction','memory',true],['memory','embedding',true],['embedding','recall',true],['fca','sleep',true],['tools','sleep',true],['autonomy','workspace',true],['agentHost','workspace',true],
+
+/** [id, block, col, row, label, role, contract nodes that can project here]. Display-only nodes list no contract node. */
+export const VIEW_NODES = [
+  ['pcm', 'client', 0, 0, '録音', 'マイク → 音声の塊', ['pcm']],
+  ['stt', 'client', 0, 1, '文字起こし', '声 → 文字', ['stt']],
+  ['join', 'client', 0, 2, '発話の結合', '切れた発話をつなぐ', ['join']],
+  ['sentences', 'voice', 0, 3, '文に分ける', '生成途中から文を取る', ['sentences']],
+  ['plan', 'voice', 0, 4, '声の計画', '感情・読み方へ', ['plan']],
+  ['tts', 'voice', 0, 5, '音声合成', '文ごとに声へ', ['tts']],
+  ['play', 'voice', 0, 6, '再生（端末）', '端末で鳴らす', ['play']],
+  ['admit', 'conv', 1, 0, '受付', '一回の run を開く', ['turn']],
+  ['base', 'conv', 2, 0, '記憶の土台', '状態・人・決定的文脈', ['recall']],
+  ['perception', 'conv', 3, 0, '知覚', '入力 → 心の出来事', ['perception']],
+  ['router', 'conv', 1, 1, 'Jev ルーター', '道具メニュー・難しさ', ['jevt', 'jevv']],
+  ['recall', 'conv', 2, 1, '意味で想起', '埋め込み → Jev 並べ替え', ['recall']],
+  ['identity', 'conv', 3, 1, '自己とできること', '相手と能力（段の時間）', []],
+  ['jevModel', 'conv', 1, 2, 'Jev 呼び出し', '小さなモデルの判断', ['llm']],
+  ['context', 'conv', 2, 2, '文脈を組む', '材料を一つの依頼に', ['context']],
+  ['taskHub', 'conv', 3, 2, '会話タスク', 'task 台帳（FCA と共通）', ['taskHub']],
+  ['decode', 'conv', 2, 3, '返事を読む', '構造を確かめる', ['decode']],
+  ['fcaTool', 'conv', 3, 3, 'FCA 道具選択', 'Jev が渡す道具を絞る', ['jevt']],
+  ['store', 'conv', 1, 4, '保存', '会話・結果を書く', ['store']],
+  ['native', 'conv', 2, 4, 'モデル入力', 'Messages・道具定義へ', ['native']],
+  ['haiku', 'conv', 3, 4, 'Haiku 道具ループ', '返事か道具かを決める', ['llm']],
+  ['queue', 'fca', 4, 2, '実行枠', '種類ごとの上限で受付', ['queue']],
+  ['fca', 'fca', 5, 2, 'FCA step', '同じエンジンで一歩', ['fca']],
+  ['gate', 'fca', 4, 3, '道具の関門', '許可・入力・条件', ['gate']],
+  ['compact', 'fca', 5, 3, '履歴の圧縮', '作業履歴を短く', ['compact']],
+  ['tools', 'fca', 4, 4, '道具の実行', '道具を動かす', ['tools']],
+  ['wait', 'fca', 5, 4, '待機', '待つ状態の記録', ['wait']],
+  ['memory', 'mind', 1, 5, '記憶を書く', '返事の後に更新', ['memory']],
+  ['embedding', 'mind', 2, 5, 'ベクトル化', '想起用の埋め込み', ['embedding']],
+  ['sleep', 'mind', 3, 5, '睡眠・整理', '記憶をまとめる', ['sleep']],
+  ['emotion', 'mind', 1, 6, '感情', '結果から気分へ', ['emotion']],
+  ['prediction', 'mind', 2, 6, '予測', '予測と結果', ['prediction']],
+  ['workspace', 'mind', 3, 6, '共有の場', '実行枠の投影', ['workspace']],
+  ['autonomy', 'own', 4, 5, '自分の時間', '小さな一歩ずつ', ['autonomy']],
+  ['executive', 'own', 5, 5, 'Executive', '作ってあるが停止中', []],
+  ['sqlite', 'db', 4, 6, '共有 SQLite', '会話・記憶・タスク・台帳', [], 2],
+  ['bodyObserve', 'world', 0, 7, '体の観測', '身体からの実観測', ['bodyObserve']],
+  ['reflex', 'world', 1, 7, '反射', '反射処理の範囲', ['reflex']],
+  ['reflexJev', 'world', 2, 7, '反射の判断', 'Jev の小さな判断', ['reflexJev']],
+  ['reflexDecision', 'world', 3, 7, '反射の選択', '候補から選ぶ', ['reflexDecision']],
+  ['bodyControl', 'world', 0, 8, '体の制御', 'stop・execute の応答', ['bodyControl']],
+  ['minecraft', 'world', 1, 8, 'Minecraft', '外部・中は未計測', ['minecraft']],
+  ['agentHost', 'world', 2, 8, 'Mac Agent Host', '外部・中は未計測', ['agentHost']],
 ];
-export const ROUTES = {
-  all:{label:'全体',nodes:null},
-  task:{label:'共通FCA',nodes:['perception','taskHub','queue','fca','compact','recall','context','jevt','native','llm','gate','tools','decode','wait','store']},
-  text:{label:'テキスト',nodes:['turn','perception','taskHub','queue','fca','recall','context','jevt','native','llm','decode','store']},
-  touch:{label:'触れ合い',nodes:['reflex','reflexJev','bodyControl','taskHub','fca','emotion','prediction','memory']},
-  voice:{label:'音声',nodes:['pcm','stt','join','perception','turn','jevv','taskHub','queue','fca','context','jevt','native','llm','decode','sentences','plan','tts','play']},
-  tool:{label:'道具ループ',nodes:['fca','context','jevt','native','llm','gate','tools','decode','wait']},
-  body:{label:'反射・Minecraft',nodes:['bodyObserve','reflex','reflexJev','reflexDecision','bodyControl','minecraft','taskHub','fca']},
-  memory:{label:'睡眠・記憶',nodes:['fca','sleep','memory','embedding','recall','emotion','prediction','store']},
-  legacy:{label:'既存経路',nodes:['turn','perception','jevv','jevt','context','native','llm','decode','autonomy','workspace','agentHost']},
-};
-export function routeIncludes(route, from, to) { const nodes = ROUTES[route]?.nodes; return !nodes || nodes.includes(from) && (!to || nodes.includes(to)); }
-/** Adopted compact lanes; no prototype-only empty rows. Coordinates stay on the routing grid. */
-export function mapLayout(width) {
-  const canvasWidth = Math.max(1088, Math.ceil(width / 8) * 8), margin = 32, gap = 40;
-  const nodeWidth = Math.floor((canvasWidth - margin * 2 - gap * 5) / 48) * 8, pitch = 144;
-  const boxes = new Map(NODE_SPECS.map(([id,col,row]) => [id,{x:margin+col*(nodeWidth+gap),y:40+row*pitch,w:nodeWidth,h:96,row,col}]));
-  const regions = [[0,0,6,1],[0,1,6,1],[0,2,5,2],[5,2,1,2],[0,4,6,1],[0,5,6,1],[0,6,6,1]];
-  const zones = regions.map(([col,row,columns,rows],index) => ({
-    x:margin+col*(nodeWidth+gap)-16,y:row*pitch+8,w:columns*nodeWidth+(columns-1)*gap+32,h:rows*pitch-8,label:LANES[index],
-  }));
-  return { width:canvasWidth,height:7*pitch+24,boxes,pitch,zones };
-}
 
-const CELL = 8, CLEARANCE = 8, STEM = 16;
-const DIRECTIONS = [[1,0],[0,1],[-1,0],[0,-1]];
-const NORMAL = { right:0, bottom:1, left:2, top:3 };
-const LOOP_PORTS = { 'native>llm':['right','left'], 'llm>gate':['bottom','top'], 'gate>tools':['left','right'], 'tools>native':['top','bottom'] };
-const MAIN_LINKS = new Set(['pcm>stt','stt>join','join>perception','perception>taskHub','taskHub>queue','queue>fca','fca>recall','recall>context','context>native','native>llm','llm>decode','llm>gate','gate>tools','tools>native','decode>sentences','sentences>plan','plan>tts','tts>play']);
+/** Structural routes of the current architecture: [from, to, background]. Only received handoffs move. */
+export const VIEW_LINKS = [
+  ['pcm', 'stt'], ['stt', 'join'], ['join', 'admit'], ['admit', 'base'], ['admit', 'perception'],
+  ['base', 'router'], ['base', 'recall'], ['base', 'identity'], ['router', 'context'], ['recall', 'context'], ['identity', 'context'],
+  ['router', 'jevModel', true], ['recall', 'jevModel', true], ['perception', 'context', true],
+  ['context', 'taskHub'], ['taskHub', 'fcaTool'], ['fcaTool', 'native'], ['native', 'haiku'],
+  ['haiku', 'gate'], ['gate', 'tools'], ['tools', 'haiku'], ['haiku', 'decode'], ['decode', 'store'], ['decode', 'sentences'],
+  ['sentences', 'plan'], ['plan', 'tts'], ['tts', 'play'],
+  ['taskHub', 'queue'], ['queue', 'fca'], ['fca', 'gate'], ['fca', 'compact'], ['fca', 'wait'], ['fca', 'recall', true],
+  ['store', 'memory'], ['memory', 'embedding'], ['embedding', 'recall', true], ['sleep', 'memory', true], ['emotion', 'prediction', true],
+  ['store', 'sqlite', true], ['autonomy', 'queue'], ['executive', 'autonomy', true],
+  ['bodyObserve', 'reflexDecision'], ['reflex', 'reflexJev'], ['reflexDecision', 'bodyControl'], ['bodyControl', 'minecraft'],
+];
 
-class MinHeap {
-  values = [];
-  push(value) {
-    let index = this.values.length; this.values.push(value);
-    while (index) {
-      const parent = (index - 1) >> 1;
-      if (this.values[parent].score <= value.score) break;
-      this.values[index] = this.values[parent]; index = parent;
+export const ROLES = ['input', 'judgment', 'action', 'output', 'memory', 'own', 'store'];
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** One contract node can mean different current processors; only explicit payload fields decide which. */
+export function viewNodeOf(node, input, output) {
+  const value = record(input) ? input : {}, result = record(output) ? output : {};
+  const phase = typeof value.phase === 'string' ? value.phase : typeof result.phase === 'string' ? result.phase : '';
+  switch (node) {
+    case 'turn': return 'admit';
+    case 'jevv': return 'router';
+    case 'jevt': {
+      const selector = typeof value.selector === 'string' ? value.selector : typeof result.selector === 'string' ? result.selector : '';
+      if (selector === 'fca' || phase.startsWith('fca_selection')) return 'fcaTool';
+      if (selector.startsWith('reflex')) return 'reflexJev';
+      return 'router';
     }
-    this.values[index] = value;
-  }
-  pop() {
-    const first = this.values[0], last = this.values.pop();
-    if (this.values.length) {
-      let index = 0;
-      while (index * 2 + 1 < this.values.length) {
-        let child = index * 2 + 1;
-        if (child + 1 < this.values.length && this.values[child + 1].score < this.values[child].score) child += 1;
-        if (this.values[child].score >= last.score) break;
-        this.values[index] = this.values[child]; index = child;
-      }
-      this.values[index] = last;
+    case 'llm': {
+      const provider = typeof value.provider === 'string' ? value.provider : typeof result.provider === 'string' ? result.provider : '';
+      return provider === 'jev' || provider === 'openai_decisions' ? 'jevModel' : 'haiku';
     }
-    return first;
-  }
-}
-
-function connectorSides(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  return Math.abs(dx) > Math.abs(dy) * .8 ? dx >= 0 ? ['right','left'] : ['left','right'] : dy >= 0 ? ['bottom','top'] : ['top','bottom'];
-}
-const sideLength = (box, side) => side === 'top' || side === 'bottom' ? box.w : box.h;
-function connectorPort(box, side, offset) {
-  const point = side === 'top' ? [box.x+offset,box.y] : side === 'bottom' ? [box.x+offset,box.y+box.h] : side === 'left' ? [box.x,box.y+offset] : [box.x+box.w,box.y+offset];
-  const direction = NORMAL[side], normal = DIRECTIONS[direction];
-  return { point, outside:[point[0]+normal[0]*STEM,point[1]+normal[1]*STEM], direction };
-}
-function simplify(points) {
-  const unique = points.filter((point,index) => !index || point[0] !== points[index-1][0] || point[1] !== points[index-1][1]);
-  return unique.filter((point,index) => !index || index === unique.length-1 ||
-    !((unique[index-1][0] === point[0] && point[0] === unique[index+1][0]) || (unique[index-1][1] === point[1] && point[1] === unique[index+1][1])));
-}
-export function roundedMapPath(points) {
-  let path = `M${points[0].join(' ')}`;
-  for (let index=1;index<points.length-1;index+=1) {
-    const before=points[index-1],point=points[index],after=points[index+1];
-    const incoming=Math.hypot(point[0]-before[0],point[1]-before[1]),outgoing=Math.hypot(after[0]-point[0],after[1]-point[1]);
-    const radius=Math.min(6,incoming/2,outgoing/2);
-    const a=point.map((value,axis)=>value+(before[axis]-value)*radius/incoming),b=point.map((value,axis)=>value+(after[axis]-value)*radius/outgoing);
-    path+=` L${a.join(' ')} Q${point.join(' ')} ${b.join(' ')}`;
-  }
-  return `${path} L${points.at(-1).join(' ')}`;
-}
-
-/** Deterministic orthogonal A*: node clearance, distinct ports, and penalties for bends/shared strokes.
- * Dynamic observed handoffs receive the same obstacle checks without moving existing paths.
- * reset() discards dynamic paths/port reservations while preserving the public canonical geometry.
- */
-export function createMapRouter(layout, links = LINKS) {
-  const {boxes,width,height} = layout, columns = Math.ceil(width/CELL)+1, rows = Math.ceil(height/CELL)+1;
-  const blocked = new Uint8Array(columns*rows);
-  for (const box of boxes.values()) for (let y=(box.y-CLEARANCE)/CELL;y<=(box.y+box.h+CLEARANCE)/CELL;y+=1)
-    for (let x=(box.x-CLEARANCE)/CELL;x<=(box.x+box.w+CLEARANCE)/CELL;x+=1) blocked[y*columns+x]=1;
-  let occupied = new Set(), ports = new Map(), routes = new Map();
-  const edgeKey = (a,b) => a < b ? `${a}:${b}` : `${b}:${a}`;
-  const reserve = (id,side,offset) => {
-    const key = `${id}:${side}`;
-    if (!ports.has(key)) ports.set(key,new Set()); ports.get(key).add(offset);
-    return connectorPort(boxes.get(id),side,offset);
-  };
-  const available = (id,side) => {
-    const slots=[],used=ports.get(`${id}:${side}`),length=sideLength(boxes.get(id),side);
-    for(let value=16;value<=length-16;value+=CELL) if(!used?.has(value)) slots.push(value);
-    return slots;
-  };
-  const requests = links.map(([from,to]) => ({from,to,key:`${from}>${to}`,sides:LOOP_PORTS[`${from}>${to}`]??connectorSides(boxes.get(from),boxes.get(to))}));
-  const groups = new Map();
-  for (const request of requests) for (const [id,side,field] of [[request.from,request.sides[0],'start'],[request.to,request.sides[1],'end']]) {
-    if(LOOP_PORTS[request.key]) { request[field]=reserve(id,side,Math.round(sideLength(boxes.get(id),side)/CELL/2)*CELL); continue; }
-    const key=`${id}:${side}`;if(!groups.has(key)) groups.set(key,[]);groups.get(key).push({request,field,id,side});
-  }
-  for (const list of groups.values()) {
-    const {id,side}=list[0],horizontal=side==='top'||side==='bottom',slots=available(id,side);
-    list.sort((a,b)=>{
-      const first=boxes.get(a.field==='start'?a.request.to:a.request.from),second=boxes.get(b.field==='start'?b.request.to:b.request.from);
-      return (horizontal?first.x-second.x:first.y-second.y)||a.request.key.localeCompare(b.request.key);
-    });
-    if(list.length>slots.length) throw new Error('OBSERVER_PORT_CAPACITY');
-    list.forEach((item,index)=>{const slot=slots[Math.floor((index+1)*(slots.length+1)/(list.length+1))-1];item.request[item.field]=reserve(id,side,slot);});
-  }
-
-  function search(start,end) {
-    const sx=start.outside[0]/CELL,sy=start.outside[1]/CELL,tx=end.outside[0]/CELL,ty=end.outside[1]/CELL;
-    const startCell=sy*columns+sx,targetCell=ty*columns+tx;
-    if(blocked[startCell]||blocked[targetCell]) return null;
-    const costs=new Float64Array(columns*rows*4).fill(Infinity),previous=new Int32Array(costs.length).fill(-1),heap=new MinHeap();
-    const initial=startCell*4+start.direction;costs[initial]=0;
-    heap.push({key:initial,x:sx,y:sy,direction:start.direction,cost:0,score:Math.abs(tx-sx)+Math.abs(ty-sy)});
-    let final=-1;
-    while(heap.values.length) {
-      const current=heap.pop(); if(current.cost!==costs[current.key]) continue;
-      if(current.x===tx&&current.y===ty) {final=current.key;break;}
-      for(let direction=0;direction<4;direction+=1) {
-        const x=current.x+DIRECTIONS[direction][0],y=current.y+DIRECTIONS[direction][1],cell=y*columns+x;
-        if(x<1||x>=columns-1||y<1||y>=rows-1||blocked[cell]) continue;
-        const key=cell*4+direction,edge=edgeKey(current.y*columns+current.x,cell);
-        const cost=current.cost+1+(direction===current.direction?0:3)+(occupied.has(edge)?8:0);
-        if(cost>=costs[key]) continue;
-        costs[key]=cost;previous[key]=current.key;
-        heap.push({key,x,y,direction,cost,score:cost+Math.abs(tx-x)+Math.abs(ty-y)});
-      }
+    case 'recall': {
+      const semantic = value.semantic === true || value.strategy === 'semantic' || ['task_semantic', 'decision_packet', 'start'].includes(phase);
+      if (semantic) return 'recall';
+      if (value.strategy === 'deterministic' || phase === 'task_deterministic' || Object.hasOwn(value, 'message')) return 'base';
+      return 'recall';
     }
-    if(final<0) return null;
-    const path=[];
-    for(let key=final;key>=0;key=previous[key]) {const cell=Math.floor(key/4);path.push([cell%columns*CELL,Math.floor(cell/columns)*CELL]);}
-    return path.reverse();
+    default: return VIEW_INDEX.has(node) ? node : null;
   }
-  function draw(request) {
-    const grid=search(request.start,request.end);if(!grid) return null;
-    const points=simplify([request.start.point,...grid,request.end.point]);
-    for(let index=1;index<grid.length;index+=1) occupied.add(edgeKey(grid[index-1][1]/CELL*columns+grid[index-1][0]/CELL,grid[index][1]/CELL*columns+grid[index][0]/CELL));
-    const route={points,path:roundedMapPath(points)};routes.set(request.key,route);return route;
+}
+/** A handoff names contract endpoints; its single payload classifies both ends. */
+export function viewHandoff(event) {
+  const payload = record(event.output) ? event.output : record(event.input) ? event.input : {};
+  return [viewNodeOf(event.fromNode, payload, payload), viewNodeOf(event.toNode, payload, payload)];
+}
+export const VIEW_INDEX = new Map(VIEW_NODES.map(spec => [spec[0], spec]));
+export const BLOCK_INDEX = new Map(BLOCKS.map(spec => [spec[0], spec]));
+export const roleOf = id => BLOCK_INDEX.get(VIEW_INDEX.get(id)?.[1])?.[3] ?? 'own';
+
+/* ---------- 目指す姿 (Syzygy ADR-0009) — dummy data only, never an observed event ---------- */
+export const TARGET_BLOCKS = [
+  ['trig', 'きっかけ', '時刻・目標・反応・体', 'input'],
+  ['exec', '中枢 Executive', '何をするかは一か所で決める', 'judgment'],
+  ['cat', '能力カタログ', 'すべての行動を能力として持つ', 'judgment'],
+  ['run', '実行系（一つ）', 'FCA task・リースは一層', 'action'],
+  ['learn', '学習', '証拠 → 報酬 → 価値', 'memory'],
+  ['ext', '外の体と書き場', 'world・agent・Aether', 'own'],
+  ['conv', '会話の速い道', 'api・いつも最優先', 'output'],
+  ['db', '共有 SQLite', '台帳・価値表・目標・タスク', 'store'],
+];
+/** [id, block, col, row, label, role, input fields, output fields]; fields are "意味 key=value; …" dummy values. */
+export const TARGET_NODES = [
+  ['tTime', 'trig', 0, 0, '時刻・休みの終わり', '休むと決めた時間が来た', '休み rest=40分', 'きっかけ trigger=time'],
+  ['tGoal', 'trig', 0, 1, '見直し日の目標', '見直しの日が来た', '目標 goals=2', 'きっかけ trigger=review'],
+  ['tOwner', 'trig', 0, 2, '所有者の反応', '返事・ボタン・作品', '種類 kind=reaction', '値 value=+1'],
+  ['tBody', 'trig', 0, 3, '体の観測', '在席・画面・他の人', '在席 ownerAway=true', 'きっかけ trigger=body'],
+  ['candidates', 'exec', 1, 0, '候補を出す', '目標×能力×休む・やめる', '目標 goals=3; 能力 capabilities=9', '候補 candidates=7; 手応え facts=7行'],
+  ['executive', 'exec', 2, 0, 'Executive', '一回選ぶ・理由を一行', '候補 candidates=7; 予算 budget=71%', '選択 choice=research; 理由 reason=1行'],
+  ['budget', 'exec', 3, 0, '一つの予算', '会話も自分の時間も同じ', '今日 used=29%', '残り remaining=71%'],
+  ['capCreate', 'cat', 1, 1, '創作', '物語・詩を書く', '前提 ready=true', '費用 cost=中'],
+  ['capResearch', 'cat', 2, 1, '読む・調べる', '公開の資料を読む', '前提 ready=true', '費用 cost=小'],
+  ['capAether', 'cat', 3, 1, 'Aether に書く', 'シャノン用フォルダ', '前提 ready=true', '外への作用 effect=なし'],
+  ['capNotify', 'cat', 1, 2, '知らせる', '文字・電話・知らせない', '前提 ready=待機', '外への作用 effect=所有者'],
+  ['capMc', 'cat', 2, 2, 'Minecraft', '体のセッション', '前提 ready=停止中', '枠 slot=minecraft'],
+  ['capRest', 'cat', 3, 2, '休む', '戻る時間と理由', '前提 ready=true', '費用 cost=0'],
+  ['dispatch', 'run', 1, 3, '一つの依頼', '選んだ能力を task に', '能力 capability=research', 'task taskId=t-90b'],
+  ['slots', 'run', 2, 3, '資源ごとの枠', '前面1・調査2・創作1', '種類 kind=research', '調査 research=1/2'],
+  ['fcaTask', 'run', 3, 3, 'FCA タスク', '長い作業を一歩ずつ', 'task taskId=t-90b', '一歩 steps=6; 結果 status=done'],
+  ['procedure', 'run', 1, 4, '手順', '決まった短い手順', '種類 kind=—', '結果 status=未使用'],
+  ['evidence', 'learn', 4, 0, '証拠', '完了の判定に合う観測', '完了条件 criteria=1', '一致 matched=true'],
+  ['reward', 'learn', 5, 0, '報酬 r2', '完了35・反応35・予測20・自己10', '完了 completion=1.0; 反応 owner=0.8; 予測 prediction=0.6; 自己 self=0.5', 'r2 r2=0.80'],
+  ['values', 'learn', 4, 1, '価値表', '能力ごとの期待値', '鍵 key=research', '期待値 v=0.61→0.65; 不確かさ u=0.18'],
+  ['goals', 'learn', 5, 1, '目標の一生', '立てる→進める→終える', '目標 goal=g-12', '進み progress=3/5; 次の見直し review=10/16'],
+  ['world', 'ext', 4, 2, 'Minecraft', '外の体', '操作 op=—', '応答 ack=—'],
+  ['agentHost', 'ext', 5, 2, 'Mac Agent Host', '外部作業', '作業 job=—', '結果 status=—'],
+  ['aether', 'ext', 4, 3, 'Aether', 'シャノン用フォルダ', '操作 op=write', '成否 ok=true'],
+  ['tin', 'conv', 0, 5, '発話・文字', '所有者の一言', '入口 surface=voice', '文字数 chars=14'],
+  ['prep', 'conv', 1, 5, '並列の準備', '想起・Jev・自己を同時に', '待てる上限 maximumWaitMs=350', '候補 itemCount=5; 道具 tools=4'],
+  ['haikuLow', 'conv', 2, 5, 'Haiku 低 effort', '速さ優先で返事を作る', 'effort effort=low; 回目 round=1', '最初の字 firstTokenMs=250'],
+  ['first', 'conv', 3, 5, '最初の一文', '一文目で話し始める', '字数 chars=18', '話し始め speakAtMs=760'],
+  ['tts', 'conv', 4, 5, '音声合成', '文ごとに声にする', '文 sentence=1/3', '最初の音 firstAudioMs=280'],
+  ['sqlite', 'db', 4, 4, '共有 SQLite', '台帳・価値表・目標', '書き込み writes=9', '読み出し reads=21'],
+];
+export const TARGET_LINKS = [
+  ['tTime', 'executive'], ['tGoal', 'candidates'], ['tOwner', 'executive'], ['tBody', 'executive'], ['candidates', 'executive'], ['budget', 'executive'],
+  ['executive', 'capCreate', true], ['executive', 'capResearch'], ['executive', 'capAether', true], ['executive', 'capNotify', true], ['executive', 'capMc', true], ['executive', 'capRest'],
+  ['capResearch', 'dispatch'], ['capRest', 'dispatch', true], ['dispatch', 'slots'], ['slots', 'fcaTask'], ['dispatch', 'procedure', true],
+  ['fcaTask', 'evidence'], ['fcaTask', 'aether'], ['fcaTask', 'agentHost', true], ['fcaTask', 'world', true],
+  ['evidence', 'reward'], ['tOwner', 'reward', true], ['reward', 'values'], ['reward', 'goals'], ['values', 'candidates'], ['goals', 'candidates'], ['values', 'sqlite', true],
+  ['tin', 'prep'], ['prep', 'haikuLow'], ['haikuLow', 'first'], ['first', 'tts'], ['haikuLow', 'goals', true], ['budget', 'haikuLow', true],
+];
+/** Dummy runs: [node, startMs, durationMs, inputOverride|outputOverride, steps[[label,start,duration]]]. */
+export const TARGET_RUNS = [
+  { name: '自分の時間の一回', spans: [
+    ['tTime', 0, 10], ['tGoal', 0, 30], ['candidates', 30, 140], ['budget', 170, 10], ['executive', 180, 1400],
+    ['capResearch', 1580, 20], ['dispatch', 1600, 30], ['slots', 1630, 40],
+    ['fcaTask', 1670, 24000, '', [['一歩 1', 1670, 3000], ['道具', 4670, 6000], ['一歩 2', 10670, 3000], ['道具', 13670, 8000], ['一歩 3', 21670, 4000]]],
+    ['aether', 23500, 900], ['evidence', 25670, 200], ['tOwner', 27000, 10], ['reward', 27010, 60], ['values', 27070, 60], ['goals', 27070, 80], ['sqlite', 27100, 40],
+    ['candidates', 27300, 120, '|候補 candidates=6'], ['executive', 27420, 1200, '|選択 choice=rest; 理由 reason=1行'], ['capRest', 28620, 20]] },
+  { name: '会話（速い道）', spans: [
+    ['tin', 0, 10], ['prep', 10, 340, '', [['想起', 10, 340], ['Jev', 10, 190], ['自己', 10, 20]]], ['budget', 350, 6],
+    ['haikuLow', 350, 900], ['first', 760, 40], ['tts', 800, 300], ['goals', 1300, 40, '目標 goal=あとでやる|'], ['sqlite', 1300, 30]] },
+];
+export function dummyFields(text) {
+  if (!text || text === '—') return [];
+  return text.split(';').map(part => part.trim()).filter(Boolean).map(part => {
+    const match = part.match(/^(\S+)\s+(\S+)=(.*)$/u);
+    return match ? { gloss: match[1], key: match[2], value: match[3] } : { gloss: part, key: '', value: '' };
+  });
+}
+export function mergeFields(base, override) {
+  const result = base.map(field => ({ ...field }));
+  for (const field of dummyFields(override)) { const index = result.findIndex(item => item.key === field.key); if (index >= 0) result[index] = field; else result.push(field); }
+  return result;
+}
+
+/* ---------- Geometry: one grid for both views ---------- */
+export const NODE_W = 134, NODE_H = 72, PITCH_X = 160, PITCH_Y = 116, ORIGIN_X = 28, ORIGIN_Y = 44;
+/** Blocks surround their own cells; nodes never overlap and blocks stay two pixels apart. */
+export function gridLayout(blocks, nodes) {
+  const boxes = new Map(), blockBoxes = new Map();
+  for (const [id, block, col, row, , , , span] of nodes) {
+    const wide = typeof span === 'number' ? span : 1;
+    boxes.set(id, { x: ORIGIN_X + col * PITCH_X, y: ORIGIN_Y + row * PITCH_Y, w: NODE_W + (wide - 1) * PITCH_X, h: NODE_H, col, row, block });
   }
-  const ordered=[...requests].sort((a,b)=>Number(MAIN_LINKS.has(b.key))-Number(MAIN_LINKS.has(a.key)));
-  for(const request of ordered) if(!draw(request)) throw new Error(`OBSERVER_ROUTE_UNAVAILABLE:${request.key}`);
-  const canonicalRoutes=new Map(routes),canonicalOccupied=new Set(occupied),canonicalPorts=new Map([...ports].map(([key,value])=>[key,new Set(value)]));
-  return {
-    route(from,to) {
-      const key=`${from}>${to}`;if(routes.has(key)) return routes.get(key);
-      if(!boxes.has(from)||!boxes.has(to)||from===to) return null;
-      const sides=connectorSides(boxes.get(from),boxes.get(to)),request={from,to,key},reserved=[];
-      const release=()=>{for(const [id,side,offset] of reserved) ports.get(`${id}:${side}`)?.delete(offset);};
-      for(const [id,preferred,field] of [[from,sides[0],'start'],[to,sides[1],'end']]) {
-        const candidates=[preferred,...Object.keys(NORMAL).filter(side=>side!==preferred)];
-        const side=candidates.find(value=>available(id,value).length);if(!side) {release();return null;}
-        const slots=available(id,side),offset=slots[Math.floor(slots.length/2)];
-        request[field]=reserve(id,side,offset);reserved.push([id,side,offset]);
-      }
-      const result=draw(request);if(!result) release();return result;
-    },
-    reset() { routes=new Map(canonicalRoutes);occupied=new Set(canonicalOccupied);ports=new Map([...canonicalPorts].map(([key,value])=>[key,new Set(value)])); },
-  };
+  for (const [id] of blocks) {
+    const inside = [...boxes.values()].filter(box => box.block === id);
+    if (!inside.length) continue;
+    const left = Math.min(...inside.map(box => box.x)), top = Math.min(...inside.map(box => box.y));
+    const right = Math.max(...inside.map(box => box.x + box.w)), bottom = Math.max(...inside.map(box => box.y + box.h));
+    blockBoxes.set(id, { x: left - 12, y: top - 30, w: right - left + 24, h: bottom - top + 42 });
+  }
+  const width = Math.max(...[...blockBoxes.values()].map(box => box.x + box.w)) + 16;
+  const height = Math.max(...[...blockBoxes.values()].map(box => box.y + box.h)) + 16;
+  return { width, height, boxes, blocks: blockBoxes };
+}
+export const CURRENT_LAYOUT = gridLayout(BLOCKS, VIEW_NODES);
+export const TARGET_LAYOUT = gridLayout(TARGET_BLOCKS, TARGET_NODES);
+
+/** A cubic curve leaving the facing sides of two boxes; `offset` separates a pair of opposite routes. */
+export function edgeCurve(a, b, offset = 0) {
+  const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2, dx = bx - ax, dy = by - ay;
+  // Leave through the sides that face each other; large blocks that overlap on one axis never route backwards.
+  const apartX = a.x + a.w <= b.x || b.x + b.w <= a.x, apartY = a.y + a.h <= b.y || b.y + b.h <= a.y;
+  const shared = (low1, high1, low2, high2, fallback) => { const low = Math.max(low1, low2), high = Math.min(high1, high2); return high > low ? (low + high) / 2 : fallback; };
+  if (apartX && (!apartY || Math.abs(dx) > Math.abs(dy) * 1.4)) {
+    const side = Math.sign(dx), y1 = apartY ? ay : shared(a.y, a.y + a.h, b.y, b.y + b.h, ay), y2 = apartY ? by : y1;
+    const start = [ax + side * a.w / 2, y1 + offset], end = [bx - side * b.w / 2, y2 + offset], half = (end[0] - start[0]) / 2;
+    return [start, [start[0] + half, start[1]], [end[0] - half, end[1]], end];
+  }
+  const side = Math.sign(dy) || 1, x1 = apartX ? ax : shared(a.x, a.x + a.w, b.x, b.x + b.w, ax), x2 = apartX ? bx : x1;
+  const start = [x1 + offset, ay + side * a.h / 2], end = [x2 + offset, by - side * b.h / 2], half = (end[1] - start[1]) / 2;
+  return [start, [start[0], start[1] + half], [end[0], end[1] - half], end];
+}
+export function bezierAt(points, t) {
+  const u = 1 - t;
+  return [0, 1].map(axis => u * u * u * points[0][axis] + 3 * u * u * t * points[1][axis] + 3 * u * t * t * points[2][axis] + t * t * t * points[3][axis]);
+}
+export const curvePath = points => `M${points[0].join(' ')} C${points[1].join(' ')} ${points[2].join(' ')} ${points[3].join(' ')}`;
+/** Structural routes with opposite pairs offset, so a return path never hides under its outbound path. */
+export function routeTable(layout, links) {
+  const routes = new Map(), keys = new Set(links.map(([from, to]) => `${from}>${to}`));
+  for (const [from, to, background] of links) {
+    const a = layout.boxes.get(from), b = layout.boxes.get(to);
+    if (!a || !b) continue;
+    const offset = keys.has(`${to}>${from}`) ? (from < to ? -9 : 9) : 0;
+    routes.set(`${from}>${to}`, { from, to, background: Boolean(background), points: edgeCurve(a, b, offset) });
+  }
+  return routes;
+}
+/** Block-level routes for the zoomed-out view, derived from node routes that cross a block boundary. */
+export function blockRoutes(layout, links) {
+  const pairs = new Map();
+  for (const [from, to] of links) {
+    const a = layout.boxes.get(from)?.block, b = layout.boxes.get(to)?.block;
+    if (a && b && a !== b) pairs.set(`${a}>${b}`, [a, b]);
+  }
+  const routes = new Map();
+  // Neighbouring blocks touch, so a block link is a short connector across their shared boundary (30%→70% of the centre line).
+  for (const [key, [a, b]] of pairs) {
+    const one = layout.blocks.get(a), two = layout.blocks.get(b), ax = one.x + one.w / 2, ay = one.y + one.h / 2, bx = two.x + two.w / 2, by = two.y + two.h / 2;
+    const length = Math.hypot(bx - ax, by - ay) || 1, shift = pairs.has(`${b}>${a}`) ? (a < b ? -12 : 12) : 0, nx = -(by - ay) / length * shift, ny = (bx - ax) / length * shift;
+    const at = t => [ax + (bx - ax) * t + nx, ay + (by - ay) * t + ny];
+    routes.set(key, { from: a, to: b, points: [at(.3), at(.43), at(.57), at(.7)] });
+  }
+  return routes;
 }

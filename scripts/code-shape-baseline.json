@@ -355,7 +355,7 @@
       "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicChatModel.ts": {
-      "multi-statement-line": 8,
+      "multi-statement-line": 7,
       "complex-function": 2,
       "long-line": 11
     },
@@ -395,7 +395,7 @@
     "services/api/src/infra/models/anthropic/anthropicToolBridge.ts": {
       "complex-function": 1,
       "multi-statement-line": 2,
-      "long-line": 3
+      "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicToolCapacity.ts": {
       "long-line": 1
@@ -500,7 +500,7 @@
     },
     "services/api/src/infra/observer/observerContext.ts": {
       "multi-statement-line": 17,
-      "long-line": 16
+      "long-line": 15
     },
     "services/api/src/infra/observer/observerRoutes.ts": {
       "multi-statement-line": 19,
