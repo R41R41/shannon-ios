@@ -26,15 +26,55 @@ export interface FcaReadSourcesOptions {
  */
 export function createFcaReadSources(parts: FcaReadSourcesOptions):
   (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
+  const job = readSourceJob(parts.conversations);
   return (scopeKey, sourceId, observedAt, shared) => {
     try {
       if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || sourceId.length > 240) return false;
+      if (shared) return readSourceVisible(parts, scopeKey, sourceId, observedAt, shared);
+      // Without a caller's snapshot: the state is read fresh every time, and one synchronous job shares the withholding made under
+      // that same state (2026-10-13: each of a turn's ~224 checks loaded every remembered turn again, ~3 s a turn on the VM).
+      const state = parts.state.snapshot(scopeKey);
+      return readSourceVisible(parts, scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
+    } catch { return false; }
+  };
+}
+
+/**
+ * What the checks of one synchronous job share: per scope and state (its version, update time and memory controls), one
+ * `MemoryWithholding`, so that the remembered turns are loaded once, not once per receipt. The source itself (availability,
+ * the clock, the audience) is checked on every call as before. Cleared at the end of the job (a microtask); a forget or a
+ * correction changes the state key, so no check uses a withholding from before it.
+ */
+function readSourceJob(conversations: ConversationStore) {
+  const entries = new Map<string, MemoryWithholding>();
+  let clearing = false;
+  return {
+    withholding(scopeKey: string, state: ReadSourceSnapshot['state']): MemoryWithholding {
+      const key = JSON.stringify([scopeKey, state.version, state.updatedAt, state.memoryControls]);
+      let withholding = entries.get(key);
+      if (!withholding) {
+        withholding = new MemoryWithholding(state, conversations, scopeKey);
+        entries.set(key, withholding);
+        if (!clearing) {
+          clearing = true;
+          queueMicrotask(() => {
+            entries.clear();
+            clearing = false;
+          });
+        }
+      }
+      return withholding;
+    },
+  };
+}
+
+function readSourceVisible(parts: FcaReadSourcesOptions, scopeKey: string, sourceId: string, observedAt: string, shared: ReadSourceSnapshot): boolean {
+    try {
       const match = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u.exec(sourceId);
       if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return false;
       const family = match[1]!, id = decodeURIComponent(match[2]!);
       if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
-      const state = shared?.state ?? parts.state.snapshot(scopeKey);
-      const withholding = shared?.withholding ?? new MemoryWithholding(state, parts.conversations, scopeKey);
+      const { state, withholding } = shared;
       const blocked = [sourceId, id].some(key => {
         const control = memoryControlFor(state, key);
         return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
@@ -91,7 +131,6 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
       }
       return !withholding.withholdsReply({ text, observedAt, recalledMemoryIds: [sourceId, id] });
     } catch { return false; }
-  };
 }
 
 /** Storage of an already-authorized receipt checks local forgetting/correction, not a new remote read.

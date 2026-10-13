@@ -369,10 +369,16 @@ export class ShannonApiKernel {
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, commonFca: !surface && audience.alone && Boolean(this.fcaConversation?.()), readTools: this.readTools, toolHints: this.toolHints });
+    // Her identity and what she may read this turn start before semantic recall and run beside it (both read only what the
+    // turn's first stage settled); the turn waits for each where it is used.
+    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, Boolean(fca));
+    const capabilityPending = capabilityContext instanceof Promise
+      ? textStage('capability_timeout', capabilityContext, noCapabilityContext) : capabilityContext;
+    // Awaited below; never an unhandled rejection meanwhile.
+    if (capabilityPending instanceof Promise) capabilityPending.catch(() => {});
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await textStage('recall_timeout', observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})), () => begun.deterministicContext) : begun.deterministicContext;
-    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, Boolean(fca));
-    const capability = capabilityContext instanceof Promise ? await textStage('capability_timeout', capabilityContext, noCapabilityContext) : capabilityContext;
+    const capability = capabilityPending instanceof Promise ? await capabilityPending : capabilityPending;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
     observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});

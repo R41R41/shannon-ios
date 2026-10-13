@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createFcaReadSources } from '../src/wiring/fcaReadSources.js';
 import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
@@ -118,5 +118,21 @@ describe('FCA private read receipts', () => {
     expect(fcaReadReceiptSources({ name: 'study.read', ok: true }).readSourceIds?.[0]).toContain('fca-unresolved://');
     expect(fcaReadReceiptSources({ name: 'study.read', ok: true, documents: { read: ['opaque-unknown'] } }).readSourceIds?.[0]).toContain('fca-unresolved://');
     expect(fcaReadReceiptSources({ name: 'web.search', ok: true })).toEqual({});
+  });
+  it('loads the remembered turns once for all receipts checked in one synchronous job, and still sees a forget made in it', async () => {
+    // 2026-10-13: every receipt check made its own withholding and loaded every remembered turn again (~224 per text turn, ~3 s).
+    const f = fixture(), later = '2026-10-10T00:00:00.000Z';
+    f.forget('unrelated-turn'); // A rule exists, so a withholding reads the remembered turns.
+    const loads = vi.spyOn(f.conversations, 'experienceCandidates');
+    for (let index = 0; index < 20; index += 1) expect(f.visible('owner', 'shannon-skill://skill-1', later)).toBe(true);
+    expect(loads).toHaveBeenCalledTimes(1);
+    f.forget('shannon-skill://skill-1');
+    expect(f.visible('owner', 'shannon-skill://skill-1', later)).toBe(false);
+    f.setConnected(false); // Availability is asked on every call, never kept for the job.
+    expect(f.visible('owner', 'aether-document://doc-1', later)).toBe(false);
+    await Promise.resolve();
+    loads.mockClear(); f.setConnected(true);
+    expect(f.visible('owner', 'aether-document://doc-1', later)).toBe(true);
+    expect(loads).toHaveBeenCalledTimes(1); // A new job loads them again.
   });
 });
