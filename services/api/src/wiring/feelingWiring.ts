@@ -200,7 +200,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = portFlags({ ...parts, audience });
-  const stream = parts.stream && audience ? { stream: new StreamFeeling({ events }) } : {};
+  // The stream port only with the audience layers, which hold only with the reply check (review T2: a stream reply is checked before sending).
+  const stream = parts.stream && audience ? { stream: new StreamFeeling({ events, days: closed.days.days ?? null, replyCheck: parts.check === true }) } : {};
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags, ...closed.days,
     ...stream };
   const sonnet = parts.strong?.model ?? null;

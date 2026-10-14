@@ -42,6 +42,8 @@ export class FeelingShadow {
     sourceCap?: boolean }) {}
 
   recorded(scopeKey: string, event: FeelingEvent): void {
+    // Review T3: a stream is folded by its own port per turn; folding the day again per comment would be quadratic in a flood.
+    if (event.audience === 'stream') return;
     try {
       const events = this.options.events();
       if (!events) return;
