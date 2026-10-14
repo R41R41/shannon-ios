@@ -66,6 +66,15 @@ describe('a boundary she was told', () => {
     expect(await say(port, 'ねえ', later(4), forgot, 'later')).not.toContain('[ボクの境界]');
   });
 
+  it('does not feed the touch judgment until she endorses it (owner, form 「入れない」; review L2)', async () => {
+    const told = setup(['chest']);
+    await say(told.port, '胸は嫌だって言わないとだめだよ', T0, clean(), 'told');
+    expect(feelingBody.lines(told.port, 'owner', 'owner', later(1), clean())).not.toContain('境界');
+    told.notes.turnEnded({ scopeKey: 'owner', surface: 'text', alone: true, at: later(2), userMessage: 'さっきはごめんね', reply: 'うん。', feeling: null });
+    await told.notes.flush('owner');
+    expect(feelingBody.lines(told.port, 'owner', 'owner', later(3), clean())).toContain('ボクが自分のものにした境界');
+  });
+
   it('is not read while boundary memory is off', async () => {
     const { port } = composedFeelingOff();
     await say(port, '胸は嫌だって言わないとだめだよ', T0, clean(), 'told');

@@ -130,8 +130,8 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const register = handle.register !== 'normal' ? { register: handle.register } : {};
   const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
-  // His words' closed tags only while something reads them (the fast layer; review Low).
-  const tags = handle.port.coreAffect ? utteranceTags(input.words) : [];
+  // His words' closed tags only while something reads them (the fast layer, the closed days' folds; review Low).
+  const tags = handle.port.coreAffect || handle.port.days ? utteranceTags(input.words) : [];
   const meaning = handle.decision?.meaning ? { meaning: handle.decision.meaning } : {};
   const told = handle.port.days?.toldIn(input.words);
   const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words),
@@ -399,7 +399,7 @@ export const feelingBody = Object.freeze({
   lines: (port: FeelingPort | null, scopeKey: string, audience: 'owner' | 'others', at: string, snapshot: CompanionStateSnapshot): string => {
     if (!port) return '';
     const lines = port.events.linesFor(scopeKey, touchKey(audience), at, snapshot);
-    return [lines?.ledgerLine ?? '', ...(lines?.carriedLines ?? []), lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
+    return [lines?.ledgerLine ?? '', ...(lines?.carriedTouchLines ?? []), lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
   },
   /** The owner's day as one ledger line, for her inner note's reflection ('' without a port). */
   ledgerLine: (port: FeelingPort | null, scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string =>

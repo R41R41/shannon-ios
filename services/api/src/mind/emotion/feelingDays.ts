@@ -33,7 +33,15 @@ export const FEELING_DAY_LIMITS = Object.freeze({ backfillDays: 30, retentionDay
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 /** What is carried into a turn: lines of facts for the audience's own turn, and closed numbers. */
-export interface CarriedLines { lines: readonly string[]; facts: Record<string, number | string> }
+export interface CarriedLines {
+  lines: readonly string[];
+  facts: Record<string, number | string>;
+  /**
+   * The lines a touch is judged with (owner decision, form 「入れない」; review L2): a boundary she was told and has not endorsed is not
+   * among them. Absent: the same as `lines`.
+   */
+  touchLines?: readonly string[];
+}
 
 export class FeelingDays {
   /** Per scope, the newest day known to be closed (a process scans back once, then only the day just over). */
@@ -93,8 +101,11 @@ export class FeelingDays {
       const relationship = features.relationship ? this.relationship(days, key.personKey, today) : { lines: [], facts: {} };
       const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: key.personKey === OWNER_PERSON_KEY },
         () => recallEpisodes(days, key.personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
-      const boundaries = features.boundaries ? boundaryLines(this.boundariesOf(scopeKey, key.personKey, at, snapshot, days), this.options.partWord) : '';
-      return { lines: [...relationship.lines, ...(episodes ? [episodes] : []), ...(boundaries ? [boundaries] : [])], facts: relationship.facts };
+      const found = features.boundaries ? this.boundariesOf(scopeKey, key.personKey, at, snapshot, days) : [];
+      const boundaries = boundaryLines(found, this.options.partWord);
+      const owned = boundaryLines(found.filter(item => item.origin === 'self' || item.endorsed), this.options.partWord);
+      const before = [...relationship.lines, ...(episodes ? [episodes] : [])];
+      return { lines: [...before, ...(boundaries ? [boundaries] : [])], facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])] };
     } catch (error) {
       this.report(error);
       return { lines: [], facts: {} };

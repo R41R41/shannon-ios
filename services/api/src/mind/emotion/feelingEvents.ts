@@ -38,6 +38,8 @@ export interface FeelingLines {
   facts: Record<string, number | string>;
   /** Stage 3: what is carried from the days before (the relationship line, episodes, boundaries), for this key's own audience. */
   carriedLines: readonly string[];
+  /** The carried lines a touch is judged with: without the boundaries she was told and has not endorsed (review L2). */
+  carriedTouchLines: readonly string[];
 }
 
 export interface FeelingKey {
@@ -119,7 +121,8 @@ export class FeelingEvents {
         const checked: Record<string, string> = last?.length ? { last_check: last.join('|') } : {};
         const carried = this.options.days?.carried(scopeKey, key, at, snapshot, words) ?? { lines: [], facts: {} };
         return { ledger, watch, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone), repetitionLine: repetitionLine(watch),
-          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked, ...carried.facts }, carriedLines: carried.lines };
+          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked, ...carried.facts }, carriedLines: carried.lines,
+          carriedTouchLines: carried.touchLines ?? carried.lines };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);
