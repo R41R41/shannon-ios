@@ -22,6 +22,8 @@ export interface BackgroundWorkerOptions {
   reportError?: (code: string) => void;
   /** The replay summary of the turn's thread is refreshed after its refinement; its failure never fails the job. */
   replaySummarizer?: { refreshForTurn(scopeKey: string, experienceId: string): Promise<unknown> };
+  /** The voice summary of the turn's thread, when a voice turn asked for it (`voiceHistorySummary.ts`); never fails the job. */
+  voiceSummarizer?: { refreshForTurn(scopeKey: string, experienceId: string): Promise<unknown> };
   /** Her impressions of the owner are updated after the turn's refinement; a failure never fails the job. */
   impressionUpdater?: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> };
   /** Syzygy ADR-0008 stage 3 (F5): what a turn teaches is proposed to the memory outbox (absent: written here, as it was). */
@@ -38,6 +40,7 @@ export class ShannonBackgroundWorker {
   private readonly now: () => Date;
   private readonly reportError: (code: string) => void;
   private readonly replaySummarizer: BackgroundWorkerOptions['replaySummarizer'];
+  private readonly voiceSummarizer: BackgroundWorkerOptions['voiceSummarizer'];
   private readonly impressionUpdater: BackgroundWorkerOptions['impressionUpdater'];
   private nextMaintenanceAt = 0;
   private readonly sleepScope?: string;
@@ -57,6 +60,7 @@ export class ShannonBackgroundWorker {
     this.now = options.now ?? (() => new Date());
     this.reportError = options.reportError ?? (code => console.error('Shannon worker job failed', code));
     this.replaySummarizer = options.replaySummarizer;
+    this.voiceSummarizer = options.voiceSummarizer;
     this.impressionUpdater = options.impressionUpdater;
   }
 
@@ -115,6 +119,13 @@ export class ShannonBackgroundWorker {
       );
       processed = true;
     }), () => ({ processed }));
+    // First after the refinement: the next voice turn may be seconds away, and it cuts its window only once this is written.
+    try {
+      if (this.voiceSummarizer) await observeAsync('memory', { operation: 'voice-summary' },
+        () => this.voiceSummarizer!.refreshForTurn(job.scopeKey, payload.experienceId), () => ({ completed: true }));
+    } catch (error) {
+      this.reportError(`VOICE_SUMMARY_${safeErrorCode(error)}`);
+    }
     try {
       if (this.replaySummarizer) await observeAsync('memory', { operation: 'replay-summary' },
         () => this.replaySummarizer!.refreshForTurn(job.scopeKey, payload.experienceId), () => ({ completed: true }));

@@ -6,6 +6,7 @@ import { configuredMemoryModelGateway } from './mind/recall/turnMemoryRecall.js'
 import { usableKnowledgeFor } from './mind/recall/turnKnowledgeRecall.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
+import { VoiceHistorySummarizer, createConfiguredVoiceSummaryWriter } from './mind/memory/voiceHistorySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 import { stage5InterestNightSchedule, stage5MemoryReaders, stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
@@ -32,6 +33,8 @@ const impressions = new ImpressionUpdater(store, store, store.impressionStore(),
 const replayWriter = createConfiguredReplaySummaryWriter(process.env, store);
 // Syzygy ADR-0008 stage 3 (F7): with SHANNON_STRUCTURED_COMPACTION on, the summary is the template rendered by code.
 const replaySummarizer = new ConversationReplaySummarizer(store, store, replayWriter, store, { memory, compaction: replayCompaction(process.env, store) });
+// The voice history's summary (owner decision 2026-10-14, SHANNON_VOICE_HISTORY_SUMMARY): Haiku without thinking, after a turn.
+const voiceSummarizer = new VoiceHistorySummarizer(store, store, createConfiguredVoiceSummaryWriter(process.env, store), store, { environment: process.env });
 // Syzygy ADR-0008 stage 1: after each sleep batch, the ledgers' nightly pass (expiry, delayed credit, retention); never fails the batch.
 const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values: store.valueVersions() });
 // Its own daily trigger at the sleep hour, whether or not a conversation's sleep job ran or succeeded (idempotent per day).
@@ -52,6 +55,7 @@ const worker = new ShannonBackgroundWorker(store, store, store, {
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
   // What left a thread's replay window is summarized here, after the turn's refinement, inside the shared background budget.
   replaySummarizer,
+  voiceSummarizer,
   impressionUpdater: impressions,
   memoryProposals: memory,
   // Stage 5: what a turn teaches is read against her self interests (`stage5MemoryReaders`), as before.

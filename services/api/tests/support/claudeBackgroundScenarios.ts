@@ -7,6 +7,8 @@ import { OpenAIDailyMindModel } from '../../src/mind/action/respond/dailyMind.js
 import { AnthropicAutonomyTextModel } from '../../src/mind/action/ownTime/anthropicAutonomyTextModel.js';
 import type { FcaModelInput } from '../../src/mind/action/fca/fcaPorts.js';
 import { OpenAIReplaySummaryWriter } from '../../src/mind/memory/conversationReplaySummary.js';
+import { ClaudeVoiceSummaryWriter } from '../../src/mind/memory/voiceHistorySummary.js';
+import { claudeBackground } from '../../src/infra/models/claude/claudeStructured.js';
 import { OpenAIImpressionAnalyzer } from '../../src/mind/memory/impressionUpdater.js';
 import { OpenAIPersonFactJudge } from '../../src/mind/memory/personFacts.js';
 import { OpenAIMemoryModelGateway } from '../../src/mind/recall/memoryModels.js';
@@ -111,6 +113,10 @@ const memoryGateway = (o: Options) => new OpenAIMemoryModelGateway({ apiKey: 'sy
 
 const shimScenarios: ClaudeScenario[] = [
   shim('replay-summary', '合成された要約。', o => new OpenAIReplaySummaryWriter(o).update('owner', { previousSummary: null, lines: ['ライ氏: 合成された一行'] })),
+  // The voice history's summary (owner decision 2026-10-14): Haiku without thinking, its instructions cached (a new golden).
+  shim('voice-summary', '話題: 合成された話題\n気持ち: 落ち着いていた', o => new ClaudeVoiceSummaryWriter(claudeBackground(o.model,
+    { apiKey: o.apiKey, fetcher: o.fetcher, usageStore: o.usageStore })!).write('owner', { previousSummary: '話題: 合成された前の話題',
+    lines: ['ユーザー: 合成された一行', 'シャノン: 合成された返事'] })),
   shim('replay-template', '{}', o => new OpenAIReplaySummaryWriter(o).updateTemplate('owner', { previous: null, messages: [] })),
   shim('impressions', '{"observations":[],"candidates":[]}', o => new OpenAIImpressionAnalyzer(o).analyze('owner',
     { person: '合成さん', localDate: '2026-10-12', lines: ['合成された発言'], impressions: [], maximumNew: 2 })),

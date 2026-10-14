@@ -137,6 +137,8 @@ export function auditedArguments(value: unknown): string {
  * marked notice in the third person, never in her voice and never as his request.
  */
 export const OPERATOR_NOTE_MARK = '［運用者の操作のお知らせ］';
+/** The note kind of the operator's lines in the owner's Talk (a stored note's turn id is `operator-note:<id>`). */
+export const OPERATOR_NOTE_KIND = 'operator-note';
 const TALK_NOTES = {
   request: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「${quoted}」を始めました。`,
   cancel: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が、代わりに始めた Minecraft の依頼「${quoted}」を止めました。`,
