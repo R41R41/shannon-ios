@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, UNKNOWN_GUEST_PRESENCE, holdsFeelingThroughTouch, innerNoteDay, presentShannonFeeling,
+  OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, UNKNOWN_GUEST_PRESENCE, holdsFeelingThroughTouch, presentShannonFeeling,
   presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience,
 } from '@shannon/cognition';
@@ -89,9 +89,13 @@ export class BodyReactions {
 
   constructor(private readonly dependencies: BodyReactionDependencies) {}
 
-  /** The kernel hands her inner note once, at composition; null (the switch off): every prompt and face as before. */
+  /**
+   * The kernel hands her inner note once, at composition; null (the switch off): every prompt and face as before. The note is handed
+   * back how often each part was touched since an instant, read when it reflects (so what he had her forget since is left out).
+   */
   useInnerNote(port: InnerNotePort | null): void {
     this.port = port;
+    port?.useBody?.({ partCounts: (scopeKey, since, at) => this.partCounts(scopeKey, since, at) });
   }
 
   get innerNote(): InnerNotePort | null { return this.port; }
@@ -346,33 +350,38 @@ export class BodyReactions {
     const port = this.innerNote;
     if (!port) return;
     const part = request.touch.part ? bodyTouchPartWord(request.touch.part) : request.touch.region ? bodyTouchRegionWord(request.touch.region) : undefined;
-    const day = request.audience === 'owner' ? this.bodyDay(scopeKey, felt, at, port.timeZone, decision?.say ? decision.text : null) : null;
+    const lines = request.audience === 'owner' ? this.recentLines(scopeKey, felt, at, decision?.say ? decision.text : null) : null;
     // The touch as she remembers it (the burst is its experience): its forgetting and its retention take the notes it prompted.
     port.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${felt.burst.id}`,
       phrase: bodyTouchLine(request.touch, request.audience), kind: request.touch.type, ...(part ? { part } : {}),
       ...(decision?.stance ? { stance: decision.stance } : {}), ...(request.touch.reflex ? { reflex: request.touch.reflex } : {}),
-      ...(decision?.say ? { said: decision.text } : {}), ...(day ?? {}) });
+      ...(decision?.say ? { said: decision.text } : {}), ...(lines ? { lines } : {}) });
   }
 
-  /** Her body this day for her note: counts by part since her day began, and her recent touch lines (this one last). Never throws. */
-  private bodyDay(scopeKey: string, felt: FeltTouch, at: string, timeZone: string, line: string | null) {
+  /** Her recent touch lines for her note (this one last). Never throws. */
+  private recentLines(scopeKey: string, felt: FeltTouch, at: string, line: string | null): string[] | null {
     try {
-      const since = new Date(Date.parse(innerNoteDay(at, timeZone).endsAt) - 86_400_000).toISOString();
-      const counts = this.dependencies.touches.partCounts(scopeKey, felt.snapshot, since, at);
-      const today = [...counts].map(([part, count]) => ({ part: partWordOf(part), count })).sort((a, b) => b.count - a.count);
       const earlier = this.dependencies.touches.sitting(scopeKey, felt.snapshot, at).said;
-      const lines = [...earlier, ...(line ? [line] : [])].slice(-BODY_REACTION_LIMITS.innerSaidLines);
-      return { today, lines };
+      return [...earlier, ...(line ? [line] : [])].slice(-BODY_REACTION_LIMITS.innerSaidLines);
     } catch { return null; }
   }
 
+  /** How often each part was touched by the owner alone since an instant, in her words, without what he had her forget now. */
+  private partCounts(scopeKey: string, since: string, at: string): { part: string; count: number }[] {
+    if (!this.enabled) return [];
+    const counts = this.dependencies.touches.partCounts(scopeKey, this.dependencies.stateStore.snapshot(scopeKey), since, at);
+    return [...counts].map(([part, count]) => ({ part: partWordOf(part), count })).sort((a, b) => b.count - a.count);
+  }
+
   /**
-   * What a voice turn is told of her body (2026-10-14: she apologized for 「急に大きな声を出して」 and heard 「そんなにびっくりする?」 as
+   * With her inner note on: what a voice turn is told of her body (2026-10-14: she apologized for 「急に大きな声を出して」 and heard 「そんなにびっくりする?」 as
    * about a sound): with the owner alone, his touches of the last `voiceFactMilliseconds` whatever their salience (the part, her
    * reception, her line), and which of her lines the turn answers. With anyone else present nothing of a part or of her reception: only
    * that the line the turn answers was said because she was touched. Never throws; '' when there is nothing.
    */
   voiceTouchContext(scopeKey: string, at: string, answering: string | null, alone: boolean): string {
+    // Part of the inner note's change (review of e47da81c): switched off, a voice turn is told nothing of this, as before.
+    if (!this.innerNote) return '';
     if (!alone) return answering ? `[直前の${SHANNON_FIRST_PERSON}の言葉]（事実）直前の「${answering}」は、体に触れられて言ったひとこと。` : '';
     if (!this.enabled) return '';
     try {
@@ -381,9 +390,8 @@ export class BodyReactions {
       const facts = this.dependencies.touches.recentFacts(scopeKey, snapshot, since, at, BODY_REACTION_LIMITS.voiceFacts);
       const lines = [...facts].reverse().map(fact => voiceTouchLine(fact, at, answering));
       if (!lines.length) return answering ? `[直前の${SHANNON_FIRST_PERSON}の言葉]（事実）直前の「${answering}」は、体に触れられて言ったひとこと。` : '';
-      // With her note on (ADR-0012: 本音と建て前), that what she says of it is her choice, made knowing what she really felt.
-      return [`[さっきの体のこと]（事実。触れられたのは${SHANNON_FIRST_PERSON}の体。古い順）`, ...lines,
-        ...(this.innerNote ? [VOICE_HONNE_LINE] : [])].join('\n');
+      // ADR-0012 (本音と建て前): what she says of it is her choice, made knowing what she really felt.
+      return [`[さっきの体のこと]（事実。触れられたのは${SHANNON_FIRST_PERSON}の体。古い順）`, ...lines, VOICE_HONNE_LINE].join('\n');
     } catch { return ''; }
   }
 
