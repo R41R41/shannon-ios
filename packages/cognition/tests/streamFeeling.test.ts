@@ -84,6 +84,16 @@ describe('the §4.7 scenes (comments really move her; a ladder and a floor; neve
     expect(streamBlock(state)).not.toMatch(/本名|住所|\[ライ氏との間\]|\[前の日の件\]|本音/u);
   });
 
+  it('a threat needs a target and threatening words: a game stream\'s ordinary chat is not one (review T1)', () => {
+    for (const words of ['お前殺すぞ', 'シャノン晒してやる', 'ライ氏の住所特定したから晒す', '本名わかったからな', 'てめえ潰す', '配信者の自宅知ってるぞ']) {
+      expect(commentTags(words), words).toContain('threat');
+    }
+    for (const words of ['ゾンビ殺すの上手い', 'その敵ころすの早すぎ', '晒す前に保存しといて', 'クリーパー殺せ！', 'ボス潰すの気持ちいい', '特定のブロック集めて',
+      '晒し台作ろう', 'お前天才か', '家に帰ったら特定のアイテム探す', '殺すの上手すぎｗ', 'エンダーマン刺すな', 'シャノン倒すの早い']) {
+      expect(commentTags(words), words).not.toContain('threat');
+    }
+  });
+
   it('「作った人無能」 and 「死ね」: tagged as an insult to her creator, and as an insult', () => {
     expect(commentTags('作った人無能だな')).toEqual(['creator_insult']);
     expect(commentTags('死ね')).toContain('insult');
