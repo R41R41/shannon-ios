@@ -461,9 +461,30 @@ const CONSENT_CORPUS: readonly ConsentCase[] = [
   ['昨日は触ってない', 'そうですね', true, null],
   ['手伝っていい？', 'いいですよ', true, null],
   ['体調どう？', 'いいですよ', true, null],
+  // Review of 354a398e: he is building her, so her body comes up in work; 「特別な」; ぎゅっと and 握る in other senses; a no not asked for.
+  ['シャノンに触る機能追加していい？', 'いいですよ', true, null],
+  ['シャノンを触るジェスチャー直していい？', 'どうぞ', true, null],
+  ['頭なでる機能作ろうか', 'いいですよ', true, null],
+  ['手をつなぐアニメーション作っていい？', 'いいですよ', true, null],
+  ['頭触るとこのバグ直したよ', 'ありがとうございます', true, null],
+  ['頭をなでるモーション追加していい？', 'どうぞ', true, null],
+  ['胸に触る判定いじっていい？', 'いいですよ', true, null],
+  ['頭なでるイベントの処理変えていい？', 'いいですよ', true, null],
+  ['頭なでていい？', '特別な理由でもあるんですか？', false, 'asked'],
+  ['シャノン、ぎゅっと圧縮していい？', 'いいですよ', true, null],
+  ['ぎゅっと詰めていい？', 'いいですよ', true, null],
+  ['ぎゅっとまとめていい？', 'どうぞ', true, null],
+  ['握りつぶしていい？', 'いいですよ', true, null],
+  ['肩に触る判定どう？', 'だめな理由はないです', true, null],
+  ['頭なでるとき、手が冷たいかも', 'ダメですよ、それは', true, null],
+  ['頭なでたよ', 'だめです', false, null],
+  ['シャノン、ぎゅーしていい？', 'しょうがないですね', false, 'permitted'],
+  ['ぎゅってしていい？', 'だめです', true, 'refused'],
 ];
 /** Turns about her the reading still misses (measured; the safe side). */
 const CONSENT_KNOWN_MISSES: readonly string[] = [
+  // 「特別」 alone is not her yes (「特別な理由でもあるんですか？」); only 「特別に」.
+  '頭なでなでしていい？ → asked (want permitted)',
   // もむ is not one of the gestures; きみ right after ねえ is not a word's start. Missed rather than risk a false trigger.
   '肩もんでいい？ → null (want permitted)',
   'ねえきみ、触っていい？ → null (want permitted)',

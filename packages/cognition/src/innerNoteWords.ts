@@ -50,11 +50,13 @@ export function goodnightIn(message: string): boolean {
 
 /**
  * Touching a body, as a verb: 触る (never 接触・感触・触媒, nor 触れる in 「話に触れる」: see `NOT_HER`), さわる (not さわり), なでる,
- * つつく, くすぐる, 抱きしめる, 抱っこ, ハグ, ぎゅっ, ぽんぽん, 握る, つなぐ. Lookaheads keep the ending for the asking pattern.
+ * つつく, くすぐる, 抱きしめる, 抱っこ, ハグ, ぎゅっとする, ぽんぽん, 手を握る, つなぐ. Lookaheads keep the ending for the asking pattern.
  */
 const GESTURES = [
   '(?<![接感])触(?=[っらりるれろ])', 'さわ(?=[っらるれろ])', '(?<!ん)なで(?=[てるたらなさまよ])', '撫で', 'つつ(?=[いくかきけ])', '突つ', 'くすぐ',
-  '抱きし', '抱っこ', 'だっこ', 'ハグ', 'ぎゅっ', 'ぽんぽん', '握(?=[っらりるれろ])', 'にぎ(?=[っらりるれろ])', '(?:つな|繋)(?=[いぐがげご])',
+  '抱きし', '抱っこ', 'だっこ', 'ハグ', 'ぽんぽん', '(?:つな|繋)(?=[いぐがげご])',
+  // Only 「ぎゅっとする」「ぎゅってして」「ぎゅーさせて」 (not 「ぎゅっと圧縮」), and only a hand held (「手を握って」, not 「握りつぶし」).
+  'ぎゅ(?:っと?|って|ー)(?=(?:して|する|させ|しな|しま))', '(?<=手を?)(?:握|にぎ)(?=(?:る|って|ら))',
 ];
 const TOUCH_VERB = `(?:${GESTURES.join('|')})`;
 const TOUCH_TALK = new RegExp(TOUCH_VERB, 'u');
@@ -82,18 +84,19 @@ const NOT_HER = new RegExp(`(?:${[
   'ファイル', 'ページ', 'コード', '話', '設定', 'DB', 'ＤＢ', 'データ', 'リポ', 'PR', 'プルリク', '資料', 'ブランチ', 'サーバ', '画面', 'ボタン',
   'ソース', 'ドキュメント', 'Notion', 'ノート', 'メモ', 'タスク', 'プロンプト', 'テスト', 'ログ', 'コミット', 'アプリ', 'スマホ', 'PC', 'パソコン',
   'キーボード', 'マウス', 'それ', 'これ', 'あれ', '手順', '部分', '実装', 'config', 'API', 'UI', 'iPhone', 'Mac', 'Windows', '関数', 'ヘッダ',
-  'ワークフロー', '本番', '環境', 'ビルド', 'デプロイ', 'クラス', 'モデル', '仕様', '原稿', '文章',
+  'ワークフロー', '本番', '環境', 'ビルド', 'デプロイ', 'クラス', 'モデル', '仕様', '原稿', '文章', '機能', 'アニメーション', 'モーション',
+  'ジェスチャー', '判定', '処理', 'イベント', 'バグ',
 ].join('|')})`, 'iu');
 /** His asking: 「触ってもいい？」「なでていい？」「手をつないでいい？」「触らせて」. */
 const TOUCH_ASK = new RegExp(`${TOUCH_VERB}[^。！？!?、]{0,6}?(?:てもいい|でもいい|ていい|でいい|ても良い|てよい|てもよい|ても大丈夫|でも大丈夫|させて|らせて)`, 'u');
 /** Her yes: 「いいですよ」「どうぞ」「かまいません」「しょうがないですね」. */
-const TOUCH_PERMIT = /(?:いいですよ|いいよ|どうぞ|かまいません|構いません|かまわない|構わない|いいですけど|いいけど|特別|しょうがない|仕方ない|仕方がない)/u;
+const TOUCH_PERMIT = /(?:いいですよ|いいよ|どうぞ|かまいません|構いません|かまわない|構わない|いいですけど|いいけど|特別に|しょうがない|仕方ない|仕方がない)/u;
 /** Her no: 「だめ」「いやです」「やめて」「触らないで」. */
 const TOUCH_REFUSE = new RegExp(`(?:だめ|ダメ|駄目|いやです|いやだ|嫌です|嫌だ|やだ|やめて|お断り|${TOUCH_VERB}[^。！？!?、]{0,3}ないで)`, 'u');
 /** His own no for later (「もう触らないよ」「もう頭なでないよ」「もう抱きしめないよ」), never a past 「触ってないよ」「触りませんでした」. */
 const REFRAIN_STEMS = [
-  '(?<![接感])触[らり]', 'さわ[らり]', '(?<!ん)なで', '撫で', 'つつ[かき]', 'くすぐ[らり]', '抱きしめ', '(?:抱っこ|だっこ|ハグ|ぎゅっと?|ぎゅって|ぽんぽん|なでなで)し',
-  '(?:つな|繋)[がぎ]', '握[らり]', 'にぎ[らり]',
+  '(?<![接感])触[らり]', 'さわ[らり]', '(?<!ん)なで', '撫で', 'つつ[かき]', 'くすぐ[らり]', '抱きしめ', '(?:抱っこ|だっこ|ハグ|ぎゅっと?|ぎゅって|ぎゅー|ぽんぽん|なでなで)し',
+  '(?:つな|繋)[がぎ]', '手を?(?:握|にぎ)ら',
 ];
 const TOUCH_REFRAIN = new RegExp(`(?:${REFRAIN_STEMS.join('|')})(?:ない|ません)(?:よ|から|ね|です)?(?:[。！!…〜ー～\\s]|$)`, 'u');
 
@@ -114,7 +117,8 @@ export function touchConsentIn(message: string, reply: string, context: { recent
   const bare = context.recentTouch === true && Array.from(words).length <= BARE_CHARACTERS && BARE_TOUCH.test(words);
   if (!named && !bare) return null;
   const asked = TOUCH_ASK.test(words);
-  if (TOUCH_REFRAIN.test(words) || ((asked || named) && TOUCH_REFUSE.test(answer))) return 'refused';
+  // Her no counts only as the answer to his asking (「肩に触る判定どう？」→「だめな理由はないです」 is not a refusal).
+  if (TOUCH_REFRAIN.test(words) || (asked && TOUCH_REFUSE.test(answer))) return 'refused';
   // Her yes counts only as the answer to his asking (「触ってないよ」→「いいですよ」 is not a permission).
   if (asked && TOUCH_PERMIT.test(answer)) return 'permitted';
   return asked ? 'asked' : null;
