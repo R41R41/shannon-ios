@@ -107,7 +107,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
     ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
-    days: feelingDayFeatures(environment) });
+    days: feelingDayFeatures(environment), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE') });
 }
 
 /**
@@ -137,8 +137,8 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
 
 /** The port's stage-2 flags: each only with what it reads (the shadow, the turn). */
 function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: FeelingSentenceWriter; narrator?: boolean; textRegister?: boolean; turn: boolean;
-  meaning?: boolean }) {
-  return { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
+  meaning?: boolean; audience?: boolean }) {
+  return { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}), ...(parts.audience ? { audience: true } : {}),
     ...(parts.meaning && parts.shadow && parts.turn ? { meaning: true } : {}),
     ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}), ...(parts.narrator && parts.shadow ? { narrator: true } : {}),
     ...(parts.textRegister && parts.turn ? { textRegister: true } : {}) };
@@ -177,15 +177,18 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
   shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot };
   /** Stage 3: what is carried across days (the closed-day table opens only when one of them is on). */
-  days?: FeelingDayFeatures }): ConfiguredFeeling {
+  days?: FeelingDayFeatures;
+  /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): keys by who wrote, light ledgers, audience layers, the source cap and the audience checks. */
+  audience?: boolean }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
   const seed = parts.seed ? { seed: parts.seed } : {};
   const shadowStore = parts.shadow ? new SQLiteFeelingShadowStore(parts.shadow.database) : null;
   let events: FeelingEvents | null = null;
   const shadow = shadowStore && parts.shadow
-    ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now }) : null;
+    ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now, sourceCap: parts.audience === true })
+    : null;
   const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
-  const closed = closedDays(parts, store);
+  const closed = closedDays({ ...parts, ...(parts.days ? { days: { ...parts.days, audience: parts.audience === true } } : {}) }, store);
   events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;

@@ -46,6 +46,8 @@ export interface FeelingKey {
   personKey: string;
   audience: FeelingAudience;
   sceneId: string | null;
+  /** How sure it is who this is (§4.1); absent: registered for the owner, unknown for anyone else. */
+  identity?: FeelingEvent['identity'];
 }
 
 export const FEELING_EVENT_LIMITS = Object.freeze({
@@ -57,6 +59,8 @@ export const FEELING_EVENT_LIMITS = Object.freeze({
   strongInFlightMilliseconds: 5 * 60_000,
   /** A voice turn is stored within this of its answer. */
   presentedFreshMilliseconds: 10 * 60_000,
+  /** A touch with others present this soon after a turn of a call with others is that call's (stage 4). */
+  sceneFreshMilliseconds: 10 * 60_000,
 });
 
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
@@ -67,6 +71,8 @@ export class FeelingEvents {
   private readonly checks = new Map<string, { flags: readonly string[]; rewritten: boolean }>();
   /** Strong replies decided and not yet recorded, per scope and day, by when (a turn in flight counts; an abandoned one expires). */
   private readonly strongInFlight = new Map<string, number[]>();
+  /** Stage 4: the call with others a scope is in, and when it was last heard (a touch with others then is that call's). */
+  private readonly scenes = new Map<string, { sceneId: string; at: number }>();
   /** The presentation id a voice turn answered with, per scope, until its turn is stored (review P2-3). */
   private readonly presented = new Map<string, { id: string; utteranceId: string | null; at: number }>();
 
@@ -189,6 +195,19 @@ export class FeelingEvents {
     const key = `${scopeKey}\u0000${innerNoteDay(at, this.options.timeZone).dayKey}`;
     const pending = this.strongInFlight.get(key) ?? [];
     if (pending.length <= 1) this.strongInFlight.delete(key); else this.strongInFlight.set(key, pending.slice(1));
+  }
+
+  /** A turn of a call with others was heard (stage 4). */
+  noteScene(scopeKey: string, sceneId: string, at: string): void {
+    if (this.scenes.size >= 64) this.scenes.clear();
+    this.scenes.set(scopeKey, { sceneId, at: Date.parse(at) });
+  }
+
+  /** The call with others heard within `sceneFreshMilliseconds` of an instant, or null. */
+  activeScene(scopeKey: string, at: string): string | null {
+    const scene = this.scenes.get(scopeKey);
+    const since = scene ? Date.parse(at) - scene.at : Number.NaN;
+    return scene && since >= 0 && since <= FEELING_EVENT_LIMITS.sceneFreshMilliseconds ? scene.sceneId : null;
   }
 
   /** A voice turn answered with this presentation id (the stored turn keeps the same id). */
