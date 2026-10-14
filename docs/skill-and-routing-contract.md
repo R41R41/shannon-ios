@@ -131,7 +131,8 @@ The rule (`mind/action/respond/textTurnThinking.ts`, decided beside the tier in 
 
 | The turn | Thinking |
 | --- | --- |
-| **Research**: a web search asked (`webSearch`) or chosen by Jev, the required web read, a place search, admitted research work, an attachment | as before (adaptive) |
+| **Research**: a web search asked (`webSearch`) or chosen by Jev (its `web_search` entry, also when it becomes the required web read rather than `useWebSearch`), a place search, admitted research work, an attachment | as before (adaptive) |
+| **A retry or correction**: Jev's `retry_or_correction` is a confident yes (p ≥ 0.9): he redoes or corrects her last reply (review of 2b57e76d) | as before |
 | **Hard**: the policy served `luna_plus` or `sonnet`, or decided by Jev's confident `needs_strong_model`, luna's learned weakness (its `explore` turn included) or `multi_step` | as before |
 | **Light**: the policy's small talk (`jev_only`: kind `chat`, and strong, verification and several steps all a confident no) **and** no tool asked for (`sessionAsksForTools`: after Jev's menu or the FCA selector nothing is shown beyond `tool_open` and the always-loaded tools; a session nothing narrowed counts as asking) | none |
 | **Read aloud**: the request says `readAloud: true` (the client reads the reply aloud; the Windows body while 「話しかける」 is on) and the turn is neither hard nor research, whatever Jev's kind, a turn Jev could not route included (as voice) | none |

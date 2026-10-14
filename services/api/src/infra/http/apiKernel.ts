@@ -410,7 +410,7 @@ export class ShannonApiKernel {
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId, ...textTurnClock(occurredAt),
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...textTurnThinking({ tier, tools: toolOffer.tools, readAloud: body.readAloud, research: [work, placeSkill, placeOptions.placeSearch, attachments.length, body.webSearch, settled?.web] }),
+      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...textTurnThinking({ tier, tools: toolOffer.tools, readAloud: body.readAloud, answer: settled?.answer, research: [work, placeSkill, placeOptions.placeSearch, attachments.length, body.webSearch, settled?.web] }),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier), richBlocks: !surface,
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),

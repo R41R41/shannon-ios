@@ -1,7 +1,8 @@
+import { jevBand } from '@shannon/learning';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import type { ShannonModelToolSession } from '../../../infra/models/chatModelTools.js';
-import { sessionAsksForTools } from '../../tools/toolsPorts.js';
+import { sessionAsksForTools, WEB_CAPABILITY_ENTRY, type TurnChoiceAnswer } from '../../tools/toolsPorts.js';
 import type { RoutedTier } from './turnRouting.js';
 
 /**
@@ -15,7 +16,10 @@ import type { RoutedTier } from './turnRouting.js';
  * Decided from signals the turn already has, nothing new is asked:
  * - **hard** keeps thinking: the tier policy served `luna_plus` or `sonnet`, or chose by Jev's confident `needs_strong_model`,
  *   luna's learned weakness (its exploration included) or `multi_step` (`decideTier`);
- * - **research** keeps thinking: a web search or the required web read, a place search, admitted research work, an attachment;
+ * - **research** keeps thinking: a web search asked or Jev's `web_search` choice (the required web read included, review of
+ *   2b57e76d), a place search, admitted research work, an attachment;
+ * - **a retry or correction** keeps thinking: Jev's `retry_or_correction` is a confident yes (p ≥ 0.9, the band's `yes`): the
+ *   owner redoes or corrects her last reply, which deserves care (review of 2b57e76d);
  * - **light** skips it: the tier policy's small talk (`jev_only`: the kind is chat and strong, verification and several steps
  *   are all a confident no) and no tool asked for (`sessionAsksForTools`: nothing beyond the always-loaded ones);
  * - **read aloud** skips it: the client says it will read the reply aloud (`readAloud`, the Windows body while 「話しかける」
@@ -33,6 +37,8 @@ export interface TextThinkingTurn {
   readAloud: unknown;
   /** The turn's research signals (web search asked or chosen, a place search, admitted work, an attachment): any truthy one is research. */
   research: readonly unknown[];
+  /** Jev's answer of the turn (`settleTextTools`): its `web_search` choice is research, a confident retry or correction keeps thinking. */
+  answer?: Pick<TurnChoiceAnswer, 'menu' | 'retry'> | null;
 }
 
 type SwitchEnvironment = Readonly<Record<string, string | undefined>>;
@@ -40,11 +46,18 @@ const HARD_REASONS: readonly string[] = Object.freeze(['strong', 'luna_weak', 'e
 
 /** Why the turn answers without thinking, or null when it thinks as configured. Pure; the switch is read by `textTurnThinking`. */
 export function textThinkingCase(turn: TextThinkingTurn): TextThinkingCase | null {
-  if (turn.research.some(Boolean)) return null;
+  if (turn.research.some(Boolean) || jevAsksForCare(turn.answer)) return null;
   const tier = turn.tier;
   if (tier && (tier.served !== 'luna' || HARD_REASONS.includes(tier.reason))) return null;
   if (tier?.tier === 'jev_only' && !sessionAsksForTools(turn.tools)) return 'light';
   return turn.readAloud === true ? 'read_aloud' : null;
+}
+
+/** Jev chose the web (research), or is confident the owner retries or corrects her last reply. */
+function jevAsksForCare(answer: TextThinkingTurn['answer']): boolean {
+  if (!answer) return false;
+  const web = answer.menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true;
+  return web || (typeof answer.retry === 'number' && jevBand(answer.retry) === 'yes');
 }
 
 /** The request field of the turn: `skipThinking` when it answers without thinking; nothing otherwise (the request as it was). */

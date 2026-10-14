@@ -75,6 +75,17 @@ describe('the rule', () => {
     expect(textThinkingCase({ tier: SMALL_TALK, tools: undefined, readAloud: undefined, research: [null, undefined, 0, false] })).toBe('light');
   });
 
+  it('keeps thinking when Jev chose the web or is sure he retries or corrects her, read aloud or not (review of 2b57e76d)', () => {
+    for (const readAloud of [undefined, true]) {
+      expect(textThinkingCase({ tier: SMALL_TALK, tools: undefined, readAloud, research: [], answer: { menu: { chosen: ['web_search'] } } })).toBeNull();
+      expect(textThinkingCase({ tier: tier({}), tools: undefined, readAloud, research: [], answer: { menu: null, retry: 0.95 } })).toBeNull();
+      expect(textThinkingCase({ tier: SMALL_TALK, tools: undefined, readAloud, research: [], answer: { menu: null, retry: 0.9 } })).toBeNull();
+    }
+    // Jev not sure, or sure he did not: nothing changes.
+    expect(textThinkingCase({ tier: SMALL_TALK, tools: undefined, readAloud: undefined, research: [], answer: { menu: { chosen: [] }, retry: 0.5 } })).toBe('light');
+    expect(textThinkingCase({ tier: tier({}), tools: undefined, readAloud: true, research: [], answer: { menu: null, retry: 0.05 } })).toBe('read_aloud');
+  });
+
   it('is on by default and off with the switch', () => {
     const light = { tier: SMALL_TALK, tools: undefined, readAloud: true, research: [] };
     expect(textTurnThinking(light, {})).toEqual({ skipThinking: true });
@@ -127,14 +138,14 @@ class RecordingModel implements ShannonChatModel {
   async generate(request: ShannonChatModelRequest) { this.all.push(request); return { mode: this.mode, model: this.model, reply: 'うん、聞いてるよ。' }; }
 }
 
-function kernel(answers: Partial<DifficultyAnswers>) {
+function kernel(answers: Partial<DifficultyAnswers>, choice: { chosen?: string[]; retry?: number | null } = {}) {
   const now = () => '2026-10-14T00:00:00.000Z';
   const path = join(directory, `turn-${files += 1}.sqlite`);
   const store = new SQLiteShannonStore({ path, now, predictionLedger: true, choiceLedger: true, cognitionDefer: task => task(), predictionShadowDefer: task => task() });
   const database = new DatabaseSync(path);
   const routing = configuredTurnRouting({}, { databasePath: null, database, choices: store.choiceLedger(), defer: task => task() })!;
-  const chooser: TurnChooser = { difficulty: true, choose: async () => ({ menu: { chosen: [] },
-    difficulty: { taskKind: 'chat', needsStrongModel: 0.02, needsVerification: 0.02, multiStep: 0.02, ...answers }, retry: null }) };
+  const chooser: TurnChooser = { difficulty: true, choose: async () => ({ menu: { chosen: choice.chosen ?? [] },
+    difficulty: { taskKind: 'chat', needsStrongModel: 0.02, needsVerification: 0.02, multiStep: 0.02, ...answers }, retry: choice.retry ?? null }) };
   const model = new RecordingModel();
   const api = createLocalApiKernel(now, { chatModel: model, autonomy: createInMemoryAutonomyService(now), turnChooser: chooser, turnRouting: routing.routing });
   const turn = async (body: Record<string, unknown> = {}) => {
@@ -167,6 +178,22 @@ describe('a text turn through the kernel', () => {
     expect((await k.turn({ readAloud: false })).request).not.toHaveProperty('skipThinking');
     expect((await k.turn({ readAloud: 'yes' })).status).toBe(400);
     k.close();
+  });
+
+  it('keeps thinking for a read-aloud turn in which Jev chose the web search, and for a correction (review of 2b57e76d)', async () => {
+    const web = kernel({ taskKind: 'lookup', needsStrongModel: 0.5 }, { chosen: ['web_search'] });
+    expect((await web.turn({ readAloud: true })).request).not.toHaveProperty('skipThinking');
+    web.close();
+    for (const answers of [{}, { taskKind: 'analysis' as const, needsStrongModel: 0.5 }]) {
+      const correction = kernel(answers, { retry: 0.95 });
+      expect((await correction.turn()).request).not.toHaveProperty('skipThinking');
+      expect((await correction.turn({ readAloud: true })).request).not.toHaveProperty('skipThinking');
+      correction.close();
+    }
+    // A light chat with Jev sure he moved on still answers without thinking.
+    const light = kernel({}, { retry: 0.05 });
+    expect((await light.turn()).request).toMatchObject({ skipThinking: true });
+    light.close();
   });
 
   it('keeps every turn as it was with the switch off', async () => {
