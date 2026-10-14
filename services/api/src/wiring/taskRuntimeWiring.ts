@@ -186,7 +186,9 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     });
     if (!waited || runtime.get(scopeKey, step.taskId)?.phase !== 'executing') return false;
     try {
-      return runtime.commitStep(step, { disposition: 'continue', history: [], checkpoint: { ...prior, fcaProviderRetries: retries + 1 } }) !== null;
+      // Nothing ran, so the messages the step saw stay pending for the retry (before 2026-10-14 they were consumed and lost).
+      const checkpoint = { ...prior, fcaProviderRetries: retries + 1 };
+      return runtime.commitStep(step, { disposition: 'continue', history: [], consumedMessageIds: [], checkpoint }) !== null;
     } catch { return false; }
   }
   /**
@@ -217,15 +219,27 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       console.log(`Shannon FCA budget not recorded task=${task.id} code=${fcaErrorCode(error)}`);
     }
   }
-  /** A known refusal fails the task in the same commit that tells its parent, and leaves a report the owner's call can speak. */
+  /**
+   * A known refusal fails the task in the same commit that tells its parent, and leaves a report the owner's call can speak.
+   * The internal root never fails: its refused step is closed, and it returns to its inbox with the messages it saw delivered
+   * once more (fix 2026-10-14; before, it went unknown for ten minutes and then waited on a message it never ran).
+   */
   function failRejectedStep(step: TaskStep): boolean {
     const task = runtime.get(scopeKey, step.taskId);
+    if (task?.kind === 'root' && task.origin === 'owner_request') {
+      try { return runtime.closeRejectedStep?.(step) ?? false; } catch { return false; }
+    }
     if (!task || task.origin !== 'owner_request' || task.kind === 'root' || task.kind === 'conversation' || task.childIds.length) return false;
     const summary = rejectedTaskReport(task.title);
     try {
       runtime.recordProgress?.(step, { operationId: `${step.id}:failed`, tool: 'fca.result', status: 'failed', report: { text: summary } });
       return runtime.commitStep(step, { disposition: 'fail', summary, history: [] }) !== null;
     } catch { return false; }
+  }
+  /** A task never waits on a message already delivered (fix 2026-10-14): the sweep closes any lost wakeup before admission. */
+  function wakeLostInboxes(): void {
+    const woken = runtime.wakePendingInboxes?.(scopeKey) ?? [];
+    if (woken.length) console.log(`Shannon FCA woke ${woken.length} task(s) waiting on a pending message`);
   }
   async function tick(): Promise<void> {
     if (closing || ticking) return;
@@ -237,6 +251,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const retired = runtime.retireUnknown?.(scopeKey, now()) ?? [];
       const minutes = UNKNOWN_EXIT_MODEL_ONLY_MS / 60_000;
       if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${minutes} min or more`);
+      wakeLostInboxes();
       for (const [taskId, job] of running) {
         const task = runtime.get(scopeKey, taskId);
         if (!task || task.phase === 'stopping' || !executionAllowed(task)) job.controller.abort();

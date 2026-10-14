@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { appliedSchemaSteps, applySchemaSteps, schemaStepChecksum } from '../../sqlite/migrations/schemaSteps.js';
 import { openDatabase } from '../../sqlite/sqliteOpen.js';
+import { tableExists } from '../../sqlite/lockWaits.js';
 import { OPERATOR_AUDIT_STEP } from '../../sqlite/migrations/execution/012_operator_audit.js';
 import { OPERATOR_VIA, type OperatorCode } from '../../../contracts/operatorContract.js';
 import type { MinecraftLifecycleAction } from '../../../contracts/minecraftLifecycleContract.js';
@@ -131,7 +132,10 @@ export interface OperatorAuditInspection {
   /** Whether schema step 012 is recorded with the checksum this build pins. */
   step: 'applied' | 'missing' | 'changed';
   recent: OperatorAuditRow[];
-  /** Accepted requests of the last two days that the operator has not stopped and no time limit stopped. */
+  /**
+   * Accepted requests of the last two days that the operator has not stopped, no time limit stopped, and whose task has not ended
+   * by any other path (completed, failed, retired, cancelled or stopped: `agent_tasks` is the authority, the audit is not).
+   */
   open: OperatorAuditRow[];
 }
 
@@ -147,11 +151,14 @@ export function inspectOperatorAudit(path: string, now: string, limit = 10): Ope
     const step = recorded.checksum === schemaStepChecksum(OPERATOR_AUDIT_STEP) ? 'applied' : 'changed';
     const read = (sql: string, ...values: Array<string | number>) => db.prepare(sql).all(...values).map(value => row(value as Record<string, unknown>));
     const since = new Date(Date.parse(now) - 48 * 3600_000).toISOString();
+    // 2026-10-14: a request whose task failed by itself (no operator cancel) stayed "open"; the task's own status closes it.
+    const ended = tableExists(db, 'agent_tasks') ? `AND NOT EXISTS (SELECT 1 FROM agent_tasks t WHERE t.task_id=a.task_id
+        AND (t.status IN ('completed','failed','cancelled') OR (t.status='paused' AND t.pause_reason='fca_stopped')))` : '';
     return {
       step,
       recent: read('SELECT * FROM operator_audit ORDER BY sequence DESC LIMIT ?', Math.max(1, Math.min(200, Math.trunc(limit)))),
       open: read(`SELECT a.* FROM operator_audit a WHERE a.command='request' AND a.event='accepted' AND a.occurred_at>=?
-        AND NOT EXISTS (SELECT 1 FROM operator_audit b WHERE b.task_id=a.task_id AND b.event IN ('stopped','time_limit'))
+        AND NOT EXISTS (SELECT 1 FROM operator_audit b WHERE b.task_id=a.task_id AND b.event IN ('stopped','time_limit')) ${ended}
         ORDER BY a.sequence DESC LIMIT 20`, since),
     };
   } finally {

@@ -12,6 +12,14 @@ export interface TaskRecoveryParts {
   pendingReceipts(scope: string): TaskSegmentReceipt[]; activeSteps(scope: string): Array<{ taskId: string; lease: ActionLease }>;
   snapshot(scope: string, id: string): TaskSnapshot; failConversation(step: TaskStep): void;
   send(scope: string, source: string, target: string, text: string, id: string): unknown;
+  /**
+   * After a lost step of a task that runs on its inbox (the internal root): the messages it saw are delivered once more, or
+   * consumed by it when it may have acted on them or they already were, and the task wakes if anything is pending
+   * (`taskInboxRedelivery.ts`).
+   */
+  redeliver?(task: TaskRecord, stepId: string, reason: string): void;
+  /** A task back to waiting on messages runs again when a delivered message is already pending. */
+  wake?(task: TaskRecord, reason: string): void;
   /** The owner-visible report that a task could not finish (`TaskProgressStore.notice`). */
   notice?(scope: string, taskId: string, stepId: string | null, operationId: string, text: string): void;
 }
@@ -23,7 +31,10 @@ const terminal = (task: TaskRecord) => ['completed', 'failed', 'cancelled'].incl
  * conversation, on the owner's next turn, only the task's own bookkeeping moves on.
  *
  * - root and conversation tasks are the suite's always-on inboxes: their unknown step is closed and they wait for their next
- *   message (a message the lost step may have acted on is not run again: that would replay it);
+ *   message. The root never waits on a message already delivered (fix 2026-10-14, a lost wakeup): a message the lost step saw
+ *   is delivered once more, exactly once, when that step never got past its decision request; a message the lost step may have
+ *   acted on (its decision answered, a tool or child started, a message sent) is consumed by it and not run again, since that
+ *   would replay it;
  * - every other task becomes `failed` (`unknown_retired`, its parent hears of it, as after a committed failure), so a parent's
  *   stop can finish and the active-task limit is not held forever. Every FCA task only calls models (`effect_class` none); a
  *   task that acted outside would close as `outcome_unknown_closed` by the same rule.
@@ -91,6 +102,8 @@ export class TaskRuntimeRecovery {
     // A stopping root only waits for its children; they keep their own stop requests.
     this.db.prepare("UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=CASE WHEN step_id IS NULL THEN 'message' ELSE wait_reason END WHERE task_id=?").run(task.id);
     this.parts.authority.event(task.scopeKey, task.id, 'fca_resumed', this.parts.now(), { status: 'running', pauseReason: null }, { reason });
+    // Messages that arrived while it was stopped did not wake it: they do now.
+    this.parts.wake?.(this.parts.required(task.scopeKey, task.id), reason);
   }
 
   /** A retired task's parent hears of it, as after a committed failure, and so does the owner's activity (its report). */
@@ -118,6 +131,8 @@ export class TaskRuntimeRecovery {
       this.db.prepare("UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason='message' WHERE task_id=?").run(task.id);
       authority.event(task.scopeKey, task.id, 'fca_recovered_unknown', now(), { status: 'running', pauseReason: null }, { reason });
       if (row.stop_requested) this.parts.finishStops(this.parts.required(task.scopeKey, task.id));
+      else if (task.kind === 'root' && row.step_id) this.parts.redeliver?.(this.parts.required(task.scopeKey, task.id), row.step_id, reason);
+      else if (task.kind === 'root') this.parts.wake?.(this.parts.required(task.scopeKey, task.id), reason);
       return;
     }
     this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=NULL,stop_requested=0 WHERE task_id=?').run(task.id);

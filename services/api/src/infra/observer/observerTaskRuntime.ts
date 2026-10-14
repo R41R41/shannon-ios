@@ -3,7 +3,8 @@ import type { TaskRuntime, TaskView } from '../../mind/action/taskRuntime/taskRu
 import { observeSync, observerHandoff, withObserverRunSync, withObserverTask } from './observerContext.js';
 
 const mutations = new Set(['createChild','send','observeExternal','admitSleep','beginConversation','beginConversationDelivery',
-  'completeConversation','stageConversationDelivery','bindConversationDelivery','failConversation','beginStep','commitStep','recordStoppedStep',
+  'completeConversation','stageConversationDelivery','bindConversationDelivery','failConversation','beginStep','commitStep',
+  'closeRejectedStep','recordStoppedStep',
   'wait','stop','resume','acknowledgeStop']);
 /** Observe canonical runtime operation returns (an enclosing transaction may still be open). The canonical runtime still owns every transaction and decision. */
 export function observedTaskRuntime(runtime: TaskRuntime, ownerAlone: () => boolean): TaskRuntime {
