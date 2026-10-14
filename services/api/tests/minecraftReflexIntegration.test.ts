@@ -24,7 +24,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
 function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean } = {}) {
-  let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true;
+  let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true, sourceChecks = 0;
   let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   const now = () => new Date(clock).toISOString(), memory = memoryWorld(), harness = actionHarness(now, memory.path), store = new MinecraftControlStore(harness.db);
   const outcomes: FcaDurableOutcome[] = [];
@@ -90,7 +90,7 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
       // The mechanics below start right after login; the spawn grace has tests of its own (`spawnGraceMilliseconds`).
       const body = createMinecraftTaskBody({ control, runtime, step, evidence, now: () => clock, pollMilliseconds: 1, spawnGraceMilliseconds: options.spawnGraceMilliseconds ?? 0,
         limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 },
-        ownerAlone: () => true, sourcesVisible: () => sourcesVisible,
+        ownerAlone: () => true, sourcesVisible: () => { sourceChecks += 1; return sourcesVisible; },
         entry: { async evaluate(input) { entryCalls += 1; return { sessionId: input.context.sessionId, generation: input.context.generation,
           decision: options.denyEntry ? 'continue' : 'enter', reason: 'danger' }; } },
         selector: { async choose(input) { choices.push(input); return { sessionId: input.context.sessionId, generation: input.context.generation,
@@ -110,10 +110,25 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
   return { ...harness, driver, store, control, task, commands, choices, modelInputs, bodies, cancelled, outcomes, pump, until,
     danger(value: boolean) { danger = value; pump(); }, sourcesVisible(value: boolean) { sourcesVisible = value; },
     facts(value: Record<string, boolean>) { extraFacts = value; pump(); }, advance(milliseconds: number) { clock += milliseconds; pump(); },
-    entryCalls: () => entryCalls, afterCloseCommands: () => afterCloseCommands };
+    entryCalls: () => entryCalls, afterCloseCommands: () => afterCloseCommands, sourceChecks: () => sourceChecks };
 }
 
 describe('task-owned Minecraft reflex with the real FCA and physical receipt transport', () => {
+  it('asks the task\'s source check only when a frame could start a reflex, not on every monitor poll (Minecraft run 10)', async () => {
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => answer.promise);
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
+    // Calm frames while the model thinks: the monitor polls (every 1 ms here) and never walks the provenance.
+    const before = f.sourceChecks();
+    for (let index = 0; index < 50; index++) { f.pump(); await delay(1); }
+    expect(f.sourceChecks() - before).toBe(0);
+    // A frame that could start a reflex asks it before anything else happens.
+    f.danger(true);
+    await f.until(() => f.sourceChecks() > before, 'source check on a danger frame');
+    await f.until(() => f.entryCalls() > 0, 'reflex entry after the check');
+    answer.resolve(wait());
+  });
   it.each([false, true])('closes the original native session when permission changes just after stop ACK (unknown release=%s)', async unknownRelease => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => answer.promise, { unknownRelease, onStopAcknowledged: () => f.sourcesVisible(false) });
