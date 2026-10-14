@@ -44,6 +44,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
+import { fcaCompactAboveTokens } from '../infra/models/anthropic/anthropicFcaCompaction.js';
 import { stage4Enabled, mindSocketPath } from '../infra/config/stage4.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
 import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.js';
@@ -99,7 +100,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });
     };
     const timeZone = ownerTimeZone(values);
-    const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }) });
+    const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
+      compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS) });
     const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });

@@ -115,7 +115,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
   if (recall) observerHandoff('recall', 'context', { phase: 'decision_packet', status: recall.status, itemCount: recall.items.length, sourceCount: recall.sourceIds.length });
-  const sharedContext = ports.evidence ? observeSync('emotion', { phase: 'shared_context' }, () => ports.evidence!.prepare(step),
+  // Minecraft run 7 (2026-10-14): 1.8–5.8 s of the API's one thread per step here. It now walks rarely and lets I/O through between walks.
+  const sharedContext = ports.evidence ? await observeAsync('emotion', { phase: 'shared_context' }, () => ports.evidence!.prepare(step),
     value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
   for (const observation of ports.observations ?? []) await observation.guard(observation.revision());

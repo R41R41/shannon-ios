@@ -52,6 +52,13 @@ export interface FcaSourceGuard {
   sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean;
   content?(scopeKey: string, taskId: string, text: string, observedAt: string): boolean;
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
+  /**
+   * Whether `sources(scopeKey, task, verified)` having just answered visible implies the same answer for `candidate`, without a walk
+   * (`foldedProvenanceCovers`). Only for the same task, scope and moment, both asked without a pending step.
+   */
+  covers?(scopeKey: string, task: TaskView, verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean;
+  /** Content-free counts since the guard was made: verdicts that walked the provenance, and verdicts reused within their window. */
+  walks?(): { walked: number; reused: number };
 }
 
 export { createFcaConversationBridge } from './fcaConversation.js';

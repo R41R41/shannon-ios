@@ -94,3 +94,60 @@ function earliestObservations(rows: readonly MemoryRow[], ids: (row: MemoryRow) 
   }
   return earliest;
 }
+
+/**
+ * Whether a walk of `candidate` that the guard would make is implied by a walk of `verified` that found it visible, both folded with
+ * the same limit (`foldFcaProvenance`) for the same task, scope and moment and the same `pendingStepId` (none, for the evidence store).
+ *
+ * A walk is an AND of independent checks, each of one source and a time: a conversation turn on its own (existence, thread,
+ * withholding of the turn, of its message and of the task's words at its time); for each folded memory source at time t, each
+ * recalled id read and not withheld at t, each read receipt available at t, and the task's own words not withheld at t. A rule that
+ * depends on the time withholds an earlier observation whenever it withholds a later one (`foldFcaProvenance` above, which rests on
+ * the same fact), so a check that passed at t' passes at every t >= t'. Hence the candidate is visible when every one of its
+ * checks was made by the verified walk at the same or an earlier time:
+ * - every conversation source of the candidate is a source of the verified list, field for field;
+ * - every memory source of the candidate is no earlier than the verified list's earliest memory source (the task's words);
+ * - each of its recalled ids and read receipts was folded in the verified list at the same or an earlier time.
+ *
+ * Plain inclusion of the rows is not enough: past the limit consecutive times are folded into their earliest (`foldMemory`), and
+ * the buckets of a shorter list need not align with the longer one's, so a subset can judge an id earlier (stricter) than its
+ * superset did. Such a candidate is not covered here and is walked in full.
+ */
+export function foldedProvenanceCovers(verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean {
+  const known = coverageOf(verified);
+  for (const source of candidate) {
+    if (source.kind !== 'memory') {
+      if (!known.turns.has(canonicalSource(source))) return false;
+      continue;
+    }
+    if (known.earliest === null || source.observedAt < known.earliest) return false;
+    if (!earlierOrSame(known.recalled, source.recalledMemoryIds, source.observedAt)) return false;
+    if (!earlierOrSame(known.read, source.readSourceIds ?? [], source.observedAt)) return false;
+  }
+  return true;
+}
+
+type Coverage = { turns: ReadonlySet<string>; earliest: string | null; recalled: ReadonlyMap<string, string>; read: ReadonlyMap<string, string> };
+/** Per verified list (the fold cache hands back the same array while its rows are the same). */
+const COVERAGE = new WeakMap<readonly TaskSource[], Coverage>();
+function coverageOf(verified: readonly TaskSource[]): Coverage {
+  const known = COVERAGE.get(verified);
+  if (known) return known;
+  const memory = verified.filter((row): row is MemoryRow => row.kind === 'memory');
+  const turns = new Set(verified.filter(row => row.kind !== 'memory').map(canonicalSource));
+  const earliest = memory.reduce<string | null>((first, row) => first === null || row.observedAt < first ? row.observedAt : first, null);
+  const coverage = { turns, earliest, recalled: earliestObservations(memory, row => row.recalledMemoryIds),
+    read: earliestObservations(memory, row => row.readSourceIds ?? []) };
+  COVERAGE.set(verified, coverage);
+  return coverage;
+}
+function earlierOrSame(known: ReadonlyMap<string, string>, ids: readonly string[], at: string): boolean {
+  return ids.every(id => {
+    const first = known.get(id);
+    return first !== undefined && first <= at;
+  });
+}
+/** A source as one comparable string, whatever the order its fields were written in. */
+function canonicalSource(source: TaskSource): string {
+  return JSON.stringify(source, Object.keys(source).sort());
+}

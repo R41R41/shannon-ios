@@ -8,7 +8,7 @@ import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRunti
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
-import { FcaProvenanceFoldCache, foldFcaProvenance } from './fcaProvenanceFold.js';
+import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
 export function conversationFcaProvenance(state: CompanionStateSnapshot, conversations: ConversationStore,
@@ -120,6 +120,7 @@ export function createFcaSourceGuard(parts: {
     return [...representative.values()].every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
   };
   const capped = new Set<string>();
+  const counts = { walked: 0, reused: 0 };
   /** Once per task, after the current check (never inside a caller's transaction): its parent is told, then it is stopped. */
   const stopCapped = (scopeKey: string, task: TaskView) => {
     if (capped.has(task.id)) return;
@@ -158,7 +159,11 @@ export function createFcaSourceGuard(parts: {
       const key = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null, sources]);
       const known = verdicts.get(key);
       if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS
-        && readsUnchanged(epoch, scopeKey, known.reads)) return known.visible;
+        && readsUnchanged(epoch, scopeKey, known.reads)) {
+        counts.reused += 1;
+        return known.visible;
+      }
+      counts.walked += 1;
       const reads = recordedReads(epoch, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
       const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, epoch.candidates, reads.check, epoch.withheld);
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
@@ -216,10 +221,25 @@ export function createFcaSourceGuard(parts: {
     const report = observed.report && !hidden(observed.report.text, observed.report.updatedAt) ? observed.report : undefined;
     return { ...observed, findings, places, report: report?.spoken && hidden(report.spoken, report.updatedAt) ? { ...report, spoken: undefined } : report };
   };
+  /**
+   * The evidence store's question (`fcaEvidenceStore.ts`): a row of the task's own outcomes stored the task's sources of an earlier
+   * step, and the current step's sources were just found visible. Who can hear, the scope and the cap are asked again; the rest is
+   * `foldedProvenanceCovers` over the same folds the walk uses.
+   */
+  const covers: NonNullable<FcaSourceGuard['covers']> = (scopeKey, task, verified, candidate) => {
+    try {
+      if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || task.scopeKey !== scopeKey) return false;
+      const limit = cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity;
+      const folded = fcaProvenanceForCheck(candidate, limit, folds);
+      const ids = new Set(folded.flatMap(source => source.recalledMemoryIds)).size;
+      if (cappable(task) && (folded.length > limit || ids > FCA_PROVENANCE_LIMITS.recalledIds)) return false;
+      return foldedProvenanceCovers(fcaProvenanceForCheck(verified, limit, folds), folded);
+    } catch { return false; }
+  };
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string) => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
-  }, { sources: sourcesVisible, progress, content });
+  }, { sources: sourcesVisible, progress, content, covers, walks: () => ({ ...counts }) });
 }
 
 /**

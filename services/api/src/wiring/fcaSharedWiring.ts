@@ -27,6 +27,11 @@ export function createFcaSharedWiring(parts: {
   const evidence = parts.affect ? new SQLiteFcaEvidenceStore({ db: parts.db, state: parts.affect, now,
     validStep: step => fcaStepIsLive(leases, step, now()),
     sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
+    sourcesCovered: (scope, id, verified, candidate) => {
+      const task = parts.runtime.get(scope, id);
+      return Boolean(task && parts.visible.covers?.(scope, task, verified, candidate));
+    },
+    ...(parts.visible.walks ? { walkCounts: parts.visible.walks } : {}),
     observeContext: (step, ids) => {
       if (!parts.runtime.inheritTaskSources(step, ids)) return false;
       step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);

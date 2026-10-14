@@ -22,7 +22,8 @@ export interface FcaDurableOutcome {
   actualTaskStatus?: string;
 }
 export interface FcaEvidence {
-  prepare(step: TaskStep): FcaSharedContext;
+  /** Asynchronous only between its row checks (`fcaEvidenceRows.ts`). */
+  prepare(step: TaskStep): Promise<FcaSharedContext>;
   beforeActions(step: TaskStep, output: FcaModelOutput): boolean;
   observed(step: TaskStep, call: FcaToolCall, result: ToolResult): void;
   unknown(step: TaskStep, call: FcaToolCall): void;

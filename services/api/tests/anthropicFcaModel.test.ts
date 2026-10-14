@@ -6,6 +6,7 @@ import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsag
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import { claudeTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
+import { FCA_COMPACT_ABOVE_TOKENS, fcaCompactAboveTokens } from '../src/infra/models/anthropic/anthropicFcaCompaction.js';
 import type { ShannonToolDefinition } from '../src/mind/tools/toolRegistryPorts.js';
 import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
@@ -162,6 +163,51 @@ describe('the estimated size of an FCA request (the 100k-token price step)', () 
     expect(warnings).toHaveLength(1);
     expect(JSON.parse(warnings[0]!)).toEqual({ event: 'fca_request_price_step', model: 'claude-haiku-5-5', estimatedInputTokens: sizes[1].estimatedInputTokens });
     expect(warnings[0]).not.toContain('原木');
+  });
+});
+
+describe('compaction before the price step (C4)', () => {
+  const bulky = (): FcaModelInput => ({ ...input(), body: { report: 'インベントリ'.repeat(40_000), position: { x: 1, y: 64, z: -3 } },
+    observations: [{ kind: 'look', text: '見えたもの'.repeat(20_000) }] } as unknown as FcaModelInput);
+  const sent = (fixture: ReturnType<typeof harness>, index: number) => JSON.parse(String((fixture.bodies[index]!.messages as Array<{ content: unknown }>).at(-1)!.content));
+
+  it('shortens the decision message below the threshold before sending, keeping the task, the owner\'s words and every id', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer()]);
+    const output = await fixture.model.decide(bulky(), signal());
+    const sizes = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size')).map(line => JSON.parse(line));
+    expect(sizes[0].estimatedInputTokens).toBeLessThanOrEqual(FCA_COMPACT_ABOVE_TOKENS);
+    expect(warn.mock.calls.some(args => String(args[0]).includes('fca_request_price_step'))).toBe(false);
+    const compacted = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_compacted')).map(line => JSON.parse(line));
+    expect(compacted).toEqual([{ event: 'fca_request_compacted', model: 'claude-haiku-5-5', level: expect.any(Number), maximumTokens: FCA_COMPACT_ABOVE_TOKENS }]);
+    const message = sent(fixture, 0);
+    expect(message.task).toEqual(input().task);
+    expect(message.messages).toEqual(input().messages);
+    expect(message.body.position).toEqual({ x: 1, y: 64, z: -3 });
+    expect(message.body.report).toMatch(/…（長いため後略: \d+字）$/u);
+    expect(message.body.report.length).toBeLessThan('インベントリ'.repeat(40_000).length);
+    // Stored as sent: the replay of the next decision holds the shortened message.
+    expect(output.history[0]).toEqual((fixture.bodies[0]!.messages as unknown[]).at(-1));
+  });
+
+  it('sends a request under the threshold unchanged, and reads the threshold from its option', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer()]);
+    await fixture.model.decide({ ...input(), body: { report: '短い報告' } } as unknown as FcaModelInput, signal());
+    expect(sent(fixture, 0).body).toEqual({ report: '短い報告' });
+    const small = scriptedAnthropic([answer()]);
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: small.fetcher, recordUsage() {}, compactAboveTokens: 5_000 });
+    await model.decide({ ...input(), body: { report: 'あ'.repeat(20_000) } } as unknown as FcaModelInput, signal());
+    expect(JSON.parse(String((small.bodies[0]!.messages as Array<{ content: unknown }>).at(-1)!.content)).body.report.length).toBeLessThan(5_000);
+    expect(() => createAnthropicFcaModel({ apiKey: 'synthetic', recordUsage() {}, compactAboveTokens: 0 })).toThrow('FCA_MODEL_CONFIG_INVALID');
+  });
+
+  it('takes SHANNON_FCA_COMPACT_ABOVE_TOKENS when it is a positive whole number', () => {
+    expect(fcaCompactAboveTokens(undefined)).toBe(95_000);
+    expect(fcaCompactAboveTokens('90000')).toBe(90_000);
+    for (const value of ['', ' ', '0', '-5', '1.5', 'many']) expect(fcaCompactAboveTokens(value)).toBe(95_000);
   });
 });
 

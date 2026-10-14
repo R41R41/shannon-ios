@@ -6,12 +6,20 @@ import type { TaskSource, TaskStep } from '../../taskRuntime/taskRuntimePorts.js
 import type { ToolResult } from '../../../tools/toolRegistryPorts.js';
 import type { FcaModelOutput, FcaToolCall } from '../fcaPorts.js';
 import type { FcaAffectAppraisal, FcaDurableOutcome, FcaEvidence, FcaOutcomeContext, FcaSharedContext } from '../fcaEvidencePorts.js';
+import { FcaPrepareTrace, visibleEvidenceRows, type FcaEvidenceJudge, type FcaVisibleRows } from './fcaEvidenceRows.js';
 
 export interface FcaEvidenceOptions {
   db: DatabaseSync; state: FcaAffectWriter; now(): string;
   /** Runs synchronously inside this connection's write transaction; must check exact step + original live lease. */
   validStep(step: TaskStep): boolean;
   sourcesVisible(scopeKey: string, taskId: string, sources: readonly TaskSource[]): boolean;
+  /**
+   * Whether `verified`, the task's sources `sourcesVisible` has just found visible, implies that `candidate` (an earlier step's sources
+   * of the same task) is visible too, without a walk (`FcaSourceGuard.covers`). Absent: every row is walked.
+   */
+  sourcesCovered?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean;
+  /** The source guard's walk counts (`FcaSourceGuard.walks`), for the prepare line only. */
+  walkCounts?(): { walked: number; reused: number };
   taskVisible(scopeKey: string, taskId: string): boolean;
   /** Persist lineage for other tasks whose public outcomes/causes enter this task's native history. */
   observeContext?(step: TaskStep, taskIds: readonly string[]): boolean;
@@ -38,28 +46,65 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       evidence_json TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(scope_key,event_id,revision,step_id));`);
     this.affect = new AffectCoordinator(options.state, options.sourcesVisible);
   }
-  prepare(step: TaskStep): FcaSharedContext {
+  /**
+   * The shared context of one decision: the affect and the newest visible outcomes of this task and its visible children. Asynchronous
+   * only between row walks (`visibleEvidenceRows`); the flush, the step's checks, the lineage write and the return keep their order.
+   * When it yielded, everything it admitted is asked again at its end, synchronously with the lineage write and the return: the
+   * lease, the step's verified sources (which covered rows rest on) and each walked source set; a row no longer visible is left out.
+   */
+  async prepare(step: TaskStep): Promise<FcaSharedContext> {
+    const trace = new FcaPrepareTrace(this.options.walkCounts);
+    let outcome = 'error';
+    try {
+      const context = await this.prepared(step, trace);
+      outcome = 'ok';
+      return context;
+    } catch (error) {
+      outcome = error instanceof Error && /^FCA_[A-Z_]+$/u.test(error.message) ? error.message : 'error';
+      throw error;
+    } finally { trace.report(outcome); }
+  }
+  private async prepared(step: TaskStep, trace: FcaPrepareTrace): Promise<FcaSharedContext> {
     // Receipt/delivery failures are retried by maintenance; they must never poison a fresh native step.
-    try { this.flush(); } catch { /* Both outboxes retain their original idempotency keys. */ }
-    if (!this.options.validStep(step) || !this.visible(step)) throw new Error('FCA_EVIDENCE_HELD');
+    trace.time('flush', () => { try { this.flush(); } catch { /* Both outboxes retain their original idempotency keys. */ } });
+    if (!this.options.validStep(step) || !trace.check(() => this.visible(step))) throw new Error('FCA_EVIDENCE_HELD');
+    // The sources just found visible; `observeContext` below may replace the step's list, never this one.
+    const verified = step.snapshot.sources;
     const ids = [step.taskId, ...step.snapshot.task.childIds].filter(id => this.options.taskVisible(step.scopeKey, id));
-    const rows = this.options.db.prepare(`SELECT * FROM fca_action_evidence WHERE scope_key=? AND observation!='pending'
-      AND task_id IN (SELECT value FROM json_each(?)) ORDER BY rowid DESC LIMIT 24`).all(step.scopeKey, JSON.stringify(ids)) as unknown as EvidenceRow[];
-    const affect = this.affect.snapshot(step.scopeKey), visibleRows = rows.filter(row => this.rowVisible(row)).slice(0, 8);
-    const affectReceipts = this.options.state.fcaAffectReceipts(step.scopeKey, [...visibleRows.map(row => row.event_id), ...affect.causes.map(cause => cause.eventId)]);
+    const rows = trace.time('select', () => this.options.db.prepare(`SELECT * FROM fca_action_evidence WHERE scope_key=? AND observation!='pending'
+      AND task_id IN (SELECT value FROM json_each(?)) ORDER BY rowid DESC LIMIT 24`).all(step.scopeKey, JSON.stringify(ids)) as unknown as EvidenceRow[]);
+    const chosen = await visibleEvidenceRows(rows, this.judge(step, verified), trace);
+    const visibleRows = chosen.yielded ? this.stillVisible(step, verified, chosen, trace) : chosen.rows;
+    const { affect, affectReceipts } = trace.time('affect', () => {
+      const affect = this.affect.snapshot(step.scopeKey);
+      const eventIds = [...visibleRows.map(row => row.event_id), ...affect.causes.map(cause => cause.eventId)];
+      return { affect, affectReceipts: this.options.state.fcaAffectReceipts(step.scopeKey, eventIds) };
+    });
     const receipts = new Map(affectReceipts.map(item => [item.eventId, item.revision]));
-    const recentOutcomes: FcaOutcomeContext[] = visibleRows.map(row => ({
-      eventId: row.event_id, taskId: row.task_id, operationId: row.event_id, name: row.name,
-      observation: row.observation as 'observed' | 'unknown',
-      result: row.result_json ? (() => { const result = JSON.parse(row.result_json) as { ok: boolean; text: string }; return { ok: result.ok, text: result.text.slice(0, 1_500) }; })() : null,
-      expectation: parse<FcaActionExpectation>(row.expectation_json), comparison: publicComparison(parse<FcaExpectationComparison>(row.comparison_json)),
-      appraisalRevision: receipts.get(row.event_id) ?? 0,
-    }));
+    const recentOutcomes: FcaOutcomeContext[] = visibleRows.map(row => outcomeContext(row, receipts.get(row.event_id) ?? 0));
     const consumed = [...new Set([...recentOutcomes.map(item => item.taskId), ...affectReceipts
       .filter(item => affect.causes.some(cause => cause.eventId === item.eventId)).flatMap(item => [item.taskId, ...item.appraisalTaskId ? [item.appraisalTaskId] : []])])].filter(id => id !== step.taskId);
     if (consumed.length && !this.options.observeContext?.(step, consumed)) throw new Error('FCA_CONTEXT_SOURCE_UNPINNED');
-    if (!this.visible(step)) throw new Error('FCA_EVIDENCE_HELD');
+    if (!trace.check(() => this.visible(step))) throw new Error('FCA_EVIDENCE_HELD');
     return { affect, recentOutcomes };
+  }
+  /** How this prepare judges a stored row: the guard's walk, and for the step's own task its coverage by the verified sources. */
+  private judge(step: TaskStep, verified: readonly TaskSource[]): FcaEvidenceJudge {
+    const covered = this.options.sourcesCovered;
+    return { taskId: step.taskId, walk: (row, sources) => this.options.sourcesVisible(row.scope_key, row.task_id, sources),
+      ...(covered ? { covered: (sources: readonly TaskSource[]) => covered(step.scopeKey, step.taskId, verified, sources) } : {}) };
+  }
+  /** After a yield: the lease and the verified sources again (or the step is held), then each walked set (or its rows are left out). */
+  private stillVisible(step: TaskStep, verified: readonly TaskSource[], chosen: FcaVisibleRows<EvidenceRow>, trace: FcaPrepareTrace): EvidenceRow[] {
+    if (!this.options.validStep(step) || !trace.check(() => this.options.sourcesVisible(step.scopeKey, step.taskId, verified))) {
+      throw new Error('FCA_EVIDENCE_HELD');
+    }
+    const gone = new Set<EvidenceRow>();
+    for (const set of chosen.walked) {
+      const first = set.rows[0]!;
+      if (!trace.rowCheck(() => this.options.sourcesVisible(first.scope_key, first.task_id, set.sources))) set.rows.forEach(row => gone.add(row));
+    }
+    return chosen.rows.filter(row => !gone.has(row));
   }
   beforeActions(step: TaskStep, output: FcaModelOutput): boolean {
     return this.transaction(() => {
@@ -188,6 +233,13 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     db.exec('BEGIN IMMEDIATE');
     try { const result = work(); db.exec('COMMIT'); return result; } catch (error) { db.exec('ROLLBACK'); throw error; }
   }
+}
+function outcomeContext(row: EvidenceRow, appraisalRevision: number): FcaOutcomeContext {
+  const result = parse<{ ok: boolean; text: string }>(row.result_json);
+  return { eventId: row.event_id, taskId: row.task_id, operationId: row.event_id, name: row.name,
+    observation: row.observation as 'observed' | 'unknown', result: result ? { ok: result.ok, text: result.text.slice(0, 1_500) } : null,
+    expectation: parse<FcaActionExpectation>(row.expectation_json), comparison: publicComparison(parse<FcaExpectationComparison>(row.comparison_json)),
+    appraisalRevision };
 }
 function parse<T>(json: string | null): T | null { return json === null ? null : JSON.parse(json) as T; }
 function publicComparison(comparison: FcaExpectationComparison | null): FcaExpectationComparison | null {

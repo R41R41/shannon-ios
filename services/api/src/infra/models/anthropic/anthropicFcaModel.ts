@@ -17,6 +17,7 @@ import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTE
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge } from './anthropicFcaHistory.js';
 import { providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
+import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -55,6 +56,11 @@ export interface AnthropicFcaOptions {
    * write (Minebot lane, 2026-10-14, task 788da00a: 22 summaries of 16–26k tokens each wrote all but 1,792 of them).
    */
   continued?: boolean;
+  /**
+   * Above this estimate of the whole request's input tokens the decision message is shortened before it is sent
+   * (`anthropicFcaCompaction.ts`; `SHANNON_FCA_COMPACT_ABOVE_TOKENS`, default 95,000: under the 100,000-token price step).
+   */
+  compactAboveTokens?: number;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -100,13 +106,16 @@ export class AnthropicFcaModel implements FcaModel {
   private readonly maximumOutputTokens: number;
   private readonly timeoutMilliseconds: number;
   private readonly system: string;
+  private readonly compactAboveTokens: number;
 
   constructor(private readonly options: AnthropicFcaOptions) {
     this.model = options.model ?? DEFAULT_HAIKU_MODEL;
     this.maximumOutputTokens = options.maximumOutputTokens ?? 4_000;
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 90_000;
+    this.compactAboveTokens = options.compactAboveTokens ?? FCA_COMPACT_ABOVE_TOKENS;
     if (!usesOneHourAnthropicCache(this.model) || !positiveInteger(this.maximumOutputTokens) || this.maximumOutputTokens > 128_000
-      || !positiveInteger(this.timeoutMilliseconds) || typeof options.recordUsage !== 'function') throw new Error('FCA_MODEL_CONFIG_INVALID');
+      || !positiveInteger(this.timeoutMilliseconds) || !positiveInteger(this.compactAboveTokens)
+      || typeof options.recordUsage !== 'function') throw new Error('FCA_MODEL_CONFIG_INVALID');
     if (!options.client && !options.apiKey?.trim()) throw new Error('ANTHROPIC_API_KEY_REQUIRED');
     this.client = options.client ?? claudeClient({ apiKey: options.apiKey!, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
     this.system = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n${STEP_INSTRUCTIONS}`;
@@ -125,25 +134,33 @@ export class AnthropicFcaModel implements FcaModel {
       const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       // A part this epoch's replay already showed in full is not restated (`anthropicFcaHistory.ts`, `elidedDecision`); the message is stored as sent.
-      const fields = decisionFields(input, ownerClock);
-      const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify(elidedDecision(fields, restatedKnowledge(history))) };
+      const fields = elidedDecision(decisionFields(input, ownerClock), restatedKnowledge(history));
       // A system message holding tool changes must immediately follow a user turn and be either the last message or
       // immediately followed by an assistant turn: it may not open the conversation (a live 400, 2026-10-12), nor sit between
       // two user messages (a live 400, 2026-10-14, Minebot lane run 3: tasks a5ad9996 and the root fd99df55 sent a public
       // epoch as [bootstrap, tool changes, decision]). The inline definitions therefore always follow the current decision
       // message and end the request; the stored round keeps them before the assistant's answer.
-      const turn: Anthropic.MessageParam[] = [current, ...menu.appended];
+      const turnOf = (sent: Record<string, unknown>): Anthropic.MessageParam[] => [{ role: 'user', content: JSON.stringify(sent) }, ...menu.appended];
       // The fixed instructions end with their own breakpoint, so that every decision and every task reads them from the cache
       // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
       // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
       const system = [{ type: 'text' as const, text: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system, cache_control: ONE_HOUR }];
-      const continued = this.options.continued !== false;
-      const request = {
-        model: this.model, max_tokens: this.maximumOutputTokens, system,
-        messages: [...continued ? markedHistory(history) : history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
-        thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
+      const continued = this.options.continued !== false, replay = continued ? markedHistory(history) : history;
+      const bodyOf = (turn: Anthropic.MessageParam[]) => {
+        const request = {
+          model: this.model, max_tokens: this.maximumOutputTokens, system,
+          messages: [...replay, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
+          thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
+        };
+        return continued ? cacheHaikuRequest(request) : cacheOneShotRequest(request);
       };
-      return { turn, menu, body: continued ? cacheHaikuRequest(request) : cacheOneShotRequest(request) };
+      // Above the threshold the decision message is shortened before it is sent (`anthropicFcaCompaction.ts`), never the replay.
+      const compacted = compactedDecision(fields, sent => estimatedAnthropicTokens(bodyOf(turnOf(sent))), this.compactAboveTokens);
+      if (compacted.level !== null) {
+        console.info(JSON.stringify({ event: 'fca_request_compacted', model: this.model, level: compacted.level, maximumTokens: this.compactAboveTokens }));
+      }
+      const turn = turnOf(compacted.fields);
+      return { turn, menu, body: bodyOf(turn) };
     }, value => observedFcaRequest(value.body), { model: this.model });
     logRequestSize(this.model, history, body);
     let message: Anthropic.Message, dispatched = false;

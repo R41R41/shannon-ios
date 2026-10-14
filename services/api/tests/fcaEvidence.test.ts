@@ -101,8 +101,8 @@ describe('concrete optional FCA predictions', () => {
     const f = fixture(), step = await f.begin();
     expect(f.evidence.beforeActions({ ...step, lease: { ...step.lease, generation: step.lease.generation + 1 } }, output())).toBe(false);
     f.evidence.beforeActions(step, output()); f.evidence.observed(step, call, observed());
-    expect(f.evidence.prepare(step).recentOutcomes).toHaveLength(1);
-    f.visible(false); expect(() => f.evidence.prepare(step)).toThrow('FCA_EVIDENCE_HELD');
+    expect((await f.evidence.prepare(step)).recentOutcomes).toHaveLength(1);
+    f.visible(false); await expect(f.evidence.prepare(step)).rejects.toThrow('FCA_EVIDENCE_HELD');
     expect(() => f.evidence.observed(step, call, observed())).toThrow('FCA_EVIDENCE_HELD');
     f.visible(true); f.allow(false); expect(f.evidence.beforeActions(step, output())).toBe(false);
     f.evidence.unknown(step, call); expect(f.row(step).observation).toBe('observed');
@@ -168,8 +168,8 @@ describe('durable FCA observation and appraisal outboxes', () => {
     const appraisal = { eventId, revision: 1, value: 0.5, cause: 'The child found evidence', target: 'research' };
     const report: FcaModelOutput = { decision: { kind: 'wait', summary: 'Observation received' }, history: [], appraisals: [appraisal] };
     const unsafe = new SQLiteFcaEvidenceStore({ ...f.options, observeContext: undefined });
-    expect(() => unsafe.prepare(parentReport)).toThrow('FCA_CONTEXT_SOURCE_UNPINNED');
-    expect(f.evidence.prepare(parentReport).recentOutcomes.some(item => item.eventId === eventId)).toBe(true);
+    await expect(unsafe.prepare(parentReport)).rejects.toThrow('FCA_CONTEXT_SOURCE_UNPINNED');
+    expect((await f.evidence.prepare(parentReport)).recentOutcomes.some(item => item.eventId === eventId)).toBe(true);
     f.evidence.beforeActions(childReport, report); f.evidence.beforeActions(parentReport, report);
     await f.commit(parentReport, 'wait'); f.evidence.flush();
     expect(f.options.state.fcaAffectReceipts('owner')).toHaveLength(1); const applied = f.options.state.snapshot('owner');
@@ -186,7 +186,7 @@ describe('durable FCA observation and appraisal outboxes', () => {
   it('does not poison a newly admitted step when a prior committed outbox acknowledgement fails', async () => {
     const f = fixture(), first = await f.begin(); f.evidence.beforeActions(first, output()); f.evidence.observed(first, call, observed()); await f.commit(first);
     f.db.exec("CREATE TRIGGER fail_outcome_ack BEFORE UPDATE OF outcome_delivered ON fca_action_evidence BEGIN SELECT RAISE(ABORT,'delivery ack crash'); END");
-    const next = await f.begin(); expect(f.evidence.prepare(next).recentOutcomes).toHaveLength(1);
+    const next = await f.begin(); expect((await f.evidence.prepare(next)).recentOutcomes).toHaveLength(1);
     expect(f.deliveries).toHaveLength(1); expect(f.row(first).outcome_delivered).toBe(0);
     f.db.exec('DROP TRIGGER fail_outcome_ack'); f.restart().flush();
     expect(f.deliveries).toHaveLength(2); expect(f.deliveries[0]!.outcomeId).toBe(f.deliveries[1]!.outcomeId);
@@ -210,13 +210,13 @@ describe('durable FCA observation and appraisal outboxes', () => {
       inherited = ids; if (!f.runtime.inheritTaskSources(step, ids)) return false;
       step.snapshot.sources = f.runtime.taskSources('owner', step.taskId, step.messageIds); return true;
     };
-    expect(f.evidence.prepare(next).affect.causes).toHaveLength(1); expect(inherited).toEqual(expect.arrayContaining([author.id, f.task.id]));
+    expect((await f.evidence.prepare(next)).affect.causes).toHaveLength(1); expect(inherited).toEqual(expect.arrayContaining([author.id, f.task.id]));
     expect(next.snapshot.sources.some(item => item.recalledMemoryIds.includes('private-memory'))).toBe(true);
     // The source gate checks receipt provenance on every use, before it can enter downstream native history.
     f.options.sourcesVisible = (_scope, _task, sources) => !sources.some(item => item.recalledMemoryIds.includes('private-memory'));
-    f.restart(); inherited = []; expect(() => f.evidence.prepare(next)).toThrow('FCA_EVIDENCE_HELD');
+    f.restart(); inherited = []; await expect(f.evidence.prepare(next)).rejects.toThrow('FCA_EVIDENCE_HELD');
     const fresh = f.runtime.createChild('owner', f.task.id, { title: 'Fresh', goal: 'Read only current affect' }, 'fresh'), freshStep = await f.begin(fresh.id);
-    expect(f.evidence.prepare(freshStep).affect.causes).toEqual([]); expect(inherited).toEqual([]);
+    expect((await f.evidence.prepare(freshStep)).affect.causes).toEqual([]); expect(inherited).toEqual([]);
   });
   it('delivers meaningful completion summaries with actual canonical status and suppresses rote waits and lookup outcomes', async () => {
     const f = fixture(), step = await f.begin();
