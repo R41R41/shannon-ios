@@ -61,6 +61,13 @@ export interface AnthropicFcaOptions {
    * (`anthropicFcaCompaction.ts`; `SHANNON_FCA_COMPACT_ABOVE_TOKENS`, default 95,000: under the 100,000-token price step).
    */
   compactAboveTokens?: number;
+  /**
+   * How long a request already sent may still finish after the step is stopped (default 0: the stop aborts it at once). Minecraft
+   * run 10 (2026-10-14, task 74a32315): the owner's cancel aborted a decision in flight; its outcome and spend became unknown (a
+   * $1.01 upper bound in the usage ledger for a ~73k-token request), the step was left unknown and the body lease was held until the
+   * unknown exit three minutes later. Its answer is still discarded; only its usage is recorded and the step can stop as known.
+   */
+  stopGraceMilliseconds?: number;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -128,7 +135,7 @@ export class AnthropicFcaModel implements FcaModel {
   }
 
   async decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput> {
-    const combined = AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMilliseconds)]);
+    const timeout = AbortSignal.timeout(this.timeoutMilliseconds), combined = AbortSignal.any([signal, timeout]);
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
@@ -171,6 +178,9 @@ export class AnthropicFcaModel implements FcaModel {
     logRequestSize(this.model, history, body);
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
+    // Once sent, a stop lets the request finish within its grace (`stopGraceMilliseconds`); the timeout still applies.
+    const grace = this.options.stopGraceMilliseconds && this.options.stopGraceMilliseconds > 0 ? graceAfter(signal, this.options.stopGraceMilliseconds) : null;
+    const transport = grace ? AbortSignal.any([timeout, grace.signal]) : combined;
     try {
       // The one tool loop, one request: the runner executes the calls and returns their results in the next decision.
       const send: ClaudeSend = request => sendClaudeOnce({
@@ -184,7 +194,7 @@ export class AnthropicFcaModel implements FcaModel {
           execution.modelOutcome = 'unknown';
           delete execution.modelUsage;
         },
-        dispatch: () => this.client.messages.create(request, { signal: combined, maxRetries: 0,
+        dispatch: () => this.client.messages.create(request, { signal: transport, maxRetries: 0,
           ...(input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) }),
       });
       message = (await claudeToolLoop(body, { session: undefined, send, isAnswer: () => true, refusal: 'final', maxRounds: 1 })).final!;
@@ -207,7 +217,7 @@ export class AnthropicFcaModel implements FcaModel {
         throw new Error(`FCA_MODEL_HTTP_${error.status}`);
       }
       throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
-    }
+    } finally { grace?.dispose(); }
     const usage = this.usage(message.usage);
     await this.options.recordUsage(usage);
     if (!usage.usageComplete) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
@@ -259,6 +269,23 @@ export class AnthropicFcaModel implements FcaModel {
 }
 
 export function createAnthropicFcaModel(options: AnthropicFcaOptions): FcaModel { return new AnthropicFcaModel(options); }
+
+/** A signal that aborts `milliseconds` after `signal` does (never before it). */
+function graceAfter(signal: AbortSignal, milliseconds: number): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const start = () => {
+    timer = setTimeout(() => controller.abort(signal.reason), milliseconds);
+    timer.unref?.();
+  };
+  if (signal.aborted) start();
+  else signal.addEventListener('abort', start, { once: true });
+  const dispose = () => {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', start);
+  };
+  return { signal: controller.signal, dispose };
+}
 
 function observedFcaToolName(name: string): string {
   return CONTROL_TOOLS.some(tool => tool.name === name) || name === FCA_CONTEXT_NAME ? name : observedToolName(name);

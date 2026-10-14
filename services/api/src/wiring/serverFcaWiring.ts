@@ -62,6 +62,9 @@ import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
 import { configuredOperatorAudit, operatorRequester, startOperatorMinecraft, type OperatorHostParts } from './operatorServerWiring.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
+/** How long an FCA decision already sent may finish after its step is stopped (`stopGraceMilliseconds`, Minecraft run 10). */
+export const FCA_MODEL_STOP_GRACE_MILLISECONDS = 20_000;
+
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
   path: string; ownerScope: string; ownerAlone(): boolean; now?(): string; usage: LlmUsageStore; sleepStore?: SQLiteShannonStore;
   state?: Pick<CompanionStateStore, 'snapshot'>; conversations?: ConversationStore; tools?: ShannonToolRunner;
@@ -107,7 +110,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     };
     const timeZone = ownerTimeZone(values);
     const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
-      compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS) });
+      compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS });
     const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });

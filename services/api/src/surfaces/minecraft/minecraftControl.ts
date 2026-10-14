@@ -220,5 +220,15 @@ export class MinecraftControl {
       await delay(step);
     }
   }
-  cancelTask(taskId: string): void { for (const body of this.frames.keys()) for (const row of this.store.pending(body)) if (row.command.context.taskId === taskId) this.store.cancel(row.command.id); }
+  /**
+   * Cancels the task's pending body commands, except a stop or a release: those only let go of the body's inputs, and a cancel must
+   * see them through. Minecraft run 10 (2026-10-14, task 74a32315): the cancel's own reflex release was cancelled here a moment after
+   * it was sent, came back `cancelled` without a stop acknowledgement, and the step was left unknown; its body lease stayed held until
+   * the unknown exit three minutes later, and every logout in between was refused with `lease_conflict`.
+   */
+  cancelTask(taskId: string): void {
+    for (const body of this.frames.keys()) for (const row of this.store.pending(body)) {
+      if (row.command.context.taskId === taskId && row.command.kind !== 'stop' && row.command.kind !== 'release') this.store.cancel(row.command.id);
+    }
+  }
 }

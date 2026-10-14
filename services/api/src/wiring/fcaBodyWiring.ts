@@ -5,6 +5,7 @@ import { createMinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { JevChooser } from '../infra/models/jev/jevChoice.js';
 import { createReflexProviders } from '../infra/models/reflexProviders.js';
+import { createReflexGovernor } from '../mind/action/reflex/reflexGovernor.js';
 import { MinecraftControlStore } from '../surfaces/minecraft/store/minecraftControlStore.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
@@ -35,5 +36,6 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
   // A body retained by an unknown step is re-checked with the body itself, at start and when the operator asks (run 6).
   const recheck = createMinecraftBodyRecheck({ db: parts.db, control, actions: parts.actions, ownerScope: parts.ownerScope,
     deviceId: parts.configuration.deviceId, log: line => console.log(line) });
-  return { control, entry: providers.entry!, selector: providers.image!, recheck };
+  // One per process: a task's automatic reflex entries are governed across its steps (Minecraft run 10).
+  return { control, entry: providers.entry!, selector: providers.image!, recheck, governor: createReflexGovernor() };
 }

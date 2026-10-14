@@ -369,6 +369,41 @@ describe('FCA native transport boundary', () => {
     expect(receipts).toHaveLength(1);
   });
 
+  it('lets a sent request finish within its stop grace, so a cancelled step knows its spend and outcome (Minecraft run 10)', async () => {
+    const controller = new AbortController();
+    const execution: ActionExecution = { lease: { id: 'original-action', holder: 'api', generation: 1 },
+      signal: controller.signal, permit: async () => { throw new Error('runner_already_checked_permit'); } };
+    const receipts: AnthropicFcaUsage[] = [];
+    let transport: AbortSignal | undefined;
+    const client: AnthropicFcaClient = { messages: { create: async (_body, options) => {
+      transport = options.signal;
+      controller.abort();
+      await new Promise(resolve => setTimeout(resolve, 5));
+      expect(options.signal.aborted).toBe(false);
+      return answer() as unknown as Anthropic.Message;
+    } } };
+    const model = createAnthropicFcaModel({ client, stopGraceMilliseconds: 1_000, recordUsage: usage => { receipts.push(usage); } });
+    await expect(inActionExecution(execution, () => model.decide(input(), controller.signal))).rejects.toThrow('FCA_MODEL_ABORTED');
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({ usageComplete: true });
+    expect(execution.modelOutcome).toBe('acknowledged');
+    expect(transport?.aborted).toBe(false);
+  });
+
+  it('aborts a sent request when its stop grace runs out, and records it as unknown once', async () => {
+    const controller = new AbortController();
+    const receipts: AnthropicFcaUsage[] = [];
+    const client: AnthropicFcaClient = { messages: { create: async (_body, options) => {
+      controller.abort();
+      await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+      throw new Error('unreachable');
+    } } };
+    const model = createAnthropicFcaModel({ client, stopGraceMilliseconds: 5, recordUsage: usage => { receipts.push(usage); } });
+    await expect(model.decide(input(), controller.signal)).rejects.toThrow('FCA_MODEL_ABORTED');
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({ usageComplete: false });
+  });
+
   it.each([true, false])('acknowledges cancellation after a response only with complete recorded usage (%s)', async complete => {
     const controller = new AbortController();
     const execution: ActionExecution = { lease: { id: 'original-action', holder: 'api', generation: 1 },
