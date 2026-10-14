@@ -594,7 +594,7 @@ A body that sees `feelingEvents: 1` on `GET /v1/body/presence` (beside `touchVoc
 - Asking stays the body's: at most one ask in about 45 seconds, never while she speaks, never while a conversation or a call is in progress. Only the **sending** of a touch is separated from asking: the iPhone and the Mac send the touches they do not ask about with `reply: "none"`; the Windows body splits `askBlocked` so that only "not connected", "sharing off" and "pairing" stop sending, and a call, her speaking or her processing only stop asking.
 - `reply` joins the content hash only when it is sent: a retry in the old shape gets the answer it always got; the same `id` with another `reply` is a `409`.
 - With anyone else present send `audience: "others"` as always: such a touch is counted for the room, never as the owner's (ADR-0013 §4.1).
-- Without `feelingEvents` (an older server, or `SHANNON_FEELING_EVENTS` off) a body keeps sending the old shape. A server that does not know `reply` refuses it with `400`; a body that receives that `400` registers again and resends the touch as a plain event.
+- Without `feelingEvents` (an older server, or `SHANNON_FEELING_EVENTS` off) a body keeps sending the old shape. Send `reply` only after seeing `feelingEvents`. A server that does not know `reply` refuses it with `400`; a body that receives that `400` registers again and resends the same touch with the same `id` and without `reply` (or as a plain event with that `id`).
 - The same touch reported later through `POST /v1/body/events` with the same `id` is still counted once.
 
 ### What a touch does to her

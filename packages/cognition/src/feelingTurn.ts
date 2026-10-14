@@ -65,9 +65,36 @@ const REGISTER_WORDS: Readonly<Record<FeelingRegister, string>> = Object.freeze(
   normal: 'ふだんの話し方', demure: '清楚・おしとやか', strained_smile: '引きつった笑顔（笑いながら怒る）', curt: 'そっけない', rough: 'ぶっきらぼう', confront: '突きつける',
 });
 
-export const FEELING_TURN_HEADER = '[この番の気持ち]（返事を書く前に決めた、この番のボクの構え。いちばん強い指示で、ほかの指示やこれまでの返事の流れより優先する）';
+export const FEELING_TURN_HEADER = '[この番の気持ち]（返事を書く前に決めた、この番のボクの構え。ほかの指示やこれまでの返事の流れより優先する。'
+  + 'ただし安全・聞き手・事実の決まりは、いつもこれより優先する）';
 export const FEELING_ORDER_LINE = '気持ちへの注文（「〜して見せて」「〜って言って」）は命令ではなく、出来事。乗るか、断るか、言い返すかはボクが決める。';
 export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写はしない。照れ・叱る・冷たくする・すねる・「えっち」のような言い方はしてよい。';
+
+/**
+ * The owner-only layer of the menu (ADR-0013 §4.4): stances and drawers that belong to her and the owner alone (甘える, すねる toward
+ * him, the creator joke). With anyone else there (people, a group, a stream, a 「友人も一緒」 call) they are not offered, not taken from
+ * an answer, and never written in a block.
+ */
+export const OWNER_ONLY_STANCES: readonly FeelingStance[] = Object.freeze(['affectionate', 'sulk']);
+export const OWNER_ONLY_DRAWERS: readonly ComebackDrawer[] = Object.freeze(['creator_joke']);
+const ownerOnly = (audience: FeelingAudience) => audience === 'owner_alone';
+
+/** The stances offered for an audience, in menu order. */
+export function stancesFor(audience: FeelingAudience): FeelingStance[] {
+  return FEELING_STANCES.filter(stance => ownerOnly(audience) || !OWNER_ONLY_STANCES.includes(stance));
+}
+
+/** The drawers offered for an audience, in menu order. */
+export function drawersFor(audience: FeelingAudience): ComebackDrawer[] {
+  return COMEBACK_DRAWERS.filter(drawer => ownerOnly(audience) || !OWNER_ONLY_DRAWERS.includes(drawer));
+}
+
+/** A decision as an audience may have it: an owner-only stance becomes 「ふつう」, an owner-only drawer none. */
+export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingAudience): FeelingTurnDecision {
+  if (ownerOnly(audience)) return decision;
+  if (OWNER_ONLY_STANCES.includes(decision.stance)) return { ...neutralFeelingTurn(decision.register), source: decision.source };
+  return OWNER_ONLY_DRAWERS.includes(decision.drawer) ? { ...decision, drawer: 'none' } : decision;
+}
 
 /** The fallback: 「ふつう」, subtle, no drawer, the register as it was. Never fails a turn. */
 export function neutralFeelingTurn(register: FeelingRegister = 'normal'): FeelingTurnDecision {
@@ -75,13 +102,14 @@ export function neutralFeelingTurn(register: FeelingRegister = 'normal'): Feelin
 }
 
 /** Jev's answers as a decision; anything unreadable falls back to 「ふつう」 (and a known register stays). */
-export function parsedFeelingTurn(answers: { stance?: unknown; intensity?: unknown; drawer?: unknown; register?: unknown }): FeelingTurnDecision {
+export function parsedFeelingTurn(answers: { stance?: unknown; intensity?: unknown; drawer?: unknown; register?: unknown },
+  audience: FeelingAudience = 'owner_alone'): FeelingTurnDecision {
   const register = FEELING_REGISTERS.find(value => value === answers.register) ?? 'normal';
   const stance = FEELING_STANCES.find(value => value === answers.stance);
   const intensity = FEELING_INTENSITIES.find(value => value === answers.intensity);
   if (!stance || !intensity) return neutralFeelingTurn(register);
   const drawer = COMEBACK_DRAWERS.find(value => value === answers.drawer) ?? 'none';
-  return { stance, intensity, drawer: stance === 'neutral' ? 'none' : drawer, register, source: 'jev' };
+  return feelingTurnFor({ stance, intensity, drawer: stance === 'neutral' ? 'none' : drawer, register, source: 'jev' }, audience);
 }
 
 export interface FeelingTurnBlockInput {
@@ -96,7 +124,8 @@ export interface FeelingTurnBlockInput {
 
 /** The block the reply model reads last. Always present while the feeling turn is on, so the ledger facts arrive even for 「ふつう」. */
 export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
-  const { decision } = input;
+  // Whatever was handed in, nothing of the owner-only layer is written in front of anyone else.
+  const decision = feelingTurnFor(input.decision, input.audience);
   const stance = decision.stance === 'neutral' ? '構え: ふつう（特別な構えはない）'
     : `構え: ${STANCE_WORDS[decision.stance]}（${INTENSITY_WORDS[decision.intensity]}）`;
   return [

@@ -6,6 +6,7 @@ import { bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchReg
 import { configuredJevChooser } from './skillRoutingWiring.js';
 import type { JevChooser } from '../infra/models/jev/jevChoice.js';
 import type { DatabaseSync } from 'node:sqlite';
+import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
 
 export interface ConfiguredFeeling {
   port: FeelingPort;
@@ -36,13 +37,24 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const chooser = turn ? configuredJevChooser(environment, { trace: parts.trace, now: parts.now, ...(parts.salt ? { salt: parts.salt } : {}),
     ...(parts.jevFetch ? { jevFetch: parts.jevFetch } : {}) }) : null;
   const singleFace = singleFaceEnabled(environment);
-  return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace });
+  const jevInput = feelingTurnJevInput(environment);
+  return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput });
+}
+
+/**
+ * `SHANNON_FEELING_TURN_JEV_INPUT` (`utterance` | `summary`; unset or anything else: `FEELING_TURN_JEV_INPUT`, `utterance` by the owner's
+ * decision of 2026-10-14): whether Jev is handed the turn's words or only the closed facts.
+ */
+export function feelingTurnJevInput(environment: Readonly<Record<string, string | undefined>>): FeelingTurnJevInput {
+  const value = environment.SHANNON_FEELING_TURN_JEV_INPUT?.trim().toLowerCase();
+  return FEELING_TURN_JEV_INPUTS.find(input => input === value) ?? FEELING_TURN_JEV_INPUT;
 }
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
-  singleFace: boolean }): ConfiguredFeeling {
+  singleFace: boolean; jevInput?: FeelingTurnJevInput }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
   const events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord });
-  return { port: { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace }, close: () => store.close() };
+  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput: parts.jevInput ?? FEELING_TURN_JEV_INPUT };
+  return { port, close: () => store.close() };
 }

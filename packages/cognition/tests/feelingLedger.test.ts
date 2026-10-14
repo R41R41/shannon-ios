@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMEBACK_DRAWER, SHANNON_EMOTION_KINDS, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
+  COMEBACK_DRAWER, FEELING_TURN_HEADER, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
   parsedFeelingTurn, repetitionLine, replyFacts, utteranceKind, watchRepetition, type FeelingEvent,
 } from '../src/index.js';
 
@@ -104,7 +104,7 @@ describe('the feeling turn and the drawer (D7, D9)', () => {
   it('gives the drawer as vocabulary, never a line, and keeps the provider policy line', () => {
     const block = feelingTurnBlock({ decision: { stance: 'not_play_along', intensity: 'moderate', drawer: 'shy_anger', register: 'normal', source: 'jev' },
       ledgerLine: '今日の胸の件（ライ氏）: 触れられた5回', repetitionLine: '', order: true, audience: 'owner_alone' });
-    expect(block.split('\n')[0]).toContain('いちばん強い指示');
+    expect(block.split('\n')[0]).toContain('ほかの指示やこれまでの返事の流れより優先する');
     expect(block).toContain('構え: 乗らない（はっきり）');
     expect(block).toContain('事実: 今日の胸の件（ライ氏）');
     expect(block).toContain('決め台詞ではない');
@@ -163,5 +163,34 @@ describe('the twelve single faces (desktop faces-12)', () => {
     expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'people', 'face').feeling).toBeUndefined();
     expect(Object.keys(SINGLE_FACE_FEELINGS)).toHaveLength(12);
     expect(Object.keys(SINGLE_FACE_FEELINGS).some(name => (SHANNON_EMOTION_KINDS as readonly string[]).includes(name))).toBe(false);
+  });
+});
+
+describe('the menu by audience (review a, c)', () => {
+  it('offers no owner-only stance or drawer with anyone else there, and takes none from an answer', () => {
+    for (const audience of ['people', 'group', 'stream'] as const) {
+      expect(stancesFor(audience)).not.toEqual(expect.arrayContaining(['affectionate']));
+      expect(stancesFor(audience)).not.toContain('sulk');
+      expect(drawersFor(audience)).not.toContain('creator_joke');
+      expect(parsedFeelingTurn({ stance: 'affectionate', intensity: 'strong', drawer: 'swat' }, audience)).toMatchObject({ stance: 'neutral', drawer: 'none' });
+      expect(parsedFeelingTurn({ stance: 'tease', intensity: 'moderate', drawer: 'creator_joke' }, audience)).toMatchObject({ stance: 'tease', drawer: 'none' });
+    }
+    expect(stancesFor('owner_alone')).toContain('affectionate');
+    expect(drawersFor('owner_alone')).toContain('creator_joke');
+  });
+
+  it('never writes 「構え: 甘える」 or the creator joke in front of others, whatever it is handed', () => {
+    const block = feelingTurnBlock({ decision: { stance: 'affectionate', intensity: 'strong', drawer: 'creator_joke', register: 'normal', source: 'jev' },
+      ledgerLine: '', repetitionLine: '', order: false, audience: 'stream' });
+    expect(block).not.toContain('甘える');
+    expect(block).not.toContain('作った人');
+    expect(block).toContain('構え: ふつう');
+    const sulk = feelingTurnBlock({ decision: { stance: 'tease', intensity: 'moderate', drawer: 'creator_joke', register: 'normal', source: 'jev' },
+      ledgerLine: '', repetitionLine: '', order: false, audience: 'people' });
+    expect(sulk).not.toContain('作った人');
+  });
+
+  it('puts the safety, audience and fact rules above the block in its own header', () => {
+    expect(FEELING_TURN_HEADER).toContain('ただし安全・聞き手・事実の決まりは、いつもこれより優先する');
   });
 });

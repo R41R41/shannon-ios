@@ -1,6 +1,8 @@
 import { neutralFeelingTurn, utteranceKind, type FeelingAudience, type FeelingRegister, type FeelingTurnDecision } from '@shannon/cognition';
 import { JEV_QUESTION_SETS, type JevChooser } from '../../infra/models/jev/jevChoice.js';
-import { feelingTurnFromAnswers, feelingTurnQuestions } from '../../contracts/feelingEventContract.js';
+import {
+  FEELING_TURN_JEV_INPUT, feelingTurnFromAnswers, feelingTurnQuestions, type FeelingTurnJevInput,
+} from '../../contracts/feelingEventContract.js';
 import { observeAsync } from '../../infra/observer/observerContext.js';
 import type { FeelingLines } from './feelingEvents.js';
 
@@ -30,6 +32,8 @@ export interface FeelingTurnInput {
   /** The register hint (D16), passed through unchanged in stage 1. */
   register: FeelingRegister;
   mood: { valence: number; arousal: number };
+  /** Whether Jev is handed the turn's words (`utterance`, at most 400 characters) or only the closed facts (`summary`). */
+  jevInput?: FeelingTurnJevInput;
 }
 
 /** What the chooser is shown: closed numbers, the audience, the words of this turn. */
@@ -50,10 +54,12 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
   const started = performance.now();
   return observeAsync('emotion', { phase: 'feeling.turn', surface: input.surface, audience: input.audience, register: input.register,
     composure: input.lines?.ledger.composure ?? 1 }, async () => {
-    const state = { utterance: input.utterance.slice(0, FEELING_TURN_LIMITS.utteranceCharacters), shannon_feeling: feelingTurnState(input) };
+    const handsWords = (input.jevInput ?? FEELING_TURN_JEV_INPUT) === 'utterance';
+    const words = handsWords ? { utterance: input.utterance.slice(0, FEELING_TURN_LIMITS.utteranceCharacters) } : {};
+    const state = { ...words, shannon_feeling: feelingTurnState(input) };
     const decided = await chooser.decide({
       scopeKey: input.scopeKey, surface: input.surface === 'voice' ? 'voice' : 'text', decision: 'feeling_turn', sets: [JEV_QUESTION_SETS.feelingTurn],
-      state, questions: feelingTurnQuestions(), parse: answers => feelingTurnFromAnswers(answers, input.register),
+      state, questions: feelingTurnQuestions('', input.audience), parse: answers => feelingTurnFromAnswers(answers, input.register, '', input.audience),
       fallback: () => neutralFeelingTurn(input.register),
       traceAnswers: value => ({ stance: value.stance, intensity: value.intensity, drawer: value.drawer, register: value.register, source: value.source }),
     });

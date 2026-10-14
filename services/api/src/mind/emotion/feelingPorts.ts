@@ -14,6 +14,7 @@ import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { JevChooser } from '../../infra/models/jev/jevChoice.js';
+import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.js';
 import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
@@ -33,6 +34,8 @@ export interface FeelingPort {
   readonly chooser: JevChooser | null;
   readonly turn: boolean;
   readonly singleFace: boolean;
+  /** What Jev is handed of the turn's words (`SHANNON_FEELING_TURN_JEV_INPUT`; owner decision 2026-10-14: `utterance`). */
+  readonly jevInput?: FeelingTurnJevInput;
 }
 
 /** The facts block while the feeling turn is off (events on): the same ledger and watch lines, as facts. */
@@ -129,7 +132,8 @@ export const feelingText = Object.freeze({
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
-        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion }) : null;
+        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion,
+        ...(port.jevInput ? { jevInput: port.jevInput } : {}) }) : null;
       return handle;
     }, null);
   },

@@ -8,7 +8,7 @@ import { fallbackWaitingDirection, jevWaitingQuestions } from '../../surfaces/vo
 import { localDecision } from './localVoiceDecision.js';
 import { lookSelfAnswer } from '../../contracts/appLookContract.js';
 import { feelingTurnFromAnswers, feelingTurnQuestions } from '../../contracts/feelingEventContract.js';
-import { isFeelingRegister } from '@shannon/cognition';
+import { isFeelingAudience, isFeelingRegister, type FeelingAudience } from '@shannon/cognition';
 
 export interface JevVoiceDecisionOptions {
   apiKey: string;
@@ -139,7 +139,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
         }],
         ...jevWaitingQuestions,
         // Syzygy ADR-0013: the feeling turn rides on this one call (`voice_route.v4`); absent, the questions of before.
-        ...(input.shannonFeeling ? Object.entries(feelingTurnQuestions('feeling_')) : []),
+        ...(input.shannonFeeling ? Object.entries(feelingTurnQuestions('feeling_', feelingAudienceOf(input))) : []),
       ]);
       const body = await this.client.ask({
         utterance: input.transcript.slice(0, 8_000),
@@ -227,5 +227,11 @@ function parsedJevDecision(
 function feelingAnswer(answers: Readonly<Record<string, unknown>>, input: VoiceDecisionInput): Pick<VoiceTurnDecision, 'feeling'> {
   if (!input.shannonFeeling) return {};
   const hint = input.shannonFeeling.register_hint;
-  return { feeling: feelingTurnFromAnswers(answers, isFeelingRegister(hint) ? hint : 'normal', 'feeling_') };
+  return { feeling: feelingTurnFromAnswers(answers, isFeelingRegister(hint) ? hint : 'normal', 'feeling_', feelingAudienceOf(input)) };
+}
+
+/** The audience the feeling turn was asked for; anything unreadable is taken as others present (never the owner-only menu). */
+function feelingAudienceOf(input: VoiceDecisionInput): FeelingAudience {
+  const audience = input.shannonFeeling?.audience;
+  return isFeelingAudience(audience) ? audience : 'people';
 }
