@@ -203,10 +203,12 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   }
 
   /** Due promises, told at their time (`SHANNON_PROMISE_ON_TIME`, `promiseNotices.ts`): her line when written and trusted, else the neutral one. */
-  deliverDuePromises(at = this.now(), timeZone = 'Asia/Tokyo', commitmentLines: ReadonlyMap<string, string> = new Map()): { due: number; sent: number } {
+  deliverDuePromises(
+    at = this.now(), timeZone = 'Asia/Tokyo', commitmentLines: ReadonlyMap<string, string> = new Map(), inCall?: (scopeKey: string, at: string) => boolean,
+  ): { due: number; sent: number } {
     this.commitmentLines = commitmentLines;
-    const told = tellDuePromises(this.database, at, timeZone, (scopeKey, snapshot, candidate, dayKey) =>
-      this.persistMessage(scopeKey, parseState(snapshot), candidate, null, null, dayKey, at, true));
+    const told = tellDuePromises(this.database, at, timeZone, (scopeKey, snapshot, candidate, dayKey, textOnly) =>
+      this.persistMessage(scopeKey, parseState(snapshot), candidate, null, null, dayKey, at, { textOnly }), inCall);
     if (told.sent > 0) this.secureFiles();
     return told;
   }
@@ -298,8 +300,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
-    /** A due promise told at its time (`deliverDuePromises`): only the gate's own error and a repeat hold it. */
-    promiseOnTime = false,
+    /** A due promise told at its time (`deliverDuePromises`): only the gate's own error and a repeat hold it; `textOnly`: never read aloud. */
+    promiseOnTime: { textOnly: boolean } | null = null,
   ): InitiativeWrite {
     const initiativeId = randomUUID();
     const threadId = candidate.thread_id ?? this.latestThread(scopeKey, createdAt);
@@ -322,7 +324,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       },
       initiativeId,
       sourceItemId: candidate.item_id,
-      dailyMindDayKey: dailyFocus?.dayKey ?? null, authoredOpening: spoken !== null,
+      dailyMindDayKey: dailyFocus?.dayKey ?? null, authoredOpening: spoken !== null, ...(promiseOnTime?.textOnly ? { spoken: false } : {}),
       ...(candidate.source_id === 'intent' || candidate.source_id === 'commitment' || candidate.source_id === 'morning-brief' ? {} : {
         sourceAttribution: {
           title: truncate(candidate.source_title, 200),

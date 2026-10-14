@@ -1,6 +1,7 @@
 import { CHARACTER_CORE, SHANNON_OWNER_NAME, characterCoreBlock, shannonOneLineVoice } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
+import { commitmentTimesGrounded } from './commitmentLineTime.js';
 
 /**
  * A promise's notice in her own words (owner decision 2026-10-14): when a promise of theirs is due, she writes the line at that
@@ -21,6 +22,8 @@ export interface CommitmentFacts {
   overdueMinutes: number | null;
   /** Someone other than the owner may see or hear her body now. */
   others: boolean;
+  /** The owner-local day it is due (month, day, weekday's one character): a day or weekday her line names must be this one. */
+  dueOn?: { month: number; day: number; weekday: string };
 }
 
 /** The neutral factual line: the only fixed text for a promise, used when no line of hers could be written or trusted. */
@@ -30,8 +33,6 @@ export function neutralCommitmentLine(facts: Pick<CommitmentFacts, 'title' | 'wh
 }
 
 const normalized = (text: string) => text.normalize('NFKC').replace(/[\s「」『』、。！？!?・]/gu, '').toLowerCase();
-/** The numbers of a text as values (「09:20」 and 「9時20分」 both hold 9 and 20). */
-const numbers = (text: string) => (text.normalize('NFKC').match(/\d+/gu) ?? []).map(Number);
 
 /** The longest run of characters the two texts share. */
 function sharedRun(left: string, right: string): number {
@@ -73,9 +74,8 @@ export function groundedCommitmentLine(line: unknown, facts: CommitmentFacts): s
   // While he is alone it names the promise; with anyone else there it does not.
   const named = namesPromise(text, facts.title);
   if (facts.others ? named : !named) return null;
-  // No time, date or count that the facts do not hold.
-  const known = new Set([...numbers(facts.title), ...numbers(facts.when ?? ''), ...(facts.overdueMinutes !== null ? [facts.overdueMinutes] : [])]);
-  return numbers(text).every(value => known.has(value)) ? text : null;
+  // No time, day, date or count that the facts do not hold: each time read as a time, by its hour and its minute.
+  return commitmentTimesGrounded(text, facts) ? text : null;
 }
 
 /** Her one-line voice is her character core's while `SHANNON_INNER_NOTE` is on (Syzygy ADR-0012 D5.1); off, the words of before. */

@@ -13,6 +13,7 @@ export const INNER_NOTE_CORE_PATHS = Object.freeze({
     'services/api/src/mind/emotion/innerNoteService.ts',
     'services/api/src/mind/emotion/innerNoteReflection.ts',
     'services/api/src/mind/emotion/store/innerNoteStore.ts',
+    'services/api/src/mind/emotion/store/innerNoteRows.ts',
     'services/api/src/infra/sqlite/migrations/emotion/001_inner_notes.ts',
     'services/api/src/wiring/innerNoteWiring.ts',
   ]),

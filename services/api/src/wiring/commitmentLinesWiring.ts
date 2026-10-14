@@ -62,5 +62,8 @@ export function commitmentFacts(candidate: { title: string; published_at: string
   const dueAt = candidate.published_at && Number.isFinite(Date.parse(candidate.published_at)) ? candidate.published_at : null;
   const when = dueAt ? new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(dueAt)) : '今日';
   const overdueMinutes = dueAt ? Math.max(0, Math.round((Date.parse(at) - Date.parse(dueAt)) / MINUTE)) : null;
-  return { title: candidate.title, when, overdueMinutes, others };
+  // The day it is due (a promise with only a date is due today): a day or weekday her line names is checked against it.
+  const day = localDateParts(new Date(dueAt ?? at), timeZone);
+  const weekday = new Intl.DateTimeFormat('ja-JP', { timeZone, weekday: 'short' }).format(new Date(dueAt ?? at));
+  return { title: candidate.title, when, overdueMinutes, others, dueOn: { month: day.month, day: day.day, weekday } };
 }

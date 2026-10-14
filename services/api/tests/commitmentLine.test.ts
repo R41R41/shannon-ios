@@ -133,7 +133,7 @@ describe('at the moment it is due', () => {
     expect(await prepare(f, writer)('2026-09-24T15:00:00.000Z')).toEqual(new Map()); // 00:00 in Tokyo
     expect(writer.asked).toEqual([]);
     expect(commitmentFacts({ title: '歯医者に電話する', published_at: '2026-09-25T05:00:00.000Z' }, '2026-09-25T05:20:00.000Z', 'Asia/Tokyo', false))
-      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false });
+      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false, dueOn: { month: 9, day: 25, weekday: '金' } });
     f.close();
   });
 });

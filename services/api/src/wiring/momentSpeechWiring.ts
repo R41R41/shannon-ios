@@ -3,7 +3,7 @@ import { innerNoteCurrent } from '@shannon/cognition';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
 import { noteForgotten } from '../mind/emotion/innerNoteLineage.js';
-import { readLatestInnerNote } from '../mind/emotion/store/innerNoteStore.js';
+import { readLatestInnerNote } from '../mind/emotion/store/innerNoteRows.js';
 import { momentInnerNoteBlock, type AutonomyMomentSpeech } from '../mind/action/ownTime/ownMomentSpeech.js';
 import { proactiveSelfEnabled } from './proactiveMomentsWiring.js';
 import { sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';

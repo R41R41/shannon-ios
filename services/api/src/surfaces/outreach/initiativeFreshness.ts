@@ -16,7 +16,8 @@ import type { InitiativeSource } from './store/initiativeSources.js';
  *   new message, and one of her moments may lead to one.
  * - **Text only** (`spoken: false`, a bubble and never a voice, on every body): a budget request (a system request, not her
  *   speech), a goal's state (neutral text), and a topic of the world that does not carry her own words.
- * - **Text only** too: a message of hers she chose to leave as text (`reachOut.spoken: false`, her moment speech).
+ * - **Text only** too: a message of hers she chose to leave as text (`reachOut.spoken: false`, her moment speech), and a due
+ *   promise told while he was in a call with her or talking (`spoken: false`, `promiseNotices.ts`): never over him.
  * - **Not judged**, as before: her own messages (`reach-out…`, which the body says only within five minutes), a look's answer
  *   (`body-look:`), a due promise (`commitment:`) and the end of a Minecraft operation he asked for (`lifecycle-outcome:`): how he is
  *   told of what he asked for is still his to decide.
@@ -50,8 +51,9 @@ export function initiativeDelivery(source: InitiativeSource, at: string, options
     const now = dateOf(at, options.timeZone);
     return now.date === brief[1] && now.hour >= options.morningHours.start && now.hour < options.morningHours.end ? 'voice' : 'stale';
   }
-  // Her own message that she chose to leave as text (owner decision 2026-10-14, `ownMomentSpeech.ts`): shown, never said aloud.
-  if (source.textOnly && sourceItemId.startsWith('reach-out')) return 'text';
+  // Her own message that she chose to leave as text (`ownMomentSpeech.ts`), or a promise told while he was in a call or talking
+  // (`promiseNotices.ts`): shown, never said aloud.
+  if (source.textOnly) return 'text';
   if (NOT_JUDGED.some(prefix => sourceItemId.startsWith(prefix))) return 'unjudged';
   if (sourceItemId.startsWith('autonomy-budget:')) return 'text';
   if (sourceItemId.startsWith('study:')) return fresh('share', createdAt, at) ? 'voice' : 'stale';

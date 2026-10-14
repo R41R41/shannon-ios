@@ -24,6 +24,7 @@ import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeS
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import { configuredCommitmentLineWriter } from './mind/action/respond/commitmentLineModel.js';
 import { switchOn } from '@shannon/switches';
+import { OWNER_CALL_LIMITS } from './mind/perception/ownerCallElsewhere.js';
 import { commitmentLinePreparer } from './wiring/commitmentLinesWiring.js';
 import { SQLiteInitiativeSources } from './surfaces/outreach/store/initiativeSources.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
@@ -66,6 +67,9 @@ const commitmentLines = commitmentLinePreparer({
   others: (scopeKey, at) => bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds),
   log: line => console.log(line),
 });
+/** A call with her under way: the newest call event of his devices within a call's longest reach started one. */
+const inCallWithHer = (scopeKey: string, at: string) => bodyStore.latestOfTypes(scopeKey, ['callStarted', 'callEnded'],
+  new Date(Date.parse(at) - OWNER_CALL_LIMITS.reportedCallMaximumMilliseconds).toISOString(), at)?.type === 'callStarted';
 const pushStore = new SQLitePushNotificationStore(databasePath);
 // SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
 const morningBrief = configuredMorningBrief(process.env, { databasePath, now: nowISOString, log: line => console.log(line),
@@ -90,7 +94,8 @@ try {
       try {
         const at = nowISOString();
         const lines = await commitmentLines(at, shutdownController.signal).catch(() => new Map<string, string>());
-        const told = initiativeStore.deliverDuePromises(at, 'Asia/Tokyo', lines);
+        // Never over him: while one of his devices reports a call with her, a promise is text only (`promiseNotices.ts`).
+        const told = initiativeStore.deliverDuePromises(at, 'Asia/Tokyo', lines, inCallWithHer);
         if (told.sent > 0) console.log(`Shannon promise delivered: ${told.sent}`);
       } catch (error) {
         if (stopping) break;

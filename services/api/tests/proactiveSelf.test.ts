@@ -415,7 +415,7 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     const lines = commitmentLinePreparer({ writer, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => f.state.snapshot(key),
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false, log: line => logs.push(line) });
     const prepared = await lines(DUE);
-    expect(writer.asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false }]);
+    expect(writer.asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水' } }]);
     f.initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', prepared);
     expect(f.last()?.content).toBe('ライ氏、9時20分ですよ！起こしてって言ってたの、ちゃんと覚えてますからね。');
     expect(logs).toEqual(['Shannon promise line: hers']);
@@ -463,3 +463,86 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     expect(model).toMatch(/switchOn\(environment, 'SHANNON_PROMISE_ON_TIME'\) \? \{ \.\.\.COMMITMENT, instructions: \(\) => commitmentLineInstructionsWithCore\(\) \} : COMMITMENT/u);
   });
 });
+
+describe('a promise\'s time is read as a time, by its hour and its minute (review of b867e66c)', () => {
+  const morning: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水' } };
+  const said = (line: string, facts: CommitmentFacts = morning) => groundedCommitmentLine(line, facts) !== null;
+
+  it('accepts the promise\'s own time in its equivalent forms, and today\'s day, weekday and date', () => {
+    for (const line of ['9時20分ですよ、起こしての時間！', '9:20、起こしてって言ってたやつ', '09:20になりました。起こしてですよ', '九時二十分！起こしてって言ったでしょ',
+      '今日の9時20分、起こしての約束ですよ', '水曜の朝9時20分、起こしてですよ', '10月14日の9時20分、起こしての時間', '午前9時20分、起こしての時間です']) {
+      expect(said(line), line).toBe(true);
+    }
+    // A verbatim quote of the promise is its name, with the day word he said then.
+    expect(said('ライ氏、「明日9:20に起こして」の時間ですよ', { ...morning, title: '明日9:20に起こして' })).toBe(true);
+    expect(said('9時半！起こしての時間ですよ', { ...morning, when: '09:30' })).toBe(true);
+  });
+
+  it('refuses another hour or minute, another day, weekday or date, another half of the day, and numbers that are not its own', () => {
+    for (const line of ['20時だよ、起こして', '20時9分、起こして', '明日の9時20分、起こして', '午後9時20分、起こして', '21時20分、起こして', '夜の9時20分、起こして',
+      '火曜の9時20分、起こして', '10月15日の9時20分、起こして', '9時、起こして', '9時20分、起こして。1時間後にまた', '9時20分、起こして。30分過ぎてます', '20だよ、起こして']) {
+      expect(said(line), line).toBe(false);
+    }
+    // The old loose set of numbers would have passed these two.
+    expect(said('20時9分、起こして', { ...morning, title: '明日9:20に起こして' })).toBe(false);
+    expect(said('20時だよ、起こして', { ...morning, title: '明日9:20に起こして' })).toBe(false);
+  });
+
+  it('reads a bare hour of an evening promise as its 12-hour form (said at its own time), never the other way', () => {
+    const evening = { ...morning, when: '21:20' };
+    expect(said('9時20分ですよ、起こしての時間', evening)).toBe(true);
+    expect(said('夜9時20分、起こしての時間', evening)).toBe(true);
+    expect(said('21:20、起こしての時間', evening)).toBe(true);
+    expect(said('午前9時20分、起こしての時間', evening)).toBe(false);
+    expect(said('朝の9時20分、起こしての時間', evening)).toBe(false);
+  });
+
+  it('names no time for a promise that has none, and states its lateness only as it is', () => {
+    expect(said('9時に起こしての約束ですよ', { ...morning, when: '今日', overdueMinutes: null })).toBe(false);
+    expect(said('9時20分の起こして、47分過ぎちゃった', { ...morning, overdueMinutes: 47 })).toBe(true);
+    expect(said('9時20分の起こして、30分過ぎちゃった', { ...morning, overdueMinutes: 47 })).toBe(false);
+  });
+});
+
+describe('a promise never speaks over him (review of b867e66c)', () => {
+  const SAID = '2026-10-13T12:58:33.359Z';
+  const DUE = '2026-10-14T00:20:00.000Z';
+  function told(options: { talkedAt?: string; inCall?: boolean }) {
+    const path = join(directory, `quiet-${databases += 1}.sqlite`);
+    const state = new SQLiteShannonStore({ path, now: () => DUE });
+    const threadId = state.createThread('owner', 'いつものトーク');
+    state.apply('owner', { type: 'prospective-memory-upserted', memory: extractProspectiveMemories('明日9:20に起こして', SAID)[0]! });
+    if (options.talkedAt) state.appendTurn('owner', threadId, 'いま話してる', 'はい。', options.talkedAt);
+    const initiatives = new SQLiteInitiativeStore(path, () => DUE, null, { promisesOnTime: true });
+    expect(initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', new Map(), () => options.inCall === true)).toMatchObject({ sent: 1 });
+    const sources = new SQLiteInitiativeSources(path);
+    const database = new DatabaseSync(path);
+    const id = (database.prepare('SELECT initiative_id AS id FROM initiative_messages').get() as { id: string }).id;
+    const source = sources.sources('owner', [id]).get(id)!;
+    const delivery = initiativeDelivery(source, DUE, { timeZone: 'Asia/Tokyo', morningHours: { start: 7, end: 10 } });
+    database.close(); sources.close(); initiatives.close(); state.close();
+    return { textOnly: source.textOnly === true, delivery };
+  }
+
+  it('is told as text only (the Talk and a bubble, never read aloud) while he is in a call with her or has just talked', () => {
+    expect(told({ inCall: true })).toEqual({ textOnly: true, delivery: 'text' });
+    expect(told({ talkedAt: later(DUE, -3) })).toEqual({ textOnly: true, delivery: 'text' });
+    // Otherwise as before: her body says it.
+    expect(told({ talkedAt: later(DUE, -30) })).toEqual({ textOnly: false, delivery: 'unjudged' });
+    // The world worker reads his devices' call events for it.
+    const worker = readFileSync(apiSourceFile('worldWorker.ts'), 'utf8');
+    expect(worker).toContain("deliverDuePromises(at, 'Asia/Tokyo', lines, inCallWithHer)");
+    expect(worker).toMatch(/const inCallWithHer = \(scopeKey: string, at: string\) => bodyStore\.latestOfTypes\(scopeKey, \['callStarted', 'callEnded'\]/u);
+  });
+});
+
+describe('her own time reads the note without its writer (review of b867e66c)', () => {
+  it('loads the row module only: no migration, no writer class', () => {
+    const wiring = readFileSync(apiSourceFile('momentSpeechWiring.ts'), 'utf8');
+    expect(wiring).toContain("from '../mind/emotion/store/innerNoteRows.js'");
+    expect(wiring).not.toContain('innerNoteStore.js');
+    const rows = readFileSync(apiSourceFile('innerNoteRows.ts'), 'utf8');
+    expect(rows.match(/^import[^;]+;$/gmu)?.join('\n')).not.toMatch(/migrations|sqliteOpen|innerNoteStore|INSERT|UPDATE|DELETE/u);
+  });
+});
+

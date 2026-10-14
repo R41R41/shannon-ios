@@ -9,7 +9,10 @@ import { openDatabase } from '../../../infra/sqlite/sqliteOpen.js';
  */
 export interface InitiativeSource {
   sourceItemId: string; createdAt: string; authored: boolean;
-  /** A message of hers she chose to leave as text (`reachOut.spoken: false`, her moment speech, owner decision 2026-10-14). */
+  /**
+   * Text only: a message of hers she chose to leave as text (`reachOut.spoken: false`, her moment speech, owner decision
+   * 2026-10-14), or a promise told while he was in a call or talking (`spoken: false`, `promiseNotices.ts`).
+   */
   textOnly?: true;
 }
 
@@ -56,5 +59,8 @@ function authored(metadata: string | null): boolean {
 }
 
 function textOnly(metadata: string | null): boolean {
-  try { return metadata !== null && (JSON.parse(metadata) as { reachOut?: { spoken?: unknown } }).reachOut?.spoken === false; } catch { return false; }
+  try {
+    const parsed = metadata === null ? null : JSON.parse(metadata) as { spoken?: unknown; reachOut?: { spoken?: unknown } };
+    return parsed?.spoken === false || parsed?.reachOut?.spoken === false;
+  } catch { return false; }
 }
