@@ -43,6 +43,10 @@ describe('the pace note', () => {
     const step = { snapshot: { task: { createdAt: '2026-10-14T06:59:00.000Z' }, checkpoint: { consecutiveToolFailures: 3 } } } as unknown as TaskStep;
     expect(minecraftPace(step, [{ ok: true }, { ok: false }, { ok: false }], Date.parse('2026-10-14T07:11:30.000Z')))
       .toEqual({ elapsedMinutes: 12, recentResults: { worked: 1, failed: 2 }, failedStepsInARow: 3 });
+    const evidence = JSON.stringify({ milestones: { dimension: 'the_nether', visited: ['overworld', 'the_nether'], netherReached: true, blazeRods: null } });
+    expect(minecraftPace(step, [{ name: 'mc.goal-evidence', ok: true, summary: evidence }, { name: 'mc.move-to', ok: true, summary: '{}' },
+      { name: 'mc.goal-evidence', ok: true, summary: '{"milestones":{"dimen' }], Date.parse('2026-10-14T07:11:30.000Z')).milestones)
+      .toEqual({ dimension: 'the_nether', netherReached: true });
     const fresh = { snapshot: { task: { createdAt: 'never' }, checkpoint: null } } as unknown as TaskStep;
     expect(minecraftPace(fresh, [], 0)).toEqual({ elapsedMinutes: null, recentResults: { worked: 0, failed: 0 }, failedStepsInARow: 0 });
   });

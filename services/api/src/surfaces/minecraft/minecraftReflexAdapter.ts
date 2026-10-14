@@ -43,14 +43,33 @@ export function concreteDanger(observation: BodyObservation): { kind: 'health' |
 
 /**
  * The task's pace as closed numbers (the old Minebot `describePace`; owner 2026-10-14: 「40分のまま速くする」): minutes since the task
- * began, its latest tool results that worked and failed (at most six), and its steps in a row whose actions all failed.
+ * began, its latest tool results that worked and failed (at most six), its steps in a row whose actions all failed, and its latest
+ * milestones when the body reported them.
  */
-export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ ok: boolean }>, at: number) {
+export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ name?: string; ok: boolean; summary?: string }>, at: number) {
   const began = Date.parse(step.snapshot.task.createdAt), checkpoint = step.snapshot.checkpoint as { consecutiveToolFailures?: unknown } | null;
   const failedSteps = Number(checkpoint?.consecutiveToolFailures ?? 0);
   return { elapsedMinutes: Number.isFinite(began) ? Math.max(0, Math.floor((at - began) / 60_000)) : null,
     recentResults: { worked: recent.filter(result => result.ok).length, failed: recent.filter(result => !result.ok).length },
-    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0 };
+    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0, ...latestMilestones(recent) };
+}
+
+/**
+ * The body's latest milestones (Minebot 4b047cf, `mc.goal-evidence`): its dimension and whether it reached the Nether, as closed
+ * values; nothing when no recent result of it is whole JSON with them.
+ */
+type PaceMilestones = { milestones?: { dimension: string | null; netherReached: boolean | null } };
+function latestMilestones(recent: ReadonlyArray<{ name?: string; ok: boolean; summary?: string }>): PaceMilestones {
+  for (const result of [...recent].reverse()) {
+    if (result.name !== 'mc.goal-evidence' || !result.ok || !result.summary) continue;
+    try {
+      const milestones = (JSON.parse(result.summary) as { milestones?: { dimension?: unknown; netherReached?: unknown } }).milestones;
+      if (!milestones || typeof milestones !== 'object') continue;
+      const dimension = typeof milestones.dimension === 'string' && /^[a-z_:]{1,40}$/u.test(milestones.dimension) ? milestones.dimension : null;
+      return { milestones: { dimension, netherReached: typeof milestones.netherReached === 'boolean' ? milestones.netherReached : null } };
+    } catch { continue; }
+  }
+  return {};
 }
 
 /** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
