@@ -46,30 +46,31 @@ export function concreteDanger(observation: BodyObservation): { kind: 'health' |
  * began, its latest tool results that worked and failed (at most six), its steps in a row whose actions all failed, and its latest
  * milestones when the body reported them.
  */
-export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ name?: string; ok: boolean; summary?: string }>, at: number) {
+export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ ok: boolean }>, at: number, milestones: PaceMilestones | null = null) {
   const began = Date.parse(step.snapshot.task.createdAt), checkpoint = step.snapshot.checkpoint as { consecutiveToolFailures?: unknown } | null;
   const failedSteps = Number(checkpoint?.consecutiveToolFailures ?? 0);
   return { elapsedMinutes: Number.isFinite(began) ? Math.max(0, Math.floor((at - began) / 60_000)) : null,
     recentResults: { worked: recent.filter(result => result.ok).length, failed: recent.filter(result => !result.ok).length },
-    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0, ...latestMilestones(recent) };
+    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0, ...(milestones ? { milestones } : {}) };
 }
 
 /**
- * The body's latest milestones (Minebot 4b047cf, `mc.goal-evidence`): its dimension and whether it reached the Nether, as closed
- * values; nothing when no recent result of it is whole JSON with them.
+ * The body's milestones (Minebot 4b047cf, `mc.goal-evidence`) as the pace note gives them: its dimension and whether it reached the
+ * Nether, closed values only (`visited` and the counts are left out). Read from a result's whole text, before any summary of it is
+ * cut (review of d36252e8: a long `visited` list passed the 1,000 characters kept and the milestones went missing); null when the
+ * text carries none.
  */
-type PaceMilestones = { milestones?: { dimension: string | null; netherReached: boolean | null } };
-function latestMilestones(recent: ReadonlyArray<{ name?: string; ok: boolean; summary?: string }>): PaceMilestones {
-  for (const result of [...recent].reverse()) {
-    if (result.name !== 'mc.goal-evidence' || !result.ok || !result.summary) continue;
-    try {
-      const milestones = (JSON.parse(result.summary) as { milestones?: { dimension?: unknown; netherReached?: unknown } }).milestones;
-      if (!milestones || typeof milestones !== 'object') continue;
-      const dimension = typeof milestones.dimension === 'string' && /^[a-z_:]{1,40}$/u.test(milestones.dimension) ? milestones.dimension : null;
-      return { milestones: { dimension, netherReached: typeof milestones.netherReached === 'boolean' ? milestones.netherReached : null } };
-    } catch { continue; }
+export type PaceMilestones = { dimension: string | null; netherReached: boolean | null };
+export function minecraftMilestones(value: unknown): PaceMilestones | null {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try { parsed = JSON.parse(value); } catch { return null; }
   }
-  return {};
+  const milestones = parsed && typeof parsed === 'object' ? (parsed as { milestones?: unknown }).milestones : undefined;
+  if (!milestones || typeof milestones !== 'object' || Array.isArray(milestones)) return null;
+  const { dimension, netherReached } = milestones as { dimension?: unknown; netherReached?: unknown };
+  return { dimension: typeof dimension === 'string' && /^[a-z_:]{1,40}$/u.test(dimension) ? dimension : null,
+    netherReached: typeof netherReached === 'boolean' ? netherReached : null };
 }
 
 /** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
@@ -87,6 +88,9 @@ export function createMinecraftTaskBody(parts: {
   const cleanupListeners = new Set<() => void>();
   const prior = step.snapshot.checkpoint as { fcaToolSelection?: { recentResults?: Array<{ name: string; ok: boolean; summary: string }> } } | null;
   let recentResults = (prior?.fcaToolSelection?.recentResults ?? []).slice(-6).map(value => ({ name: value.name.slice(0, 160), ok: value.ok, summary: value.summary.slice(0, 1000) }));
+  // The latest milestones, kept in the task's checkpoint across steps (`minecraftMilestones` key, through this port's `checkpoint`).
+  const kept = (step.snapshot.checkpoint as { minecraftMilestones?: unknown } | null)?.minecraftMilestones;
+  let milestones = minecraftMilestones({ milestones: kept });
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -256,7 +260,8 @@ export function createMinecraftTaskBody(parts: {
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace: minecraftPace(step, recentResults, now()) };
+      const pace = minecraftPace(step, recentResults, now(), milestones);
+      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
@@ -276,6 +281,7 @@ export function createMinecraftTaskBody(parts: {
     },
     noteResult(call, result) {
       if (activeAction?.name === call.name) activeAction = undefined;
+      if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
     },
     async close() {
@@ -289,7 +295,8 @@ export function createMinecraftTaskBody(parts: {
     audiences: ['owner_alone' as const], surfaces: ['text' as const] };
   // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
-  const tools: FcaExternalTools = { definitions: offered ? [definition] : [], async execute(call) {
+  const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
+    checkpoint: () => (milestones ? { minecraftMilestones: milestones } : {}), async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!parts.selector || call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !live()) throw new Error('FCA_BODY_LEASE_INVALID');

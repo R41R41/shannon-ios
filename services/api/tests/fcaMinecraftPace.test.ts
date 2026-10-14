@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MINECRAFT_SKILL_DEFAULT_MS, MINECRAFT_SKILL_MAX_MS, minecraftRetryHint, minecraftSkillMilliseconds, minecraftSkillResult } from '../src/surfaces/minecraft/minecraftOutcome.js';
-import { minecraftPace } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
+import { minecraftMilestones, minecraftPace } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
 import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 
 /** The Minebot lane agreement of 2026-10-14 (failure kinds, per-skill duration) and the pace note (owner: 「40分のまま速くする」). */
@@ -43,11 +43,23 @@ describe('the pace note', () => {
     const step = { snapshot: { task: { createdAt: '2026-10-14T06:59:00.000Z' }, checkpoint: { consecutiveToolFailures: 3 } } } as unknown as TaskStep;
     expect(minecraftPace(step, [{ ok: true }, { ok: false }, { ok: false }], Date.parse('2026-10-14T07:11:30.000Z')))
       .toEqual({ elapsedMinutes: 12, recentResults: { worked: 1, failed: 2 }, failedStepsInARow: 3 });
-    const evidence = JSON.stringify({ milestones: { dimension: 'the_nether', visited: ['overworld', 'the_nether'], netherReached: true, blazeRods: null } });
-    expect(minecraftPace(step, [{ name: 'mc.goal-evidence', ok: true, summary: evidence }, { name: 'mc.move-to', ok: true, summary: '{}' },
-      { name: 'mc.goal-evidence', ok: true, summary: '{"milestones":{"dimen' }], Date.parse('2026-10-14T07:11:30.000Z')).milestones)
-      .toEqual({ dimension: 'the_nether', netherReached: true });
+    const milestones = minecraftMilestones(JSON.stringify({ milestones: { dimension: 'the_nether', visited: ['overworld', 'the_nether'], netherReached: true } }));
+    expect(minecraftPace(step, [], Date.parse('2026-10-14T07:11:30.000Z'), milestones).milestones).toEqual({ dimension: 'the_nether', netherReached: true });
     const fresh = { snapshot: { task: { createdAt: 'never' }, checkpoint: null } } as unknown as TaskStep;
     expect(minecraftPace(fresh, [], 0)).toEqual({ elapsedMinutes: null, recentResults: { worked: 0, failed: 0 }, failedStepsInARow: 0 });
+  });
+});
+
+describe('the milestones of mc.goal-evidence (review of d36252e8)', () => {
+  it('reads them from the whole result, however long its visited list, and gives only the dimension and netherReached', () => {
+    const visited = Array.from({ length: 400 }, (_, index) => `chunk_${index}`);
+    const text = JSON.stringify({ ok: true, milestones: { dimension: 'the_nether', visited, netherReached: true, blazeRods: 2, blazePowder: null,
+      enderPearls: 0, enderEyes: null } });
+    expect(text.length).toBeGreaterThan(4_000);
+    expect(minecraftMilestones(text)).toEqual({ dimension: 'the_nether', netherReached: true });
+    // What a 1,000-character summary of it held: no milestones (the former reading).
+    expect(minecraftMilestones(text.slice(0, 1000))).toBeNull();
+    expect(minecraftMilestones(JSON.stringify({ milestones: { dimension: 'Not A Dimension!', netherReached: 'yes' } }))).toEqual({ dimension: null, netherReached: null });
+    for (const none of ['', 'not json', '{}', JSON.stringify({ milestones: null }), JSON.stringify({ milestones: [] })]) expect(minecraftMilestones(none)).toBeNull();
   });
 });
