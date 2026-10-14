@@ -37,14 +37,15 @@ struct ShannonPresentationFaceTests {
     }
 
     @Test
-    func noPublicIdIsDrawnWithAnOwnerOnlyFace() {
-        #expect(ShannonPresentationFace.ownerOnly == ["jealous", "tender", "tsun"])
-        for id in ShannonPresentationFace.bundledIDs.subtracting(ShannonPresentationFace.ownerOnly) {
-            #expect(!ShannonPresentationFace.ownerOnly.contains(ShannonPresentationFace.drawnID(for: id) ?? ""), "\(id)")
-            // Not even as the eyes' nearest face (the server's nearest for 「そっぽ」 is `jealous`).
-            #expect(![.jealous, .tender].contains(ShannonPresentationFace.eyeExpression(for: id)), "\(id)")
+    func everyIdIsDrawnWithItsOwnFaceInPublicToo() {
+        // Owner, 2026-10-14 (「嫉妬も甘えも出す」): no client-side rule narrows a face; each id draws its own.
+        for id in ["jealous", "tender", "tsun", "turnAway", "flatStare"] {
+            #expect(ShannonPresentationFace.drawnID(for: id) == id)
         }
-        #expect(ShannonPresentationFace.eyeExpression(for: "turnAway") == .annoyed)
+        // The eyes take the server's nearest face (`expression` beside the single face's `feeling`).
+        #expect(ShannonPresentationFace.eyeExpression(for: "turnAway") == .jealous)
+        #expect(ShannonPresentationFace.eyeExpression(for: "tsun") == .jealous)
+        #expect(ShannonPresentationFace.eyeExpression(for: "tender") == .tender)
         #expect(ShannonPresentationFace.japaneseName(for: "flatStare") == "ジト目")
     }
 

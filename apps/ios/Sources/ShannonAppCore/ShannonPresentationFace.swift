@@ -11,17 +11,14 @@ import AppKit
 ///
 /// - No id (an older server, an older cache): nil, and the message shows its usual face (`ShannonMessageAvatarMood`).
 /// - An id this build has no picture for (a newer server): the neutral face, never a guess.
-/// - Each id draws its own picture only. With anyone else there the server sends the public layer's id, and no public id
-///   is drawn with a face of the owner-only layer (`ownerOnly`), not even as the nearest one.
+/// - Each id draws its own picture, whoever was there: the faces are not restricted in public or on a stream (owner,
+///   2026-10-14: 「嫉妬も甘えも出す」). Which feeling to show in front of others is the server's choice, never the client's.
 ///
 /// The pictures are `shannon-face-<id>.png` (108 px, 36 pt at 3×), rendered from Live2D by `scripts/render-face-icons.py`;
 /// the names are keyed by the id and stay stable when the art is rendered again.
 public enum ShannonPresentationFace {
     /// The id drawn when the id is not known here.
     public static let fallbackID = "neutral"
-
-    /// The owner-only layer (the server's `OWNER_ONLY_PRESENTATION_IDS`): shown to the owner alone, never in front of others.
-    public static let ownerOnly: Set<String> = ["jealous", "tender", "tsun"]
 
     /// Every id with a picture: the server's presentation vocabulary (version 1) and the other faces of the Live2D model.
     public static let bundledIDs: Set<String> = [
@@ -48,8 +45,7 @@ public enum ShannonPresentationFace {
         "shannon-face-\(drawnID(for: id) ?? fallbackID)"
     }
 
-    /// The Waterlight eye shape (the ボット avatar) for an id: one of the 22 faces. A public id never reads as an owner-only one
-    /// (the server's nearest face for 「そっぽ」 is `jealous`; here it is `annoyed`).
+    /// The Waterlight eye shape (the ボット avatar) for an id: one of the 22 faces, the server's nearest face for the id.
     public static func eyeExpression(for id: String) -> ShannonExpressionDTO {
         guard let drawn = drawnID(for: id) else { return .neutral }
         if let expression = ShannonExpressionDTO(rawValue: drawn) { return expression }
@@ -67,7 +63,7 @@ public enum ShannonPresentationFace {
     private static let nearest: [String: ShannonExpressionDTO] = [
         "proud": .determined, "flustered": .embarrassed, "apologetic": .concerned,
         "businessSmile": .joyful, "strainedSmile": .wry, "blankFace": .calm, "listless": .sleepy, "tongueClick": .annoyed,
-        "coverUp": .amused, "irked": .annoyed, "banVerdict": .annoyed, "flatStare": .exasperated, "turnAway": .annoyed,
+        "coverUp": .amused, "irked": .annoyed, "banVerdict": .annoyed, "flatStare": .exasperated, "turnAway": .jealous,
         "tsun": .jealous, "holdingBackTears": .sad,
         "angry": .annoyed, "crying": .sad, "pout": .annoyed, "shocked": .surprised, "shout": .annoyed, "smug": .determined,
         "wail": .sad, "wink": .amused,
