@@ -5,6 +5,11 @@ export interface ActionExecution {
   /** Transient acknowledgement of this step's model request; never persisted or exposed. */
   modelOutcome?:'unknown'|'acknowledged';
   modelUsage?:{inputTokens:number;outputTokens:number};
+  /**
+   * An FCA step asked its model for its decision (`fcaRunner.ts`). Before that, a step has run only internal work and model calls
+   * whose results it keeps (recall, tool selection, history summaries): a hold there may be retried (`heldBeforeAnyEffect`).
+   */
+  decisionRequested?:boolean;
   /** A bounded executor's acknowledgement, separate from a model call nested inside that step. */
   stepOutcome?:'unknown'|'acknowledged';
   /** A write tool of a conversation turn ran and has not returned an acknowledged result: an interruption leaves its outcome unknown. */

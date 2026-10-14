@@ -2,6 +2,7 @@ import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskStep, TaskSnapshot } from '../taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS, executeTaskTool } from '../../tools/toolRunnerPorts.js';
 import { observeAsync, observerHandoff, observeSync, withObserverTask } from '../../../infra/observer/observerContext.js';
+import { currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
@@ -140,6 +141,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const waiting = waitGate.fact();
   await checked();
   observerHandoff('context', 'native', provenance);
+  const execution = currentActionExecution();
+  if (execution) execution.decisionRequested = true;
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
   const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal).catch(error => { progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' }); throw error; });
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'received' });
@@ -235,7 +238,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (saved.task.phase === 'waiting') {

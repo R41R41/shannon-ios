@@ -138,15 +138,18 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     });
   }
   type StepPorts = ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
+  /** The task is stopping and the step's model and tool promises have unwound, with the body's physical release confirmed. */
+  function stoppedSafely(taskId: string, stepPorts: StepPorts, execution: ActionExecution): boolean {
+    return runtime.get(scopeKey, taskId)?.phase === 'stopping' && execution.modelOutcome !== 'unknown'
+      && stepPorts?.safeToAcknowledgeStop?.() !== false && stepPorts?.tools?.safeToAcknowledgeStop?.() !== false;
+  }
   /** Closes a step that threw: a confirmed stop, a known refusal, or else an unknown outcome. Logs only the closed code. */
   async function settleFailedStep(error: unknown, taskId: string, step: TaskStep | null, stepPorts: StepPorts, execution: ActionExecution): Promise<void> {
     const code = fcaErrorCode(error);
-    const stopped = step && runtime.get(scopeKey, taskId)?.phase === 'stopping';
-    if (stopped && execution.modelOutcome !== 'unknown'
-      && stepPorts?.safeToAcknowledgeStop?.() !== false && stepPorts?.tools?.safeToAcknowledgeStop?.() !== false) {
+    if (step && stoppedSafely(taskId, stepPorts, execution)) {
       // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
       console.log(`Shannon FCA step stopped task=${taskId} code=${code}`);
-      runtime.recordStoppedStep(step!);
+      runtime.recordStoppedStep(step);
       await flushReceipts();
       return;
     }
@@ -156,6 +159,9 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       return;
     }
+    // Held before its decision with nothing sent to the body or any outside tool (Minecraft run 8, 2026-10-14: held right after a
+    // compaction, the task was paused as unknown and retired): the step is closed as `continue` and the task goes on. See below.
+    if (await retriedHeldStep(code, taskId, step, execution)) return;
     // The provider refused the request itself (nothing ran, nothing was charged, an identical retry is refused again), or her history
     // could not be made to fit before the step's model call (a replay holds the same way; owner test 2026-10-13: FCA_HISTORY_RECENT_LIMIT
     // left a research unknown until it was retired). A known failure with its notice.
@@ -188,6 +194,26 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     try {
       // Nothing ran, so the messages the step saw stay pending for the retry (before 2026-10-14 they were consumed and lost).
       const checkpoint = { ...prior, fcaProviderRetries: retries + 1 };
+      return runtime.commitStep(step, { disposition: 'continue', history: [], consumedMessageIds: [], checkpoint }) !== null;
+    } catch { return false; }
+  }
+  /**
+   * A step held before its decision (`heldBeforeAnyEffect`) is committed as `continue` with nothing in its history and no message
+   * consumed, under its own lease (a lost lease cannot commit, and the step stays unknown as before). The compaction it committed
+   * stays; the next step starts from it. At most `HELD_RETRIES` in a row: a normal commit resets the count (`fcaRunner.ts`).
+   */
+  async function retriedHeldStep(code: string, taskId: string, step: TaskStep | null, execution: ActionExecution): Promise<boolean> {
+    if (!step || !heldBeforeAnyEffect(code, execution) || !retryHeldStep(step)) return false;
+    console.log(`Shannon FCA step held_retried task=${taskId} code=${code}`);
+    await flushReceipts();
+    return true;
+  }
+  function retryHeldStep(step: TaskStep): boolean {
+    const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
+    const retries = typeof prior.fcaHeldRetries === 'number' ? prior.fcaHeldRetries : 0;
+    if (retries >= HELD_RETRIES || runtime.get(scopeKey, step.taskId)?.phase !== 'executing') return false;
+    try {
+      const checkpoint = { ...prior, fcaHeldRetries: retries + 1 };
       return runtime.commitStep(step, { disposition: 'continue', history: [], consumedMessageIds: [], checkpoint }) !== null;
     } catch { return false; }
   }
@@ -322,6 +348,21 @@ const CONTEXT_REJECTIONS: ReadonlySet<string> = new Set(['FCA_CONTEXT_INVALID', 
 export function failsBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
   return rejectedBeforeAnyEffect(code, execution) || (HISTORY_LIMITS.has(code) && execution.stepOutcome !== 'unknown')
     || (CONTEXT_REJECTIONS.has(code) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown');
+}
+
+/** Holds of a step's execution (`fcaRunner.ts` `checked`, and its history's own check in `prepareFcaHistory`). */
+const HELD_CODES: ReadonlySet<string> = new Set(['FCA_EXECUTION_HELD', 'FCA_HISTORY_HELD']);
+const HELD_RETRIES = 3;
+/**
+ * A hold before the step asked for its decision, with no bounded executor started in it (a body skill, a reflex or a Minecraft
+ * lifecycle operation sets `stepOutcome`), no model call in doubt and no write in flight. Before its decision a step has only run
+ * internal work and model calls whose results it keeps (a committed history summary among them), so nothing outside can be done
+ * twice by running the next step. Any other hold keeps today's unknown.
+ */
+export function heldBeforeAnyEffect(code: string,
+  execution: Pick<ActionExecution, 'decisionRequested' | 'modelOutcome' | 'stepOutcome' | 'writeInFlight'>): boolean {
+  return HELD_CODES.has(code) && execution.decisionRequested !== true && execution.stepOutcome === undefined
+    && execution.modelOutcome !== 'unknown' && execution.writeInFlight !== true;
 }
 
 export function rejectedTaskReport(title: string): string {
