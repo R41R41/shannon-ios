@@ -71,4 +71,16 @@ describe('the relationship ledger', () => {
     const start = RELATIONSHIP_PARAMETERS.start.owner;
     expect(start.respect - state.scales.respect).toBeGreaterThan(start.trust - state.scales.trust);
   });
+
+  it('lets irritation fade on calm days of ordinary talk, not only on silent ones (review H1)', () => {
+    const insults = (day: string): RelationshipDay => ({ dayKey: day,
+      events: [1, 2, 3].map(minute => event(day, minute, 'spoke', { tags: utteranceTags('お前ポンコツだな') })) });
+    const calm = ['2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13'].map(day => ({ dayKey: day,
+      events: [event(day, 0, 'spoke'), event(day, 5, 'spoke')] }));
+    const after = foldRelationship([insults('2026-10-07')], 'owner', '2026-10-08').scales.irritation;
+    const later = foldRelationship([insults('2026-10-07'), ...calm], 'owner', '2026-10-14').scales.irritation;
+    expect(after).toBeGreaterThanOrEqual(0.4);
+    expect(later).toBeCloseTo(after * (1 - RELATIONSHIP_PARAMETERS.irritationFade) ** 6, 3);
+    expect(later).toBeLessThan(0.1);
+  });
 });

@@ -126,7 +126,9 @@ function step(state: RelationshipState, signals: DaySignals, parameters: Relatio
     if (pull[scale] < 0) return value + parameters.lossRate * pull[scale];
     return value + parameters.gainRate * pull[scale] * (1 - value) + (lost ? 0 : parameters.recovery * (state.peak[scale] - value));
   };
-  const built = state.scales.irritation + parameters.irritationGain * pull.irritation * (1 - state.scales.irritation);
+  // Review H1: irritation fades by its daily share on every closed day that brings none, a day of ordinary talk included.
+  const kept = pull.irritation > 0 ? state.scales.irritation : state.scales.irritation * (1 - parameters.irritationFade);
+  const built = kept + parameters.irritationGain * pull.irritation * (1 - kept);
   const irritation = clamp(built * (1 - parameters.apologyRelief * signals.apology));
   const floor = (scale: 'trust' | 'liking', value: number) => Math.max(parameters.floorRatio * state.peak[scale], value);
   const trust = clamp(floor('trust', moved('trust'))), liking = clamp(floor('liking', moved('liking'))), respect = clamp(moved('respect'));
