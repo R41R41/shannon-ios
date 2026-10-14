@@ -1,4 +1,4 @@
-import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
+import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion, TextPacingBypass, TextRegisterDirective } from '@shannon/cognition';
 import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from '../infra/models/chatModel.js';
 import type { OrganizeSession } from '../integrations/voyager/organize.js';
 import type { ShannonPlace } from '../integrations/places/placeDiscovery.js';
@@ -20,7 +20,7 @@ export interface ApiRequest {
 
 /** One NDJSON line of `stream: "sentences"` (docs/chat-stream-contract.md). */
 export type ChatStreamLine =
-  | { type: 'start'; threadId: string; turnId?: string; audience: 'owner' | 'others' }
+  | { type: 'start'; threadId: string; turnId?: string; audience: 'owner' | 'others'; textRegister?: ChatTextRegister }
   | { type: 'sentence'; index: number; text: string }
   | { type: 'done'; response: unknown; fallback?: ChatSentenceFallback }
   | { type: 'error'; status: number; error: string };
@@ -74,6 +74,16 @@ export interface ThreadListRequest {
   scopeKey: string;
 }
 
+/**
+ * Her text register and pacing for one reply (Syzygy ADR-0013 item 10, `SHANNON_TEXT_REGISTER`; docs/feeling-events-contract.md). Absent:
+ * render as before. A device waits `pauseMs` from his message before showing her typing, shows it at least `typingMs`, and with `split`
+ * sends the first sentence and then the rest (`parts`, when there are two) after `gapMs` of typing; `bypass`: all at once, no pacing.
+ */
+export interface ChatTextRegister extends TextRegisterDirective {
+  bypass?: TextPacingBypass;
+  parts?: readonly [string, string];
+}
+
 export interface ChatResponse {
   thread?: ChatThread;
   mode: ShannonChatMode;
@@ -87,6 +97,8 @@ export interface ChatResponse {
   feedback?: FeedbackState;
   snapshotVersion: number;
   messageEmotion: ShannonMessageEmotion;
+  /** Item 10 (`SHANNON_TEXT_REGISTER`): the form and pacing of this reply; old clients ignore it. */
+  textRegister?: ChatTextRegister;
   systemPrompt: string;
   state: CompanionStateSnapshot;
   artifacts?: ShannonGeneratedArtifact[];

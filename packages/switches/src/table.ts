@@ -229,6 +229,50 @@ export const SWITCHES = [
     doc: 'Owner 2026-10-14: a strong feeling turn\'s text reply goes to Sonnet (capped a day by SHANNON_FEELING_STRONG_REPLY_DAILY_CAP); else Haiku.',
   },
   {
+    name: 'SHANNON_CORE_AFFECT', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 2 shadow: appraisal, core affect, blame and composure folded from her events and recorded beside the current state; no behaviour.',
+  },
+  {
+    name: 'SHANNON_REPLY_CHECK', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 stage 2: her reply is checked (giving in, lecture, AI tone…); strong, order and public text turns before sending, one rewrite.',
+  },
+  {
+    name: 'SHANNON_FEELING_SENTENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 D7: in a strong scene (fast layer past her band, or blame), Haiku writes her feeling in 2-3 lines before a text reply; owner alone.',
+  },
+  {
+    name: 'SHANNON_FEELING_MEANING', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v5).',
+  },
+  {
+    name: 'SHANNON_RELATIONSHIP_LEDGER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: trust, liking, respect and irritation per person, moved nightly from her closed days (drops fast, recovers slowly, floor).',
+  },
+  {
+    name: 'SHANNON_EPISODE_MEMORY', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: a closed day\'s incidents become episodes she recalls later (yesterday\'s, older ones when their subject comes up).',
+  },
+  {
+    name: 'SHANNON_BOUNDARY_MEMORY', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: her boundaries with their basis and origin (self or told); a told one is hers only once she endorses it in reflection.',
+  },
+  {
+    name: 'SHANNON_FEELING_AUDIENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS', 'SHANNON_REPLY_CHECK'],
+    doc: 'ADR-0013 stage 4: events keyed by who wrote (account, never name), friend and light ledgers, audience layers, source cap, audience checks.',
+  },
+  {
+    name: 'SHANNON_FEELING_STREAM', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_AUDIENCE'],
+    doc: 'ADR-0013 stage 5: comments move her (crowd, caps, repeats collapsed), harassment ladder and floor, say-only moderation, stream register.',
+  },
+  {
+    name: 'SHANNON_TEXT_REGISTER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 item 10 (owner: B): text reply form (length, emoji, endings) and pacing (typing, split in two, sulk pause ≤20 s) from her feeling.',
+  },
+  {
+    name: 'SHANNON_INNER_NARRATOR', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_INNER_NOTE'],
+    doc: 'ADR-0013 §6: her inner note reads the fast layer and the ledger as narrator (honne not from her replies); intent and until unchanged.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

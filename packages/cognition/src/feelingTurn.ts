@@ -29,6 +29,8 @@ export interface FeelingTurnDecision {
   register: FeelingRegister;
   /** `jev`: chosen; `fallback`: Jev did not answer in time or answered something unusable: 「ふつう」. */
   source: 'jev' | 'fallback';
+  /** Stage 2 (`SHANNON_CORE_AFFECT`): Jev's reading of the words' meaning for her appraisal: meant, and teasing (each 0..1). */
+  meaning?: { deliberate: number; teasing: number };
 }
 
 /** The menu as the chooser reads it (English, a fixed question set: a change of wording is a new version). */
@@ -155,6 +157,8 @@ export interface FeelingTurnBlockInput {
   /** This turn's words were a feeling order. */
   order: boolean;
   audience: FeelingAudience;
+  /** Stage 3: what is carried from the days before (relationship, episodes, boundaries), lines of facts for this audience. */
+  carried?: readonly string[];
 }
 
 /** The block the reply model reads last. Always present while the feeling turn is on, so the ledger facts arrive even for 「ふつう」. */
@@ -166,7 +170,8 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   return [
     FEELING_TURN_HEADER, stance,
     decision.register !== 'normal' ? `話し方の段: ${REGISTER_WORDS[decision.register]}` : '',
-    input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', input.ledgerLine ? FEELING_FACTS_USE_LINE : '',
+    input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', ...(input.carried ?? []),
+    input.ledgerLine || input.carried?.length ? FEELING_FACTS_USE_LINE : '',
     input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
   ].filter(Boolean).join('\n');
 }

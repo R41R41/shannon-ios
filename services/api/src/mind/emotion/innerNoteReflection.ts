@@ -1,5 +1,5 @@
 import {
-  CHARACTER_CORE, INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,
+  CHARACTER_CORE, endorsedBoundaries, innerNoteReflectionInput, innerNoteReflectionInstructions, innerNoteReflectionSchema, parsedInnerNoteReflection,
   type InnerNoteDraft, type InnerNoteReflectionFacts,
 } from '@shannon/cognition';
 import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
@@ -26,8 +26,11 @@ export interface InnerNoteReflectionRequest {
 
 export interface InnerNoteReflector {
   readonly model: string;
-  /** The draft (null when the answer was not a note) and the usage of the call; throws when the provider refused or failed. */
-  reflect(request: InnerNoteReflectionRequest): Promise<{ draft: InnerNoteDraft | null; usage: InnerNoteUsage | null }>;
+  /**
+   * The draft (null when the answer was not a note) and the usage of the call, and (ADR-0013 D6) the told boundaries she endorsed;
+   * throws when the provider refused or failed.
+   */
+  reflect(request: InnerNoteReflectionRequest): Promise<{ draft: InnerNoteDraft | null; usage: InnerNoteUsage | null; endorsed?: readonly string[] }>;
 }
 
 export class ClaudeInnerNoteReflector implements InnerNoteReflector {
@@ -49,12 +52,17 @@ export class ClaudeInnerNoteReflector implements InnerNoteReflector {
 
   async reflect(request: InnerNoteReflectionRequest) {
     this.last = null;
-    const answer = await completeStructured('inner_note', innerNoteReflectionInstructions(CHARACTER_CORE), innerNoteReflectionInput(request.facts),
-      INNER_NOTE_REFLECTION_SCHEMA, { claude: this.claude, scopeKey: request.scopeKey, maximumOutputTokens: INNER_NOTE_SERVICE_LIMITS.maximumOutputTokens,
+    // Syzygy ADR-0013 §6: with her fast layer handed, she reflects as narrator (one more fixed section; without it, the same bytes).
+    const told = (request.facts.toldBoundaries ?? []).map(item => item.subject);
+    const instructions = innerNoteReflectionInstructions(CHARACTER_CORE, { narrator: request.facts.fastLayer !== undefined,
+      carryOver: request.facts.relationship !== undefined, toldBoundaries: told.length > 0 });
+    const answer = await completeStructured('inner_note', instructions, innerNoteReflectionInput(request.facts),
+      innerNoteReflectionSchema(told), { claude: this.claude, scopeKey: request.scopeKey, maximumOutputTokens: INNER_NOTE_SERVICE_LIMITS.maximumOutputTokens,
         effort: 'low', cacheSystem: true, ...(request.signal ? { signal: request.signal } : {}) });
     const usage = this.usage();
     if (!answer.ok) throw new Error(`INNER_NOTE_UPSTREAM_${answer.status}`);
-    return { draft: parsedInnerNoteReflection(answer.value), usage };
+    const endorsed = told.length ? { endorsed: endorsedBoundaries(answer.value, told) } : {};
+    return { draft: parsedInnerNoteReflection(answer.value), usage, ...endorsed };
   }
 
   private usage(): InnerNoteUsage | null {

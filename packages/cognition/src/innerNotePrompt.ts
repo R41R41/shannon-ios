@@ -60,9 +60,50 @@ const HOOKS = `[フック]（本文と一緒に出す）
 - scale・until_minutes・day_reason: 上の仕組みのとおり。何もない時は until_minutes=null。
 ${ROUTE_FIELD}`;
 
-/** The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour). */
-export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE): string {
-  return [HEADER, characterCoreBlock(core), FIELDS, SYSTEM, QUESTIONS, HOOKS].join('\n\n');
+/**
+ * Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): the note no longer decides her feeling; it reads the fast layer and the ledger, and tells
+ * her honne, her tatemae and her plan as the narrator. Her replies were said to the moment, so they are not where her honne comes from.
+ */
+const NARRATOR = `[語り手として]
+- いまの気持ちは、もう動いている（[いまの${I}]、速い層）。メモはそれを決め直さず、読んで、本人の言葉で語る。
+- 本音は、速い層と今日の件（帳面）から読む。${I}が返事で言ったことを本音の元にしない（返事は、その場に合わせて言ったことがある）。`;
+
+/**
+ * ADR-0012 D4 as ADR-0013 §6 revises it (`SHANNON_RELATIONSHIP_LEDGER`): the sulking attitude still closes with the day, but the
+ * relationship ledger's values carry over and come back slowly (owner: 「下がって、ゆっくり戻る」).
+ */
+const DAY_END = '- 一日の気持ちは、次の日には持ち越されない（仕組み）。';
+const DAY_END_CARRIED = '- すねた態度や一日の気持ちは、次の日には持ち越されない（仕組み）。ただし関係の帳簿（信頼・好意・尊敬・いらだち）は日をまたいで持ち越され、'
+  + 'ゆっくり戻る（仕組み。[〜との間] の行）。';
+
+/** ADR-0013 D6 (`SHANNON_BOUNDARY_MEMORY`): a boundary she was told is hers only once she endorses it here (ADR-0005 3 and 7). */
+const TOLD_BOUNDARIES = `[言われた境界]（入力に [言われた境界] がある時）
+- 人に「嫌と言わないと」と言われて持った境界は、まだ${I}が自分で決めたものではない。
+- 振り返って、本当に${I}自身もいやだと思うものだけを endorsed_boundaries に書く（入力の名前のまま）。そう思わないもの、まだ分からないものは書かない。何も無ければ空にする。`;
+
+/**
+ * The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour); one more section as
+ * narrator; the day's end as revised when the relationship ledger carries over; the told boundaries' section when there are any.
+ */
+export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE,
+  options: { narrator?: boolean; carryOver?: boolean; toldBoundaries?: boolean } = {}): string {
+  const system = options.carryOver ? SYSTEM.replace(DAY_END, DAY_END_CARRIED) : SYSTEM;
+  return [HEADER, characterCoreBlock(core), FIELDS, system, QUESTIONS, HOOKS, ...(options.narrator ? [NARRATOR] : []),
+    ...(options.toldBoundaries ? [TOLD_BOUNDARIES] : [])].join('\n\n');
+}
+
+/** The schema with the told boundaries she may endorse (only when there are some; otherwise the schema of before). */
+export function innerNoteReflectionSchema(toldBoundaries: readonly string[] = []): Readonly<Record<string, unknown>> {
+  if (!toldBoundaries.length) return INNER_NOTE_REFLECTION_SCHEMA;
+  const endorsed = { type: 'array', items: { type: 'string', enum: [...toldBoundaries] }, description: '自分のものにする言われた境界' };
+  return { ...INNER_NOTE_REFLECTION_SCHEMA, properties: { ...INNER_NOTE_REFLECTION_SCHEMA.properties, endorsed_boundaries: endorsed },
+    required: [...INNER_NOTE_REFLECTION_SCHEMA.required, 'endorsed_boundaries'] };
+}
+
+/** The told boundaries an answer endorses, among those offered. */
+export function endorsedBoundaries(value: unknown, offered: readonly string[]): string[] {
+  const listed = value && typeof value === 'object' ? (value as { endorsed_boundaries?: unknown }).endorsed_boundaries : undefined;
+  return Array.isArray(listed) ? [...new Set(listed.filter((item): item is string => typeof item === 'string' && offered.includes(item)))] : [];
 }
 
 export interface InnerNoteReflectionFacts {
@@ -91,6 +132,12 @@ export interface InnerNoteReflectionFacts {
   ledger?: string;
   /** This day's turns that asked, allowed or refused touching her, oldest first (events with `consent`). */
   consents?: readonly InnerNoteEvent[];
+  /** Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): her fast layer now, in words (`fastLayerWords`). Present: she reflects as narrator. */
+  fastLayer?: string;
+  /** Stage 3 (`SHANNON_RELATIONSHIP_LEDGER`): the relationship line ('' when nothing is off). Present: ADR-0012 D4 as revised. */
+  relationship?: string;
+  /** Stage 3 (`SHANNON_BOUNDARY_MEMORY`): the boundaries she was told and has not taken as hers (names as the answer gives them back). */
+  toldBoundaries?: readonly { subject: string; word: string }[];
 }
 
 function minutesLeft(at: string, until: string): string {
@@ -137,6 +184,10 @@ export function innerNoteReflectionInput(facts: InnerNoteReflectionFacts): strin
     counts,
     ['[起きたこと]', ...facts.events.slice(-INNER_NOTE_LIMITS.events).map(event => innerNoteEventLine(event, at, timeZone))].join('\n'),
     ...touchLines(facts),
+    ...(facts.fastLayer ? [facts.fastLayer] : []),
+    ...(facts.relationship ? [facts.relationship] : []),
+    ...(facts.toldBoundaries?.length ? [`[言われた境界]（まだ${I}が自分で決めたものではない。名前: 何の境界か）\n${facts.toldBoundaries
+      .map(item => `- ${item.subject}: ${item.word}`).join('\n')}`] : []),
     feelingLine(facts.feeling),
     ...(recent.length ? [['[直前の会話]', ...recent].join('\n')] : []),
     ...(facts.yesterday ? [`[前の日のこと]（出来事として覚えているだけ。態度は持ち越さない）${facts.yesterday}`] : []),

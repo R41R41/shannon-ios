@@ -12,6 +12,8 @@ import { soothingIn } from './affect.js';
  */
 export const FEELING_EVENT_KINDS = [
   'touched', 'spoke', 'apologized', 'praised', 'feeling_order', 'own_reply', 'own_refusal', 'own_motion', 'game', 'comment', 'crowd_comment',
+  // Stage 3 (`SHANNON_BOUNDARY_MEMORY`): she took a boundary she was told as her own, in her inner note's reflection.
+  'own_boundary',
 ] as const;
 export type FeelingEventKind = typeof FEELING_EVENT_KINDS[number];
 
@@ -64,8 +66,22 @@ export interface FeelingEventFacts {
   /** The feeling turn's stance and register for the turn this reply answered. */
   turnStance?: string;
   register?: FeelingRegister;
+  /** Stage 2: Jev's reading of his words for her appraisal (`AppraisalMeaning`): meant and teasing, 0..1. */
+  meaning?: { deliberate: number; teasing: number };
+  /** Closed tags of his words (`utteranceTags`: insult, lewd, ai_taunt, creator_insult); no words are kept. */
+  tags?: readonly string[];
+  /** The reply check's flags on this reply (`SHANNON_REPLY_CHECK`), and whether it was rewritten before it was sent. */
+  checkFlags?: readonly string[];
+  rewritten?: true;
   /** The reply went to the stronger model (`SHANNON_FEELING_STRONG_REPLY_MODEL`): counted against the day's cap. */
   replyModel?: 'strong';
+  /** Stage 3 (`SHANNON_BOUNDARY_MEMORY`): his words told her to refuse something (「嫌だって言わないと」): its subject, a part or `body`. */
+  toldBoundary?: string;
+  /** Stage 5 (`SHANNON_FEELING_STREAM`): what kind of words a comment was, and a digest of them (repeats collapse; the text is never kept). */
+  commentKind?: 'spoke' | 'apologized' | 'praised' | 'feeling_order';
+  digest?: string;
+  /** Stage 5: her tell-off to a viewer, a notice for the moderator (the owner); she has no tool to act on it (owner: 「言うだけ」). */
+  tellOff?: { viewer: string; reason: string };
 }
 
 export interface FeelingEvent {
@@ -90,11 +106,29 @@ export const isFeelingAudience = (value: unknown): value is FeelingAudience => F
 export const isFeelingChannel = (value: unknown): value is FeelingChannel => FEELING_CHANNELS.some(kind => kind === value);
 export const isFeelingRegister = (value: unknown): value is FeelingRegister => FEELING_REGISTERS.some(kind => kind === value);
 
+/**
+ * Who wrote, as a surface knows it for certain (ADR-0013 §4.1, stage 4): the owner's verified account (`registered`), or a platform
+ * account (`platform`: `person:<id>` for a remembered friend bound to it, `platform:<digest>` for anyone else). Never a name or a look
+ * (ADR-0011 §8.2). `audience` is who can read the reply: `people` for a friend's DM, `group` for a shared conversation.
+ */
+export interface FeelingSpeaker {
+  personKey: string;
+  identity: 'registered' | 'platform';
+  audience: Exclude<FeelingAudience, 'owner_alone'>;
+  /** The place (a group conversation: `group:<thread>`), so her composure and the per-source cap work per place (§4.8; re-review S4-4). */
+  sceneId?: string;
+}
+
 /** Who an event is about and who saw it, from what the surface knows. Only the owner alone makes an owner event. */
-export function feelingActor(input: { ownerAlone: boolean; group?: boolean; sceneId?: string | null }):
+export function feelingActor(input: { ownerAlone: boolean; group?: boolean; sceneId?: string | null; speaker?: FeelingSpeaker }):
   Pick<FeelingEvent, 'personKey' | 'identity' | 'audience' | 'sceneId'> {
   const sceneId = input.sceneId ?? null;
   if (input.ownerAlone) return { personKey: OWNER_PERSON_KEY, identity: 'registered', audience: 'owner_alone', sceneId };
+  // Stage 4 (§4.1): a surface that knows who wrote (a platform account, never a name or a look) keys the event to that person.
+  if (input.speaker) {
+    const { personKey, identity, audience } = input.speaker;
+    return { personKey, identity, audience, sceneId: input.speaker.sceneId ?? sceneId };
+  }
   return { personKey: sceneId ? `scene:${sceneId}` : UNKNOWN_PERSON_KEY, identity: 'unknown', audience: input.group ? 'group' : 'people', sceneId };
 }
 

@@ -5,6 +5,7 @@ import {
   groupAudience,
   type CompanionClock,
   type CompanionStateStore,
+  type FeelingSpeaker,
   type MemoryAudience,
 } from '@shannon/cognition';
 import { resolveReplyEmotion } from '../emotion/emotionPorts.js';
@@ -89,6 +90,11 @@ export interface PlatformAudiencePolicy {
   /** What she remembers of the people here, and her impressions of them, as this audience may read them. */
   peopleLines: readonly string[];
   impressionLines: readonly string[];
+  /**
+   * Syzygy ADR-0013 stage 4 (§4.1): who wrote, by account only: the owner, a remembered friend bound to the account (`person:<id>`), or
+   * anyone else (`platform:<digest>`, the account id never kept as it is). Absent in the owner's private conversation.
+   */
+  speaker?: FeelingSpeaker;
 }
 
 export class PlatformBridgeError extends Error {
@@ -254,7 +260,8 @@ export class PlatformBridgeService {
     // Her impressions of the people here, only those everyone in this conversation has seen form.
     const impressionLines = peopleLines.length ? platformImpressionLines(this.conversationStore, snapshot, scopeKey, {
       personIds: userIds.flatMap(id => this.people!.person(scopeKey, request.platform, id)?.id ?? []), present, at: this.now() }) : [];
-    return { binding, threadId, ownerWrote, present, ownerPresent, gate, snapshot, peopleLines, impressionLines };
+    const speaker = feelingSpeakerOf(present, ownerWrote, friend?.id ?? null, `${request.platform}:${request.sourceUserId}`, threadId);
+    return { binding, threadId, ownerWrote, present, ownerPresent, gate, snapshot, peopleLines, impressionLines, ...(speaker ? { speaker } : {}) };
   }
 
   private boundConversation(request: { platform: ShannonPlatform; conversationId: string }): PlatformBridgeBinding {
@@ -448,4 +455,16 @@ function recordValue(value: unknown): value is Record<string, unknown> {
 
 function badRequest(message: string): PlatformBridgeError {
   return new PlatformBridgeError('BAD_REQUEST', 400, message);
+}
+
+/** Who wrote, for her feeling events (stage 4): by account, never by name; nothing in the owner's private conversation. */
+function feelingSpeakerOf(present: MemoryAudience, ownerWrote: boolean, friendId: string | null, account: string, threadId: string)
+  : FeelingSpeaker | null {
+  if (present.kind === 'owner') return null;
+  const audience = present.kind === 'group' ? 'group' as const : 'people' as const;
+  // A group conversation is a place: her composure and the per-source cap are its own (re-review S4-4).
+  const place = audience === 'group' ? { sceneId: `group:${threadId}` } : {};
+  if (ownerWrote) return { personKey: 'owner', identity: 'registered', audience, ...place };
+  const personKey = friendId ? `person:${friendId}` : `platform:${createHash('sha256').update(account).digest('hex').slice(0, 16)}`;
+  return { personKey, identity: 'platform', audience, ...place };
 }

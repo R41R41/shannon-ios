@@ -99,7 +99,7 @@ export class BodyReactions {
   useInnerNote(port: InnerNotePort | null): void {
     this.port = port;
     port?.useBody?.({ partCounts: (scopeKey, since, at) => this.partCounts(scopeKey, since, at),
-      ledger: (scopeKey, at) => (this.feeling ? feelingBody.ledgerLine(this.feeling, scopeKey, at, this.dependencies.stateStore.snapshot(scopeKey)) : '') });
+      ...feelingBody.noteReader(() => this.feeling, scopeKey => this.dependencies.stateStore.snapshot(scopeKey)) });
   }
 
   get innerNote(): InnerNotePort | null { return this.port; }
