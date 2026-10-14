@@ -50,7 +50,7 @@ function run(summary: () => AnthropicMessage) {
   const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
   const tools: FcaExternalTools = { definitions: [find],
     async execute() { return toolOk(JSON.stringify({ found: 'oak_log', distance: 33, blocks: 'x'.repeat(40_000) })); } };
-  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,

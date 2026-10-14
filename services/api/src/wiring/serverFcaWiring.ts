@@ -114,7 +114,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
-    const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+    const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
     // A Minecraft task's skill reads, settled by what the task then does (`fcaSkillOutcomes.ts`).
     const minecraft = withSkillOutcomes(configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions }),
       parts.skills, parts.now);

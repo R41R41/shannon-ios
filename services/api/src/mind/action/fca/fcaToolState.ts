@@ -19,7 +19,7 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   const key = digest({ task: { id, title, goal, completionCriteria }, children: input.children ?? [], inputKey, catalog });
   const known = new Set(catalog.map(tool => tool.name));
   if (previous && !previous.refresh && previous.key === key && [...previous.names, ...previous.opened].every(name => known.has(name))) return previous;
-  let result: { names: readonly string[]; source: 'jev' | 'fallback' };
+  let result: { names: readonly string[]; source: 'jev' | 'fallback' | 'catalog' };
   try {
     observerHandoff('context', 'jevt', { phase: 'fca_selection', offeredCount: catalog.length });
     result = await selector.select({ scopeKey, signal, goal: `${input.task.goal}\nCompletion criteria: ${input.task.completionCriteria}`,
@@ -31,13 +31,44 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   }
   signal.throwIfAborted();
   const valid = Array.isArray(result?.names) && result.names.every(name => typeof name === 'string' && known.has(name))
-    && new Set(result.names).size === result.names.length && ['jev', 'fallback'].includes(result.source);
-  const chosen = new Set(valid ? result.names : [...known]);
-  const wanted = options.keepBodyTools ? keptBodyTools(chosen, catalog, previous) : chosen;
-  observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: valid ? result.source : 'fallback', selectedCount: wanted.size });
+    && new Set(result.names).size === result.names.length && ['jev', 'fallback', 'catalog'].includes(result.source);
+  const fallback = !valid || result.source === 'fallback';
+  const chosen = fallback ? fallbackFcaTools(catalog, previous, options.keepBodyTools === true) : new Set(result.names);
+  const wanted = options.keepBodyTools && !fallback ? keptBodyTools(chosen, catalog, previous) : chosen;
+  observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: fallback ? 'fallback' : result.source, selectedCount: wanted.size });
+  // A fallback menu is asked again at the next decision instead of being kept until the input changes.
   return { version: 1, key, inputKey, names: catalog.filter(tool => wanted.has(tool.name)).map(tool => tool.name),
     opened: previous?.key === key ? previous.opened.filter(name => known.has(name)) : [],
-    refresh: false, recentResults: previous?.recentResults ?? [] };
+    refresh: fallback, recentResults: previous?.recentResults ?? [] };
+}
+
+/**
+ * The characters of tool definitions a fallback menu may add (each definition as JSON). Minecraft run 10 (2026-10-14, task
+ * 74a32315): four selections that timed out or fell back put all 139 tools (~89k characters of definitions) in the request, which
+ * passed Haiku's 100k-token price step (101,703–109,898 estimated tokens). A Jev selection of that task added 38–46k.
+ */
+export const FCA_FALLBACK_DEFINITION_CHARACTERS = 40_000;
+
+/**
+ * The menu when the selector timed out, fell back or answered invalidly: the task tools, then the previous selection, then (a body
+ * task) the body's tools, until `FCA_FALLBACK_DEFINITION_CHARACTERS`. Every other tool stays listed in the catalog and can be opened
+ * with `tool_open`; `memory_read` tools are always offered (`selectedFcaTools`).
+ */
+export function fallbackFcaTools(catalog: readonly ShannonToolDefinition[], previous: Pick<FcaToolState, 'names'> | null, body: boolean): Set<string> {
+  const byName = new Map(catalog.map(tool => [tool.name, tool]));
+  const core = catalog.filter(tool => tool.domain === 'task_runtime' || /^(task|goal)\./u.test(tool.name)).map(tool => tool.name);
+  const bodyTools = body ? catalog.filter(tool => tool.domain === 'minecraft_body').map(tool => tool.name) : [];
+  const chosen = new Set<string>();
+  let used = 0;
+  for (const name of [...core, ...previous?.names ?? [], ...bodyTools]) {
+    const tool = byName.get(name);
+    if (!tool || chosen.has(name)) continue;
+    const size = JSON.stringify({ name: tool.name, description: tool.description, input: tool.input }).length;
+    if (used + size > FCA_FALLBACK_DEFINITION_CHARACTERS) continue;
+    chosen.add(name);
+    used += size;
+  }
+  return chosen;
 }
 
 /**
