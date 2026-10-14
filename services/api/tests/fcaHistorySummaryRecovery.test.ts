@@ -94,8 +94,9 @@ describe('a third Minecraft step compacts its first round (Minebot lane run 2, t
     const decisions = r.decisionBodies();
     expect(decisions).toHaveLength(4);
     const third = messages(decisions[2]!);
-    // One public user message, the definitions added again after it, then the current decision; no signed block in it.
-    expect(third.map(entry => entry.role)).toEqual(['user', 'system', 'user']);
+    // One public user message, then the current decision, the definitions added again after it (they end the request: a system
+    // message between two user messages was a live 400, Minebot lane run 3); no signed block in it.
+    expect(third.map(entry => entry.role)).toEqual(['user', 'user', 'system']);
     expect(JSON.stringify(third[0])).not.toContain('signed-round');
     expect(JSON.stringify(third[0]).length).toBeLessThanOrEqual(FCA_HISTORY_POLICY.maximumNativeCharacters + 100);
     const replay = JSON.parse(String(third[0]!.content)) as { kind: string; rounds: Array<{ sequence: number; messages: Array<{ role: string; callId?: string; content: string }> }> };
@@ -108,7 +109,7 @@ describe('a third Minecraft step compacts its first round (Minebot lane run 2, t
     const decision = replay.rounds[0]!.messages.find(entry => entry.role === 'user')!;
     expect(JSON.parse(decision.content)).toMatchObject({ task: { goal: GOAL }, restatedEachDecision: expect.arrayContaining(['catalog']) });
     expect(JSON.parse(decision.content)).not.toHaveProperty('catalog');
-    const current = JSON.parse(String(third.at(-1)!.content)) as { task: { goal: string; completionCriteria: string } };
+    const current = JSON.parse(String(third[1]!.content)) as { task: { goal: string; completionCriteria: string } };
     expect(current.task).toMatchObject({ goal: GOAL, completionCriteria: CRITERIA });
     // Nothing stored: no summary, the original rounds whole and signed.
     const window = r.driver.runtime.history('owner', r.task.id)!;

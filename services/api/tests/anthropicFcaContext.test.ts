@@ -8,6 +8,7 @@ import { SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { TASK_TOOLS } from '../src/mind/tools/toolRunnerPorts.js';
 import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+import { anthropicRequestViolation } from './support/anthropicProviderRules.js';
 
 const input = (history: readonly unknown[] = []): FcaModelInput => ({
   task: { id: 'task', title: 'Research', goal: 'Find public facts', completionCriteria: 'Measurements compared' },
@@ -50,7 +51,12 @@ describe('FCA shared context native protocol', () => {
     expect((f.bodies[1]!.messages as unknown[]).slice(0, first.history.length)).toEqual(first.history);
     expect(JSON.stringify(first.history)).toBe(original);
     expect(f.bodies[1]!.system).toEqual(f.bodies[0]!.system); expect(f.bodies[1]!.tools).toEqual(f.bodies[0]!.tools);
-    const current = JSON.parse((f.bodies[1]!.messages as Array<{ content: string }>).at(-1)!.content);
+    // The current decision, then the added definition, which ends the request (a system message between two user messages is a
+    // provider 400: Minebot lane run 3, 2026-10-14).
+    const sent = f.bodies[1]!.messages as Array<{ role: string; content: string }>;
+    expect(sent.slice(-2).map(entry => entry.role)).toEqual(['user', 'system']);
+    expect(anthropicRequestViolation(f.bodies[1]!)).toBeNull();
+    const current = JSON.parse(sent.at(-2)!.content);
     expect(current.sharedContext).toEqual(input().sharedContext); expect(current.recall).toEqual(input().recall);
     expect(FCA_CONTEXT_INSTRUCTIONS).toContain(SHANNON_FCA_SHARED_CAPABILITY.text);
     expect(JSON.stringify(f.bodies[1]!.system)).not.toMatch(/PRIVATE_AFFECT_CAUSE|PRIVATE_RECALL_SOURCE|fca_context/u);

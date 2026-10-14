@@ -136,8 +136,9 @@ describe('a Minecraft task whose first round alone exceeds the history budget ta
     const second = run.fixture.bodies[1];
     expect(second).toBeDefined();
     const sent = messages(second!);
-    // A fresh epoch: one public user message, the definitions added again after it, then the current decision.
-    expect(sent.map(entry => entry.role)).toEqual(['user', 'system', 'user']);
+    // A fresh epoch: one public user message, then the current decision, the definitions added again after it (they end the
+    // request: a system message between two user messages was the live 400 of Minebot lane run 3, root fd99df55).
+    expect(sent.map(entry => entry.role)).toEqual(['user', 'user', 'system']);
     expect(length(sent[0])).toBeLessThanOrEqual(FCA_HISTORY_POLICY.maximumNativeCharacters);
     expect(JSON.stringify(sent)).not.toContain('signed-round-1');
     const bootstrap = JSON.parse(String(sent[0]!.content)) as { kind: string; rounds: Array<{ messages: Array<{ role: string; callId?: string; content: string }> }> };
@@ -146,7 +147,7 @@ describe('a Minecraft task whose first round alone exceeds the history budget ta
     expect(public_.filter(entry => entry.role === 'tool_call').map(entry => entry.callId)).toEqual(['toolu_reflex_1']);
     expect(public_.filter(entry => entry.role === 'tool_result').map(entry => entry.callId)).toEqual(['toolu_reflex_1']);
     expect(public_.find(entry => entry.role === 'tool_result')!.content).toMatch(/…（長いため後略: \d+字）/u);
-    const current = JSON.parse(String(sent.at(-1)!.content)) as { task: { goal: string; completionCriteria: string } };
+    const current = JSON.parse(String(sent[1]!.content)) as { task: { goal: string; completionCriteria: string } };
     expect(current.task).toMatchObject({ goal: GOAL, completionCriteria: CRITERIA });
     // The stored round is untouched.
     const stored = run.driver.runtime.snapshot('owner', run.task.id)!.history;

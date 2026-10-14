@@ -118,9 +118,12 @@ export class AnthropicFcaModel implements FcaModel {
         ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
         ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
         ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) }) };
-      // A system message holding tool changes may not open the conversation (a live 400, 2026-10-12): on a task's first
-      // decision the inline definitions follow its first user message instead of preceding it.
-      const turn = history.some(message => message.role === 'user') ? [...menu.appended, current] : [current, ...menu.appended];
+      // A system message holding tool changes must immediately follow a user turn and be either the last message or
+      // immediately followed by an assistant turn: it may not open the conversation (a live 400, 2026-10-12), nor sit between
+      // two user messages (a live 400, 2026-10-14, Minebot lane run 3: tasks a5ad9996 and the root fd99df55 sent a public
+      // epoch as [bootstrap, tool changes, decision]). The inline definitions therefore always follow the current decision
+      // message and end the request; the stored round keeps them before the assistant's answer.
+      const turn: Anthropic.MessageParam[] = [current, ...menu.appended];
       return { turn, menu, body: cacheHaikuRequest({
         model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
         messages: [...history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
