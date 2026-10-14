@@ -44,6 +44,8 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'emotion/001_inner_notes': 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc',
   'emotion/002_inner_note_episodes': '82db51e74ebb56f08b3392b192a27490a0f3fc111deb956c022a59b9497452df',
   'emotion/003_inner_note_attempts': 'da679362296ea082a98c9b58ea1105862782f38e1f131b07162f319eddee1010',
+  // Her feeling events (Syzygy ADR-0013 stage 1), applied in production since the stage-1 switches went on (2026-10-14).
+  'emotion/004_feeling_events': 'f137c35156c7d3d0e875309beead90cd72bb9115bcd44d8cad54e4baf2fdc462',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
@@ -85,6 +87,9 @@ export const S3_ADDITIONS = Object.freeze({
     'operator_audit',
     // 2026-10-14: the voice history's summaries and wants, made when SHANNON_VOICE_HISTORY_SUMMARY first takes effect.
     'conversation_voice_summaries', 'conversation_voice_summary_wants',
+    // 2026-10-14: her feeling events (emotion/004, ADR-0013 stage 1), with their time index and primary-key index, made when
+    // SHANNON_FEELING_EVENTS first opens their store.
+    'shannon_feeling_events',
   ]),
 });
 
