@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentActionExecution } from '../src/infra/context/actionExecution.js';
 import type { FcaModel, FcaModelInput, FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import type { TaskSleepTicket } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
-import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
+import { createTaskRuntimeWiring, failsBeforeAnyEffect } from '../src/wiring/taskRuntimeWiring.js';
 import { leaseOf } from '../src/contracts/actionThreadContract.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { integratedFcaHarness, round } from './support/fcaIntegratedHarness.js';
@@ -261,6 +261,20 @@ describe('the internal root never waits on a message already delivered', () => {
     f.driver.runtime.send('owner', f.root.id, f.root.id, 'next', 'next-1');
     await f.driver.tick(); await f.driver.drain();
     expect(rootCalls(f)).toHaveLength(3);
+  });
+
+  it('fails as known, never unknown, a step whose answered decision carried an expectation the evidence store refused (operator run 5)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const f = fixture(() => { currentActionExecution()!.modelOutcome = 'acknowledged'; throw new Error('FCA_EXPECTATION_INVALID'); });
+    const child = f.child('minecraft');
+    for (let i = 0; i < 3; i++) { await f.driver.tick(); await f.driver.drain(); }
+    expect(f.driver.runtime.get('owner', child.id)?.phase).toBe('failed');
+    const lines = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step') && line.includes(child.id));
+    expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_EXPECTATION_INVALID`]);
+    // Only before any effect: once a body or tool outcome is in doubt, the step stays unknown.
+    expect(failsBeforeAnyEffect('FCA_EXPECTATION_INVALID', { modelOutcome: 'acknowledged', stepOutcome: 'unknown' })).toBe(false);
+    expect(failsBeforeAnyEffect('FCA_APPRAISAL_INVALID', { modelOutcome: 'unknown' })).toBe(false);
+    expect(failsBeforeAnyEffect('FCA_CONTEXT_INVALID', { modelOutcome: 'acknowledged' })).toBe(true);
   });
 
   it('runs the message after one refusal once the request is accepted', async () => {

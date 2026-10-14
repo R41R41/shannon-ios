@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import { createAnthropicFcaModel, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
@@ -36,6 +36,7 @@ function harness(script: AnthropicMessage[]) {
 const changes = (history: readonly unknown[]) => history.flatMap(entry => {
   const item = entry as { role: string; content: unknown[] }; return item.role === 'system' ? item.content : [];
 });
+afterEach(() => { vi.restoreAllMocks(); });
 describe('FCA shared context native protocol', () => {
   it('adds context inline to an existing signed epoch while keeping its cached prefix and prior native bytes unchanged', async () => {
     const f = harness([answer([signed, nativeCall('fca_wait', 'first', { summary: 'Waiting' })]),
@@ -86,22 +87,67 @@ describe('FCA shared context native protocol', () => {
     } finally { restore(); }
   });
   it.each([
-    [context([{ ...expectation, callIndex: 1 }], []), 'FCA_EXPECTATION_INVALID'],
-    [context([{ ...expectation, observable: { kind: 'json_pointer', path: '/ok' } }], []), 'FCA_EXPECTATION_INVALID'],
-    [context([expectation, expectation], []), 'FCA_EXPECTATION_INVALID'],
-    [context([], [{ ...appraisal, eventId: 'invented' }]), 'FCA_APPRAISAL_INVALID'],
-    [context([], [{ ...appraisal, revision: 1 }]), 'FCA_APPRAISAL_INVALID'],
-    [context([], [appraisal, appraisal]), 'FCA_APPRAISAL_INVALID'],
-    [nativeCall('fca_context', 'metadata', { expectations: [] }), 'FCA_CONTEXT_INVALID'],
-  ])('rejects malformed metadata without a repair call %#', async (annotation, code) => {
+    [context([{ ...expectation, callIndex: 1 }], []), 'expectations[0]', 'call_index'],
+    [context([{ ...expectation, observable: { kind: 'json_pointer', path: '/ok' } }], []), 'expectations[0]', 'transport_success'],
+    [context([{ ...expectation, observable: { kind: 'json_pointer', path: 'count' } }], []), 'expectations[0]', 'json_pointer_path'],
+    [context([{ ...expectation, observable: { kind: 'text_contains', text: '到着' }, expected: '到着' }], []), 'expectations[0]', 'text_contains_expected'],
+    [context([{ ...expectation, withinMs: 0 }], []), 'expectations[0]', 'within_ms'],
+    [context([{ ...expectation, extra: 1 }], []), 'expectations[0]', 'fields'],
+    [context([], [{ ...appraisal, eventId: 'invented' }]), 'appraisals[0]', 'appraisal_event'],
+    [context([], [{ ...appraisal, revision: 1 }]), 'appraisals[0]', 'appraisal_revision'],
+    [nativeCall('fca_context', 'metadata', { expectations: [] }), 'fca_context', 'context_shape'],
+  ])('answers malformed metadata with a correction beside the unchanged action, without a repair call %#', async (annotation, item, reason) => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const f = harness([answer([annotation as Record<string, unknown>, nativeCall('task_list', 'action')])]);
-    await expect(f.model.decide(input(), signal())).rejects.toThrow(String(code));
+    const result = await f.model.decide(input(), signal());
+    expect(result.decision).toEqual({ kind: 'tools', calls: [{ id: 'action', name: 'task.list', input: {} }] });
+    expect(result.expectations).toEqual([]); expect(result.appraisals).toEqual([]);
+    expect(result.auxiliaryResults).toHaveLength(1);
+    expect(result.auxiliaryResults![0]).toMatchObject({ id: 'metadata', ok: false });
+    expect(JSON.parse(result.auxiliaryResults![0]!.text)).toMatchObject({ received: true, accepted: { expectations: 0, appraisals: 0 },
+      rejected: [{ item, reason, rule: expect.any(String) }] });
+    // The model reads it as an error result of its context call, next to its action's result.
+    expect((f.model.toolResults([...result.auxiliaryResults!, { id: 'action', ok: true, text: '[]' }]) as { content: unknown }).content).toEqual([
+      { type: 'tool_result', tool_use_id: 'metadata', content: result.auxiliaryResults![0]!.text, is_error: true },
+      { type: 'tool_result', tool_use_id: 'action', content: '[]', is_error: false }]);
+    // Content-free: closed reasons only, never the model's values.
+    expect(info.mock.calls.map(call => String(call[0]))).toContain(JSON.stringify({ event: 'fca_context_rejected', acceptedExpectations: 0,
+      acceptedAppraisals: 0, rejected: [`${item}:${reason}`] }));
+    expect(JSON.stringify(info.mock.calls)).not.toMatch(/PRIVATE_|到着|invented/u);
     expect(f.bodies).toHaveLength(1); expect(f.usage).toHaveLength(1); expect(f.usage[0]!.usageComplete).toBe(true);
+  });
+  it('keeps the items that hold and the first of duplicates, and names each one left out', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const second = { ...expectation, callIndex: 1, observable: { kind: 'text_contains', text: 'done' }, expected: true };
+    const f = harness([answer([context([expectation, { ...expectation, expected: 5 }, second, { ...second, probability: 2 }], [appraisal, appraisal]),
+      nativeCall('task_list', 'first'), nativeCall('task_list', 'second')])]);
+    const result = await f.model.decide(input(), signal());
+    expect(result.expectations).toEqual([{ ...expectation, callId: 'first', callIndex: undefined }, { ...second, callId: 'second', callIndex: undefined }]);
+    expect(result.appraisals).toEqual([appraisal]);
+    expect(JSON.parse(result.auxiliaryResults![0]!.text).rejected.map((item: { item: string; reason: string }) => `${item.item}:${item.reason}`))
+      .toEqual(['expectations[1]:duplicate_call', 'expectations[3]:probability', 'appraisals[1]:duplicate_event']);
+  });
+  it('answers an expectation beside a wait, and two context calls, with corrections in the control round', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const f = harness([answer([context([expectation], []), nativeCall('fca_wait', 'wait', { summary: 'Waiting' })]),
+      answer([context([], []), nativeCall('fca_context', 'again', { expectations: [], appraisals: [] }), nativeCall('task_list', 'action')])]);
+    const waited = await f.model.decide(input(), signal());
+    expect(waited.decision).toEqual({ kind: 'wait', summary: 'Waiting' }); expect(waited.expectations).toEqual([]);
+    const results = (waited.history.at(-1) as { content: Array<{ tool_use_id: string; is_error: boolean; content: string }> }).content;
+    expect(results.map(item => [item.tool_use_id, item.is_error])).toEqual([['metadata', true], ['wait', false]]);
+    expect(JSON.parse(results[0]!.content).rejected).toEqual([expect.objectContaining({ item: 'expectations[0]', reason: 'no_action' })]);
+    const twice = await f.model.decide(input(), signal());
+    expect(twice.decision).toEqual({ kind: 'tools', calls: [{ id: 'action', name: 'task.list', input: {} }] });
+    expect(twice.auxiliaryResults!.map(item => [item.id, item.ok])).toEqual([['metadata', false], ['again', false]]);
+    expect(JSON.parse(twice.auxiliaryResults![0]!.text).rejected).toEqual([expect.objectContaining({ item: 'fca_context', reason: 'context_shape' })]);
   });
   it('does not appraise unknown outcomes, accept metadata-only decisions, or silently change the legacy schema prefix', async () => {
     const unknown = input(); unknown.sharedContext!.recentOutcomes = [{ ...unknown.sharedContext!.recentOutcomes[0]!, observation: 'unknown', result: null }];
+    vi.spyOn(console, 'info').mockImplementation(() => {});
     const f = harness([answer([context([], [appraisal]), nativeCall('task_list', 'action')]), answer([context([], [])])]);
-    await expect(f.model.decide(unknown, signal())).rejects.toThrow('FCA_APPRAISAL_INVALID');
+    const refused = await f.model.decide(unknown, signal());
+    expect(refused.appraisals).toEqual([]);
+    expect(JSON.parse(refused.auxiliaryResults![0]!.text).rejected).toEqual([expect.objectContaining({ item: 'appraisals[0]', reason: 'appraisal_event' })]);
     await expect(f.model.decide(input(), signal())).rejects.toThrow('FCA_MODEL_DECISION_MISSING');
     const legacy = input(); delete legacy.catalog;
     await expect(f.model.decide(legacy, signal())).rejects.toThrow('FCA_CONTEXT_REQUIRES_SELECTED_MODE');

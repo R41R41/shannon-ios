@@ -313,8 +313,15 @@ export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExec
 
 /** The history limits `prepareFcaHistory` throws before the step's model call (`fcaHistory.ts`): deterministic, so a replay holds too. */
 const HISTORY_LIMITS: ReadonlySet<string> = new Set(['FCA_HISTORY_RECENT_LIMIT', 'FCA_HISTORY_ROUND_LIMIT', 'FCA_HISTORY_COMPACTION_LIMIT']);
+/**
+ * The closed checks of the shared-context call (`anthropicFcaContext.ts`, `fcaEvidenceStore.beforeActions`): a complete, paid answer
+ * refused before any of its actions ran. The decoder answers an invalid item as a correction, so these remain only as a guard; one
+ * that still reaches here is a known failure, never an unknown step (Minecraft operator run 5, 2026-10-14: FCA_EXPECTATION_INVALID).
+ */
+const CONTEXT_REJECTIONS: ReadonlySet<string> = new Set(['FCA_CONTEXT_INVALID', 'FCA_EXPECTATION_INVALID', 'FCA_APPRAISAL_INVALID']);
 export function failsBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  return rejectedBeforeAnyEffect(code, execution) || (HISTORY_LIMITS.has(code) && execution.stepOutcome !== 'unknown');
+  return rejectedBeforeAnyEffect(code, execution) || (HISTORY_LIMITS.has(code) && execution.stepOutcome !== 'unknown')
+    || (CONTEXT_REJECTIONS.has(code) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown');
 }
 
 export function rejectedTaskReport(title: string): string {

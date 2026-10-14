@@ -9,7 +9,7 @@ import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.j
 import { SQLiteFcaEvidenceStore } from '../src/mind/action/fca/store/fcaEvidenceStore.js';
 import type { FcaDurableOutcome } from '../src/mind/action/fca/fcaEvidencePorts.js';
 import type { FcaModelOutput, FcaToolCall } from '../src/mind/action/fca/fcaPorts.js';
-import { compareFcaOutcome, validFcaExpectation, type FcaActionExpectation } from '../src/mind/prediction/predictionPorts.js';
+import { compareFcaOutcome, fcaExpectationProblem, validFcaExpectation, type FcaActionExpectation } from '../src/mind/prediction/predictionPorts.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
@@ -64,6 +64,21 @@ describe('concrete optional FCA predictions', () => {
     }
     expect(validFcaExpectation({ ...expectation, observable: { kind: 'json_pointer', path: '/ok' } })).toBe(false);
     expect(validFcaExpectation({ ...expectation, observable: { kind: 'json_pointer', path: '/count', extra: 'hidden' } })).toBe(false);
+    // One definition of validity, with the closed reason the decoder returns to the model (operator run 5, 2026-10-14).
+    expect(fcaExpectationProblem(expectation)).toBeNull();
+    expect(([
+      [{ ...expectation, observable: { kind: 'text_contains', text: '到着' }, expected: '到着' }, 'text_contains_expected'],
+      [{ ...expectation, observable: { kind: 'text_contains', text: '' }, expected: true }, 'text_contains_text'],
+      [{ ...expectation, observable: { kind: 'json_pointer', path: 'count' } }, 'json_pointer_path'],
+      [{ ...expectation, observable: { kind: 'json_pointer', path: '/success' } }, 'transport_success'],
+      [{ ...expectation, observable: { kind: 'regex', path: '/count' } }, 'observable'],
+      [{ ...expectation, source: 'model' }, 'source'], [{ ...expectation, callId: '' }, 'call_id'],
+      [{ ...expectation, expected: 'x'.repeat(241) }, 'expected'], [{ ...expectation, probability: 1.5 }, 'probability'],
+      [{ ...expectation, expectedValue: -2 }, 'expected_value'], [{ ...expectation, withinMs: 86_400_001 }, 'within_ms'], [[], 'not_object'],
+    ] as const).map(([value]) => [fcaExpectationProblem(value), validFcaExpectation(value)]))
+      .toEqual(['text_contains_expected', 'text_contains_text', 'json_pointer_path', 'transport_success', 'observable', 'source', 'call_id',
+        'expected', 'probability', 'expected_value', 'within_ms', 'not_object'].map(reason => [reason, false]));
+    expect(fcaExpectationProblem({ ...expectation, observable: { kind: 'text_contains', text: '到着' }, expected: true })).toBeNull();
     expect(compareFcaOutcome({ ...expectation, observable: { kind: 'json_pointer', path: '/a~1b/~0value' } },
       { ok: true, text: '{"a/b":{"~value":2}}' }, false).status).toBe('observed');
   });

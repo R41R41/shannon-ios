@@ -176,6 +176,23 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     expect(f.driver.runtime.snapshot('owner', f.task.id)?.checkpoint).toMatchObject({ consecutiveToolFailures: 0 });
   });
 
+  it('lets an in-flight skill handle its own stall: stuck never preempts it, danger still does (operator run 5)', async () => {
+    const f = fixture(() => move(), { holdSkill: true });
+    await f.driver.tick(); await f.until(() => f.commands.some(c => c.kind === 'skill'), 'normal skill dispatched');
+    const skill = f.commands.find(c => c.kind === 'skill')!;
+    // Production 2026-10-14, task 68395576: `stuck` 1.5 s into an mc.move-to entered a session that cancelled it ("Action interrupted").
+    f.facts({ stuck: true });
+    for (let i = 0; i < 30; i++) { f.pump(); await delay(1); }
+    expect(f.entryCalls()).toBe(0);
+    expect(f.cancelled).toEqual([]);
+    expect(f.commands.map(c => c.kind)).toEqual(['skill']);
+    f.danger(true);
+    await f.until(() => f.driver.runtime.get('owner', f.task.id)?.phase === 'ready', 'a hazard still preempts the skill');
+    await f.driver.drain();
+    expect(f.entryCalls()).toBe(1);
+    expect(f.cancelled).toContain(skill.id);
+  });
+
   it('holds unknown stop outcomes and never replays after recovery or owner stop', async () => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => answer.promise, { unknownStop: true });

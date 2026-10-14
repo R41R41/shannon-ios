@@ -149,6 +149,11 @@ export function createMinecraftTaskBody(parts: {
     lastSequence = observation.sequence;
     const facts = observation.facts, mode = facts.danger === true ? 'danger' : facts.stuck === true ? 'stuck' : facts.visualRequired === true ? 'visual' : null;
     if (!mode) return;
+    // A body skill in flight owns its own stalls (Minebot's pathfinding has its stuck count and timeout) and reports its result to the
+    // task; only an immediate hazard preempts it. Minecraft operator run 5 (2026-10-14, task 68395576): `stuck` (controls held, no
+    // movement for 1.5 s) 1.5 s into an mc.move-to entered a session that cancelled the skill ("Action interrupted"), then could not
+    // get a picture and returned with no decision.
+    if (activeAction && mode !== 'danger') return;
     const signature = JSON.stringify([mode, facts.target ?? null]);
     if (signature === lastSignature && now() - lastEntryAt < 2_000) return;
     if (!leaseMatches() || !await execution!.permit([], monitorAbort.signal) || !live()) return;

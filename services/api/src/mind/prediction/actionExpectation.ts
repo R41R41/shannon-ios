@@ -12,22 +12,43 @@ export type FcaExpectationComparison =
   | { status: 'pending' | 'unobserved'; actual: null; mismatch: null }
   | { status: 'observed' | 'mismatch'; actual: string | number | boolean | null; mismatch: boolean };
 
-export function validFcaExpectation(value: unknown): value is FcaActionExpectation {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+export function validFcaExpectation(value: unknown): value is FcaActionExpectation { return fcaExpectationProblem(value) === null; }
+
+/**
+ * Why an expectation is not valid, as a closed reason, or null when it is. The one definition of validity: the decoder answers the
+ * model with the reason (Minecraft operator run 5, 2026-10-14, task 68395576: one invalid expectation beside a valid action left the
+ * whole step unknown and the task paused), and the evidence store refuses anything else.
+ */
+export type FcaExpectationProblem = 'not_object' | 'call_id' | 'source' | 'observable' | 'text_contains_text' | 'text_contains_expected'
+  | 'json_pointer_path' | 'transport_success' | 'expected' | 'probability' | 'expected_value' | 'within_ms';
+export function fcaExpectationProblem(value: unknown): FcaExpectationProblem | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'not_object';
   const item = value as FcaActionExpectation;
-  const scalar = item.expected === null || typeof item.expected === 'boolean' || typeof item.expected === 'string' && item.expected.length <= 240
-    || typeof item.expected === 'number' && Number.isFinite(item.expected);
-  const observable = item.observable;
-  return typeof item.callId === 'string' && item.callId.length > 0 && item.callId.length <= 200 && item.source === 'tool_result'
-    && !!observable && (observable.kind === 'text_contains' && Object.keys(observable).sort().join(',') === 'kind,text'
-      && typeof observable.text === 'string' && observable.text.length > 0
-      && observable.text.length <= 240 && typeof item.expected === 'boolean'
-      || observable.kind === 'json_pointer' && Object.keys(observable).sort().join(',') === 'kind,path'
-      && typeof observable.path === 'string' && observable.path.length <= 240
-      && /^\/(?:[^~]|~[01])*$/u.test(observable.path) && !['/ok', '/success'].includes(observable.path))
-    && scalar && (item.probability === null || typeof item.probability === 'number' && Number.isFinite(item.probability) && item.probability >= 0 && item.probability <= 1)
-    && (item.expectedValue === null || typeof item.expectedValue === 'number' && Number.isFinite(item.expectedValue) && Math.abs(item.expectedValue) <= 1)
-    && Number.isSafeInteger(item.withinMs) && item.withinMs >= 1 && item.withinMs <= 86_400_000;
+  if (typeof item.callId !== 'string' || item.callId.length === 0 || item.callId.length > 200) return 'call_id';
+  if (item.source !== 'tool_result') return 'source';
+  return observableProblem(item) ?? numbersProblem(item);
+}
+function observableProblem(item: FcaActionExpectation): FcaExpectationProblem | null {
+  const observable = item.observable as Record<string, unknown> | null | undefined;
+  if (!observable || typeof observable !== 'object') return 'observable';
+  const keys = Object.keys(observable).sort().join(',');
+  if (observable.kind === 'text_contains' && keys === 'kind,text') {
+    if (typeof observable.text !== 'string' || observable.text.length === 0 || observable.text.length > 240) return 'text_contains_text';
+    return typeof item.expected === 'boolean' ? null : 'text_contains_expected';
+  }
+  if (observable.kind !== 'json_pointer' || keys !== 'kind,path') return 'observable';
+  const path = observable.path;
+  if (typeof path !== 'string' || path.length > 240 || !/^\/(?:[^~]|~[01])*$/u.test(path)) return 'json_pointer_path';
+  return ['/ok', '/success'].includes(path) ? 'transport_success' : null;
+}
+function numbersProblem(item: FcaActionExpectation): FcaExpectationProblem | null {
+  const expected = item.expected;
+  if (!(expected === null || typeof expected === 'boolean' || typeof expected === 'string' && expected.length <= 240
+    || typeof expected === 'number' && Number.isFinite(expected))) return 'expected';
+  const probability = item.probability, value = item.expectedValue;
+  if (!(probability === null || typeof probability === 'number' && Number.isFinite(probability) && probability >= 0 && probability <= 1)) return 'probability';
+  if (!(value === null || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1)) return 'expected_value';
+  return Number.isSafeInteger(item.withinMs) && item.withinMs >= 1 && item.withinMs <= 86_400_000 ? null : 'within_ms';
 }
 
 /** Transport success grants access to evidence; it is never itself the predicted fact or value. */
