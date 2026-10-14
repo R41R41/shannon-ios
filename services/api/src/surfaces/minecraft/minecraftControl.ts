@@ -49,6 +49,8 @@ export class MinecraftControl {
     const at = this.arrivals.get(bodyId);
     return at === undefined || this.options.now() - at < milliseconds;
   }
+  /** When this body last arrived (login, new connection, respawn), or null (`fastJudgment.ts`: a death changes it). */
+  arrivedAt(bodyId: string): number | null { return this.arrivals.get(bodyId) ?? null; }
   available(): string[] { return [...this.frames.keys()].filter(id => this.frame(id)); }
   observe(bodyId: string): BodyObservation | null { return this.frame(bodyId)?.poll.observation ?? null; }
   /**

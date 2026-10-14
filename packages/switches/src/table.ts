@@ -168,6 +168,10 @@ export const SWITCHES = [
     doc: 'Registered Minecraft start and stop tools under the action gate.',
   },
   {
+    name: 'SHANNON_MINECRAFT_FAST_JUDGMENT', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
+    doc: 'Image-free fast judgment of danger for a Minecraft body: fight, flee or shelter from its own state (Syzygy ADR-0011 stage 2).',
+  },
+  {
     name: 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL', default: 'off', kind: 'on_only', owner: 'recall', requires: [],
     doc: 'Conversation recall reads temporal knowledge.',
   },

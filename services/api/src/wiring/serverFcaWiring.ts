@@ -131,6 +131,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         const skillNames = () => parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
         const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
+          fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
           sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;

@@ -14,6 +14,7 @@ import {
 } from '../../mind/action/reflex/reflexPorts.js';
 import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import { observerHandoff } from '../../infra/observer/observerContext.js';
+import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
@@ -95,6 +96,9 @@ export function createMinecraftTaskBody(parts: {
   skillNames?(): ReadonlySet<string>;
   /** The task's automatic reflex entries across its steps (`reflexGovernor.ts`); one for this step alone when absent. */
   governor?: ReflexGovernor;
+  /** Syzygy ADR-0011 stage 2 (`SHANNON_MINECRAFT_FAST_JUDGMENT`): danger is judged without an image (`minecraftFastJudgment.ts`). */
+  fastJudgment?: boolean;
+  log?(line: string): void;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor();
@@ -114,13 +118,19 @@ export function createMinecraftTaskBody(parts: {
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
-  let lastSignature = '', lastSequence = -1;
+  let lastSignature = '', lastSequence = -1, lastFastSequence = -1;
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
   const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
+  const log = parts.log ?? ((line: string) => console.info(line));
+  // To the Observer (its sidecar, kept 15 minutes) and, content-free, to the journal: the Minebot lane looked for the governor's
+  // holds there after run 11 and found none.
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
-    if (held !== reason) observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
+    if (held !== reason) {
+      observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
+      log(`Shannon reflex entry held task=${step.taskId} reason=${reason}`);
+    }
     held = reason;
   };
   const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
@@ -250,12 +260,31 @@ export function createMinecraftTaskBody(parts: {
     void settled.finally(() => { if (active === settled) active = null; });
     return job;
   };
+  const fast = parts.fastJudgment ? createMinecraftFastJudgment({ control, step, governor, now, context, permit: signal => permit(signal),
+    activeAction: () => activeAction, interrupt: () => toolAborts.forEach(abort => abort.abort()),
+    touched: () => { revision += 1; }, stepOutcome: value => { execution!.stepOutcome = value; }, unknown: () => { unknown = true; },
+    send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), hold, log }) : null;
+  const startFast = (job: Promise<void>) => {
+    const settled = job.then(() => null, error => {
+      fault = error; unknown = true;
+      return null;
+    });
+    active = settled;
+    void settled.finally(() => { if (active === settled) active = null; });
+  };
   const tick = async () => {
     // The task's source check (`live`) walks its whole provenance when its verdict has expired (Minecraft run 10, 2026-10-14: 2–5 s
     // each on a long task, the API's thread blocked every ~5 s while this monitor polled every 250 ms). It is asked only once a
     // frame could start a reflex; nothing is shown, sent or started before it, and the entry asks it again (below).
-    if (closed || active || !parts.entry || !parts.selector || attempts >= 4) return;
+    if (closed || active) return;
     const bodyId = bound(), observation = bodyId ? control.observe(bodyId) : null;
+    // The image-free fast judgment comes first and needs no picture (ADR-0011 stage 2, run 11).
+    if (fast && bodyId && observation && observation.sequence !== lastFastSequence) {
+      lastFastSequence = observation.sequence;
+      const job = fast.consider(bodyId, observation, live, monitorAbort.signal);
+      if (job) return startFast(job);
+    }
+    if (!parts.entry || !parts.selector || attempts >= 4) return;
     // Every session requires a picture; without one it could only end `observation_unavailable` after the entry call.
     if (bodyId && control.imagesUnavailable(bodyId)) return;
     if (!observation || observation.sequence === lastSequence) return;
@@ -264,6 +293,8 @@ export function createMinecraftTaskBody(parts: {
     const evidence = mode === 'danger' ? concreteDanger(observation) : null;
     dangerFrames = evidence ? dangerFrames + 1 : 0;
     if (!mode) return void (held = '');
+    // With the fast judgment on, danger is its alone: the image reflex stopped her fight and stood still in run 11.
+    if (fast && mode === 'danger') return;
     if (!live()) return;
     if (control.settling(bodyId!, spawnGrace)) return hold('spawn_grace', { mode, sequence: observation.sequence });
     if (!decided && !activeAction) {
