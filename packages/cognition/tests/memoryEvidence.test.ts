@@ -132,6 +132,68 @@ describe('remembered evidence verdicts', () => {
     expect(isMemoryEvidenceVisible(more, other)).toBe(false);
   });
 
+  it('keeps a verdict apart by which item withholds the evidence, when one item is excepted', () => {
+    const at = '2026-10-14T00:00:00.000Z';
+    const control = (memoryId: string, sourceEvidence: string): MemoryControl => ({ memoryId, kind: 'user-fact', status: 'forgotten',
+      pinned: false, updatedAt: at, changeReason: 'owner', sourceEvidence });
+    const evidence = '僕は紅茶が好きです', quote = '昨日、僕は紅茶が好きですと言った';
+    // The same withheld text: once withheld only by the excepted item, once by another item.
+    const byExcepted = freezeSnapshot({ ...createInitialCompanionState('owner', at), memoryControls: [control('fact-tea', evidence)] });
+    const byOther = freezeSnapshot({ ...createInitialCompanionState('owner', at), memoryControls: [control('fact-other', evidence)] });
+    const byBoth = freezeSnapshot({ ...createInitialCompanionState('owner', at),
+      memoryControls: [control('fact-tea', evidence), control('fact-other', evidence)] });
+    for (const order of [[byExcepted, byOther, byBoth], [byOther, byExcepted, byBoth], [byBoth, byOther, byExcepted]]) {
+      resetMemoryEvidenceCache();
+      for (const state of order) {
+        expect(isMemoryEvidenceVisible(state, quote, 'fact-tea')).toBe(reference(state, quote, 'fact-tea'));
+        expect(isMemoryEvidenceVisible(state, quote)).toBe(false);
+      }
+    }
+    expect(reference(byExcepted, quote, 'fact-tea')).toBe(true);
+    expect(reference(byOther, quote, 'fact-tea')).toBe(false);
+    expect(reference(byBoth, quote, 'fact-tea')).toBe(false);
+    // A promise withheld through its own control or its source turn: excepting one of them leaves the other.
+    const promise = { id: 'promise-tea', summary: '紅茶を買う', status: 'pending' as const, createdAt: at, updatedAt: at,
+      evidence: '紅茶を買っておいて', sourceExperienceId: 'turn-tea' };
+    const both = freezeSnapshot({ ...createInitialCompanionState('owner', at), prospectiveMemories: [promise],
+      memoryControls: [control('promise-tea', '散歩の話'), control('turn-tea', '散歩の話')] });
+    const parentOnly = freezeSnapshot({ ...createInitialCompanionState('owner', at), prospectiveMemories: [promise],
+      memoryControls: [control('turn-tea', '散歩の話')] });
+    resetMemoryEvidenceCache();
+    for (const state of [parentOnly, both, parentOnly]) {
+      for (const except of [undefined, 'promise-tea', 'turn-tea']) {
+        expect(isMemoryEvidenceVisible(state, '紅茶を買っておいて', except)).toBe(reference(state, '紅茶を買っておいて', except));
+      }
+    }
+    expect(isMemoryEvidenceVisible(parentOnly, '紅茶を買っておいて', 'turn-tea')).toBe(true);
+    expect(isMemoryEvidenceVisible(both, '紅茶を買っておいて', 'turn-tea')).toBe(false);
+  });
+
+  it('gathers a state that is not frozen again on every question, so a change made in place is seen', () => {
+    const at = '2026-10-14T00:00:00.000Z';
+    const quote = '僕は紅茶が好きです';
+    const controls: MemoryControl[] = [{ memoryId: 'turn-9', kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at,
+      changeReason: 'owner', sourceEvidence: '散歩コースの話' }];
+    const facts = [{ id: 'fact-tea', statement: 'ライ氏は紅茶が好き', confidence: 0.9, observedAt: at, evidence: '猫の名前の話' }];
+    const state = { ...createInitialCompanionState('owner', at), memoryControls: controls, userFacts: facts } as CompanionStateSnapshot;
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(true);
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(true);
+    // A new forgotten control pushed into the same array.
+    controls.push({ memoryId: 'fact-tea', kind: 'user-fact', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' });
+    expect(isMemoryEvidenceVisible(state, '猫の名前の話')).toBe(false);
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(reference(state, quote));
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(true);
+    // An evidence text changed in place.
+    facts[0]!.evidence = quote;
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(false);
+    controls[0]!.sourceEvidence = 'ギターの弦の話';
+    expect(isMemoryEvidenceVisible(state, 'ギターの弦の話')).toBe(false);
+    // Restored in place: nothing of the item is withheld any more.
+    controls[1]!.status = 'active';
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(true);
+    expect(isMemoryEvidenceVisible(state, quote)).toBe(reference(state, quote));
+  });
+
   it('stays bounded: many states and quotes keep at most the configured verdicts', () => {
     const at = '2026-10-14T00:00:00.000Z';
     for (let index = 0; index < 30; index += 1) {
