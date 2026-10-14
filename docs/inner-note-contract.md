@@ -15,8 +15,10 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 - **When she reflects.** After a touch of the owner alone (her stance, her reflex, her line), his apology or kind word
   (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a turn about touching her body that asked, allowed or refused it (`touchConsentIn`,
   trigger `consent`, her own yes or no included; owner decision 2026-10-14; read narrowly, since a false one writes 「ボクが触れるのを
-  許した」 as a fact: his words name her or a part of a body next to the verb, or hold hands, or come within 5 minutes of a touch of
-  his; a file, a page, a topic, a database and the like in his words, 接触・感触・触媒, さわり and a past 「触ってないよ」 never count), a reply she felt at moderate or stronger; when her sulk's time runs out
+  許した」 as a fact: his words name her or a part of a body as a word of its own (not 全体・冒頭・笑顔・相手) right before the verb, or, within 5
+  minutes of a touch of his, are the bare verb with nothing it is done to (「触っていい？」「もう一回触っていい？」, not 「もう本番は
+  触らないよ」); a file, a page, a topic, a database, an implementation and the like in his words, 接触・感触・触媒, さわり and a past
+  「触ってないよ」 never count; measured on a corpus of 104 turns in `humanLikeness.test.ts`: no false trigger, two misses pinned), a reply she felt at moderate or stronger; when her sulk's time runs out
   (its `until`, or an ordinary sulk's hour); when an ordinary sulk without `until` finds the numbers back in their usual band (D2.4,
   once per episode); when her day ends. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her — 「ごめん、ちょっと
   待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)

@@ -278,28 +278,18 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
     expect(capped.logs).toContain('inner_note_daily_cap');
   });
 
-  it('reads a turn about touching narrowly', () => {
-    // Her body, named or held: counted.
-    expect(touchConsentIn('シャノン、触ってもいい？', 'もちろんいいですよ')).toBe('permitted');
-    expect(touchConsentIn('頭なでていい？', 'だめです')).toBe('refused');
-    expect(touchConsentIn('手をつないでいい？', 'しょうがないですね')).toBe('permitted');
-    expect(touchConsentIn('ほっぺつついてもいい？', 'やだ')).toBe('refused');
-    expect(touchConsentIn('君の髪なでてもいい？', 'えっと……')).toBe('asked');
-    // Right after a touch of his, without naming her.
-    expect(touchConsentIn('触ってもいい？', 'もちろんいいですよ', { recentTouch: true })).toBe('permitted');
-    expect(touchConsentIn('もう触らないよ', 'そうしてください', { recentTouch: true })).toBe('refused');
-    expect(touchConsentIn('ちょっと触らせて', 'えっと……', { recentTouch: true })).toBe('asked');
-    // Without either: not about her body.
-    expect(touchConsentIn('触ってもいい？', 'もちろんいいですよ')).toBeNull();
-    expect(touchConsentIn('なでなでしていい？', 'しょうがないですね')).toBeNull();
-    // What a developer touches, and words that only contain 触 (review of e47da81c): never, even right after a touch.
-    for (const [words, reply] of [['このファイル触っていい？', 'いいですよ'], ['Notionのページ触っていい？', 'どうぞ'], ['その話に触れてもいい？', 'いいですよ'],
-      ['さわりだけ話していい？', 'いいよ'], ['接触しませんでした', 'だめですよ'], ['触ってないよ', 'いいですよ'], ['触ってないよ', 'ほんとですか？'],
-      ['DBに触っても大丈夫？', '大丈夫です'], ['この手順触っていい？', 'どうぞ'], ['今日の天気は？', 'いいですよ、晴れです'], ['この資料を触っておいて', '了解です'],
-      ['みんなで行っていい？', 'いいですよ'], ['原稿は進みつつありません', 'そうですか'], ['触媒の話をしよう', 'いいですよ'], ['感触はどう？', 'いいですよ']] as const) {
-      expect(touchConsentIn(words, reply), words).toBeNull();
-      expect(touchConsentIn(words, reply, { recentTouch: true }), `${words} (after a touch)`).toBeNull();
+  it('reads a turn about touching narrowly: no false trigger on the corpus, and the misses counted', () => {
+    const fp: string[] = [];
+    const fn: string[] = [];
+    for (const [words, reply, recentTouch, expected] of CONSENT_CORPUS) {
+      const got = touchConsentIn(words, reply, recentTouch ? { recentTouch: true } : {});
+      if (expected === null && got !== null) fp.push(`${words} → ${got}`);
+      else if (expected !== null && got !== expected) fn.push(`${words} → ${got} (want ${expected})`);
     }
+    // When in doubt, nothing: a false one writes 「ボクが触れるのを許した」 as a fact. The misses are pinned so a change shows.
+    expect(fp).toEqual([]);
+    expect(fn).toEqual(CONSENT_KNOWN_MISSES);
+    expect(CONSENT_CORPUS.length).toBeGreaterThanOrEqual(100);
   });
 });
 
@@ -355,3 +345,126 @@ describe('ライ氏 only when it means something (4)', () => {
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'guest')).not.toContain(INNER_NOTE_ADDRESS_LINE);
   });
 });
+
+type ConsentCase = readonly [words: string, reply: string, recentTouch: boolean, expected: 'asked' | 'permitted' | 'refused' | null];
+/**
+ * About a hundred turns, measured (reviews of e47da81c and 077abda7). The owner is a developer: most turns with 触る are about work.
+ * `recentTouch` is a touch of his within five minutes. Expected null means: must never be read as about her body.
+ */
+const CONSENT_CORPUS: readonly ConsentCase[] = [
+  // Her body, named (a word of its own right before the verb).
+  ['シャノン、触ってもいい？', 'もちろんいいですよ', false, 'permitted'],
+  ['シャノンに触っていい？', 'どうぞ', false, 'permitted'],
+  ['頭なでていい？', 'いいですよ', false, 'permitted'],
+  ['頭なでていい？', 'だめです', false, 'refused'],
+  ['もう一回頭なでていい？', 'しょうがないですね', false, 'permitted'],
+  ['ほっぺつついてもいい？', 'やだ', false, 'refused'],
+  ['ほっぺつついてもいい？', 'えー、いいけど', false, 'permitted'],
+  ['君の髪なでてもいい？', 'えっと……', false, 'asked'],
+  ['手をつないでいい？', 'しょうがないですね', false, 'permitted'],
+  ['手を握っていい？', 'いいですよ', false, 'permitted'],
+  ['手を握ってもいい？', 'やめて', false, 'refused'],
+  ['頭ぽんぽんしていい？', 'ふふん、どうぞ', false, 'permitted'],
+  ['頭なでなでしていい？', '特別ですよ', false, 'permitted'],
+  ['肩もんでいい？', 'いいですよ', false, 'permitted'],
+  ['ねえきみ、触っていい？', 'いいですよ', false, 'permitted'],
+  ['髪さわっていい？', 'いいですよ', false, 'permitted'],
+  ['シャノン、ぎゅってしていい？', 'えっ……いいですよ', false, 'permitted'],
+  ['シャノン、ハグしていい？', 'だめです', false, 'refused'],
+  ['シャノン、抱っこしていい？', 'やだ', false, 'refused'],
+  ['シャノン、抱きしめていい？', 'しょうがないですね', false, 'permitted'],
+  ['もう頭なでないよ', 'そうですか', false, 'refused'],
+  ['もう君の頭は触らないよ', 'ふーん', false, 'refused'],
+  ['お腹つついていい？', 'お断りです', false, 'refused'],
+  ['顔さわっていい？', 'いやです', false, 'refused'],
+  ['頬つついてもいい？', 'どうぞ', false, 'permitted'],
+  ['首さわっていい？', 'だめ', false, 'refused'],
+  // Within minutes of a touch of his, the bare verb.
+  ['触ってもいい？', 'もちろんいいですよ', true, 'permitted'],
+  ['触っていい？', 'だめです', true, 'refused'],
+  ['もう一回触っていい？', 'いいですよ', true, 'permitted'],
+  ['ちょっと触らせて', 'えっと……', true, 'asked'],
+  ['もう触らないよ', 'そうしてください', true, 'refused'],
+  ['もう抱きしめないよ', 'べつにいいですけど', true, 'refused'],
+  ['もうなでないよ', 'そうですか', true, 'refused'],
+  ['ぎゅってしていい？', 'いいですよ', true, 'permitted'],
+  ['ハグしていい？', 'やだ', true, 'refused'],
+  ['抱っこしていい？', 'しょうがないですね', true, 'permitted'],
+  ['なでなでしていい？', 'しょうがないですね', true, 'permitted'],
+  ['ねえ、触っていい？', 'どうぞ', true, 'permitted'],
+  ['またつついていい？', 'だめです', true, 'refused'],
+  ['触らないで、って言った？', 'はい', true, null],
+  // The bare verb without a touch of his: not known to be about her.
+  ['触ってもいい？', 'もちろんいいですよ', false, null],
+  ['なでなでしていい？', 'しょうがないですね', false, null],
+  ['もう触らないよ', 'そうしてください', false, null],
+  ['ぎゅってしていい？', 'いいですよ', false, null],
+  // Compounds that only contain a body word (review of 077abda7).
+  ['全体触っていい？', 'いいですよ', false, null],
+  ['本体触っていい？', 'いいですよ', false, null],
+  ['補足に触れてもいい？', 'いいですよ', false, null],
+  ['冒頭に少し触れてもいい？', 'いいですよ', false, null],
+  ['先頭触っていい？', 'どうぞ', false, null],
+  ['笑顔に触れていい？', 'いいですよ', false, null],
+  ['相手を触っていい？', 'いいですよ', false, null],
+  ['右手で触っていい？', 'いいですよ', false, null],
+  ['手首さわっていい？', 'いいですよ', false, null],
+  ['身体性の議論に触れてもいい？', 'どうぞ', false, null],
+  ['具体例に触れていい？', 'いいですよ', false, null],
+  ['主体を触っていい？', 'いいですよ', false, null],
+  ['人体模型触っていい？', 'どうぞ', false, null],
+  ['ぶきみな所触っていい？', 'いいですよ', false, null],
+  // Work, also right after a touch (reviews of e47da81c and 077abda7).
+  ['このファイル触っていい？', 'いいですよ', true, null],
+  ['Notionのページ触っていい？', 'どうぞ', true, null],
+  ['その話に触れてもいい？', 'いいですよ', true, null],
+  ['さわりだけ話していい？', 'いいよ', true, null],
+  ['接触しませんでした', 'だめですよ', true, null],
+  ['触ってないよ', 'いいですよ', true, null],
+  ['触ってないよ', 'ほんとですか？', true, null],
+  ['DBに触っても大丈夫？', '大丈夫です', true, null],
+  ['この手順触っていい？', 'どうぞ', true, null],
+  ['実装触っていい？', 'いいですよ', true, null],
+  ['config触っていい？', 'いいですよ', true, null],
+  ['API触っていい？', 'どうぞ', true, null],
+  ['UI触っていい？', 'いいですよ', true, null],
+  ['iPhone触っていい？', 'いいですよ', true, null],
+  ['この関数触っていい？', 'いいですよ', true, null],
+  ['ヘッダ触っていい？', 'どうぞ', true, null],
+  ['Mac触っていい？', 'いいですよ', true, null],
+  ['ワークフロー触っていい？', 'いいですよ', true, null],
+  ['もう本番は触らないよ', 'そうしてください', true, null],
+  ['リポジトリ触っていい？', 'いいですよ', true, null],
+  ['ブランチ触ってもいい？', 'どうぞ', true, null],
+  ['設定をちょっと触ってもいい？', 'いいですよ', true, null],
+  ['シャノンのコード触っていい？', 'いいですよ', true, null],
+  ['シャノンの設定触っていい？', 'だめです', true, null],
+  ['シャノン、この実装触っていい？', 'どうぞ', true, null],
+  ['ログ触らないでね', 'はい', true, null],
+  ['デプロイ環境には触らないよ', 'お願いします', true, null],
+  ['仕様に触れておくね', 'どうぞ', true, null],
+  ['原稿触っていい？', 'いいですよ', true, null],
+  ['感触はどう？', 'いいですよ', true, null],
+  ['触媒の話をしよう', 'いいですよ', true, null],
+  ['新しいモデル触った？', 'まだです', true, null],
+  ['猫なでていい？', 'いいですよ', true, null],
+  ['犬なでてきた', 'いいなあ', true, null],
+  ['みんなで行っていい？', 'いいですよ', true, null],
+  ['原稿は進みつつありません', 'そうですか', true, null],
+  ['Wi-Fiつないでいい？', 'いいですよ', true, null],
+  ['サーバにつないでいい？', 'どうぞ', true, null],
+  ['今日の天気は？', 'いいですよ、晴れです', true, null],
+  ['この資料を触っておいて', '了解です', true, null],
+  ['握手しよう', 'いいですよ', true, null],
+  ['ハンドル握っていい？', 'どうぞ', true, null],
+  ['触りませんでした', 'そうですか', true, null],
+  ['昨日は触ってない', 'そうですね', true, null],
+  ['手伝っていい？', 'いいですよ', true, null],
+  ['体調どう？', 'いいですよ', true, null],
+];
+/** Turns about her the reading still misses (measured; the safe side). */
+const CONSENT_KNOWN_MISSES: readonly string[] = [
+  // もむ is not one of the gestures; きみ right after ねえ is not a word's start. Missed rather than risk a false trigger.
+  '肩もんでいい？ → null (want permitted)',
+  'ねえきみ、触っていい？ → null (want permitted)',
+];
