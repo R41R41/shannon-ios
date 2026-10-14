@@ -98,7 +98,7 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const ranTool = this.options.ranTool ? this.options.ranTool(request) : safeCount(() => turnToolResults(request.tools).length) > 0;
     if (!flags.length || ranTool) {
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return first;
+      return ranTool && privacy(flags) ? safe(first) : first;
     }
     const { tools: _tools, ...words } = request;
     const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
@@ -106,14 +106,23 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
     const second = await within(rewrite, this.options.rewriteDeadlineMilliseconds ?? REWRITE_DEADLINE_MILLISECONDS);
     if (!second || second.outOfTime) {
-      this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out');
+      this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter');
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return first;
+      return privacy(flags) ? safe(first) : first;
     }
     this.options.checked?.(request.scopeKey, flags, true, context.turn);
-    return second;
+    // A rewrite that still tells a private matter is not sent either.
+    return privacy(checkReply(second.reply, context)) ? safe(second) : second;
   }
 }
+
+/**
+ * Re-review S4-3: a draft that told the owner's private matters, or read out a privacy marker, is never sent as it was. When no clean
+ * rewrite came (late, failed, still leaking) or the turn ran a tool (no rewrite), this neutral line goes instead: nothing private in it.
+ */
+export const PRIVATE_SAFE_REPLY = 'その話は、ここではやめておきますね。';
+const privacy = (flags: readonly string[]) => flags.includes('private_leak') || flags.includes('marker_spoken');
+const safe = (result: ShannonChatModelResult): ShannonChatModelResult => ({ ...result, reply: PRIVATE_SAFE_REPLY });
 
 function plain(request: Marked): ShannonChatModelRequest {
   if (!request.feelingStrong && !request.feelingCheck) return request;

@@ -257,7 +257,7 @@ export const SWITCHES = [
     doc: 'ADR-0013 stage 3: her boundaries with their basis and origin (self or told); a told one is hers only once she endorses it in reflection.',
   },
   {
-    name: 'SHANNON_FEELING_AUDIENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    name: 'SHANNON_FEELING_AUDIENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS', 'SHANNON_REPLY_CHECK'],
     doc: 'ADR-0013 stage 4: events keyed by who wrote (account, never name), friend and light ledgers, audience layers, source cap, audience checks.',
   },
   {

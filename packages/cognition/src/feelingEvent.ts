@@ -106,7 +106,13 @@ export const isFeelingRegister = (value: unknown): value is FeelingRegister => F
  * account (`platform`: `person:<id>` for a remembered friend bound to it, `platform:<digest>` for anyone else). Never a name or a look
  * (ADR-0011 §8.2). `audience` is who can read the reply: `people` for a friend's DM, `group` for a shared conversation.
  */
-export interface FeelingSpeaker { personKey: string; identity: 'registered' | 'platform'; audience: Exclude<FeelingAudience, 'owner_alone'> }
+export interface FeelingSpeaker {
+  personKey: string;
+  identity: 'registered' | 'platform';
+  audience: Exclude<FeelingAudience, 'owner_alone'>;
+  /** The place (a group conversation: `group:<thread>`), so her composure and the per-source cap work per place (§4.8; re-review S4-4). */
+  sceneId?: string;
+}
 
 /** Who an event is about and who saw it, from what the surface knows. Only the owner alone makes an owner event. */
 export function feelingActor(input: { ownerAlone: boolean; group?: boolean; sceneId?: string | null; speaker?: FeelingSpeaker }):
@@ -114,7 +120,10 @@ export function feelingActor(input: { ownerAlone: boolean; group?: boolean; scen
   const sceneId = input.sceneId ?? null;
   if (input.ownerAlone) return { personKey: OWNER_PERSON_KEY, identity: 'registered', audience: 'owner_alone', sceneId };
   // Stage 4 (§4.1): a surface that knows who wrote (a platform account, never a name or a look) keys the event to that person.
-  if (input.speaker) return { personKey: input.speaker.personKey, identity: input.speaker.identity, audience: input.speaker.audience, sceneId };
+  if (input.speaker) {
+    const { personKey, identity, audience } = input.speaker;
+    return { personKey, identity, audience, sceneId: input.speaker.sceneId ?? sceneId };
+  }
   return { personKey: sceneId ? `scene:${sceneId}` : UNKNOWN_PERSON_KEY, identity: 'unknown', audience: input.group ? 'group' : 'people', sceneId };
 }
 

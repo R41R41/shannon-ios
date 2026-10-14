@@ -64,7 +64,8 @@ const MARKER = /【機微|機微:/u;
 function audienceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[] {
   if (!context.audienceChecks || context.audience === 'owner_alone') return [];
   const flags: ReplyCheckFlag[] = [];
-  if ((context.audience === 'group' || context.audience === 'stream') && OWNER_PRIVATE.test(reply)) flags.push('private_leak');
+  // Re-review S4-2: with anyone else there, the owner's private matters are flagged (people too, after their marked lines).
+  if (OWNER_PRIVATE.test(reply)) flags.push('private_leak');
   if (MARKER.test(reply)) flags.push('marker_spoken');
   return flags;
 }
