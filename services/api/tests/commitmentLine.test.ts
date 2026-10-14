@@ -9,6 +9,7 @@ import {
   type PromisePhraseChoice,
 } from '../src/mind/action/respond/commitmentLine.js';
 import { commitmentFacts, commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
+import { dueCommitmentCandidate } from '../src/mind/action/respond/commitmentInitiative.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
@@ -140,13 +141,31 @@ describe('every sentence states only what is literally true when it is told (rev
   });
 
   it('finds a promise about waking him only by its words for waking', () => {
-    for (const title of ['起こして', '7時に起こす', '目覚ましをかける', 'めざましで起きる', '起床の確認', '起きる時間を守る']) expect(wakePromise(title), title).toBe(true);
-    for (const title of ['昨日起こったこと', '早起きの習慣', '何が起こるか見る', '起き上がりこぼし']) expect(wakePromise(title), title).toBe(false);
+    for (const title of ['起こして', '7時に起こす', '目覚ましをかける', 'めざましで起きる', '起床の確認', '起きる時間を守る', '起こしに来て', 'モーニングコールして',
+      'アラームをかける', 'アラームセットしておいて', '明日ちゃんと起きれるように', '起きられるようにしてね']) expect(wakePromise(title), title).toBe(true);
+    for (const title of ['昨日起こったこと', '早起きの習慣', '何が起こるか見る', '起き上がりこぼし', '行動を起こす', '事を起こす', '問題を起こすな', '騒ぎを起こす']) {
+      expect(wakePromise(title), title).toBe(false);
+    }
   });
 
-  it('holds over a table of its time × 「あとで」 × when it is told × a date only × who is there', () => {
-    const JST = 9 * 60;
-    const clockOf = (iso: string) => ((Math.round(Date.parse(iso) / 60_000) + JST) % 1440 + 1440) % 1440;
+  it('ignores a stale 「あとで」 of another day for a date-only promise, and does not say 「7時から」 when told later than that', () => {
+    // Deferred to yesterday's 12:21; told today at its usual 9:00 (a date-only promise of yesterday): not deferred, a past day, late.
+    // (`eligible_at` is the usual notice on the day it is told: today's 9:00, `dueCommitmentCandidate`.)
+    const stale = commitmentFacts({ title: '部屋の掃除', published_at: null, due_date: '2026-10-13', remind_after: '2026-10-13T03:21:00.000Z',
+      eligible_at: '2026-10-14T00:00:00.000Z' }, '2026-10-14T00:00:30.000Z', 'Asia/Tokyo', false);
+    expect(stale.deferredTo).toBeUndefined();
+    expect(commitmentFactSentence(stale)).toBe('10月13日の約束：「部屋の掃除」');
+    expect(promisePhraseChoices(stale).map(entry => entry.text)).not.toContain('えへへ、');
+    // A deferral held overnight and told at 9:30 (after an outage): the night, but no 「7時から」.
+    const outage = commitmentFacts({ title: '起こして', published_at: '2026-10-14T00:20:00.000Z', remind_after: '2026-10-14T15:05:00.000Z' },
+      '2026-10-15T00:30:00.000Z', 'Asia/Tokyo', false);
+    expect(commitmentFactSentence(outage)).toBe('9時20分の約束：「起こして」（夜中の0時5分に、と頼まれていた分・夜のあいだは控えていたため）');
+    const plainNight = commitmentFacts({ title: '薬を飲む', published_at: '2026-10-14T14:30:00.000Z' }, '2026-10-15T00:30:00.000Z', 'Asia/Tokyo', false);
+    expect(commitmentFactSentence(plainNight)).toBe('夜の11時30分の約束：「薬を飲む」（夜のあいだは控えていたため・10時間遅れ）');
+  });
+
+  it('holds over a table of its time × 「あとで」 × when it is told × a date only × who is there, in two time zones', () => {
+    const onTimeOnly = new Set(PROMISE_PHRASES_V1.filter(entry => entry.only === 'on_time').map(entry => entry.text));
     const phraseClock = (phrase: string) => {
       const match = /^(夜中の|昼の|午後|夜の|夕方の)?(\d+)時(?:(\d+)分)?$/u.exec(phrase);
       if (!match) throw new Error(`unparsed ${phrase}`);
@@ -154,48 +173,69 @@ describe('every sentence states only what is literally true when it is told (rev
       return hour * 60 + Number(match[3] ?? 0);
     };
     const plus = (iso: string, minutes: number) => new Date(Date.parse(iso) + minutes * 60_000).toISOString();
-    const quiet = (iso: string) => { const minutes = clockOf(iso); return minutes >= 23 * 60 || minutes < 7 * 60; };
-    const nextSeven = (iso: string) => { let t = iso; while (clockOf(t) !== 7 * 60) t = plus(t, 1); return plus(t, 0.5); };
-    const onTimeOnly = new Set(PROMISE_PHRASES_V1.filter(entry => entry.only === 'on_time').map(entry => entry.text));
     let checked = 0;
-    const dues = [{ due: '2026-10-14T00:20:00.000Z' }, { due: '2026-10-14T14:30:00.000Z' }, { due: null, date: '2026-10-14' }, { due: null, date: '2026-10-13' }];
-    for (const due of dues) {
-      const base = due.due ?? '2026-10-14T00:00:00.000Z';
-      const reminds = due.due ? [null, plus(base, -30), plus(base, 181), plus('2026-10-14T15:05:00.000Z', due.due === '2026-10-14T14:30:00.000Z' ? 1440 : 0)]
-        : [null, '2026-10-14T03:21:00.000Z'];
-      for (const remind of reminds) {
-        const deferred = remind !== null && (due.due === null || Date.parse(remind) > Date.parse(due.due));
-        const anchor = deferred ? remind! : due.due ?? '2026-10-14T03:00:00.000Z';
-        const deliveries = [plus(anchor, 0.5), plus(anchor, 20), ...(quiet(anchor) ? [nextSeven(anchor)] : [])].filter(time => !quiet(time));
-        for (const delivered of deliveries) {
-          for (const others of [false, true]) {
-            const facts = commitmentFacts({ title: '起こして', published_at: due.due, remind_after: remind, due_date: due.date ?? null }, delivered, 'Asia/Tokyo', others);
-            const sentence = commitmentFactSentence(facts);
-            const minutesLate = due.due !== null && Date.parse(delivered) - Date.parse(anchor) >= 2 * 60_000;
-            const pastDay = due.date === '2026-10-13';
-            checked += 1;
-            const label = `${sentence} [due ${due.due ?? due.date} remind ${remind} at ${delivered}]`;
-            // 「時刻です」 only when not deferred, not a past date-only promise, and on time.
-            if (sentence.includes('時刻です')) expect(!deferred && !pastDay && !minutesLate, label).toBe(true);
-            if (others && !deferred && !pastDay && !minutesLate) expect(sentence, label).toContain('時刻です');
-            // Every minutes count, added to the time it names, is the time it is told.
-            const lateMatch = /(?:(\d+)時間)?(?:(\d+)分)?遅れ/u.exec(sentence);
-            if (lateMatch && (lateMatch[1] || lateMatch[2])) {
-              const count = Number(lateMatch[1] ?? 0) * 60 + Number(lateMatch[2] ?? 0);
-              const named = /（([^（、・]+)に、と頼まれていた分/u.exec(sentence)?.[1] ?? sentence.split('の約束')[0]!;
-              expect((phraseClock(named) + count) % 1440, label).toBe(clockOf(delivered));
+    for (const zone of [{ name: 'Asia/Tokyo', offset: 9 * 60 }, { name: 'Asia/Kolkata', offset: 5 * 60 + 30 }]) {
+      const clockOf = (iso: string) => ((Math.round(Date.parse(iso) / 60_000) + zone.offset) % 1440 + 1440) % 1440;
+      // An owner-local 2026-10-DD at HH:MM as an instant.
+      const local = (day: number, minutes: number) => new Date(Date.UTC(2026, 9, day, 0, minutes - zone.offset)).toISOString();
+      const quiet = (iso: string) => { const minutes = clockOf(iso); return minutes >= 23 * 60 || minutes < 7 * 60; };
+      const nextLocal = (iso: string, minutes: number) => { let t = plus(iso, 1); while (clockOf(t) !== minutes) t = plus(t, 1); return plus(t, 0.5); };
+      // A date-only promise's usual notice on the day it is told is today's 9:00 (its date is today or earlier).
+      const dues = [{ due: local(14, 9 * 60 + 20) }, { due: local(14, 23 * 60 + 30) }, { due: null, date: '2026-10-14', eligible: local(14, 9 * 60) },
+        { due: null, date: '2026-10-13', eligible: local(14, 9 * 60) }];
+      for (const due of dues) {
+        const reminds = due.due
+          ? [null, plus(due.due, -30), plus(due.due, 181), due.due === local(14, 23 * 60 + 30) ? local(15, 65) : local(15, 5)]
+          // A date-only promise: none, later the same day, and a stale one of an earlier day.
+          : [null, local(14, 12 * 60 + 21), local(12, 12 * 60 + 21)];
+        for (const remind of reminds) {
+          const deferred = remind !== null && (due.due ? Date.parse(remind) > Date.parse(due.due) : Date.parse(remind) > Date.parse(due.eligible!));
+          const anchor = deferred ? remind! : due.due ?? local(14, 9 * 60);
+          const deliveries = [plus(anchor, 0.5), plus(anchor, 20),
+            ...(quiet(anchor) ? [nextLocal(anchor, 7 * 60), nextLocal(anchor, 9 * 60 + 30)] : [])].filter(time => !quiet(time) && Date.parse(time) >= Date.parse(anchor));
+          for (const delivered of deliveries) {
+            for (const others of [false, true]) {
+              const facts = commitmentFacts({ title: '起こして', published_at: due.due, remind_after: remind, due_date: due.date ?? null, eligible_at: due.eligible ?? null },
+                delivered, zone.name, others);
+              const sentence = commitmentFactSentence(facts);
+              const minutesLate = due.due !== null && Date.parse(delivered) - Date.parse(anchor) >= 2 * 60_000;
+              const pastDay = due.date !== undefined && due.date < `2026-10-${String(new Date(Date.parse(delivered) + zone.offset * 60_000).getUTCDate()).padStart(2, '0')}`;
+              checked += 1;
+              const label = `${sentence} [${zone.name} due ${due.due ?? due.date} remind ${remind} at ${delivered}]`;
+              if (sentence.includes('時刻です')) expect(!deferred && !pastDay && !minutesLate, label).toBe(true);
+              if (others && !deferred && !pastDay && !minutesLate) expect(sentence, label).toContain('時刻です');
+              // 「あとで」 is said only when it was asked for after the usual time.
+              expect(sentence.includes('頼まれていた分'), label).toBe(deferred);
+              // Every minutes count, added to the time it names, is the time it is told.
+              const lateMatch = /(?:(\d+)時間)?(?:(\d+)分)?遅れ/u.exec(sentence);
+              if (lateMatch && (lateMatch[1] || lateMatch[2])) {
+                const count = Number(lateMatch[1] ?? 0) * 60 + Number(lateMatch[2] ?? 0);
+                const named = /（([^（、・]+)に、と頼まれていた分/u.exec(sentence)?.[1] ?? sentence.split('の約束')[0]!;
+                expect((phraseClock(named) + count) % 1440, label).toBe(clockOf(delivered));
+              }
+              if (deferred && quiet(anchor)) expect(sentence, label).not.toMatch(/\d+分遅れ|時間遅れ/u);
+              // 「7時からのお知らせ」 only when told within a quarter of an hour of 7:00.
+              if (sentence.includes('7時からのお知らせ')) expect(clockOf(delivered) >= 7 * 60 && clockOf(delivered) < 7 * 60 + 15, label).toBe(true);
+              const late = minutesLate || (pastDay && !deferred);
+              const choices = promisePhraseChoices({ ...facts, others: false }).map(entry => entry.text);
+              if (late) for (const phrase of onTimeOnly) expect(choices, label).not.toContain(phrase);
             }
-            // A deferred promise past the night never counts minutes.
-            if (deferred && quiet(anchor)) expect(sentence, label).not.toMatch(/\d+分遅れ|時間遅れ/u);
-            // On-time-only phrases never when late (minutes) or a past day not deferred.
-            const late = minutesLate || (pastDay && !deferred);
-            const choices = promisePhraseChoices({ ...facts, others: false }).map(entry => entry.text);
-            if (late) for (const phrase of onTimeOnly) expect(choices, label).not.toContain(phrase);
           }
         }
       }
     }
-    expect(checked).toBeGreaterThanOrEqual(38);
+    expect(checked).toBeGreaterThanOrEqual(90);
+  });
+
+  it('computes a date-only promise\'s usual notice on the day it is told, from the stored promise', () => {
+    const state = new SQLiteShannonStore({ path: join(directory, `eligible-${Math.random().toString(36).slice(2)}.sqlite`), now: () => SAID });
+    const memory = extractProspectiveMemories('明日プレゼンの練習しよう', SAID)[0]!;
+    state.apply('owner', { type: 'prospective-memory-upserted', memory: { ...memory, remindAfter: '2026-09-25T03:21:00.000Z' } });
+    // Due 2026-09-25 (09:00): told on the 26th at 09:00, the 25th's 「あとで」 is stale.
+    const [candidate] = dueCommitmentCandidate('owner', state.snapshot('owner'), '2026-09-26T00:00:30.000Z');
+    expect(candidate).toMatchObject({ due_date: '2026-09-25', eligible_at: '2026-09-26T00:00:00.000Z', remind_after: '2026-09-25T03:21:00.000Z' });
+    expect(commitmentFacts(candidate!, '2026-09-26T00:00:30.000Z', 'Asia/Tokyo', false).deferredTo).toBeUndefined();
+    state.close();
   });
 
   it('with SHANNON_PROMISE_ON_TIME off, the topic loop is handed the prepared lines and shows the promise', async () => {
