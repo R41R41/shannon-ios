@@ -1,4 +1,6 @@
-import { faceForEmotionKind, publicPresentationId, type ShannonFace } from './expression.js';
+import { faceForEmotionKind, publicPresentationId, singleFace, type ShannonFace, type SingleFaceFeeling } from './expression.js';
+import type { ComebackDrawer } from './comebackDrawer.js';
+import type { FeelingRegister } from './feelingEvent.js';
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingStance } from './feelingTurn.js';
 import type { ShannonEmotionKind } from './types.js';
@@ -21,6 +23,23 @@ const STANCE_FACE: Readonly<Record<Exclude<FeelingStance, 'neutral'>, ShannonEmo
 const TOUCH_STANCE_FACE: Readonly<Record<string, ShannonEmotionKind | undefined>> = Object.freeze({
   welcome: 'bashful', fine: 'content', unsure: 'confused', dislike: 'annoyed', refuse: 'annoyed',
 });
+/**
+ * The twelve faces of the single face (the desktop body's `faces-12`): a stance, a drawer she reaches into, or the register she keeps
+ * shows as one of them when it has one. Only `presentFor` reads these, so only `SHANNON_SINGLE_FACE` shows them.
+ */
+const STANCE_SINGLE_FACE: Readonly<Partial<Record<FeelingStance, SingleFaceFeeling>>> = Object.freeze({
+  sulky: 'irked', snipe: 'irked', exasperated: 'flatStare', not_play_along: 'flatStare', refuse_body: 'turnAway', cover_up: 'coverUp',
+  sulk: 'tsun', cold: 'blankFace',
+});
+const DRAWER_SINGLE_FACE: Readonly<Partial<Record<ComebackDrawer, SingleFaceFeeling>>> = Object.freeze({
+  tongue_click: 'tongueClick', order_out: 'banVerdict', laugh_angry: 'strainedSmile', turn_away: 'turnAway', cover_up: 'coverUp', curt: 'listless',
+});
+const REGISTER_SINGLE_FACE: Readonly<Partial<Record<FeelingRegister, SingleFaceFeeling>>> = Object.freeze({
+  demure: 'businessSmile', strained_smile: 'strainedSmile', curt: 'listless', rough: 'irked', confront: 'banVerdict',
+});
+/** Holding back tears, for a hurt she shows (only her own hurt, never the owner's sadness). */
+const KIND_SINGLE_FACE: Readonly<Partial<Record<ShannonEmotionKind, SingleFaceFeeling>>> = Object.freeze({ hurt: 'holdingBackTears' });
+
 /** Her own apology words never take her face (D12, ADR-0012 D5.2). */
 const OWN_APOLOGY = new Set<ShannonEmotionKind>(['apologetic', 'regret']);
 
@@ -36,6 +55,9 @@ export interface FeelingFaceState {
   /** Her inner note's `shown`, an opinion only when nothing else decides (owner alone). */
   noteShown?: ShannonEmotionKind;
   tell?: 'blush';
+  /** The feeling turn's drawer and the register it passed through (stage 1: a hint), for the twelve faces. */
+  drawer?: ComebackDrawer;
+  register?: FeelingRegister;
 }
 
 export interface FeelingFace extends ShannonFace {
@@ -60,14 +82,25 @@ function face(state: FeelingFaceState, audience: FeelingAudience): FeelingFace {
   const tell = owner && state.tell === 'blush' ? { tell: 'blush' as const } : {};
   const shown = (kind: ShannonEmotionKind | undefined): kind is ShannonEmotionKind => kind !== undefined && kind !== 'neutral'
     && (owner || !OWNER_ONLY_KINDS.has(kind));
-  const of = (kind: ShannonEmotionKind, source: FeelingFace['source']): FeelingFace => ({ ...faceForEmotionKind(kind), ...tell, kind, source });
-  if (state.overridden && shown(state.feeling)) return { ...faceForEmotionKind(state.feeling), kind: state.feeling, source: 'override' };
-  if (state.overridden) return { ...state.mood, source: 'override' };
+  const of = (kind: ShannonEmotionKind, source: FeelingFace['source'], twelve?: SingleFaceFeeling): FeelingFace =>
+    ({ ...(twelve ? singleFace(twelve) : faceForEmotionKind(kind)), ...tell, kind, source });
+  if (state.overridden) {
+    return shown(state.feeling) ? { ...faceForEmotionKind(state.feeling), kind: state.feeling, source: 'override' } : { ...state.mood, source: 'override' };
+  }
   const stance = state.stance ? stanceKind(state.stance) : undefined;
-  if (shown(stance)) return of(stance, 'stance');
-  if (shown(state.feeling) && !OWN_APOLOGY.has(state.feeling)) return of(state.feeling, 'feeling');
+  if (shown(stance)) return of(stance, 'stance', twelveOf(state, owner));
+  const kept = state.register ? REGISTER_SINGLE_FACE[state.register] : undefined;
+  if (kept && !shown(state.feeling)) return { ...singleFace(kept), ...tell, source: 'stance' };
+  if (shown(state.feeling) && !OWN_APOLOGY.has(state.feeling)) return of(state.feeling, 'feeling', KIND_SINGLE_FACE[state.feeling]);
   if (owner && shown(state.noteShown)) return of(state.noteShown, 'note');
   return { ...state.mood, ...tell, source: 'mood' };
+}
+
+/** The single face of a stance (or of the drawer it reaches into); 「ツン」 is for the owner alone. */
+function twelveOf(state: FeelingFaceState, owner: boolean): SingleFaceFeeling | undefined {
+  const turn = state.stance?.kind === 'turn' ? state.stance.stance : undefined;
+  const twelve = (turn ? STANCE_SINGLE_FACE[turn] : undefined) ?? (state.drawer ? DRAWER_SINGLE_FACE[state.drawer] : undefined);
+  return twelve === 'tsun' && !owner ? undefined : twelve;
 }
 
 /** The face case of `presentFor`. */
@@ -84,6 +117,8 @@ export const PRESENTATION_VERSION = 1;
 export const PRESENTATION_IDS: readonly string[] = Object.freeze([
   'joyful', 'excited', 'amused', 'laughing', 'bashful', 'embarrassed', 'relieved', 'surprised', 'curious', 'thinking', 'confused', 'determined',
   'tender', 'calm', 'jealous', 'wry', 'exasperated', 'annoyed', 'concerned', 'sad', 'sleepy', 'neutral', 'proud', 'flustered', 'apologetic',
+  'businessSmile', 'strainedSmile', 'blankFace', 'listless', 'tongueClick', 'coverUp', 'irked', 'banVerdict', 'flatStare', 'turnAway', 'tsun',
+  'holdingBackTears',
 ]);
 
 export interface Presentation {

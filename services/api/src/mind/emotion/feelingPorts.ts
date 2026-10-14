@@ -100,6 +100,13 @@ function replyWithFace(resolved: ReplyEmotion, face: FeelingFace, presentation: 
   return { expressiveEmotion: resolved.expressiveEmotion, messageEmotion: Object.freeze(shown) };
 }
 
+/** The feeling turn's drawer and register, for the twelve single faces (none for 「ふつう」 or the register of before). */
+function turnHints(handle: FeelingTurnHandle): Pick<FeelingFaceState, 'drawer' | 'register'> {
+  const decision = handle.decision;
+  const drawer = decision && decision.drawer !== 'none' ? { drawer: decision.drawer } : {};
+  return { ...drawer, ...(handle.register !== 'normal' ? { register: handle.register } : {}) };
+}
+
 function faceState(port: FeelingPort, scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot,
   extra: Partial<FeelingFaceState> & { mood: ShannonFace }): FeelingFaceState {
   const stance = extra.stance ?? port.events.freshStance(scopeKey, key, at, snapshot) ?? undefined;
@@ -139,7 +146,7 @@ export const feelingText = Object.freeze({
       const visible = resolved.messageEmotion.kind;
       const stance = handle.decision && handle.decision.stance !== 'neutral' ? { kind: 'turn' as const, stance: handle.decision.stance } : undefined;
       const state = faceState(handle.port, handle.scopeKey, handle.key, at, snapshot, { mood: faceForMood(snapshot.emotion),
-        ...(visible ? { feeling: visible } : {}), ...(stance ? { stance } : {}) });
+        ...(visible ? { feeling: visible } : {}), ...(stance ? { stance } : {}), ...turnHints(handle) });
       return replyWithFace(resolved, feelingFace(state, handle.key.audience), presentFor(state, handle.key.audience, 'icon'));
     }, resolved);
   },
@@ -189,7 +196,7 @@ export const feelingVoice = Object.freeze({
     return safely<{ presentationId?: string }>(() => {
       const stance = handle.decision && handle.decision.stance !== 'neutral' ? { kind: 'turn' as const, stance: handle.decision.stance } : undefined;
       const visible = feeling.visibility !== 'hidden' && feeling.primary !== 'neutral' ? { feeling: feeling.primary } : {};
-      const extra = { mood: faceForMood(snapshot.emotion), ...visible, ...(stance ? { stance } : {}) };
+      const extra = { mood: faceForMood(snapshot.emotion), ...visible, ...(stance ? { stance } : {}), ...turnHints(handle) };
       const state = faceState(handle.port, handle.scopeKey, handle.key, at, snapshot, extra);
       return { presentationId: presentFor(state, handle.key.audience, 'icon').id };
     }, {});

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ShannonExpression, ShannonFeeling, ShannonTouchKind } from '@shannon/cognition';
+import type { ShannonExpression, ShannonFace, ShannonTouchKind } from '@shannon/cognition';
 import {
   BODY_LIMITS, BODY_TOUCH_DETAIL_FIELDS, BODY_TOUCH_EVENT_TYPES, touchDetailDigest, validatedTouchDetail, type BodyAudience, type BodyTouchDetail,
 } from './bodyContract.js';
@@ -98,7 +98,7 @@ export interface BodyReactionMessage {
   id: string;
   text: string;
   expression: ShannonExpression;
-  feeling?: ShannonFeeling;
+  feeling?: ShannonFace['feeling']; // ADR-0013: one of the twelve single faces too, while SHANNON_SINGLE_FACE is on.
   /** The Talk a spoken answer would continue; null when she has no Talk yet. */
   threadId: string | null;
   /** How long the body keeps its microphone open for his answer. */
@@ -110,8 +110,11 @@ export interface BodyReactionAnswer {
   id: string;
   status: 'said' | 'quiet';
   message: BodyReactionMessage | null;
-  /** Her face after the touch (and after her line, when she said one). */
-  mood: { expression: ShannonExpression; feeling?: ShannonFeeling; tell?: 'blush'; until?: string };
+  /**
+   * Her face after the touch (and after her line, when she said one). ADR-0013: `feeling` may be one of the twelve single faces too,
+   * while `SHANNON_SINGLE_FACE` is on (`expression` is then its nearest face).
+   */
+  mood: { expression: ShannonExpression; feeling?: ShannonFace['feeling']; tell?: 'blush'; until?: string };
   /** Present only when the touch was not taken in: its fields name something that cannot be a touch (`isImpossibleTouch`). */
   ignored?: 'not_a_touch';
 }

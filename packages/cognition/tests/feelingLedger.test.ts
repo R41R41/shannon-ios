@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMEBACK_DRAWER, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
+  COMEBACK_DRAWER, SHANNON_EMOTION_KINDS, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
   parsedFeelingTurn, repetitionLine, replyFacts, utteranceKind, watchRepetition, type FeelingEvent,
 } from '../src/index.js';
 
@@ -144,5 +144,24 @@ describe('one presentation source (D17)', () => {
     expect(messageEmotionForOthers(message)).toEqual({ expression: 'jealous', valence: 0, arousal: 0, openness: 0, presentationId: 'calm' });
     const plain = { expression: 'calm' as const, valence: 0, arousal: 0, openness: 0 };
     expect(messageEmotionForOthers(plain)).toBe(plain);
+  });
+});
+
+describe('the twelve single faces (desktop faces-12)', () => {
+  const mood = { expression: 'calm' as const };
+  it('carry the name in feeling and the nearest of the 22 faces in expression', () => {
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'cold' } }, 'owner_alone', 'face')).toMatchObject({ expression: 'calm', feeling: 'blankFace' });
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'scold' }, drawer: 'tongue_click' }, 'owner_alone', 'face'))
+      .toMatchObject({ expression: 'annoyed', feeling: 'tongueClick' });
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'scold' }, drawer: 'order_out' }, 'stream', 'icon').id).toBe('banVerdict');
+    expect(presentFor({ mood, register: 'demure' }, 'stream', 'face')).toMatchObject({ expression: 'joyful', feeling: 'businessSmile' });
+    expect(presentFor({ mood, feeling: 'hurt' }, 'owner_alone', 'face')).toMatchObject({ expression: 'sad', feeling: 'holdingBackTears' });
+  });
+
+  it('keep 「ツン」 for the owner alone, and stay out of the emotion kinds (the voice judge and the prompts are untouched)', () => {
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'owner_alone', 'icon').id).toBe('tsun');
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'people', 'face').feeling).toBeUndefined();
+    expect(Object.keys(SINGLE_FACE_FEELINGS)).toHaveLength(12);
+    expect(Object.keys(SINGLE_FACE_FEELINGS).some(name => (SHANNON_EMOTION_KINDS as readonly string[]).includes(name))).toBe(false);
   });
 });
