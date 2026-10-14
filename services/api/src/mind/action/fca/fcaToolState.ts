@@ -32,11 +32,24 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   signal.throwIfAborted();
   const valid = Array.isArray(result?.names) && result.names.every(name => typeof name === 'string' && known.has(name))
     && new Set(result.names).size === result.names.length && ['jev', 'fallback'].includes(result.source);
-  const wanted = new Set(valid ? result.names : [...known]);
+  const wanted = keptBodyTools(new Set(valid ? result.names : [...known]), catalog, previous);
   observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: valid ? result.source : 'fallback', selectedCount: wanted.size });
   return { version: 1, key, inputKey, names: catalog.filter(tool => wanted.has(tool.name)).map(tool => tool.name),
     opened: previous?.key === key ? previous.opened.filter(name => known.has(name)) : [],
     refresh: false, recentResults: previous?.recentResults ?? [] };
+}
+
+/**
+ * A body's tools are never all left out while the catalog offers them (it does only while a body is bound and its frame is fresh):
+ * Minecraft run 9 (2026-10-14), after an interrupted move the selection was made again without any `mc.*` tool, and she reported
+ * that her body's tools were gone and waited. Then the body tools of the previous selection are kept, or all of them without one.
+ */
+function keptBodyTools(wanted: Set<string>, catalog: readonly ShannonToolDefinition[], previous: FcaToolState | null): Set<string> {
+  const body = catalog.filter(tool => tool.domain === 'minecraft_body').map(tool => tool.name);
+  if (!body.length || body.some(name => wanted.has(name))) return wanted;
+  const kept = previous?.names.filter(name => body.includes(name)) ?? [];
+  for (const name of kept.length ? kept : body) wanted.add(name);
+  return wanted;
 }
 
 export function selectedFcaTools(catalog: readonly ShannonToolDefinition[], state: FcaToolState): ShannonToolDefinition[] {

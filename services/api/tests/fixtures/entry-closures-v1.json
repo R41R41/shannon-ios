@@ -690,6 +690,7 @@
     "surfaces/minecraft/minecraftObservationSummary.ts",
     "surfaces/minecraft/minecraftOutcome.ts",
     "surfaces/minecraft/minecraftReflexAdapter.ts",
+    "surfaces/minecraft/minecraftSkillPointers.ts",
     "surfaces/minecraft/serverMinecraftBodyRoute.ts",
     "surfaces/minecraft/store/minecraftControlStore.ts",
     "surfaces/minecraft/store/minecraftLifecycleStore.ts",

@@ -47,6 +47,7 @@ import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
 import { fcaCompactAboveTokens } from '../infra/models/anthropic/anthropicFcaCompaction.js';
+import { skillNamesOfIndex } from '../surfaces/minecraft/minecraftSkillPointers.js';
 import { fcaSegmentStaleMinutes } from '../mind/action/fca/store/fcaEvidenceSegments.js';
 import { stage4Enabled, mindSocketPath } from '../infra/config/stage4.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
@@ -123,7 +124,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
         const history = { codec: anthropicFcaHistoryCodec, summarizer };
         if (step.snapshot.task.origin === 'own_time') return ownTimeStepPorts(step, { ...parts, runtime: _runtime, selector, history });
-        const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
+        // Her readable skills for the body's situational pointers (`minecraftSkillPointers.ts`): only while `skill.read` is offered.
+        const skillNames = () => parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
+          ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
+        const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
+          sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
@@ -175,7 +180,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending);
       }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content,
         // The evidence store's coverage and walk counts are the foreground guard's, as its `sources` (review of 5d492ae8).
-        covers: foregroundVisible.covers, walks: foregroundVisible.walks });
+        covers: foregroundVisible.covers, residual: foregroundVisible.residual, walks: foregroundVisible.walks });
     }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
     if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible,

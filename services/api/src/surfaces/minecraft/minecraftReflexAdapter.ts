@@ -1,3 +1,4 @@
+import { MINECRAFT_SKILL_POINTER_NOTE, minecraftSituation, minecraftSkillPointers } from './minecraftSkillPointers.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -44,14 +45,23 @@ export function concreteDanger(observation: BodyObservation): { kind: 'health' |
 /**
  * The task's pace as closed numbers (the old Minebot `describePace`; owner 2026-10-14: 「40分のまま速くする」): minutes since the task
  * began, its latest tool results that worked and failed (at most six), its steps in a row whose actions all failed, and its latest
- * milestones when the body reported them.
+ * milestones when the body reported them, and the seconds she has spent in `mc.wait-time` (Minecraft run 9: 390 s in nine calls) when any.
  */
-export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ ok: boolean }>, at: number, milestones: PaceMilestones | null = null) {
+export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ ok: boolean }>, at: number, milestones: PaceMilestones | null = null,
+  idleWaitMilliseconds = 0) {
   const began = Date.parse(step.snapshot.task.createdAt), checkpoint = step.snapshot.checkpoint as { consecutiveToolFailures?: unknown } | null;
   const failedSteps = Number(checkpoint?.consecutiveToolFailures ?? 0);
   return { elapsedMinutes: Number.isFinite(began) ? Math.max(0, Math.floor((at - began) / 60_000)) : null,
     recentResults: { worked: recent.filter(result => result.ok).length, failed: recent.filter(result => !result.ok).length },
-    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0, ...(milestones ? { milestones } : {}) };
+    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0, ...(milestones ? { milestones } : {}),
+    ...(idleWaitMilliseconds > 0 ? { idleWaitSeconds: Math.round(idleWaitMilliseconds / 1000) } : {}) };
+}
+
+/** The milliseconds a `mc.wait-time` call asks for (`milliseconds`, or `ms`), bounded; 0 when it names none. */
+export function waitTimeMilliseconds(input: unknown): number {
+  const value = input && typeof input === 'object' ? (input as { milliseconds?: unknown; ms?: unknown }) : {};
+  const milliseconds = Number(value.milliseconds ?? value.ms);
+  return Number.isFinite(milliseconds) && milliseconds > 0 ? Math.min(milliseconds, 3_600_000) : 0;
 }
 
 /**
@@ -80,6 +90,8 @@ export function createMinecraftTaskBody(parts: {
   limits?: Partial<ReflexLimits>; evidence?: FcaEvidence;
   /** How long after a body's login, reconnection or respawn no reflex starts on its own (`MinecraftControl.settling`). */
   spawnGraceMilliseconds?: number;
+  /** The skills she can open with `skill.read` now (`minecraftSkillPointers`); none when absent. */
+  skillNames?(): ReadonlySet<string>;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(), claims = new Set<string>();
@@ -91,6 +103,9 @@ export function createMinecraftTaskBody(parts: {
   // The latest milestones, kept in the task's checkpoint across steps (`minecraftMilestones` key, through this port's `checkpoint`).
   const kept = (step.snapshot.checkpoint as { minecraftMilestones?: unknown } | null)?.minecraftMilestones;
   let milestones = minecraftMilestones({ milestones: kept });
+  // Her idle waits in this task, kept in the checkpoint as the milestones are (`minecraftIdleWaitMs`).
+  const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
+  let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -260,8 +275,10 @@ export function createMinecraftTaskBody(parts: {
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
-      const pace = minecraftPace(step, recentResults, now(), milestones);
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace };
+      const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
+      const pointers = minecraftSkillPointers(minecraftSituation(observation, pace), parts.skillNames?.() ?? new Set());
+      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace,
+        ...(pointers.length ? { skillPointers: pointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE } : {}) };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
@@ -278,10 +295,13 @@ export function createMinecraftTaskBody(parts: {
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };
+      pendingWaitMs = call.name === 'mc.wait-time' ? waitTimeMilliseconds(call.input) : 0;
     },
     noteResult(call, result) {
       if (activeAction?.name === call.name) activeAction = undefined;
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
+      if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
+      pendingWaitMs = 0;
       recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
     },
     async close() {
@@ -296,7 +316,8 @@ export function createMinecraftTaskBody(parts: {
   // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
-    checkpoint: () => (milestones ? { minecraftMilestones: milestones } : {}), async execute(call) {
+    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}) }),
+    async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!parts.selector || call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !live()) throw new Error('FCA_BODY_LEASE_INVALID');
