@@ -399,3 +399,4 @@ export * from './feelingDynamics.js';
 export * from './replyCheck.js';
 export * from './textRegister.js';
 export * from './feelingSentence.js';
+export * from './relationshipLedger.js';
