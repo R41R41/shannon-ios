@@ -1459,7 +1459,7 @@
     "services/api/src/mind/prediction/actionExpectation.ts": {
       "complex-function": 2,
       "multi-statement-line": 2,
-      "long-line": 2
+      "long-line": 1
     },
     "services/api/src/mind/prediction/bodyTouchPrediction.ts": {
       "long-line": 1

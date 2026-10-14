@@ -48,7 +48,9 @@ describe('a due promise owns the daily slot (TM-02)', () => {
     // The loop keeps rechecking instead of sleeping until tomorrow.
     expect(nextInitiativeDelayMilliseconds(early, sevenNextDay)).toBe(15 * 60_000);
     expect(initiatives.runOnce(nineNextDay)).toMatchObject({ sent: 1, stopped: null });
-    expect(state.conversationHistory('owner', threadId).at(-1)?.content).toContain('明日プレゼンの練習しよう');
+    // Without a prepared line (the world worker's preparation, `commitmentLinesWiring.ts`) the notice is the private-safe fact
+    // sentence: who is at her body is not known there (review of f23a3c94).
+    expect(state.conversationHistory('owner', threadId).at(-1)?.content).toBe('今日の約束の時刻です（内容はアプリで確認できます）。');
     // The daily limit is unchanged: the spontaneous topic does not follow on the same day.
     expect(initiatives.runOnce(noonNextDay)).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
     expect(initiatives.initiativeEvaluation(30, noonNextDay).stopped).toMatchObject({ 'reserved-for-commitment': 1 });

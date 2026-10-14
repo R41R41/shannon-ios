@@ -313,7 +313,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いからです。` : 'ボクが気になったからです。';
     const spoken = dailyFocus?.openingLine ? authoredWorldOpening(dailyFocus.openingLine, candidate.title, interest) : null;
     const content = candidate.source_id === 'commitment'
-      ? this.commitmentLines.get(candidate.item_id) ?? commitmentFactSentence(commitmentFacts(candidate, createdAt, this.timeZone, false))
+      // Without a prepared line (the preparation failed), the private-safe fact sentence: who is there is not known.
+      ? this.commitmentLines.get(candidate.item_id) ?? commitmentFactSentence(commitmentFacts(candidate, createdAt, this.timeZone, true))
       : candidate.source_id === 'morning-brief' ? (candidate.summary ?? candidate.title).slice(0, 2_000)
       : candidate.source_id === 'intent' ? truncate(candidate.summary ?? `「${candidate.title}」`, 500)
       // A topic of the world in her own words or none (owner 2026-10-14): the daily mind's grounded line, else its title and address only.

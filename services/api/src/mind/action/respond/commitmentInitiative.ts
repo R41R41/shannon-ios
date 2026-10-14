@@ -40,12 +40,16 @@ function isDue(memory: ProspectiveMemory, at: string): boolean {
 }
 
 /** A reminder is a proposal to resume a promise, never evidence of its completion. */
-export function dueCommitmentCandidate(scopeKey: string, raw: unknown, at: string): (CandidateRow & { score: number })[] {
+export type DueCommitmentCandidate = CandidateRow & { score: number; remind_after?: string | null; due_date?: string | null };
+
+export function dueCommitmentCandidate(scopeKey: string, raw: unknown, at: string): DueCommitmentCandidate[] {
   const state = restoreCompanionState(scopeKey, raw, at);
   return visiblePending(state).filter(memory => isDue(memory, at)).map(memory => ({
     item_id: commitmentItemId(memory), source_id: 'commitment',
     source_title: 'ふたりの約束', title: visibleMemoryText(state, memory.id, memory.summary)!, url: '',
     summary: memory.id, published_at: memory.dueAt ?? null, discovered_at: memory.updatedAt, score: 0.8,
+    // 「あとで」 (snooze) asks for the reminder at remindAfter: its lateness counts from there (`commitmentFacts`).
+    remind_after: memory.remindAfter ?? null, due_date: memory.dueDate ?? null,
   })).sort((a, b) => (a.published_at ?? a.discovered_at).localeCompare(b.published_at ?? b.discovered_at));
 }
 

@@ -381,7 +381,8 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     f.state.appendTurn('owner', f.threadId, 'おはよう', 'おはようございます。', '2026-10-13T23:34:14.000Z');
     expect(f.initiatives.deliverDuePromises(later(DUE, -1), 'Asia/Tokyo')).toEqual({ due: 0, sent: 0 });
     expect(f.initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', new Map())).toEqual({ due: 1, sent: 1 });
-    expect(f.last()?.content).toBe('9時20分の約束：「明日9:20に起こして」');
+    // No prepared line here (as when the preparation failed): the private-safe fact sentence, content hidden.
+    expect(f.last()?.content).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
     // Told once.
     expect(f.initiatives.deliverDuePromises(later(DUE, 1), 'Asia/Tokyo')).toEqual({ due: 0, sent: 0 });
     // The topic loop neither tells a promise nor keeps the day's slot for one: a topic of hers may still come that day.
