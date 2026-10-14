@@ -97,7 +97,7 @@ Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. It changes no reply, p
 
 Explicit_on, default off; needs `SHANNON_FEELING_TURN`. D8: closed flags read from her reply and the turn's closed context (`replyCheck.ts`). A strong turn, a feeling order and a turn in front of others are checked before sending; the others after, their flags going to the next feeling turn.
 
-- One rewrite at most, with a note of what was off after everything else. It is offered no tools and waited for at most 2.5 s (review M5): late or failed, the first draft goes out as it was. A turn that ran a tool is never rewritten. The record goes to that turn's own events (keyed by the turn, review L3).
+- One rewrite at most, with a note of what was off after everything else. It is offered no tools and waited for at most 2.5 s (review M5): late or failed, the first draft goes out as it was. A turn that ran a tool is never rewritten. The record goes to that turn's own events (keyed by the turn, review L3). Cost (review R3): on a strong turn the rewrite is a second Sonnet call; it is not counted against the day's cap of 200 strong replies (the cap counts turns), so a cost estimate adds the rewrite rate (under one in ten) × the strong turns.
 - Review M6: `ai_tone` only on a turn of feeling (a stance, a feeling order, a strong intensity), never on a plain answer; `numbers_spoken` only there and only when the turn's ledger counted something today (a count that can be the ledger's), never a number he asked for.
 
 ## Stage 2: her feeling sentence (`SHANNON_FEELING_SENTENCE`)
