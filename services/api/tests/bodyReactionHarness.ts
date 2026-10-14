@@ -11,6 +11,7 @@ import type { TouchExperienceWriter } from '../src/mind/memory/store/bodyTouchMe
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { InnerNotePort } from '../src/mind/emotion/innerNotePorts.js';
+import type { FeelingPort } from '../src/mind/emotion/feelingPorts.js';
 
 export const scope = 'owner';
 export const START = '2026-10-02T06:00:00.000Z';
@@ -63,7 +64,8 @@ export class FakeChat implements ShannonChatModel {
 export interface ReactionHarnessOptions {
   config?: Partial<BodyReactionConfig>;
   ingestEnabled?: boolean;
-  speaker?: FakeSpeaker | null;
+  /** The fast model of a touch line; a real one only in a live evaluation. */
+  speaker?: FakeSpeaker | BodyReactionSpeaker | null;
   stateStore?: CompanionStateStore;
   conversationStore?: ConversationStore;
   /** The same database path for the reaction tables when the stores are SQLite. */
@@ -77,13 +79,17 @@ export interface ReactionHarnessOptions {
   prediction?: BodyTouchDependencies['prediction'];
   /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE` on): her inner note's port, handed to the kernel; absent: every prompt as before. */
   innerNote?: InnerNotePort;
+  /** Syzygy ADR-0013 (`SHANNON_FEELING_EVENTS` on): her feeling events' port; absent: every prompt and face as before. */
+  feeling?: FeelingPort;
+  /** The conversation's model; absent: `FakeChat`. */
+  chatModel?: ShannonChatModel;
 }
 
 export async function reactionHarness(options: ReactionHarnessOptions = {}) {
   const clock = { at: START };
   const now = () => clock.at;
   const speaker = options.speaker === undefined ? new FakeSpeaker() : options.speaker;
-  const chatModel = new FakeChat();
+  const chatModel = (options.chatModel ?? new FakeChat()) as FakeChat;
   const stateStore = options.stateStore ?? new InMemoryCompanionStateStore(now);
   const conversationStore = options.conversationStore ?? new InMemoryConversationStore();
   const autonomy = createInMemoryAutonomyService(now);
@@ -91,6 +97,7 @@ export async function reactionHarness(options: ReactionHarnessOptions = {}) {
   const bodyStore = new SQLiteBodyStore(options.path ?? ':memory:');
   const api = createLocalApiKernel(now, {
     stateStore, conversationStore, chatModel, autonomy, ...(options.innerNote ? { innerNote: options.innerNote } : {}),
+    ...(options.feeling ? { feeling: options.feeling } : {}),
     body: {
       store: bodyStore, ingestEnabled: options.ingestEnabled ?? true,
       reactions: { store: reactionStore, speaker, config: options.config ?? {}, experiences: options.experiences ?? null,

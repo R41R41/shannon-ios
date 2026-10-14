@@ -29,6 +29,7 @@ import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { noteCopyWrite } from './mind/memory/memoryPorts.js';
 import { installSalt } from './wiring/installSalt.js';
+import { configuredFeeling } from './wiring/feelingWiring.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
@@ -194,6 +195,8 @@ const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new File
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
+const feeling = configuredFeeling(process.env, { databasePath: configuredDatabasePath(), timeZone: autonomyConfig.timeZone, now, // ADR-0013 stage 1; off: null.
+  trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt });
 const operationOutcomes = configuredOperationOutcomes(configuredDatabasePath(), { env: process.env, usageStore: persistentStore, now, body: bodyStore });
 const kernel = createLocalApiKernel(now, {
   conversationExtras: () => stage5.conversationExtras.ports, ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
@@ -226,6 +229,7 @@ const kernel = createLocalApiKernel(now, {
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore, memoryRecall, ...(innerNote ? { innerNote: innerNote.port } : {}),
+  ...(feeling ? { feeling: feeling.port } : {}),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { fcaTouch: () => fca?.touch ?? null, store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
@@ -483,7 +487,7 @@ function shutdown(): void {
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
-    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close();
+    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close(); feeling?.close();
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();

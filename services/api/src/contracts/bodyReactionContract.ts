@@ -5,6 +5,7 @@ import {
 } from './bodyContract.js';
 import { isBodyTouchRegion, type BodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
 import { serverEnvironment } from '../infra/config/serverEnvironment.js';
+import { isBodyReactionReply, type BodyReactionReply } from './feelingEventContract.js';
 
 /**
  * When she is touched (`docs/body-contract.md`): the wire contract of `POST /v1/body/reactions`
@@ -89,6 +90,8 @@ export interface BodyReactionRequest {
   audience: BodyAudience;
   /** Canonical ISO 8601 (UTC). */
   occurredAt: string;
+  /** Syzygy ADR-0013 (`feelingEventContract.ts`): `none` asks for no words; absent as before (words may come). */
+  reply?: BodyReactionReply;
 }
 
 export interface BodyReactionMessage {
@@ -133,7 +136,7 @@ export function validBodyReactionId(value: unknown): value is string {
 
 /** The request, or the reason it is refused. No field outside the vocabulary is accepted, and none carries text. */
 export function validatedBodyReactionRequest(body: Record<string, unknown>): BodyReactionRequest | string {
-  const unknown = only(body, ['scopeKey', 'id', 'touch', 'audience', 'occurredAt']);
+  const unknown = only(body, ['scopeKey', 'id', 'touch', 'audience', 'occurredAt', 'reply']);
   if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
   if (!validBodyReactionId(body.id)) return 'id is invalid';
   if (!isRecord(body.touch)) return 'touch must be an object';
@@ -151,8 +154,9 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   if (body.audience !== 'owner' && body.audience !== 'others') return 'audience must be owner or others';
   const time = typeof body.occurredAt === 'string' && body.occurredAt.length <= 40 ? Date.parse(body.occurredAt) : Number.NaN;
   if (!Number.isFinite(time)) return 'occurredAt must be an ISO 8601 timestamp';
+  if (body.reply !== undefined && !isBodyReactionReply(body.reply)) return 'reply must be words or none';
   return {
-    id: body.id, audience: body.audience, occurredAt: new Date(time).toISOString(),
+    id: body.id, audience: body.audience, occurredAt: new Date(time).toISOString(), ...(isBodyReactionReply(body.reply) ? { reply: body.reply } : {}),
     touch: {
       type, durationMs: touch.durationMs, ongoing: touch.ongoing, ...(touch.strength !== undefined ? { strength: Math.round(touch.strength * 100) / 100 } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused.
@@ -170,6 +174,8 @@ export function bodyReactionContentHash(request: BodyReactionRequest): string {
     ...(request.touch.region !== undefined ? [request.touch.region] : []),
     // Touch vocabulary 2: only the fields that were sent, so a retry in the old shape gets the answer it always got.
     ...touchDetailDigest(request.touch),
+    // Syzygy ADR-0013: only when sent, as above.
+    ...(request.reply !== undefined ? [`reply:${request.reply}`] : []),
   ])).digest('hex').slice(0, 32);
 }
 

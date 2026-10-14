@@ -40,7 +40,8 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
       const trace = voiceRouteTrace(this.inner, input, decision, probe, Math.max(0, clock() - started), at, this.options.usdPerJevCall);
       const set = this.options.questionSet;
       // Syzygy ADR-0012: a turn that gave Jev her inner line asked `voice_route.v3`.
-      const id = set && input.shannonInner ? JEV_QUESTION_SETS.voiceRouteInner : set?.id;
+      // Syzygy ADR-0013: a turn that also asked the feeling turn asked `voice_route.v4`.
+      const id = set && input.shannonFeeling ? JEV_QUESTION_SETS.voiceRouteFeeling : set && input.shannonInner ? JEV_QUESTION_SETS.voiceRouteInner : set?.id;
       this.write(input.scopeKey, set ? { ...trace, answers: { ...trace.answers, qv: [id!], ql: set.language } } : trace);
     } catch { /* a trace never fails a turn */ }
     return decision;
@@ -66,6 +67,8 @@ export function voiceRouteTrace(
     ...(decision.transcriptReliabilityProbability !== undefined ? { reliable: decision.transcriptReliabilityProbability } : {}),
     ...(decision.roomLookProbability !== undefined ? { look: decision.roomLookProbability } : {}),
     ...(decision.lookSelfProbability !== undefined ? { lookSelf: decision.lookSelfProbability } : {}),
+    ...(decision.feeling ? { feelingStance: decision.feeling.stance, feelingIntensity: decision.feeling.intensity, feelingDrawer: decision.feeling.drawer,
+      feelingRegister: decision.feeling.register } : {}),
   };
   const jev = decider === 'jev';
   const contextChars = jev ? probe.stateChars : input.transcript.length + (input.context ?? []).reduce((sum, item) => sum + item.content.length, 0);

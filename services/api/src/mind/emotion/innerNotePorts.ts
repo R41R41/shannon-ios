@@ -56,6 +56,8 @@ export interface InnerNoteTouch {
 /** What her body tells her note when it reflects: how often each part was touched by the owner alone since an instant, in her words. */
 export interface InnerNoteBodyReader {
   partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[];
+  /** Syzygy ADR-0013: the day's episode ledger with the owner, as one line of facts ('' while feeling events are off). */
+  ledger?(scopeKey: string, at: string): string;
 }
 
 export interface InnerNotePort {

@@ -213,6 +213,18 @@ export const SWITCHES = [
     doc: 'ADR-0012 stage 1: her inner note (reflection after salient events), character core and prompt cleanup; off, every prompt is as it was.',
   },
   {
+    name: 'SHANNON_FEELING_EVENTS', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: [],
+    doc: 'ADR-0013 stage 1: every touch, word and reply of hers is a feeling event; the day\'s episode ledger; wordless touches. Off: as it was.',
+  },
+  {
+    name: 'SHANNON_SINGLE_FACE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 1: one face function (faceFor) for replies, touches and presence; her own apology words no longer take the face.',
+  },
+  {
+    name: 'SHANNON_FEELING_TURN', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 1: Jev picks her stance, strength and comeback drawer before she replies; the last, strongest block of the prompt.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

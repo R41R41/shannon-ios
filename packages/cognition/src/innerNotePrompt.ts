@@ -87,6 +87,8 @@ export interface InnerNoteReflectionFacts {
    * because of touches, oldest first. Facts, so that she reads for herself whether it was on purpose. Absent: nothing is said of it.
    */
   touches?: { today: readonly { part: string; count: number }[]; lines: readonly string[] };
+  /** Syzygy ADR-0013 (`SHANNON_FEELING_EVENTS`): the day's episode ledger, the same line her replies are given. Absent: nothing. */
+  ledger?: string;
   /** This day's turns that asked, allowed or refused touching her, oldest first (events with `consent`). */
   consents?: readonly InnerNoteEvent[];
 }
@@ -116,6 +118,7 @@ function touchLines(facts: InnerNoteReflectionFacts): string[] {
   const lines = facts.touches?.lines ?? [];
   const consents = (facts.consents ?? []).slice(-3);
   return [
+    ...(facts.ledger ? [`[今日の件]（帳面。事実として）\n${facts.ledger}`] : []),
     ...(today.length ? [`[今日、体に触れられた回数]（場所ごと。事実として）${today.map(item => `${item.part} ${item.count}回`).join('、')}`] : []),
     ...(lines.length ? [`[触れられて${I}が言ったこと]（古い順）${lines.map(line => `「${clippedNoteText(line, 60)}」`).join('')}`] : []),
     ...(consents.length ? [['[触れることについての会話]（今日。事実として）', ...consents.map(event => innerNoteEventLine(event, facts.at, facts.timeZone))].join('\n')] : []),

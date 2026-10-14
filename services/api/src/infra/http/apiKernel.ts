@@ -83,6 +83,7 @@ import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
+import { feelingText } from '../../mind/emotion/feelingPorts.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
 import { finishTurn, routeTurn, textTurnThinking, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
@@ -144,15 +145,14 @@ export interface ShannonApiKernelOptions {
    */
   turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
-  turnRouting?: TurnRouting; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; conversationExtras?: () => import('../../contracts/conversationExtrasContract.js').ConversationExtrasPorts | null; // Stage2 routing and Stage5 optional, server-bound reaction metadata; rich chat (docs/rich-chat-contract.md).
+  turnRouting?: TurnRouting; feeling?: import('../../mind/emotion/feelingPorts.js').FeelingPort; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; conversationExtras?: () => import('../../contracts/conversationExtrasContract.js').ConversationExtrasPorts | null; // Stage2 routing and Stage5 optional, server-bound reaction metadata; rich chat (docs/rich-chat-contract.md).
   /**
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
    */
   mind?: MindTurnPorts; operationOutcomes?: TracedOperationOutcomes; // The latter: lifecycle ends, for later tool traces (2026-10-14).
   /** Explicit opt-in; the normal text model/stream remains the foreground conversation executor. */
-  fcaConversation?: () => FcaConversationPort | null;
-  fcaVoice?: () => FcaVoicePort | null;
+  fcaConversation?: () => FcaConversationPort | null; fcaVoice?: () => FcaVoicePort | null;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel; private readonly auxiliaryChatModel: ShannonChatModel;
@@ -184,7 +184,7 @@ export class ShannonApiKernel {
   private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
-  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null; private readonly innerNote: import('../../mind/emotion/innerNotePorts.js').InnerNotePort | null;
+  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null; private readonly innerNote: import('../../mind/emotion/innerNotePorts.js').InnerNotePort | null; private readonly feeling: import('../../mind/emotion/feelingPorts.js').FeelingPort | null; // ADR-0013
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -230,7 +230,7 @@ export class ShannonApiKernel {
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now, options.operationOutcomes); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
-    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); // Stage 2, step 6: skill.read.
+    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); this.feeling = feelingText.attach(this.body, options.feeling); // Step 6: skill.read.
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
@@ -320,7 +320,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.auxiliaryChatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}), innerNote: this.innerNote });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}), innerNote: feelingText.binder(this.innerNote, this.feeling), feeling: this.feeling });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -363,16 +363,15 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
+    const feelingTurn = feelingText.start(this.feeling, { scopeKey: body.scopeKey, alone: audience.alone, surface: Boolean(surface), message, begun }); // 0013
     // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
     const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
-    // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
-    // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
+    // Who her tools are offered to, and (ADR-0008 stage 2) her read tools' plan and the turn's Jev call, beside recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, commonFca: !surface && audience.alone && Boolean(this.fcaConversation?.()), readTools: this.readTools, toolHints: this.toolHints });
     const { basePrompt, capability: capabilityPending } = startTextIdentityAndCapability(deps, input, begun, Boolean(fca)); // Beside recall.
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await textStage('recall_timeout', observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})), () => begun.deterministicContext) : begun.deterministicContext;
     const capability = capabilityPending instanceof Promise ? await capabilityPending : capabilityPending;
-    // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
     observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});
     let layered = observeSync('context',{threadId},()=>textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook }),value=>({contextCharacters:value.turnContext.length}));
@@ -397,16 +396,16 @@ export class ShannonApiKernel {
     if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
     layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
     systemPrompt = layered.prompt;
-    // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
+    // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing). ADR-0013: her feeling turn, ≤200 ms more.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     if(this.mind?.sync)await this.mind.sync();
+    const feelingBlock = feelingTurn ? await feelingText.block(feelingTurn) : ''; // Without a port, not even a tick.
     const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
-      // The history is a character budget; what fell out of it is covered by the replay summary.
-      // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
+      // The history is a character budget (the replay summary covers the rest). Stage 3's blocks, then ADR-0013's, follow the turn's context.
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) }), innerNoteText.context(this.innerNote, body.scopeKey, audience.alone, Boolean(surface), occurredAt)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) }), innerNoteText.context(this.innerNote, body.scopeKey, audience.alone, Boolean(surface), occurredAt)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null})), feelingBlock),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId, ...textTurnClock(occurredAt),
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
@@ -422,7 +421,7 @@ export class ShannonApiKernel {
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
-    const { messageEmotion, expressiveEmotion } = innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone, turnToolResults(toolOffer.tools).some(call => !call.ok));
+    const { messageEmotion, expressiveEmotion } = feelingText.face(feelingTurn, innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone, turnToolResults(toolOffer.tools).some(call => !call.ok)), captured, occurredAt);
     const response: ChatResponse = {
       mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
       snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
@@ -471,6 +470,7 @@ export class ShannonApiKernel {
     // Her stored feeling toward the owner moves only on a turn that is his alone.
     if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
     innerNoteText.ended(this.innerNote, body.scopeKey, audience.alone && !surface, occurredAt, message, reply, expressiveEmotion, experience?.id);
+    feelingText.ended(feelingTurn, { at: occurredAt, message, reply, ...(experience ? { experienceId: experience.id } : {}) }); // ADR-0013
     this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
     } catch (error) {
@@ -492,7 +492,7 @@ export class ShannonApiKernel {
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
       toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}), ...(this.feedback ? { feedback: this.feedback } : {}), ...(this.stage5Capabilities ? {stage5Capabilities:this.stage5Capabilities} : {}),
-      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}), ...(this.innerNote ? { innerNote: this.innerNote } : {}),
+      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}), ...(this.innerNote ? { innerNote: this.innerNote } : {}), ...(this.feeling ? { feeling: this.feeling } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

@@ -26,10 +26,12 @@ import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } fr
 import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
 import { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
+import { feelingBody, type FeelingPort } from '../../mind/emotion/feelingPorts.js';
+import { feelingEventsCapability } from '../../contracts/feelingEventContract.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
-import { innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
+import { innerNoteFaceOf, innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
 export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 
 /**
@@ -117,6 +119,8 @@ export class ShannonBody {
   readonly reactions: BodyReactions;
   /** The owner in a call on another device: the presence field, and the refusal of a voice request from her body. */
   readonly ownerCalls: OwnerCalls;
+  /** Syzygy ADR-0013 (`SHANNON_FEELING_EVENTS`): her feeling events and the one face; null, everything as before. */
+  private feeling: FeelingPort | null = null;
 
   constructor(private readonly dependencies: ShannonBodyDependencies) {
     this.store = dependencies.store ?? new SQLiteBodyStore(':memory:');
@@ -165,6 +169,18 @@ export class ShannonBody {
       ...(dependencies.ownerCalls?.answered ? { answered: dependencies.ownerCalls.answered } : {}),
     });
   }
+
+  /** The kernel hands her feeling events once, at composition (the touches, the reactions, presence). */
+  useFeeling(port: FeelingPort | null): void {
+    this.feeling = port;
+    this.reactions.useFeeling(port);
+  }
+
+  /** Whether this server takes wordless touches (`feelingEvents` on presence and the capabilities answer). */
+  get feelingEvents(): boolean { return this.feeling !== null; }
+
+  /** The field that says so (`feelingEventContract.ts`): `{ feelingEvents: 1 }`, or nothing while switched off. */
+  get feelingCapability(): { feelingEvents?: number } { return feelingEventsCapability(this.feelingEvents); }
 
   /** Stores a validated batch. Each event answers for itself; nothing here calls a model or writes a reply. */
   ingest(scopeKey: string, deviceId: string, events: readonly BodyEvent[]): BodyIngestReceipt | 'BODY_INGEST_DISABLED' {
@@ -236,6 +252,10 @@ export class ShannonBody {
       if (!type || results[index]?.status !== 'stored') continue;
       try { const felt = this.touches.observe(scopeKey, { ...event, type, ...(surface ? { surface } : {}) });
         if (felt) this.contact(scopeKey, deviceId, event.id, event.occurredAt, event.audience, { ...event, type }, felt);
+        // ADR-0013: every touch is a feeling event (the finer part, else the region).
+        const part = event.part ?? event.region;
+        if (felt) feelingBody.touched(this.feeling, scopeKey, { id: event.id, type, ...(part ? { part } : {}), audience: event.audience,
+          occurredAt: event.occurredAt, burstId: felt.burst.id });
       } catch (error) {
         console.error('Shannon touch failed', error instanceof Error ? error.message : 'unknown');
       }
@@ -357,14 +377,18 @@ export class ShannonBody {
     const overview = this.dependencies.autonomy.overview(scopeKey);
     // This read is what tells her the window is visible; an open look for this device rides on the snapshot.
     const looking = this.looks.presence(scopeKey, deviceId, at);
+    const shown = {
+      expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}),
+      primary: mood.fromConversation ? current.primary : 'neutral',
+      intensity: mood.fromConversation ? round(current.intensity, 1) : 0,
+      fromConversation: mood.fromConversation,
+      valence: round(snapshot.emotion.valence, 2), arousal: round(snapshot.emotion.arousal, 2), openness: round(snapshot.emotion.openness, 2),
+    };
     const content = {
-      mood: innerNoteMood(this.reactions.innerNote, scopeKey, at, { // Syzygy ADR-0012: while her inner note is active, the face it shows.
-        expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}),
-        primary: mood.fromConversation ? current.primary : 'neutral',
-        intensity: mood.fromConversation ? round(current.intensity, 1) : 0,
-        fromConversation: mood.fromConversation,
-        valence: round(snapshot.emotion.valence, 2), arousal: round(snapshot.emotion.arousal, 2), openness: round(snapshot.emotion.openness, 2),
-      }, current.overrideReason !== undefined),
+      // ADR-0013 (`SHANNON_SINGLE_FACE`): the one face, the note's `shown` an opinion in it. Else ADR-0012: the note's face while it is active.
+      mood: this.feeling?.singleFace
+        ? feelingBody.mood(this.feeling, scopeKey, audience, at, snapshot, shown, innerNoteFaceOf(this.reactions.innerNote, scopeKey, at))
+        : innerNoteMood(this.reactions.innerNote, scopeKey, at, shown, current.overrideReason !== undefined),
       doing: bodyDoing(overview.loop.state, this.dependencies.autonomy.activityDays(scopeKey, 2), at),
       autonomy: { state: overview.control.state },
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },
@@ -386,7 +410,7 @@ export class ShannonBody {
       pollAfterSeconds: Math.min(looking.fastPoll ? BODY_LOOK_LIMITS.fastPollSeconds : BODY_LIMITS.presencePollSeconds,
         content.ownerCallElsewhere?.active ? OWNER_CALL_LIMITS.pollSeconds : Number.POSITIVE_INFINITY),
       // A fact of this server, not of the snapshot: outside the etag, and on an unchanged answer too.
-      touchVocabulary: BODY_TOUCH_VOCABULARY,
+      touchVocabulary: BODY_TOUCH_VOCABULARY, ...feelingEventsCapability(this.feelingEvents),
     };
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
   }

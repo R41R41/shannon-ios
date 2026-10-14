@@ -1,6 +1,7 @@
 import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateStore } from '@shannon/cognition';
 import { presentCompanionState, resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { storedVoiceFace } from '../../mind/emotion/voiceEmotionPlan.js';
+import { feelingVoice, type FeelingPort } from '../../mind/emotion/feelingPorts.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from '../../infra/http/apiValidation.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
@@ -22,6 +23,8 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   fcaVoice?: () => FcaVoicePort | null;
   /** Syzygy ADR-0012: her inner note learns which stored turn a voice utterance became (forgetting the turn forgets its notes). */
   innerNote?: { bind(scopeKey: string, from: string, to: string): void } | null;
+  /** Syzygy ADR-0013 D17 (`SHANNON_SINGLE_FACE`): the presentation id stored with her message; absent, the message as before. */
+  feeling?: FeelingPort | null;
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -61,6 +64,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
   const companion = request.body.companionPresent === true || ownerSaysCompanionPresent(userMessage)
     ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
+  const storedEmotion = feelingVoice.stored(dependencies.feeling ?? null, messageEmotion, 'audience' in companion); // ADR-0013 D17
   // He answered her line aloud, so it becomes conversation: her line, his words, her reply. It is display history
   // (no user side, no experience). With someone else able to hear, the turn follows the companion rules and her
   // line stays out of the Talk: it was context for the reply and remains in the memory of the touch.
@@ -68,7 +72,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     dependencies.conversationStore.appendNote?.(scopeKey, threadId, reaction.text, reaction.saidAt, 'body-reaction');
   }
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
-    messageEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };
+    messageEmotion: storedEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };
   const fca = dependencies.fcaVoice?.(), receipt = utteranceId && request.deviceId ? { scopeKey, threadId,
     deviceId: request.deviceId, utteranceId, userTranscript: userMessage, shannonReply, companionPresent: 'audience' in companion } : null;
   const delivery = receipt ? fca?.history(receipt) : null;
@@ -84,7 +88,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   if (!stored) dependencies.background.schedule(turn, experience.id);
   if (utteranceId) dependencies.innerNote?.bind(scopeKey, `utterance:${utteranceId}`, `experience:${experience.id}`);
   // The face goes back as before; its `kind` is sent only to the owner alone (it is stored either way).
-  const shownEmotion = 'audience' in companion ? messageEmotionForOthers(messageEmotion) : messageEmotion;
+  const shownEmotion = 'audience' in companion ? messageEmotionForOthers(storedEmotion) : storedEmotion;
   const feedback = 'audience' in companion ? null : bindCompletedFeedback(dependencies.feedback,scopeKey,typeof request.body.feedbackRecordId==='string'?request.body.feedbackRecordId:undefined,threadId,experience.id,shannonReply);
   return { status: 201, body: { threadId, turnId: experience.id, messageEmotion: shownEmotion, state: presentCompanionState(captured, completedAt), ...(feedback?{feedback}:{}) } };
 }
