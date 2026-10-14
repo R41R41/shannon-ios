@@ -223,7 +223,10 @@ export function createMinecraftTaskBody(parts: {
     return job;
   };
   const tick = async () => {
-    if (!live() || closed || active || !parts.entry || !parts.selector || attempts >= 4) return;
+    // The task's source check (`live`) walks its whole provenance when its verdict has expired (Minecraft run 10, 2026-10-14: 2–5 s
+    // each on a long task, the API's thread blocked every ~5 s while this monitor polled every 250 ms). It is asked only once a
+    // frame could start a reflex; nothing is shown, sent or started before it, and the entry asks it again (below).
+    if (closed || active || !parts.entry || !parts.selector || attempts >= 4) return;
     const bodyId = bound(), observation = bodyId ? control.observe(bodyId) : null;
     // Every session requires a picture; without one it could only end `observation_unavailable` after the entry call.
     if (bodyId && control.imagesUnavailable(bodyId)) return;
@@ -233,6 +236,7 @@ export function createMinecraftTaskBody(parts: {
     const evidence = mode === 'danger' ? concreteDanger(observation) : null;
     dangerFrames = evidence ? dangerFrames + 1 : 0;
     if (!mode) return void (held = '');
+    if (!live()) return;
     if (control.settling(bodyId!, spawnGrace)) return hold('spawn_grace', { mode, sequence: observation.sequence });
     if (!decided && !activeAction) {
       if (mode !== 'danger') return hold('before_first_decision', { mode, sequence: observation.sequence });
