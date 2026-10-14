@@ -40,6 +40,8 @@ export interface CommitmentFacts {
    * and the sentence names it whenever it states minutes, so that no number adds up to a wrong clock time (review of da980080).
    */
   deferredTo?: string;
+  /** Told after the night, but not soon after it ends (an outage): the night is said, never 「7時から」. */
+  toldLate?: boolean;
 }
 
 const MINUTE = 60_000;
@@ -63,7 +65,10 @@ function minutesLate(facts: Pick<CommitmentFacts, 'overdueMinutes'>): boolean {
   return facts.overdueMinutes !== null && facts.overdueMinutes >= PROMISE_LATE_MINUTES;
 }
 
-const NIGHT_NOTE = `夜のあいだは控えていたため、${QUIET_END_HOUR}時からのお知らせ`;
+/** The night's note: 「…7時からのお知らせ」 only when it is told within a quarter of an hour of the quiet hours' end. */
+const nightNote = (facts: Pick<CommitmentFacts, 'toldLate'>) => (facts.toldLate ? '夜のあいだは控えていたため' : `夜のあいだは控えていたため、${QUIET_END_HOUR}時からのお知らせ`);
+/** How long after the quiet hours end 「7時からのお知らせ」 is still true. */
+export const PROMISE_NIGHT_NOTE_MINUTES = 15;
 
 /**
  * What the sentence says besides the promise, each literally true when it is told (review of da980080): 「47分遅れ」 counts from the
@@ -75,10 +80,10 @@ function factNotes(facts: CommitmentFacts, timed: boolean): string[] {
   if (facts.deferredTo !== undefined) {
     const asked = late ? canonicalTimePhrases({ when: facts.deferredTo })[0] : undefined;
     if (!asked) return ['あとで、と頼まれていた分'];
-    return [`${asked}に、と頼まれていた分`, facts.quietHeld ? NIGHT_NOTE : `${late}遅れ`];
+    return [`${asked}に、と頼まれていた分`, facts.quietHeld ? nightNote(facts) : `${late}遅れ`];
   }
   if (!late) return [];
-  return facts.quietHeld ? [NIGHT_NOTE, `${late}遅れ`] : [`${late}遅れ`];
+  return facts.quietHeld ? [nightNote(facts), `${late}遅れ`] : [`${late}遅れ`];
 }
 
 /**
@@ -114,26 +119,44 @@ const instant = (value: string | null | undefined) => (value && Number.isFinite(
  * The facts of one due promise at `at`: what, when (owner-local), how late, and whether the night held it. Lateness counts from
  * max(its time, its 「あとで」 remindAfter): a reminder told when he asked to be reminded is not late (review of f23a3c94).
  */
-export interface CommitmentCandidateFacts { title: string; published_at: string | null; remind_after?: string | null; due_date?: string | null }
+export interface CommitmentCandidateFacts {
+  title: string; published_at: string | null; remind_after?: string | null; due_date?: string | null;
+  /** A date-only promise's usual notice time (`dueCommitmentCandidate`): a 「あとで」 at or before it is stale and ignored. */
+  eligible_at?: string | null;
+}
+
+const clockIn = (timeZone: string) => (value: string) =>
+  new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
 
 export function commitmentFacts(candidate: CommitmentCandidateFacts, at: string, timeZone: string, others: boolean): CommitmentFacts {
   const dueAt = instant(candidate.published_at);
+  if (!dueAt) return dateOnlyFacts(candidate, at, timeZone, others);
+  const clock = clockIn(timeZone);
   const remindAfter = instant(candidate.remind_after);
-  const clock = (value: string) => new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
-  if (!dueAt) {
-    const day = dayOf(candidate.due_date ?? null, at, timeZone);
-    return { title: candidate.title, when: '今日', overdueMinutes: null, others, dayLabel: day.label, ...(day.past ? { pastDay: true } : {}),
-      ...(remindAfter ? { deferredTo: clock(remindAfter) } : {}) };
-  }
   const deferred = remindAfter !== null && Date.parse(remindAfter) > Date.parse(dueAt);
   const from = deferred ? remindAfter! : dueAt;
   const overdueMinutes = Math.max(0, Math.round((Date.parse(at) - Date.parse(from)) / MINUTE));
+  const night = nightOf(from, at, overdueMinutes, timeZone);
+  return { title: candidate.title, when: clock(dueAt), overdueMinutes, others, ...night, ...(deferred ? { deferredTo: clock(remindAfter!) } : {}) };
+}
+
+/** A date-only promise: its day, whether it is past, and a 「あとで」 only when later than the usual notice (else stale; review of 2b82e623). */
+function dateOnlyFacts(candidate: CommitmentCandidateFacts, at: string, timeZone: string, others: boolean): CommitmentFacts {
+  const day = dayOf(candidate.due_date ?? null, at, timeZone);
+  const remindAfter = instant(candidate.remind_after);
+  const eligible = instant(candidate.eligible_at);
+  const deferred = remindAfter !== null && eligible !== null && Date.parse(remindAfter) > Date.parse(eligible);
+  return { title: candidate.title, when: '今日', overdueMinutes: null, others, dayLabel: day.label, ...(day.past ? { pastDay: true } : {}),
+    ...(deferred ? { deferredTo: clockIn(timeZone)(remindAfter!) } : {}) };
+}
+
+/** Whether the night held it, and whether it is told past a quarter of an hour after the night (then no 「7時から」). */
+function nightOf(from: string, at: string, overdueMinutes: number, timeZone: string): Pick<CommitmentFacts, 'quietHeld' | 'toldLate'> {
   const fromHour = localDateParts(new Date(from), timeZone).hour;
   const quietHeld = (fromHour >= QUIET_START_HOUR || fromHour < QUIET_END_HOUR) && overdueMinutes >= PROMISE_LATE_MINUTES;
-  return {
-    title: candidate.title, when: clock(dueAt), overdueMinutes, others, ...(quietHeld ? { quietHeld: true } : {}),
-    ...(deferred ? { deferredTo: clock(remindAfter!) } : {}),
-  };
+  if (!quietHeld) return {};
+  const [toldHour, toldMinute] = clockIn(timeZone)(at).split(':').map(Number) as [number, number];
+  return toldHour === QUIET_END_HOUR && toldMinute < PROMISE_NIGHT_NOTE_MINUTES ? { quietHeld: true } : { quietHeld: true, toldLate: true };
 }
 
 /** A date-only promise's day: 「今日」 when its date is today where it is told, else 「10月14日」 (past when earlier); 「今日」 without a date. */
@@ -182,9 +205,15 @@ export const PROMISE_PHRASES_V1: readonly PromisePhrase[] = Object.freeze<Promis
 ]);
 
 /** A promise about waking him (起こして, 起きる, 目覚まし): only then the wake phrases are offered. */
+const WAKE_WORDS = new RegExp([
+  '起こして', '起こしに来て', '(?<!行動を|事を|ことを|問題を|騒ぎを|事件を|騒動を|革命を|奇跡を|変化を|波風を)起こす', 'おこして', '目覚まし', 'めざまし',
+  'モーニングコール', 'アラームを?(?:かけ|掛け|セット)', '起床', '起きる時間', '起きる時刻', '起きれるように', '起きられるように',
+].join('|'), 'u');
+
 export function wakePromise(title: string): boolean {
-  // 起こして / 起こす (not 起こった・起こる), 目覚まし, 起床, 起きる時間 (not 早起き in general; review of da980080).
-  return /起こして|起こす|おこして|目覚まし|めざまし|起床|起きる時間|起きる時刻/u.test(title);
+  // 起こして / 起こす (not 起こった・起こる, nor 行動を起こす and its kind), 起こしに来て, 目覚まし, モーニングコール, アラームをかける,
+  // 起床, 起きる時間, 起きれるように (not 早起き in general; reviews of da980080 and 2b82e623).
+  return WAKE_WORDS.test(title);
 }
 
 /** The phrases this promise may take now ('' is none). */

@@ -40,7 +40,26 @@ function isDue(memory: ProspectiveMemory, at: string): boolean {
 }
 
 /** A reminder is a proposal to resume a promise, never evidence of its completion. */
-export type DueCommitmentCandidate = CandidateRow & { score: number; remind_after?: string | null; due_date?: string | null };
+export type DueCommitmentCandidate = CandidateRow & { score: number; remind_after?: string | null; due_date?: string | null; eligible_at?: string | null };
+
+/** The instant of an owner-local date at an hour (`YYYY-MM-DD`, 0..23) in a time zone, or null. */
+export function zonedInstant(date: string, hour: number, timeZone: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
+  if (!match) return null;
+  const guess = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour);
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+      minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(guess)).map(part => [part.type, part.value]));
+    const seen = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute));
+    return new Date(guess - (seen - guess)).toISOString();
+  } catch { return null; }
+}
+
+function usualNotice(memory: ProspectiveMemory, at: string): string | null {
+  const timeZone = memory.timeZone ?? 'Asia/Tokyo';
+  const today = localParts(at, timeZone)?.day ?? memory.dueDate!;
+  return zonedInstant(today > memory.dueDate! ? today : memory.dueDate!, eligibleHour(memory), timeZone);
+}
 
 export function dueCommitmentCandidate(scopeKey: string, raw: unknown, at: string): DueCommitmentCandidate[] {
   const state = restoreCompanionState(scopeKey, raw, at);
@@ -50,6 +69,9 @@ export function dueCommitmentCandidate(scopeKey: string, raw: unknown, at: strin
     summary: memory.id, published_at: memory.dueAt ?? null, discovered_at: memory.updatedAt, score: 0.8,
     // 「あとで」 (snooze) asks for the reminder at remindAfter: its lateness counts from there (`commitmentFacts`).
     remind_after: memory.remindAfter ?? null, due_date: memory.dueDate ?? null,
+    // A date-only promise's usual notice time on the day it is told (its date, or today when that is later, at the hour of its part
+    // of the day): a 「あとで」 counts only when it asked for later than that (an older one is stale; review of 2b82e623).
+    eligible_at: !memory.dueAt && memory.dueDate ? usualNotice(memory, at) : null,
   })).sort((a, b) => (a.published_at ?? a.discovered_at).localeCompare(b.published_at ?? b.discovered_at));
 }
 
