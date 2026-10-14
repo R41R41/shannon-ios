@@ -57,8 +57,8 @@ export const SLOT_SEEDS = Object.freeze({
 
 /**
  * What the S3 and S4 steps add (Syzygy ADR-0009 stage 1): columns appended by ALTER TABLE (008, 009, 010), and two new tables
- * with their indexes (009). Step 011 changes only rows. Also the additive objects of ADR-0009 stage 2 (E2, E3, E5), which may be
- * there on either side of a deploy.
+ * with their indexes (009). Step 011 changes only rows. Also the additive objects of ADR-0009 stage 2 (E2, E3, E5), and those of the
+ * voice history summary (2026-10-14: two tables and the epoch's `summary_version`), which may be there on either side of a deploy.
  */
 export const S3_ADDITIONS = Object.freeze({
   columns: Object.freeze({
@@ -69,6 +69,8 @@ export const S3_ADDITIONS = Object.freeze({
     autonomy_pursuits: ['source_kind TEXT', 'source_ref TEXT', 'interest_id TEXT', 'expected_value REAL', 'expected_score REAL',
       'completion_predicate TEXT', 'review_at TEXT', 'progress REAL', 'last_worked_at TEXT', 'evidence_json TEXT', 'closed_reason TEXT',
       'closed_at TEXT'],
+    // 2026-10-14: the epoch's pinned voice summary version (SHANNON_VOICE_HISTORY_SUMMARY, `voiceSummaryMigration.ts`).
+    conversation_replay_epochs: ['summary_version INTEGER'],
   }),
   tables: Object.freeze([
     'mind_action_slot_pools', 'mind_action_slot_classes',
@@ -76,6 +78,8 @@ export const S3_ADDITIONS = Object.freeze({
     'autonomy_pursuit_events', 'autonomy_pursuit_marks', 'fca_task_budget', 'executive_deliberations',
     // 2026-10-14: the operator's append-only audit (execution/012), made when SHANNON_OPERATOR_MINECRAFT is first on.
     'operator_audit',
+    // 2026-10-14: the voice history's summaries and wants, made when SHANNON_VOICE_HISTORY_SUMMARY first takes effect.
+    'conversation_voice_summaries', 'conversation_voice_summary_wants',
   ]),
 });
 

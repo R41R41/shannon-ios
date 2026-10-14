@@ -366,10 +366,14 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   voiceSummaries(scopeKey: string, threadId: string) {
     return this.voiceSummariesOn ? selectVoiceSummaries(this.context.database, scopeKey, threadId) : [];
   }
-  /** `accept` runs inside the write transaction (BEGIN IMMEDIATE): no other connection commits a forget between it and the write. */
-  saveVoiceSummary(scopeKey: string, threadId: string, record: VoiceSummaryRecord, keep: readonly number[], accept: () => boolean) {
+  /** `prepare` runs inside the write transaction (BEGIN IMMEDIATE): no other connection commits a forget between it and the write. */
+  saveVoiceSummary(scopeKey: string, threadId: string, prepare: () => { record: VoiceSummaryRecord; keep: readonly number[] } | null) {
     if (!this.voiceSummariesOn) return false;
-    return this.context.transaction(() => accept() && (insertVoiceSummary(this.context.database, scopeKey, threadId, record, keep), true));
+    return this.context.transaction(() => {
+      const write = prepare();
+      if (write) insertVoiceSummary(this.context.database, scopeKey, threadId, write.record, write.keep);
+      return Boolean(write);
+    });
   }
   deleteVoiceSummaries(scopeKey: string, threadId: string, versions: readonly number[]) {
     if (this.voiceSummariesOn) this.context.transaction(() => removeVoiceSummaries(this.context.database, scopeKey, threadId, versions));

@@ -68,6 +68,9 @@ export interface VoiceSummaryRecord {
   chainStartedAt: string; updatedAt: string;
 }
 
+/** What a voice summary write puts in the store (`saveVoiceSummary`). */
+export interface VoiceSummaryWrite { record: VoiceSummaryRecord; keep: readonly number[] }
+
 export type ReplayChannel = 'text' | 'voice';
 
 /** What was said in a thread before its replay window (`conversationReplaySummary.ts`); not the navigation summary. */
@@ -233,11 +236,12 @@ export interface ConversationStore {
   /** The thread's voice summaries, newest version first (`voiceHistorySummary.ts`). Absent: voice replays without one. */
   voiceSummaries?(scopeKey: string, threadId: string): readonly VoiceSummaryRecord[];
   /**
-   * Writes a new version and removes every other version except those in `keep` (one a running epoch replays), only when
-   * `accept` (the forget re-check) answers true inside the same write transaction, so no forget commits between them.
+   * Inside one write transaction: `prepare` reads what it needs (the running epoch's pinned version, the versions there are, the
+   * state for the forget re-check) and answers the version to write and the versions to keep beside it, or null to write nothing;
+   * then the version is written and every other version except `keep` removed. No forget commits between the check and the write.
    * Answers whether it was written.
    */
-  saveVoiceSummary?(scopeKey: string, threadId: string, record: VoiceSummaryRecord, keep: readonly number[], accept: () => boolean): boolean;
+  saveVoiceSummary?(scopeKey: string, threadId: string, prepare: () => VoiceSummaryWrite | null): boolean;
   /** Removes these versions (a forget reached them). */
   deleteVoiceSummaries?(scopeKey: string, threadId: string, versions: readonly number[]): void;
   /** When a voice turn last found its window about to overflow: the background then extends the summary. */

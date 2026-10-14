@@ -282,8 +282,10 @@ export class InMemoryConversationStore implements ConversationStore {
   voiceSummaries(scopeKey: string, threadId: string): readonly VoiceSummaryRecord[] {
     return this.voiceSummaryVersions.get(`${scopeKey}\u0000${threadId}`) ?? [];
   }
-  saveVoiceSummary(scopeKey: string, threadId: string, record: VoiceSummaryRecord, keep: readonly number[], accept: () => boolean): boolean {
-    if (!accept()) return false;
+  saveVoiceSummary(scopeKey: string, threadId: string, prepare: () => { record: VoiceSummaryRecord; keep: readonly number[] } | null): boolean {
+    const write = prepare();
+    if (!write) return false;
+    const { record, keep } = write;
     const kept = this.voiceSummaries(scopeKey, threadId).filter(item => keep.includes(item.version) && item.version !== record.version);
     const versions = [Object.freeze({ ...record }), ...kept].sort((left, right) => right.version - left.version);
     this.voiceSummaryVersions.set(`${scopeKey}\u0000${threadId}`, Object.freeze(versions));

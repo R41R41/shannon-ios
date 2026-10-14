@@ -66,22 +66,28 @@ export class VoiceHistorySummarizer {
     if (!plan) return 'current';
     const summary = await this.written(scopeKey, plan, startedAt);
     if (summary.outcome) return summary.outcome;
-    return this.saved(scopeKey, threadId, records, plan, summary.text, startedAt);
+    return this.saved(scopeKey, threadId, plan, summary.text, startedAt);
   }
 
-  /** The new version, unless a forget came while the model ran; a version a running voice epoch replays is kept beside it. */
-  private saved(scopeKey: string, threadId: string, records: readonly VoiceSummaryRecord[],
-    plan: NonNullable<ReturnType<VoiceHistorySummarizer['planned']>>, summary: string, startedAt: string): VoiceSummaryOutcome {
-    const epoch = this.store.replayEpoch?.(scopeKey, threadId, 'voice')?.summaryVersion ?? 0;
-    const record: VoiceSummaryRecord = {
-      version: Math.max(epoch, ...records.map(item => item.version), 0) + 1, summary,
-      coversFromMessageId: plan.chain?.coversFromMessageId ?? plan.batches[0]![0]!.id, coveredThroughMessageId: plan.through,
-      chainStartedAt: plan.chain?.chainStartedAt ?? startedAt, updatedAt: startedAt,
-    };
-    // A forget that came while the model ran, or comes now: judged inside the write's own transaction, so none slips between.
-    const clean = () => !new MemoryWithholding(this.stateStore.snapshot(scopeKey), this.store, scopeKey).withholdsReplaySummary(threadId, record);
-    if (!this.store.saveVoiceSummary!(scopeKey, threadId, record, epoch ? [epoch] : [], clean)) return 'forgotten';
-    return 'updated';
+  /**
+   * The new version, unless a forget came while the model ran or comes now: everything it depends on (the running epoch's pinned
+   * version, the versions there are, the state of the forget re-check) is read inside the write's own transaction.
+   */
+  private saved(scopeKey: string, threadId: string, plan: NonNullable<ReturnType<VoiceHistorySummarizer['planned']>>,
+    summary: string, startedAt: string): VoiceSummaryOutcome {
+    const written = this.store.saveVoiceSummary!(scopeKey, threadId, () => {
+      const epoch = this.store.replayEpoch?.(scopeKey, threadId, 'voice')?.summaryVersion ?? 0;
+      const versions = this.store.voiceSummaries!(scopeKey, threadId).map(item => item.version);
+      const record: VoiceSummaryRecord = {
+        version: Math.max(epoch, ...versions, 0) + 1, summary,
+        coversFromMessageId: plan.chain?.coversFromMessageId ?? plan.batches[0]![0]!.id, coveredThroughMessageId: plan.through,
+        chainStartedAt: plan.chain?.chainStartedAt ?? startedAt, updatedAt: startedAt,
+      };
+      const state = this.stateStore.snapshot(scopeKey);
+      if (new MemoryWithholding(state, this.store, scopeKey).withholdsReplaySummary(threadId, record)) return null;
+      return { record, keep: epoch ? [epoch] : [] };
+    });
+    return written ? 'updated' : 'forgotten';
   }
 
   /** The writer's calls, batch by batch from the chain's summary, each inside the shared background budget. */

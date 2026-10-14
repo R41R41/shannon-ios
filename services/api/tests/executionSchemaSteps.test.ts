@@ -20,6 +20,7 @@ import {
   ACTION_SLOTS_STEP, ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP, OWNER_SLOT_LIMITS_STEP,
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
 
 /**
@@ -351,6 +352,34 @@ describe('the pinned checksums', () => {
     expect(failed.status).toBe(1);
     expect(failed.stdout).toContain(`checksum of ${ACTION_THREADS_STEP.id} is edited`);
     expect(failed.stdout).toContain('"name":"unexpected"');
+  });
+
+  it('accepts the voice history summary\'s additions on a database the API made (owner decision 2026-10-14), and nothing else', () => {
+    const path = temporaryPath();
+    const at = '2026-10-14T00:00:00.000Z';
+    // Before the deploy: the API with replay epochs, without the voice summary (its tables and its epoch column absent).
+    const old = new SQLiteShannonStore({ path, now: () => at, replayEpochs: true, voiceSummaries: false });
+    old.saveReplayEpoch('owner', 'thread', 'voice', { epoch: 1, startMessageId: 'a', fullFromMessageId: 'a', budgetCharacters: 12_000, startedAt: at });
+    old.close();
+    const before = `${path}.before.jsonl`;
+    const script = fileURLToPath(new URL('../../../scripts/verify-schema-steps.mjs', import.meta.url));
+    expect(spawnSync(process.execPath, [script, 'dump', path, before], { encoding: 'utf8' }).status).toBe(0);
+    // After: the new code opens it with the summary on, as every service does at its start.
+    const current = new SQLiteShannonStore({ path, now: () => at, replayEpochs: true, voiceSummaries: true });
+    current.close();
+    const columns = new DatabaseSync(path, { readOnly: true });
+    expect((columns.prepare('PRAGMA table_info(conversation_replay_epochs)').all() as Array<{ name: string }>).map(row => row.name))
+      .toContain('summary_version');
+    columns.close();
+    const check = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(check.stdout).toContain('SCHEMA_UNCHANGED_AND_LEDGER_PINNED');
+    expect(check.status).toBe(0);
+    const tamper = new DatabaseSync(path);
+    tamper.exec('ALTER TABLE conversation_replay_epochs ADD COLUMN unexpected TEXT');
+    tamper.close();
+    const failed = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toContain('unexpected TEXT');
   });
 
   it('holds the slot tables to the rows the ledger says were written (S3 review L5)', () => {
