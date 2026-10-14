@@ -66,7 +66,7 @@ function run(options: Options) {
   let selections = 0;
   const selector: FcaToolSelector = { async select(request) {
     const names = request.tools.map(tool => tool.name);
-    return { names: options.selection ? options.selection(selections++, names) : names, source: 'fallback' };
+    return { names: options.selection ? options.selection(selections++, names) : names, source: 'catalog' };
   } };
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,

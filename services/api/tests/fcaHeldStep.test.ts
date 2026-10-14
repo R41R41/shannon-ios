@@ -27,7 +27,7 @@ function fixture(options: { holdAt: Hold; bodyActs?: boolean }) {
     held = true;
     holding = true;
   };
-  const selector: FcaToolSelector = { async select(request) { hold('selection'); return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+  const selector: FcaToolSelector = { async select(request) { hold('selection'); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
   const body = (): FcaBodyLifecycle => ({
     // As a reflex that started on its own and reached the body before the decision.
     start() { const execution = currentActionExecution(); if (execution && options.bodyActs) execution.stepOutcome = 'acknowledged'; },

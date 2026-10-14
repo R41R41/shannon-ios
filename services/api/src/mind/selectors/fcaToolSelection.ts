@@ -11,7 +11,8 @@ export interface FcaToolSelectionRequest {
   tools: readonly { name: string; description: string }[];
   signal: AbortSignal;
 }
-export interface FcaToolSelectionResult { names: readonly string[]; source: 'jev' | 'fallback' }
+/** `catalog`: a deliberate whole catalog (no selector configured); `fallback`: the selector could not answer (bounded by the caller). */
+export interface FcaToolSelectionResult { names: readonly string[]; source: 'jev' | 'fallback' | 'catalog' }
 export interface FcaToolSelector { select(request: FcaToolSelectionRequest): Promise<FcaToolSelectionResult> }
 
 export const FCA_TOOL_SELECTION_LIMITS = Object.freeze({ goal: 2_000, state: 4_000, recentResults: 8, resultName: 160, resultSummary: 1_000 });

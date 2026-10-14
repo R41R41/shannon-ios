@@ -12,6 +12,7 @@ import {
   type BodyStopRequest, type BodyTaskContext, type ReflexEntrySelector, type ReflexEvent, type ReflexLimits,
   type ReflexPorts, type ReflexSelector, type ReflexSessionReceipt, type ReflexSessionRequest,
 } from '../../mind/action/reflex/reflexPorts.js';
+import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import { observerHandoff } from '../../infra/observer/observerContext.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
@@ -92,8 +93,11 @@ export function createMinecraftTaskBody(parts: {
   spawnGraceMilliseconds?: number;
   /** The skills she can open with `skill.read` now (`minecraftSkillPointers`); none when absent. */
   skillNames?(): ReadonlySet<string>;
+  /** The task's automatic reflex entries across its steps (`reflexGovernor.ts`); one for this step alone when absent. */
+  governor?: ReflexGovernor;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
+  const governor = parts.governor ?? createReflexGovernor();
   const monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(), claims = new Set<string>();
   const releasedSessions = new Set<string>();
   const captures = new Map<string, number>(), modes = new Map<string, 'explicit' | 'danger' | 'stuck' | 'visual'>();
@@ -215,11 +219,35 @@ export function createMinecraftTaskBody(parts: {
     },
   };
   const controller = createReflexController(ports);
-  const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal) => {
-    revision += 1; modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
-    const job = controller.run(request, signal); active = job;
-    void job.then(receipt => { if (receipt?.control === 'held') unknown = true; }, error => { fault = error; unknown = true; })
-      .finally(() => { if (active === job) active = null; });
+  /**
+   * RUNNER SEMANTICS (Minecraft run 10, 2026-10-14): a session makes the step's decision stale (`revision`, read by `guard`) only when
+   * it interrupted a body tool in flight (or is her own `minecraft.reflex` call), or when it touched the body: it sent a body
+   * action, its control is held, or it failed. One that only observed and returned leaves the decision made meanwhile valid; in run
+   * 10 such sessions discarded the FCA's last 20 decisions (every tool result 「身体の状態が変わりました」).
+   */
+  const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal, entry?: ReflexEntryFacts) => {
+    const interrupting = mode === 'explicit' || activeAction !== undefined;
+    if (interrupting) revision += 1;
+    modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
+    const job = controller.run(request, signal);
+    if (entry) governor.began(step.taskId, now(), entry);
+    // Effective: a body action completed in it. A session that only observed and returned is followed by its mode's cooldown.
+    const ended = (effective: boolean) => { if (entry) governor.ended(step.taskId, now(), entry, effective); };
+    const touched = () => { if (!interrupting) revision += 1; };
+    // `active` settles only after this bookkeeping, so `guard` compares the revision as the session left it.
+    const settled = job.then(receipt => {
+      if (receipt?.control === 'held') unknown = true;
+      if (receipt && (receipt.actions.length > 0 || receipt.control === 'held')) touched();
+      ended(!!receipt?.actions.some(action => action.outcome === 'completed'));
+      return receipt;
+    }, error => {
+      fault = error; unknown = true;
+      touched();
+      ended(false);
+      return null;
+    });
+    active = settled;
+    void settled.finally(() => { if (active === settled) active = null; });
     return job;
   };
   const tick = async () => {
@@ -250,15 +278,21 @@ export function createMinecraftTaskBody(parts: {
     if (activeAction && mode !== 'danger') return;
     const signature = JSON.stringify([mode, facts.target ?? null]);
     if (signature === lastSignature && now() - lastEntryAt < 2_000) return;
+    // Cooldown after a session without effect, the per-minute budget, and one stuck entry per place until she decides again
+    // (`reflexGovernor.ts`, Minecraft run 10). Worsening danger is never held here.
+    const entryFacts: ReflexEntryFacts = { mode, danger: evidence, place: reflexPlace((observation.state as { world?: unknown }).world) };
+    const admission = governor.admit(step.taskId, now(), entryFacts);
+    if (!admission.admit) return hold(admission.reason, { mode, sequence: observation.sequence });
     if (!leaseMatches() || !await execution!.permit([], monitorAbort.signal) || !live()) return;
     lastSignature = signature; lastEntryAt = now(); attempts += 1; held = '';
     // The fact that started it, for the Observer (Minecraft run 6: an entry at spawn left no trace of why).
     observerHandoff('bodyObserve', 'reflex', { phase: 'entry', trigger: 'observation', mode, sequence: observation.sequence, decided,
+      ...(admission.escalated ? { escalated: true } : {}),
       ...(evidence ? { evidence: evidence.kind, value: evidence.value, frames: dangerFrames } : {}), danger: facts.danger === true,
       stuck: facts.stuck === true, visual: facts.visualRequired === true });
     const ctx = context(bodyId!, `${step.id}:reflex:${attempts}`), request = { context: ctx, limits };
     if (await evaluateReflexEntry(request, { context: ctx, observation, trigger: 'observation', recent: [] }, parts.entry, ports, monitorAbort.signal)
-      && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal);
+      && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal, entryFacts);
   };
   const poll = () => {
     if (monitoring || closed) return;
@@ -292,10 +326,14 @@ export function createMinecraftTaskBody(parts: {
       const abort = new AbortController(); toolAborts.add(abort);
       const cancel = () => abort.abort(); parent.addEventListener('abort', cancel, { once: true });
       cleanupListeners.add(() => parent.removeEventListener('abort', cancel));
-      if (parent.aborted || active) abort.abort(); return abort.signal;
+      // A tool cut off by a session in progress leaves the decision stale even when the session itself touches nothing.
+      if (active) revision += 1;
+      if (parent.aborted || active) abort.abort();
+      return abort.signal;
     },
     noteCall(call, operationId) {
       decided = true;
+      governor.decided(step.taskId, now());
       if (!call.name.startsWith('mc.')) return;
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);

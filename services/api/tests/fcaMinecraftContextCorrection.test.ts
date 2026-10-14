@@ -83,7 +83,7 @@ function run() {
     if (request.name === 'mc.check-path-to') return toolOk('到着しました。経路あり: (29, 67, 33)');
     return toolOk(`原木を1個掘った。周囲: ${'樫の原木、草、石。'.repeat(decision % 3 === 0 ? 1_400 : 200)}`);
   } };
-  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
   const body: FcaBodyLifecycle = { start() {}, revision: () => 0, guard: async () => true, toolSignal: (_name, signal) => signal, async close() {},
     context: () => ({ revision: 0, observation: { position: { x: decision, y: 62, z: 34 }, nearby: '樫の原木、草、石'.repeat(120) } as never }) };
   let only = '';

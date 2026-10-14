@@ -78,7 +78,7 @@ function minecraftRun(options: { observation: number; result: number }) {
     toolSignal: (_name, parent) => parent, close: async () => {} };
   const tools: FcaExternalTools = { definitions: [...skills, reflex],
     async execute() { return toolOk(JSON.stringify({ reason: 'observation_unavailable', decisions: 0, control: 'returned', latestObservation: 'x'.repeat(options.result) })); } };
-  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now, canRunTask: (_runtime, id) => id === only,
     stepPorts: () => ({ body, tools, selector, history: { codec: anthropicFcaHistoryCodec } }) });

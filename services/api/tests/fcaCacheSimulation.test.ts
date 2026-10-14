@@ -97,7 +97,7 @@ function run() {
   const tools: FcaExternalTools = { definitions: SKILLS, async execute() {
     return toolOk(JSON.stringify({ found: 'oak_log', distance: 12, detail: '原木'.repeat(decisions % 5 === 0 ? 3_500 : 100) }));
   } };
-  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+  const selector: FcaToolSelector = { async select(request) { return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
   let packets = 0;
   const recall: TaskRecall = { start() {}, cancel() {}, async finishSegment() {}, async cancelAll() {},
     async packet(input): Promise<TaskRecallPacket> {
