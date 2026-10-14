@@ -180,19 +180,22 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   days?: FeelingDayFeatures;
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): keys by who wrote, light ledgers, audience layers, the source cap and the audience checks. */
   audience?: boolean }): ConfiguredFeeling {
+  // Review R1: the audience layers only with the reply check and the turn they rely on (a switch's `requires` only warns at start);
+  // without the check, no marked line of the owner's reaches a turn with others present.
+  const audience = parts.audience === true && parts.check === true && parts.turn;
   const store = new SQLiteFeelingEventStore(parts.database);
   const seed = parts.seed ? { seed: parts.seed } : {};
   const shadowStore = parts.shadow ? new SQLiteFeelingShadowStore(parts.shadow.database) : null;
   let events: FeelingEvents | null = null;
   const shadow = shadowStore && parts.shadow
-    ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now, sourceCap: parts.audience === true })
+    ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now, sourceCap: audience })
     : null;
   const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
-  const closed = closedDays({ ...parts, ...(parts.days ? { days: { ...parts.days, audience: parts.audience === true } } : {}) }, store);
+  const closed = closedDays({ ...parts, ...(parts.days ? { days: { ...parts.days, audience } } : {}) }, store);
   events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
-  const flags = portFlags(parts);
+  const flags = portFlags({ ...parts, audience });
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags, ...closed.days };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);

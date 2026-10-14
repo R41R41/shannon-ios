@@ -22,11 +22,11 @@ const TODAY = '2026-10-14T04:00:00.000Z';
 const snapshot = (): CompanionStateSnapshot => createInitialCompanionState('owner', YESTERDAY);
 const PRIVATE = /\[ライ氏との間\]|\[前の日の件\]|\[ボクの境界\]|ライ氏/u;
 
-function composed(audience = true) {
+function composed(audience = true, check = true) {
   const clock = { at: YESTERDAY };
   const jev = fakeFeelingJev(() => ({ stance: 'sulky', intensity: 'moderate', drawer: 'none' }));
   const { port } = composedFeeling({ database: new DatabaseSync(':memory:'), now: () => clock.at, timeZone: 'Asia/Tokyo', chooser: jev.chooser, turn: true,
-    singleFace: true, days: { relationship: true, episodes: true, boundaries: true }, audience });
+    singleFace: true, days: { relationship: true, episodes: true, boundaries: true }, audience, check });
   return { port, clock, jev };
 }
 
@@ -188,5 +188,15 @@ describe('the re-review of stage 4', () => {
     expect(ledger).toContain('rel_liking');
     expect(ledger).toContain('rel_irritation');
     expect(ledger).not.toMatch(/rel_trust|rel_respect/u);
+  });
+
+  it('R1: with the reply check off, the audience layers stay off: no marked line of the owner\'s reaches a people turn', async () => {
+    const { port, clock } = composed(true, false);
+    expect(port.audience).toBeUndefined();
+    ownersBadDay(port);
+    clock.at = TODAY;
+    const block = await textTurn(port, 'おはよう', TODAY, false, false, 'r1');
+    expect(block).not.toContain('【機微');
+    expect(block).not.toMatch(PRIVATE);
   });
 });
