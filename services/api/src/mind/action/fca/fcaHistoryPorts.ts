@@ -12,6 +12,12 @@ export interface FcaHistoryCodec {
    * (`maximumToolDefinitionCharacters`), not against the conversational history budget.
    */
   reproducible?(entry: unknown): boolean;
+  /**
+   * A native entry as the native history budget measures it: a decision message without the parts each decision restates (the
+   * catalog, recall and fixed instructions), whose size the whole replay's bound still counts. The entry itself is replayed
+   * unchanged. Absent: the entry as it is.
+   */
+  measured?(entry: unknown): unknown;
 }
 export interface FcaHistorySummaryInput {
   previous: CompactionTemplate | null;

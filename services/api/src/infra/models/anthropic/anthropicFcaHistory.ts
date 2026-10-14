@@ -12,6 +12,12 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
     const message = object(entry);
     return !!message && isFcaToolChangeMessage(message);
   },
+  // A decision message counts against the native budget without the parts each decision restates (`publicDecision`); the token
+  // bound of the whole replay still counts them.
+  measured(entry) {
+    const message = object(entry);
+    return message?.role === 'user' && typeof message.content === 'string' ? { ...message, content: publicDecision(message.content) } : entry;
+  },
   project(round) {
     const result: CompactionMessage[] = [];
     const calls = new Set<string>(), pending = new Set<string>();
