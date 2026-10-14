@@ -71,6 +71,9 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: 'おはようございます。今日もよろしくお願いします。', context: alone('neutral', 'subtle'), flags: [] },
   { reply: '明日は雨みたいなので、傘を持っていってくださいね。', context: alone('worry', 'subtle'), flags: [] },
   { reply: 'ふふん、ボクにかかればこのくらい楽勝です。', context: alone('tease', 'moderate'), flags: [] },
+  // Review M6: a plain answer is not a feeling turn: numbers he asked for and a polite tone are not flagged (synthetic).
+  { reply: 'その会議は今月3回目ですね。15時からです。', context: alone('neutral', 'subtle'), flags: [] },
+  { reply: '申し訳ありませんが、その店の営業時間は分かりませんでした。', context: crowd('neutral', 'subtle'), flags: [] },
   // Item 10 (`SHANNON_TEXT_REGISTER`): the text form her state asked for (synthetic).
   { reply: '別に。怒ってません😊', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }),
     flags: ['text_register_mismatch'] },

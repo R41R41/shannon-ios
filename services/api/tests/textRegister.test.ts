@@ -79,20 +79,42 @@ describe('the sentence stream', () => {
   const base = { body: { scopeKey: 'owner', message: 'x', stream: 'sentences' as const }, threadId: 't', audience: { audience: 'owner' as const, alone: true },
     capability: { prompt: '', sources: [] }, placeSearch: false };
 
-  it('sends a turn she keeps quiet first only once it is complete; one without a pause early, with its directive on start', async () => {
+  it('sends a paced turn only once it is complete; an unpaced or already bypassed one early, its bypass on the first start line (M3)', async () => {
     const lines: ChatStreamLine[] = [];
-    const paused = streaming();
-    await generateChatTurn(paused.model as never, { write: line => lines.push(line) }, { ...base, textRegister: directive }, {} as never);
-    expect(paused.calls).toEqual(['generate']);
-    const early = streaming();
-    await generateChatTurn(early.model as never, { write: line => lines.push(line) }, { ...base, textRegister: { ...directive, pauseMs: 0 } }, {} as never);
-    expect(early.calls).toEqual(['stream']);
-    expect(lines[0]).toMatchObject({ type: 'start', textRegister: { pauseMs: 0, split: true } });
+    for (const held of [directive, { ...directive, pauseMs: 0 }, { ...directive, pauseMs: 0, split: false }]) {
+      const paused = streaming();
+      await generateChatTurn(paused.model as never, { write: line => lines.push(line) }, { ...base, textRegister: held }, {} as never);
+      expect(paused.calls).toEqual(['generate']);
+    }
+    const plain = streaming();
+    await generateChatTurn(plain.model as never, { write: line => lines.push(line) },
+      { ...base, textRegister: { ...directive, pauseMs: 0, typingMs: 0, split: false } }, {} as never);
+    expect(plain.calls).toEqual(['stream']);
+    lines.length = 0;
+    const urgent = streaming();
+    await generateChatTurn(urgent.model as never, { write: line => lines.push(line) },
+      { ...base, textRegister: { ...directive, pauseMs: 0, typingMs: 0, split: false, bypass: 'urgent' } }, {} as never);
+    expect(urgent.calls).toEqual(['stream']);
+    expect(lines[0]).toMatchObject({ type: 'start', textRegister: { bypass: 'urgent', pauseMs: 0, typingMs: 0 } });
   });
 
   it('puts the reply\'s directive on the start line of a stream sent once complete', () => {
     const body = { threadId: 't', audience: 'owner', reply: '別に。怒ってません。', textRegister: { ...directive, parts: ['別に。', '怒ってません。'] } };
     const lines = chatSentenceStreamLines({ status: 200, body, sentenceStream: { fallback: null } });
     expect(lines[0]).toMatchObject({ type: 'start', textRegister: { pauseMs: 12_000 } });
+  });
+
+  it('decides the bypass from his words before the model writes', async () => {
+    const { textRegisterBefore } = await import('../src/mind/emotion/textRegisterTurn.js');
+    expect(textRegisterBefore(directive, '地震だ！')).toMatchObject({ bypass: 'urgent', pauseMs: 0, typingMs: 0, split: false });
+    expect(textRegisterBefore(directive, '怒ってる？').bypass).toBeUndefined();
+  });
+
+  it('bypasses a reply whose turn wrote to the owner\'s device (a reminder, a timer, the calendar: M2)', async () => {
+    const { feelingText } = await import('../src/mind/emotion/feelingPorts.js');
+    const handle = { textRegister: directive } as never;
+    expect(feelingText.register(handle, '明日9時に起こして', '入れました。', {}, [{ ok: true, effect: 'write' }]).textRegister)
+      .toMatchObject({ bypass: 'promise', pauseMs: 0, typingMs: 0, split: false });
+    expect(feelingText.register(handle, 'ねえ', '別に。', {}, [{ ok: true, effect: 'read' }]).textRegister!.bypass).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../infra/models/chatModel.js';
-import type { ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine } from '../../contracts/contracts.js';
-import type { TextRegisterDirective } from '@shannon/cognition';
+import type {
+  ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine, ChatTextRegister,
+} from '../../contracts/contracts.js';
 import { ChatSentenceSplitter, splitChatSentences } from './chatSentenceSplitter.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
@@ -32,8 +33,16 @@ export interface ChatSentenceTurn {
   /** The turn's Notion, Aether and Voyager reads: the prompt text and the pages that become a source list. */
   capability: { prompt: string; sources: readonly unknown[] };
   placeSearch: boolean;
-  /** Item 10 (`SHANNON_TEXT_REGISTER`): her form and pacing; a turn she keeps quiet first (`pauseMs`) is sent once complete. */
-  textRegister?: TextRegisterDirective;
+  /**
+   * Item 10 (`SHANNON_TEXT_REGISTER`): her form and pacing, with a bypass already known (review M3). A paced turn (a pause, the typing
+   * display or a split) is sent once complete, when the reply's own bypass is known too; a bypassed or unpaced one may stream early.
+   */
+  textRegister?: ChatTextRegister;
+}
+
+/** Whether a turn's directive holds its reply back (a pause, the typing display or a split) and nothing bypasses it yet. */
+function paced(register: ChatTextRegister | undefined): boolean {
+  return Boolean(register && !register.bypass && (register.pauseMs > 0 || register.typingMs > 0 || register.split));
 }
 
 /** Why an opted-in turn is a single `done`, decided before the model is called; null when its sentences are sent. */
@@ -60,7 +69,7 @@ export async function generateChatTurn(
 ): Promise<ShannonChatModelResult> {
   if (turn.body.stream !== 'sentences') return model.generate(request);
   const fallback = plannedFallback(turn);
-  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming && !(turn.textRegister?.pauseMs);
+  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming && !paced(turn.textRegister);
   const register = turn.textRegister ? { textRegister: turn.textRegister } : {};
   let completion: ShannonChatModelResult;
   if (early) {

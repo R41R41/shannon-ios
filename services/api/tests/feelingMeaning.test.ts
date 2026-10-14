@@ -16,13 +16,13 @@ import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.
  */
 const DAY = '2026-10-14T04:00:00.000Z';
 
-async function chat(shadow: boolean, meaning?: { deliberate: number; teasing: number }) {
+async function chat(shadow: boolean, meaning?: { deliberate: number; teasing: number }, asked = shadow) {
   const database = new DatabaseSync(':memory:');
   const clock = { at: DAY };
   const jev = fakeFeelingJev(scenarioPolicy, meaning ? { meaning } : {});
   let harness: Awaited<ReturnType<typeof reactionHarness>> | null = null;
   const configured = composedFeeling({ database, now: () => clock.at, timeZone: 'Asia/Tokyo', chooser: jev.chooser, turn: true, singleFace: false,
-    ...(shadow ? { shadow: { database, snapshot: (scopeKey: string) => harness!.stateStore.snapshot(scopeKey) } } : {}) });
+    ...(shadow ? { shadow: { database, snapshot: (scopeKey: string) => harness!.stateStore.snapshot(scopeKey) } } : {}), meaning: asked });
   harness = await reactionHarness({ feeling: configured.port, stage2: false });
   harness.clock.at = DAY;
   await harness.send('POST', '/v1/chat', { message: 'お前ポンコツだな' }, 'iphone');
@@ -49,6 +49,12 @@ describe('the meaning questions (feeling_meaning.v1)', () => {
     expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v1', 'feeling_meaning.v1']);
     expect(words.at(-1)!.meaning).toEqual({ deliberate: 0.9, teasing: 0.05 });
     expect(JSON.stringify(words)).not.toContain('ポンコツ');
+  });
+
+  it('are not asked with the shadow alone (review M4: SHANNON_CORE_AFFECT changes no Jev question)', async () => {
+    const { jev } = await chat(true, { deliberate: 0.9, teasing: 0.05 }, false);
+    expect(Object.keys(jev.questions[0]!)).toEqual(['stance', 'intensity', 'drawer']);
+    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v1']);
   });
 
   it('are not asked without the shadow: the same questions, state and set as stage 1', async () => {

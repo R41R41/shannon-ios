@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { switchOn } from '@shannon/switches';
 import { reactionHarness, scope, SECOND } from './bodyReactionHarness.js';
 import { composedFeeling } from '../src/wiring/feelingWiring.js';
+import { feelingBody } from '../src/mind/emotion/feelingPorts.js';
+import { createInitialCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import { SQLiteFeelingShadowStore } from '../src/mind/emotion/store/feelingShadowStore.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 
@@ -60,5 +62,30 @@ describe('the stage-2 shadow (SHANNON_CORE_AFFECT)', () => {
     expect(strip(on.harness.chatModel.requests.at(-1)!.turnContext)).toBe(strip(off.harness.chatModel.requests.at(-1)!.turnContext));
     expect(on.harness.speaker.prompts).toEqual(off.harness.speaker.prompts);
     expect(off.database.prepare("SELECT name FROM sqlite_master WHERE name = 'shannon_feeling_shadow'").get()).toBeUndefined();
+  });
+});
+
+describe('the shadow and forgetting (review M1)', () => {
+  it('computes a day again without what he had her forget: no forgotten influence stays in the rows', () => {
+    const database = new DatabaseSync(':memory:');
+    const clock = { at: DAY };
+    let state: CompanionStateSnapshot = createInitialCompanionState('owner', DAY);
+    const { port } = composedFeeling({ database, now: () => clock.at, timeZone: 'Asia/Tokyo', chooser: null, turn: false, singleFace: false,
+      shadow: { database, snapshot: () => state } });
+    const touch = (minute: number, stance?: string) => {
+      clock.at = new Date(Date.parse(DAY) + minute * 60_000).toISOString();
+      feelingBody.touched(port, 'owner', { id: `t${minute}`, type: 'poke', part: 'chest', audience: 'owner', occurredAt: clock.at, burstId: `burst-${minute}` },
+        stance ? { stance } : {});
+    };
+    [0, 1, 2, 3, 4].forEach(minute => touch(minute, minute === 1 ? 'dislike' : undefined));
+    const store = new SQLiteFeelingShadowStore(database);
+    const blameBefore = store.series('owner', 'owner', 'owner_alone', '2026-10-13T00:00:00.000Z').at(-1)!.blame;
+    state = { ...state, memoryControls: [1, 2, 3, 4].map(minute => ({ memoryId: `burst-${minute}`, kind: 'experience' as const, status: 'forgotten' as const,
+      pinned: false, updatedAt: clock.at, changeReason: 'owner' })) };
+    touch(10);
+    const series = store.series('owner', 'owner', 'owner_alone', '2026-10-13T00:00:00.000Z');
+    expect(series.map(point => point.sourceId)).toEqual(['burst-0', 'burst-10']);
+    expect(series.at(-1)!.blame).toBeLessThan(blameBefore);
+    expect(series.at(-1)!.blame).toBe(0);
   });
 });

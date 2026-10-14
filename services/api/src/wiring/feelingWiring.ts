@@ -53,9 +53,10 @@ function sentenceWriter(environment: Readonly<Record<string, string | undefined>
  * `SHANNON_INNER_NARRATOR` with the inner note it changes (the fast layer it reads is checked where the port is composed), and
  * `SHANNON_TEXT_REGISTER` with the feeling turn it reads.
  */
-function presentationFlags(environment: Readonly<Record<string, string | undefined>>, turn: boolean): { narrator: boolean; textRegister: boolean } {
+function presentationFlags(environment: Readonly<Record<string, string | undefined>>, turn: boolean)
+  : { narrator: boolean; textRegister: boolean; meaning: boolean } {
   const narrator = switchOn(environment, 'SHANNON_INNER_NARRATOR') && switchOn(environment, 'SHANNON_INNER_NOTE');
-  return { narrator, textRegister: turn && switchOn(environment, 'SHANNON_TEXT_REGISTER') };
+  return { narrator, textRegister: turn && switchOn(environment, 'SHANNON_TEXT_REGISTER'), meaning: turn && switchOn(environment, 'SHANNON_FEELING_MEANING') };
 }
 
 /** The cap, from the environment: a whole number from 0 (none) to 10 000; anything else is the default. */
@@ -132,8 +133,10 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
 }
 
 /** The port's stage-2 flags: each only with what it reads (the shadow, the turn). */
-function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: FeelingSentenceWriter; narrator?: boolean; textRegister?: boolean; turn: boolean }) {
+function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: FeelingSentenceWriter; narrator?: boolean; textRegister?: boolean; turn: boolean;
+  meaning?: boolean }) {
   return { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
+    ...(parts.meaning && parts.shadow && parts.turn ? { meaning: true } : {}),
     ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}), ...(parts.narrator && parts.shadow ? { narrator: true } : {}),
     ...(parts.textRegister && parts.turn ? { textRegister: true } : {}) };
 }
@@ -145,6 +148,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   check?: boolean;
   /** Item 10 (`SHANNON_TEXT_REGISTER`): her text reply's form and pacing (only with the turn). */
   textRegister?: boolean;
+  /** Review M4 (`SHANNON_FEELING_MEANING`): Jev reads the meaning of his words (only with the shadow and the turn). */
+  meaning?: boolean;
   /** Stage 2 (`SHANNON_INNER_NARRATOR`): her inner note reads the fast layer (only with the shadow). */
   narrator?: boolean;
   /** Stage 2 (`SHANNON_FEELING_SENTENCE`): her feeling sentence's writer (used only with the shadow and the turn). */
@@ -164,7 +169,7 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const flags = portFlags(parts);
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
   const sonnet = parts.strong?.model ?? null;
-  const checked = (scopeKey: string, found: readonly string[], rewritten: boolean) => events?.noteCheck(scopeKey, found, rewritten);
+  const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);
   const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
   const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, { sonnet, checked, released }) : model);
   const close = () => {

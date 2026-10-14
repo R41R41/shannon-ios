@@ -14,13 +14,20 @@ import { turnToolResults } from '../../mind/tools/toolsPorts.js';
  * - The check before sending (`SHANNON_REPLY_CHECK`, stage 2 items 5 and 8): a text request marked `feelingCheck` (a strong turn, a
  *   feeling order, or one in front of others) is written in full, checked (`checkReply`), and when something is off written once more
  *   with a note of what was off after everything else; the second draft is the answer, checked or not. A draft whose turn already ran a
- *   tool is never rewritten (a write must not run twice): its flags go to the next feeling turn instead. Streamed, the answer goes out
- *   in one piece after the check.
+ *   tool is never rewritten (a write must not run twice): its flags go to the next feeling turn instead. The rewrite is offered no
+ *   tools and is waited for at most `REWRITE_DEADLINE_MILLISECONDS` (review M5): late, the first draft goes out as it was. Streamed,
+ *   the answer goes out in one piece after the check.
  */
+export const REWRITE_DEADLINE_MILLISECONDS = 2_500;
+
 export interface FeelingReplyOptions {
   sonnet?: AnthropicChatModel | null;
   /** Told of each checked draft: its flags and whether it was rewritten (the next feeling turn and the Observer read them). */
-  checked?: (scopeKey: string, flags: readonly ReplyCheckFlag[], rewritten: boolean) => void;
+  checked?: (scopeKey: string, flags: readonly ReplyCheckFlag[], rewritten: boolean, turn?: string) => void;
+  /** Tests: the rewrite's deadline. */
+  rewriteDeadlineMilliseconds?: number;
+  /** Whether the turn ran a tool (the turn's tool results; tests hand their own). */
+  ranTool?: (request: ShannonChatModelRequest) => boolean;
   /** A strong turn that failed (review P3a): it no longer counts against the day's cap. */
   released?: (scopeKey: string) => void;
   log?: (line: string) => void;
@@ -88,13 +95,20 @@ export class FeelingReplyChatModel implements ShannonChatModel {
 
   private async checked(request: Marked, context: ReplyCheckContext, first: ShannonChatModelResult): Promise<ShannonChatModelResult> {
     const flags = first.outOfTime ? [] : checkReply(first.reply, context);
-    const ranTool = safeCount(() => turnToolResults(request.tools).length) > 0;
+    const ranTool = this.options.ranTool ? this.options.ranTool(request) : safeCount(() => turnToolResults(request.tools).length) > 0;
     if (!flags.length || ranTool) {
-      this.options.checked?.(request.scopeKey, flags, false);
+      this.options.checked?.(request.scopeKey, flags, false, context.turn);
       return first;
     }
-    const second = await this.answer({ ...request, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') });
-    this.options.checked?.(request.scopeKey, flags, true);
+    const { tools: _tools, ...words } = request;
+    const rewrite = this.answer({ ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') });
+    const second = await within(rewrite, this.options.rewriteDeadlineMilliseconds ?? REWRITE_DEADLINE_MILLISECONDS);
+    if (!second || second.outOfTime) {
+      this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out');
+      this.options.checked?.(request.scopeKey, flags, false, context.turn);
+      return first;
+    }
+    this.options.checked?.(request.scopeKey, flags, true, context.turn);
     return second;
   }
 }
@@ -107,6 +121,15 @@ function plain(request: Marked): ShannonChatModelRequest {
 
 /** The tiered model answers `tier: sonnet` with Sonnet; its fallback strips the tier, so the model of before decides as it would. */
 const asSonnet = (request: Marked): ShannonChatModelRequest => ({ ...plain(request), tier: 'sonnet' });
+
+/** The answer if it comes within the deadline; null when it is late or fails (a late one is dropped). */
+async function within<T>(answer: Promise<T>, milliseconds: number): Promise<T | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), milliseconds); });
+  try {
+    return await Promise.race([answer.catch(() => null), late]);
+  } finally { clearTimeout(timer); }
+}
 
 /** A count that cannot be read counts as one: closed, no rewrite. */
 function safeCount(read: () => number): number {

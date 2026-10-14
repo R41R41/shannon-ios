@@ -57,6 +57,21 @@ export class SQLiteFeelingShadowStore {
     return Number(this.database.prepare('DELETE FROM shannon_feeling_shadow WHERE scope_key = ? AND occurred_at < ?').run(scopeKey, before).changes);
   }
 
+  /** The rows that name a source (what forgetting can reach), oldest first. */
+  sourced(scopeKey: string, limit = 5_000): { personKey: string; audience: string; sceneId: string | null; sourceId: string; at: string }[] {
+    return (this.database.prepare(`SELECT person_key, audience, scene_id, source_id, occurred_at FROM shannon_feeling_shadow
+      WHERE scope_key = ? AND source_id IS NOT NULL ORDER BY occurred_at ASC LIMIT ?`).all(scopeKey, limit) as Row[]).map(row => ({
+      personKey: String(row.person_key), audience: String(row.audience), sceneId: typeof row.scene_id === 'string' ? row.scene_id : null,
+      sourceId: String(row.source_id), at: String(row.occurred_at) }));
+  }
+
+  /** Deletes one key's rows in a span (a day whose points are computed again without what was forgotten). */
+  deleteSpan(scopeKey: string, key: { personKey: string; audience: string; sceneId: string | null }, since: string, until: string): number {
+    return Number(this.database.prepare(`DELETE FROM shannon_feeling_shadow WHERE scope_key = ? AND person_key = ? AND audience = ?
+      AND COALESCE(scene_id, '') = ? AND occurred_at >= ? AND occurred_at <= ?`)
+      .run(scopeKey, key.personKey, key.audience, key.sceneId ?? '', since, until).changes);
+  }
+
   close(): void {
     if (this.owned && this.database.isOpen) this.database.close();
   }

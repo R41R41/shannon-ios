@@ -29,6 +29,12 @@ function bypassOf(input: { message: string; reply: string; outOfTime: boolean; w
   return textPacingBypassIn(input.message, input.reply) ?? (input.wrote ? 'promise' : null);
 }
 
+/** The directive before the model writes: bypassed already when his words are urgent or about safety (review M3). */
+export function textRegisterBefore(directive: TextRegisterDirective, message: string): ChatTextRegister {
+  const bypass = textPacingBypassIn(message, '');
+  return bypass ? { ...bypassedTextRegister(directive, bypass), bypass } : { ...directive };
+}
+
 /** The directive as the device receives it with the reply. */
 export function textRegisterReply(directive: TextRegisterDirective, input: { message: string; reply: string; outOfTime: boolean; wrote: boolean })
   : ChatTextRegister {

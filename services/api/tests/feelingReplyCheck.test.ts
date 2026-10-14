@@ -6,6 +6,7 @@ import { reactionHarness, scope } from './bodyReactionHarness.js';
 import { fakeFeelingJev } from './support/feelingHarness.js';
 import { composedFeeling } from '../src/wiring/feelingWiring.js';
 import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { FeelingReplyChatModel } from '../src/infra/models/feelingStrongChatModel.js';
 
 /** The reply check (Syzygy ADR-0013 stage 2, `SHANNON_REPLY_CHECK`): before sending on strong, order and public text turns, one rewrite. */
 const DAY = '2026-10-14T04:00:00.000Z';
@@ -58,5 +59,39 @@ describe('the reply check before sending (SHANNON_REPLY_CHECK)', () => {
     const off = await checked({ stance: 'snipe', intensity: 'strong' }, ['直しますから。'], false);
     expect(off.requests).toHaveLength(1);
     expect(off.events.at(-1)!.facts.checkFlags).toBeUndefined();
+  });
+});
+
+describe('the rewrite\'s bounds (review M5)', () => {
+  const context = { stance: 'snipe' as const, intensity: 'strong' as const, audience: 'owner_alone' as const, order: false, violation: false, turn: 't1' };
+  const drafts = (delay: number) => {
+    const requests: ShannonChatModelRequest[] = [];
+    const model = { mode: 'local-stub' as const, model: 'fake', generate: async (request: ShannonChatModelRequest) => {
+      requests.push(request);
+      if (requests.length > 1 && delay) await new Promise(resolve => setTimeout(resolve, delay));
+      return { mode: 'local-stub' as const, model: 'fake', reply: requests.length > 1 ? 'ポンコツとは失礼ですね。' : 'どこがダメか言ってくれれば直しますから。' };
+    } };
+    return { model, requests };
+  };
+
+  it('sends the first draft when the rewrite is late, and says it was not rewritten', async () => {
+    const { model, requests } = drafts(500);
+    const seen: unknown[][] = [];
+    const wrapped = new FeelingReplyChatModel(model as never, { checked: (...args) => { seen.push(args); }, rewriteDeadlineMilliseconds: 50 });
+    const result = await wrapped.generate({ scopeKey: 'owner', feelingCheck: context } as never);
+    expect(result.reply).toBe('どこがダメか言ってくれれば直しますから。');
+    expect(requests).toHaveLength(2);
+    expect(seen).toEqual([['owner', ['helper_drift'], false, 't1']]);
+  });
+
+  it('offers the rewrite no tools, and never rewrites a turn that ran a tool', async () => {
+    const fast = drafts(0);
+    await new FeelingReplyChatModel(fast.model as never).generate({ scopeKey: 'owner', feelingCheck: context, tools: { definitions: [] } } as never);
+    expect('tools' in fast.requests[1]!).toBe(false);
+    const ran = drafts(0);
+    const result = await new FeelingReplyChatModel(ran.model as never, { ranTool: () => true })
+      .generate({ scopeKey: 'owner', feelingCheck: context } as never);
+    expect(ran.requests).toHaveLength(1);
+    expect(result.reply).toBe('どこがダメか言ってくれれば直しますから。');
   });
 });

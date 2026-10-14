@@ -88,6 +88,11 @@ export class FeelingEvents {
     try { this.options.store.bindSource?.(scopeKey, from, to); } catch (error) { this.report(error); }
   }
 
+  /** The events of a span as they were recorded (callers filter what was forgotten). */
+  between(scopeKey: string, since: string, until: string): FeelingEvent[] {
+    return this.options.store.between(scopeKey, since, until);
+  }
+
   /** The day's events still remembered (her day: owner-local, 3:00 boundary). */
   today(scopeKey: string, at: string, snapshot: CompanionStateSnapshot): FeelingEvent[] {
     const since = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - DAY_MILLISECONDS).toISOString();
@@ -153,16 +158,17 @@ export class FeelingEvents {
     }
   }
 
-  /** The check of a draft written before sending (`FeelingReplyChatModel`). */
-  noteCheck(scopeKey: string, flags: readonly string[], rewritten: boolean): void {
+  /** The check of a draft written before sending (`FeelingReplyChatModel`), for its turn (review L3: never another turn's). */
+  noteCheck(scopeKey: string, flags: readonly string[], rewritten: boolean, turn = ''): void {
     if (this.checks.size >= 64) this.checks.clear();
-    this.checks.set(scopeKey, { flags, rewritten });
+    this.checks.set(`${scopeKey}\u0000${turn}`, { flags, rewritten });
   }
 
   /** The check noted for a scope's turn, once. */
-  takeCheck(scopeKey: string): { flags: readonly string[]; rewritten: boolean } | null {
-    const check = this.checks.get(scopeKey) ?? null;
-    this.checks.delete(scopeKey);
+  takeCheck(scopeKey: string, turn = ''): { flags: readonly string[]; rewritten: boolean } | null {
+    const key = `${scopeKey}\u0000${turn}`;
+    const check = this.checks.get(key) ?? null;
+    this.checks.delete(key);
     return check;
   }
 
@@ -221,7 +227,7 @@ export class FeelingEvents {
 }
 
 /** A source the owner had her forget (or hid) is not folded; an event without one always is. */
-function remembered(snapshot: CompanionStateSnapshot, sourceId: string | null): boolean {
+export function remembered(snapshot: CompanionStateSnapshot, sourceId: string | null): boolean {
   if (!sourceId) return true;
   const control = memoryControlFor(snapshot, sourceId);
   return !control || control.status === 'active';

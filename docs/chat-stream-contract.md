@@ -90,7 +90,7 @@ While the model writes, a sentence is sent once the characters that decide its e
 | The same turn producing `artifacts` or a work proposal (`uiBlocks: agent_task_proposal`) | the same; they are in `done.response` | **while the model writes** | |
 | `audience: "others"` | `start`, sentences, `done` | after the turn is complete | |
 | `SHANNON_CHAT_STREAM_EARLY=off`, or a model that cannot stream (`local-stub`) | `start`, sentences, `done` | after the turn is complete | |
-| `SHANNON_TEXT_REGISTER` on and the turn's directive has `pauseMs` > 0 (she keeps quiet first) | `start`, sentences, `done` | after the turn is complete | The pause needs the whole reply (a bypass is known only then). |
+| `SHANNON_TEXT_REGISTER` on and the turn's directive holds the reply back (`pauseMs`, `typingMs` or `split`, no `bypass` yet) | `start`, sentences, `done` | after the turn is complete | A bypass found in her reply is known only then; it rides on `start`. |
 | Reply with a source list (a Notion read) | single `done` | after | `sources` |
 | Explicit command (a fixed reply: 「〜をタスクにして」, 「〜をAetherに残して」 (Aether named; an unqualified memo is the model's to place or ask about), an answer to a reminder, a work or memory command) or an organize turn (整理して) | single `done` | after | `command` |
 | Request with `attachments` | single `done` | after | `attachments` |

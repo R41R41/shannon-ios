@@ -26,6 +26,10 @@ export interface ReplyCheckContext {
   order: boolean;
   /** She said no to this person today and it went on (a violation turn). */
   violation: boolean;
+  /** The turn this context is for (the check's record is handed to that turn's events, review L3). */
+  turn?: string;
+  /** The turn's ledger counted something today (touches, apologies): a count she reads out can only be the ledger's (review M6). */
+  counted?: boolean;
   /** The register step her composure holds (0–5), when the fast layer is known; absent: not checked. */
   level?: number;
   /** Item 10 (`SHANNON_TEXT_REGISTER`): the text form her state asked for; absent: not checked. */
@@ -53,8 +57,11 @@ const chars = (text: string) => Array.from(text.trim()).length;
 function lexicalFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[] {
   const declining = DECLINING.has(context.stance);
   const flags: ReplyCheckFlag[] = [];
-  if (AI_TONE.test(reply)) flags.push('ai_tone');
-  if (NUMBERS.test(reply)) flags.push('numbers_spoken');
+  // Review M6: a help-desk tone matters on a turn of feeling (a stance, a feeling order), not on a plain answer; a count read out
+  // matters only when it can be the ledger's (the turn's ledger counted something today), never a number he asked for.
+  const feeling = context.stance !== 'neutral' || context.order || context.intensity === 'strong';
+  if (feeling && AI_TONE.test(reply)) flags.push('ai_tone');
+  if (feeling && (context.counted || context.violation) && NUMBERS.test(reply)) flags.push('numbers_spoken');
   if (declining && HELPER_END.test(reply)) flags.push('helper_drift');
   if (declining && chars(reply) >= 80 && LECTURE.test(reply)) flags.push('lecture');
   return flags;

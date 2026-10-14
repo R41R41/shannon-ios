@@ -14,6 +14,7 @@ import {
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
 } from '@shannon/cognition';
+import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -23,7 +24,7 @@ import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
-import { textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
+import { textRegisterBefore, textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
 import type { ChatTextRegister } from '../../contracts/contracts.js';
 import type { FeelingSentenceWriter } from '../../infra/models/feelingSentenceModel.js';
 
@@ -50,6 +51,11 @@ export interface FeelingPort {
   readonly check?: boolean;
   /** `SHANNON_CORE_AFFECT`: the shadow's composure step is known to the check (its register flags); nothing else reads it. */
   readonly coreAffect?: boolean;
+  /**
+   * `SHANNON_FEELING_MEANING` (with the fast layer and the turn; review M4): the feeling turn's Jev call also asks the meaning of his words
+   * (meant, teasing). Apart from `SHANNON_CORE_AFFECT`, so the shadow changes no Jev question.
+   */
+  readonly meaning?: boolean;
   /** `SHANNON_TEXT_REGISTER` (with the turn): her text reply's form and pacing follow the feeling turn and her composure. */
   readonly textRegister?: boolean;
   /** `SHANNON_INNER_NARRATOR` (with the fast layer): her inner note reads the fast layer and reflects as narrator. */
@@ -68,6 +74,8 @@ const safely = <T>(work: () => T, fallback: T): T => {
 /** One feeling turn in progress (text or voice): its key, the lines of that key, and its decision once known. */
 export interface FeelingTurnHandle {
   port: FeelingPort;
+  /** This turn's own id (its check record is handed to it alone, review L3). */
+  turn: string;
   scopeKey: string;
   key: FeelingKey;
   channel: FeelingChannel;
@@ -93,7 +101,7 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
   const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot);
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
-  return { port, scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
+  return { port, turn: randomUUID(), scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
     at: input.at, snapshot: input.snapshot, strong: false };
 }
 
@@ -115,7 +123,8 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const register = handle.register !== 'normal' ? { register: handle.register } : {};
   const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
-  const tags = utteranceTags(input.words);
+  // His words' closed tags only while something reads them (the fast layer; review Low).
+  const tags = handle.port.coreAffect ? utteranceTags(input.words) : [];
   const meaning = handle.decision?.meaning ? { meaning: handle.decision.meaning } : {};
   const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words),
     facts: { ...(tags.length ? { tags } : {}), ...meaning } };
@@ -131,8 +140,10 @@ function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
   const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
   const form = handle.textRegister ? { form: { maxCharacters: handle.textRegister.maxCharacters, emoji: handle.textRegister.emoji,
     lineBreaks: handle.textRegister.lineBreaks } } : {};
+  const ledger = handle.lines?.ledger;
+  const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    ...(level !== undefined ? { level } : {}), ...form };
+    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
@@ -150,7 +161,7 @@ function composureLevel(handle: FeelingTurnHandle): number | undefined {
 function checkFacts(handle: FeelingTurnHandle, reply: string): { checkFlags?: readonly string[]; rewritten?: true } {
   const context = checkContext(handle);
   if (!context) return {};
-  const before = handle.channel === 'text' ? handle.port.events.takeCheck(handle.scopeKey) : null;
+  const before = handle.channel === 'text' ? handle.port.events.takeCheck(handle.scopeKey, handle.turn) : null;
   const flags = before ? before.flags : checkReply(reply, context);
   observeSync('emotion', { phase: 'feeling.reply_check', audience: handle.key.audience, before: Boolean(before) }, () => null,
     () => ({ flags: [...flags], rewritten: before?.rewritten === true }));
@@ -224,7 +235,7 @@ export const feelingText = Object.freeze({
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
         utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion,
-        ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.coreAffect ? { reading: true } : {}) }) : null;
+        ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.meaning ? { reading: true } : {}) }) : null;
       handle.sentence = port.sentence && port.coreAffect && port.turn
         ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
       return handle;
@@ -244,13 +255,21 @@ export const feelingText = Object.freeze({
     const form = handle.textRegister ? textRegisterLines(handle.textRegister) : '';
     return safely(() => [blockOf(handle, handle.decision), lines ? feelingSentenceBlock(lines) : '', form].filter(Boolean).join('\n\n'), '');
   },
-  /** Item 10: the directive the sentence stream is handed before the model writes (a paused turn is not streamed early). */
-  paced: (handle: FeelingTurnHandle | null): { textRegister?: TextRegisterDirective } => (handle?.textRegister ? { textRegister: handle.textRegister } : {}),
+  /**
+   * Item 10: the directive the sentence stream is handed before the model writes, with what bypasses it that is known already (review
+   * M3: urgency or safety in his words; such a turn is never held by a pause or the typing display). A paced turn is not streamed early.
+   */
+  paced: (handle: FeelingTurnHandle | null, message: string): { textRegister?: ChatTextRegister } => {
+    if (!handle?.textRegister) return {};
+    return safely<{ textRegister?: ChatTextRegister }>(() => ({ textRegister: textRegisterBefore(handle.textRegister!, message) }), {});
+  },
   /** Item 10: the reply's form and pacing for the device, with what bypasses it; nothing without the switch. */
-  register: (handle: FeelingTurnHandle | null, message: string, reply: string, completion: { outOfTime?: true }, wrote: boolean)
-    : { textRegister?: ChatTextRegister } => {
+  register: (handle: FeelingTurnHandle | null, message: string, reply: string, completion: { outOfTime?: true },
+    results: readonly { ok: boolean; effect: 'read' | 'write' }[]): { textRegister?: ChatTextRegister } => {
     const directive = handle?.textRegister;
     if (!directive) return {};
+    // Review M2: a promise is any write her tools did this turn: her own places, and the owner's device (a reminder, a timer, the calendar).
+    const wrote = results.some(call => call.ok && call.effect === 'write');
     return safely<{ textRegister?: ChatTextRegister }>(() => ({ textRegister: textRegisterReply(directive, { message, reply,
       outOfTime: completion.outOfTime === true, wrote }) }), {});
   },
@@ -296,7 +315,7 @@ export const feelingVoice = Object.freeze({
     if (!handle?.port.turn) return {};
     return { shannonFeeling: feelingTurnState({ scopeKey: handle.scopeKey, surface: 'voice', audience: handle.key.audience, utterance: transcript,
       lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 },
-      ...(handle.port.coreAffect ? { reading: true } : {}) }) };
+      ...(handle.port.meaning ? { reading: true } : {}) }) };
   },
   /** The block after the router answered (its feeling, or 「ふつう」 when the router fell back). */
   block: (handle: FeelingTurnHandle | null, decided: FeelingTurnDecision | undefined): string => {

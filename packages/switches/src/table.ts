@@ -241,6 +241,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 D7: in a strong scene (fast layer past her band, or blame), Haiku writes her feeling in 2-3 lines before a text reply; owner alone.',
   },
   {
+    name: 'SHANNON_FEELING_MEANING', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v5).',
+  },
+  {
     name: 'SHANNON_TEXT_REGISTER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
     doc: 'ADR-0013 item 10 (owner: B): text reply form (length, emoji, endings) and pacing (typing, split in two, sulk pause ≤20 s) from her feeling.',
   },
