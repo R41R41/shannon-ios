@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY } from '@shannon/cognition';
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
+import type { TaskRecallPacket } from '../../../mind/recall/taskRecallPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
 import { estimatedAnthropicCostUsd, knownCount, knownInput, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { claudeClient } from '../claude/claudeClient.js';
@@ -272,8 +273,20 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
   return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
     ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-    ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
+    ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
+}
+
+/**
+ * The recall packet as the model reads it: each memory's text whole, its provenance as its kind and counts. The source id lists
+ * (Minebot lane task 788da00a, 2026-10-14: 3,000–4,600 of each memory's 3,900–5,400 characters, and 2,600 more for the packet)
+ * are server evidence the runner has already pinned (`observeMemory`) and rechecks; no tool takes them, and `detailRef` still
+ * names the memory for `memory.read`.
+ */
+function modelRecall(packet: TaskRecallPacket): Record<string, unknown> & { items: readonly { id: string }[] } {
+  const { sourceIds, ...rest } = packet;
+  return { ...rest, sourceCount: sourceIds.length, items: packet.items.map(item => item.provenance ? { ...item, provenance: {
+    kind: item.provenance.kind, sourceCount: item.provenance.sourceIds.length, readSourceCount: item.provenance.readSourceIds.length } } : item) };
 }
 
 /**

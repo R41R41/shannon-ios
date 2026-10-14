@@ -106,6 +106,18 @@ describe('restated decision parts within one replay epoch', () => {
   });
 });
 
+describe('the recall packet as the model reads it', () => {
+  it('gives each memory\'s text whole and its provenance as counts, without the source id lists the runner keeps', async () => {
+    const h = harness(1);
+    const sourced = { ...item('a'), provenance: { kind: 'experience' as const, sourceIds: ['SOURCE-1', 'SOURCE-2'], readSourceIds: ['READ-1'] } };
+    await h.step([], { recall: { ...packet([sourced]), sourceIds: ['SOURCE-1', 'SOURCE-2'] } });
+    const recall = h.sent(0).recall;
+    expect(recall).toEqual({ contextVersion: 'v1', observedAt: '2026-10-14T00:00:00.000Z', status: 'ready', sourceCount: 2,
+      items: [{ ...item('a'), provenance: { kind: 'experience', sourceCount: 2, readSourceCount: 1 } }] });
+    expect(JSON.stringify(h.fixture.bodies[0])).not.toMatch(/SOURCE-|READ-1/u);
+  });
+});
+
 describe('an elided memory never stands for one withheld or forgotten since (privacy)', () => {
   const worlds: ReturnType<typeof memoryWorld>[] = [];
   afterEach(() => worlds.splice(0).forEach(world => world.close()));
@@ -139,7 +151,8 @@ describe('an elided memory never stands for one withheld or forgotten since (pri
     const withheld = await recall.packet(cue);
     expect(withheld).toMatchObject({ status: 'withheld', items: [] });
     await h.step(history, { recall: withheld });
-    expect(h.sent(2).recall).toEqual({ ...withheld, items: [] });
+    const { sourceIds: _sources, ...withheldFields } = withheld;
+    expect(h.sent(2).recall).toEqual({ ...withheldFields, sourceCount: 0, items: [] });
     for (const id of expected) expect(JSON.stringify(h.sent(2))).not.toContain(id);
   });
 });

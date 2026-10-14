@@ -57,7 +57,11 @@ describe('FCA shared context native protocol', () => {
     expect(sent.slice(-2).map(entry => entry.role)).toEqual(['user', 'system']);
     expect(anthropicRequestViolation(f.bodies[1]!)).toBeNull();
     const current = JSON.parse(sent.at(-2)!.content);
-    expect(current.sharedContext).toEqual(input().sharedContext); expect(current.recall).toEqual(input().recall);
+    expect(current.sharedContext).toEqual(input().sharedContext);
+    // The model reads the packet's source ids as a count; the runner has pinned and rechecks the ids themselves.
+    const { sourceIds, ...recall } = input().recall!;
+    expect(current.recall).toEqual({ ...recall, sourceCount: sourceIds.length });
+    expect(JSON.stringify(f.bodies[1]!.messages)).not.toContain('PRIVATE_RECALL_SOURCE');
     expect(FCA_CONTEXT_INSTRUCTIONS).toContain(SHANNON_FCA_SHARED_CAPABILITY.text);
     expect(JSON.stringify(f.bodies[1]!.system)).not.toMatch(/PRIVATE_AFFECT_CAUSE|PRIVATE_RECALL_SOURCE|fca_context/u);
     const complete = [...second.history, f.model.toolResults([...second.auxiliaryResults!, { id: 'actual-call', ok: true, text: '{"count":3}' }])];

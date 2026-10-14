@@ -1,6 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { CompactionMessage } from '@shannon/mind';
-import type { TaskRecallPacket } from '../../../mind/recall/taskRecallPorts.js';
 import type { FcaHistoryCodec } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
 
@@ -163,13 +162,15 @@ export function elidedDecision(fields: Record<string, unknown>, knowledge: Resta
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
     if ((ELIDED as readonly string[]).includes(key)) result[key] = knowledge.parts.get(key) === JSON.stringify(value) ? UNCHANGED : value;
-    else if (key === 'recall') result[key] = elidedRecall(value as TaskRecallPacket, knowledge);
+    else if (key === 'recall') result[key] = elidedRecall(value as RecallFields, knowledge);
     else result[key] = value;
   }
   return result;
 }
 
-function elidedRecall(packet: TaskRecallPacket, knowledge: RestatedKnowledge): Record<string, unknown> {
+/** A recall packet as a decision message gives it (`modelRecall` in `anthropicFcaModel.ts`). */
+type RecallFields = Record<string, unknown> & { items: readonly ({ id: string } & Record<string, unknown>)[] };
+function elidedRecall(packet: RecallFields, knowledge: RestatedKnowledge): Record<string, unknown> {
   const items: unknown[] = [], known: string[] = [];
   for (const item of packet.items) {
     if (knowledge.memories.get(item.id) === JSON.stringify(item) && !known.includes(item.id)) known.push(item.id);
