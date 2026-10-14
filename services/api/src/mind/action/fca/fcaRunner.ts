@@ -79,7 +79,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
-  if (recallContext) { observerHandoff('fca', 'recall', { phase: 'start' }); ports.recall!.start(recallContext.input); }
+  // The recall's deterministic part runs on the API's one thread. Minecraft run 6 (2026-10-14): started while a body had just logged
+  // in, it blocked the thread while a stop was being handed over. Pending I/O (the body's polls) goes first; while the body is still
+  // in its first frames after login, the recall starts with the decision packet instead (which starts it if nothing did).
+  if (recallContext && !ports.body?.settling?.()) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    signal.throwIfAborted();
+    observerHandoff('fca', 'recall', { phase: 'start' }); ports.recall!.start(recallContext.input);
+  } else if (recallContext) observerHandoff('fca', 'recall', { phase: 'start_deferred', reason: 'body_settling' });
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   const replay = ports.history ? await prepareFcaHistory(step, {

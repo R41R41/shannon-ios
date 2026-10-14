@@ -39,6 +39,11 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'execution/010_task_host_starting': 'a5d43ddc03296599405e1606e08661e08189f87f4a6bac57b53a96f9afd94f8a',
   'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
   'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
+  // Her inner note (Syzygy ADR-0012, services/api/src/infra/sqlite/migrations/emotion/), as production's ledger holds them since
+  // 2026-10-13 (read 2026-10-14): without them every deploy check reported `unknown step emotion/…`.
+  'emotion/001_inner_notes': 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc',
+  'emotion/002_inner_note_episodes': '82db51e74ebb56f08b3392b192a27490a0f3fc111deb956c022a59b9497452df',
+  'emotion/003_inner_note_attempts': 'da679362296ea082a98c9b58ea1105862782f38e1f131b07162f319eddee1010',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */

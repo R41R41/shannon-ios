@@ -9,7 +9,7 @@ import { MINECRAFT_LIFECYCLE_ACTIONS, type MinecraftLifecycleAction } from './mi
  */
 export const OPERATOR_VIA = 'operator_cli';
 export const OPERATOR_DOMAINS = ['minecraft'] as const;
-export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel'] as const;
+export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'release'] as const;
 export type OperatorCommand = typeof OPERATOR_COMMANDS[number];
 export const OPERATOR_PATH = '/operator/v1/minecraft';
 /** Where the socket is, beside the database the CLI was told to use (never a guessed default path). */
@@ -39,13 +39,17 @@ export const OPERATOR_CODES = [
   'accepted', 'out_of_scope', 'invalid_input', 'disabled', 'owner_not_alone', 'body_unavailable', 'lifecycle_unavailable',
   'minecraft_busy', 'lease_conflict', 'unresolved_operation', 'budget_above_cap', 'refused', 'not_found', 'not_operator_task',
   'not_running', 'rate_limited', 'flooded', 'stopped', 'time_limit', 'settled', 'error',
+  // Minecraft run 6 (2026-10-14): the body re-check (`minecraft release`) and a set_day asked before the login settled.
+  'released', 'not_retained', 'not_confirmed', 'proof_refused', 'recheck_busy', 'not_settled',
 ] as const;
 export type OperatorCode = typeof OPERATOR_CODES[number];
 
 export type OperatorInput =
   | { command: 'lifecycle'; action: MinecraftLifecycleAction; serverId: string | null }
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number }
-  | { command: 'cancel'; taskId: string | null };
+  | { command: 'cancel'; taskId: string | null }
+  /** A request to check the Minecraft body again and release what it proves released (never a force release). */
+  | { command: 'release' };
 export interface OperatorEnvelope { v: 1; operator: string; domain: string; op: string; args: Record<string, unknown> }
 export type OperatorParse = { ok: true; operator: string; input: OperatorInput } | { ok: false; operator: string; code: OperatorCode; message: string };
 export interface OperatorReply {
@@ -100,6 +104,12 @@ function cancel(operator: string, args: Record<string, unknown>): OperatorParse 
   return { ok: true, operator, input: { command: 'cancel', taskId: args.taskId } };
 }
 
+function release(operator: string, args: Record<string, unknown>): OperatorParse {
+  const serverId = args.serverId ?? null;
+  if (serverId !== null && (typeof serverId !== 'string' || !SERVER_ID.test(serverId))) return refuse(operator, 'invalid_input', 'serverId is invalid');
+  return { ok: true, operator, input: { command: 'release' } };
+}
+
 /** Reads one envelope. Anything outside the Minecraft operations is `out_of_scope`, and the audit records it as such. */
 export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (!record(value)) return refuse('unknown', 'invalid_input', 'a JSON object is required');
@@ -119,6 +129,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.op === 'request') return request(operator, args);
   if (value.op === 'cancel') return cancel(operator, args);
+  if (value.op === 'release') return release(operator, args);
   return lifecycle(operator, value.op, args);
 }
 

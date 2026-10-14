@@ -42,6 +42,8 @@ export interface FcaBodyLifecycle {
   toolSignal(name: string, parent: AbortSignal): AbortSignal;
   noteCall?(call: FcaToolCall, operationId: string): void;
   noteResult?(call: FcaToolCall, result: ToolResult): void;
+  /** True while the body is in its first frames after a login or respawn: heavy local work (the recall) waits for the decision. */
+  settling?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

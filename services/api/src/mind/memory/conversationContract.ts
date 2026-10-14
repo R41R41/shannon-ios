@@ -5,6 +5,7 @@ import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureVie
 import type { MemorySearchHit, MemorySearchOptions } from './store/sqliteMemorySearch.js';
 import type { FeedbackState } from '../../contracts/feedbackContract.js';
 import type { ReportCard, ReportCardNote } from '../../contracts/conversationExtrasContract.js';
+import type { TaskMemoryReadSnapshot } from './taskMemoryPorts.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
@@ -174,8 +175,10 @@ export interface PlatformTurnPersistenceResult {
 export interface ConversationStore {
   /** False proves this scope has no canonical experience owning private-read provenance. Omitted means unknown; never infer from FCA being off. */
   hasReadSourceProvenance?(scopeKey: string): boolean;
+  /** A mark that changes whenever any stored row may have (null: unknown, e.g. inside a transaction). Absent: never reuse a read. */
+  changeMark?(): string | null;
   /** Current native source visibility, injected by wiring; absent readers withhold derived private task experiences. */
-  readSourceVisible?(scopeKey: string, sourceId: string, observedAt: string): boolean;
+  readSourceVisible?(scopeKey: string, sourceId: string, observedAt: string, shared?: TaskMemoryReadSnapshot): boolean;
   /** Stage5's bounded supplementary self. Read again under current forgetting/disclosure; absent/OFF yields no prompt. */
   selfInterestProjection?(scopeKey: string, audience: MemoryAudience, openOnly?: boolean): string;
   listThreads(scopeKey: string): readonly ConversationThread[];

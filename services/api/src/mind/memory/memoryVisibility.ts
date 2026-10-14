@@ -20,6 +20,13 @@ import { observedStep } from '../../infra/observer/observerContext.js';
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
 
+/**
+ * The native reader of read receipts (`fcaReadSources.ts`). `shared`: the asking read's state, withholding and walk, so that many
+ * receipts of one read share them (the reader then reads no state of its own and memoizes its skill reads for that walk only).
+ */
+export type ReadSourceVisible = (scopeKey: string, sourceId: string, observedAt: string,
+  shared?: { state: CompanionStateSnapshot; withholding: MemoryWithholding; walk?: object }) => boolean;
+
 /** A Shannon reply (or the Shannon side of an experience summary) as the withholding rule sees it. */
 export interface WithholdableReply {
   experienceId?: string;
@@ -52,16 +59,50 @@ export class MemoryWithholding {
   /** The part of a recalled id's verdict that does not depend on the time of the reply that recalled it (one walk per id). */
   private readonly provenanceDecisions = new Map<string, boolean>();
   private readonly readDecisions = new Map<string, boolean>();
+  /** What the native reader answered for a read receipt (source and time) within one synchronous read (`sourceVisible`). */
+  private readonly sourceDecisions = new Map<string, boolean>();
+  /** One object per synchronous read, so the source reader's own per-walk memo (`fcaReadSources.ts`) ends with the read. */
+  private walk: object = {};
+  /** The withholding whose state and walk a scoped one (summary lineage) asks native read receipts under: the whole state's. */
+  private root: MemoryWithholding = this;
   private externalReadsPossible = true;
   private queryDepth = 0;
   /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
   private query<T>(work: () => T): T {
     if (this.queryDepth === 0) {
-      this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear();
+      this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear(); this.sourceDecisions.clear();
+      this.walk = {};
       this.externalReadsPossible = this.store?.hasReadSourceProvenance?.(this.scopeKey) !== false;
     }
     this.queryDepth += 1;
     try { return work(); } finally { this.queryDepth -= 1; }
+  }
+
+  /**
+   * Whether a remembered turn's read receipt is still available, asked of the native reader once per receipt and time within one
+   * read, under this read's own state and walk (`shared`). Minecraft run 6 (2026-10-14): without them every one of a turn's ~1,100
+   * receipt checks read and parsed the whole state again, asked the skill store again and walked afresh (`visible=3.6–4.0 s` per
+   * text or voice turn and per FCA step, the API's one thread blocked). A scoped withholding asks under the whole state, as before.
+   */
+  private sourceVisible(source: string, observedAt: string): boolean {
+    if (this.root !== this) return this.root.sourceVisible(source, observedAt);
+    if (!this.readSourceVisible) return false;
+    if (this.queryDepth === 0) return this.readSourceVisible(this.scopeKey, source, observedAt);
+    const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
+    if (known !== undefined) return known;
+    const result = this.readSourceVisible(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
+    this.sourceDecisions.set(key, result);
+    return result;
+  }
+  /** `sourceVisible` for a caller inside this read (`taskMemory.ts`): a read receipt of a remembered item at its time. */
+  readSourceAvailable(source: string, observedAt: string): boolean { return this.sourceVisible(source, observedAt); }
+  /** A remembered turn as this withholding read it (once per id; the candidates it was made with are already known). */
+  experienceRow(id: string): ShannonExperience | null { return this.experience(id); }
+  private scoped(state: CompanionStateSnapshot): MemoryWithholding {
+    const scoped = new MemoryWithholding(state, this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey),
+      this.readSourceVisible);
+    scoped.root = this.root;
+    return scoped;
   }
 
 
@@ -76,7 +117,7 @@ export class MemoryWithholding {
     private readonly store: ConversationStore | null,
     private readonly scopeKey: string,
     private candidates?: readonly ShannonExperience[],
-    private readonly readSourceVisible = store?.readSourceVisible?.bind(store),
+    private readonly readSourceVisible: ReadSourceVisible | undefined = store?.readSourceVisible?.bind(store),
     /** The withheld turns among `candidates` under this same `state`, when a caller already derived them (`withheldExperiences`). */
     withheld?: readonly ShannonExperience[],
   ) {
@@ -154,7 +195,7 @@ export class MemoryWithholding {
   private computeProvenance(id: string, seen: Set<string>): boolean {
     if (this.hidden().some(item => item.id === id)) return true;
     const experience = this.experience(id);
-    if (experience?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, experience.observedAt))) return true;
+    if (experience?.readSourceIds?.some(source => !this.sourceVisible(source, experience.observedAt))) return true;
     return Boolean(experience?.recalledMemoryIds?.some(source => this.recalledWithheld(source, experience.observedAt, seen)));
   }
 
@@ -168,7 +209,7 @@ export class MemoryWithholding {
       const experience = id.startsWith('knowledge:') ? null : this.experience(id);
       const result = id.startsWith('knowledge:')
         ? Boolean(this.knowledge().get(id.slice(10))?.sourceExperienceIds.some(ref => this.unavailableRead(ref, seen)))
-        : Boolean(experience && ((experience.readSourceIds ?? []).some(ref => !this.readSourceVisible?.(this.scopeKey, ref, experience.observedAt))
+        : Boolean(experience && ((experience.readSourceIds ?? []).some(ref => !this.sourceVisible(ref, experience.observedAt))
           || (experience.recalledMemoryIds ?? []).some(ref => this.unavailableRead(ref, seen))));
       this.readDecisions.set(id, result); return result;
     } finally { seen.delete(id); }
@@ -222,7 +263,7 @@ export class MemoryWithholding {
   withholdsExperience(experience: { id: string; summary: string; observedAt?: string; recalledMemoryIds?: readonly string[] }): boolean { return this.query(() => this.experienceWithheld(experience)); }
   private experienceWithheld(experience: { id: string; summary: string; observedAt?: string; recalledMemoryIds?: readonly string[] }): boolean {
     const full = this.experience(experience.id);
-    if (full?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, full.observedAt))) return true;
+    if (full?.readSourceIds?.some(source => !this.sourceVisible(source, full.observedAt))) return true;
     if (visibleMemoryText(this.state, experience.id, experience.summary) === null) return true;
     const reply = experience.summary.split(' / シャノン: ');
     return this.withholdsReply({
@@ -254,9 +295,7 @@ export class MemoryWithholding {
     if (restated || cached !== undefined) return restated || cached === true;
     const started = lineage.chainStartedAt;
     const relevant = new Set(this.rules.filter(rule => !started || rule.boundary >= started).map(rule => rule.memoryId));
-    const scoped = relevant.size === this.rules.length ? this : relevant.size === 0 ? null : new MemoryWithholding(
-      scopedState(this.state, relevant),
-      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
+    const scoped = relevant.size === this.rules.length ? this : relevant.size === 0 ? null : this.scoped(scopedState(this.state, relevant));
     const tainted = Boolean(scoped && scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message))));
     this.summaryDecisions.set(threadId, tainted);
     return tainted;
@@ -278,9 +317,7 @@ export class MemoryWithholding {
     if (this.rules.some(rule => !rule.wide && ruleWithholdsText(rule, summary.summary, summary.updatedAt))) return true;
     const relevant = new Set(this.rules.filter(rule => rule.boundary >= summary.chainStartedAt).map(rule => rule.memoryId));
     if (!relevant.size) return false;
-    const scoped = relevant.size === this.rules.length ? this : new MemoryWithholding(
-      scopedState(this.state, relevant),
-      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
+    const scoped = relevant.size === this.rules.length ? this : this.scoped(scopedState(this.state, relevant));
     return scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message)));
   }
 

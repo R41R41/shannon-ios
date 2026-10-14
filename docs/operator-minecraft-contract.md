@@ -2,11 +2,14 @@
 
 Status: implemented behind `SHANNON_OPERATOR_MINECRAFT` (default **off**). Owner decision 2026-10-14: 「Minecraft だけに限って作る」.
 
-An operator on the production VM, as the service user, may ask the running API to do one of three things for the owner:
+An operator on the production VM, as the service user, may ask the running API to do one of four things for the owner:
 
 1. a Minecraft lifecycle operation (`start`, `stop`, `login`, `logout`, `set_day`) on a registered server;
 2. one Minecraft work request, as the same common task `minecraft.request` and the in-game intent create;
-3. the cancel of a request that the operator itself started.
+3. the cancel of a request that the operator itself started;
+4. a body re-check (`release`, Minecraft run 6, owner decision 2026-10-14 「直しを入れてから自動で解放」): the API asks the body
+   again whether it is stopped with every input released, and releases only what the body's own receipt proves (below). It is a
+   request to check, never a force release; the owner's release (`release-retained`) is a separate path and is not offered here.
 
 Nothing else is offered. There is no conversation message as the owner, no memory or note, no other tool, no setting, and no
 credential. Anything else is refused as `out_of_scope` and audited.
@@ -36,6 +39,7 @@ Envelope: `{ "v": 1, "operator": "<label>", "domain": "minecraft", "op": "<op>",
 | `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000) |
 | `cancel` | `taskId` (a task UUID) or `latest: true` |
 | `start`, `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
+| `release` | none (`serverId` accepted and ignored: there is one configured body) |
 
 The reply is `{ operationId, outcome: accepted|refused, code, message, taskId?, lifecycleId?, actionId?, deadlineAt?, budgetYen? }`:
 `202` accepted, `403` out of scope, `409` any other refusal.
@@ -66,9 +70,28 @@ A lifecycle operation goes through the conversation's detached path (`minecraftL
 with the operation id as its only source, the body taken once, and the native operation carried to its receipt. The lifecycle
 authority allows it only when the audit holds an `invoked` row of that operation with the same action and server and no refusal,
 the owner is alone, and the command id is that source. `set_day` additionally needs a running server with nobody else on it.
+Right after a login the player count may still be unknown (RCON `list uuids` is slow while a world generates; run 6): `set_day`
+then looks again for up to 12 s, and answers `not_settled` (「ログイン直後で…まだ確かめられません」) if it is still unknown;
+a stopped server or another player is `refused` with that reason. The command line prints the code and the message.
 When it ends, her notice (【知らせ:作業終了】) names it as the operator's: the tool is `operator.minecraft.<action>` (its source is
 `operator:<uuid>`, which only this audited path makes) and the line reads 「運用者がライ氏の代わりに頼んだ〈minecraft.start〉が終わった」,
 never 「受け付けた…」 as if she had accepted it.
+
+## The body re-check (`release`)
+
+An FCA step whose outcome stayed unknown keeps the Minecraft body retained until a release proof (ADR-0009 §9). Run 6: a stop handed
+over during a 10 s stall of the API never reached the body, so no receipt could ever prove the body released. The API
+(`minecraftBodyRecheckWiring.ts`) sends the body a `release` of the same lease and session under a new id (`recheck:<sha256>`);
+the body cancels what of that session may remain and answers `stopped` only once its actuator confirmed every physical input
+released. That original receipt, with nothing of the lease sent after it left unsettled, is the domain proof
+(`minecraftFcaReleaseProof`) the action store re-reads under its writer lock before it ends the retained record
+(`mind_action_retained_releases`: `domain`, `domain_proof`, `proof:fca-release:<sha256>`). The action itself stays `unknown`.
+
+- The API does it on its own for every retained body of an unknown step, every 5 s once the body is connected, at most three
+  physical attempts per step and process; waiting for the body to connect does not count.
+- `release` asks for a pass now, whatever those attempts. Codes: `released` (accepted), `not_retained`, `body_unavailable`,
+  `not_confirmed` (the body could not confirm: still retained), `proof_refused`, `recheck_busy`. Audited as `invoked`, `accepted`
+  and `settled` with the result code.
 
 ## The request
 
@@ -146,6 +169,7 @@ $N --import tsx services/api/src/opsCli.ts minecraft status
 $N --import tsx services/api/src/opsCli.ts minecraft request --operator ryo --max-minutes 20 --budget-yen 500 石を16個集めて
 $N --import tsx services/api/src/opsCli.ts minecraft cancel --operator ryo --latest
 $N --import tsx services/api/src/opsCli.ts minecraft login --operator ryo --server shannon-home
+$N --import tsx services/api/src/opsCli.ts minecraft release --operator ryo
 ```
 
 `status` opens the database read-only (socket present or not, step 012 applied / missing / changed, open operator requests (an accepted request

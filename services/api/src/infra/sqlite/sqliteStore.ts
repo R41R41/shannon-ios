@@ -1,5 +1,6 @@
 import type { ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
+import { databaseChangeMark } from './experienceCandidateReads.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
@@ -349,6 +350,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
   hasReadSourceProvenance(scopeKey: string) { return this.conversations.hasReadSourceProvenance(scopeKey); }
+  /** The database's change mark (`experienceCandidateReads.ts`): rows read under an equal mark are the rows it holds now. */
+  changeMark() { return databaseChangeMark(this.context.database); }
   recentThreadMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, threadId, limit); }
   recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }

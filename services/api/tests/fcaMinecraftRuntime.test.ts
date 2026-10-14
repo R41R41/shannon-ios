@@ -20,12 +20,12 @@ function fixture() {
   let sequence = 0;
   const control = new MinecraftControl(bodyStore, configuration, { now: () => Date.parse(at), ownerAlone: () => true, pollMilliseconds: 1,
     leaseValid: lease => !!h.store.check(lease, at)?.resources.includes(actionResource('minebot', 'minecraft-body')) });
-  const poll = (receipts: MinecraftControlReceipt[] = []) => control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, {
+  const poll = (receipts: MinecraftControlReceipt[] = [], active: string[] = []) => control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, {
     schemaVersion: 1, serverId: 'world', connectionId: 'connection',
     observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: sequence++, stateAt: at, receivedAt: at, connected: true, state: { inventory: receipts.length ? { stone: 1 } : {} }, facts: {} },
     skills: [{ name: 'dig', description: 'Dig the requested count.', readOnly: false,
       inputSchema: { type: 'object', properties: { count: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['count'], additionalProperties: false } }],
-    candidates: [], receipts, activeOperationIds: [],
+    candidates: [], receipts, activeOperationIds: active,
   } satisfies MinecraftControlPoll);
   poll();
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => at,
@@ -75,7 +75,7 @@ describe('normal physical tools in the common FCA executor', () => {
     expect(f.calls).toHaveLength(1);
     expect(f.calls[0]!.tools.find(tool => tool.name === 'mc.dig')?.nativeInputSchema).toMatchObject({ required: ['count'], properties: { count: { type: 'integer' } } });
     expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('executing');
-    expect(f.poll().commands).toEqual([]);
+    expect(f.poll([], [command.id]).commands).toEqual([]); // The body reports it running: not handed again.
     const receipt = { id: command.id, connectionId: 'connection', outcome: 'completed' as const, inputsReleased: true, observedAt: at, result: 'One stone observed in inventory.' };
     expect(f.poll([receipt]).acknowledged).toEqual([command.id]); await f.driver.drain();
     expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('ready'); // Tool acknowledgement alone never marks goal complete.

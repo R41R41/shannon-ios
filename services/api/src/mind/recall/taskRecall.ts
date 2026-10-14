@@ -32,10 +32,8 @@ export function createTaskRecall(parts: {
     entries.set(key, entry);
     input.signal?.addEventListener('abort', () => { entry.controller.abort(); if (entries.get(key) === entry) entries.delete(key); }, { once: true });
     try {
-      const snapshot = parts.state.snapshot(input.scopeKey);
-      const context = observeSync('recall', { phase: 'task_deterministic' }, () => prepareTurnCognitiveContext(snapshot, parts.conversations, { scopeKey: input.scopeKey, message: input.cue,
-        occurredAt: parts.now(), channel: 'system', present: input.present, currentGoal: input.cue }), value => ({ memoryCount: value.memories.length }));
-      entry.ids = [...new Set([...parts.memory.search(input.scopeKey, input.cue, input.present).map(item => item.id), ...context.memories.map(item => item.id)])];
+      const { snapshot, context, found } = deterministicRecall(parts, input);
+      entry.ids = [...new Set([...found.map(item => item.id), ...context.memories.map(item => item.id)])];
       if (!parts.enrich || input.semantic === false) { entry.status = entry.ids.length ? 'ready' : 'no_match'; return; }
       const running = pending.get(key) ?? new Set<Entry>(); running.add(entry); pending.set(key, running);
       const span = observerSpan('recall', { phase: 'task_semantic' });
@@ -73,10 +71,29 @@ export function createTaskRecall(parts: {
     }
     if (input.signal?.aborted || entries.get(keyOf(input)) !== entry) return empty('cancelled');
     if (!parts.memory.available(input.scopeKey, input.present)) { cancel(input.scopeKey, input.taskId); return empty('withheld'); }
-    const items = parts.memory.read(input.scopeKey, entry.ids, input.present).slice(0, 8).map(item => Object.freeze({ ...item, summary: item.summary.slice(0, 500) }));
+    // The step's state and withholding when nothing changed since its start (a fresh walk all the same: receipts are asked again).
+    const shared = parts.memory.readSnapshot?.(input.scopeKey);
+    const items = parts.memory.read(input.scopeKey, entry.ids, input.present, shared).slice(0, 8).map(item => Object.freeze({ ...item, summary: item.summary.slice(0, 500) }));
     const status = entry.status === 'ready' && !items.length ? 'no_match' : entry.status;
-    return Object.freeze({ contextVersion: input.contextVersion, observedAt: parts.now(), status, items: Object.freeze(items), sourceIds: Object.freeze(parts.memory.sources(input.scopeKey, items.map(item => item.id))) });
+    return Object.freeze({ contextVersion: input.contextVersion, observedAt: parts.now(), status, items: Object.freeze(items), sourceIds: Object.freeze(parts.memory.sources(input.scopeKey, items.map(item => item.id), shared)) });
   } };
 }
 
 const valueStatus = (status: string, aborted: boolean) => aborted ? 'cancelled' : status;
+
+/**
+ * The step's deterministic context and its `memory.search` under one state and one withholding: one walk of the recall graph, not
+ * one per call (Minecraft run 6, 2026-10-14: three walks per step blocked the API 3–4 s each), kept while nothing changed.
+ */
+function deterministicRecall(parts: { state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore; memory: TaskMemory; now(): string },
+  input: TaskRecallInput) {
+  const shared = parts.memory.readSnapshot?.(input.scopeKey);
+  const snapshot = shared?.state ?? parts.state.snapshot(input.scopeKey);
+  const work = () => {
+    const context = observeSync('recall', { phase: 'task_deterministic' }, () => prepareTurnCognitiveContext(snapshot, parts.conversations, {
+      scopeKey: input.scopeKey, message: input.cue, occurredAt: parts.now(), channel: 'system', present: input.present, currentGoal: input.cue,
+      ...(shared ? { withholding: shared.withholding } : {}) }), value => ({ memoryCount: value.memories.length }));
+    return { snapshot, context, found: parts.memory.search(input.scopeKey, input.cue, input.present, 8, undefined, shared) };
+  };
+  return shared ? shared.withholding.withReadSnapshot(work) : work();
+}

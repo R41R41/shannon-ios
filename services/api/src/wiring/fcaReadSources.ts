@@ -37,8 +37,9 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
   const walks = new WeakMap<object, Map<string, { body: string } | null>>();
   const skillOf = (shared: ReadSourceSnapshot | undefined): SkillReader => (scopeKey, skillId, revisionId) => {
     if (!shared) return parts.skill?.(scopeKey, skillId, revisionId) ?? null;
-    let known = walks.get(shared.withholding);
-    if (!known) walks.set(shared.withholding, known = new Map());
+    const walk = shared.walk ?? shared.withholding;
+    let known = walks.get(walk);
+    if (!known) walks.set(walk, known = new Map());
     const key = JSON.stringify([scopeKey, skillId, revisionId ?? null]);
     if (!known.has(key)) known.set(key, parts.skill?.(scopeKey, skillId, revisionId) ?? null);
     return known.get(key)!;

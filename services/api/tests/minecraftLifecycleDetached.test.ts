@@ -222,7 +222,8 @@ describe('minecraft.set_day: the owner alone in a conversation, under its own li
   it.each([
     ['a stopped server', { running: 'stopped' as const }, 'サーバーが起動していない'],
     ['another player online', { otherPlayers: 1 }, 'ほかの参加者がいる'],
-    ['an unknown player count', { otherPlayers: null }, 'ほかの参加者がいる'],
+    // Run 6 (2026-10-14): right after a login the count is not known yet; the reason says so, not that players are present.
+    ['an unknown player count', { otherPlayers: null }, 'まだ確かめられない'],
   ])('refuses at once on %s, with nothing admitted or sent', async (_label, patch, text) => {
     const f = fixture();
     f.poll({ states: [{ serverId: 'home', observedAt: f.at(), running: 'running', bot: 'joined', otherPlayers: 0, ...patch }] });

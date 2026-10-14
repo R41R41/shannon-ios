@@ -387,10 +387,12 @@ export class SQLiteActionStore {
     for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND sent=1").all()){
       const action=view(row);
       const link=actionTaskLink(this.db,action);
-      if(!unknownDue(String(row.updated_at),at,link.taskKind))continue;
-      const exit=unknownExit(actionEffectClass(link.taskKind),link.taskKind);
       const base=JSON.parse(String(row.base_resources_json)) as string[];
       const retained=(key:string)=>this.retainedAfterRelease(key,action.resources,action);
+      if(!unknownDue(String(row.updated_at),at,link.taskKind))continue;
+      // A step that holds a resource only a release proof frees (the Minecraft body, an Agent Host) may have acted outside: it is
+      // closed as such, whatever its task's kind (Minecraft run 6, 2026-10-14: a body-moving step was retired as effect `none`).
+      const exit=unknownExit(action.resources.some(retained)?'external':actionEffectClass(link.taskKind),link.taskKind);
       const kept=action.resources.filter(key=>base.includes(key)||retained(key));
       this.db.prepare("UPDATE mind_actions SET sent=0,effect_sent=1,resources_json=?,result=?,updated_at=? WHERE id=?").run(JSON.stringify(kept),exit.code,at,action.id);
       // The retained keys are recorded now: only a recorded key keeps excluding others (retainedResourceStore.ts).

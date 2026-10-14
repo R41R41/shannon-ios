@@ -11,6 +11,7 @@ import { OPERATOR_NOTE_KIND, OPERATOR_TITLE_PREFIX } from '../contracts/operator
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
+import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 
 /** The note kind of the operator's lines in the owner's Talk (`operatorContract.ts`, where the voice replay reads it too). */
 export { OPERATOR_NOTE_KIND };
@@ -71,6 +72,8 @@ export interface OperatorServerParts extends OperatorHostParts {
   audit: OperatorServerAudit | null; path: string; scopeKey: string; now(): string; ownerAlone(): boolean;
   /** The common runtime's side of a request (`fcaMinecraftRequests(...).operator` and the runtime's wake), when Minecraft is on. */
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
+  /** The body re-check (`minecraftBodyRecheckWiring.ts`), when Minecraft is on: `minecraft release` asks it to check again now. */
+  bodyRecheck?: Pick<MinecraftBodyRecheck, 'request'> | null;
   log(line: string): void;
 }
 
@@ -97,7 +100,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   if (!audit) return { close: async () => { await directory; } };
   const service = createOperatorMinecraft({
     scopeKey: parts.scopeKey, enabled: () => audit.enabled, ownerAlone: parts.ownerAlone, now: parts.now, audit: audit.store,
-    lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions,
+    lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions, bodyRecheck: parts.bodyRecheck ?? null,
     lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false,
     activity: recorder(parts),
     note: (id, text, at) => {

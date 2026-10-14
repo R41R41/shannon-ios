@@ -21,6 +21,7 @@ import {
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { EMOTION_STEPS } from '../src/infra/sqlite/migrations/emotionSteps.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
 
 /**
@@ -380,6 +381,26 @@ describe('the pinned checksums', () => {
     const failed = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
     expect(failed.status).toBe(1);
     expect(failed.stdout).toContain('unexpected TEXT');
+  });
+
+  it('pins her inner note steps as production\'s ledger holds them, so a deploy check passes cleanly (2026-10-14)', () => {
+    const path = temporaryPath();
+    buildOld(path, true);
+    // As on the VM since 2026-10-13: the inner note's steps are applied before the deploy and stay as they were.
+    const emotion = new DatabaseSync(path); applySchemaSteps(emotion, EMOTION_STEPS); emotion.close();
+    const before = `${path}.before.jsonl`;
+    const script = fileURLToPath(new URL('../../../scripts/verify-schema-steps.mjs', import.meta.url));
+    expect(spawnSync(process.execPath, [script, 'dump', path, before], { encoding: 'utf8' }).status).toBe(0);
+    openNew(path).close();
+    const check = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(check.stdout).not.toContain('unknown step');
+    expect(check.stdout).toContain('SCHEMA_UNCHANGED_AND_LEDGER_PINNED');
+    expect(check.status).toBe(0);
+    expect(EMOTION_STEPS.map(step => [step.id, schemaStepChecksum(step)])).toEqual([
+      ['emotion/001_inner_notes', 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc'],
+      ['emotion/002_inner_note_episodes', '82db51e74ebb56f08b3392b192a27490a0f3fc111deb956c022a59b9497452df'],
+      ['emotion/003_inner_note_attempts', 'da679362296ea082a98c9b58ea1105862782f38e1f131b07162f319eddee1010'],
+    ]);
   });
 
   it('holds the slot tables to the rows the ledger says were written (S3 review L5)', () => {

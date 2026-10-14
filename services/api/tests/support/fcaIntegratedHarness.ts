@@ -111,13 +111,21 @@ export function integratedFcaHarness(parts: {
       atomic: work => underWriteLock(actions.db, null, '', work, 'fca_integration_admission') });
     tools.useMinecraftTasks(requests.tools);
   }
+  // The body runs what it was handed until it sends the receipt, and reports it as active meanwhile (`controlLoop.ts`).
+  const running = new Set<string>();
   function poll(receipts: readonly MinecraftControlReceipt[] = []) {
+    for (const receipt of receipts) running.delete(receipt.id);
+    const reply = bodyPoll(receipts);
+    for (const command of reply.commands) running.add(command.id);
+    return reply;
+  }
+  function bodyPoll(receipts: readonly MinecraftControlReceipt[]) {
     return control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world', connectionId: 'connection',
       observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: ++sequence, stateAt: world.now(), receivedAt: world.now(),
         connected: true, state: { inventory: { stone: receipts.some(receipt => receipt.outcome === 'completed') ? 1 : 0 } }, facts: {} },
       skills: [{ name: 'dig', description: 'Dig the observed stone block', readOnly: false,
         inputSchema: { type: 'object', properties: { count: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['count'], additionalProperties: false } }],
-      candidates: [], receipts, activeOperationIds: [],
+      candidates: [], receipts, activeOperationIds: [...running],
     });
   }
   connect(); poll();

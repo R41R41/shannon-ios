@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftBodyConfiguration } from '../contracts/minecraftBodyContract.js';
-import { actionResource, type ActionLease } from '../contracts/actionThreadContract.js';
+import { actionResource, type ActionLease, type ActionThreads } from '../contracts/actionThreadContract.js';
+import { createMinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { JevChooser } from '../infra/models/jev/jevChoice.js';
 import { createReflexProviders } from '../infra/models/reflexProviders.js';
@@ -13,6 +14,8 @@ import { bodyLeaseAttempt, bodyLeaseKnown, bodyLeaseValid } from './actionLeaseR
 export function configuredFcaMinecraft(values: Readonly<Record<string, string | undefined>>, parts: {
   db: DatabaseSync; configuration?: MinecraftBodyConfiguration | null; ownerScope: string; ownerAlone(): boolean;
   jev: JevChooser | null; usage: LlmUsageStore;
+  /** For the body re-check's domain proof (`minecraftBodyRecheckWiring.ts`). */
+  actions: Pick<ActionThreads, 'reconcileResource'>;
 }) {
   // Since Syzygy ADR-0009 S9 a configured body always takes the common path (the phase-4 request queue is retired).
   if (!parts.configuration) return null;
@@ -29,5 +32,8 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
         cachedInputTokens: receipt.cachedInputTokens, outputTokens: receipt.outputTokens, totalTokens: receipt.totalTokens,
         estimatedCostUsd: receipt.estimatedCostUsd, occurredAt: receipt.occurredAt });
     } } })!;
-  return { control, entry: providers.entry!, selector: providers.image! };
+  // A body retained by an unknown step is re-checked with the body itself, at start and when the operator asks (run 6).
+  const recheck = createMinecraftBodyRecheck({ db: parts.db, control, actions: parts.actions, ownerScope: parts.ownerScope,
+    deviceId: parts.configuration.deviceId, log: line => console.log(line) });
+  return { control, entry: providers.entry!, selector: providers.image!, recheck };
 }

@@ -9,12 +9,12 @@ import type { MinecraftControlPoll, MinecraftControlReceipt } from '../src/contr
 import type { BodyTaskContext } from '../src/contracts/bodyControlContract.js';
 const databases: DatabaseSync[] = [];
 afterEach(() => databases.splice(0).forEach(db => db.close()));
-function fixture() {
+function fixture(options: { frameMilliseconds?: number; cancelWaitMilliseconds?: number; pollMilliseconds?: number } = {}) {
   const db = new DatabaseSync(':memory:'); databases.push(db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
   const store = new MinecraftControlStore(db);
   let allowed = true, owner = true, sequence = 0;
-  const control = new MinecraftControl(store, configuration, { now: Date.now, leaseValid: () => allowed, leaseKnown: () => true, ownerAlone: () => owner, pollMilliseconds: 1, cancelWaitMilliseconds: 10 });
+  const control = new MinecraftControl(store, configuration, { now: Date.now, leaseValid: () => allowed, leaseKnown: () => true, ownerAlone: () => owner, pollMilliseconds: 1, cancelWaitMilliseconds: 10, ...options });
   const scope = { scopeKey: 'owner', deviceId: 'minebot' };
   const poll = (patch: Partial<MinecraftControlPoll> = {}): MinecraftControlPoll => ({ schemaVersion: 1, serverId: 'world', connectionId: 'connection',
     observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: sequence++, stateAt: new Date().toISOString(), receivedAt: new Date().toISOString(), connected: true, state: { health: 20 }, facts: { target: 'stone' } },
@@ -29,7 +29,8 @@ describe('Minecraft common FCA body protocol', () => {
   it('delivers once, accepts the exact receipt and retains no image bytes', async () => {
     const f = fixture(), result = f.control.command(f.command);
     expect(f.control.poll(f.scope, f.poll()).commands.map(c => c.id)).toEqual(['operation']);
-    expect(f.control.poll(f.scope, f.poll()).commands).toEqual([]);
+    expect(f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] })).commands).toEqual([]);
+    expect(f.control.poll(f.scope, f.poll()).commands).toEqual([]); // Confirmed running: never handed again.
     const receipt = f.receipt();
     expect(f.control.poll(f.scope, f.poll({ receipts: [receipt] })).acknowledged).toEqual(['operation']);
     expect(await result).toEqual(receipt);
@@ -41,7 +42,7 @@ describe('Minecraft common FCA body protocol', () => {
     const f = fixture(), abort = new AbortController();
     const outcome = f.control.command(f.command, abort.signal).catch(error => error.message);
     f.control.poll(f.scope, f.poll()); abort.abort(); await delay(3);
-    expect(f.control.poll(f.scope, f.poll()).cancel).toEqual(['operation']);
+    expect(f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] })).cancel).toEqual(['operation']);
     expect(await outcome).toBe('FCA_BODY_OUTCOME_UNKNOWN');
     const restarted = new MinecraftControl(new MinecraftControlStore(f.db), f.control.configuration, { now: Date.now, leaseValid: () => true, ownerAlone: () => true });
     expect(restarted.poll(f.scope, f.poll()).commands).toEqual([]);
@@ -100,5 +101,59 @@ describe('Minecraft common FCA body protocol', () => {
     expect(validSkillInput({ count: 2, injected: true }, skills[0]!.inputSchema)).toBe(false);
     const value = f.poll({ candidates: [{ kind: 'action', operation: 'dig', arguments: {}, label: 'dig', preconditions: [{ key: 'missing', value: true }], maxDurationMs: 100, expiresAt: new Date(Date.now() + 1000).toISOString() }] });
     expect(validControlPoll(value, Date.now())).toBe(false);
+  });
+
+  it('hands a stop over through a blocked API thread: redelivered under the same id, settled, never unknown (run 6)', async () => {
+    const f = fixture({ frameMilliseconds: 300, cancelWaitMilliseconds: 200, pollMilliseconds: 5 });
+    const stop = { requestId: 'stop-request', context: f.context, reason: 'danger' };
+    const id = 'stop:run6';
+    const outcome = f.control.command({ id, context: f.context, lease: f.command.lease, kind: 'stop', stop, milliseconds: 200 } as never)
+      .then(value => value, (error: Error) => error.message);
+    await delay(10);
+    // The reply carrying the stop is written while the body has already given up on that request (its 2 s poll timeout).
+    expect(f.control.poll(f.scope, f.poll()).commands.map(command => command.id)).toEqual([id]);
+    const blocked = Date.now(); while (Date.now() - blocked < 700) { /* The API's one thread is blocked (run 6: 9.9 s, 13.6 s). */ }
+    // The body's next poll is read in the next I/O turn; it does not list the stop: it never reached the body.
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(f.control.poll(f.scope, f.poll()).commands.map(command => command.id)).toEqual([id]);
+    expect(f.control.poll(f.scope, f.poll({ activeOperationIds: [id] })).commands).toEqual([]); // Taken now: not handed again.
+    const receipt = f.receipt({ id, stop: { bodyId: 'minecraft:world', sessionId: 'step', generation: 1, requestId: 'stop-request', state: 'stopped',
+      inputsReleased: true, observedAt: new Date().toISOString() } });
+    expect(f.control.poll(f.scope, f.poll({ receipts: [receipt] })).acknowledged).toEqual([id]);
+    expect(await outcome).toMatchObject({ id, outcome: 'completed', stop: { state: 'stopped', inputsReleased: true } });
+    expect(f.store.safe('task')).toBe(true);
+  });
+  it('settles a cancelled command the body never received as cancelled, without a physical acknowledgement', async () => {
+    const f = fixture(), abort = new AbortController();
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    f.control.poll(f.scope, f.poll()); // Delivered, but the reply was lost.
+    abort.abort(); await delay(3);
+    f.control.poll(f.scope, f.poll()); // The next poll does not list it: proven never handed over.
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true });
+    expect(f.store.safe('task')).toBe(true);
+  });
+  it('asks the body once more before an unknown: a command still running there gets one more wait', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 100, pollMilliseconds: 2 }), abort = new AbortController();
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    f.control.poll(f.scope, f.poll());
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] })); // Confirmed running on the body.
+    abort.abort();
+    await delay(140); // The cancel wait passed: the body is asked again (its next poll).
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] })); // Still running there: one more wait, not unknown.
+    await delay(20);
+    f.control.poll(f.scope, f.poll({ receipts: [f.receipt({ outcome: 'cancelled' })] }));
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true });
+  });
+  it('declares unknown when the body, asked again, no longer reports a command it was running', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 20, pollMilliseconds: 2 }), abort = new AbortController();
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    f.control.poll(f.scope, f.poll());
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] }));
+    abort.abort();
+    for (let i = 0; i < 10; i++) { await delay(8); f.control.poll(f.scope, f.poll({ receipts: Array.from({ length: 16 }, (_, k) => f.receipt({ id: `other-${k}` })) })); }
+    expect(await outcome).toBe('FCA_BODY_OUTCOME_UNKNOWN');
   });
 });

@@ -15,6 +15,7 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] <goal...>',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft <start|stop|login|logout|set_day> --operator <label> [--server <id>]',
+  '  opsCli.ts minecraft release --operator <label>   (ask the body again whether it is stopped; releases only what it proves)',
 ].join('\n');
 
 export interface OperatorCliIo { out(line: string): void; err(line: string): void }

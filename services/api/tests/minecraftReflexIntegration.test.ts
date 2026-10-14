@@ -9,7 +9,10 @@ import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { combineFcaTools, fcaMinecraftTools } from '../src/wiring/fcaMinecraftTools.js';
 import { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
-import { createMinecraftTaskBody } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
+import { concreteDanger, createMinecraftTaskBody } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
+import { installObserverSink } from '../src/infra/observer/observerContext.js';
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 import { SQLiteFcaEvidenceStore } from '../src/mind/action/fca/store/fcaEvidenceStore.js';
@@ -20,7 +23,7 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
-function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean } = {}) {
+function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean } = {}) {
   let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true;
   let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   const now = () => new Date(clock).toISOString(), memory = memoryWorld(), harness = actionHarness(now, memory.path), store = new MinecraftControlStore(harness.db);
@@ -53,7 +56,8 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
     const received = receipts; receipts = [];
     const response = control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world', connectionId: 'connection',
       observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: sequence++, stateAt: now(), receivedAt: now(), connected: true,
-        state: { health: danger ? 4 : 20, phase: 'current physical observation' }, facts: { danger, stuck: false, visualRequired: false, onGround: true, ...extraFacts } },
+        state: { health: danger ? 4 : 20, phase: 'current physical observation', ...(options.evidence === false ? {} : { world: { health: danger ? 4 : 20, oxygen: 20, nearbyThreats: [] } }) },
+        facts: { danger, stuck: false, visualRequired: false, onGround: true, alive: true, ...extraFacts } },
       skills: [{ name: 'move', description: 'bounded movement', readOnly: false, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } }],
       candidates: [{ kind: 'action', label: 'retreat one step', operation: 'move', arguments: { direction: 'back', durationMs: 100 },
         preconditions: [{ key: 'onGround', value: true }], maxDurationMs: 2000, expiresAt: new Date(clock + 3000).toISOString(), requiresImage: true }],
@@ -83,7 +87,8 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
   const model: FcaModel = { async decide(input) { modelInputs.push(input); return decide(input); }, toolResults: results => ({ role: 'tool_results', results }) };
   const driver = createTaskRuntimeWiring({ db: harness.db, actions: harness.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     stepPorts(runtime, step) {
-      const body = createMinecraftTaskBody({ control, runtime, step, evidence, now: () => clock, pollMilliseconds: 1,
+      // The mechanics below start right after login; the spawn grace has tests of its own (`spawnGraceMilliseconds`).
+      const body = createMinecraftTaskBody({ control, runtime, step, evidence, now: () => clock, pollMilliseconds: 1, spawnGraceMilliseconds: options.spawnGraceMilliseconds ?? 0,
         limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 },
         ownerAlone: () => true, sourcesVisible: () => sourcesVisible,
         entry: { async evaluate(input) { entryCalls += 1; return { sessionId: input.context.sessionId, generation: input.context.generation,
@@ -291,5 +296,52 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     answer.resolve(wait()); await f.driver.drain();
     expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('ready');
     await f.actions.finish(leaseOf(competitor!), 'completed', 'fixture_done');
+  });
+
+  it('starts no reflex on its own at spawn or before the first decision without two frames of concrete danger, and says why (run 6)', async () => {
+    const events: ObserverDraft[] = [], restore = installObserverSink(event => { events.push(event); });
+    cleanups.push(async () => restore());
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => answer.promise, { spawnGraceMilliseconds: 5_000, evidence: false });
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision pending');
+    // Run 6: a fresh world's first frames said danger (health not there yet) while the task had not decided anything.
+    f.danger(true); for (let i = 0; i < 20; i++) { f.pump(); await delay(1); }
+    expect(f.entryCalls()).toBe(0);
+    f.advance(6_000); for (let i = 0; i < 20; i++) { f.pump(); await delay(1); } // Past the spawn grace, still no concrete evidence.
+    expect(f.entryCalls()).toBe(0);
+    f.danger(false); f.facts({ stuck: true }); for (let i = 0; i < 20; i++) { f.pump(); await delay(1); } // Stuck never starts one before a decision.
+    expect(f.entryCalls()).toBe(0);
+    const held = events.filter(event => event.kind === 'handoff' && event.toNode === 'reflex').map(event => (event.output as { reason?: string } | undefined)?.reason);
+    expect(held).toEqual(expect.arrayContaining(['spawn_grace', 'danger_without_evidence', 'before_first_decision']));
+    expect(f.commands.filter(command => command.kind !== 'capture')).toEqual([]);
+  });
+
+  it('starts one for concrete danger seen in two frames in a row before the first decision, and records the fact (run 6)', async () => {
+    const events: ObserverDraft[] = [], restore = installObserverSink(event => { events.push(event); });
+    cleanups.push(async () => restore());
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => answer.promise, { spawnGraceMilliseconds: 5_000 });
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision pending');
+    f.danger(true); for (let i = 0; i < 20; i++) { f.pump(); await delay(1); }
+    expect(f.entryCalls()).toBe(0); // Within the spawn grace.
+    f.advance(6_000);
+    await f.until(() => f.entryCalls() === 1, 'entry after the grace with concrete danger');
+    const entry = events.find(event => event.kind === 'handoff' && event.toNode === 'reflex' && (event.output as { phase?: string } | undefined)?.phase === 'entry');
+    expect(entry?.output).toMatchObject({ trigger: 'observation', mode: 'danger', evidence: 'health', value: 4, decided: false });
+  });
+
+  it('reads concrete danger only from the frame\'s own health, oxygen and nearby threats', () => {
+    const frame = (world: Record<string, unknown> | undefined, alive = true): BodyObservation => ({ schemaVersion: 1, bodyId: 'minecraft:world', sequence: 1,
+      stateAt: '2026-10-14T05:00:00.000Z', receivedAt: '2026-10-14T05:00:00.000Z', connected: true,
+      state: (world ? { world } : {}) as BodyObservation['state'], facts: { danger: true, alive } });
+    expect(concreteDanger(frame(undefined))).toBeNull(); // Spawn: no world yet.
+    expect(concreteDanger(frame({ health: 0, oxygen: 20, nearbyThreats: [] }))).toBeNull(); // Health not arrived (reads 0).
+    expect(concreteDanger(frame({ health: 4 }, false))).toBeNull(); // Not alive.
+    expect(concreteDanger(frame({ health: 4 }))).toEqual({ kind: 'health', value: 4 });
+    expect(concreteDanger(frame({ health: 20, oxygen: 3 }))).toEqual({ kind: 'oxygen', value: 3 });
+    expect(concreteDanger(frame({ health: 20, nearbyThreats: [{ distance: 9 }, { distance: 4.5 }, { distance: 2, canReachMe: false }] }))).toEqual({ kind: 'threat', value: 4.5 });
+    expect(concreteDanger(frame({ health: 20, oxygen: 20, nearbyThreats: [{ distance: 12 }] }))).toBeNull();
   });
 });

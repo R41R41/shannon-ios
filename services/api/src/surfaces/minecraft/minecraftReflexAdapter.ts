@@ -11,19 +11,43 @@ import {
   type BodyStopRequest, type BodyTaskContext, type ReflexEntrySelector, type ReflexEvent, type ReflexLimits,
   type ReflexPorts, type ReflexSelector, type ReflexSessionReceipt, type ReflexSessionRequest,
 } from '../../mind/action/reflex/reflexPorts.js';
-import type { MinecraftControl } from './minecraftControl.js';
+import { observerHandoff } from '../../infra/observer/observerContext.js';
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 const DEFAULT_LIMITS: ReflexLimits = { maxDurationMs: 20_000, maxDecisions: 6, maxActions: 4, maxActionMs: 5_000, maxStateAgeMs: 3_000, maxImageAgeMs: 3_000 };
+/** Frames in a row that must show concrete danger before a reflex starts on its own ahead of the task's first decision. */
+export const REFLEX_DANGER_FRAMES = 2;
+
+/**
+ * The concrete evidence behind a body's `danger` fact (Minebot: health at most 8, oxygen at most 6, or a hostile within 5 blocks
+ * that can reach it), read from the frame's world state; null when the frame shows none of it. Minecraft run 6 (2026-10-14): the
+ * flag was true at spawn into a fresh world, before health had arrived (an unknown health reads as 0 there), and a reflex started
+ * ahead of the task's first decision.
+ */
+export function concreteDanger(observation: BodyObservation): { kind: 'health' | 'oxygen' | 'threat'; value: number } | null {
+  const world = observation.state.world as { health?: unknown; oxygen?: unknown; nearbyThreats?: unknown } | undefined;
+  if (observation.facts.alive !== true || !world || typeof world !== 'object') return null;
+  const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  if (finite(world.health) && world.health > 0 && world.health <= 8) return { kind: 'health', value: world.health };
+  if (finite(world.oxygen) && world.oxygen >= 0 && world.oxygen <= 6) return { kind: 'oxygen', value: world.oxygen };
+  const threats = Array.isArray(world.nearbyThreats) ? world.nearbyThreats as Array<{ distance?: unknown; canReachMe?: unknown }> : [];
+  const near = threats.filter(threat => finite(threat?.distance) && threat.distance <= 5 && threat.canReachMe !== false)
+    .map(threat => threat.distance as number);
+  return near.length ? { kind: 'threat', value: Math.min(...near) } : null;
+}
 
 /** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
 export function createMinecraftTaskBody(parts: {
   control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; entry: ReflexEntrySelector | null; selector: ReflexSelector | null;
   ownerAlone(): boolean; sourcesVisible(): boolean; now?: () => number; pollMilliseconds?: number;
   limits?: Partial<ReflexLimits>; evidence?: FcaEvidence;
+  /** How long after a body's login, reconnection or respawn no reflex starts on its own (`MinecraftControl.settling`). */
+  spawnGraceMilliseconds?: number;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(), claims = new Set<string>();
@@ -37,6 +61,14 @@ export function createMinecraftTaskBody(parts: {
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
   let lastSignature = '', lastSequence = -1;
+  // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
+  // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
+  let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
+  const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
+  const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
+    if (held !== reason) observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
+    held = reason;
+  };
   const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
   const live = () => leaseMatches() && parts.ownerAlone() && parts.sourcesVisible() && !monitorAbort.signal.aborted
     && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
@@ -148,7 +180,15 @@ export function createMinecraftTaskBody(parts: {
     if (!observation || observation.sequence === lastSequence) return;
     lastSequence = observation.sequence;
     const facts = observation.facts, mode = facts.danger === true ? 'danger' : facts.stuck === true ? 'stuck' : facts.visualRequired === true ? 'visual' : null;
-    if (!mode) return;
+    const evidence = mode === 'danger' ? concreteDanger(observation) : null;
+    dangerFrames = evidence ? dangerFrames + 1 : 0;
+    if (!mode) return void (held = '');
+    if (control.settling(bodyId!, spawnGrace)) return hold('spawn_grace', { mode, sequence: observation.sequence });
+    if (!decided && !activeAction) {
+      if (mode !== 'danger') return hold('before_first_decision', { mode, sequence: observation.sequence });
+      if (!evidence) return hold('danger_without_evidence', { sequence: observation.sequence });
+      if (dangerFrames < REFLEX_DANGER_FRAMES) return hold('danger_not_persistent', { kind: evidence.kind, value: evidence.value, frames: dangerFrames });
+    }
     // A body skill in flight owns its own stalls (Minebot's pathfinding has its stuck count and timeout) and reports its result to the
     // task; only an immediate hazard preempts it. Minecraft operator run 5 (2026-10-14, task 68395576): `stuck` (controls held, no
     // movement for 1.5 s) 1.5 s into an mc.move-to entered a session that cancelled the skill ("Action interrupted"), then could not
@@ -157,7 +197,11 @@ export function createMinecraftTaskBody(parts: {
     const signature = JSON.stringify([mode, facts.target ?? null]);
     if (signature === lastSignature && now() - lastEntryAt < 2_000) return;
     if (!leaseMatches() || !await execution!.permit([], monitorAbort.signal) || !live()) return;
-    lastSignature = signature; lastEntryAt = now(); attempts += 1;
+    lastSignature = signature; lastEntryAt = now(); attempts += 1; held = '';
+    // The fact that started it, for the Observer (Minecraft run 6: an entry at spawn left no trace of why).
+    observerHandoff('bodyObserve', 'reflex', { phase: 'entry', trigger: 'observation', mode, sequence: observation.sequence, decided,
+      ...(evidence ? { evidence: evidence.kind, value: evidence.value, frames: dangerFrames } : {}), danger: facts.danger === true,
+      stuck: facts.stuck === true, visual: facts.visualRequired === true });
     const ctx = context(bodyId!, `${step.id}:reflex:${attempts}`), request = { context: ctx, limits };
     if (await evaluateReflexEntry(request, { context: ctx, observation, trigger: 'observation', recent: [] }, parts.entry, ports, monitorAbort.signal)
       && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal);
@@ -177,6 +221,7 @@ export function createMinecraftTaskBody(parts: {
       timer = setInterval(poll, parts.pollMilliseconds ?? 250); timer.unref(); poll();
     },
     revision: () => revision,
+    settling: () => !!availableBody() && control.settling(availableBody()!, spawnGrace),
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
@@ -192,6 +237,7 @@ export function createMinecraftTaskBody(parts: {
       if (parent.aborted || active) abort.abort(); return abort.signal;
     },
     noteCall(call, operationId) {
+      decided = true;
       if (!call.name.startsWith('mc.')) return;
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);

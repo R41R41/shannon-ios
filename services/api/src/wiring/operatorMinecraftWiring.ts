@@ -10,6 +10,7 @@ import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import type { OperatorSocketRefusal } from '../infra/ops/operatorSocket.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
+import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 
 /** What the activity record (「したことの記録」, shown in 自律活動 › 記録) keeps of an operator invocation. */
 export interface OperatorActivity { summary: string; tool: string; outcome: 'done' | 'refused'; reasonCode: string; detail: string }
@@ -20,6 +21,8 @@ export interface OperatorMinecraftParts {
   lifecycle: OperatorLifecycle | null;
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
   actions: ActionThreads | null;
+  /** The body re-check (`minecraftBodyRecheckWiring.ts`); absent without a configured body. */
+  bodyRecheck?: Pick<MinecraftBodyRecheck, 'request'> | null;
   lifecycleUnresolved(): boolean;
   activity(at: string, entry: OperatorActivity): void;
   /** A short note in the owner's Talk, written once per id. */
@@ -44,7 +47,14 @@ const MESSAGES: Partial<Record<OperatorCode, string>> = {
   not_operator_task: 'このタスクは運用者が始めたものではないので止めません（ライ氏の依頼は本人の「止まって」で止めます）。',
   not_running: 'このタスクはもう終わっているか、止めている途中です。',
   lifecycle_unavailable: 'マイクラ管理が設定されていないか、新しい状態が届いていません。',
+  released: 'マイクラの体が止まっていて入力も離していることを体に確かめ直し、保持を解放しました。',
+  not_retained: '確認待ちで保持されているマイクラの体はありません。',
+  not_confirmed: '体が停止と入力の解放を確かめられなかったので、保持したままにしました。',
+  proof_refused: '体の答えを解放の証明として受け付けられなかったので、保持したままにしました。',
+  recheck_busy: '体の確認をいま実行中です。',
+  not_settled: 'ログイン直後で、サーバーの状態（ほかの参加者の数）をまだ確かめられません。少し待ってからもう一度頼んでください。',
 };
+const RECHECK_UNAVAILABLE = 'マイクラの体が接続されていないので、まだ確かめられません。接続されたらサーバーが自動でも確かめます。';
 
 /**
  * The operator's Minecraft service in the API (owner decision 2026-10-14; `docs/operator-minecraft-contract.md`). Every
@@ -180,6 +190,21 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     return c.reply('accepted', 'stopped', '停止要求を受け付けました。身体操作の停止確認後に停止済みになります。', { taskId: found.id });
   }
 
+  /** `minecraft release`: the body is asked again whether it is stopped with every input released (a request, never a force). */
+  async function release(c: Context) {
+    if (!parts.bodyRecheck) return c.refuse('body_unavailable');
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted',
+      argsJson: c.argsJson });
+    const result = await parts.bodyRecheck.request('operator');
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: result.code, argsJson: c.argsJson,
+      ...(result.actionIds[0] ? { actionId: result.actionIds[0] } : {}), detail: result.detail.slice(0, 200) });
+    parts.activity(c.at, { summary: `運用者（${c.operator}）の依頼で、マイクラの体が止まっているかを確かめ直しました。`, tool: 'operator.minecraft.release',
+      outcome: result.code === 'released' ? 'done' : 'refused', reasonCode: result.code,
+      detail: `operation=${c.operationId} actions=${result.actionIds.join(',')}` });
+    const message = result.code === 'body_unavailable' ? RECHECK_UNAVAILABLE : MESSAGES[result.code] ?? result.code;
+    return c.reply(result.code === 'released' ? 'accepted' : 'refused', result.code, message, result.actionIds[0] ? { actionId: result.actionIds[0] } : {});
+  }
+
   async function handle(value: unknown): Promise<{ status: number; body: unknown }> {
     const turnedAway = flooded(parts.now(), operatorLabel((value as { operator?: unknown } | null)?.operator));
     if (turnedAway) return turnedAway;
@@ -196,6 +221,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const parsed = c.parsed.input;
     if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId);
     if (parsed.command === 'request') return request(c, parsed);
+    if (parsed.command === 'release') return release(c);
     return cancel(c, parsed);
   }
 

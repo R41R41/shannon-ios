@@ -104,7 +104,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
-    const minecraft = configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev });
+    const minecraft = configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions });
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     const runtime = createTaskRuntimeWiring({ db, actions, model,
@@ -186,7 +186,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const timer = setInterval(() => timedTick('fca_wake', wake), 1000); timer.unref();
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),
-      requests: minecraft && requests ? { ...requests.operator, wake } : null }) : null;
+      requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck: minecraft?.recheck ?? null }) : null;
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone), requester: operatorRequester(operatorAudit, parts.ownerScope),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
@@ -215,7 +215,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { await operator?.close(); clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
+    }, async close() { await operator?.close(); await minecraft?.recheck?.close(); clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
   } catch (error) { operatorAudit?.close(); sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,

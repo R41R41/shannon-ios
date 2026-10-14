@@ -1,21 +1,40 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
-import { MemoryWithholding } from './memoryVisibility.js';
+import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
 import type { ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
-import type { TaskMemory, TaskMemoryItem } from './taskMemoryPorts.js';
+import type { TaskMemory, TaskMemoryItem, TaskMemoryReadSnapshot } from './taskMemoryPorts.js';
 
 export interface TaskMemoryParts {
   state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore; ownerScope: string;
   ownerAlone(): boolean; now(): string; knowledge?: Pick<ShannonKnowledgeStore, 'listShannonKnowledge'>;
-  readSourceVisible?(scope: string, id: string, observedAt: string): boolean;
+  readSourceVisible?: ReadSourceVisible;
 }
 /** Same canonical store, disclosure and forgetting gates as conversation recall. No cached private text. */
 export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
   const knowledge = parts.knowledge ?? (typeof (parts.conversations as Partial<ShannonKnowledgeStore>).listShannonKnowledge === 'function'
     ? parts.conversations as ConversationStore & ShannonKnowledgeStore : undefined);
   const available = (scope: string, present: MemoryAudience) => scope === parts.ownerScope && isOwnerOnly(present) && parts.ownerAlone();
+  /**
+   * The state and withholding of a read, kept while the database is unchanged (its change mark: every write of the state, a turn,
+   * a task experience or a skill moves it). Then the state is the same object (its withheld evidence is gathered once) and the
+   * remembered turns and their withheld ones are not read again; every read still asks native read receipts afresh, and walks
+   * afresh, since only the read's own decisions are memoized (`MemoryWithholding.query`). Minecraft run 6 (2026-10-14).
+   */
+  let kept: { key: string; snapshot: TaskMemoryReadSnapshot } | null = null;
+  const readSnapshot = (scope: string): TaskMemoryReadSnapshot => {
+    const mark = parts.conversations.changeMark?.() ?? null;
+    const key = mark === null ? null : JSON.stringify([scope, mark]);
+    if (key !== null && kept?.key === key) return kept.snapshot;
+    const state = parts.state.snapshot(scope);
+    const withholding = new MemoryWithholding(state, parts.conversations, scope, parts.conversations.experienceCandidates(scope), parts.readSourceVisible);
+    const snapshot: TaskMemoryReadSnapshot = { state, withholding, experience: id => withholding.experienceRow(id) };
+    // Reading the state may itself have written (a first state): keep it under the mark after the read.
+    const after = parts.conversations.changeMark?.() ?? null;
+    kept = key !== null && after === mark ? { key, snapshot } : null;
+    return snapshot;
+  };
   const read: TaskMemory['read'] = (scope, ids, present, shared) => {
     if (!available(scope, present)) return [];
     const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
@@ -23,7 +42,10 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
     return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
-    const experienceOf = (id: string) => { if (!canonical.has(id)) canonical.set(id, store.experiencesById?.(scope, [id])[0] ?? null); return canonical.get(id) ?? null; };
+    const experienceOf = (id: string) => {
+      if (shared?.experience) return shared.experience(id);
+      if (!canonical.has(id)) canonical.set(id, store.experiencesById?.(scope, [id])[0] ?? null); return canonical.get(id) ?? null;
+    };
     const lineage = new Map<string, boolean>();
     const lineageVisible = (id: string, seen = new Set<string>()): boolean => {
       if (seen.has(id) || seen.size >= 5000) return false;
@@ -50,7 +72,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         return state.activeMemories.some(row => row.id === id) || state.interests.some(text => memoryIdentifier('interest', text) === id);
       }
       return gate.allowsTurn(experience) && !withheld.withholdsExperience(experience)
-        && !(experience.readSourceIds ?? []).some(ref => !parts.readSourceVisible?.(scope, ref, experience.observedAt))
+        && !(experience.readSourceIds ?? []).some(ref => !withheld.readSourceAvailable(ref, experience.observedAt))
         && (experience.recalledMemoryIds ?? []).every(ref => lineageVisible(ref, seen));
     };
     const items: TaskMemoryItem[] = [];
@@ -72,7 +94,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         if (!doc || withheld.withholdsKnowledge(doc) || doc.sourceExperienceIds.some(ref => !lineageVisible(ref))) continue;
         readSourceIds = (doc.aetherReferences ?? []).map(ref => `aether-document://${encodeURIComponent(ref.documentId)}`);
         summary = `${doc.title}\n${doc.bodyMarkdown}`; at = doc.updatedAt; applicability = doc.applicability; evidence = doc.sourceExperienceIds.join(',');
-        if (doc.aetherReferences?.some(ref => !parts.readSourceVisible?.(scope, `aether-document://${encodeURIComponent(ref.documentId)}`, at))) continue;
+        if (doc.aetherReferences?.some(ref => !withheld.readSourceAvailable(`aether-document://${encodeURIComponent(ref.documentId)}`, at))) continue;
       } else {
         const experience = experienceOf(id);
         const fact = state.userFacts.find(row => row.id === id) ?? state.relationships.find(row => row.id === id);
@@ -121,24 +143,24 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     }
     return [...found];
   };
-  const search: TaskMemory['search'] = (scope, query, present, limit = 8, options) => {
+  const search: TaskMemory['search'] = (scope, query, present, limit = 8, options, shared) => {
     if (!available(scope, present)) return [];
-    const state = parts.state.snapshot(scope);
+    const state = shared?.state ?? parts.state.snapshot(scope);
     const candidates = [...state.userFacts, ...state.relationships].map(item => ({ id: item.id, text: item.statement, observedAt: item.observedAt }));
     candidates.push(...state.activeMemories.map(item => ({ id: item.id, text: item.summary, observedAt: state.updatedAt })),
       ...state.interests.map(text => ({ id: memoryIdentifier('interest', text), text, observedAt: state.updatedAt })));
     candidates.push(...state.prospectiveMemories.map(item => ({ id: item.id, text: item.summary, observedAt: item.updatedAt })));
     const ids = [...(parts.conversations.searchMemory?.(scope, query, options ? 1200 : 40, options ? { ...options, offset: 0 } : undefined) ?? []).map(hit => hit.id),
       ...searchMemoryDocuments(query, candidates, 20).map(item => item.id)];
-    if (!options) return read(scope, ids, present).slice(0, Math.max(1, Math.min(12, limit)));
+    if (!options) return read(scope, ids, present, shared).slice(0, Math.max(1, Math.min(12, limit)));
     const unique = [...new Set(ids)], found: TaskMemoryItem[] = [];
-    for (let offset = 0; offset < unique.length; offset += 40) found.push(...read(scope, unique.slice(offset, offset + 40), present));
+    for (let offset = 0; offset < unique.length; offset += 40) found.push(...read(scope, unique.slice(offset, offset + 40), present, shared));
     const visible = found.filter(item => (!options.kind || (options.kind === 'thread' ? item.id.startsWith('thread:') : options.kind === 'knowledge' ? item.id.startsWith('knowledge:') : !item.id.startsWith('thread:') && !item.id.startsWith('knowledge:') && Boolean(parts.conversations.experiencesById?.(scope, [item.id]).length)))
       && withinSearchRange(item.observedAt, options) && (!options.match || matchesSearch(item.summary, query, options)));
     if (options.order === 'newest' || options.order === 'oldest') visible.sort((a, b) => (options.order === 'oldest' ? (Date.parse(a.observedAt) - Date.parse(b.observedAt)) : (Date.parse(b.observedAt) - Date.parse(a.observedAt))) || a.id.localeCompare(b.id));
     return visible.slice(options.offset ?? 0, (options.offset ?? 0) + Math.max(1, Math.min(40, limit)));
   };
-  return { available, search, read, sources, async execute(name, input, context, signal) {
+  return { available, search, read, sources: (scope, ids, shared) => sources(scope, ids, shared?.experience, shared?.state), readSnapshot, async execute(name, input, context, signal) {
     if (signal?.aborted) return { status: 'cancelled', items: [], sourceIds: [] };
     if (!available(context.scopeKey, context.present)) return { status: 'withheld', items: [], sourceIds: [] };
     let items: TaskMemoryItem[];

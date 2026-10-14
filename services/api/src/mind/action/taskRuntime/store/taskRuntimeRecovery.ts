@@ -36,8 +36,8 @@ const terminal = (task: TaskRecord) => ['completed', 'failed', 'cancelled'].incl
  *   acted on (its decision answered, a tool or child started, a message sent) is consumed by it and not run again, since that
  *   would replay it;
  * - every other task becomes `failed` (`unknown_retired`, its parent hears of it, as after a committed failure), so a parent's
- *   stop can finish and the active-task limit is not held forever. Every FCA task only calls models (`effect_class` none); a
- *   task that acted outside would close as `outcome_unknown_closed` by the same rule.
+ *   stop can finish and the active-task limit is not held forever. An FCA task only calls models (`effect_class` none); one
+ *   that sent the Minecraft body a command may have acted outside and closes as `outcome_unknown_closed` (run 6, 2026-10-14).
  */
 export class TaskRuntimeRecovery {
   constructor(private readonly db: DatabaseSync, private readonly parts: TaskRecoveryParts) {}
@@ -68,6 +68,15 @@ export class TaskRuntimeRecovery {
     return changed;
   }
 
+  /**
+   * Whether the task sent the Minecraft body a command: it may have acted outside, whatever its kind, and closes as such
+   * (Minecraft run 6, 2026-10-14: a body-moving task was retired as a model-only one, `unknown_retired`).
+   */
+  private actedOnBody(taskId: string): boolean {
+    if (!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fca_body_operations'").get()) return false;
+    return Boolean(this.db.prepare('SELECT 1 FROM fca_body_operations WHERE task_id=? LIMIT 1').get(taskId));
+  }
+
   /** When the task entered `fca_unknown` (its latest recovery event), or null when it is not unknown. */
   unknownSince(scopeKey: string, taskId: string): string | null {
     const task = this.parts.authority.get(scopeKey, taskId);
@@ -84,7 +93,7 @@ export class TaskRuntimeRecovery {
       if (task.pauseReason !== 'fca_unknown' || terminal(task) || receipted.has(task.id)) continue;
       const kind = deriveTaskKind(task.kind);
       if (!unknownDue(this.unknownSince(scopeKey, task.id), at, kind)) continue;
-      this.retire(task, unknownExit(kind ? effectClassOf(kind) : 'none', kind).code);
+      this.retire(task, unknownExit(this.actedOnBody(task.id) ? 'external' : kind ? effectClassOf(kind) : 'none', kind).code);
       retired.push(this.parts.get(scopeKey, task.id)!);
     }
     return retired;

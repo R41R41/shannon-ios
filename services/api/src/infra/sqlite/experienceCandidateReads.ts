@@ -25,6 +25,9 @@ export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, 
   return value;
 }
 
+/** The database's change mark (above): equal marks mean every row reads as it did (inside a transaction: none, `null`). */
+export function databaseChangeMark(database: DatabaseSync): string | null { return database.isTransaction ? null : changeMark(database); }
+
 function changeMark(database: DatabaseSync): string {
   const changes = database.prepare('SELECT total_changes() AS changes').get() as { changes: number };
   return `${changes.changes}:${dataVersion(database)}`;

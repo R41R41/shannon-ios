@@ -171,6 +171,20 @@ describe('FCA external-tool source and unknown-outcome boundaries', () => {
     } finally { restore(); }
   });
 
+  it.each([false, true])('starts the recall ahead of the decision unless the body is still settling after its login (%s, run 6)', async settling => {
+    const f = fixture(() => ({ kind: 'wait', summary: 'waiting' })), events: ObserverDraft[] = [], order: string[] = [];
+    const empty: TaskRecallPacket = { contextVersion: 'v', observedAt: at, status: 'no_match', items: [], sourceIds: [] };
+    f.ports.recall = { start() { order.push('start'); }, async packet() { order.push('packet'); return empty; }, async finishSegment() {}, cancel() {}, async cancelAll() {} };
+    f.ports.body = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), guard: async () => true,
+      toolSignal: (_name, parent) => parent, close: async () => {}, settling: () => settling };
+    const restore = installObserverSink(event => events.push(event));
+    try { await withObserverRun({ scopeKey: 'owner', surface: 'fixture' }, f.run); } finally { restore(); }
+    // Settling: the packet starts it (`taskRecall.packet`), at the decision, not while the body's first frames are handed over.
+    expect(order).toEqual(settling ? ['packet'] : ['start', 'packet']);
+    const deferred = events.filter(event => event.kind === 'handoff' && event.toNode === 'recall' && (event.output as { phase?: string } | undefined)?.phase === 'start_deferred');
+    expect(deferred).toHaveLength(settling ? 1 : 0);
+  });
+
   it('checks source visibility before selection and again after selection, before the model', async () => {
     const f = fixture(() => tools('task.list'));
     let visible = false, selections = 0, permits = 0;

@@ -74,6 +74,11 @@ export function prepareTurnCognitiveContext(
     provisionalIntent?: ShannonIntent | null;
     /** See `TurnCognitiveContext.openOnly`: decided here, at the source, rather than by filtering lines afterwards. */
     openOnly?: boolean;
+    /**
+     * The caller's withholding over this same `snapshot` (an FCA step's recall shares one with its `memory.search` and packet:
+     * `TaskMemory.readSnapshot`). Absent, one is made here, as before.
+     */
+    withholding?: MemoryWithholding;
   },
 ): TurnCognitiveContext {
   const openOnly = input.openOnly === true;
@@ -100,7 +105,7 @@ export function prepareTurnCognitiveContext(
     memory.status === 'pending' && visibleMemoryText(full, memory.id, memory.summary)
     && memory.summary.split(/[、のをは]/u).some(piece => piece.length >= 3 && input.message.includes(piece)))?.summary;
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
-  const withholding = new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
+  const withholding = input.withholding ?? new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   // One synchronous read: every remembered turn shares one walk of the recall graph (not one walk per turn).
   const visibleTurns = parts.time('visible', () => withholding.withReadSnapshot(() =>
     recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item))));

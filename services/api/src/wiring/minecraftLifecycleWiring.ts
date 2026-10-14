@@ -7,7 +7,7 @@ import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createLifecycleRunner, type LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { LifecycleOutcomeKind } from '../mind/action/respond/lifecycleOutcomeLine.js';
-import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE } from './operatorLifecycleWiring.js';
+import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE, setDayReadiness } from './operatorLifecycleWiring.js';
 import { operatorLifecycleAllowed } from '../infra/ops/store/operatorAuditStore.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
@@ -50,8 +50,10 @@ function conversationOperation(row: { kind: string; origin: string; sourceId: st
  */
 function setDayRefusal(kind: string, origin: string, ownerAlone: boolean, state: MinecraftLifecycleState | undefined): string | null {
   if (kind !== 'respond' || origin !== 'owner_request' || !ownerAlone) return '時刻の変更はライ氏と二人の会話で頼まれた時だけ行います。';
-  if (state?.running !== 'running') return 'サーバーが起動していないので、時刻は変えられません。';
-  return state.otherPlayers === 0 ? null : 'ほかの参加者がいるか、人数を確かめられないので、時刻は変えません。';
+  const readiness = setDayReadiness(state);
+  if (readiness === 'not_running') return 'サーバーが起動していないので、時刻は変えられません。';
+  if (readiness === 'not_settled') return 'ログイン直後で、ほかの参加者の数をまだ確かめられないので、時刻は変えません。少し待ってからもう一度頼んでください。';
+  return readiness === 'ready' ? null : 'ほかの参加者がいるので、時刻は変えません。';
 }
 
 /** How a settled operation ended for him: its accepted receipt's outcome, else unknown once its command was written, else never started. */

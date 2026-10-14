@@ -190,6 +190,19 @@ export class ActionLeaseReader {
    * One original lifecycle command per unknown action that still holds `resource` and whose command ran under the attempt
    * just before (the one the sweep closed), oldest first, at most 128.
    */
+  /**
+   * The unknown FCA step attempts (agentTask) whose `resource` is still recorded as retained, with the lease of that attempt
+   * (`generation - 1`, the last holder): what a body re-check may prove released (`minecraftBodyRecheckWiring.ts`).
+   */
+  retainedUnknownSteps(resource: string): Array<{ actionId: string; scopeKey: string; lease: { id: string; generation: number; holder: string } }> {
+    if (!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mind_action_retained_resources'").get()) return [];
+    const rows = this.db.prepare(`SELECT a.id,a.scope_key,a.generation,a.last_holder FROM mind_actions a
+      JOIN mind_action_retained_resources r ON r.action_id=a.id AND r.resource=?
+      WHERE a.state='unknown' AND a.kind='agentTask' AND a.holder IS NULL AND a.last_holder IS NOT NULL ORDER BY r.retained_at,a.id LIMIT 32`).all(resource);
+    return rows.map(row => ({ actionId: String(row.id), scopeKey: String(row.scope_key),
+      lease: { id: String(row.id), generation: Number(row.generation) - 1, holder: String(row.last_holder) } }));
+  }
+
   unknownLifecycleCommands(resource: string): string[] {
     const rows = this.db.prepare(`SELECT o.command_json FROM minecraft_lifecycle_operations o JOIN mind_actions a ON a.id=o.execution_id
       WHERE a.state='unknown' AND json_extract(o.command_json,'$.authority.lease.generation')=a.generation-1
