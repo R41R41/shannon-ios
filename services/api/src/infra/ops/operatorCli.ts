@@ -16,6 +16,8 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft <start|stop|login|logout|set_day> --operator <label> [--server <id>]',
   '  opsCli.ts minecraft release --operator <label>   (ask the body again whether it is stopped; releases only what it proves)',
+  '  opsCli.ts skills import dry-run --operator <label> --pack <id> --revision <rev>',
+  '  opsCli.ts skills import apply --operator <label> --pack <id> --revision <rev> --plan-hash <hash> --approval-reference <ref>',
 ].join('\n');
 
 export interface OperatorCliIo { out(line: string): void; err(line: string): void }
@@ -103,7 +105,25 @@ function lifecycleEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   return { ...base, args: typeof server === 'string' ? { serverId: server } : {} };
 }
 
-/** The envelope one command sends. A domain or operation outside Minecraft is sent as it is, so the API refuses and audits it. */
+/** `skills import <dry-run|apply>`: the owner's skill-pack import, run by the API with the paired route's own importer. */
+function skillImportEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
+  knownFlags(parsed, ['--operator', '--pack', '--revision', '--plan-hash', '--approval-reference']);
+  const [phase, ...words] = parsed.positional;
+  if ((phase !== 'dry-run' && phase !== 'apply') || words.length) throw new UsageError('skills import takes dry-run or apply');
+  const text = (name: string) => {
+    const value = parsed.flags.get(name);
+    return typeof value === 'string' ? value : undefined;
+  };
+  const packId = text('--pack'), revision = text('--revision'), planHash = text('--plan-hash'), approvalReference = text('--approval-reference');
+  if (!packId || !revision) throw new UsageError('skills import needs --pack and --revision');
+  if (phase === 'apply' && (!planHash || !approvalReference)) {
+    throw new UsageError('apply needs --plan-hash and --approval-reference (from the reviewed dry-run)');
+  }
+  if (phase === 'dry-run' && (planHash || approvalReference)) throw new UsageError('dry-run takes no --plan-hash or --approval-reference');
+  return { ...base, args: { phase, packId, revision, ...(phase === 'apply' ? { planHash, approvalReference } : {}) } };
+}
+
+/** The envelope one command sends. A domain or operation outside those offered is sent as it is, so the API refuses and audits it. */
 export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<string, string | undefined>>): OperatorEnvelope {
   const [domain, op, ...rest] = argv;
   if (!domain || !op) throw new UsageError('a domain and an operation are required');
@@ -111,6 +131,7 @@ export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<s
   const operator = (parsed.flags.get('--operator') as string | undefined) ?? env.SHANNON_OPERATOR?.trim();
   if (!operator || operatorLabel(operator) === 'unknown') throw new UsageError('--operator <label> ([A-Za-z0-9._@-], at most 64) is required');
   const base: Base = { v: 1, operator, domain, op };
+  if (domain === 'skills' && op === 'import') return skillImportEnvelope(base, parsed);
   if (domain !== 'minecraft') return { ...base, args: {} };
   if (op === 'request') return requestEnvelope(base, parsed);
   if (op === 'cancel') return cancelEnvelope(base, parsed);
@@ -147,7 +168,34 @@ function printReply(reply: { status: number; body: unknown }, io: OperatorCliIo)
   }
   const line = (key: string) => body[key] !== undefined && io.out(`${key}: ${String(body[key])}`);
   for (const key of ['outcome', 'code', 'message', 'operationId', 'taskId', 'lifecycleId', 'actionId', 'deadlineAt', 'budgetYen']) line(key);
-  return body.outcome === 'accepted' ? 0 : 1;
+  const problems = body.skillImport === undefined ? 0 : printSkillImport(body.skillImport, io);
+  return body.outcome === 'accepted' && problems === 0 ? 0 : 1;
+}
+
+/** A skill import plan without the skill bodies; the number of problems it found. */
+function printImportPlan(plan: Record<string, any>, io: OperatorCliIo): number {
+  const problems: unknown[] = Array.isArray(plan.problems) ? plan.problems : [];
+  if (typeof plan.planHash === 'string') io.out(`planHash: ${plan.planHash}`);
+  if (plan.capacity) io.out(`capacity: ${JSON.stringify(plan.capacity)}`);
+  for (const skill of Array.isArray(plan.skills) ? plan.skills : []) {
+    const marks = `${skill.revises ? ' (revises)' : ''}${skill.lint?.length ? ` lint=${skill.lint.join(',')}` : ''}`;
+    io.out(`  skill: ${skill.name} ${skill.sha256}${marks}`);
+  }
+  for (const problem of problems) io.out(`  problem: ${JSON.stringify(problem)}`);
+  if (plan.existingReceipt?.receiptId) io.out(`existingReceipt: ${plan.existingReceipt.receiptId}`);
+  return problems.length;
+}
+
+/** What a `skills import` answer holds (the plan, the importer's refusal or the receipt); the number of problems a plan found. */
+function printSkillImport(value: unknown, io: OperatorCliIo): number {
+  const result = (value && typeof value === 'object' ? value : {}) as Record<string, any>;
+  const problems = printImportPlan((result.plan ?? result) as Record<string, any>, io);
+  if (result.rejected) io.out(`rejected: ${String(result.rejected)}`);
+  if (result.error) io.out(`error: ${String(result.error)}`);
+  if (!result.receipt) return problems;
+  io.out(`receipt: ${result.receipt.receiptId} idempotent=${String(result.idempotent)} approval=${result.receipt.approvalReference}`);
+  for (const skill of result.receipt.skills ?? []) io.out(`  imported: ${skill.name} ${skill.revisionId}`);
+  return problems;
 }
 
 /** Runs one command; the exit code is 0 when accepted (or status read), 1 when refused or failed, 2 for a usage error. */

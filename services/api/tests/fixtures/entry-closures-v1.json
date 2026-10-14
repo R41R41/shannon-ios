@@ -69,6 +69,7 @@
     "infra/http/serverInnerNoteRoute.ts",
     "infra/http/serverMoodHistoryRoute.ts",
     "infra/http/serverShannonNowRoute.ts",
+    "infra/http/skillImportCommand.ts",
     "infra/http/skillRoutes.ts",
     "infra/ipc/mindSocket.ts",
     "infra/models/anthropic/anthropicCachePlan.ts",

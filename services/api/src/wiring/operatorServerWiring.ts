@@ -12,6 +12,7 @@ import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
+import type { SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
 
 /** The note kind of the operator's lines in the owner's Talk (`operatorContract.ts`, where the voice replay reads it too). */
 export { OPERATOR_NOTE_KIND };
@@ -66,6 +67,8 @@ export interface OperatorHostParts {
     threadId(scopeKey: string): string;
     appendNoteOnce(scopeKey: string, threadId: string, id: string, content: string, at: string, kind: string, ownerAlone?: boolean): unknown;
   };
+  /** The owner's skill import (the paired route's own importer and packs), for `skills import`; absent while her skills are off. */
+  skillImport?: SkillImportCommandDeps | null;
 }
 
 export interface OperatorServerParts extends OperatorHostParts {
@@ -101,7 +104,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   const service = createOperatorMinecraft({
     scopeKey: parts.scopeKey, enabled: () => audit.enabled, ownerAlone: parts.ownerAlone, now: parts.now, audit: audit.store,
     lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions, bodyRecheck: parts.bodyRecheck ?? null,
-    lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false,
+    lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false, skillImport: parts.skillImport ?? null,
     activity: recorder(parts),
     note: (id, text, at) => {
       try {

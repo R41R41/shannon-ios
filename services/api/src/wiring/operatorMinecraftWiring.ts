@@ -11,9 +11,11 @@ import type { OperatorSocketRefusal } from '../infra/ops/operatorSocket.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
+import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
+import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 
 /** What the activity record (「したことの記録」, shown in 自律活動 › 記録) keeps of an operator invocation. */
-export interface OperatorActivity { summary: string; tool: string; outcome: 'done' | 'refused'; reasonCode: string; detail: string }
+export interface OperatorActivity { summary: string; tool: string; outcome: 'done' | 'refused'; reasonCode: string; detail: string; domain?: string }
 
 export interface OperatorMinecraftParts {
   scopeKey: string; enabled(): boolean; ownerAlone(): boolean; now(): string;
@@ -27,6 +29,8 @@ export interface OperatorMinecraftParts {
   activity(at: string, entry: OperatorActivity): void;
   /** A short note in the owner's Talk, written once per id. */
   note(id: string, text: string, at: string): void;
+  /** The owner's skill import (`skillImportCommand.ts`) while her skills are on; absent, `skills import` is refused. */
+  skillImport?: SkillImportCommandDeps | null;
 }
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
@@ -54,6 +58,16 @@ const MESSAGES: Partial<Record<OperatorCode, string>> = {
   recheck_busy: '体の確認をいま実行中です。',
   not_settled: 'ログイン直後で、サーバーの状態（ほかの参加者の数）をまだ確かめられません。少し待ってからもう一度頼んでください。',
 };
+const SKILL_IMPORT_MESSAGES = { 'dry-run': '取り込みの計画です。問題が無ければ plan hash で apply します。',
+  apply: 'スキルの取り込みを記録しました。', refused: 'スキルの取り込みを受け付けませんでした（skillImport に理由があります）。' };
+
+/** The operator code of a skill import answer: the importer's own refusals by name, the route's status otherwise. */
+function skillImportCode(result: { status: number; body: unknown }): OperatorCode {
+  const rejected = (result.body as { rejected?: unknown } | null)?.rejected;
+  if (result.status === 200) return 'accepted';
+  if (rejected === 'stale_plan' || rejected === 'validation_failed') return rejected;
+  return result.status === 404 ? 'not_found' : result.status === 403 ? 'disabled' : 'refused';
+}
 const RECHECK_UNAVAILABLE = 'マイクラの体が接続されていないので、まだ確かめられません。接続されたらサーバーが自動でも確かめます。';
 
 /**
@@ -205,6 +219,29 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     return c.reply(result.code === 'released' ? 'accepted' : 'refused', result.code, message, result.actionIds[0] ? { actionId: result.actionIds[0] } : {});
   }
 
+  /**
+   * `skills import`: exactly the paired route's import (`runSkillImport`). The audit names the operator; an applied pack is written to
+   * the activity record as adopted through the operator with its approval reference, and its receipt keeps that reference.
+   */
+  function skillImport(c: Context, input: Extract<OperatorInput, { command: 'skill_import' }>) {
+    if (!parts.skillImport) return c.refuse('disabled', 'シャノンのスキルがこのサーバーで有効になっていないので、取り込めません。');
+    const result = runSkillImport(parts.skillImport, parts.scopeKey, input.phase, { packId: input.packId, revision: input.revision,
+      ...(input.phase === 'apply' ? { planHash: input.planHash, approvalReference: input.approvalReference } : {}) });
+    const body = (result.body ?? {}) as { planHash?: unknown; receipt?: { receiptId?: unknown } };
+    const code = skillImportCode(result);
+    const detail = `${input.packId}/${input.revision} ${input.phase} plan=${String(body.planHash ?? '')} receipt=${String(body.receipt?.receiptId ?? '')}`;
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: code === 'accepted' ? 'accepted' : 'refused', code,
+      argsJson: c.argsJson, detail: detail.slice(0, 200) });
+    if (result.applied) {
+      const summary = `運用者（${c.operator}）経由で、運用作成のスキル（${input.packId}/${input.revision}）を取り込みました。`
+        + `承認: ${input.approvalReference}。利用と成功の実績はまだありません。`;
+      parts.activity(result.at, { summary, tool: 'operator.skills.import', outcome: 'done', reasonCode: 'skills_import', detail: result.applied.receiptId,
+        domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id });
+    }
+    return c.reply(code === 'accepted' ? 'accepted' : 'refused', code, SKILL_IMPORT_MESSAGES[code === 'accepted' ? input.phase : 'refused'],
+      { skillImport: result.body });
+  }
+
   async function handle(value: unknown): Promise<{ status: number; body: unknown }> {
     const turnedAway = flooded(parts.now(), operatorLabel((value as { operator?: unknown } | null)?.operator));
     if (turnedAway) return turnedAway;
@@ -222,6 +259,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId);
     if (parsed.command === 'request') return request(c, parsed);
     if (parsed.command === 'release') return release(c);
+    if (parsed.command === 'skill_import') return skillImport(c, parsed);
     return cancel(c, parsed);
   }
 
