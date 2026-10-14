@@ -1,4 +1,4 @@
-import { faceForEmotionKind, publicFace, publicPresentationId, singleFace, type ShannonFace, type SingleFaceFeeling } from './expression.js';
+import { faceForEmotionKind, publicPresentationId, singleFace, type ShannonFace, type SingleFaceFeeling } from './expression.js';
 import type { ComebackDrawer } from './comebackDrawer.js';
 import type { FeelingRegister } from './feelingEvent.js';
 import type { FeelingAudience } from './feelingEvent.js';
@@ -136,9 +136,7 @@ export const presentationIdOf = (shown: ShannonFace): string => shown.feeling ??
 export function presentFor(state: FeelingFaceState, audience: FeelingAudience, surface: 'face'): FeelingFace;
 export function presentFor(state: FeelingFaceState, audience: FeelingAudience, surface: 'icon'): Presentation;
 export function presentFor(state: FeelingFaceState, audience: FeelingAudience, surface: 'face' | 'icon'): FeelingFace | Presentation {
-  const own = face(state, audience);
-  // In front of anyone else the face is the public layer's, its fallback expression included (review of 2026-10-14).
-  const shown = audience === 'owner_alone' ? own : publicFace(own);
+  const shown = face(state, audience);
   if (surface === 'face') return shown;
   const id = presentationIdOf(shown);
   return { v: PRESENTATION_VERSION, id: audience === 'owner_alone' ? id : publicPresentationId(id) };
