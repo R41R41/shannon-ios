@@ -33,6 +33,13 @@ export interface CommitmentFacts {
   quietHeld?: boolean;
   /** For a promise with a date only: its day as said, 「今日」 only when it is due today (else 「10月14日」). */
   dayLabel?: string;
+  /** A date-only promise told on a later day than its date (late for her phrases, unless deferred; no minutes are shown). */
+  pastDay?: boolean;
+  /**
+   * 「あとで」 asked for a later reminder (remindAfter after its time): the owner-local 「HH:MM」 he asked for. Lateness counts from it,
+   * and the sentence names it whenever it states minutes, so that no number adds up to a wrong clock time (review of da980080).
+   */
+  deferredTo?: string;
 }
 
 const MINUTE = 60_000;
@@ -47,8 +54,31 @@ function lateness(minutes: number): string {
 /** It counts as late from this many minutes past its time (a pass of the world worker is at most a minute apart). */
 export const PROMISE_LATE_MINUTES = 2;
 
-export function commitmentLate(facts: Pick<CommitmentFacts, 'overdueMinutes'>): boolean {
+/** Late for her phrases: minutes past its time (or past the time 「あとで」 asked for), or a date-only promise of an earlier day. */
+export function commitmentLate(facts: Pick<CommitmentFacts, 'overdueMinutes' | 'pastDay' | 'deferredTo'>): boolean {
+  return minutesLate(facts) || (facts.pastDay === true && facts.deferredTo === undefined);
+}
+
+function minutesLate(facts: Pick<CommitmentFacts, 'overdueMinutes'>): boolean {
   return facts.overdueMinutes !== null && facts.overdueMinutes >= PROMISE_LATE_MINUTES;
+}
+
+const NIGHT_NOTE = `夜のあいだは控えていたため、${QUIET_END_HOUR}時からのお知らせ`;
+
+/**
+ * What the sentence says besides the promise, each literally true when it is told (review of da980080): 「47分遅れ」 counts from the
+ * time named at its start; after 「あとで」, from the time he asked for, which is then named (「昼の12時21分に、と頼まれていた分・20分
+ * 遅れ」); after the night past a deferral, no minutes at all. Empty on time.
+ */
+function factNotes(facts: CommitmentFacts, timed: boolean): string[] {
+  const late = timed && minutesLate(facts) ? lateness(facts.overdueMinutes!) : null;
+  if (facts.deferredTo !== undefined) {
+    const asked = late ? canonicalTimePhrases({ when: facts.deferredTo })[0] : undefined;
+    if (!asked) return ['あとで、と頼まれていた分'];
+    return [`${asked}に、と頼まれていた分`, facts.quietHeld ? NIGHT_NOTE : `${late}遅れ`];
+  }
+  if (!late) return [];
+  return facts.quietHeld ? [NIGHT_NOTE, `${late}遅れ`] : [`${late}遅れ`];
 }
 
 /**
@@ -59,12 +89,17 @@ export function commitmentLate(facts: Pick<CommitmentFacts, 'overdueMinutes'>): 
 export function commitmentFactSentence(facts: CommitmentFacts): string {
   const time = canonicalTimePhrases(facts)[0];
   const day = time ?? facts.dayLabel ?? '今日';
-  const late = time && commitmentLate(facts) ? lateness(facts.overdueMinutes!) : null;
-  const night = facts.quietHeld && late ? `夜のあいだは控えていたため、${QUIET_END_HOUR}時からのお知らせ・` : '';
-  // With anyone else there: no promise words; 「…の約束の時刻です」 only when it is its time (review of f23a3c94).
-  if (facts.others) return late ? `${day}の約束のお知らせです（${night}${late}遅れ・内容はアプリで確認できます）。` : `${day}の約束の時刻です（内容はアプリで確認できます）。`;
+  const notes = factNotes(facts, time !== undefined);
+  // With anyone else there: no promise words; 「…の約束の時刻です」 only at its very time: not late, not deferred, not a date-only
+  // promise of an earlier day (reviews of f23a3c94 and da980080).
+  if (facts.others) {
+    const itsTime = notes.length === 0 && !facts.pastDay;
+    return itsTime ? `${day}の約束の時刻です（内容はアプリで確認できます）。` : `${day}の約束のお知らせです（${[...notes, '内容はアプリで確認できます'].join('・')}）。`;
+  }
   const title = facts.title.replace(/\s+/gu, ' ').trim().slice(0, 240);
-  const note = night ? `（${night}${late}遅れ）` : late ? `（${late}遅れのお知らせ）` : '';
+  // A plain lateness keeps its wording of before; anything else is its notes as they are.
+  const plain = facts.deferredTo === undefined && !facts.quietHeld && notes.length === 1;
+  const note = notes.length === 0 ? '' : plain ? `（${notes[0]}のお知らせ）` : `（${notes.join('・')}）`;
   return `${day}の約束：「${title}」${note}`;
 }
 
@@ -84,22 +119,30 @@ export interface CommitmentCandidateFacts { title: string; published_at: string 
 export function commitmentFacts(candidate: CommitmentCandidateFacts, at: string, timeZone: string, others: boolean): CommitmentFacts {
   const dueAt = instant(candidate.published_at);
   const remindAfter = instant(candidate.remind_after);
-  if (!dueAt) return { title: candidate.title, when: '今日', overdueMinutes: null, others, dayLabel: dayLabel(candidate.due_date ?? null, at, timeZone) };
-  const when = new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(dueAt));
-  const from = remindAfter && Date.parse(remindAfter) > Date.parse(dueAt) ? remindAfter : dueAt;
+  const clock = (value: string) => new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+  if (!dueAt) {
+    const day = dayOf(candidate.due_date ?? null, at, timeZone);
+    return { title: candidate.title, when: '今日', overdueMinutes: null, others, dayLabel: day.label, ...(day.past ? { pastDay: true } : {}),
+      ...(remindAfter ? { deferredTo: clock(remindAfter) } : {}) };
+  }
+  const deferred = remindAfter !== null && Date.parse(remindAfter) > Date.parse(dueAt);
+  const from = deferred ? remindAfter! : dueAt;
   const overdueMinutes = Math.max(0, Math.round((Date.parse(at) - Date.parse(from)) / MINUTE));
   const fromHour = localDateParts(new Date(from), timeZone).hour;
   const quietHeld = (fromHour >= QUIET_START_HOUR || fromHour < QUIET_END_HOUR) && overdueMinutes >= PROMISE_LATE_MINUTES;
-  return { title: candidate.title, when, overdueMinutes, others, ...(quietHeld ? { quietHeld: true } : {}) };
+  return {
+    title: candidate.title, when: clock(dueAt), overdueMinutes, others, ...(quietHeld ? { quietHeld: true } : {}),
+    ...(deferred ? { deferredTo: clock(remindAfter!) } : {}),
+  };
 }
 
-/** A date-only promise's day: 「今日」 when its date is today where it is told, else 「10月14日」; 「今日」 without a known date. */
-function dayLabel(dueDate: string | null, at: string, timeZone: string): string {
+/** A date-only promise's day: 「今日」 when its date is today where it is told, else 「10月14日」 (past when earlier); 「今日」 without a date. */
+function dayOf(dueDate: string | null, at: string, timeZone: string): { label: string; past: boolean } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dueDate ?? '');
-  if (!match) return '今日';
+  if (!match) return { label: '今日', past: false };
   const now = localDateParts(new Date(at), timeZone);
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  return year === now.year && month === now.month && day === now.day ? '今日' : `${month}月${day}日`;
+  const today = `${now.year}-${String(now.month).padStart(2, '0')}-${String(now.day).padStart(2, '0')}`;
+  return dueDate === today ? { label: '今日', past: false } : { label: `${Number(match[2])}月${Number(match[3])}日`, past: dueDate! < today };
 }
 
 /** Where a phrase stands: before the fact sentence, or after it. */
@@ -140,7 +183,8 @@ export const PROMISE_PHRASES_V1: readonly PromisePhrase[] = Object.freeze<Promis
 
 /** A promise about waking him (起こして, 起きる, 目覚まし): only then the wake phrases are offered. */
 export function wakePromise(title: string): boolean {
-  return /起こ|起き|目覚|めざまし/u.test(title);
+  // 起こして / 起こす (not 起こった・起こる), 目覚まし, 起床, 起きる時間 (not 早起き in general; review of da980080).
+  return /起こして|起こす|おこして|目覚まし|めざまし|起床|起きる時間|起きる時刻/u.test(title);
 }
 
 /** The phrases this promise may take now ('' is none). */

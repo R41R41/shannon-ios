@@ -1495,7 +1495,7 @@
     },
     "services/api/src/mind/recall/taskRecall.ts": {
       "multi-statement-line": 13,
-      "long-line": 7
+      "long-line": 5
     },
     "services/api/src/mind/recall/temporalKnowledgeRecall.ts": {
       "long-line": 3
