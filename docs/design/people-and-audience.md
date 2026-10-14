@@ -103,8 +103,27 @@ its words.
 
 **Acting.** With anyone else present the bounded projections of agent work, Aether notes and Voyager tasks are
 available under the self-check. Commands that act (create a task or note, remember, forget, change a promise, start
-work, approvals), new goals, work proposals and Shannon's stored feeling stay off: the speaker is not known to be
-the owner.
+work, approvals), new goals and work proposals stay off: the speaker is not known to be the owner. Her stored feeling toward
+the owner stays off too; what she feels about what happens there is used (next section, Syzygy ADR-0013 §4.4).
+
+## Her feeling with others present (Syzygy ADR-0013 §4.4, `SHANNON_FEELING_AUDIENCE`)
+
+The rule 「人がいる時は、保存された気持ちを渡さない」 is revised: **the feeling born of what happens there is used; the owner's own
+feeling (her relationship with him, their private matters, the honne of her note) is not, as before.** She is touched and gets
+angry, teased and gets shy, in front of anyone; that continuity is not cut. One feeling, its layers shown per audience:
+
+| Audience | What happens there (the scene's ledger, its fast layer, the feeling turn) | The owner's relationship, their matters, her honne about him |
+| --- | --- | --- |
+| `owner_alone` | used | used |
+| `people` (the owner with someone else: text `audience: "others"`, owner voice with a guest, 「友人も一緒」) | used | marked `【機微:ライ氏との間・ライ氏だけが知っている】` and left to the speak-time check; her inner note's honne is still not given; a touch line gets none of it |
+| `group` (a shared platform conversation) | used | not given |
+| `stream` (stage 5) | used | never given |
+
+- **Who an event is about** (§4.1): by account only, never by a name or a look (ADR-0011 §8.2). A platform turn is keyed to the verified owner (`registered`), a remembered friend bound to the account (`person:<id>`, `platform`), or anyone else (`platform:<digest>`; the account id is not kept as it is). A 「友人も一緒」 call is one scene: its turns and the touches with others present during it (within 10 minutes of a turn of the call) are the call's, never the owner's.
+- **Ledgers by person** (§4.2): the owner's (stage 3); a known friend's, lighter, used only in that friend's own DM; a stranger's light ledger (liking and irritation, forgiven and forgotten fast, kept 30 days) used where they speak. Their coefficients are proposals awaiting the owner.
+- **One source cannot swing a scene** (§4.3): past three hurtful events in ten minutes, more from the same source are felt as nothing new.
+- **Checks per audience** (§4.6): in a group or a stream, a reply that tells the owner's private matters or her honne about him is flagged (`private_leak`) and, on text, rewritten once before it is sent; anywhere with others present, a privacy marker read out is flagged (`marker_spoken`).
+- The face is not restricted per audience (owner, 2026-10-14: 「嫉妬も甘えも出す」); only these content layers are.
 
 ## Sensitivity
 

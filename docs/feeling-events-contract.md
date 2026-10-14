@@ -176,6 +176,17 @@ Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. D6 and ADR-0005 3 and 
 - Observer: `feeling.boundaries` (counts of self, told, endorsed).
 - Body refusal gestures (払う・隠す) are left for later (they need Live2D art); no presence value is added yet.
 
+## Stage 4: audiences (`SHANNON_FEELING_AUDIENCE`)
+
+Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. ADR-0013 §4; the app design note `docs/design/people-and-audience.md` § "Her feeling with others present".
+
+- **Keys** (§4.1): `feelingActor` takes the surface's `FeelingSpeaker` (`TextTurnSurface.feelingSpeaker`, from `PlatformAudiencePolicy.speaker`): the owner `registered`, `person:<id>` for a remembered friend bound to the account, `platform:<sha256(platform:account) 16 hex>` for anyone else; audience `people` for a friend's DM, `group` for a shared conversation. Never a name. A touch with others present within 10 minutes of a turn of a call with others (`noteScene`) is keyed to that call's scene.
+- **Ledgers** (§4.2, proposals for the owner): a friend (`person:`) starts at 0.55 / 0.6 / 0.55 / 0, loss 0.25, gain 0.08, recovery 0.15, irritation fade 0.4, accumulation 0.45, apology relief 0.4, floor 0.6; a stranger or viewer (`platform:`, later the stream's) keeps liking and irritation only, starts at 0.5, loss 0.3, gain 0.12, recovery 0.3, irritation fade 0.5, accumulation 0.5, apology relief 0.4, floor 0.5. Light rows (anyone but the owner and friends) are kept 30 days.
+- **Layers** (§4.4, `carriedFor`): the owner alone gets his own lines; the owner with others present (`people`, speaker unknown), his own lines marked `【機微:ライ氏との間・ライ氏だけが知っている】` and no `rel_*` for the chooser; a friend in their own DM, theirs; a stranger, their light line 「[この人との間]…好意: …、いらだち: …」; anyone in a group (the owner or a friend among them), nothing private. A touch line never gets the marked lines.
+- **Source cap** (§4.3, proposal): in a scene, one source's hurtful events past 3 in 10 minutes are appraised as nothing new (`SOURCE_INFLUENCE_PROPOSAL`); the composure reserve keeps its own cap.
+- **Checks** (§4.6): `private_leak` (a group or a stream: the owner's private matters, their time alone, her honne about him) and `marker_spoken` (anyone else present: a privacy marker read out); public text turns are checked before sending and rewritten once.
+- Off: keys, lines, folds and checks are as before.
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).
