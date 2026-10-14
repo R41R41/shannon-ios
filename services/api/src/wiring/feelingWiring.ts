@@ -49,9 +49,14 @@ function sentenceWriter(environment: Readonly<Record<string, string | undefined>
   return configuredFeelingSentenceWriter(environment, { ...(parts.usageStore ? { usageStore: parts.usageStore } : {}), now: parts.now });
 }
 
-/** `SHANNON_INNER_NARRATOR` with the inner note it changes (the fast layer it reads is checked where the port is composed). */
-const narratorOn = (environment: Readonly<Record<string, string | undefined>>) =>
-  switchOn(environment, 'SHANNON_INNER_NARRATOR') && switchOn(environment, 'SHANNON_INNER_NOTE');
+/**
+ * `SHANNON_INNER_NARRATOR` with the inner note it changes (the fast layer it reads is checked where the port is composed), and
+ * `SHANNON_TEXT_REGISTER` with the feeling turn it reads.
+ */
+function presentationFlags(environment: Readonly<Record<string, string | undefined>>, turn: boolean): { narrator: boolean; textRegister: boolean } {
+  const narrator = switchOn(environment, 'SHANNON_INNER_NARRATOR') && switchOn(environment, 'SHANNON_INNER_NOTE');
+  return { narrator, textRegister: turn && switchOn(environment, 'SHANNON_TEXT_REGISTER') };
+}
 
 /** The cap, from the environment: a whole number from 0 (none) to 10 000; anything else is the default. */
 export function strongReplyDailyCap(environment: Readonly<Record<string, string | undefined>>): number {
@@ -98,7 +103,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), narrator: narratorOn(environment) });
+    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn) });
 }
 
 /**
@@ -126,11 +131,20 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
   return FEELING_TURN_JEV_INPUTS.find(input => input === value) ?? FEELING_TURN_JEV_INPUT;
 }
 
+/** The port's stage-2 flags: each only with what it reads (the shadow, the turn). */
+function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: FeelingSentenceWriter; narrator?: boolean; textRegister?: boolean; turn: boolean }) {
+  return { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
+    ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}), ...(parts.narrator && parts.shadow ? { narrator: true } : {}),
+    ...(parts.textRegister && parts.turn ? { textRegister: true } : {}) };
+}
+
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
   singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
   /** Stage 2 (`SHANNON_REPLY_CHECK`): her replies are checked. */
   check?: boolean;
+  /** Item 10 (`SHANNON_TEXT_REGISTER`): her text reply's form and pacing (only with the turn). */
+  textRegister?: boolean;
   /** Stage 2 (`SHANNON_INNER_NARRATOR`): her inner note reads the fast layer (only with the shadow). */
   narrator?: boolean;
   /** Stage 2 (`SHANNON_FEELING_SENTENCE`): her feeling sentence's writer (used only with the shadow and the turn). */
@@ -147,8 +161,7 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
-  const flags = { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
-    ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}), ...(parts.narrator && parts.shadow ? { narrator: true } : {}) };
+  const flags = portFlags(parts);
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean) => events?.noteCheck(scopeKey, found, rewritten);

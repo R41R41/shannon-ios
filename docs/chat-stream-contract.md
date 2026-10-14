@@ -40,7 +40,7 @@ It is a field on the existing route, not a second route, so authentication, the 
 
 | Line | Fields | Meaning |
 | --- | --- | --- |
-| `start` | `threadId`, `audience`, optional `turnId` | Sentences follow. `audience` is what the server applied. `turnId` is present only when the turn was already stored when the line was written; a turn sent while the model writes has none here. The turn id is always in `done.response.turnId`. |
+| `start` | `threadId`, `audience`, optional `turnId`, optional `textRegister` (her form and pacing, `SHANNON_TEXT_REGISTER`; see `docs/feeling-events-contract.md`) | Sentences follow. `audience` is what the server applied. `turnId` is present only when the turn was already stored when the line was written; a turn sent while the model writes has none here. The turn id is always in `done.response.turnId`. |
 | `sentence` | `index` (0, 1, 2, …), `text` | One sentence of the reply. |
 | `done` | `response`, optional `fallback` | Terminal. `response` is exactly the object a request without `stream` returns for this turn, including `reply`, `turnId`, `messageEmotion`, `state`, and any `artifacts` and `uiBlocks`. |
 | `error` | `status`, `error` | Terminal. See [Errors](#errors-retraction-and-disconnects). |
@@ -90,6 +90,7 @@ While the model writes, a sentence is sent once the characters that decide its e
 | The same turn producing `artifacts` or a work proposal (`uiBlocks: agent_task_proposal`) | the same; they are in `done.response` | **while the model writes** | |
 | `audience: "others"` | `start`, sentences, `done` | after the turn is complete | |
 | `SHANNON_CHAT_STREAM_EARLY=off`, or a model that cannot stream (`local-stub`) | `start`, sentences, `done` | after the turn is complete | |
+| `SHANNON_TEXT_REGISTER` on and the turn's directive has `pauseMs` > 0 (she keeps quiet first) | `start`, sentences, `done` | after the turn is complete | The pause needs the whole reply (a bypass is known only then). |
 | Reply with a source list (a Notion read) | single `done` | after | `sources` |
 | Explicit command (a fixed reply: 「〜をタスクにして」, 「〜をAetherに残して」 (Aether named; an unqualified memo is the model's to place or ask about), an answer to a reminder, a work or memory command) or an organize turn (整理して) | single `done` | after | `command` |
 | Request with `attachments` | single `done` | after | `attachments` |

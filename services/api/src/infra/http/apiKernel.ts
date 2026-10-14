@@ -400,7 +400,7 @@ export class ShannonApiKernel {
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     if(this.mind?.sync)await this.mind.sync();
     const feelingBlock = feelingTurn ? await feelingText.block(feelingTurn) : ''; // Without a port, not even a tick.
-    const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
+    const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null, ...feelingText.paced(feelingTurn) }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget (the replay summary covers the rest). Stage 3's blocks, then ADR-0013's, follow the turn's context.
@@ -427,11 +427,11 @@ export class ShannonApiKernel {
       snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
       state: presentCompanionState(captured, occurredAt, expressiveEmotion),
       ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
+      ...feelingText.register(feelingTurn, message, reply, completion, turnWroteHerOwnThings(toolOffer.tools)), // ADR-0013 item 10
     };
     if (placeSkill?.places.length) response.uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
     const completedTurn = {
-      scopeKey: body.scopeKey,
-      threadId,
+      scopeKey: body.scopeKey, threadId,
       capturedState: captured,
       userMessage: message,
       shannonReply: reply,

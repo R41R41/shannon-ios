@@ -401,6 +401,7 @@
     "mind/emotion/store/innerNoteStore.ts",
     "mind/emotion/store/moodHistory.ts",
     "mind/emotion/store/moodHistoryReader.ts",
+    "mind/emotion/textRegisterTurn.ts",
     "mind/emotion/timingPorts.ts",
     "mind/emotion/voiceEmotionPlan.ts",
     "mind/inhibition/aetherShownText.ts",

@@ -102,6 +102,33 @@ Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_FEELING_TURN`
 - **Where**: after the feeling turn's block, under 「[いまの気持ち]（返事の前にボクが書いた独り言。気持ちとして読む。そのまま返事に書かない）」. Started with the turn, beside the Jev call; the reply waits at most 1.0 s beyond the moment its prompt is otherwise ready; late or failed, the reply goes on without it. The lines are not stored.
 - **Observer**: `feeling.sentence`: reason (`moved` | `blame`), written, line count, latency. Never the lines.
 
+## Item 10: her text register and pacing (`SHANNON_TEXT_REGISTER`)
+
+Explicit_on, default off; needs `SHANNON_FEELING_TURN`. Owner's choice from the comparison page (2026-10-14): 「B. 形＋間と分け方」. The model writes every word; the server derives one directive per text reply from the feeling turn (stance, intensity) and the register her composure holds (the fast layer's step while `SHANNON_CORE_AFFECT` is on, else the turn's), tells the model the form (a 「[この番の書き方]」 block after the feeling turn's), and hands the device the pacing.
+
+`ChatResponse.textRegister` (and the stream's `start.textRegister`), absent when off; old clients ignore it:
+
+| Field | Values | Device |
+| --- | --- | --- |
+| `version` | `1` | |
+| `length`, `maxCharacters` | `short` · `medium` · `free`; characters, `0` = no limit | informational (the model was asked) |
+| `punctuation` | `ordinary` · `clipped` (short 「。」) · `trailing` (「……」) | informational |
+| `emoji` | `free` · `rare` (one at most) · `none` | informational; never add emoji to an error or system notice |
+| `endings` | `soft` · `polite` · `flat` · `firm` · `curt` · `rough` | informational |
+| `lineBreaks` | boolean | informational |
+| `pauseMs` | 0–20 000 | wait this long **from his message being sent** before showing her typing (only what is left of it) |
+| `typingMs` | 0–8 000 | show her typing at least this long before her first message (counted from when it first appeared) |
+| `split` | boolean | two messages: the first sentence, then the rest (only when the reply has two sentences or more) |
+| `gapMs` | ms | her typing between the two messages |
+| `parts` | `[first, rest]`, optional | the two messages when the split applies (a streamed turn: sentence 0, then the others) |
+| `bypass` | `urgent` · `safety` · `promise` · `system`, optional | show the reply at once, whole: no pause, typing or split |
+
+- Mapping: an ordinary turn keeps its length and gets no pause or split. Warm stances (受け入れる・照れる・甘える・からかう・ごまかす・心配する): medium, emoji, soft endings, split. Cross ones (むっ・呆れる・毒づく・冷たく・言い返す・乗らない): short, no emoji, flat or curt endings, split, typing 3–6 s, a pause of 0 / 2 / 4 s by strength. すねる: 「……」, short, a pause of 5 / 12 / 20 s. 叱る・突っぱねる・体で拒む: short, firm, no split, no pause (said at once). A worn composure (curt, rough, confront) makes any reply at most 80 characters, without emoji or line breaks; in front of others emoji stay rare at most.
+- Bypass: her reply ran out of time (`system`), urgent or safety words in his message or her reply (`urgent`, `safety`), or a write her tools did this turn (a reminder, a calendar event: `promise`). Commands and organize turns have no `textRegister` (their replies are fixed text, as before).
+- A turn with `pauseMs` > 0 is not streamed while the model writes (`docs/chat-stream-contract.md`).
+- The reply check (D8) adds `text_register_mismatch`: far longer than the band (1.5×), emoji where none (or more than one where rare), line breaks where none. Before sending on the turns checked before sending, after otherwise.
+- Observer: `feeling.text_register` (stance, length, maxCharacters, emoji, endings, pauseMs, typingMs, split).
+
 ## Stage 2: her inner note as narrator (`SHANNON_INNER_NARRATOR`)
 
 Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_INNER_NOTE`. ADR-0013 §6: the note stays, but no longer decides her feeling; it reads the fast layer and the ledger and tells her honne, tatemae and plan as the narrator.

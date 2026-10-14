@@ -7,7 +7,8 @@
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
   checkBeforeSending, checkReply, feelingSentenceBlock,
-  fastLayerWords, advanceCoreAffect, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  fastLayerWords, advanceCoreAffect, registerOfLevel,
+  type TextRegisterDirective, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
@@ -22,6 +23,8 @@ import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
+import { textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
+import type { ChatTextRegister } from '../../contracts/contracts.js';
 import type { FeelingSentenceWriter } from '../../infra/models/feelingSentenceModel.js';
 
 export type { FeelingKey, FeelingLines } from './feelingEvents.js';
@@ -47,6 +50,8 @@ export interface FeelingPort {
   readonly check?: boolean;
   /** `SHANNON_CORE_AFFECT`: the shadow's composure step is known to the check (its register flags); nothing else reads it. */
   readonly coreAffect?: boolean;
+  /** `SHANNON_TEXT_REGISTER` (with the turn): her text reply's form and pacing follow the feeling turn and her composure. */
+  readonly textRegister?: boolean;
   /** `SHANNON_INNER_NARRATOR` (with the fast layer): her inner note reads the fast layer and reflects as narrator. */
   readonly narrator?: boolean;
   /** `SHANNON_FEELING_SENTENCE` (with the fast layer and the turn): Haiku writes her feeling in two or three lines in a strong scene. */
@@ -78,6 +83,8 @@ export interface FeelingTurnHandle {
   strong: boolean;
   /** Her feeling sentence being written (a strong text scene, for the owner alone), or absent. */
   sentence?: Promise<readonly string[] | null> | null;
+  /** Item 10: this text reply's form and pacing (`SHANNON_TEXT_REGISTER`), once the feeling turn is known. */
+  textRegister?: TextRegisterDirective;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -122,8 +129,16 @@ function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
   if (!handle.port.check || !handle.decision) return null;
   const violation = continuedAfterRefusal(handle.lines?.ledger, handle.at);
   const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
+  const form = handle.textRegister ? { form: { maxCharacters: handle.textRegister.maxCharacters, emoji: handle.textRegister.emoji,
+    lineBreaks: handle.textRegister.lineBreaks } } : {};
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    ...(level !== undefined ? { level } : {}) };
+    ...(level !== undefined ? { level } : {}), ...form };
+}
+
+/** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
+function registerNow(handle: FeelingTurnHandle): FeelingRegister {
+  const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
+  return level !== undefined ? registerOfLevel(level) : handle.register;
 }
 
 /** The shadow's composure step for this key now (for the check's register flags only). */
@@ -224,7 +239,20 @@ export const feelingText = Object.freeze({
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
     handle.decision = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
     const lines = sentence ? await sentence : null;
-    return safely(() => [blockOf(handle, handle.decision), lines ? feelingSentenceBlock(lines) : ''].filter(Boolean).join('\n\n'), '');
+    const decided = handle.port.textRegister ? handle.decision : null;
+    if (decided) handle.textRegister = safely(() => textRegisterOf(decided, registerNow(handle), handle.key.audience), undefined);
+    const form = handle.textRegister ? textRegisterLines(handle.textRegister) : '';
+    return safely(() => [blockOf(handle, handle.decision), lines ? feelingSentenceBlock(lines) : '', form].filter(Boolean).join('\n\n'), '');
+  },
+  /** Item 10: the directive the sentence stream is handed before the model writes (a paused turn is not streamed early). */
+  paced: (handle: FeelingTurnHandle | null): { textRegister?: TextRegisterDirective } => (handle?.textRegister ? { textRegister: handle.textRegister } : {}),
+  /** Item 10: the reply's form and pacing for the device, with what bypasses it; nothing without the switch. */
+  register: (handle: FeelingTurnHandle | null, message: string, reply: string, completion: { outOfTime?: true }, wrote: boolean)
+    : { textRegister?: ChatTextRegister } => {
+    const directive = handle?.textRegister;
+    if (!directive) return {};
+    return safely<{ textRegister?: ChatTextRegister }>(() => ({ textRegister: textRegisterReply(directive, { message, reply,
+      outOfTime: completion.outOfTime === true, wrote }) }), {});
   },
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
   route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),

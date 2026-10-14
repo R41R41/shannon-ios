@@ -71,4 +71,12 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: 'おはようございます。今日もよろしくお願いします。', context: alone('neutral', 'subtle'), flags: [] },
   { reply: '明日は雨みたいなので、傘を持っていってくださいね。', context: alone('worry', 'subtle'), flags: [] },
   { reply: 'ふふん、ボクにかかればこのくらい楽勝です。', context: alone('tease', 'moderate'), flags: [] },
+  // Item 10 (`SHANNON_TEXT_REGISTER`): the text form her state asked for (synthetic).
+  { reply: '別に。怒ってません😊', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }),
+    flags: ['text_register_mismatch'] },
+  { reply: '別に。\n怒ってません。', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }),
+    flags: ['text_register_mismatch'] },
+  { reply: '別に。怒ってません。', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }), flags: [] },
+  { reply: '怒ってないですよ〜。ちょっとびっくりしただけです😊', context: alone('shy', 'subtle', { form: { maxCharacters: 120, emoji: 'free', lineBreaks: true } }),
+    flags: [] },
 ]);

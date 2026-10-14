@@ -1,5 +1,6 @@
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import type { ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine } from '../../contracts/contracts.js';
+import type { TextRegisterDirective } from '@shannon/cognition';
 import { ChatSentenceSplitter, splitChatSentences } from './chatSentenceSplitter.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
@@ -31,6 +32,8 @@ export interface ChatSentenceTurn {
   /** The turn's Notion, Aether and Voyager reads: the prompt text and the pages that become a source list. */
   capability: { prompt: string; sources: readonly unknown[] };
   placeSearch: boolean;
+  /** Item 10 (`SHANNON_TEXT_REGISTER`): her form and pacing; a turn she keeps quiet first (`pauseMs`) is sent once complete. */
+  textRegister?: TextRegisterDirective;
 }
 
 /** Why an opted-in turn is a single `done`, decided before the model is called; null when its sentences are sent. */
@@ -57,14 +60,15 @@ export async function generateChatTurn(
 ): Promise<ShannonChatModelResult> {
   if (turn.body.stream !== 'sentences') return model.generate(request);
   const fallback = plannedFallback(turn);
-  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming;
+  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming && !(turn.textRegister?.pauseMs);
+  const register = turn.textRegister ? { textRegister: turn.textRegister } : {};
   let completion: ShannonChatModelResult;
   if (early) {
     const splitter = new ChatSentenceSplitter();
     let index = 0;
     completion = await model.generateStreaming!(request, text => {
       for (const sentence of splitter.append(text)) {
-        if (index === 0) sink.write({ type: 'start', threadId: turn.threadId, audience: turn.audience.audience });
+        if (index === 0) sink.write({ type: 'start', threadId: turn.threadId, audience: turn.audience.audience, ...register });
         sink.write({ type: 'sentence', index, text: sentence });
         index += 1;
       }
@@ -101,7 +105,8 @@ export function chatSentenceStreamLines(response: ApiResponse): ChatStreamLine[]
   const fallback = response.sentenceStream ? response.sentenceStream.fallback : 'command';
   if (fallback) return [{ type: 'done', response: body, fallback }];
   return [
-    { type: 'start', threadId: body.threadId, ...(body.turnId ? { turnId: body.turnId } : {}), audience: body.audience },
+    { type: 'start', threadId: body.threadId, ...(body.turnId ? { turnId: body.turnId } : {}), audience: body.audience,
+      ...(body.textRegister ? { textRegister: body.textRegister } : {}) },
     ...splitChatSentences(body.reply).map((text, index) => ({ type: 'sentence' as const, index, text })),
     { type: 'done', response: body },
   ];

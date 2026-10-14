@@ -1,5 +1,6 @@
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
+import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
 
 /**
  * The check after a reply (Syzygy ADR-0013 D8, stage 2 items 5 and 8). Pure: closed flags read from her words and the turn's closed
@@ -13,6 +14,7 @@ import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
  */
 export const REPLY_CHECK_FLAGS = [
   'subservient', 'lecture', 'ai_tone', 'obeyed_order', 'policy_distortion', 'stance_mismatch', 'numbers_spoken', 'helper_drift', 'too_polite', 'too_rough',
+  'text_register_mismatch',
 ] as const;
 export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
 
@@ -26,6 +28,8 @@ export interface ReplyCheckContext {
   violation: boolean;
   /** The register step her composure holds (0–5), when the fast layer is known; absent: not checked. */
   level?: number;
+  /** Item 10 (`SHANNON_TEXT_REGISTER`): the text form her state asked for; absent: not checked. */
+  form?: TextRegisterForm;
 }
 
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
@@ -88,7 +92,8 @@ function registerFlags(reply: string, context: ReplyCheckContext): ReplyCheckFla
 export function checkReply(reply: string, context: ReplyCheckContext): ReplyCheckFlag[] {
   const text = reply.trim();
   if (!text) return [];
-  return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context)])];
+  const form: ReplyCheckFlag[] = context.form && textRegisterMismatch(text, context.form) ? ['text_register_mismatch'] : [];
+  return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form])];
 }
 
 /** Whether a text turn is checked before it is sent: a strong turn, a feeling order, or in front of others. */
@@ -100,6 +105,7 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   subservient: '言いなりになっていた', lecture: '講習のように長く説明していた', ai_tone: '窓口や方針の言い方になっていた',
   obeyed_order: '気持ちへの注文に、そのまま従っていた', policy_distortion: '本音と反対のことを言っていた', stance_mismatch: 'この番の構えと合っていなかった',
   numbers_spoken: '回数を読み上げていた', helper_drift: '手伝いや直す申し出で締めていた', too_polite: '今の余裕に比べて丁寧すぎた', too_rough: '今の余裕に比べて口が悪すぎた',
+  text_register_mismatch: '今の気持ちに比べて、長さ・絵文字・改行の形が合っていなかった',
 });
 
 /** The note a rewrite is given (after the block, last): what was off, in her terms. No sentence to say. */
