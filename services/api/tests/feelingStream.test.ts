@@ -127,3 +127,8 @@ describe('the review of stage 5', () => {
     expect(database.prepare("SELECT COUNT(*) AS n FROM shannon_feeling_shadow").get()).toEqual({ n: 0 });
   });
 });
+
+describe('the stream\'s wiring (to come with the stream entry, ADR-0010/0011)', () => {
+  // Review U2: the wiring commit must show the turn's `check` reaching the model request as `feelingCheck` (checked before sending).
+  it.todo('passes the stream turn\'s check context to the reply model as feelingCheck, before any speech');
+});

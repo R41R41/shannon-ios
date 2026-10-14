@@ -96,6 +96,7 @@ export class StreamFeeling {
     if (!viewer || !this.options.days) return { lines: [], wary: false };
     const carried = this.options.days.carried(scopeKey, { personKey: `viewer:${viewer}`, audience: 'stream', sceneId: null }, at, snapshot, '', 'text');
     const irritation = Number(carried.facts.rel_irritation ?? 0);
+    // Provisional (review U3): 0.15 is not among the approved coefficients; the owner is asked before stage 5 goes on.
     return { lines: [...carried.lines], wary: irritation >= 0.15 };
   }
 
