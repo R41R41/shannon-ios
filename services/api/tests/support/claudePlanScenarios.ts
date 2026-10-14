@@ -76,6 +76,9 @@ export const PLAN_SCENARIOS: readonly ClaudeScenario[] = [
   { name: 'plan-text-place-search', script: [webAnswer(HAIKU.model), answer(HAIKU.model)],
     run: c => planChat(c, HAIKU).generate({ ...planText, message: '近くのカフェ', placeSearch: { latitude: 34.7, longitude: 137.7 } }) },
   { name: 'plan-text-unoffered-call', script: [unofferedCall(), answer(HAIKU.model, 0, 2_300)], run: c => streamed(c, HAIKU, planText) },
+  // A light or read-aloud turn under the plan: `plan-text-tools` with `thinking: disabled` only (owner decision 2026-10-14).
+  { name: 'plan-text-light-no-thinking', script: [toolCall(HAIKU.model), answer(HAIKU.model, 0, 4_100)],
+    run: c => streamed(c, HAIKU, { ...planText, tools: tools(['study.list', 'study.read']), skipThinking: true }) },
   { name: 'plan-sonnet-text-tools', script: [toolCall(SONNET.model), answer(SONNET.model, 0, 4_100)],
     run: c => streamed(c, SONNET, { ...planText, tier: 'sonnet', tools: tools(['study.list']) }) },
   { name: 'plan-text-rejected-fallback', script: [providerError(400, 'invalid_request_error', {}, 'The compiled grammar is too large'), answer(HAIKU.model)],

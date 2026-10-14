@@ -51,6 +51,11 @@ export interface ChatRequest {
   audience?: 'owner' | 'others';
   /** Absent: one JSON document, as before the field existed. `sentences`: NDJSON lines (docs/chat-stream-contract.md). */
   stream?: 'sentences';
+  /**
+   * The client reads the reply aloud (the Windows body while 「話しかける」 is on). `true` lets a turn that is neither hard nor
+   * research answer without thinking first (`textTurnThinking`); absent or `false`: as before the field existed.
+   */
+  readAloud?: boolean;
   /** What the app says about its camera in this turn (`appLookContract.ts`): `{ state, cameras, platform }`. Absent: the turn has no app camera. */
   appLook?: unknown;
 }

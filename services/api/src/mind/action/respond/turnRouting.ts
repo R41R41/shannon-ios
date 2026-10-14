@@ -3,6 +3,8 @@ import { decideTier, type DifficultyAnswers, type TierDecision } from '@shannon/
 import type { TurnDoing, TurnRouting } from '../../../contracts/turnRoutingContract.js';
 
 export type { TurnRouting } from '../../../contracts/turnRoutingContract.js';
+/** Whether a text turn answers without thinking (owner decision 2026-10-14): decided beside its tier, from the same signals. */
+export { textTurnThinking, textThinkingCase, type TextThinkingCase } from './textTurnThinking.js';
 import type { ShannonModelToolSession, ShannonTierRequest } from '../../../infra/models/chatModelTools.js';
 import { TURN_CHECKER_MINIMUM_MILLISECONDS, verifiedReply, verifyWriteClaims, writeClaims, type TurnVerdict } from '../../selectors/selectorsPorts.js';
 import { toolDoing, turnOffersWrites, turnToolResults } from '../../tools/toolsPorts.js';

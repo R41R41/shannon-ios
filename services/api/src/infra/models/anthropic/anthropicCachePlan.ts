@@ -16,8 +16,8 @@ import {
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu, stableOpener } from './anthropicForegroundMenu.js';
 import {
-  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, spokenReplyLines, textTurnConversation,
-  WEB_ANSWER_LINE,
+  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, spokenReplyLines, textThinking,
+  textTurnConversation, WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { conversationTool, TOOL_CALL_SCHEMA } from './anthropicToolCapacity.js';
@@ -37,7 +37,9 @@ import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
  * - system: her identity, the fixed instructions and what she knows of the owner, without anything that depends on the turn.
  *   The tool-dependent capability lines, the skill index, the reply-feeling and tool instructions and the web-answer line move
  *   into the turn's own system message after the words.
- * - effort and thinking: as configured (Haiku at medium), never changed by the turn.
+ * - effort: as configured, never changed by the turn. Thinking: as configured, except a light or read-aloud turn answers without
+ *   it (`textThinking`, owner decision 2026-10-14). Tools and system stay the same bytes; the provider may not reuse the cached
+ *   messages across a turn whose thinking differs from the one before (cost, not speed: the 2026-10-13 probe).
  *
  * Where the breakpoints go is the transport's (`cachePlanMarkers.ts`).
  */
@@ -221,7 +223,7 @@ export function plannedChatBody(settings: ClaudeChatSettings, request: ShannonCh
     messages: withTurnLines(claudeTurnMessages(textTurnConversation(fixed)), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },
-    thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
+    thinking: textThinking(settings, request),
     output_config: { effort: conversationEffort(settings), format: planFormat(settings, request, agentHostHint) },
   };
   const schema: PlanSchema = exceptionTurn(request) ? 'exception' : 'common';

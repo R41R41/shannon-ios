@@ -10,7 +10,7 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSes
 import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
 import { attachmentProjection, WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
-import { usesOneHourAnthropicCache } from './haikuConfig.js';
+import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
 import { appendForegroundMenu, stableForegroundMenu } from './anthropicForegroundMenu.js';
 export { structuredSchema } from './anthropicSchema.js';
@@ -29,7 +29,8 @@ export { structuredSchema } from './anthropicSchema.js';
  *   `tool_choice` is `auto`, and `none` for the answer without tools (forced use is a 400 on this model).
  * - Voice offers native web search. Structured text receives a separate non-JSON search receipt through a read tool.
  * - Text: the structured reply through `output_config.format` (the same schema, in the subset Anthropic supports).
- * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default); Haiku at medium.
+ * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default); Haiku at medium. A light or
+ *   read-aloud text turn answers without it (`textThinking`, `skipThinking`).
  */
 export const CLAUDE_TEXT_LINES = [
   '[返答の形・Claude]',
@@ -143,6 +144,17 @@ export function spokenReplyLines(request: Pick<ShannonChatModelRequest, 'spokenR
   return request.spokenReply ? [SPOKEN_STRUCTURED_REPLY_LINE, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS] : [];
 }
 
+/**
+ * A text turn's thinking: as configured (`textThinking`), or none for a turn the server decided answers without it
+ * (`skipThinking`, owner decision 2026-10-14). Haiku turns it off with `disabled` (accepted at effort low, as on voice); the
+ * Sonnet tier, which rejects `disabled`, with `between_tools`; any other model keeps its setting. Fixed for the whole turn,
+ * every round of its tool loop included. Only this field changes: tools and system are the same bytes.
+ */
+export function textThinking(settings: ClaudeChatSettings, request: Pick<ShannonChatModelRequest, 'skipThinking'>): Anthropic.ThinkingConfigParam {
+  const off = isHaikuModel(settings.model) ? 'disabled' : settings.model === 'claude-sonnet-5-5' ? 'between_tools' : null;
+  return { type: request.skipThinking && off ? off : settings.textThinking } as Anthropic.ThinkingConfigParam;
+}
+
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
@@ -163,7 +175,7 @@ export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonCha
       ...spokenReplyLines(request), ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: claudeTurnMessages(textTurnConversation(request)),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
-    thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
+    thinking: textThinking(settings, request),
     output_config: {
       effort: conversationEffort(settings),
       format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> },

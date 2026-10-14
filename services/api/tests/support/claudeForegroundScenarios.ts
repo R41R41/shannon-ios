@@ -126,6 +126,9 @@ const textScenarios: ClaudeScenario[] = [
   { name: 'text-plus-tier', script: [answer(HAIKU.model)], run: c => chat(c, HAIKU).generate({ ...text, tier: 'luna_plus', escalation: true }) },
   // Rich chat (docs/rich-chat-contract.md): the app's own Talk says how tables, charts and images are shown.
   { name: 'text-rich-blocks', script: [answer(HAIKU.model)], run: c => chat(c, HAIKU).generate({ ...text, richBlocks: true }) },
+  // A light or read-aloud turn (owner decision 2026-10-14, `textTurnThinking`): `text-tools-streamed` with `thinking: disabled` only.
+  { name: 'text-light-no-thinking', script: [toolCall(HAIKU.model), answer(HAIKU.model, 0, 4_100)],
+    run: c => streamedText(c, HAIKU, { ...text, tools: tools(['study.list']), skipThinking: true }) },
 ];
 
 const voiceScenarios: ClaudeScenario[] = [

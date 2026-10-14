@@ -115,6 +115,19 @@ export function baseToolSession(session: ShannonModelToolSession): ShannonModelT
   return (session as { base?: ShannonModelToolSession }).base ?? session;
 }
 
+/**
+ * Whether a turn's session asks for a tool now: a menu session (Jev or the FCA selector narrowed it) shows a definition beyond
+ * `tool_open` and the always-loaded ones (`alwaysLoadedToolNames`), the tools his words named included; a session nothing
+ * narrowed counts as asking whenever it offers anything (nothing chose for it). No session: no.
+ */
+export function sessionAsksForTools(session: ShannonModelToolSession | undefined): boolean {
+  if (!session) return false;
+  const menu = (session as { menu?: { offered: readonly ShannonToolDefinition[] } }).menu;
+  if (!menu) return session.definitions.length > 0;
+  const loaded = alwaysLoadedToolNames(menu.offered);
+  return session.definitions.some(tool => tool.name !== TOOL_OPEN_NAME && !loaded.includes(tool.name));
+}
+
 /** The tools a turn offers as Jev's menu reads them: the provider name, the summary, and the area that groups them. */
 export function menuCandidatesOf(definitions: readonly ShannonToolDefinition[]): readonly { name: string; summary: string; group: string }[] {
   return definitions.map(tool => Object.freeze({ name: providerToolName(tool.name), summary: toolSummary(tool), group: tool.name.split('.')[0]! }));

@@ -8,5 +8,5 @@ export { WEB_CAPABILITY_ENTRY, toolDoing } from './shannonTools.js';
 export { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
 export { type ToolInput } from './shannonToolInput.js';
 export { type PreparedToolCall, type ToolExecutionContext } from './shannonToolTypes.js';
-export { withToolMenu, baseToolSession } from './shannonToolMenu.js';
+export { withToolMenu, baseToolSession, sessionAsksForTools } from './shannonToolMenu.js';
 export { type ShannonToolRunner } from './shannonToolRunner.js';

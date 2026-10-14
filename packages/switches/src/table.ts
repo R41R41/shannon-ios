@@ -192,6 +192,10 @@ export const SWITCHES = [
     doc: 'Haiku voice turns think adaptively before speaking (off: thinking disabled, owner-approved 2026-10-13; it cost 2-3 s before the first word).',
   },
   {
+    name: 'SHANNON_TEXT_LIGHT_NO_THINKING', default: 'on', kind: 'default_on', owner: 'model', requires: [],
+    doc: 'Light or read-aloud text turns answer without thinking unless hard or research (owner 2026-10-14; off: text always thinks).',
+  },
+  {
     name: 'SHANNON_REPLAY_EPOCHS', default: 'off', kind: 'explicit_on', owner: 'model', requires: ['SHANNON_CLAUDE_CACHE_PLAN'],
     doc: 'Replayed history is rendered once per epoch and only appended to until its budget is passed (text; voice also needs the voice plan).',
   },

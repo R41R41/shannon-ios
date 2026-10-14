@@ -106,6 +106,11 @@ export function validMemoryAction(value: unknown): value is MemoryAction {
     || value === 'mark-sensitive' || value === 'mark-ordinary';
 }
 
+/** The first boolean flag of a chat request that is present and not a boolean (`webSearch`, `readAloud`), or null. */
+export function invalidChatFlag(body: { webSearch?: unknown; readAloud?: unknown }): 'webSearch' | 'readAloud' | null {
+  return (['webSearch', 'readAloud'] as const).find(flag => body[flag] !== undefined && typeof body[flag] !== 'boolean') ?? null;
+}
+
 export function badRequest(message: string): ApiResponse {
   return { status: 400, body: { error: 'BAD_REQUEST', message } };
 }
