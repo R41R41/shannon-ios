@@ -1,3 +1,4 @@
+import { evidenceVisibleUnderControls } from './memoryEvidence.js';
 import type { CompanionStateSnapshot, MemoryKind } from './types.js';
 
 export function memoryIdentifier(kind: MemoryKind, text: string): string {
@@ -36,28 +37,8 @@ export function visibleMemoryText(
 export function isMemoryEvidenceVisible(snapshot: CompanionStateSnapshot, evidence: string, exceptMemoryId?: string): boolean {
   // Only a forgotten, rejected or corrected item can hide evidence: with none, nothing is compared (asked for every remembered turn).
   if (!snapshot.memoryControls.some(control => control.status !== 'active' || control.overrideText)) return true;
-  const normalize = (value: string) => value.replace(/[\s。、]/gu, '');
-  const quote = normalize(evidence);
-  if (quote.length < 3) return true;
-  const overlaps = (value: string | undefined) => {
-    const original = normalize(value ?? '');
-    return original.length >= 3 && (original.includes(quote) || quote.includes(original));
-  };
-  if (snapshot.memoryControls.some(control => control.memoryId !== exceptMemoryId
-    && (control.status !== 'active' || control.overrideText) && (
-    overlaps(control.sourceEvidence)
-    || overlaps(snapshot.userFacts.find(item => item.id === control.memoryId)?.evidence)
-    || overlaps(snapshot.relationships.find(item => item.id === control.memoryId)?.evidence)
-  ))) return false;
-  return !snapshot.prospectiveMemories.some(memory => {
-    const control = memoryControlFor(snapshot, memory.id);
-    const parent = memory.sourceExperienceId ? memoryControlFor(snapshot, memory.sourceExperienceId) : undefined;
-    const blocked = (value: typeof control) => value && value.memoryId !== exceptMemoryId
-      && (value.status !== 'active' || value.overrideText);
-    if (!blocked(control) && !blocked(parent)) return false;
-    const original = normalize(memory.evidence ?? memory.summary);
-    return original.length >= 3 && (original.includes(quote) || quote.includes(original));
-  });
+  // The withheld evidence is gathered once per state and a verdict is remembered under its exact content (`memoryEvidence.ts`).
+  return evidenceVisibleUnderControls(snapshot, evidence, exceptMemoryId);
 }
 
 /** Conservative assertion boundary shared by local/model extraction and reuse.
