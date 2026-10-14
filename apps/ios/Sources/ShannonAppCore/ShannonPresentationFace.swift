@@ -34,6 +34,12 @@ public enum ShannonPresentationFace {
         "angry", "crying", "pout", "shocked", "shout", "smug", "wail", "wink",
     ]
 
+    /// The presentation id of her latest reply in these messages (the Mac's Dock and menu-bar face, owner choice A of the resident
+    /// icons). Nil when she has not replied or her latest reply has none (an older server): the icon stays as it is today.
+    public static func latestID(in messages: [ConversationMessage]) -> String? {
+        messages.last { $0.role == .shannon }?.emotionSnapshot?.presentationId
+    }
+
     /// The id whose picture is drawn: the id itself when known, the neutral face otherwise; nil without an id.
     public static func drawnID(for id: String?) -> String? {
         guard let id else { return nil }
@@ -102,3 +108,48 @@ struct ShannonPresentationFaceView: View {
         return Image(systemName: "person.crop.circle.fill")
     }
 }
+
+#if canImport(AppKit)
+extension ShannonPresentationFace {
+    /// Her face for the menu bar: the picture of the id, cropped to a circle, 18 pt, in colour (not a template).
+    /// Nil without an id: the menu bar keeps its symbol.
+    public static func menuBarImage(for id: String?, side: CGFloat = 18) -> NSImage? {
+        guard let drawn = drawnID(for: id), let picture = Bundle.module.image(forResource: "shannon-face-\(drawn)") else { return nil }
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSBezierPath(ovalIn: rect).addClip()
+            picture.draw(in: rect)
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = "シャノン、\(japaneseName(for: drawn))"
+        return image
+    }
+}
+
+/// The Dock icon and the menu-bar item of the Mac app follow her latest reply's face (Syzygy ADR-0013 D17, owner choice A
+/// 「顔がそのまま変わる」): the same 45 pictures as the talk screen. No id: today's icon. An unknown id: the neutral face.
+/// Setting `applicationIconImage` shows no system prompt. The iPhone's home icon never changes.
+struct ShannonResidentFaceModifier: ViewModifier {
+    let conversation: ShannonConversationModel
+    let appIcon: ShannonAppIconModel
+
+    func body(content: Content) -> some View {
+        let id = ShannonPresentationFace.latestID(in: conversation.messages)
+        content
+            .onAppear { show(id) }
+            .onChange(of: id) { _, newID in show(newID) }
+    }
+
+    @MainActor private func show(_ id: String?) {
+        appIcon.showFace(presentationId: id)
+        ShannonDesktopMenuBar.shared.showFace(presentationId: id)
+    }
+}
+
+public extension View {
+    /// The Mac app's Dock and menu-bar face (`ShannonResidentFaceModifier`).
+    func shannonResidentFace(conversation: ShannonConversationModel, appIcon: ShannonAppIconModel) -> some View {
+        modifier(ShannonResidentFaceModifier(conversation: conversation, appIcon: appIcon))
+    }
+}
+#endif

@@ -44,6 +44,8 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
     private var sections: [ShannonDesktopMenuBarSection] = []
     private var item: NSStatusItem?
     private var appliedSymbol: String?
+    /// Her latest reply's face (Syzygy ADR-0013 D17): drawn instead of the default symbol while no part names its own.
+    private(set) var faceID: String?
     /// For tests: makes no status item, only records what would be shown.
     var makesStatusItem = true
     private(set) var shownButton: ShannonDesktopMenuBarButton?
@@ -60,6 +62,15 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    /// Her latest reply's face, for the item while it is shown and no part names its own symbol (a call keeps its own).
+    /// No id: the symbol of today.
+    public func showFace(presentationId: String?) {
+        let drawn = ShannonPresentationFace.drawnID(for: presentationId)
+        guard drawn != faceID else { return }
+        faceID = drawn
+        refresh()
+    }
+
     /// Whether the item is in the menu bar now.
     public var isShown: Bool { shownButton != nil || item != nil }
 
@@ -72,8 +83,11 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
             shownButton = nil
             return
         }
-        let button = sections.lazy.filter(\.wantsMenuBarItem).compactMap(\.menuBarButton).first
+        let named = sections.lazy.filter(\.wantsMenuBarItem).compactMap(\.menuBarButton).first
+        let button = named
             ?? ShannonDesktopMenuBarButton(title: "", symbol: "sparkle", accessibilityLabel: ShannonGeneratedStrings.appName)
+        // Her face, while no part names its own symbol and she has one.
+        let face = named == nil ? faceID : nil
         shownButton = button
         guard makesStatusItem else { return }
         if item == nil {
@@ -85,11 +99,16 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
         }
         guard let statusButton = item?.button else { return }
         // Refreshed every second while a call shows its time: only what changed is written.
-        if appliedSymbol != button.symbol {
-            appliedSymbol = button.symbol
-            let image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
-            image?.isTemplate = true
-            statusButton.image = image
+        let shown = face.map { "face:\($0)" } ?? button.symbol
+        if appliedSymbol != shown {
+            appliedSymbol = shown
+            if let face, let image = ShannonPresentationFace.menuBarImage(for: face) {
+                statusButton.image = image
+            } else {
+                let image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
+                image?.isTemplate = true
+                statusButton.image = image
+            }
         }
         let position: NSControl.ImagePosition = button.title.isEmpty ? .imageOnly : .imageLeading
         if statusButton.imagePosition != position { statusButton.imagePosition = position }

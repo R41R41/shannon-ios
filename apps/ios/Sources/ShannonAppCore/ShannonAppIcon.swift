@@ -168,8 +168,9 @@ public final class ShannonAppIconModel {
         "\(activeChoice.levelName)・\(activeChoice.japaneseName)"
     }
 
-    /// Re-applies the owner's chosen level at launch. The icon never follows Shannon's
-    /// emotion or the appearance; the owner picks one of the three levels in Settings.
+    /// Re-applies the owner's chosen level at launch. The iPhone's home icon never follows Shannon's emotion or the
+    /// appearance; the owner picks one of the three levels in Settings. On the Mac the Dock shows her latest reply's face
+    /// (`showFace`, Syzygy ADR-0013 D17) and returns to this choice when a reply has none.
     public func activate() async {
         await apply(choice: selectedChoice)
     }
@@ -191,6 +192,27 @@ public final class ShannonAppIconModel {
     }
 
 #if canImport(AppKit)
+    /// The face shown in the Dock now (Syzygy ADR-0013 D17); nil while the owner's chosen icon is shown.
+    public private(set) var shownFaceID: String?
+
+    /// The Dock icon follows her latest reply's face (owner choice A of the resident icons): the face of the id, in the same
+    /// shape as the app icon. No id: the owner's chosen icon, as today. An unknown id: the neutral face.
+    public func showFace(presentationId: String?) {
+        let drawn = ShannonPresentationFace.drawnID(for: presentationId)
+        guard drawn != shownFaceID else { return }
+        if let drawn, let image = ShannonAppIconAssets.macApplicationIcon(for: ShannonPresentationFace.assetName(for: drawn)) {
+            NSApplication.shared.applicationIconImage = image
+            shownFaceID = drawn
+            return
+        }
+        shownFaceID = nil
+        if selectedChoice == .defaultChoice {
+            NSApplication.shared.applicationIconImage = nil
+        } else {
+            applyMacApplicationIcon(selectedChoice)
+        }
+    }
+
     public func restoreMacApplicationIconBeforeWindowCreation() {
         guard selectedChoice != .defaultChoice else { return }
         applyMacApplicationIcon(selectedChoice)

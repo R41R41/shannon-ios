@@ -128,6 +128,8 @@ struct ShannonDeskApp: App {
             .shannonEarphoneSpeaking(conversation: conversationModel)
             .shannonPrivateListening(privateListeningModel)
             .shannonDeviceActions(deviceActionModel)
+            // The Dock icon and the menu-bar item show her latest reply's face (Syzygy ADR-0013 D17, owner choice A).
+            .shannonResidentFace(conversation: conversationModel, appIcon: appIconModel)
             .onOpenURL { url in
                 // shannon://yousu and shannon://admin/ops open ようす and 設定 › 管理 › 運用.
                 if ShannonYousuLink.open(url) { return }

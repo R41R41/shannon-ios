@@ -1,5 +1,8 @@
 import Foundation
 import Testing
+#if canImport(AppKit)
+import AppKit
+#endif
 @testable import ShannonAppCore
 
 /// The face beside each reply (Syzygy ADR-0013 D17, owner choice A): the reply's stored presentation id, its picture,
@@ -84,4 +87,43 @@ struct ShannonPresentationFaceTests {
         #expect(ShannonMessageAvatarView(emotion: nil).presentationID == nil)
         #expect(ShannonMessageRow.avatarSize == 36)
     }
+
+    @Test
+    func theLatestReplysIdIsTheResidentFace() {
+        func reply(_ id: String?) -> ConversationMessage {
+            ConversationMessage(role: .shannon, text: "はい。", emotionSnapshot: .init(
+                valence: 0, arousal: 0, openness: 0, expression: .calm, presentationId: id, stateVersion: 1))
+        }
+        #expect(ShannonPresentationFace.latestID(in: []) == nil)
+        #expect(ShannonPresentationFace.latestID(in: [reply("irked"), ConversationMessage(role: .user, text: "で？")]) == "irked")
+        // Her latest reply from an older server has none: today's icon, not the face before it.
+        #expect(ShannonPresentationFace.latestID(in: [reply("irked"), reply(nil)]) == nil)
+    }
+
+#if os(macOS)
+    @Test @MainActor
+    func theDockAndTheMenuBarShowTheFaceAndWithoutAnIdTodaysIcon() throws {
+        let suite = "shannon-resident-face-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let icon = ShannonAppIconModel(defaults: defaults, activeAlternateIconName: nil)
+        icon.showFace(presentationId: "tsun")
+        #expect(icon.shownFaceID == "tsun")
+        icon.showFace(presentationId: "fromANewerServer")
+        #expect(icon.shownFaceID == "neutral")
+        icon.showFace(presentationId: nil)
+        #expect(icon.shownFaceID == nil)
+
+        let menuBar = ShannonDesktopMenuBar()
+        menuBar.makesStatusItem = false
+        menuBar.showFace(presentationId: "flatStare")
+        #expect(menuBar.faceID == "flatStare")
+        menuBar.showFace(presentationId: nil)
+        #expect(menuBar.faceID == nil)
+        let image = try #require(ShannonPresentationFace.menuBarImage(for: "jealous"))
+        #expect(image.size == NSSize(width: 18, height: 18))
+        #expect(!image.isTemplate)
+        #expect(ShannonPresentationFace.menuBarImage(for: nil) == nil)
+    }
+#endif
 }
