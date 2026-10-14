@@ -117,6 +117,8 @@ describe('FCA private read receipts', () => {
     expect(fcaReadReceiptSources({ name: 'aether.read', ok: true, documents: { read: ['doc-1'] } })).toEqual({ readSourceIds: ['aether-document://doc-1'] });
     expect(fcaReadReceiptSources({ name: 'study.list', ok: true, documents: { sourceIds: ['shannon-study://one'] } })).toEqual({ readSourceIds: ['shannon-study://one'] });
     expect(fcaReadReceiptSources({ name: 'study.read', ok: true }).readSourceIds?.[0]).toContain('fca-unresolved://');
+    // Minecraft run 11 (2026-10-14): the servers' state is a public read, never an unresolved private receipt that holds the task.
+    expect(fcaReadReceiptSources({ name: 'minecraft.lifecycle_status', ok: true })).toEqual({});
     expect(fcaReadReceiptSources({ name: 'study.read', ok: true, documents: { read: ['opaque-unknown'] } }).readSourceIds?.[0]).toContain('fca-unresolved://');
     expect(fcaReadReceiptSources({ name: 'web.search', ok: true })).toEqual({});
   });
