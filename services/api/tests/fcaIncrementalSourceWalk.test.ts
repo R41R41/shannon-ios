@@ -68,6 +68,30 @@ describe('the incremental source check', () => {
     expect(verdictOf(w, w.next(1, [w.pool[200]!]))).toEqual({ incremental: false, fresh: false });
   });
 
+  it.each([
+    ['a forget', (w: World) => { w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'forget' }); }],
+    ['a correction', (w: World) => { w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'correct', text: '訂正' }); }],
+  ])('walks the whole provenance again after %s between two walks (a new state version), and hides (review of d6fcd7d7)', (_label, change) => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    change(w);
+    const before = w.visible.walks!();
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(false);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 0]);
+  });
+
+  it('does not use a base whose read receipt was lost, and walks whole (review of d6fcd7d7)', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    w.lose(w.f.skillSources[0]!);
+    const before = w.visible.walks!();
+    // New rows without that receipt: the base it rests on consulted it, so the base is not used.
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(false);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 0]);
+  });
+
   it('hides when the owner is no longer alone, and for another scope, between two walks', () => {
     const w = world();
     expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
