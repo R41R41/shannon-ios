@@ -206,6 +206,7 @@ export function relationshipLine(state: RelationshipState, who: string, kept: re
 }
 
 /** Closed values for the chooser and the Observer. */
-export function relationshipFacts(state: RelationshipState): Record<string, number> {
-  return { rel_trust: state.scales.trust, rel_liking: state.scales.liking, rel_respect: state.scales.respect, rel_irritation: state.scales.irritation };
+export function relationshipFacts(state: RelationshipState, kept: readonly RelationshipScale[] = RELATIONSHIP_SCALES): Record<string, number> {
+  // Re-review S4-5: a light ledger (liking and irritation) hands only what it keeps.
+  return Object.fromEntries(RELATIONSHIP_SCALES.filter(scale => kept.includes(scale)).map(scale => [`rel_${scale}`, state.scales[scale]]));
 }

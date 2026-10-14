@@ -1,7 +1,7 @@
 import {
   OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, boundaryLines, closedDayGroups, foldBoundaries, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts,
   relationshipLine, relationshipParametersFor, toldBoundaryIn, type Boundary,
-  type CompanionStateSnapshot, type FeelingEvent, type RelationshipDay,
+  type CompanionStateSnapshot, type FeelingChannel, type FeelingEvent, type RelationshipDay,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { ClosedDayRow } from './store/feelingDayStore.js';
@@ -103,11 +103,11 @@ export class FeelingDays {
    * What a turn of this key is handed of the days before: the relationship line, the episodes recalled (yesterday's, or older ones his
    * `words` name), and her boundaries; nothing for anyone unknown or a scene.
    */
-  carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = ''): CarriedLines {
+  carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = '', channel?: FeelingChannel): CarriedLines {
     const { features } = this.options;
     if (!(features.relationship || features.episodes || features.boundaries)) return { lines: [], facts: {} };
     try {
-      const whose = carriedFor(key, features.audience === true);
+      const whose = carriedFor(key, features.audience === true, channel);
       if (!whose) return { lines: [], facts: {} };
       this.close(scopeKey, at);
       const own = this.own(scopeKey, whose.personKey, at, snapshot, words);
@@ -168,7 +168,7 @@ export class FeelingDays {
     const state = observeSync('emotion', { phase: 'feeling.relationship', owner: personKey === OWNER_PERSON_KEY, days: days.length },
       () => foldRelationship(days, personKey, today), value => ({ ...value.scales, peakTrust: value.peak.trust, peakLiking: value.peak.liking }));
     const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人', relationshipParametersFor(personKey).scales);
-    return { lines: line ? [line] : [], facts: relationshipFacts(state) };
+    return { lines: line ? [line] : [], facts: relationshipFacts(state, relationshipParametersFor(personKey).scales) };
   }
 
   private closeDay(scopeKey: string, dayKey: string, start: number, at: string): void {
@@ -194,10 +194,12 @@ const knownPerson = (key: FeelingKey) => key.personKey !== UNKNOWN_PERSON_KEY &&
  * own DM (`people`), theirs; a stranger or a viewer, their light ledger (it is of what happened in front of others); anyone in a group,
  * the owner or a friend among them, nothing private.
  */
-export function carriedFor(key: FeelingKey, audience: boolean): { personKey: string; marked: boolean } | null {
+export function carriedFor(key: FeelingKey, audience: boolean, channel?: FeelingChannel): { personKey: string; marked: boolean } | null {
   if (key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone') return { personKey: OWNER_PERSON_KEY, marked: false };
   if (!audience) return knownPerson(key) ? { personKey: key.personKey, marked: false } : null;
-  if (!knownPerson(key)) return key.audience === 'people' ? { personKey: OWNER_PERSON_KEY, marked: true } : null;
+  // Re-review S4-1 (owner, form 「渡さない」): only a text turn with others present gets the owner's matters, marked; a voice turn
+  // (a guest, 「友人も一緒」) and a touch get none of them, as in a group. The scene's own feeling stays.
+  if (!knownPerson(key)) return key.audience === 'people' && channel === 'text' ? { personKey: OWNER_PERSON_KEY, marked: true } : null;
   if (key.personKey.startsWith('person:')) return key.audience === 'people' ? { personKey: key.personKey, marked: false } : null;
   return key.personKey === OWNER_PERSON_KEY ? null : { personKey: key.personKey, marked: false };
 }

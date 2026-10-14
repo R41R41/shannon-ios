@@ -115,14 +115,16 @@ angry, teased and gets shy, in front of anyone; that continuity is not cut. One 
 | Audience | What happens there (the scene's ledger, its fast layer, the feeling turn) | The owner's relationship, their matters, her honne about him |
 | --- | --- | --- |
 | `owner_alone` | used | used |
-| `people` (the owner with someone else: text `audience: "others"`, owner voice with a guest, 「友人も一緒」) | used | marked `【機微:ライ氏との間・ライ氏だけが知っている】` and left to the speak-time check; her inner note's honne is still not given; a touch line gets none of it |
+| `people`, text (the owner with someone else: `audience: "others"`) | used | marked `【機微:ライ氏との間・ライ氏だけが知っている】`, left to the speak-time check, and checked before sending (`private_leak`, `marker_spoken`); her inner note's honne is still not given |
+| `people`, voice (owner voice with a guest, 「友人も一緒」) and touches with others present | used | **not given** (owner decision, form 「渡さない」: 声の人前では渡さない、文字の people は印付き＋送る前の確かめ) |
 | `group` (a shared platform conversation) | used | not given |
 | `stream` (stage 5) | used | never given |
 
 - **Who an event is about** (§4.1): by account only, never by a name or a look (ADR-0011 §8.2). A platform turn is keyed to the verified owner (`registered`), a remembered friend bound to the account (`person:<id>`, `platform`), or anyone else (`platform:<digest>`; the account id is not kept as it is). A 「友人も一緒」 call is one scene: its turns and the touches with others present during it (within 10 minutes of a turn of the call) are the call's, never the owner's.
 - **Ledgers by person** (§4.2): the owner's (stage 3); a known friend's, lighter, used only in that friend's own DM; a stranger's light ledger (liking and irritation, forgiven and forgotten fast, kept 30 days) used where they speak. Their coefficients were approved by the owner as proposed (2026-10-15).
 - **One source cannot swing a scene** (§4.3): past three hurtful events in ten minutes, more from the same source are felt as nothing new.
-- **Checks per audience** (§4.6): in a group or a stream, a reply that tells the owner's private matters or her honne about him is flagged (`private_leak`) and, on text, rewritten once before it is sent; anywhere with others present, a privacy marker read out is flagged (`marker_spoken`).
+- **Checks per audience** (§4.6): anywhere with others present (people, a group, a stream), a reply that tells the owner's private matters or her honne about him is flagged (`private_leak`), and a privacy marker read out (`marker_spoken`); on text it is rewritten once before it is sent, and when no clean rewrite comes in time, or the turn ran a tool, a neutral line with nothing private goes instead of the draft. The audience layers need `SHANNON_REPLY_CHECK`.
+- **A place** (§4.8): a group conversation is a place of its own (`group:<thread>`) beside who wrote: her composure there, and the per-source cap, are the place's.
 - The face is not restricted per audience (owner, 2026-10-14: 「嫉妬も甘えも出す」); only these content layers are.
 
 ## Sensitivity
