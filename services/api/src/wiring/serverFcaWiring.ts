@@ -45,6 +45,7 @@ import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
 import { fcaCompactAboveTokens } from '../infra/models/anthropic/anthropicFcaCompaction.js';
+import { fcaSegmentStaleMinutes } from '../mind/action/fca/store/fcaEvidenceSegments.js';
 import { stage4Enabled, mindSocketPath } from '../infra/config/stage4.js';
 import { MindSocketClient } from '../infra/ipc/mindSocket.js';
 import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.js';
@@ -161,10 +162,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       visible = Object.assign((scope: string, id: string, pending?: string) => {
         const task = runtime.runtime.get(scope, id);
         return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending);
-      }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content });
+      }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content,
+        // The evidence store's coverage and walk counts are the foreground guard's, as its `sources` (review of 5d492ae8).
+        covers: foregroundVisible.covers, walks: foregroundVisible.walks });
     }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
-    if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible });
+    if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible,
+      segmentStaleMinutes: fcaSegmentStaleMinutes(values.SHANNON_FCA_SEGMENT_STALE_MINUTES) });
     if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
     const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, ...(parts.now ? { now: parts.now } : {}) }) : null;
     if (conversation && parts.tools) parts.tools.useTaskRuntime({ available: scope => conversation.taskToolsAvailable(scope),

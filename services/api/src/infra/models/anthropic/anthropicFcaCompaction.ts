@@ -1,3 +1,5 @@
+import { estimatedAnthropicTokens } from './anthropicFcaHistory.js';
+
 /**
  * The current decision message, shortened before it is sent when the whole request is estimated above `compactAboveTokens`
  * (`AnthropicFcaOptions`), so that a request stays under Haiku's long-prompt price step (100,000 input tokens priced at five times
@@ -7,25 +9,38 @@
  *
  * The longest texts of the shortened parts are cut to one common length, the highest at which the request fits (found by halving),
  * never below `FLOOR_CHARACTERS`, each cut marked with how much was left out. Ids, names and numbers stay whole (no id reaches the
- * floor). What the owner wrote (`messages`), the task itself, the clock and the fixed rules are never cut. The message is stored as it
+ * floor). What the owner wrote (`messages`), the task itself, its children's titles and summaries, the clock and the fixed rules
+ * are never cut.
+ *
+ * The whole request is measured once. The estimate (`estimatedAnthropicTokens`) counts characters, so the request with another
+ * decision message is that measure less the first message's and plus the other's: each halving measures only the message. The message is stored as it
  * was sent, so a later decision restates a part in full rather than naming the shortened one as unchanged (`elidedDecision`).
  */
 export const FCA_COMPACT_ABOVE_TOKENS = 95_000;
 const FLOOR_CHARACTERS = 400;
-const KEPT_WHOLE = new Set(['task', 'messages', 'ownerClock', 'waiting', 'contextInstructions', 'progressInstructions']);
+const KEPT_WHOLE = new Set(['task', 'messages', 'children', 'ownerClock', 'waiting', 'contextInstructions', 'progressInstructions']);
+/** The most halvings of the common length (each measures only the decision message): enough for texts of up to about 4 MB. */
+const MAX_HALVINGS = 22;
 const CUT = (omitted: number) => `…（長いため後略: ${omitted}字）`;
 
-/** The decision fields to send: as given when they fit, else the highest common cut that fits, else the floor (the best it can do). */
-export function compactedDecision(fields: Record<string, unknown>, measure: (fields: Record<string, unknown>) => number,
+/**
+ * The decision fields to send: as given when the request (`requestTokens`, measured with `fields`) fits, else the highest common
+ * cut that fits, else the floor (the best it can do).
+ */
+export function compactedDecision(fields: Record<string, unknown>, requestTokens: number,
   maximum: number): { fields: Record<string, unknown>; level: number | null } {
-  if (measure(fields) <= maximum) return { fields, level: null };
+  if (requestTokens <= maximum) return { fields, level: null };
+  // The message travels as a JSON string inside the request: measured as that string, with its escapes.
+  const message = (sent: Record<string, unknown>) => estimatedAnthropicTokens(JSON.stringify(sent));
+  // Each measure rounds up once, so the sum may fall one token short of the whole; one token of room covers it.
+  const rest = requestTokens - message(fields), fits = (sent: Record<string, unknown>) => rest + message(sent) + 1 <= maximum;
   const at = (level: number) => Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, KEPT_WHOLE.has(key) ? value : cutTexts(value, level)]));
   const floor = at(FLOOR_CHARACTERS);
-  if (measure(floor) > maximum) return { fields: floor, level: FLOOR_CHARACTERS };
+  if (!fits(floor)) return { fields: floor, level: FLOOR_CHARACTERS };
   let low = FLOOR_CHARACTERS, high = Math.max(low, longestText(fields)), best = floor;
-  while (low < high) {
+  for (let halvings = 0; low < high && halvings < MAX_HALVINGS; halvings++) {
     const level = Math.ceil((low + high) / 2), candidate = at(level);
-    if (measure(candidate) <= maximum) {
+    if (fits(candidate)) {
       low = level;
       best = candidate;
     } else high = level - 1;

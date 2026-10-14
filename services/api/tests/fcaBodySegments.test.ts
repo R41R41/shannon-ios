@@ -8,6 +8,10 @@ import { SQLiteFcaEvidenceStore } from '../src/mind/action/fca/store/fcaEvidence
 import type { FcaDurableOutcome } from '../src/mind/action/fca/fcaEvidencePorts.js';
 import type { FcaToolCall } from '../src/mind/action/fca/fcaPorts.js';
 import { fcaOutcomeEpisode } from '../src/mind/action/fca/fcaOutcomeEpisode.js';
+import { createFcaSleepTaskEvidence } from '../src/wiring/fcaSleepTaskEvidence.js';
+import { verifiedSegmentSources } from '../src/wiring/fcaSleepSegmentEvidence.js';
+import { taskExperienceDraft, taskExperienceId, type TaskExperienceRecord } from '../src/mind/memory/taskMemoryPorts.js';
+import { taskExperienceSummary } from '../src/mind/memory/taskExperience.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
@@ -32,18 +36,19 @@ function fixture() {
   const root = runtime.ensureRoot('owner');
   const task = runtime.createChild('owner', root.id, { title: '木のツルハシ', goal: '木を切ってツルハシを作る' }, 'mc-segments');
   const deliveries: FcaDurableOutcome[] = [];
+  let visible = true;
   const evidence = new SQLiteFcaEvidenceStore({ db: h.db, state: world.store, now: world.now,
-    validStep: (step: TaskStep) => !!h.store.check(step.lease, world.now()), sourcesVisible: () => true, taskVisible: () => true,
+    validStep: (step: TaskStep) => !!h.store.check(step.lease, world.now()), sourcesVisible: () => visible, taskVisible: () => true,
     observeContext: () => true, onOutcome: outcome => { deliveries.push(outcome); } });
   let sourceIndex = 0;
   /** One committed step of the task with these calls and results, under fresh provenance (one more memory row each step). */
-  async function step(calls: Array<[string, ReturnType<typeof ok> | null]>, taskId = task.id) {
+  async function step(calls: Array<[string, ReturnType<typeof ok> | null]>, taskId = task.id, recalled?: readonly string[]) {
     const current = runtime.get('owner', taskId)!;
     const action = await h.actions.claim((await h.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request',
       sourceId: `fca:${taskId}:${current.revision}`, resources: [actionResource('owner', `fca:${taskId}`)] })).id);
     const begun = runtime.beginStep('owner', taskId, leaseOf(action!))!;
     sourceIndex += 1;
-    runtime.observeSources(begun, { observationId: `obs-${sourceIndex}`, recalledMemoryIds: [`memory-${sourceIndex}`, 'memory-shared'] });
+    runtime.observeSources(begun, { observationId: `obs-${sourceIndex}`, recalledMemoryIds: recalled ?? [`memory-${sourceIndex}`, 'memory-shared'] });
     begun.snapshot.sources = runtime.taskSources('owner', taskId, begun.messageIds);
     const toolCalls: FcaToolCall[] = calls.map(([name], index) => ({ id: `c${index}`, name, input: {} }));
     expect(evidence.beforeActions(begun, { decision: { kind: 'tools', calls: toolCalls }, history: [] })).toBe(true);
@@ -58,7 +63,7 @@ function fixture() {
     return begun;
   }
   const held = () => Number((h.db.prepare('SELECT COUNT(*) AS n FROM fca_action_evidence WHERE outcome_delivered=2').get() as { n: number }).n);
-  return { world, h, runtime, root, task, evidence, deliveries, step, held };
+  return { world, h, runtime, root, task, evidence, deliveries, step, held, setVisible: (value: boolean) => { visible = value; } };
 }
 
 describe('Minecraft body actions remembered per segment (owner decision 2026-10-14)', () => {
@@ -129,5 +134,73 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
     await f.step([['web.search', ok('{"hits":1}')], ['web.search', ok('{"hits":2}')]]);
     expect(f.deliveries.map(item => [item.action.name, item.segment ?? null])).toEqual([['web.search', null], ['web.search', null]]);
     expect(f.held()).toBe(0);
+  });
+
+  it('keeps held actions held while the owner is not alone when the task is cancelled, and remembers them once he is (review F1)', async () => {
+    const f = fixture();
+    await f.step([['mc.move-to', ok()]]);
+    await f.step([['mc.move-to', ok()], ['mc.move-to', ok()]]);
+    f.deliveries.length = 0;
+    expect(f.held()).toBe(2);
+    // The owner cancels the task while others are present: nothing can be shown, so nothing closes and nothing is lost.
+    f.setVisible(false);
+    f.runtime.stop('owner', f.task.id, 'owner_stop');
+    f.evidence.flush();
+    expect(f.deliveries).toEqual([]);
+    expect(f.held()).toBe(2);
+    f.setVisible(true);
+    f.evidence.flush();
+    expect(f.held()).toBe(0);
+    expect(f.deliveries.map(item => [item.segment!.closedBy, item.segment!.actions.length])).toEqual([[expect.stringMatching(/^task_(paused|cancelled)$/u), 2]]);
+  });
+
+  it('closes a segment left open longer than the quiet time, of a task still running (review F4)', async () => {
+    const f = fixture();
+    await f.step([['mc.move-to', ok()]]);
+    await f.step([['mc.move-to', ok()]]);
+    f.deliveries.length = 0;
+    f.world.advance(29 * 60_000);
+    f.evidence.flush();
+    expect(f.held()).toBe(1);
+    f.world.advance(2 * 60_000);
+    f.evidence.flush();
+    expect(f.held()).toBe(0);
+    expect(f.deliveries.map(item => item.segment!.closedBy)).toEqual(['segment_stale']);
+  });
+
+  it('lets the nightly learning use a segment episode matched to its rows, and refuses a forged or mismatched one (review F2)', async () => {
+    const f = fixture();
+    const turns = Array.from({ length: 4 }, (_, index) => f.world.store.appendTurn('owner', 'thread-mc', `木を集めて${index}`, `集めます${index}`, f.world.now()).id);
+    f.world.advance(60_000);
+    await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]], f.task.id, turns.slice(0, 2));
+    f.deliveries.length = 0;
+    await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]], f.task.id, turns.slice(1, 3));
+    await f.step([['goal.verify', ok('{"verified":true}')]], f.task.id, [turns[3]!]);
+    expect(f.deliveries).toHaveLength(1);
+    const record = fcaOutcomeEpisode(f.deliveries[0]!)!;
+    expect(record.segment).toEqual({ eventIds: f.deliveries[0]!.segment!.eventIds, closedBy: 'goal.verify' });
+    // Through the memory outbox and its one writer, as production writes it (the segment survives the op's codec).
+    f.world.ports.proposals.propose(taskExperienceDraft(record));
+    await f.world.writer().drain();
+    const id = taskExperienceId('owner', f.task.id, record.outcomeId);
+    const stored = JSON.parse(String(f.h.db.prepare('SELECT payload_json FROM experience_events WHERE event_id=?').get(id)!.payload_json)) as { task: TaskExperienceRecord };
+    expect(stored.task.segment).toEqual(record.segment);
+    const evidence = createFcaSleepTaskEvidence(f.h.db);
+    expect(evidence('owner', id)).toBe(true);
+    const forged: Array<[string, TaskExperienceRecord]> = [
+      ['an action left out', { ...record, segment: { ...record.segment!, eventIds: record.segment!.eventIds.slice(1) } }],
+      ['actions reordered', { ...record, segment: { ...record.segment!, eventIds: [...record.segment!.eventIds].reverse() } }],
+      ['another closing outcome named', { ...record, segment: { ...record.segment!, closedBy: 'task.replan' } }],
+      ['a status not derived', { ...record, status: 'failure' }],
+      ['an action of nothing', { ...record, segment: { ...record.segment!, eventIds: [...record.segment!.eventIds, 'step-x:call-y'] } }],
+      ['another action line', { ...record, action: record.action.replace('×1', '×5') }],
+    ];
+    expect(record.action).toContain('×1');
+    for (const [label, candidate] of forged) expect(verifiedSegmentSources(f.h.db, 'owner', candidate), label).toBeNull();
+    // The stored episode replaced by a forged one, its summary consistent, is refused on the same path.
+    const payload = JSON.parse(String(f.h.db.prepare('SELECT payload_json FROM experience_events WHERE event_id=?').get(id)!.payload_json)) as Record<string, unknown>;
+    const fake = { ...stored.task, segment: { ...record.segment!, eventIds: record.segment!.eventIds.slice(1) } };
+    f.h.db.prepare('UPDATE experience_events SET payload_json=? WHERE event_id=?').run(JSON.stringify({ ...payload, task: fake, summary: taskExperienceSummary(fake) }), id);
+    expect(evidence('owner', id)).toBe(false);
   });
 });

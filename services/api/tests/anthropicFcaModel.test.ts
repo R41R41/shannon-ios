@@ -167,7 +167,8 @@ describe('the estimated size of an FCA request (the 100k-token price step)', () 
 });
 
 describe('compaction before the price step (C4)', () => {
-  const bulky = (): FcaModelInput => ({ ...input(), body: { report: 'インベントリ'.repeat(40_000), position: { x: 1, y: 64, z: -3 } },
+  const children = [{ id: 'child-1', title: '材料集め', phase: 'executing', summary: '木を集める途中、'.repeat(300) }];
+  const bulky = (): FcaModelInput => ({ ...input(), children, body: { report: 'インベントリ'.repeat(40_000), position: { x: 1, y: 64, z: -3 } },
     observations: [{ kind: 'look', text: '見えたもの'.repeat(20_000) }] } as unknown as FcaModelInput);
   const sent = (fixture: ReturnType<typeof harness>, index: number) => JSON.parse(String((fixture.bodies[index]!.messages as Array<{ content: unknown }>).at(-1)!.content));
 
@@ -184,6 +185,7 @@ describe('compaction before the price step (C4)', () => {
     const message = sent(fixture, 0);
     expect(message.task).toEqual(input().task);
     expect(message.messages).toEqual(input().messages);
+    expect(message.children).toEqual(children);
     expect(message.body.position).toEqual({ x: 1, y: 64, z: -3 });
     expect(message.body.report).toMatch(/…（長いため後略: \d+字）$/u);
     expect(message.body.report.length).toBeLessThan('インベントリ'.repeat(40_000).length);

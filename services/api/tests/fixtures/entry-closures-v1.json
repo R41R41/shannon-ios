@@ -779,6 +779,7 @@
     "wiring/fcaSleepJobs.ts",
     "wiring/fcaSleepMemory.ts",
     "wiring/fcaSleepPeopleWiring.ts",
+    "wiring/fcaSleepSegmentEvidence.ts",
     "wiring/fcaSleepSources.ts",
     "wiring/fcaSleepTaskEvidence.ts",
     "wiring/fcaSleepTaskLineage.ts",

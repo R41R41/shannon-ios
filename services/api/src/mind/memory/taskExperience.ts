@@ -6,6 +6,11 @@ export interface TaskExperienceRecord {
   scopeKey: string; taskId: string; outcomeId: string; observedAt: string; status: TaskExperienceOutcome;
   goal: string; context: string; action: string; prediction: string; observedResult: string; interpretation: string;
   sourceIds: readonly string[]; readSourceIds?: readonly string[];
+  /**
+   * A Minecraft body's segment (owner decision 2026-10-14): the evidence rows of its actions and what closed it, so that the nightly
+   * learning can match the episode to them (`fcaSleepSegmentEvidence.ts`). Absent on an episode of one outcome.
+   */
+  segment?: { eventIds: readonly string[]; closedBy: string };
 }
 export interface TaskExperienceWriter {
   write(scopeKey: string, record: TaskExperienceRecord): boolean;

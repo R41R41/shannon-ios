@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { TaskSource } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { taskExperienceId, taskExperienceSummary, type TaskExperienceRecord } from '../mind/memory/taskExperience.js';
 import { createFcaSleepTaskLineage } from './fcaSleepTaskLineage.js';
+import { segmentClosingId, verifiedSegmentSources } from './fcaSleepSegmentEvidence.js';
+import { committedEvidenceHistorySources } from '../mind/action/fca/store/fcaEvidenceSegments.js';
 
 /** A task outcome is an observation by Shannon, never a statement attributed to the owner. */
 export function createFcaSleepTaskEvidence(db: DatabaseSync) {
@@ -17,6 +19,7 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
         || record.readSourceIds?.length || id !== taskExperienceId(scope, record.taskId, record.outcomeId)
         || payload.summary !== taskExperienceSummary(record) || payload.userMessage !== `task-evidence-${id}`
         || payload.shannonReply !== '' || row.observed_at !== record.observedAt) return false;
+      if (record.segment) return segmentEvidence(db, scope, record, transferable);
       const proof = db.prepare(`SELECT e.result_json,e.name,e.goal,e.action_json,e.expectation_json,e.comparison_json,e.observed_at,e.sources_json,h.committed_status,h.sources_json AS history_sources FROM fca_action_evidence e
         JOIN fca_task_history h ON h.task_id=e.task_id AND h.step_id=e.step_id
         JOIN agent_tasks t ON t.task_id=e.task_id AND t.scope_key=e.scope_key
@@ -43,6 +46,19 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
       return record.status === status && typeof result.text === 'string' && record.observedResult === result.text.slice(0, 4000);
     } catch { return false; }
   };
+}
+/**
+ * A segment episode of a Minecraft body (owner decision 2026-10-14): the same proof of its closing row as an episode of one outcome
+ * (committed history, an owner-requested task that is not Codex or sleep, observed), its actions and rebuilt record matched by
+ * `verifiedSegmentSources`, no private read anywhere in its rows or history, and its lineage transferable.
+ */
+function segmentEvidence(db: DatabaseSync, scope: string, record: TaskExperienceRecord,
+  transferable: ReturnType<typeof createFcaSleepTaskLineage>): boolean {
+  const historySources = committedEvidenceHistorySources(db, scope, segmentClosingId(record), record.taskId);
+  const sources = historySources ? verifiedSegmentSources(db, scope, record) : null;
+  if (!historySources || !sources || [...sources, ...historySources].some(source => source.readSourceIds?.length)) return false;
+  const ids = (rows: readonly TaskSource[]) => rows.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]);
+  return transferable(scope, [...record.sourceIds, ...ids(sources), ...ids(historySources)], record.observedAt);
 }
 /** Store-shaped tests without a canonical FCA database remain on their historical evidence rules. */
 export function fcaSleepTaskEvidenceFor(store: object): (scope: string, id: string) => boolean {

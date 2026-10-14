@@ -205,7 +205,8 @@ const candidate = record({ kind: word(40), pattern: text(200), keyTerms: list(te
 const PAYLOADS: Readonly<Record<MemoryOpKind, Codec>> = Object.freeze({
   'task.experience': record({ record: record({ scopeKey: id, taskId: id, outcomeId: id, observedAt: time,
     status: oneOf(['success', 'failure', 'cancelled', 'unobserved']), goal: text(1000), context: text(2000), action: text(1000),
-    prediction: text(1000), observedResult: text(4000), interpretation: text(2000), sourceIds: list(id, 5000), readSourceIds: optional(list(id, 5000)) }) }),
+    prediction: text(1000), observedResult: text(4000), interpretation: text(2000), sourceIds: list(id, 5000), readSourceIds: optional(list(id, 5000)),
+    segment: optional(record({ eventIds: list(id, 5000), closedBy: text(64) })) }) }),
   'fact.upsert': record({ fact: statementItem, source: learningSource }),
   'relationship.upsert': record({ relationship: statementItem, source: learningSource }),
   'interest.change': record({ interest: text(160), source: optional(learningSource), provenance: optional(oneOf(['owner_explicit'])) }),

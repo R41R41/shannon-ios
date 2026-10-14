@@ -155,7 +155,7 @@ export class AnthropicFcaModel implements FcaModel {
         return continued ? cacheHaikuRequest(request) : cacheOneShotRequest(request);
       };
       // Above the threshold the decision message is shortened before it is sent (`anthropicFcaCompaction.ts`), never the replay.
-      const compacted = compactedDecision(fields, sent => estimatedAnthropicTokens(bodyOf(turnOf(sent))), this.compactAboveTokens);
+      const compacted = compactedDecision(fields, estimatedAnthropicTokens(bodyOf(turnOf(fields))), this.compactAboveTokens);
       if (compacted.level !== null) {
         console.info(JSON.stringify({ event: 'fca_request_compacted', model: this.model, level: compacted.level, maximumTokens: this.compactAboveTokens }));
       }

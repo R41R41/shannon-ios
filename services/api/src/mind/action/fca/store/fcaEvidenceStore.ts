@@ -6,7 +6,7 @@ import type { TaskSource, TaskStep } from '../../taskRuntime/taskRuntimePorts.js
 import type { ToolResult } from '../../../tools/toolRegistryPorts.js';
 import type { FcaModelOutput, FcaToolCall } from '../fcaPorts.js';
 import type { FcaAffectAppraisal, FcaDurableOutcome, FcaEvidence, FcaOutcomeContext, FcaSharedContext } from '../fcaEvidencePorts.js';
-import { heldRows, heldSegmentsOfEndedTasks, HELD_FOR_SEGMENT, isBodyAction, segmentActions, segmentDisposition, segmentSources } from './fcaEvidenceSegments.js';
+import { durableOutcomeOf, FCA_SEGMENT_STALE_MINUTES, heldRows, heldSegmentsToClose, HELD_FOR_SEGMENT, segmentDisposition } from './fcaEvidenceSegments.js';
 import { FcaPrepareTrace, visibleEvidenceRows, type FcaEvidenceJudge, type FcaVisibleRows } from './fcaEvidenceRows.js';
 
 export interface FcaEvidenceOptions {
@@ -19,6 +19,8 @@ export interface FcaEvidenceOptions {
    * of the same task) is visible too, without a walk (`FcaSourceGuard.covers`). Absent: every row is walked.
    */
   sourcesCovered?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean;
+  /** Minutes a segment of held body actions may stay open after its newest (`SHANNON_FCA_SEGMENT_STALE_MINUTES`, default 30). */
+  segmentStaleMinutes?: number;
   /** The source guard's walk counts (`FcaSourceGuard.walks`), for the prepare line only. */
   walkCounts?(): { walked: number; reused: number };
   taskVisible(scopeKey: string, taskId: string): boolean;
@@ -103,6 +105,13 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       throw new Error('FCA_EVIDENCE_HELD');
     }
     const gone = new Set<EvidenceRow>();
+    // A child task's visibility is asked again too: what it holds now may have been withheld during the yield (review F3).
+    const childVisible = new Map<string, boolean>();
+    for (const row of chosen.rows) {
+      if (row.task_id === step.taskId) continue;
+      if (!childVisible.has(row.task_id)) childVisible.set(row.task_id, this.options.taskVisible(row.scope_key, row.task_id));
+      if (!childVisible.get(row.task_id)) gone.add(row);
+    }
     for (const set of chosen.walked) {
       const first = set.rows[0]!;
       if (!trace.rowCheck(() => this.options.sourcesVisible(first.scope_key, first.task_id, set.sources))) set.rows.forEach(row => gone.add(row));
@@ -206,22 +215,13 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
         continue;
       }
       const held = disposition === 'close' ? this.visibleHeld(heldRows<EvidenceRow>(this.options.db, row.scope_key, row.task_id, row.seq), row) : [];
-      const outcome = this.durableOutcome(row, held);
+      // A held action that cannot be shown now keeps its segment open: the closing outcome stays undelivered and is asked again.
+      if (!held) continue;
+      const outcome = durableOutcomeOf(this.options.db, row, held);
       if (outcome.segment || !this.routineOutcome(row)) this.options.onOutcome!(outcome);
       this.markDelivered([...held, row], 1);
     }
     this.closeEndedSegments();
-  }
-  private durableOutcome(row: EvidenceRow, held: readonly EvidenceRow[]): FcaDurableOutcome {
-    const result = parse<{ ok: boolean; text: string }>(row.result_json);
-    const lifecycle = row.name === 'fca.complete' || row.name === 'fca.wait';
-    const actualTaskStatus = lifecycle && result ? String((JSON.parse(result.text) as { actualStatus: string }).actualStatus) : undefined;
-    const segment = held.length || isBodyAction(row.name) ? { actions: segmentActions(this.options.db, [...held, ...isBodyAction(row.name) ? [row] : []]), closedBy: row.name } : null;
-    return { scopeKey: row.scope_key, taskId: row.task_id, stepId: row.step_id, outcomeId: row.event_id, goal: row.goal,
-      action: JSON.parse(row.action_json) as FcaToolCall, expectation: parse<FcaActionExpectation>(row.expectation_json),
-      comparison: parse<FcaExpectationComparison>(row.comparison_json), observation: row.observation as 'observed' | 'unknown',
-      result, observedAt: row.observed_at!, sources: segment ? segmentSources([...held, row]) : JSON.parse(row.sources_json) as TaskSource[],
-      ...(actualTaskStatus ? { actualTaskStatus } : {}), ...(segment ? { segment } : {}) };
   }
   /** A lookup, or a wait with nothing observed since the last delivered wait or completion: not an episode of its own. */
   private routineOutcome(row: EvidenceRow): boolean {
@@ -232,10 +232,11 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
         AND p.name IN ('fca.wait','fca.complete') AND p.outcome_delivered=1),0) LIMIT 1`).get(row.scope_key, row.task_id, row.observed_at!);
   }
   /**
-   * The held rows still visible now, each stored source set judged once (covered by `anchor`'s just-verified sources where it can be,
-   * as in `prepare`). A held row no longer visible is not remembered: it is marked delivered and left out of the episode.
+   * The held rows, when every one is visible now (each stored source set judged once, covered by `anchor`'s just-verified sources
+   * where it can be, as in `prepare`); null when any is not, and every row stays held for the next flush (owner not alone: review of
+   * 5d492ae8, F1). Nothing held is marked remembered unseen.
    */
-  private visibleHeld(rows: readonly EvidenceRow[], anchor: EvidenceRow | null): EvidenceRow[] {
+  private visibleHeld(rows: readonly EvidenceRow[], anchor: EvidenceRow | null): EvidenceRow[] | null {
     const verdicts = new Map<string, boolean>(), anchorSources = anchor ? JSON.parse(anchor.sources_json) as TaskSource[] : null;
     const visible = rows.filter(row => {
       const key = `${row.task_id}\u0000${row.sources_json}`;
@@ -247,17 +248,15 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       }
       return verdicts.get(key)!;
     });
-    this.markDelivered(rows.filter(row => !visible.includes(row)), 1);
-    return visible;
+    return visible.length === rows.length ? visible : null;
   }
-  /** A task paused, stopped, failed or completed with body actions still held: their segment closes with the task's status. */
+  /** A task paused, stopped, failed or completed, or quiet too long, with body actions still held: their segment closes. */
   private closeEndedSegments() {
-    for (const ended of heldSegmentsOfEndedTasks(this.options.db)) {
-      const held = this.visibleHeld(heldRows<EvidenceRow>(this.options.db, ended.scopeKey, ended.taskId), null), last = held.at(-1);
-      if (!last) continue;
-      const actions = segmentActions(this.options.db, held), closedBy = `task_${ended.status}`;
-      this.options.onOutcome!({ ...this.durableOutcome(last, held.slice(0, -1)), outcomeId: `${last.event_id}:segment`,
-        segment: { actions, closedBy }, sources: segmentSources(held) });
+    const staleBefore = new Date(Date.parse(this.options.now()) - (this.options.segmentStaleMinutes ?? FCA_SEGMENT_STALE_MINUTES) * 60_000).toISOString();
+    for (const ended of heldSegmentsToClose(this.options.db, staleBefore)) {
+      const held = this.visibleHeld(heldRows<EvidenceRow>(this.options.db, ended.scopeKey, ended.taskId), null), last = held?.at(-1);
+      if (!held || !last) continue;
+      this.options.onOutcome!(durableOutcomeOf(this.options.db, last, held.slice(0, -1), { closedBy: ended.closedBy, outcomeId: `${last.event_id}:segment` }));
       this.markDelivered(held, 1);
     }
   }

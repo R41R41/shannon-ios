@@ -20,6 +20,8 @@ export function createFcaSharedWiring(parts: {
   ownerScope: string; ownerAlone(): boolean; visible: FcaSourceGuard;
   readSourceVisible(scope: string, id: string, at: string): boolean;
   affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null; now?: () => string;
+  /** `SHANNON_FCA_SEGMENT_STALE_MINUTES` (`fcaEvidenceSegments.ts`). */
+  segmentStaleMinutes?: number;
 }) {
   const now = parts.now ?? (() => new Date().toISOString());
   const leases = new ActionLeaseReader(parts.db);
@@ -27,6 +29,7 @@ export function createFcaSharedWiring(parts: {
   const recall = createTaskRecall({ ...parts, memory, enrich: parts.enrich ?? null, now });
   const evidence = parts.affect ? new SQLiteFcaEvidenceStore({ db: parts.db, state: parts.affect, now,
     validStep: step => fcaStepIsLive(leases, step, now()),
+    ...(parts.segmentStaleMinutes ? { segmentStaleMinutes: parts.segmentStaleMinutes } : {}),
     sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
     sourcesCovered: (scope, id, verified, candidate) => {
       const task = parts.runtime.get(scope, id);

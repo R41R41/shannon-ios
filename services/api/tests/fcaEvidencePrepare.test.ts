@@ -7,6 +7,7 @@ import { fcaProvenanceForCheck } from '../src/mind/action/fca/fcaConversationSou
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { memoryWorld } from './support/memoryWorld.js';
 import { run6RecallShape, type Run6RecallShape } from './support/run6RecallShape.js';
 
@@ -208,6 +209,30 @@ describe('a row of the step\'s own task covered by its verified sources (P1 b): 
     expect(w.visible.covers!('owner', w.task, verified, earlier)).toBe(false);
     const id = insertOutcome(w.h.db, w.task.id, 'step-prefix', 'call', earlier, at(prefix));
     const context = await w.evidence.prepare(stepOf(w.task, verified));
+    expect(context.recentOutcomes.map(item => item.eventId)).not.toContain(id);
+  });
+});
+
+describe('a child task withheld during the yield (review of 5d492ae8, F3)', () => {
+  it('leaves out a child\'s outcome when a memory the child holds is forgotten while the store lets the event loop through', async () => {
+    quiet();
+    const f = run6RecallShape({ turns: 200, recallingTurns: 10, tasks: 4, recalledPerTask: 8, taskRecallsOfTasks: 2, readsPerTask: 2, skills: 2 });
+    cleanups.push(() => f.close());
+    const w = wired(f);
+    const child = w.runtime.createChild('owner', w.task.id, { title: '材料集め', goal: '木を集める', completionCriteria: '持ち物で確かめる' }, 'mc-child');
+    const victim = f.turns.at(-3)!;
+    const action = await w.h.actions.claim((await w.h.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request',
+      sourceId: `fca:${child.id}:${child.revision}`, resources: [actionResource('owner', `fca:${child.id}`)] })).id);
+    const childStep = w.runtime.beginStep('owner', child.id, leaseOf(action!))!;
+    expect(w.runtime.observeSources(childStep, { observationId: 'child-recall', recalledMemoryIds: [victim] })).toBe(true);
+    expect(w.visible('owner', child.id)).toBe(true);
+    // The child's stored outcome does not name the memory; the child itself holds it now.
+    const id = insertOutcome(w.h.db, child.id, 'child-step', 'call', [], f.world.now());
+    const parent = w.runtime.get('owner', w.task.id)!;
+    expect(parent.childIds).toContain(child.id);
+    setImmediate(() => { f.memoryService.mutate('owner', { memoryId: victim, action: 'forget' }); });
+    const context = await w.evidence.prepare(stepOf(parent, []));
+    expect(w.visible('owner', child.id)).toBe(false);
     expect(context.recentOutcomes.map(item => item.eventId)).not.toContain(id);
   });
 });

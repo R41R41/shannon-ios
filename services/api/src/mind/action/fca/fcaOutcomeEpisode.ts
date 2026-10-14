@@ -26,7 +26,7 @@ export function fcaOutcomeEpisode(outcome: FcaDurableOutcome): TaskExperienceRec
     prediction: outcome.expectation ? JSON.stringify(outcome.expectation).slice(0, 1000) : '',
     observedResult: outcome.result?.text.slice(0, 4000) ?? '',
     interpretation: outcome.comparison ? JSON.stringify(outcome.comparison).slice(0, 2000) : '結果はこの操作の観測であり、目的全体の達成や原因の証明ではない。',
-    sourceIds, readSourceIds };
+    sourceIds, readSourceIds, ...(gathered ? { segment: { eventIds: segment.eventIds, closedBy: segment.closedBy } } : {}) };
 }
 
 function outcomeStatus(outcome: FcaDurableOutcome): TaskExperienceRecord['status'] {
