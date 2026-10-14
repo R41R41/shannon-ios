@@ -407,6 +407,26 @@ describe('the pinned checksums', () => {
     ]);
   });
 
+  it('passes a deploy across which her feeling events step was applied, and pins it (ADR-0013 stage 1, 2026-10-14)', () => {
+    const path = temporaryPath();
+    buildOld(path, true);
+    const emotion = new DatabaseSync(path); applySchemaSteps(emotion, EMOTION_STEPS); emotion.close();
+    const before = `${path}.before.jsonl`;
+    const script = fileURLToPath(new URL('../../../scripts/verify-schema-steps.mjs', import.meta.url));
+    expect(spawnSync(process.execPath, [script, 'dump', path, before], { encoding: 'utf8' }).status).toBe(0);
+    openNew(path).close();
+    // As in production when the stage-1 switches went on: the step, its table and its two indexes appear across the deploy.
+    const feeling = new DatabaseSync(path); applySchemaSteps(feeling, FEELING_STEPS); feeling.close();
+    const check = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(check.stdout).not.toContain('unknown step');
+    expect(check.stdout).not.toContain('shannon_feeling_events');
+    expect(check.stdout).toContain('SCHEMA_UNCHANGED_AND_LEDGER_PINNED');
+    expect(check.status).toBe(0);
+    const indexes = new DatabaseSync(path, { readOnly: true });
+    expect(indexes.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND tbl_name = 'shannon_feeling_events'").get()).toEqual({ n: 2 });
+    indexes.close();
+  });
+
   it('holds the slot tables to the rows the ledger says were written (S3 review L5)', () => {
     const path = temporaryPath();
     buildOld(path, false);
