@@ -7,6 +7,8 @@ import { replyRequiredQuestion, routerTurnState } from '../attention/silencePort
 import { fallbackWaitingDirection, jevWaitingQuestions } from '../../surfaces/voice/voiceWaitingCue.js';
 import { localDecision } from './localVoiceDecision.js';
 import { lookSelfAnswer } from '../../contracts/appLookContract.js';
+import { feelingTurnFromAnswers, feelingTurnQuestions } from '../../contracts/feelingEventContract.js';
+import { isFeelingAudience, isFeelingRegister, type FeelingAudience } from '@shannon/cognition';
 
 export interface JevVoiceDecisionOptions {
   apiKey: string;
@@ -136,6 +138,8 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
           },
         }],
         ...jevWaitingQuestions,
+        // Syzygy ADR-0013: the feeling turn rides on this one call (`voice_route.v4`); absent, the questions of before.
+        ...(input.shannonFeeling ? Object.entries(feelingTurnQuestions('feeling_', feelingAudienceOf(input))) : []),
       ]);
       const body = await this.client.ask({
         utterance: input.transcript.slice(0, 8_000),
@@ -144,7 +148,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
         has_fresh_location: input.hasFreshLocation,
         recent_context: input.context ?? [],
         raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
-        ...(input.shannonInner ? { shannon_inner: input.shannonInner } : {}),
+        ...(input.shannonInner ? { shannon_inner: input.shannonInner } : {}), ...(input.shannonFeeling ? { shannon_feeling: input.shannonFeeling } : {}),
       }, questions);
       return parsedJevDecision(body, input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     } catch {
@@ -215,6 +219,19 @@ function parsedJevDecision(
     }),
     conversationClass, latencyClass, affect, affectIntensity, delivery, waitingDirection,
     selectedSkills: selected, ...roomLookAnswer(answerMap.room_look), ...lookSelfAnswer(answerMap.look_self),
-    skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
+    skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)), ...feelingAnswer(answerMap, input),
   };
+}
+
+/** Syzygy ADR-0013: the feeling turn's answer when it was asked; unusable answers are 「ふつう」. */
+function feelingAnswer(answers: Readonly<Record<string, unknown>>, input: VoiceDecisionInput): Pick<VoiceTurnDecision, 'feeling'> {
+  if (!input.shannonFeeling) return {};
+  const hint = input.shannonFeeling.register_hint;
+  return { feeling: feelingTurnFromAnswers(answers, isFeelingRegister(hint) ? hint : 'normal', 'feeling_', feelingAudienceOf(input)) };
+}
+
+/** The audience the feeling turn was asked for; anything unreadable is taken as others present (never the owner-only menu). */
+function feelingAudienceOf(input: VoiceDecisionInput): FeelingAudience {
+  const audience = input.shannonFeeling?.audience;
+  return isFeelingAudience(audience) ? audience : 'people';
 }

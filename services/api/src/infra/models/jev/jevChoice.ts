@@ -91,6 +91,10 @@ export const JEV_QUESTION_SETS = Object.freeze({
   recallBeam: 'recall_beam.v1',
   /** Whether she would want to say something at a moment she perceived (owner decision 2026-10-14, `proactiveMoments.ts`). */
   proactiveMoment: 'proactive_moment.v2',
+  /** Syzygy ADR-0013 stage 1: her stance, its strength and her comeback drawer before a text reply (`mind/emotion/feelingTurn.ts`). */
+  feelingTurn: 'feeling_turn.v1',
+  /** The voice route that also asks the feeling turn's questions (either route set above, plus those). */
+  voiceRouteFeeling: 'voice_route.v4',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';
@@ -200,7 +204,7 @@ export function replayedAnswers(trace: Readonly<Record<string, unknown>>): Recor
 /** What one stage-2 decision writes to the decision traces (`contracts/decisionTraceContract.ts`), as closed values. */
 export interface JevChoiceTrace {
   surface: 'text' | 'voice';
-  decision: 'tool_menu' | 'difficulty' | 'recall_beam';
+  decision: 'tool_menu' | 'difficulty' | 'recall_beam' | 'feeling_turn';
   answers: Readonly<Record<string, string | boolean | number | readonly string[]>>;
   outcome: 'ok' | 'timeout' | 'error' | 'fallback';
   model: string;

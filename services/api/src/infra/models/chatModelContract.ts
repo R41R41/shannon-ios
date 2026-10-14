@@ -40,6 +40,8 @@ export interface ShannonPrecedingReply {
 
 export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {
   generateThreadTitle?: boolean;
+  /** Syzygy ADR-0013 (`SHANNON_FEELING_STRONG_REPLY_MODEL`): a strong feeling turn's reply goes to Sonnet (`FeelingStrongChatModel`). */
+  feelingStrong?: true;
   /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
   spokenReply?: boolean;
   /**

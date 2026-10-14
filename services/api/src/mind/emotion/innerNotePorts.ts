@@ -8,7 +8,7 @@ import {
   innerNoteTouchBlock, innerNoteTurnBlock, projectEmotionReaction, shannonIdentityPrompt, withoutOwnApology, buildExpressiveEmotionPrompt,
   innerNoteExpressiveEmotionPrompt,
   type CompanionStateSnapshot, type InnerNote, type InnerNoteEvent, type ReplyEmotion, type ShannonEmotionKind, type ShannonExpressiveEmotion,
-  type ShannonExpression, type ShannonFeeling,
+  type ShannonExpression, type ShannonFace, type ShannonFeeling,
 } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
 import { decidedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
@@ -56,6 +56,8 @@ export interface InnerNoteTouch {
 /** What her body tells her note when it reflects: how often each part was touched by the owner alone since an instant, in her words. */
 export interface InnerNoteBodyReader {
   partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[];
+  /** Syzygy ADR-0013: the day's episode ledger with the owner, as one line of facts ('' while feeling events are off). */
+  ledger?(scopeKey: string, at: string): string;
 }
 
 export interface InnerNotePort {
@@ -130,7 +132,7 @@ export function withCharacterCore<T extends { identity: string }>(parts: T, port
  * Her face on the body while her note is active: the face of what she shows, a blush when the note says, and her `until`. An
  * override of her present feeling (safety, grief, an emergency: 「胸が痛い、救急車」) keeps the face it gave: no sulk shows then.
  */
-export function innerNoteMood<T extends { expression: ShannonExpression; feeling?: ShannonFeeling }>(port: InnerNotePort | null | undefined,
+export function innerNoteMood<T extends { expression: ShannonExpression; feeling?: ShannonFace['feeling'] }>(port: InnerNotePort | null | undefined,
   scopeKey: string, at: string, mood: T, overridden = false): T & { tell?: 'blush'; until?: string } {
   const face = overridden ? null : innerNoteFaceOf(port, scopeKey, at);
   if (!face) return mood;

@@ -582,6 +582,21 @@ The body asks for a reaction while a touch is going on and later reports the fin
 - A later message with that id only brings the stored duration (the longer one) and strength of that touch up to date. It moves no feeling a second time and adds no second memory. In `POST /v1/body/events` it answers `stored` like any new event (the event table is separate from the reactions).
 - An event whose id matches no reaction is a touch in its own right. So touches the body did not ask a reaction for (inside its 45-second spacing, during a conversation) still move her feeling and are remembered: send them as events. This holds for `audience: others` too.
 
+### A wordless touch (`reply: "none"`, Syzygy ADR-0013 stage 1)
+
+A body that sees `feelingEvents: 1` on `GET /v1/body/presence` (beside `touchVocabulary`, on every answer, outside the `etag`) or on the answer of `PUT /v1/body/capabilities` may send every finished touch it does not ask words for to `POST /v1/body/reactions` with one more field:
+
+| Field | Value | Required | Meaning |
+| --- | --- | --- | --- |
+| `reply` | `"words"` or `"none"` | no | `"none"`: the touch reaches her feeling, her day's episode ledger and her inner note, and no model is asked for words. Absent or `"words"`: as before. |
+
+- The answer has the same shape. A wordless touch is always `status: "quiet"`, `message: null`, with her face in `mood`.
+- Asking stays the body's: at most one ask in about 45 seconds, never while she speaks, never while a conversation or a call is in progress. Only the **sending** of a touch is separated from asking: the iPhone and the Mac send the touches they do not ask about with `reply: "none"`; the Windows body splits `askBlocked` so that only "not connected", "sharing off" and "pairing" stop sending, and a call, her speaking or her processing only stop asking.
+- `reply` joins the content hash only when it is sent: a retry in the old shape gets the answer it always got; the same `id` with another `reply` is a `409`.
+- With anyone else present send `audience: "others"` as always: such a touch is counted for the room, never as the owner's (ADR-0013 §4.1).
+- Without `feelingEvents` (an older server, or `SHANNON_FEELING_EVENTS` off) a body keeps sending the old shape. Send `reply` only after seeing `feelingEvents`. A server that does not know `reply` refuses it with `400`; a body that receives that `400` registers again and resends the same touch with the same `id` and without `reply` (or as a plain event with that `id`).
+- The same touch reported later through `POST /v1/body/events` with the same `id` is still counted once.
+
 ### What a touch does to her
 
 - **Feeling.** A touch is an input to her one emotion state, the same state conversation moves: the reducer event `body-touched` and the one table in `packages/cognition/src/touchEmotion.ts` (since 2026-10-06 not on the parts where her body flinches first: see [Where only the reflex moves her](#where-only-the-reflex-moves-her)). Being patted pleases her (`happy`, then `bashful` from the third pat of a sitting, `affectionate` from the sixth); tickling makes her giggle, then flusters her, then she is cutely cross; a poke surprises her, a second one makes her cross, and from the fourth she sulks; being carried flusters her; holding hands makes her shy, then affectionate. A firm or long touch is felt a little more. The continuous mood moves by at most 0.08 per value per touch and never past the row's mood, so any number of touches stays bounded. The feeling fades as every feeling does, on her awake clock (`docs/architecture.md`, emotional continuity): the reaction passes in minutes, and being patted or poked enough to please or annoy her leaves a mood for a few awake hours; while she is dormant nothing fades. What she feels now is not replaced by a touch (nor by her line about it) when an override holds it (safety, grief, emergency, accuracy) or when it is presently stronger than the touch's: she does not turn happy from one pat while she is very sad; only the mood moves then. A feeling that itself came from a touch always gives way to the next touch. A touch reported more than 10 minutes after it happened is remembered and moves no feeling.

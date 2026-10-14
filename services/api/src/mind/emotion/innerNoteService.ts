@@ -355,18 +355,24 @@ export class InnerNoteService implements InnerNotePort {
    * touching her.
    */
   private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
-    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents'> {
+    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger'> {
     const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
     const day = innerNoteDay(at, this.timeZone);
     const today = this.partCounts(scopeKey, new Date(Date.parse(day.endsAt) - 86_400_000).toISOString(), at);
     const kept = this.bodyLines.get(scopeKey);
     const lines = kept?.dayKey === day.dayKey ? kept.lines.filter(said => eventVisible(snapshot, { kind: 'touch', at, touch: { phrase: '', said } })) : [];
     const touches = today.length || lines.length ? { today, lines } : null;
-    return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}) };
+    const ledger = this.ledgerLine(scopeKey, at);
+    return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}), ...(ledger ? { ledger } : {}) };
   }
 
   private partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[] {
     try { return (this.body?.partCounts(scopeKey, since, at) ?? []).filter(item => item.count > 0); } catch { return []; }
+  }
+
+  /** ADR-0013: the same ledger line her replies are given ('' without feeling events). */
+  private ledgerLine(scopeKey: string, at: string): string {
+    try { return this.body?.ledger?.(scopeKey, at) ?? ''; } catch { return ''; }
   }
 
   private recent(scopeKey: string, at: string) {

@@ -32,9 +32,27 @@ export type ShannonExpression =
  */
 export type ShannonFeeling = 'proud' | 'flustered' | 'apologetic';
 
+/**
+ * Syzygy ADR-0013 stage 1: the twelve faces the desktop body added (branch `codex/shannon/faces-12`), used only while
+ * `SHANNON_SINGLE_FACE` is on and never among `SHANNON_EMOTION_KINDS` (the voice judge's choices and every prompt stay as they were).
+ * On the wire the name goes in `feeling` and the nearest of the 22 faces in `expression`, so an older body falls back to that face.
+ */
+export const SINGLE_FACE_FEELINGS = Object.freeze({
+  businessSmile: 'joyful', strainedSmile: 'wry', blankFace: 'calm', listless: 'sleepy', tongueClick: 'annoyed', coverUp: 'amused',
+  irked: 'annoyed', banVerdict: 'annoyed', flatStare: 'exasperated', turnAway: 'jealous', tsun: 'jealous', holdingBackTears: 'sad',
+} as const satisfies Readonly<Record<string, ShannonExpression>>);
+export type SingleFaceFeeling = keyof typeof SINGLE_FACE_FEELINGS;
+export const isSingleFaceFeeling = (value: unknown): value is SingleFaceFeeling => typeof value === 'string' && Object.hasOwn(SINGLE_FACE_FEELINGS, value);
+
+/** One of the twelve faces as the wire carries it: the name in `feeling`, its nearest face in `expression`. */
+export function singleFace(feeling: SingleFaceFeeling): ShannonFace {
+  return Object.freeze({ expression: SINGLE_FACE_FEELINGS[feeling], feeling });
+}
+
 export interface ShannonFace {
   expression: ShannonExpression;
-  feeling?: ShannonFeeling;
+  /** A core feeling, or (only while `SHANNON_SINGLE_FACE` is on) one of the twelve single-face names. */
+  feeling?: ShannonFeeling | SingleFaceFeeling;
 }
 
 export interface ShannonMessageEmotion extends ShannonFace {
@@ -47,6 +65,11 @@ export interface ShannonMessageEmotion extends ShannonFace {
    * Absent when the face comes from the quiet mood. Additive: a client that does not know it shows the face.
    */
   kind?: ShannonEmotionKind;
+  /**
+   * Syzygy ADR-0013 D17 (`SHANNON_SINGLE_FACE`): the presentation id a client draws beside this message (its avatar icon), from the
+   * one presentation source. Present only while that switch is on. Closed vocabulary, no private content.
+   */
+  presentationId?: string;
 }
 
 const face = (expression: ShannonExpression, feeling?: ShannonFeeling): ShannonFace =>

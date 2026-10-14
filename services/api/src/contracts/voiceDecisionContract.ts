@@ -1,3 +1,4 @@
+import type { FeelingTurnDecision } from '@shannon/cognition';
 export const VOICE_SKILLS = [
   'current_web',
   'place_discovery',
@@ -113,6 +114,11 @@ export interface VoiceDecisionInput {
    * summary, nothing personal). Present, Jev chooses her performance from it (`voice_route.v3`) instead of mirroring the speaker.
    */
   shannonInner?: string;
+  /**
+   * Syzygy ADR-0013 stage 1 (`SHANNON_FEELING_TURN`): the feeling turn's state (closed numbers of the day's ledger and the watch,
+   * the audience). Present, the router also asks the feeling turn's three questions (`voice_route.v4`) and answers `feeling`.
+   */
+  shannonFeeling?: Readonly<Record<string, unknown>>;
 }
 
 export interface VoiceTurnDecision {
@@ -137,6 +143,8 @@ export interface VoiceTurnDecision {
   lookSelfProbability?: number;
   /** Set when the turn is left unanswered: the category that decided it. */
   silence?: VoiceSilenceCategory;
+  /** Syzygy ADR-0013: her stance for the reply, when the router was asked (`shannonFeeling`). */
+  feeling?: FeelingTurnDecision;
 }
 
 export interface VoiceDecisionGateway {

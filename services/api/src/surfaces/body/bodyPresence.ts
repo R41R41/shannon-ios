@@ -13,6 +13,8 @@ export interface BodyPresence {
   pollAfterSeconds: number;
   /** The touch vocabulary this server takes (`BODY_TOUCH_VOCABULARY`); a body sends the fields of vocabulary 2 only once it sees 2 or more. */
   touchVocabulary: number;
+  /** Syzygy ADR-0013: present (1) while this server takes wordless touches (`reply: none`); absent on an older server or switched off. */
+  feelingEvents?: number;
   mood: {
     expression: string; feeling?: string; primary: string; intensity: number; fromConversation: boolean;
     valence: number; arousal: number; openness: number;
@@ -31,7 +33,8 @@ export interface BodyPresence {
   ownerCallElsewhere?: OwnerCallElsewhere;
 }
 
-export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds' | 'touchVocabulary'> & { unchanged: true };
+export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds' | 'touchVocabulary' | 'feelingEvents'>
+  & { unchanged: true };
 
 export interface BodyNudges {
   schemaVersion: number;

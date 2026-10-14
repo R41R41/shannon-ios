@@ -219,8 +219,12 @@ export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutT
   return blocks.filter(Boolean).join('\n\n');
 }
 
-/** The request with the workspace's blocks after the turn's context, which is kept byte for byte as its start. */
-export function withWorkspace<T extends { turnContext?: string }>(request: T, blocks: string): T {
-  if (!blocks) return request;
-  return { ...request, turnContext: request.turnContext ? `${request.turnContext}\n\n${blocks}` : blocks };
+/**
+ * The request with the workspace's blocks after the turn's context, which is kept byte for byte as its start. `last` (Syzygy ADR-0013:
+ * her feeling turn's block, the strongest instruction) follows everything; '' adds nothing.
+ */
+export function withWorkspace<T extends { turnContext?: string }>(request: T, blocks: string, last = ''): T {
+  const tail = [blocks, last].filter(Boolean).join('\n\n');
+  if (!tail) return request;
+  return { ...request, turnContext: request.turnContext ? `${request.turnContext}\n\n${tail}` : tail };
 }

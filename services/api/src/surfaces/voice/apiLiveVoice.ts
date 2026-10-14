@@ -2,17 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { placeReply, wantsNearbyPlaces, wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
 import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '../../integrations/places/placeDiscoverySkill.js';
 import {
-  OWNER_AUDIENCE,
-  UNKNOWN_GUEST_PRESENCE,
-  buildExpressiveEmotionPrompt,
-  guardedShannonSeenPrompt,
-  isOwnerOnly,
-  projectEmotionReaction,
-  resolveShannonEmotionState,
-  shannonIdentityPrompt,
-  type CompanionClock,
-  type CompanionStateStore,
-  type MemoryAudience,
+  OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, buildExpressiveEmotionPrompt, guardedShannonSeenPrompt, isOwnerOnly, projectEmotionReaction,
+  resolveShannonEmotionState, shannonIdentityPrompt, type CompanionClock, type CompanionStateStore, type MemoryAudience,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../infra/http/apiValidation.js';
@@ -55,6 +46,7 @@ export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voi
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
 import { emotionTiming, feelingBeforeTurn, innerNoteVoice, stillFeltLine, type InnerNotePort } from '../../mind/emotion/companionPresence.js';
+import { feelingVoice, type FeelingPort } from '../../mind/emotion/feelingPorts.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
@@ -82,6 +74,7 @@ import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT, webForWeather, 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
   looks?: VoiceLooks; innerNote?: InnerNotePort; // Syzygy ADR-0012 (SHANNON_INNER_NOTE): her inner note; absent, every prompt as before.
+  feeling?: FeelingPort; // Syzygy ADR-0013 (SHANNON_FEELING_EVENTS): her feeling events and turn; absent, every prompt as before.
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel; auxiliaryChatModel?: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
@@ -182,6 +175,8 @@ async function completeLiveVoiceDelegation(
   const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
+  const feelingTurn = feelingVoice.start(dependencies.feeling, { scopeKey, alone, guest: temporaryGuest, threadId, transcript, at: occurredAt,
+    snapshot: routingState }); // ADR-0013: a call with anyone else is the call's scene, never the owner's.
   const fca = !temporaryGuest && alone ? dependencies.fcaVoice?.() : null;
   const fcaInput = confirmedFcaVoiceInput(scopeKey, threadId, dependencies.deviceId, deviceContext?.userUtterance, transcript);
   const duplicate = voiceFcaDuplicate(fca, fcaInput); if (duplicate) return duplicate;
@@ -208,6 +203,7 @@ async function completeLiveVoiceDelegation(
     context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
     ...innerNoteVoice.route(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt), // ADR-0012: voice_route.v3 sees her.
+    ...feelingVoice.route(feelingTurn, transcript, routingState), // ADR-0013: voice_route.v4 also asks her stance (no extra round trip).
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined, ...dependencies.looks?.routing,
   };
   let decision = await timing.measure('route', () => bounded('route_timeout', router.decide(routeInput), () => localRules.decide(routeInput)));
@@ -381,7 +377,7 @@ async function completeLiveVoiceDelegation(
   if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
   const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
-    voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, snapshotNow:()=>dependencies.stateStore.snapshot(scopeKey), store: dependencies.conversationStore, at: occurredAt }));
+    voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, snapshotNow:()=>dependencies.stateStore.snapshot(scopeKey), store: dependencies.conversationStore, at: occurredAt }), feelingVoice.block(feelingTurn, decision.feeling)); // ADR-0013: last.
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: selectedOffer, tier } = choices ? await bounded('tool_menu_timeout', voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }), () => ({ offer: offered, tier: null })) : { offer: offered, tier: null };
@@ -472,6 +468,8 @@ async function completeLiveVoiceDelegation(
   }
   innerNoteVoice.ended(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt, transcript, reply, expressiveEmotion,
     deviceContext?.userUtterance?.id); // ADR-0012
+  const utteranceId = deviceContext?.userUtterance?.id;
+  feelingVoice.ended(feelingTurn, { at: occurredAt, transcript, reply, ...(utteranceId ? { utteranceId } : {}) }); // ADR-0013
   stageFcaVoice(fcaTurn);
   dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
   return visibleVoiceResponse(() => ({
@@ -483,6 +481,7 @@ async function completeLiveVoiceDelegation(
       ...(feedbackRecordId ? { feedbackRecordId } : {}),
       webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
       ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(), ...(completion.truncated ? { truncated: true } : {}),
+      ...feelingVoice.presented(feelingTurn, expressiveEmotion, emotionState, occurredAt, utteranceId), // ADR-0013 D17: the icon id.
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
       ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,

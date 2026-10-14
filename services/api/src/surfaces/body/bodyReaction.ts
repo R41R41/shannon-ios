@@ -23,7 +23,8 @@ import type { ReactionLine, SQLiteBodyReactionStore, TouchFact } from './store/b
 import type { BodyTouches, FeltTouch } from '../../mind/emotion/bodyTouch.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../../mind/memory/memoryVisibility.js';
-import { innerNoteMood, innerNoteTouchContext, type InnerNotePort } from '../../mind/emotion/innerNotePorts.js';
+import { innerNoteFaceOf, innerNoteMood, innerNoteTouchContext, type InnerNotePort } from '../../mind/emotion/innerNotePorts.js';
+import { feelingBody, type FeelingPort } from '../../mind/emotion/feelingPorts.js';
 
 /**
  * When she is touched: the reflex from a touch to her answer (Syzygy ADR-0003, reflex layer).
@@ -86,6 +87,8 @@ export class BodyReactions {
   private readonly pruned = new Map<string, number>();
   /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): her inner note, read by the touch prompt and told of the touch, and the face on presence. */
   private port: InnerNotePort | null = null;
+  /** Syzygy ADR-0013 (`SHANNON_FEELING_EVENTS`): her feeling events, the ledger the touch line is told, and the one face. */
+  private feeling: FeelingPort | null = null;
 
   constructor(private readonly dependencies: BodyReactionDependencies) {}
 
@@ -95,10 +98,14 @@ export class BodyReactions {
    */
   useInnerNote(port: InnerNotePort | null): void {
     this.port = port;
-    port?.useBody?.({ partCounts: (scopeKey, since, at) => this.partCounts(scopeKey, since, at) });
+    port?.useBody?.({ partCounts: (scopeKey, since, at) => this.partCounts(scopeKey, since, at),
+      ledger: (scopeKey, at) => (this.feeling ? feelingBody.ledgerLine(this.feeling, scopeKey, at, this.dependencies.stateStore.snapshot(scopeKey)) : '') });
   }
 
   get innerNote(): InnerNotePort | null { return this.port; }
+
+  /** The kernel hands her feeling events once, at composition; null (the switch off): every prompt and face as before. */
+  useFeeling(port: FeelingPort | null): void { this.feeling = port; }
 
   get enabled(): boolean { return this.dependencies.config.enabled && this.dependencies.ingestEnabled; }
 
@@ -195,12 +202,16 @@ export class BodyReactions {
         // Touch vocabulary 2, as sent: stored with the touch, and since stage 1b read for the reflex (`part`) and her words.
         ...(request.touch.part !== undefined ? { part: request.touch.part } : {}), ...(request.touch.side !== undefined ? { side: request.touch.side } : {}),
         ...(request.touch.gesture !== undefined ? { gesture: request.touch.gesture } : {}), ...(request.touch.reflex !== undefined ? { reflex: request.touch.reflex } : {}),
-      }, { awaitsStance: timely && this.dependencies.speaker !== null }) : null;
+      }, { awaitsStance: timely && this.dependencies.speaker !== null && request.reply !== 'none' }) : null;
       if (felt) { try { this.dependencies.contact?.(scopeKey, deviceId, request, felt); } catch { /* Local reaction is independent. */ } }
-      const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
+      // A wordless touch (`reply: none`, ADR-0013) reaches her feeling, her ledger and her note, and asks no model for words.
+      const decision = felt && timely && request.reply !== 'none' ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);
       if (felt) this.noteTouch(scopeKey, request, decision, at, felt);
+      if (felt) feelingBody.touched(this.feeling, scopeKey, { id: request.id, type: request.touch.type, ...partOf(request.touch), audience: request.audience,
+        occurredAt: request.occurredAt, burstId: felt.burst.id, ...(request.reply === 'none' ? { wordless: true } : {}) },
+      { stance: decision?.stance ?? null, said: decision?.say ? decision.text : null, at: this.dependencies.now() });
       // Syzygy ADR-0006 stage 2: her stance is the outcome of the touch, and its prediction error moves her.
       const prediction = felt?.prediction;
       const settled = felt && prediction ? this.settle(scopeKey, felt, decision) : null;
@@ -216,7 +227,7 @@ export class BodyReactions {
       // her face afterwards also when she stays silent (the body shows `mood` after its flinch). Under stage 2 that holds for
       // every part (no table moves her). Elsewhere under stage 1b, as before, a silent answer leaves the feeling of the touch.
       const ownFeeling = decision !== null && (reflexPart !== undefined || prediction !== undefined) && decision.feeling !== 'neutral';
-      if (!felt || !decision || (!decision.say && !ownFeeling)) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at), at, null);
+      if (!felt || !decision || (!decision.say && !ownFeeling)) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at, request.audience), at, null);
 
       const saidAt = this.dependencies.now();
       const before = stateStore.snapshot(scopeKey);
@@ -240,7 +251,7 @@ export class BodyReactions {
         type: 'expressive-emotion-updated',
         emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
       });
-      if (!decision.say) return this.finished(scopeKey, this.quiet(request.id, after, saidAt), saidAt, null);
+      if (!decision.say) return this.finished(scopeKey, this.quiet(request.id, after, saidAt, request.audience), saidAt, null);
       const answer: BodyReactionAnswer = {
         schemaVersion: 1, id: request.id, status: 'said',
         message: {
@@ -248,7 +259,7 @@ export class BodyReactions {
           ...(resolved.messageEmotion.feeling ? { feeling: resolved.messageEmotion.feeling } : {}),
           threadId: this.dependencies.conversationStore.listThreads(scopeKey)[0]?.threadId ?? null, listenSeconds: config.listenSeconds,
         },
-        mood: this.mood(after, saidAt),
+        mood: this.mood(after, saidAt, request.audience),
       };
       const listenUntil = new Date(Date.parse(saidAt) + config.listenSeconds * 1_000 + BODY_REACTION_LIMITS.linkMarginMilliseconds).toISOString();
       const stored = this.finished(scopeKey, answer, saidAt, listenUntil);
@@ -305,7 +316,8 @@ export class BodyReactions {
       ...(stage2 ? { asksStance: true } : {}), ...(history ? { history } : {}),
       touch: request.touch, audience: request.audience, feeling: presentShannonFeeling(felt.snapshot, at, emotionTiming()),
       burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at, ...(surface ? { surface } : {}),
-      ...(this.innerNote ? { inner: { block: innerNoteTouchContext(this.innerNote, scopeKey, request.audience, at) } } : {}),
+      ...(this.innerNote ? { inner: { block: [innerNoteTouchContext(this.innerNote, scopeKey, request.audience, at), // ADR-0013: the day's ledger, as facts.
+        feelingBody.lines(this.feeling, scopeKey, request.audience, at, felt.snapshot)].filter(Boolean).join('\n') } } : {}),
     });
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -413,16 +425,19 @@ export class BodyReactions {
     return this.dependencies.store.reaction(scopeKey, answer.id)?.answer ?? answer;
   }
 
-  private quiet(id: string, snapshot: CompanionStateSnapshot, at: string): BodyReactionAnswer {
-    return { schemaVersion: 1, id, status: 'quiet', message: null, mood: this.mood(snapshot, at) };
+  private quiet(id: string, snapshot: CompanionStateSnapshot, at: string, audience?: 'owner' | 'others'): BodyReactionAnswer {
+    return { schemaVersion: 1, id, status: 'quiet', message: null, mood: this.mood(snapshot, at, audience) };
   }
 
   /** Her face now, without its cause: the body may be on a stream. */
-  private mood(snapshot: CompanionStateSnapshot, at: string): BodyReactionAnswer['mood'] {
+  private mood(snapshot: CompanionStateSnapshot, at: string, audience?: 'owner' | 'others'): BodyReactionAnswer['mood'] {
     const mood = presentShannonMood(snapshot, at, emotionTiming());
     // Syzygy ADR-0012: her note's face while it is active, never over an override (safety, grief, an emergency).
     const overridden = presentShannonFeeling(snapshot, at, emotionTiming()).overrideReason !== undefined;
     const face = { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) };
+    // ADR-0013 (`SHANNON_SINGLE_FACE`): one face from the state; the note's `shown` is only an opinion in it.
+    const note = this.feeling?.singleFace ? innerNoteFaceOf(this.innerNote, snapshot.scopeKey, at) : null;
+    if (this.feeling?.singleFace) return feelingBody.mood(this.feeling, snapshot.scopeKey, audience, at, snapshot, face, note);
     return innerNoteMood(this.innerNote, snapshot.scopeKey, at, face, overridden);
   }
 
@@ -454,6 +469,9 @@ function partWordOf(part: string | null): string {
   if (isBodyTouchRegion(part)) return bodyTouchRegionWord(part);
   return '体のどこか';
 }
+
+/** The part of a touch for her feeling events: the finer part, else the region. */
+const partOf = (touch: BodyReactionRequest['touch']): { part?: string } => (touch.part ?? touch.region ? { part: (touch.part ?? touch.region)! } : {});
 
 function minutesAgo(at: string, now: string): string {
   const minutes = Math.round((Date.parse(now) - Date.parse(at)) / 60_000);

@@ -109,7 +109,8 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     // An app's desktop body (desktopBodyIdentity.ts) is a full body on the Mac and nothing else.
     if (saved === 'desktop_body_shape') return badRequest('a desktop body registers surface "mac" and no touchOnly');
     // The touch vocabulary this server takes: a body sends the fields of vocabulary 2 only once it has seen it here or on presence.
-    return { status: 200, body: { ...saved, touchVocabulary: BODY_TOUCH_VOCABULARY } };
+    // Syzygy ADR-0013: `feelingEvents` while this server takes wordless touches; absent otherwise.
+    return { status: 200, body: { ...saved, touchVocabulary: BODY_TOUCH_VOCABULARY, ...body.feelingCapability } };
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };
 }
