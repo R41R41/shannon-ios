@@ -89,7 +89,7 @@ function run() {
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,
-    stepPorts: (_runtime, step) => ({ selector, body, evidence, history: { codec: anthropicFcaHistoryCodec, summarizer },
+    stepPorts: (_runtime, step) => ({ selector, body, evidence, history: { codec: anthropicFcaHistoryCodec, summarizer, policy: RUN5_POLICY },
       tools: createFcaProgressTools(base, { checkpoint: step.snapshot.checkpoint, async permit() {} }) }) });
   cleanups.push(async () => { await driver.close(); h.close(); world.close(); });
   const root = driver.runtime.ensureRoot('owner');
@@ -103,6 +103,9 @@ function run() {
   }
   return { h, driver, task, fixture, violations, decisions, executed, settle };
 }
+
+/** Operator run 5's history policy (a 32,000-character summary input, two batches back to back), which this replay reproduces. */
+const RUN5_POLICY = { maximumSummaryCharacters: 32_000 };
 
 describe('Minecraft operator run 5: an invalid expectation after two summaries and a replan is corrected, never unknown', () => {
   it('runs the action, returns the correction to the model, records its next valid expectation and completes', async () => {

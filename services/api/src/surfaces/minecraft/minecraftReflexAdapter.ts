@@ -41,6 +41,18 @@ export function concreteDanger(observation: BodyObservation): { kind: 'health' |
   return near.length ? { kind: 'threat', value: Math.min(...near) } : null;
 }
 
+/**
+ * The task's pace as closed numbers (the old Minebot `describePace`; owner 2026-10-14: 「40分のまま速くする」): minutes since the task
+ * began, its latest tool results that worked and failed (at most six), and its steps in a row whose actions all failed.
+ */
+export function minecraftPace(step: TaskStep, recent: ReadonlyArray<{ ok: boolean }>, at: number) {
+  const began = Date.parse(step.snapshot.task.createdAt), checkpoint = step.snapshot.checkpoint as { consecutiveToolFailures?: unknown } | null;
+  const failedSteps = Number(checkpoint?.consecutiveToolFailures ?? 0);
+  return { elapsedMinutes: Number.isFinite(began) ? Math.max(0, Math.floor((at - began) / 60_000)) : null,
+    recentResults: { worked: recent.filter(result => result.ok).length, failed: recent.filter(result => !result.ok).length },
+    failedStepsInARow: Number.isSafeInteger(failedSteps) && failedSteps >= 0 ? failedSteps : 0 };
+}
+
 /** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
 export function createMinecraftTaskBody(parts: {
   control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; entry: ReflexEntrySelector | null; selector: ReflexSelector | null;
@@ -225,7 +237,7 @@ export function createMinecraftTaskBody(parts: {
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null };
+      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace: minecraftPace(step, recentResults, now()) };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {

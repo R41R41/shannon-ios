@@ -5,7 +5,11 @@ import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts
 
 export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   maximumNativeCharacters: 64_000, maximumRounds: 24, recentRounds: 6,
-  maximumSummaryCharacters: 32_000, maximumBatches: 8,
+  // Fewer summary calls per compaction: Minecraft run 7 (2026-10-14) compacted 10 times in 33 steps with two or three calls each
+  // (rounds of ~19,000 characters, at most one or two to a 32,000-character input), 221 s of its 639 s. On the Minecraft-shaped
+  // fixture of `fcaProvenanceCap.test.ts` 64,000 makes 10–11 calls in 35 steps where 32,000 made 15–33. Even all in Japanese
+  // (1.1 tokens a character) the input stays below the 100,000-token price step.
+  maximumSummaryCharacters: 64_000, maximumBatches: 8,
   // Inline tool definitions are rebuilt from the catalog and sit in the cached prefix; a Minecraft body's 77 skills alone are
   // about 46,000 characters (Minebot lane 2026-10-14, task ecf64b3e failed its second step on them). Their own bound keeps
   // repeated selection changes from growing the request without limit; past it the round is compacted like any other.

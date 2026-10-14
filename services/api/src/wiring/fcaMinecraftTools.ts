@@ -8,6 +8,7 @@ import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
+import { minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id): BodyTaskContext {
@@ -44,10 +45,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
-      skill: current.name, arguments: call.input as Record<string, unknown>, milliseconds: 120_000 }, call.signal);
+      skill: current.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current) }, call.signal);
     active.stepOutcome = 'acknowledged';
-    return receipt.outcome === 'completed' ? toolOk(receipt.result ?? '操作の実行結果を受け取った。目的の達成は新しい観測で確認する。')
-      : toolFailure('failed', receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`, { retryable: false });
+    return minecraftSkillResult(receipt);
   } };
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {

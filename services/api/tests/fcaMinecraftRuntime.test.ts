@@ -14,7 +14,7 @@ import { actionHarness } from './support/actionThreadHarness.js';
 
 const at = '2026-10-09T00:00:00.000Z', closes: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of closes.splice(0)) await close(); });
-function fixture() {
+function fixture(skillExtra: { maxDurationMs?: unknown } = {}) {
   const h = actionHarness(() => at), calls: FcaModelInput[] = [], bodyStore = new MinecraftControlStore(h.db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
   let sequence = 0;
@@ -23,7 +23,7 @@ function fixture() {
   const poll = (receipts: MinecraftControlReceipt[] = [], active: string[] = []) => control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, {
     schemaVersion: 1, serverId: 'world', connectionId: 'connection',
     observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: sequence++, stateAt: at, receivedAt: at, connected: true, state: { inventory: receipts.length ? { stone: 1 } : {} }, facts: {} },
-    skills: [{ name: 'dig', description: 'Dig the requested count.', readOnly: false,
+    skills: [{ name: 'dig', description: 'Dig the requested count.', readOnly: false, ...skillExtra as { maxDurationMs?: number },
       inputSchema: { type: 'object', properties: { count: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['count'], additionalProperties: false } }],
     candidates: [], receipts, activeOperationIds: active,
   } satisfies MinecraftControlPoll);
@@ -84,5 +84,37 @@ describe('normal physical tools in the common FCA executor', () => {
     expect(f.driver.runtime.get('owner', f.task.id)).toMatchObject({ phase: 'completed', summary: 'Stone confirmed' });
     expect(f.calls).toHaveLength(2); expect(f.db.prepare('SELECT COUNT(*) AS n FROM fca_body_operations').get()).toEqual({ n: 1 });
     expect(f.db.prepare('SELECT * FROM agent_task_commands').all()).toEqual([]);
+  });
+});
+
+describe('a body skill\'s own duration and its failure kinds (Minebot lane agreement, 2026-10-14)', () => {
+  async function dispatched(f: ReturnType<typeof fixture>) {
+    await f.driver.tick();
+    for (let count = 0; count < 1000 && !f.bodyStore.pending('minecraft:world').length; count++) await delay(1);
+    return f.poll().commands[0]!;
+  }
+  it('gives a skill the catalog\'s maxDurationMs as its deadline, bounded to ten minutes, and 120 s without it', async () => {
+    for (const [extra, seconds] of [[{ maxDurationMs: 300_000 }, 300], [{ maxDurationMs: 3_600_000 }, 600], [{}, 120], [{ maxDurationMs: 'long' }, 120]] as const) {
+      const f = fixture(extra), command = await dispatched(f);
+      expect(Date.parse(command.deadlineAt) - Date.parse(at), JSON.stringify(extra)).toBe(seconds * 1000);
+      f.poll([{ id: command.id, connectionId: 'connection', outcome: 'completed', inputsReleased: true, observedAt: at, result: 'done' }]);
+      await f.driver.drain();
+    }
+  });
+  it('tells the model how to retry a failure from the body\'s failureType, and keeps a failure without one as it was', async () => {
+    const cases: Array<[Record<string, unknown>, string | null]> = [
+      [{ failureType: 'no_path', recoverable: true }, '［再試行の目安: change_situation｜位置・対象・周りを変えてから試す］'],
+      [{ failureType: 'interrupted' }, '［再試行の目安: retry_same｜そのままもう一度試せる］'],
+      [{ failureType: 'missing_tool' }, '［再試行の目安: need_material｜材料や道具がそろうまで同じ操作は通らない］'],
+      [{}, null],
+    ];
+    for (const [extra, hint] of cases) {
+      const f = fixture(), command = await dispatched(f);
+      f.poll([{ id: command.id, connectionId: 'connection', outcome: 'failed', inputsReleased: true, observedAt: at, result: '移動失敗: パスが見つかりません', ...extra } as MinecraftControlReceipt]);
+      await f.driver.drain(); await f.driver.tick(); await f.driver.drain();
+      const results = JSON.stringify(f.calls[1]!.history);
+      expect(results).toContain('移動失敗: パスが見つかりません');
+      if (hint) expect(results).toContain(hint); else expect(results).not.toContain('再試行の目安');
+    }
   });
 });

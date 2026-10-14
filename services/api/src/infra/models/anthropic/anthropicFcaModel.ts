@@ -78,6 +78,12 @@ const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this 
 const WAIT_RULE = 'Nobody can send this task a message or answer a question: it has no unfinished child task and whoever handed it over '
   + 'cannot reply. fca_wait is turned away until refusedWaits reaches refusalLimit; a wait after that stops the task. '
   + 'Continue toward the goal with the offered tools, or use fca_complete once the completion criteria are met.';
+/**
+ * With a body (`body`, its `pace` from `minecraftPace`): the L101–L103 lessons of the Minebot campaign (a run of steps without progress,
+ * and idle waits while nobody could answer, used up the run). Restated only when it changed, as the other elided parts are.
+ */
+const BODY_RULE = 'body.pace gives the minutes since this task began and its latest tool results. Time is limited: when steps bring no '
+  + 'progress, change the approach or the order of subgoals instead of repeating it. Never wait idle while nobody can answer; continue with the body.';
 /** Rich chat (owner decision 2026-10-13): a report is shown as a card in his Talk, its form chosen by its content. */
 const REPORT_FORM_RULE = [
   'A report for the owner (a task.send to your parent, or the fca_complete summary when you send none) is shown in his app as Markdown,',
@@ -290,7 +296,7 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
   return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
     ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-    ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
+    ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
 }
 

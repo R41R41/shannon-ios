@@ -5,6 +5,8 @@ import type { BodyActionReceipt, BodyCandidateDraft, BodyObservation, BodyOperat
 export const MINECRAFT_CONTROL_PATH = '/v1/body/minecraft/control';
 export interface MinecraftSkillDefinition {
   name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; readOnly: boolean;
+  /** How long the body lets this skill run, when it says (`minecraftSkillMilliseconds`); optional. */
+  maxDurationMs?: number;
 }
 export interface MinecraftControlCommand {
   schemaVersion: 1; id: string; serverId: string; connectionId: string;
@@ -16,6 +18,8 @@ export interface MinecraftControlCommand {
 export interface MinecraftControlReceipt {
   id: string; connectionId: string; outcome: 'completed' | 'failed' | 'cancelled' | 'unknown';
   inputsReleased: boolean; observedAt: string; result?: string;
+  /** Why a skill failed, as the body's closed code (`minecraftRetryHint`), and whether it thinks it can recover; both optional. */
+  failureType?: string; recoverable?: boolean;
   action?: BodyActionReceipt; stop?: BodyStopAcknowledgement;
   /** Ephemeral pixels only: the companion stores an expiring reference, never this field in SQLite. */
   image?: { dataUrl: string; capturedAt: string };

@@ -117,11 +117,11 @@ function object(value: unknown): Record<string, unknown> | null {
  * decision states them all again.
  */
 export const UNCHANGED = Object.freeze({ unchanged: true as const });
-const ELIDED = ['catalog', 'skillIndex', 'contextInstructions', 'progressInstructions'] as const;
+const ELIDED = ['catalog', 'skillIndex', 'contextInstructions', 'progressInstructions', 'bodyInstructions'] as const;
 
 /** The fixed rule for reading an elided decision message; it belongs to the cached instructions, never to a message. */
 export const FCA_RESTATED_RULE = 'Within this conversation a decision message restates only what changed since an earlier decision message: '
-  + 'a part given as {"unchanged":true} (catalog, skillIndex, contextInstructions, progressInstructions) '
+  + 'a part given as {"unchanged":true} (catalog, skillIndex, contextInstructions, progressInstructions, bodyInstructions) '
   + 'is exactly its latest full value in an earlier decision message. '
   + 'recall.items holds memories in full; recall.knownItemIds names memories that are current '
   + 'and unchanged since their latest full appearance earlier in this conversation. '

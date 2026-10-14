@@ -686,6 +686,7 @@
     "surfaces/minecraft/minecraftIntent.ts",
     "surfaces/minecraft/minecraftLifecycle.ts",
     "surfaces/minecraft/minecraftObservationSummary.ts",
+    "surfaces/minecraft/minecraftOutcome.ts",
     "surfaces/minecraft/minecraftReflexAdapter.ts",
     "surfaces/minecraft/serverMinecraftBodyRoute.ts",
     "surfaces/minecraft/store/minecraftControlStore.ts",
