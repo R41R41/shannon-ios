@@ -40,6 +40,8 @@ export interface RelationshipParameters {
   apologyRelief: number;
   /** Trust and liking never fall below this × their highest value. */
   floorRatio: number;
+  /** The scales kept (the light ledger of a stranger or a viewer keeps liking and irritation only, §4.2); absent: all four. */
+  scales?: readonly RelationshipScale[];
 }
 
 /** Approved by the owner as proposed (2026-10-14, form: 「この案でよい」); model assumptions until fitted to her own data (D14). */
@@ -57,6 +59,36 @@ export const RELATIONSHIP_PARAMETERS: RelationshipParameters = Object.freeze({
   apologyRelief: 0.35,
   floorRatio: 0.7,
 });
+
+/**
+ * Stage 4 (ADR-0013 §4.2, `SHANNON_FEELING_AUDIENCE`): a known friend's ledger, lighter than the owner's (it starts lower, moves and
+ * fades a little faster, its floor is lower), and a stranger's or a viewer's light ledger (liking and irritation only, forgiven and
+ * forgotten fast). Proposals for the owner's approval (2026-10-14); model assumptions.
+ */
+export const FRIEND_RELATIONSHIP_PROPOSAL: RelationshipParameters = Object.freeze({
+  status: 'proposal',
+  start: Object.freeze({ owner: RELATIONSHIP_PARAMETERS.start.owner, other: Object.freeze({ trust: 0.55, liking: 0.6, respect: 0.55, irritation: 0 }) }),
+  lossRate: 0.25, gainRate: 0.08, recovery: 0.15, irritationFade: 0.4, irritationGain: 0.45, apologyRelief: 0.4, floorRatio: 0.6,
+});
+export const STRANGER_RELATIONSHIP_PROPOSAL: RelationshipParameters = Object.freeze({
+  status: 'proposal',
+  start: Object.freeze({ owner: RELATIONSHIP_PARAMETERS.start.owner, other: Object.freeze({ trust: 0.5, liking: 0.5, respect: 0.5, irritation: 0 }) }),
+  lossRate: 0.3, gainRate: 0.12, recovery: 0.3, irritationFade: 0.5, irritationGain: 0.5, apologyRelief: 0.4, floorRatio: 0.5,
+  scales: Object.freeze(['liking', 'irritation'] as const),
+});
+
+/** Whose ledger a person key keeps: the owner's, a known friend's (`person:`), or a stranger's or viewer's light one. */
+export type RelationshipClass = 'owner' | 'friend' | 'stranger';
+export function relationshipClassOf(personKey: string): RelationshipClass {
+  if (personKey === OWNER_PERSON_KEY) return 'owner';
+  return personKey.startsWith('person:') ? 'friend' : 'stranger';
+}
+
+/** The parameters of a person's ledger by their class. */
+export function relationshipParametersFor(personKey: string): RelationshipParameters {
+  const kind = relationshipClassOf(personKey);
+  return kind === 'owner' ? RELATIONSHIP_PARAMETERS : kind === 'friend' ? FRIEND_RELATIONSHIP_PROPOSAL : STRANGER_RELATIONSHIP_PROPOSAL;
+}
 
 /** One closed day of a person: its day key and its remembered events (the archive's, or today's). */
 export interface RelationshipDay { dayKey: string; events: readonly FeelingEvent[] }
@@ -146,7 +178,7 @@ function step(state: RelationshipState, signals: DaySignals, parameters: Relatio
 
 /** The relationship with one person after their closed days (oldest first), rested up to `today` (a day key). */
 export function foldRelationship(days: readonly RelationshipDay[], personKey: string, today: string,
-  parameters: RelationshipParameters = RELATIONSHIP_PARAMETERS): RelationshipState {
+  parameters: RelationshipParameters = relationshipParametersFor(personKey)): RelationshipState {
   const start = personKey === OWNER_PERSON_KEY ? parameters.start.owner : parameters.start.other;
   let state: RelationshipState = { personKey, scales: start, peak: { trust: start.trust, liking: start.liking, respect: start.respect }, dayKey: null };
   for (const day of [...days].filter(item => item.dayKey < today).sort((a, b) => a.dayKey.localeCompare(b.dayKey))) {
@@ -163,10 +195,12 @@ const IRRITATION_WORDS: readonly [number, string][] = [[0.05, '残っていな�
 const worded = (value: number, words: readonly [number, string][], last: string) => words.find(([below]) => value < below)?.[1] ?? last;
 
 /** The relationship as one line of facts in words ('' when nothing is off): trust, liking and respect against their highest, irritation. */
-export function relationshipLine(state: RelationshipState, who: string): string {
+export function relationshipLine(state: RelationshipState, who: string, kept: readonly RelationshipScale[] = RELATIONSHIP_SCALES): string {
   const drop = (scale: 'trust' | 'liking' | 'respect') => worded(state.peak[scale] - state.scales[scale], DROP_WORDS, 'かなり下がっている');
   const irritation = worded(state.scales.irritation, IRRITATION_WORDS, '強く残っている');
-  const parts = [`信頼: ${drop('trust')}`, `好意: ${drop('liking')}`, `尊敬: ${drop('respect')}`, `いらだち: ${irritation}`];
+  const words: Record<RelationshipScale, string> = { trust: `信頼: ${drop('trust')}`, liking: `好意: ${drop('liking')}`, respect: `尊敬: ${drop('respect')}`,
+    irritation: `いらだち: ${irritation}` };
+  const parts = RELATIONSHIP_SCALES.filter(scale => kept.includes(scale)).map(scale => words[scale]);
   if (parts.every(part => part.endsWith('いつもどおり') || part.endsWith('残っていない'))) return '';
   return `[${who}との間]（日をまたいで持っているもの。事実として。すねた態度は持ち越さない）${parts.join('、')}`;
 }

@@ -257,6 +257,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 stage 3: her boundaries with their basis and origin (self or told); a told one is hers only once she endorses it in reflection.',
   },
   {
+    name: 'SHANNON_FEELING_AUDIENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 4: events keyed by who wrote (account, never name), friend and light ledgers, audience layers, source cap, audience checks.',
+  },
+  {
     name: 'SHANNON_TEXT_REGISTER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
     doc: 'ADR-0013 item 10 (owner: B): text reply form (length, emoji, endings) and pacing (typing, split in two, sulk pause ≤20 s) from her feeling.',
   },

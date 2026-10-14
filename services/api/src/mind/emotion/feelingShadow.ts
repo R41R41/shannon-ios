@@ -37,7 +37,9 @@ export class FeelingShadow {
   private readonly pruned = new Map<string, number>();
 
   constructor(private readonly options: { events: () => FeelingEvents | null; store: FeelingShadowRecords;
-    snapshot: (scopeKey: string) => CompanionStateSnapshot; now: () => string; reportError?: (error: unknown) => void }) {}
+    snapshot: (scopeKey: string) => CompanionStateSnapshot; now: () => string; reportError?: (error: unknown) => void;
+    /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): the per-source influence cap in a scene. */
+    sourceCap?: boolean }) {}
 
   recorded(scopeKey: string, event: FeelingEvent): void {
     try {
@@ -46,7 +48,8 @@ export class FeelingShadow {
       const at = this.options.now();
       const snapshot = this.options.snapshot(scopeKey);
       const key = shadowKeyOf(event);
-      const point = foldFeelingDynamics(events.today(scopeKey, event.occurredAt > at ? event.occurredAt : at, snapshot), key).series
+      const today = events.today(scopeKey, event.occurredAt > at ? event.occurredAt : at, snapshot);
+      const point = foldFeelingDynamics(today, key, {}, { sourceCap: this.options.sourceCap === true }).series
         .filter(item => item.at === event.occurredAt && item.kind === event.kind).at(-1);
       if (!point) return;
       this.forget(scopeKey, snapshot);
@@ -86,7 +89,7 @@ export class FeelingShadow {
     const since = new Date(start).toISOString(), until = new Date(start + DAY_MILLISECONDS - 1).toISOString();
     this.options.store.deleteSpan(scopeKey, key, since, until);
     const events = this.options.events()?.between(scopeKey, since, until).filter(event => remembered(snapshot, event.sourceId)) ?? [];
-    const series = foldFeelingDynamics(events, key).series;
+    const series = foldFeelingDynamics(events, key, {}, { sourceCap: this.options.sourceCap === true }).series;
     const at = this.options.now();
     for (const event of events.filter(item => sameKey(shadowKeyOf(item), key))) {
       const point = series.find((item: FeelingPoint) => item.at === event.occurredAt && item.kind === event.kind);

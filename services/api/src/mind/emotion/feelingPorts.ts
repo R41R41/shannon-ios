@@ -8,7 +8,8 @@ import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
   checkBeforeSending, checkReply, feelingSentenceBlock,
   fastLayerWords, advanceCoreAffect, registerOfLevel,
-  type TextRegisterDirective, toldBoundariesOpen, OWNER_PERSON_KEY, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  type TextRegisterDirective, toldBoundariesOpen, OWNER_PERSON_KEY, type FeelingSpeaker,
+  continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
@@ -22,7 +23,7 @@ import type { JevChooser } from '../../infra/models/jev/jevChoice.js';
 import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.js';
 import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
-import type { FeelingDays } from './feelingDays.js';
+import { OWNER_PRIVATE_MARK, type FeelingDays } from './feelingDays.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
 import { textRegisterBefore, textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
@@ -59,6 +60,8 @@ export interface FeelingPort {
    * (meant, teasing). Apart from `SHANNON_CORE_AFFECT`, so the shadow changes no Jev question.
    */
   readonly meaning?: boolean;
+  /** `SHANNON_FEELING_AUDIENCE` (stage 4): keys by who wrote, light ledgers, audience layers and checks. */
+  readonly audience?: boolean;
   /** `SHANNON_TEXT_REGISTER` (with the turn): her text reply's form and pacing follow the feeling turn and her composure. */
   readonly textRegister?: boolean;
   /** `SHANNON_INNER_NARRATOR` (with the fast layer): her inner note reads the fast layer and reflects as narrator. */
@@ -122,7 +125,8 @@ function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null
 
 /** The events after a turn: his words (what kind of thing they were) and her reply (its closed facts, and the stance it was given). */
 function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string; reply: string; turnId: string; sourceId: string | null }): void {
-  const base = { ...handle.key, identity: handle.key.personKey === 'owner' ? 'registered' as const : 'unknown' as const, channel: handle.channel,
+  const identity = handle.key.identity ?? (handle.key.personKey === 'owner' ? 'registered' as const : 'unknown' as const);
+  const base = { ...handle.key, identity, channel: handle.channel,
     sourceId: input.sourceId, occurredAt: input.at };
   const stance = handle.decision && handle.decision.stance !== 'neutral' ? { turnStance: handle.decision.stance } : {};
   const strong = handle.strong ? { replyModel: 'strong' as const } : {};
@@ -151,7 +155,7 @@ function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
   const ledger = handle.lines?.ledger;
   const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form };
+    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}) };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
@@ -162,7 +166,8 @@ function registerNow(handle: FeelingTurnHandle): FeelingRegister {
 
 /** The shadow's composure step for this key now (for the check's register flags only). */
 function composureLevel(handle: FeelingTurnHandle): number | undefined {
-  return safely(() => foldFeelingDynamics(handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot), handle.key).composure.level, undefined);
+  const events = () => handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot);
+  return safely(() => foldFeelingDynamics(events(), handle.key, {}, { sourceCap: handle.port.audience === true }).composure.level, undefined);
 }
 
 /** A reply's check: the one made before sending when there was one, else checked now (voice, and text turns not checked before). */
@@ -234,11 +239,14 @@ export const feelingText = Object.freeze({
     return port ?? null;
   },
   /** Started right after the turn begins, beside recall and context: the Jev call runs while they do. */
-  start: (port: FeelingPort | null, input: { scopeKey: string; alone: boolean; surface: boolean; message: string;
-    begun: { occurredAt: string; captured: CompanionStateSnapshot } }) => {
+  start: (port: FeelingPort | null, input: { scopeKey: string; alone: boolean; surface: boolean | { feelingSpeaker?: FeelingSpeaker } | undefined;
+    message: string; begun: { occurredAt: string; captured: CompanionStateSnapshot } }) => {
     if (!port) return null;
     return safely(() => {
-      const key = feelingActor({ ownerAlone: input.alone && !input.surface, group: input.surface });
+      const surface = Boolean(input.surface);
+      // Stage 4 (`SHANNON_FEELING_AUDIENCE`): a surface that knows who wrote keys the turn to that person.
+      const speaker = port.audience && typeof input.surface === 'object' ? input.surface.feelingSpeaker : undefined;
+      const key = feelingActor({ ownerAlone: input.alone && !surface, group: surface, ...(speaker ? { speaker } : {}) });
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
@@ -316,6 +324,7 @@ export const feelingVoice = Object.freeze({
     // A 「友人も一緒」 call, or the owner's call with someone beside him: the call is the scene; nothing is the owner's.
     const key = feelingActor({ ownerAlone: input.alone && !input.guest, sceneId: input.alone && !input.guest ? null : `call:${input.threadId}` });
     const { scopeKey, transcript: words, at, snapshot } = input;
+    if (port.audience && key.sceneId) safely(() => port.events.noteScene(scopeKey, key.sceneId!, at), undefined);
     return safely(() => begin(port, { scopeKey, key, channel: 'voice', words, at, snapshot }), null);
   },
   /** What the router is handed: the feeling turn's state, only while the turn is on. */
@@ -376,6 +385,15 @@ export interface FeelingTouch {
 
 const touchKey = (audience: 'owner' | 'others'): FeelingKey => feelingActor({ ownerAlone: audience === 'owner' });
 
+/**
+ * Stage 4 (`SHANNON_FEELING_AUDIENCE`): a touch with others present during a call with others (「友人も一緒」, or the owner's call with
+ * someone beside him) is that call's: it moves the scene's ledger and fast layer (the feeling is not cut off), never the owner's.
+ */
+function touchKeyIn(port: FeelingPort, scopeKey: string, audience: 'owner' | 'others', at: string): FeelingKey {
+  const scene = audience === 'others' && port.audience ? port.events.activeScene(scopeKey, at) : null;
+  return scene ? feelingActor({ ownerAlone: false, sceneId: scene }) : touchKey(audience);
+}
+
 /** Her note's face, as an opinion in the one face (ADR-0012's `innerNoteFaceOf`). */
 type BodyNoteFace = { shown?: ShannonEmotionKind; tell?: string; until?: string | null };
 
@@ -384,7 +402,7 @@ export const feelingBody = Object.freeze({
   touched: (port: FeelingPort | null, scopeKey: string, touch: FeelingTouch, outcome: { stance?: string | null; said?: string | null; at?: string } = {}) => {
     if (!port) return;
     safely(() => {
-      const key = touchKey(touch.audience);
+      const key = touchKeyIn(port, scopeKey, touch.audience, touch.occurredAt);
       const identity = touch.audience === 'owner' ? 'registered' as const : 'unknown' as const;
       const base = { ...key, identity, channel: 'body' as const, sourceId: touch.burstId };
       const facts = { touchKind: touch.type, ...(touch.part ? { part: touch.part } : {}), ...(outcome.stance ? { stance: outcome.stance } : {}),
@@ -398,8 +416,10 @@ export const feelingBody = Object.freeze({
   /** The facts a touch line is told (the same ledger line, and the watch), for the touch's own audience. */
   lines: (port: FeelingPort | null, scopeKey: string, audience: 'owner' | 'others', at: string, snapshot: CompanionStateSnapshot): string => {
     if (!port) return '';
-    const lines = port.events.linesFor(scopeKey, touchKey(audience), at, snapshot);
-    return [lines?.ledgerLine ?? '', ...(lines?.carriedTouchLines ?? []), lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
+    const lines = port.events.linesFor(scopeKey, touchKeyIn(port, scopeKey, audience, at), at, snapshot);
+    // A touch line is not told the owner's marked matters (it has no check before it is said).
+    const carried = (lines?.carriedTouchLines ?? []).filter(line => !line.startsWith(OWNER_PRIVATE_MARK));
+    return [lines?.ledgerLine ?? '', ...carried, lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
   },
   /** The owner's day as one ledger line, for her inner note's reflection ('' without a port). */
   ledgerLine: (port: FeelingPort | null, scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string =>

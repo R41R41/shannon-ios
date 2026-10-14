@@ -1,6 +1,6 @@
 import {
   OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, boundaryLines, closedDayGroups, foldBoundaries, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts,
-  relationshipLine, toldBoundaryIn, type Boundary,
+  relationshipLine, relationshipParametersFor, toldBoundaryIn, type Boundary,
   type CompanionStateSnapshot, type FeelingEvent, type RelationshipDay,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -24,11 +24,22 @@ export interface ClosedDayRecords {
   person(scopeKey: string, personKey: string, sinceDayKey: string): ClosedDayRow[];
   lastDayKey(scopeKey: string): string | null;
   prune(scopeKey: string, beforeDayKey: string): number;
+  /** Rows of anyone but the owner and remembered friends (light ledgers, unknown people, scenes) before a day. */
+  pruneLight?(scopeKey: string, beforeDayKey: string): number;
 }
 
-export interface FeelingDayFeatures { relationship: boolean; episodes: boolean; boundaries: boolean }
+export interface FeelingDayFeatures {
+  relationship: boolean; episodes: boolean; boundaries: boolean;
+  /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): friends' and strangers' ledgers, and the owner's lines marked when he is with others. */
+  audience?: boolean;
+}
 
-export const FEELING_DAY_LIMITS = Object.freeze({ backfillDays: 30, retentionDays: 400 });
+/** The owner's matters with anyone else present (§4.4 `people`): marked, for her own check before she speaks. */
+export const OWNER_PRIVATE_MARK = '【機微:ライ氏との間・ライ氏だけが知っている】';
+
+export const FEELING_DAY_LIMITS = Object.freeze({ backfillDays: 30, retentionDays: 400,
+  /** A stranger's or a viewer's light ledger (and anyone unknown or a scene): kept this long (§4.2: 保存期間に上限). */
+  lightRetentionDays: 30 });
 
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
@@ -72,6 +83,7 @@ export class FeelingDays {
       this.closedThrough.set(scopeKey, this.dayKeyAt(yesterdayStart));
       if (this.closedThrough.size > 64) this.closedThrough.clear();
       this.options.store.prune(scopeKey, this.dayKeyAt(Date.parse(today.endsAt) - (FEELING_DAY_LIMITS.retentionDays + 1) * DAY_MILLISECONDS));
+      this.options.store.pruneLight?.(scopeKey, this.dayKeyAt(Date.parse(today.endsAt) - (FEELING_DAY_LIMITS.lightRetentionDays + 1) * DAY_MILLISECONDS));
     } catch (error) { this.report(error); }
   }
 
@@ -93,23 +105,36 @@ export class FeelingDays {
    */
   carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = ''): CarriedLines {
     const { features } = this.options;
-    if (!(features.relationship || features.episodes || features.boundaries) || !knownPerson(key)) return { lines: [], facts: {} };
+    if (!(features.relationship || features.episodes || features.boundaries)) return { lines: [], facts: {} };
     try {
+      const whose = carriedFor(key, features.audience === true);
+      if (!whose) return { lines: [], facts: {} };
       this.close(scopeKey, at);
-      const days = this.history(scopeKey, key.personKey, at, snapshot);
-      const today = innerNoteDay(at, this.options.timeZone).dayKey;
-      const relationship = features.relationship ? this.relationship(days, key.personKey, today) : { lines: [], facts: {} };
-      const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: key.personKey === OWNER_PERSON_KEY },
-        () => recallEpisodes(days, key.personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
-      const found = features.boundaries ? this.boundariesOf(scopeKey, key.personKey, at, snapshot, days) : [];
-      const boundaries = boundaryLines(found, this.options.partWord);
-      const owned = boundaryLines(found.filter(item => item.origin === 'self' || item.endorsed), this.options.partWord);
-      const before = [...relationship.lines, ...(episodes ? [episodes] : [])];
-      return { lines: [...before, ...(boundaries ? [boundaries] : [])], facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])] };
+      const own = this.own(scopeKey, whose.personKey, at, snapshot, words);
+      // §4.4: with others present, the owner's matters are marked for her check before she speaks; nothing of the owner goes to the chooser.
+      const mark = (lines: readonly string[]) => lines.map(line => line.split('\n').map(part => `${OWNER_PRIVATE_MARK}${part}`).join('\n'));
+      return whose.marked ? { lines: mark(own.lines), facts: {}, touchLines: mark(own.touchLines ?? own.lines) } : own;
     } catch (error) {
       this.report(error);
       return { lines: [], facts: {} };
     }
+  }
+
+  /** One person's carried lines: the relationship (their class's scales), the episodes recalled, and (the owner's) boundaries. */
+  private own(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, words: string): CarriedLines {
+    const { features } = this.options;
+    const days = this.history(scopeKey, personKey, at, snapshot);
+    const today = innerNoteDay(at, this.options.timeZone).dayKey;
+    const relationship = features.relationship ? this.relationship(days, personKey, today) : { lines: [], facts: {} };
+    const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: personKey === OWNER_PERSON_KEY },
+      () => recallEpisodes(days, personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
+    const owner = personKey === OWNER_PERSON_KEY;
+    const found = features.boundaries && owner ? this.boundariesOf(scopeKey, personKey, at, snapshot, days) : [];
+    const boundaries = boundaryLines(found, this.options.partWord);
+    // Review L2: the touch judgment gets only her own and endorsed boundaries.
+    const owned = boundaryLines(found.filter(item => item.origin === 'self' || item.endorsed), this.options.partWord);
+    const before = [...relationship.lines, ...(episodes ? [episodes] : [])];
+    return { lines: [...before, ...(boundaries ? [boundaries] : [])], facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])] };
   }
 
   /** The subject his words told her to refuse, while boundary memory is on (null otherwise). */
@@ -142,7 +167,7 @@ export class FeelingDays {
   private relationship(days: ReturnType<FeelingDays['history']>, personKey: string, today: string): CarriedLines {
     const state = observeSync('emotion', { phase: 'feeling.relationship', owner: personKey === OWNER_PERSON_KEY, days: days.length },
       () => foldRelationship(days, personKey, today), value => ({ ...value.scales, peakTrust: value.peak.trust, peakLiking: value.peak.liking }));
-    const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人');
+    const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人', relationshipParametersFor(personKey).scales);
     return { lines: line ? [line] : [], facts: relationshipFacts(state) };
   }
 
@@ -162,3 +187,17 @@ export class FeelingDays {
 
 /** A person whose relationship she keeps: not anyone unknown, and not a scene as a whole. */
 const knownPerson = (key: FeelingKey) => key.personKey !== UNKNOWN_PERSON_KEY && !key.personKey.startsWith('scene:');
+
+/**
+ * Whose carried lines a turn of this key gets, and whether marked (ADR-0013 §4.4). Without stage 4: a known person's own, as in stage 3.
+ * With it: the owner alone, his own; the owner with others present (`people`, the speaker not known), his own marked; a friend in their
+ * own DM (`people`), theirs; a stranger or a viewer, their light ledger (it is of what happened in front of others); anyone in a group,
+ * the owner or a friend among them, nothing private.
+ */
+export function carriedFor(key: FeelingKey, audience: boolean): { personKey: string; marked: boolean } | null {
+  if (key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone') return { personKey: OWNER_PERSON_KEY, marked: false };
+  if (!audience) return knownPerson(key) ? { personKey: key.personKey, marked: false } : null;
+  if (!knownPerson(key)) return key.audience === 'people' ? { personKey: OWNER_PERSON_KEY, marked: true } : null;
+  if (key.personKey.startsWith('person:')) return key.audience === 'people' ? { personKey: key.personKey, marked: false } : null;
+  return key.personKey === OWNER_PERSON_KEY ? null : { personKey: key.personKey, marked: false };
+}

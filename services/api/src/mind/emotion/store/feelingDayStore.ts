@@ -59,6 +59,12 @@ export class SQLiteFeelingDayStore {
     return Number(this.database.prepare('DELETE FROM shannon_feeling_days WHERE scope_key = ? AND day_key < ?').run(scopeKey, beforeDayKey).changes);
   }
 
+  /** Rows of anyone but the owner and remembered friends (light ledgers, unknown people, scenes) before a day. */
+  pruneLight(scopeKey: string, beforeDayKey: string): number {
+    return Number(this.database.prepare(`DELETE FROM shannon_feeling_days WHERE scope_key = ? AND day_key < ? AND person_key <> 'owner'
+      AND person_key NOT LIKE 'person:%'`).run(scopeKey, beforeDayKey).changes);
+  }
+
   close(): void {
     if (this.owned && this.database.isOpen) this.database.close();
   }
