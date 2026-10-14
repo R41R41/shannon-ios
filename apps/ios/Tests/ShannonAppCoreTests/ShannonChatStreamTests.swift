@@ -278,6 +278,31 @@ final class ShannonChatStreamTests: XCTestCase {
     }
 
     @MainActor
+    func testAHeldReplyStaysInItsOwnTalkWhenHeOpensAnother() async {
+        let register = ShannonTextRegisterDTO(pauseMs: 20_000, typingMs: 3_000, split: true, gapMs: 1_000)
+        var response = Fixture.response(reply: "……別に。気にしてません。", turnId: "turn-1")
+        response.textRegister = register
+        let client = StreamingClient(sentences: ["……別に。", "気にしてません。"], outcome: .success(response), register: register)
+        let model = ShannonConversationModel(client: client)
+        let gate = PacingGate()
+        model.pacingSleep = { _ in await gate.waitFirst() }
+
+        model.draft = "怒ってる？"
+        let first = Task { await model.sendDraft() }
+        while model.replyPacing == nil { await Task.yield() }
+        await model.selectThread("t-2")
+        // Put whole into its own Talk, not into the one now shown.
+        XCTAssertEqual(model.selectedThreadId, "t-2")
+        XCTAssertFalse(model.messages.contains { $0.text.contains("気にしてません") })
+        XCTAssertEqual(model.cachedHistories["t-1"]?.map(\.message.text), ["怒ってる？", "……別に。気にしてません。"])
+        await gate.release()
+        await first.value
+        XCTAssertFalse(model.messages.contains { $0.role == .shannon }, "nothing of it lands in the other Talk afterwards")
+        XCTAssertEqual(model.cachedHistories["t-1"]?.filter { $0.message.role == .shannon }.count, 1)
+        XCTAssertNil(model.replyPacing)
+    }
+
+    @MainActor
     func testAnUrgentReplyAndAnOlderServerAreShownAtOnceAsBefore() async {
         for register in [ShannonTextRegisterDTO(pauseMs: 20_000, typingMs: 8_000, split: true, gapMs: 2_000, bypass: "safety"), nil] {
             var response = Fixture.response(reply: "はい。元気です。")

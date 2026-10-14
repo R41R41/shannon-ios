@@ -41,6 +41,8 @@ extension ShannonConversationModel {
             await acknowledgeVisibleInitiatives()
             return
         }
+        // A reply held at her pace goes in whole into its own Talk before another is shown (ADR-0013 item 10).
+        flushPacedReply()
         cacheCurrentHistory()
         selectedThreadId = threadId
         messages = threadId.flatMap { cachedHistories[$0]?.map(\.message) } ?? []
@@ -57,6 +59,8 @@ extension ShannonConversationModel {
     public func createThread(title: String?) async {
         do {
             let threadId = try await client.createThread(scopeKey: scopeKey, title: title)
+            flushPacedReply()
+            cacheCurrentHistory()
             selectedThreadId = threadId
             let threadItem = ChatThreadDTO(
                 threadId: threadId,
@@ -119,6 +123,7 @@ extension ShannonConversationModel {
             cachedHistories.removeValue(forKey: threadId)
             agentTasks.removeAll { $0.conversationThreadID == threadId }
             if selectedThreadId == threadId {
+                flushPacedReply()
                 selectedThreadId = threads.first?.threadId
                 messages = selectedThreadId.flatMap { cachedHistories[$0]?.map(\.message) } ?? []
                 await reloadConversation(threadId: selectedThreadId)
@@ -140,6 +145,8 @@ extension ShannonConversationModel {
         do {
             let response = try await client.loadConversation(scopeKey: scopeKey, threadId: threadId)
             guard revision == historyLoadRevision, selectedThreadId == selectionAtStart else { return }
+            // The stored Talk has the held reply already: the pace ends here, and nothing is put in twice.
+            flushPacedReply()
             selectedThreadId = response.threadId
             messages = response.messages.compactMap(Self.conversationMessage)
             feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)

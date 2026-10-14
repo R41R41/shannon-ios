@@ -143,6 +143,9 @@ extension ShannonConversationModel {
             return
         }
         heldPacedReply = reply
+        // The Talk the reply belongs to: it is never put into another one.
+        let origin = selectedThreadId
+        heldPacedThread = origin
         // The composer is free while she takes her time.
         isSending = false
         replyPacing = ShannonReplyPacingState(threadID: selectedThreadId, showsTyping: pacing.pause == 0)
@@ -158,15 +161,20 @@ extension ShannonConversationModel {
         }
         if pacing.typing > 0 { guard await pacedWait(pacing.typing, for: reply.id) else { return } }
         guard pacing.parts.count == 2 else {
-            messages.append(reply)
+            placeWhole(reply, in: origin)
             return
         }
         // The first message carries her face only: its actions (reactions, feedback, places) come with the whole reply.
+        // Only while its own Talk is on screen; elsewhere the whole reply goes into its Talk at once.
+        guard selectedThreadId == origin else {
+            placeWhole(reply, in: origin)
+            return
+        }
         messages.append(ConversationMessage(
             id: reply.id, role: .shannon, text: pacing.parts[0], sentAt: reply.sentAt, emotionSnapshot: reply.emotionSnapshot))
         replyPacing?.showsTyping = true
         if pacing.gap > 0 { guard await pacedWait(pacing.gap, for: reply.id) else { return } }
-        placeWhole(reply)
+        placeWhole(reply, in: origin)
     }
 
     /// Waits for the pace; false when the reply was put in meanwhile (he sent something).
@@ -184,11 +192,20 @@ extension ShannonConversationModel {
         heldPacedReply = nil
         replyPacing = nil
         pacingWait?.cancel()
-        placeWhole(reply)
+        placeWhole(reply, in: heldPacedThread)
     }
 
-    /// The whole reply in the history: in place of its first sentence, or appended.
-    private func placeWhole(_ reply: ConversationMessage) {
+    /// The whole reply in its own Talk: in place of its first sentence, or appended; into that Talk's cached history when
+    /// another Talk is on screen, never into the one shown.
+    private func placeWhole(_ reply: ConversationMessage, in thread: String?) {
+        guard selectedThreadId == thread else {
+            guard let thread else { return }
+            var history = cachedHistories[thread, default: []]
+            history.removeAll { $0.id == reply.id }
+            history.append(ShannonConversationCache.CachedMessage(reply))
+            cachedHistories[thread] = history
+            return
+        }
         if let index = messages.firstIndex(where: { $0.id == reply.id }) {
             messages[index] = reply
         } else {

@@ -25,6 +25,7 @@ public final class ShannonConversationModel {
     }
     /// The reply held at her pace, put in whole if he sends meanwhile; and the wait to cut short then.
     @ObservationIgnored var heldPacedReply: ConversationMessage?
+    @ObservationIgnored var heldPacedThread: String?
     @ObservationIgnored var pacingWait: Task<Void, Never>?
     /// Counts sends: a send that ends after a later one began leaves `isSending` to the later one.
     @ObservationIgnored var sendGeneration = 0
