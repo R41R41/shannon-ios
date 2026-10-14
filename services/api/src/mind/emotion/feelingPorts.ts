@@ -8,7 +8,7 @@ import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
   checkBeforeSending, checkReply, feelingSentenceBlock,
   fastLayerWords, advanceCoreAffect, registerOfLevel,
-  type TextRegisterDirective, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  type TextRegisterDirective, toldBoundariesOpen, OWNER_PERSON_KEY, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
@@ -133,8 +133,9 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   // His words' closed tags only while something reads them (the fast layer; review Low).
   const tags = handle.port.coreAffect ? utteranceTags(input.words) : [];
   const meaning = handle.decision?.meaning ? { meaning: handle.decision.meaning } : {};
+  const told = handle.port.days?.toldIn(input.words);
   const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words),
-    facts: { ...(tags.length ? { tags } : {}), ...meaning } };
+    facts: { ...(tags.length ? { tags } : {}), ...meaning, ...(told ? { toldBoundary: told } : {}) } };
   if (input.words.trim()) record({ ...base, ...said });
   if (input.reply.trim()) record({ ...base, id: `reply:${handle.channel}:${input.turnId}`, kind: 'own_reply', facts });
   if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
@@ -411,6 +412,23 @@ export const feelingBody = Object.freeze({
       if (!feeling?.narrator || !feeling.coreAffect) return null;
       const core = foldFeelingDynamics(feeling.events.today(scopeKey, at, snapshot(scopeKey)), touchKey('owner')).core;
       return fastLayerWords(advanceCoreAffect(core, Date.parse(at)));
+    },
+    /** Stage 3: the told boundaries not yet hers, as subjects and words, for her reflection (null while boundary memory is off). */
+    toldBoundaries: (scopeKey: string, at: string): { subject: string; word: string }[] | null => {
+      const feeling = port();
+      if (!feeling?.days?.features.boundaries) return null;
+      return toldBoundariesOpen(feeling.days.boundaries(scopeKey, OWNER_PERSON_KEY, at, snapshot(scopeKey)))
+        .map(boundary => ({ subject: boundary.subject, word: boundary.subject === 'body' ? '体' : feeling.events.partWord(boundary.subject) }));
+    },
+    /** Stage 3: she took these told boundaries as her own in reflection: one event each, on the telling's source (forgotten with it). */
+    endorse: (scopeKey: string, subjects: readonly string[], at: string): void => {
+      const feeling = port();
+      if (!feeling?.days?.features.boundaries) return;
+      const open = toldBoundariesOpen(feeling.days.boundaries(scopeKey, OWNER_PERSON_KEY, at, snapshot(scopeKey)));
+      for (const boundary of open.filter(item => subjects.includes(item.subject))) {
+        feeling.events.record(scopeKey, { ...touchKey('owner'), identity: 'registered', channel: 'text', id: `boundary:${boundary.subject}:${at}`,
+          kind: 'own_boundary', sourceId: boundary.toldSource, facts: { part: boundary.subject }, occurredAt: at });
+      }
     },
     relationship: (scopeKey: string, at: string): string | null => {
       const feeling = port();

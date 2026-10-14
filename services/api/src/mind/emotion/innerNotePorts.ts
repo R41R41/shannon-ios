@@ -62,6 +62,10 @@ export interface InnerNoteBodyReader {
   fastLayer?(scopeKey: string, at: string): string | null;
   /** Stage 3 (`SHANNON_RELATIONSHIP_LEDGER`): the owner's relationship line ('' when nothing is off); null while it is off. */
   relationship?(scopeKey: string, at: string): string | null;
+  /** Stage 3 (`SHANNON_BOUNDARY_MEMORY`): the boundaries she was told and has not taken as hers; null while it is off. */
+  toldBoundaries?(scopeKey: string, at: string): { subject: string; word: string }[] | null;
+  /** Stage 3: she took these told boundaries as her own in a reflection that was written. */
+  endorse?(scopeKey: string, subjects: readonly string[], at: string): void;
 }
 
 export interface InnerNotePort {

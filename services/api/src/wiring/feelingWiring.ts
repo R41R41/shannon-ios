@@ -7,7 +7,7 @@ import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../mind/memory/memoryVisibility.js';
 import { feelingEventsEnabled, feelingTurnEnabled, singleFaceEnabled, type FeelingPort } from '../mind/emotion/feelingPorts.js';
 import { SQLiteFeelingEventStore } from '../mind/emotion/store/feelingEventStore.js';
-import { bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
+import { BODY_TOUCH_PART_WORDS, bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
 import { configuredJevChooser } from './skillRoutingWiring.js';
 import type { JevChooser } from '../infra/models/jev/jevChoice.js';
 import type { DatabaseSync } from 'node:sqlite';
@@ -150,7 +150,9 @@ function closedDays(parts: { database: string | DatabaseSync; now: () => string;
   const features = parts.days;
   if (!features || !(features.relationship || features.episodes || features.boundaries)) return { days: {}, store: null };
   const store = new SQLiteFeelingDayStore(parts.database);
-  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord }) }, store };
+  const subjects = Object.entries(BODY_TOUCH_PART_WORDS).filter(([subject]) => subject !== 'other').map(([subject, { word }]) => ({ subject, word }));
+  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord, subjects }) },
+    store };
 }
 
 /** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read). */

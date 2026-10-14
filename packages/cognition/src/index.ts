@@ -382,7 +382,7 @@ export {
 } from './innerNoteWords.js';
 export {
   INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,
-  type InnerNoteReflectionFacts,
+  innerNoteReflectionSchema, endorsedBoundaries, type InnerNoteReflectionFacts,
 } from './innerNotePrompt.js';
 // Syzygy ADR-0013 stage 1: feeling events, the episode ledger, the repetition watch, the comeback drawer, the feeling turn and the one face.
 export * from './feelingEvent.js';
@@ -402,3 +402,4 @@ export * from './feelingSentence.js';
 export * from './relationshipLedger.js';
 export * from './feelingDays.js';
 export * from './episodeMemory.js';
+export * from './boundaryMemory.js';

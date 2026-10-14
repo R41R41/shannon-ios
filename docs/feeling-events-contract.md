@@ -164,6 +164,16 @@ Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. D4: 「その日の終
 - It goes where the relationship line goes (the feeling turn's or the facts block, the touch line, her inner note's reflection); a turn hands its words for the recall (the touch line hands none, so only the near day). Forgetting: computed from the closed days through the filter, so a forgotten source leaves no episode.
 - Observer: `feeling.episodes` (lines recalled).
 
+## Stage 3: boundary memory (`SHANNON_BOUNDARY_MEMORY`)
+
+Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. D6 and ADR-0005 3 and 7.
+
+- A boundary keeps its basis (since when, on how many days she said no, how often it was crossed after, who told her) and its origin: `self` (she said no herself: a touch she took as dislike or refuse, or her refusing words about it) or `told` (his words told her to refuse it: 「胸は嫌だって言わないと」 → `facts.toldBoundary` on his words' event, the part they name or `body`).
+- A told boundary stays told, worded 「胸: ライ氏に「嫌と言わないと」と言われて持った境界。まだボクが自分で決めたものではない（自分で決めたとは言わない）」, until her inner note's reflection endorses it: the reflection is handed 「[言われた境界]」 with the open ones, its instructions get one more section and its schema `endorsed_boundaries` (an enum of those offered; absent when there are none, so instructions and schema are as before). An endorsement is an `own_boundary` event on the telling's source, so forgetting the telling forgets both. Endorsed: 「ライ氏に言われて考え、ボクが自分のものにした境界」. Her own no makes it `self` whatever was told.
+- Folded from the closed days and today through the forgetting filter, under 「[ボクの境界]（事実として）」 where the relationship line goes. Owner only in this stage.
+- Observer: `feeling.boundaries` (counts of self, told, endorsed).
+- Body refusal gestures (払う・隠す) are left for later (they need Live2D art); no presence value is added yet.
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).

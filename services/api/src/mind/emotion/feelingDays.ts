@@ -1,5 +1,6 @@
 import {
-  OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, closedDayGroups, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts, relationshipLine,
+  OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, boundaryLines, closedDayGroups, foldBoundaries, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts,
+  relationshipLine, toldBoundaryIn, type Boundary,
   type CompanionStateSnapshot, type FeelingEvent, type RelationshipDay,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -40,6 +41,8 @@ export class FeelingDays {
 
   constructor(private readonly options: { events: { between(scopeKey: string, since: string, until: string, limit?: number): FeelingEvent[] };
     store: ClosedDayRecords; timeZone: string; now: () => string; features: FeelingDayFeatures; partWord: (subject: string) => string;
+    /** The parts a told boundary may name, with their words (the body contract's). */
+    subjects?: readonly { subject: string; word: string }[];
     reportError?: (error: unknown) => void }) {}
 
   get features(): FeelingDayFeatures { return this.options.features; }
@@ -82,7 +85,7 @@ export class FeelingDays {
    */
   carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = ''): CarriedLines {
     const { features } = this.options;
-    if (!(features.relationship || features.episodes) || !knownPerson(key)) return { lines: [], facts: {} };
+    if (!(features.relationship || features.episodes || features.boundaries) || !knownPerson(key)) return { lines: [], facts: {} };
     try {
       this.close(scopeKey, at);
       const days = this.history(scopeKey, key.personKey, at, snapshot);
@@ -90,11 +93,39 @@ export class FeelingDays {
       const relationship = features.relationship ? this.relationship(days, key.personKey, today) : { lines: [], facts: {} };
       const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: key.personKey === OWNER_PERSON_KEY },
         () => recallEpisodes(days, key.personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
-      return { lines: [...relationship.lines, ...(episodes ? [episodes] : [])], facts: relationship.facts };
+      const boundaries = features.boundaries ? boundaryLines(this.boundariesOf(scopeKey, key.personKey, at, snapshot, days), this.options.partWord) : '';
+      return { lines: [...relationship.lines, ...(episodes ? [episodes] : []), ...(boundaries ? [boundaries] : [])], facts: relationship.facts };
     } catch (error) {
       this.report(error);
       return { lines: [], facts: {} };
     }
+  }
+
+  /** The subject his words told her to refuse, while boundary memory is on (null otherwise). */
+  toldIn(words: string): string | null {
+    return this.options.features.boundaries ? toldBoundaryIn(words, this.options.subjects ?? []) : null;
+  }
+
+  /** Her boundaries with one person: the closed days and today, through the forgetting filter. */
+  boundaries(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot): Boundary[] {
+    if (!this.options.features.boundaries) return [];
+    try {
+      this.close(scopeKey, at);
+      return this.boundariesOf(scopeKey, personKey, at, snapshot, this.history(scopeKey, personKey, at, snapshot));
+    } catch (error) {
+      this.report(error);
+      return [];
+    }
+  }
+
+  private boundariesOf(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, days: ReturnType<FeelingDays['history']>)
+    : Boundary[] {
+    const start = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - DAY_MILLISECONDS).toISOString();
+    const today = this.options.events.between(scopeKey, start, at).filter(event => remembered(snapshot, event.sourceId));
+    return observeSync('emotion', { phase: 'feeling.boundaries', owner: personKey === OWNER_PERSON_KEY }, () =>
+      foldBoundaries([...days.flatMap(day => day.events), ...today], personKey, this.options.timeZone),
+    found => ({ self: found.filter(item => item.origin === 'self').length, told: found.filter(item => item.origin === 'told' && !item.endorsed).length,
+      endorsed: found.filter(item => item.endorsed).length }));
   }
 
   private relationship(days: ReturnType<FeelingDays['history']>, personKey: string, today: string): CarriedLines {

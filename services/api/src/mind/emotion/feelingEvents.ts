@@ -77,6 +77,9 @@ export class FeelingEvents {
 
   get timeZone(): string { return this.options.timeZone; }
 
+  /** A subject (a part, a region, a kind of touch) in her words. */
+  partWord(subject: string): string { return this.options.partWord(subject); }
+
   /** One event in. The Observer sees its closed shape (kind, who, audience, register, composure), never words. */
   record(scopeKey: string, event: FeelingEvent): void {
     try {

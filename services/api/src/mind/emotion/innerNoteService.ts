@@ -317,7 +317,8 @@ export class InnerNoteService implements InnerNotePort {
     const yesterday = previous && !closing ? null : this.dependencies.store.lastClosedSummary(scopeKey);
     const recent = this.recent(scopeKey, at);
     const facts = this.facts(scopeKey, at, previous, events, day.dayEndsAt, closing !== null, snapshot, previous ? null : yesterday?.summary ?? null, recent);
-    const { draft, usage } = await this.dependencies.reflector!.reflect({ scopeKey, facts, signal: AbortSignal.timeout(this.limits.timeoutMilliseconds) });
+    const signal = AbortSignal.timeout(this.limits.timeoutMilliseconds);
+    const { draft, usage, endorsed } = await this.dependencies.reflector!.reflect({ scopeKey, facts, signal });
     if (!draft) return this.unreadable();
     // Forgotten while the call ran: what it wrote is about a moment he took back, and is not kept.
     if (!entries.every(entry => this.entryVisible(this.dependencies.state.snapshot(scopeKey), entry))) return this.discarded();
@@ -330,7 +331,13 @@ export class InnerNoteService implements InnerNotePort {
       summary: closing ? draft.summary : null, coreVersion: CHARACTER_CORE.version, coreHash: CHARACTER_CORE.hash, episodeStartedAt: settled.episodeStartedAt,
       usage, elapsedMs: performance.now() - started, createdAt: at, closing: closing !== null });
     this.latestCache.delete(scopeKey);
+    if (endorsed?.length) this.endorse(scopeKey, endorsed, at);
     return true;
+  }
+
+  /** ADR-0013 D6: the told boundaries she took as hers in the reflection just written. */
+  private endorse(scopeKey: string, subjects: readonly string[], at: string): void {
+    try { this.body?.endorse?.(scopeKey, subjects, at); } catch (error) { this.log('endorse', error); }
   }
 
   private facts(scopeKey: string, at: string, previous: StoredInnerNote | null, events: readonly InnerNoteEvent[], dayEndsAt: string, closing: boolean,
@@ -355,7 +362,7 @@ export class InnerNoteService implements InnerNotePort {
    * touching her.
    */
   private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
-    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger' | 'fastLayer' | 'relationship'> {
+    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger' | 'fastLayer' | 'relationship' | 'toldBoundaries'> {
     const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
     const day = innerNoteDay(at, this.timeZone);
     const today = this.partCounts(scopeKey, new Date(Date.parse(day.endsAt) - 86_400_000).toISOString(), at);
@@ -366,7 +373,7 @@ export class InnerNoteService implements InnerNotePort {
     const fast = this.fastLayer(scopeKey, at);
     const relationship = this.relationship(scopeKey, at);
     return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}), ...(ledger ? { ledger } : {}),
-      ...(fast !== null ? { fastLayer: fast } : {}), ...(relationship !== null ? { relationship } : {}) };
+      ...(fast !== null ? { fastLayer: fast } : {}), ...(relationship !== null ? { relationship } : {}), ...this.toldBoundaries(scopeKey, at) };
   }
 
   private partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[] {
@@ -381,6 +388,14 @@ export class InnerNoteService implements InnerNotePort {
   /** ADR-0013 §6: her fast layer in words while she is the narrator, else null (the reflection of before). */
   private fastLayer(scopeKey: string, at: string): string | null {
     try { return this.body?.fastLayer?.(scopeKey, at) ?? null; } catch { return null; }
+  }
+
+  /** Stage 3: the told boundaries not yet hers (absent when there are none or boundary memory is off). */
+  private toldBoundaries(scopeKey: string, at: string): { toldBoundaries?: { subject: string; word: string }[] } {
+    try {
+      const told = this.body?.toldBoundaries?.(scopeKey, at) ?? [];
+      return told.length ? { toldBoundaries: told } : {};
+    } catch { return {}; }
   }
 
   /** Stage 3: the relationship line while the ledger carries over (ADR-0012 D4 as revised), else null. */
