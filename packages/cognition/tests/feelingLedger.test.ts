@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMEBACK_DRAWER, FEELING_TURN_HEADER, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
+  COMEBACK_DRAWER, FEELING_TURN_HEADER, strongReplyReason, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
   parsedFeelingTurn, repetitionLine, replyFacts, utteranceKind, watchRepetition, type FeelingEvent,
 } from '../src/index.js';
 
@@ -199,5 +199,20 @@ describe('the menu by audience (review a, c)', () => {
 
   it('puts the safety, audience and fact rules above the block in its own header', () => {
     expect(FEELING_TURN_HEADER).toContain('ただし安全・聞き手・事実の決まりは、いつもこれより優先する');
+  });
+});
+
+describe('which model writes the reply (owner: 「気持ちが強い時だけSonnet」)', () => {
+  const turn = (stance: string, intensity: string) => parsedFeelingTurn({ stance, intensity, drawer: 'none' });
+  it('is the strong one for はっきり and above, a public decline, or a body refusal; else the ordinary one', () => {
+    expect(strongReplyReason(turn('shy', 'subtle'), 'owner_alone')).toBeNull();
+    expect(strongReplyReason(neutralFeelingTurn(), 'owner_alone')).toBeNull();
+    expect(strongReplyReason(null, 'owner_alone')).toBeNull();
+    expect(strongReplyReason(turn('scold', 'moderate'), 'owner_alone')).toBe('intensity');
+    expect(strongReplyReason(turn('tease', 'strong'), 'owner_alone')).toBe('intensity');
+    expect(strongReplyReason(turn('not_play_along', 'moderate'), 'people')).toBe('public_decline');
+    expect(strongReplyReason(turn('not_play_along', 'subtle'), 'stream')).toBeNull();
+    expect(strongReplyReason(turn('refuse_body', 'subtle'), 'owner_alone')).toBe('body_refusal');
+    expect(strongReplyReason(turn('shy', 'subtle'), 'owner_alone', 'refuse')).toBe('body_refusal');
   });
 });

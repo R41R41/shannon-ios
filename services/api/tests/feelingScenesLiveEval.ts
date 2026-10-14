@@ -3,10 +3,12 @@ import { createConfiguredChatModel } from '../src/infra/models/openAIChatModel.j
 import { createConfiguredBodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
 import { jevUsdPerCall } from '../src/infra/models/jev/jevUsage.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
-import { anthropicApiKey, haikuVoiceThinking } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicApiKey, haikuVoiceThinking, sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { DatabaseSync } from 'node:sqlite';
+import { switchOn } from '@shannon/switches';
+import { composedFeeling, strongReplyDailyCap } from '../src/wiring/feelingWiring.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
-import { feelingPort } from './support/feelingHarness.js';
 import { FEELING_SCENES, playScene, sceneDriver, sceneReport } from './support/feelingScenarios.js';
 
 /**
@@ -34,24 +36,43 @@ if (conversation.mode === 'local-stub') throw new Error('A conversation model cr
 const only = new Set((process.env.SHANNON_FEELING_SCENES ?? '').split(',').map(id => id.trim()).filter(Boolean));
 const jevPrice = jevUsdPerCall(process.env);
 
-function recording(inner: ShannonChatModel): ShannonChatModel & { requests: ShannonChatModelRequest[] } {
+function recording(inner: () => ShannonChatModel): ShannonChatModel & { requests: ShannonChatModelRequest[] } {
   const requests: ShannonChatModelRequest[] = [];
-  return Object.assign(Object.create(inner) as ShannonChatModel, {
-    requests, generate: (request: ShannonChatModelRequest) => { requests.push(request); return inner.generate(request); },
+  return Object.assign(Object.create(conversation) as ShannonChatModel, {
+    requests, generate: (request: ShannonChatModelRequest) => { requests.push(request); return inner().generate(request); },
   });
+}
+
+/**
+ * Her feeling port as the server composes it: with `SHANNON_FEELING_STRONG_REPLY_MODEL=on` the strong turns' replies go to the app's
+ * Sonnet (its settings and the shared Anthropic key), at most the day's cap.
+ */
+function feelingConfigured(now: () => string) {
+  const apiKey = anthropicApiKey(process.env);
+  const sonnet = switchOn(process.env, 'SHANNON_FEELING_STRONG_REPLY_MODEL') && apiKey
+    ? new AnthropicChatModel({ apiKey, usageStore, settings: sonnetSettings(process.env) }) : null;
+  return composedFeeling({ database: new DatabaseSync(':memory:'), now, timeZone: 'Asia/Tokyo', chooser, turn: true, singleFace: true,
+    ...(sonnet ? { strong: { cap: strongReplyDailyCap(process.env), model: sonnet } } : {}) });
 }
 
 const reports = [];
 for (const scene of FEELING_SCENES.filter(item => !only.size || only.has(item.id))) {
   const usedBefore = usage.length, jevBefore = jevCalls;
-  const driver = await sceneDriver({ port: now => feelingPort(now, { chooser }), chatModel: recording(conversation),
+  let wrapped: ShannonChatModel = conversation;
+  const driver = await sceneDriver({ port: now => { const configured = feelingConfigured(now); wrapped = configured.wrap(conversation); return configured.port; },
+    chatModel: recording(() => wrapped),
     speaker: createConfiguredBodyReactionSpeaker(replyModel ? { ...process.env, SHANNON_LLM_MODEL: 'claude-haiku-5-5' } : process.env, usageStore) });
   const result = await playScene(driver, scene);
   const modelUsd = usage.slice(usedBefore).reduce((sum, event) => sum + event.estimatedCostUsd, 0);
   const jev = jevCalls - jevBefore;
   const used = usage.slice(usedBefore);
   const input = used.reduce((sum, event) => sum + event.inputTokens, 0), cached = used.reduce((sum, event) => sum + event.cachedInputTokens, 0);
-  const report = { ...sceneReport(result), modelUsd: Math.round(modelUsd * 10_000) / 10_000, jevCalls: jev, modelCalls: used.length,
+  const byModel = Object.fromEntries([...new Set(used.map(event => event.model))].map(model => {
+    const rows = used.filter(event => event.model === model);
+    return [model, { calls: rows.length, usd: Math.round(rows.reduce((sum, event) => sum + event.estimatedCostUsd, 0) * 10_000) / 10_000,
+      minCachedTokens: Math.min(...rows.map(event => event.cachedInputTokens)), maxInputTokens: Math.max(...rows.map(event => event.inputTokens)) }];
+  }));
+  const report = { ...sceneReport(result), byModel, modelUsd: Math.round(modelUsd * 10_000) / 10_000, jevCalls: jev, modelCalls: used.length,
     usdPerTurn: Math.round((modelUsd / Math.max(1, result.turns.length)) * 10_000) / 10_000, cacheHit: input ? Math.round((cached / input) * 100) / 100 : null,
     jevUsd: jevPrice === null ? null : Math.round(jev * jevPrice * 10_000) / 10_000 };
   reports.push(report);

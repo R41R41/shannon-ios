@@ -6,7 +6,7 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  replyFacts,
+  replyFacts, strongReplyReason,
   presentFor, presentationIdOf, publicPresentationId, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
@@ -37,6 +37,8 @@ export interface FeelingPort {
   readonly singleFace: boolean;
   /** What Jev is handed of the turn's words (`SHANNON_FEELING_TURN_JEV_INPUT`; owner decision 2026-10-14: `utterance`). */
   readonly jevInput?: FeelingTurnJevInput;
+  /** `SHANNON_FEELING_STRONG_REPLY_MODEL` with the Anthropic key: a strong turn's text reply goes to Sonnet, at most `cap` a day. */
+  readonly strong?: { cap: number };
 }
 
 /** The facts block while the feeling turn is off (events on): the same ledger and watch lines, as facts. */
@@ -57,6 +59,11 @@ export interface FeelingTurnHandle {
   register: FeelingRegister;
   pending: Promise<FeelingTurnDecision> | null;
   decision: FeelingTurnDecision | null;
+  /** When the turn began and her state then (the stronger model's choice reads a touch she refused just before). */
+  at: string;
+  snapshot: CompanionStateSnapshot;
+  /** The reply went to the stronger model (counted against the day's cap until it is recorded). */
+  strong: boolean;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -65,7 +72,8 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
   const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot);
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
-  return { port, scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null };
+  return { port, scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
+    at: input.at, snapshot: input.snapshot, strong: false };
 }
 
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
@@ -81,10 +89,29 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const base = { ...handle.key, identity: handle.key.personKey === 'owner' ? 'registered' as const : 'unknown' as const, channel: handle.channel,
     sourceId: input.sourceId, occurredAt: input.at };
   const stance = handle.decision && handle.decision.stance !== 'neutral' ? { turnStance: handle.decision.stance } : {};
-  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...(handle.register !== 'normal' ? { register: handle.register } : {}) };
+  const strong = handle.strong ? { replyModel: 'strong' as const } : {};
+  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...(handle.register !== 'normal' ? { register: handle.register } : {}), ...strong };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
   if (input.words.trim()) record({ ...base, id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words), facts: {} });
   if (input.reply.trim()) record({ ...base, id: `reply:${handle.channel}:${input.turnId}`, kind: 'own_reply', facts });
+  if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
+}
+
+/**
+ * Which model writes this text reply (owner decision 2026-10-14: 「気持ちが強い時だけSonnet」): the stronger one for a strong turn while
+ * the day's cap allows, else the ordinary one. The Observer is told which and why, never the words.
+ */
+function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true } {
+  const strong = handle.port.strong;
+  if (!strong || !handle.port.turn) return {};
+  const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
+  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null);
+  handle.strong = reason !== null && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
+  const capped = reason !== null && !handle.strong;
+  observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,
+    () => ({ model: handle.strong ? 'sonnet' : 'haiku', reason: reason ?? 'none', capped }));
+  if (capped) console.warn('Shannon feeling reply model: the day\'s cap of strong replies is reached; this reply stays on Haiku');
+  return handle.strong ? { feelingStrong: true } : {};
 }
 
 /** The one face of a state for an audience, with its span (closed values only). */
@@ -144,6 +171,8 @@ export const feelingText = Object.freeze({
     handle.decision = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
     return safely(() => blockOf(handle, handle.decision), '');
   },
+  /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
+  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true } => (handle ? safely(() => routeReply(handle), {}) : {}),
   /** The message face under `SHANNON_SINGLE_FACE`: the turn's stance, else the reply's feeling (never her own apology), else the mood. */
   face: (handle: FeelingTurnHandle | null, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, at: string): ReplyEmotion => {
     if (!handle?.port.singleFace) return resolved;

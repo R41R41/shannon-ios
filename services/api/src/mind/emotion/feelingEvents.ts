@@ -54,6 +54,8 @@ const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 export class FeelingEvents {
   private readonly pruned = new Map<string, number>();
+  /** Strong replies decided and not yet recorded, per scope and day (a turn in flight counts against the cap). */
+  private readonly strongInFlight = new Map<string, number>();
 
   constructor(private readonly options: { store: FeelingEventRecords; now: () => string; timeZone: string; partWord: (subject: string) => string;
     reportError?: (error: unknown) => void; seed?: RepetitionSeed }) {}
@@ -111,6 +113,35 @@ export class FeelingEvents {
       .map((reply, index): FeelingEvent => ({ ...key, id: `seed:${index}`, kind: 'own_reply', identity: 'registered', channel: 'text',
         sourceId: reply.sourceId ?? null, facts: replyFacts(reply.text, drawersIn), occurredAt: reply.at }));
     return [...events, ...seeded];
+  }
+
+  /**
+   * One strong reply of the day, if the cap allows (owner decision 2026-10-14: a daily guard on Sonnet). Counted from today's recorded
+   * replies that went to the strong model, plus those decided and not yet recorded. False: the cap is reached (or the count failed).
+   */
+  reserveStrong(scopeKey: string, at: string, cap: number): boolean {
+    try {
+      const day = innerNoteDay(at, this.options.timeZone);
+      const since = new Date(Date.parse(day.endsAt) - DAY_MILLISECONDS).toISOString();
+      const key = `${scopeKey}\u0000${day.dayKey}`;
+      const recorded = this.options.store.between(scopeKey, since, at)
+        .filter(event => event.kind === 'own_reply' && event.facts.replyModel === 'strong').length;
+      const pending = this.strongInFlight.get(key) ?? 0;
+      if (recorded + pending >= cap) return false;
+      if (this.strongInFlight.size >= 64) this.strongInFlight.clear();
+      this.strongInFlight.set(key, pending + 1);
+      return true;
+    } catch (error) {
+      this.report(error);
+      return false;
+    }
+  }
+
+  /** A strong reply's turn ended (its reply is recorded, or the turn failed): it no longer counts as in flight. */
+  releaseStrong(scopeKey: string, at: string): void {
+    const key = `${scopeKey}\u0000${innerNoteDay(at, this.options.timeZone).dayKey}`;
+    const pending = this.strongInFlight.get(key) ?? 0;
+    if (pending <= 1) this.strongInFlight.delete(key); else this.strongInFlight.set(key, pending - 1);
   }
 
   /** The newest stance of a key while it is fresh (the feeling turn's on her reply, or how she took a touch). */

@@ -100,6 +100,20 @@ export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingA
   return OWNER_ONLY_DRAWERS.includes(decision.drawer) ? { ...decision, drawer: 'none' } : decision;
 }
 
+/**
+ * When the reply goes to the stronger model (owner decision 2026-10-14, form: 「気持ちが強い時だけSonnet」; ADR-0013 §7 item 7): a stance
+ * shown はっきり or stronger; with anyone else there, a declining stance (乗らない・毒づく・言い返す・呆れる…) at はっきり or stronger;
+ * a turn of refusing with her body (払う・隠す), or right after a touch she refused. Null: the ordinary model.
+ */
+export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal';
+const DECLINING_STANCES: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky']);
+
+export function strongReplyReason(decision: FeelingTurnDecision | null, audience: FeelingAudience, touchStance?: string | null): StrongReplyReason | null {
+  if (decision?.stance === 'refuse_body' || touchStance === 'refuse') return 'body_refusal';
+  if (!decision || decision.stance === 'neutral' || decision.intensity === 'subtle') return null;
+  return audience !== 'owner_alone' && DECLINING_STANCES.has(decision.stance) ? 'public_decline' : 'intensity';
+}
+
 /** The fallback: 「ふつう」, subtle, no drawer, the register as it was. Never fails a turn. */
 export function neutralFeelingTurn(register: FeelingRegister = 'normal'): FeelingTurnDecision {
   return { stance: 'neutral', intensity: 'subtle', drawer: 'none', register, source: 'fallback' };

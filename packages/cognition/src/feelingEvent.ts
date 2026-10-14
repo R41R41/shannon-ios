@@ -64,6 +64,8 @@ export interface FeelingEventFacts {
   /** The feeling turn's stance and register for the turn this reply answered. */
   turnStance?: string;
   register?: FeelingRegister;
+  /** The reply went to the stronger model (`SHANNON_FEELING_STRONG_REPLY_MODEL`): counted against the day's cap. */
+  replyModel?: 'strong';
 }
 
 export interface FeelingEvent {

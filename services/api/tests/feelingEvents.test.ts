@@ -215,6 +215,52 @@ describe('the repetition watch over the day (owner, after the live eval)', () =>
   });
 });
 
+describe('strong feeling turns on Sonnet (owner: 「気持ちが強い時だけSonnet」)', () => {
+  async function routed(cap: number, policy: Parameters<typeof fakeFeelingJev>[0]) {
+    const clock = { at: DAY };
+    const jev = fakeFeelingJev(policy);
+    const served: string[] = [];
+    const answer = (model: string) => async (request: { feelingStrong?: true; tier?: string }) => {
+      served.push(model);
+      expect('feelingStrong' in request).toBe(false);
+      return { mode: 'local-stub' as const, model, reply: 'もう、知りません。' };
+    };
+    const haiku = { mode: 'local-stub' as const, model: 'haiku-fake', generate: answer('haiku-fake') };
+    const sonnet = { mode: 'anthropic' as const, model: 'sonnet-fake', generate: answer('sonnet-fake'), outOfTimeTurn: async () => ({ mode: 'anthropic', model: 'sonnet-fake', reply: '' }) };
+    const configured = composedFeeling({ database: new DatabaseSync(':memory:'), now: () => clock.at, timeZone: 'Asia/Tokyo', chooser: jev.chooser,
+      turn: true, singleFace: true, strong: { cap, model: sonnet as never } });
+    const harness = await reactionHarness({ feeling: configured.port, chatModel: configured.wrap(haiku as never), stage2: false });
+    const at = (instant: string) => { harness.clock.at = instant; clock.at = instant; };
+    at(DAY);
+    return { harness, served, at };
+  }
+
+  it('sends a weak turn to Haiku and a strong one to Sonnet', async () => {
+    const { harness, served, at } = await routed(5, state => ((state.shannon_feeling as { this_turn: { apology: boolean } }).this_turn.apology
+      ? { stance: 'shy', intensity: 'subtle', drawer: 'none' } : { stance: 'scold', intensity: 'strong', drawer: 'swat' }));
+    await harness.send('POST', '/v1/chat', { message: 'ごめん' }, 'iphone');
+    at('2026-10-14T04:01:00.000Z');
+    await harness.send('POST', '/v1/chat', { message: 'いいじゃん' }, 'iphone');
+    expect(served).toEqual(['haiku-fake', 'sonnet-fake']);
+  });
+
+  it('falls back to Haiku once the day\'s cap is reached, and counts the day from 3:00', async () => {
+    const { harness, served, at } = await routed(1, () => ({ stance: 'scold', intensity: 'strong', drawer: 'none' }));
+    await harness.send('POST', '/v1/chat', { message: 'いいじゃん' }, 'iphone');
+    at('2026-10-14T04:02:00.000Z');
+    await harness.send('POST', '/v1/chat', { message: 'いいじゃん' }, 'iphone');
+    at('2026-10-14T18:30:00.000Z');
+    await harness.send('POST', '/v1/chat', { message: 'いいじゃん' }, 'iphone');
+    expect(served).toEqual(['sonnet-fake', 'haiku-fake', 'sonnet-fake']);
+  });
+
+  it('marks nothing while the strong model is off, even on a strong turn', async () => {
+    const on = await harnessWith();
+    await on.chat('怒って見せて');
+    expect('feelingStrong' in on.chatModel.requests.at(-1)!).toBe(false);
+  });
+});
+
 describe('the presentation id of each message (D17)', () => {
   it('is stored with her text reply and returned with it while the one face is on; absent while off', async () => {
     const on = await harnessWith({ turn: false });

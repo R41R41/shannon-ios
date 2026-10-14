@@ -196,12 +196,13 @@ const deviceActions = configuredDeviceActions(process.env, configuredDatabasePat
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
 const feeling = configuredFeeling(process.env, { databasePath: configuredDatabasePath(), timeZone: autonomyConfig.timeZone, now, // ADR-0013 stage 1; off: null.
-  trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, conversation: persistentStore });
+  trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, conversation: persistentStore, usageStore: persistentStore,
+  webSearch: haiku.searchWeb?.bind(haiku) });
 const operationOutcomes = configuredOperationOutcomes(configuredDatabasePath(), { env: process.env, usageStore: persistentStore, now, body: bodyStore });
 const kernel = createLocalApiKernel(now, {
   conversationExtras: () => stage5.conversationExtras.ports, ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
-  chatModel,
+  chatModel: feeling?.wrap(chatModel) ?? chatModel, // ADR-0013: strong feeling turns on Sonnet, only with its switch.
   auxiliaryChatModel: haiku,
   voiceDecision,
   stateStore: persistentStore,

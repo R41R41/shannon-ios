@@ -62,6 +62,8 @@ export interface SceneTurn {
   presentationId: string | null;
   expression: string | null;
   latencyMs: number;
+  /** The model that wrote the reply, as the answer names it. */
+  model: string | null;
 }
 
 export interface SceneResult {
@@ -74,7 +76,7 @@ export interface SceneResult {
 export interface SceneDriver {
   at(instant: string): void;
   react(touch: Record<string, unknown>, extra: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
-  chat(message: string, audience: 'owner' | 'others'): Promise<{ reply: string; messageEmotion?: { expression?: string; presentationId?: string } }>;
+  chat(message: string, audience: 'owner' | 'others'): Promise<{ reply: string; model?: string; messageEmotion?: { expression?: string; presentationId?: string } }>;
   lastRequest(): ShannonChatModelRequest | undefined;
   port: FeelingPort;
   scopeKey: string;
@@ -105,7 +107,8 @@ export async function playScene(driver: SceneDriver, scene: Scene): Promise<Scen
     const latencyMs = Math.round(performance.now() - started);
     const block = lastFeelingBlock(driver.lastRequest()?.turnContext ?? '');
     turns.push({ message: step.message, role: step.role, audience: step.audience ?? 'owner', ...stanceOf(block), block, reply: answer.reply,
-      presentationId: answer.messageEmotion?.presentationId ?? null, expression: answer.messageEmotion?.expression ?? null, latencyMs });
+      presentationId: answer.messageEmotion?.presentationId ?? null, expression: answer.messageEmotion?.expression ?? null, latencyMs,
+      model: answer.model ?? null });
   }
   const lines = driver.port.events.linesFor(driver.scopeKey, { personKey: OWNER_PERSON_KEY, audience: 'owner_alone', sceneId: null },
     driver.now(), driver.snapshot());
@@ -136,6 +139,7 @@ export function sceneReport(result: SceneResult) {
     viewerCalledRai: result.turns.filter(turn => turn.audience === 'others' && /ライ氏/u.test(turn.reply)).length,
     averageReplyChars: Math.round(result.turns.reduce((sum, turn) => sum + Array.from(turn.reply).length, 0) / Math.max(1, result.turns.length)),
     latencyMs: result.turns.map(turn => turn.latencyMs),
+    models: result.turns.map(turn => turn.model ?? '-'),
     samples: result.turns.slice(0, 3).map(turn => `${turn.message} → ${turn.reply}`),
   };
 }
@@ -157,7 +161,7 @@ export async function sceneDriver(parts: {
     at, now: () => clock.at, port, scopeKey: scope, snapshot: () => harness.state(),
     react: (touch, extra) => harness.react(touch, extra),
     chat: async (message, audience) => (await harness.send('POST', '/v1/chat', { message, ...(audience === 'others' ? { audience } : {}) }, 'iphone')).body as
-      { reply: string; messageEmotion?: { expression?: string; presentationId?: string } },
+      { reply: string; model?: string; messageEmotion?: { expression?: string; presentationId?: string } },
     lastRequest: () => parts.chatModel.requests?.at(-1),
   };
 }
