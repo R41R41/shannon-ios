@@ -15,7 +15,10 @@ import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
  * drops an operation the device has not taken by then.
  *
  * The record: an operation from a conversation is written to the activity record when it closes (whatever closes
- * it: report, lease running out, or the tool giving up), with counts and never content. An operation from her own
+ * it: report, lease running out, or the tool giving up), with counts and never content. A list, read or search of a
+ * conversation that closes while its tool still waits is the exception: its line (which names the path) goes back to the
+ * tool with the outcome, and the tool records it only once its result may be used, so a read whose result a later source
+ * or audience check withholds leaves no path behind (`shannonToolRunner.ts`). An operation from her own
  * time is recorded by its loop step against the gate's decision; when it closes after the step stopped waiting for
  * it (a late report, a lease that ran out), that close is recorded here too (ADR-0002: every action is recorded).
  *
@@ -32,10 +35,13 @@ const CLAIM_POLL_MILLISECONDS = 500;
 const RUN_POLL_MILLISECONDS = 200;
 
 export type HostRunOutcome =
-  | { kind: 'done'; result: HostOperationResult | undefined }
-  | { kind: 'failed' | 'refused'; code: HostStepCode }
+  | { kind: 'done'; result: HostOperationResult | undefined; record?: HostOperationReport }
+  | { kind: 'failed' | 'refused'; code: HostStepCode; record?: HostOperationReport }
   | { kind: 'not_bound' | 'offline' | 'stopped' | 'unsupported' }
-  | { kind: 'timeout'; handedOut: boolean };
+  | { kind: 'timeout'; handedOut: boolean; record?: HostOperationReport };
+
+/** A line of the activity record about one operation: counts and never content. */
+export interface HostOperationReport { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }
 
 export interface HostOperationRequest {
   host: string;
@@ -49,9 +55,9 @@ export interface HostOperationRequest {
 }
 
 export interface HostOperationRecorder {
-  recordConversationAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): unknown;
+  recordConversationAction(scopeKey: string, report: HostOperationReport): unknown;
   /** An own-time folder operation that closed after its step stopped waiting. */
-  recordLateFolderAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): unknown;
+  recordLateFolderAction(scopeKey: string, report: HostOperationReport): unknown;
 }
 
 /** In-process wake-ups: a queued operation wakes a held claim, a report wakes the waiting tool. Other processes are polled. */
@@ -143,10 +149,10 @@ export class HostFolderOperations {
       if (current?.status === 'leased') this.store.hostOperations.markWaiterGone(scopeKey, row.id);
       if (current?.status !== 'queued') return current;
       this.close(scopeKey, current, 'dropped', this.now());
-      return null;
+      return this.store.hostOperations.get(scopeKey, row.id) ?? { ...current, status: 'dropped' as const };
     });
     if (dropped && dropped.status !== 'leased') return this.finished(scopeKey, dropped);
-    return { kind: 'timeout', handedOut: dropped !== null };
+    return { kind: 'timeout', handedOut: true };
   }
 
   /** The long-poll claim of a v2 device. A step from v1 copies is handed out here too, through the v1 desk. */
@@ -246,32 +252,53 @@ export class HostFolderOperations {
 
   private close(scopeKey: string, row: HostOperationRow, status: 'done' | 'failed' | 'refused' | 'expired' | 'dropped', at: string, detail: { code?: HostStepCode; result?: HostOperationResult } = {}): void {
     if (!this.store.hostOperations.close(scopeKey, row.id, status, at, detail)) return;
+    const waiterGone = this.store.hostOperations.get(scopeKey, row.id)?.waiterGone === true;
+    // A conversation's list, read or search its tool still waits for: the tool records it once its result may be used.
+    if (toolRecords(row, status, waiterGone)) return;
     // Her own time: the step records what it waited for; what closes after it stopped waiting is recorded here.
-    const late = row.origin === 'autonomy' && (status === 'expired' || this.store.hostOperations.get(scopeKey, row.id)?.waiterGone === true);
+    const late = row.origin === 'autonomy' && (status === 'expired' || waiterGone);
     if (row.origin !== 'conversation' && !late) return;
-    const place = `自分のフォルダ（${row.host}）`;
-    const target = `「${row.relativePath || 'いちばん上'}」`;
-    const name = `${place}での${NAMES[row.operation]}（${target}${row.toRelativePath !== undefined ? `→「${row.toRelativePath}」` : ''}）`;
-    const report = {
-      tool: row.tool, outcome: status === 'done' ? 'done' as const : 'failed' as const, ...(detail.code ? { reasonCode: detail.code } : status === 'done' ? {} : { reasonCode: status }),
-      summary: (late ? '（自分の時間に頼んだもの。待つのをやめたあとで閉じた）' : '') + (status === 'done' ? `${place}の${target}${DONE[row.operation](row.toRelativePath ?? '')}${resultFacts(row.operation, detail.result)}。`
-        : status === 'expired' ? `${name}を端末に渡しましたが、時間内に結果が届きませんでした。どうなったかは分かりません。`
-          : status === 'dropped' ? `${name}は、端末が受け取らなかったのでやめました。`
-            : `${name}はできませんでした（${HOST_STEP_CODES[detail.code ?? 'unknown']}）。`),
-    };
+    const report = operationReport(row, status, detail, late);
     if (late) this.recorder.recordLateFolderAction(scopeKey, report);
     else this.recorder.recordConversationAction(scopeKey, report);
   }
 
   private finished(scopeKey: string, row: HostOperationRow): HostRunOutcome {
-    if (row.status === 'done') return { kind: 'done', result: this.store.hostOperations.takeResult(scopeKey, row.id) as HostOperationResult | undefined };
-    if (row.status === 'failed' || row.status === 'refused') return { kind: row.status, code: row.code ?? 'unknown' };
-    return { kind: 'timeout', handedOut: row.status === 'expired' };
+    const status = row.status as ClosedStatus;
+    const result = status === 'done' ? this.store.hostOperations.takeResult(scopeKey, row.id) as HostOperationResult | undefined : undefined;
+    const detail = { ...(row.code ? { code: row.code } : {}), ...(result ? { result } : {}) };
+    const record = toolRecords(row, status, row.waiterGone) ? { record: operationReport(row, status, detail, false) } : {};
+    if (status === 'done') return { kind: 'done', result, ...record };
+    if (status === 'failed' || status === 'refused') return { kind: status, code: row.code ?? 'unknown', ...record };
+    return { kind: 'timeout', handedOut: status === 'expired', ...record };
   }
 
   private paused(scopeKey: string): boolean {
     try { return this.store.control(scopeKey).paused; } catch { return true; }
   }
+}
+
+type ClosedStatus = Exclude<HostOperationRow['status'], 'queued' | 'leased'>;
+/** Operations that change nothing on the device: what they return may still be withheld after they ran. */
+const READ_ONLY: ReadonlySet<HostOperation> = new Set(['list', 'read', 'search']);
+
+/** Whether the tool that queued this operation records its close, rather than the close itself: see the header. */
+function toolRecords(row: HostOperationRow, status: ClosedStatus, waiterGone: boolean): boolean {
+  return row.origin === 'conversation' && READ_ONLY.has(row.operation) && status !== 'expired' && !waiterGone;
+}
+
+function operationReport(row: HostOperationRow, status: ClosedStatus, detail: { code?: HostStepCode; result?: HostOperationResult }, late: boolean): HostOperationReport {
+  const place = `自分のフォルダ（${row.host}）`;
+  const target = `「${row.relativePath || 'いちばん上'}」`;
+  const name = `${place}での${NAMES[row.operation]}（${target}${row.toRelativePath !== undefined ? `→「${row.toRelativePath}」` : ''}）`;
+  const done = `${place}の${target}${DONE[row.operation](row.toRelativePath ?? '')}${resultFacts(row.operation, detail.result)}。`;
+  return {
+    tool: row.tool, outcome: status === 'done' ? 'done' : 'failed', ...(detail.code ? { reasonCode: detail.code } : status === 'done' ? {} : { reasonCode: status }),
+    summary: (late ? '（自分の時間に頼んだもの。待つのをやめたあとで閉じた）' : '') + (status === 'done' ? done
+      : status === 'expired' ? `${name}を端末に渡しましたが、時間内に結果が届きませんでした。どうなったかは分かりません。`
+        : status === 'dropped' ? `${name}は、端末が受け取らなかったのでやめました。`
+          : `${name}はできませんでした（${HOST_STEP_CODES[detail.code ?? 'unknown']}）。`),
+  };
 }
 
 const NAMES: Readonly<Record<HostOperation, string>> = Object.freeze({

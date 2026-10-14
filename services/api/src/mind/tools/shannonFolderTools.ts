@@ -125,16 +125,19 @@ export function folderExecutors(operations: HostFolderOperations, roomLook: (sco
 function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { host: string; path: string; to?: string }, context: ToolExecutionContext): ToolRun {
   const place = `自分のフォルダ（${target.host}）`;
   const writes = operation !== 'list' && operation !== 'read' && operation !== 'search';
-  // A conversation's operation that reached the queue is recorded when it closes (`hostFolderOperations.ts`).
+  // A conversation's operation that reached the queue is recorded when it closes (`hostFolderOperations.ts`), except a list, read
+  // or search this call waited for: its line comes back here, and the runner writes it once the result may be used.
   const queued = outcome.kind === 'done' || outcome.kind === 'failed' || outcome.kind === 'refused' || outcome.kind === 'timeout';
+  const handedBack = 'record' in outcome ? outcome.record : undefined;
+  const recorded = (record: ToolRun['record']): Pick<ToolRun, 'record' | 'recordedElsewhere'> => handedBack ? { record: handedBack }
+    : { record, ...(queued && context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}) };
   // HostRunOutcome already owns the acknowledgement; its port exposes no operation ID, so none is invented here.
   const evidence = (result: ToolResult) => writes ? withToolEvidence(result, {
     outcome: outcome.kind === 'done' ? 'applied' : outcome.kind === 'timeout' && outcome.handedOut ? 'unknown' : 'failed',
     action: operation, target: { kind: 'folder', id: `${target.host}:${target.path}` }, labels: [target.path, ...(target.to ? [target.to] : [])],
   }) : result;
   const failed = (result: ToolResult, reasonCode: string): ToolRun => ({
-    result: evidence(result), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱おうとしましたが、できませんでした。`, outcome: 'failed', reasonCode },
-    ...(queued && context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
+    result: evidence(result), ...recorded({ summary: `${place}で「${target.path || 'いちばん上'}」を扱おうとしましたが、できませんでした。`, outcome: 'failed', reasonCode }),
   });
   switch (outcome.kind) {
     case 'not_bound': return failed(toolFailure('unavailable', 'そのPCやMacは登録されていない。', { retryable: false, refusal: { why: 'PCやMacの登録がない', wouldWork: 'ライ氏がPCやMacを登録したあと' } }), 'not_bound');
@@ -167,11 +170,10 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
       : operation === 'move' ? `「${target.path}」を「${target.to}」にした。` : `「${target.path}」をゴミ箱（${trashed}）に移した。ライ氏が戻せる。`;
   }
   return {
-    result: evidence(toolOk(text)), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' },
+    result: evidence(toolOk(text)), ...recorded({ summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' }),
     ...(!writes ? { documents: { sourceIds: [
       `shannon-folder://${encodeURIComponent(target.host)}/${createHash('sha256').update(target.path).digest('hex')}`,
     ] } } : {}),
-    ...(context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
   };
 }
 
