@@ -108,8 +108,8 @@ function pulls(signals: DaySignals): RelationshipScales {
 }
 
 /**
- * Below this, a day's residual blame alone (no violation, no hurtful word) is minor: irritation fades on it. Provisional: a model
- * assumption the owner approves before `SHANNON_RELATIONSHIP_LEDGER` goes on.
+ * Below this, a day's residual blame alone (no violation, no hurtful word) is minor: irritation fades on it. Approved by the owner
+ * (2026-10-15, form 「0.35でよい」); a model assumption until fitted.
  */
 export const MINOR_IRRITATION = 0.35;
 
