@@ -17,6 +17,8 @@ export const FCA_TASK_USE_PREFIX = 'fca:';
 export function fcaSkillTaskKey(taskId: string): string {
   return `${FCA_TASK_USE_PREFIX}${createHash('sha256').update(taskId).digest('hex').slice(0, 40)}`;
 }
+/** The operator pack whose skills a Minecraft task's reads and outcomes judge (the owner's approval scope). */
+export const MINECRAFT_TASK_PACK = 'legacy-minecraft';
 /** The body milestones a skill may aim at (`SkillMilestone`). */
 export const SKILL_MILESTONES: readonly SkillMilestone[] = Object.freeze(['nether', 'blaze_rods']);
 export const isTaskUse = (talk: string): boolean => talk.startsWith(FCA_TASK_USE_PREFIX);
@@ -30,13 +32,14 @@ export function writeSkillUses(store: UseStore, skill: StoredSkill, uses: readon
   for (const use of uses) if (use.o !== null && !skill.uses.some(old => old.id === use.id && old.o !== null)) store.tally(skill.skillId, use.v, use.o);
 }
 
-/** `SkillMemory.usedInTask`: the read's skill id (also when the task already read this version), or null. */
+/** `SkillMemory.usedInTask`: the read's skill id (also when the task already read this version), or null (not a legacy-minecraft skill). */
 export function taskRead(memory: TaskUseMemory, scopeKey: string, taskKey: string, name: string, at: string): string | null {
   let skillId: string | null = null;
   if (!isTaskUse(taskKey)) return null;
   memory.write(at, () => {
     const skill = memory.store.byName(scopeKey, name);
-    if (!skill || skill.status === 'retired') return;
+    // Only the owner-approved Minecraft trials (Syzygy, 2026-10-14) are judged by a task's body outcomes, never her other skills.
+    if (!skill || skill.status === 'retired' || skill.provenance?.packId !== MINECRAFT_TASK_PACK) return;
     skillId = skill.skillId;
     const uses = withTaskUse(skill, taskKey, at);
     if (uses) writeSkillUses(memory.store, skill, uses);

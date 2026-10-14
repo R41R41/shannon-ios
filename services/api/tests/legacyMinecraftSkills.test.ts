@@ -241,4 +241,21 @@ describe('a Minecraft task reading a skill: a use its outcome settles', () => {
     expect(memory.store.byName('owner', 'mc-low-health')!.uses).toMatchObject([{ talk: fcaSkillTaskKey('unbound'), o: 0 }]);
     expect(withSkillOutcomes(null, memory)).toBeNull();
   });
+
+  it('records nothing for a skill outside the legacy Minecraft pack, even while a body is connected and then dies', () => {
+    const { memory, apply } = imported();
+    const standard = standardSkillPack('standard10', 'draft-2')!;
+    expect(apply({ ...standard, skills: standard.skills.slice(0, 1) } as SkillPack, later(2))).toHaveProperty('receipt');
+    const learned = memory.create('owner', { draft: { name: 'her-own', description: '自分で覚えた時', steps: '1. 確かめる', aids: '- なし', references: '- 経験' }, evidence: [] }, pass, at);
+    expect(learned).toHaveProperty('skillId');
+    const listeners = new Set<(body: string) => void>();
+    const control = { store: { body: () => null }, available: () => ['minecraft:only'], deathListeners: listeners };
+    const outcomes = withSkillOutcomes({ control: control as never }, memory, () => later(5))!.skillOutcomes!;
+    const names = [standard.skills[0]!.name, 'her-own'];
+    for (const name of names) outcomes.read('owner', 'research', name);
+    expect(memory.usedInTask('owner', fcaSkillTaskKey('research'), names[0]!, later(6))).toBeNull();
+    for (const listener of listeners) listener('minecraft:only');
+    outcomes.tick(() => 'failed');
+    for (const name of names) expect(memory.store.byName('owner', name)!.uses).toEqual([]);
+  });
 });
