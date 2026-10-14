@@ -24,7 +24,8 @@ All three off: no table is opened, presence and the capabilities answer carry no
 {
   id: string;                       // touch:<touchId> | turn:<surface>:<turnId> | reply:<surface>:<turnId> | reply:body:<touchId>
   kind: 'touched' | 'spoke' | 'apologized' | 'praised' | 'feeling_order' | 'own_reply' | 'own_refusal'
-      | 'own_motion' | 'game' | 'comment' | 'crowd_comment';
+      | 'own_motion' | 'game' | 'comment' | 'crowd_comment'
+      | 'own_boundary'; // stage 3: she endorsed a told boundary (SHANNON_BOUNDARY_MEMORY)
   personKey: string;                // 'owner' | 'unknown' | 'scene:<sceneId>'
   identity: 'registered' | 'platform' | 'named' | 'unknown' | 'crowd';
   audience: 'owner_alone' | 'people' | 'group' | 'stream';
