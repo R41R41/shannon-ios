@@ -129,9 +129,83 @@ describe('Minecraft common FCA body protocol', () => {
     await delay(3);
     f.control.poll(f.scope, f.poll()); // Delivered, but the reply was lost.
     abort.abort(); await delay(3);
-    f.control.poll(f.scope, f.poll()); // The next poll does not list it: proven never handed over.
-    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true });
+    // The next poll does not list it: not handed again, told to cancel; the poll after that reply still reports nothing.
+    expect(f.control.poll(f.scope, f.poll())).toMatchObject({ commands: [], cancel: ['operation'] });
+    expect(f.store.phase('operation')).toBe('delivered');
+    f.control.poll(f.scope, f.poll());
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true, result: 'BODY_COMMAND_NOT_RECEIVED' });
     expect(f.store.safe('task')).toBe(true);
+  });
+  it('a poll sent before the delivering reply, read after it, concludes nothing about the command (run 6 review)', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 200, pollMilliseconds: 2 }), abort = new AbortController();
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    // The body sends P1 and gives up on it while the API's thread is stalled; P2 is read first and its reply hands the command.
+    const p1 = f.poll(), p2 = f.poll();
+    expect(f.control.poll(f.scope, p2).commands.map(c => c.id)).toEqual(['operation']);
+    abort.abort(); await delay(3); // Cancelled in that window, while the body is executing it.
+    // The abandoned P1 is read late: it does not list the command because it was sent before the body took it.
+    expect(() => f.control.poll(f.scope, p1)).toThrow('STALE');
+    expect(f.store.phase('operation')).toBe('delivered');
+    expect(f.store.receipt('operation')).toBeNull();
+    // Even without the frame's own order (a process that has not seen P2), P1 says nothing about a command handed after it.
+    const restarted = new MinecraftControl(f.store, f.control.configuration, { now: Date.now, leaseValid: () => true, leaseKnown: () => true, ownerAlone: () => true });
+    expect(restarted.poll(f.scope, p1)).toMatchObject({ commands: [], cancel: ['operation'] });
+    expect(f.store.phase('operation')).toBe('delivered');
+    expect(f.store.receipt('operation')).toBeNull();
+    // The body's own next poll lists it as active: running, told to cancel, settled by its physical receipt only.
+    expect(f.control.poll(f.scope, f.poll({ activeOperationIds: ['operation'] })).cancel).toEqual(['operation']);
+    expect(f.store.phase('operation')).toBe('running');
+    f.control.poll(f.scope, f.poll({ receipts: [f.receipt({ outcome: 'cancelled', inputsReleased: true, result: 'aborted' })] }));
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', result: 'aborted' });
+  });
+  it('a cancelled command handed earlier is told to cancel before it is settled, and the body\'s receipt wins', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 200, pollMilliseconds: 2 }), abort = new AbortController();
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    f.control.poll(f.scope, f.poll());
+    abort.abort(); await delay(3);
+    // A poll that slipped through without the command: no settlement on it alone, the cancel goes out.
+    expect(f.control.poll(f.scope, f.poll())).toMatchObject({ commands: [], cancel: ['operation'] });
+    // The body was in fact executing it: the next poll after the cancel reply carries its physical receipt.
+    f.control.poll(f.scope, f.poll({ receipts: [f.receipt({ outcome: 'cancelled', inputsReleased: false, result: 'still holding' })] }));
+    expect(await outcome).toBe('FCA_BODY_OUTCOME_UNKNOWN');
+    expect(f.store.receipt('operation')).toMatchObject({ inputsReleased: false, result: 'still holding' });
+    expect(f.store.safe('task')).toBe(false);
+  });
+  it('stops handing a command again when every reply is later than the body\'s poll timeout', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 100, pollMilliseconds: 2 });
+    const outcome = f.control.command({ ...f.command, milliseconds: 60_000 }).catch((error: Error) => error.message);
+    await delay(3);
+    // Every reply arrives after the body gave up on it: each next poll proves the handing lost.
+    const handed: string[][] = [];
+    for (let i = 0; i < 8; i++) { handed.push(f.control.poll(f.scope, f.poll()).commands.map(c => c.id)); await delay(2); }
+    expect(handed.flat()).toEqual(['operation', 'operation', 'operation']);
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true, result: 'BODY_COMMAND_NOT_RECEIVED' });
+    expect(f.store.safe('task')).toBe(true);
+  });
+  it('does not hand a command again past its deadline, which the body would refuse', async () => {
+    const f = fixture({ cancelWaitMilliseconds: 200, pollMilliseconds: 2 });
+    const outcome = f.control.command({ ...f.command, milliseconds: 15 }).catch((error: Error) => error.message);
+    await delay(3);
+    expect(f.control.poll(f.scope, f.poll()).commands.map(c => c.id)).toEqual(['operation']);
+    const blocked = Date.now(); while (Date.now() - blocked < 30) { /* a stall: the reply never reached the body */ }
+    expect(f.control.poll(f.scope, f.poll()).commands).toEqual([]);
+    expect(await outcome).toMatchObject({ outcome: 'cancelled', inputsReleased: true, result: 'BODY_COMMAND_NOT_RECEIVED' });
+  });
+  it('refuses a poll of an earlier connection read after the current connection\'s', async () => {
+    const f = fixture(), abort = new AbortController();
+    const old = f.poll(); // The old connection's poll, abandoned while the API was stalled.
+    await delay(5);
+    f.control.poll(f.scope, f.poll({ connectionId: 'new-connection' })); // The body connected again; its first poll is read first.
+    const outcome = f.control.command(f.command, abort.signal).catch((error: Error) => error.message);
+    await delay(3);
+    expect(f.control.poll(f.scope, f.poll({ connectionId: 'new-connection' })).commands.map(c => c.id)).toEqual(['operation']);
+    expect(() => f.control.poll(f.scope, old)).toThrow('STALE');
+    expect(f.control.poll(f.scope, f.poll({ connectionId: 'new-connection', activeOperationIds: ['operation'] })).cancel).toEqual([]);
+    expect(f.store.phase('operation')).toBe('running');
+    f.control.poll(f.scope, f.poll({ connectionId: 'new-connection', receipts: [f.receipt({ connectionId: 'new-connection' })] }));
+    expect(await outcome).toMatchObject({ outcome: 'completed' });
   });
   it('asks the body once more before an unknown: a command still running there gets one more wait', async () => {
     const f = fixture({ cancelWaitMilliseconds: 100, pollMilliseconds: 2 }), abort = new AbortController();

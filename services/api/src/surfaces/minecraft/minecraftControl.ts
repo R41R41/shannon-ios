@@ -16,9 +16,17 @@ export const MINECRAFT_SPAWN_GRACE_MILLISECONDS = 10_000;
 export const MINECRAFT_STALL_MILLISECONDS = 250;
 /** The receipts a body sends in one poll at most (`controlLoop.ts`): a fuller list may leave one out. */
 const RECEIPTS_PER_POLL = 16;
+/**
+ * How many times one command is handed to the body at most. Review of run 6: while every reply came later than the body's 2 s
+ * poll timeout, each poll proved the last handing lost, the command was handed again and its wait, counted from the last
+ * handing, never ran out. After this many lost handings it is settled as never received.
+ */
+export const MINECRAFT_MAX_HANDINGS = 3;
 /** One command being waited for: when the wait gave it up, so the next poll cancels it (`command`). */
 interface Waiting { expired: boolean }
 const ioTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+/** Stop and release are taken by the body whatever their deadline; any other command only before it (`controlLoop.ts`). */
+const cleanup = (command: MinecraftControlCommand) => command.kind === 'stop' || command.kind === 'release';
 /** A paired body supplies observations and executes exact commands; the shared FCA owns all long-term decisions. */
 export class MinecraftControl {
   readonly frames = new Map<string, Frame>();
@@ -73,6 +81,9 @@ export class MinecraftControl {
     if (!validControlPoll(input, this.options.now()) || !config.servers.has(input.serverId) || input.observation.bodyId !== this.bodyId(input.serverId)) throw new Error('FCA_BODY_POLL_INVALID');
     const bodyId = input.observation.bodyId, old = this.frames.get(bodyId);
     if (old?.poll.connectionId === input.connectionId && input.observation.sequence <= old.poll.observation.sequence) throw new Error('FCA_BODY_STALE_FRAME');
+    // A poll of an earlier connection read after the current one's (a stall around a reconnect): older than the frame there is.
+    if (old && old.poll.connectionId !== input.connectionId && this.options.now() - old.received <= (this.options.frameMilliseconds ?? 3000)
+      && Date.parse(input.observation.stateAt) < Date.parse(old.poll.observation.stateAt)) throw new Error('FCA_BODY_STALE_FRAME');
     if (!input.skills && (!old || old.poll.connectionId !== input.connectionId)) throw new Error('FCA_BODY_CATALOG_REQUIRED');
     // References sent by the body never allow arbitrary URLs or a previous connection's pixels to enter inference.
     const observation = { ...input.observation, receivedAt: new Date(this.options.now()).toISOString() };
@@ -112,28 +123,51 @@ export class MinecraftControl {
       }
     }
     for (const [ref, image] of this.images) if (image.expires < this.options.now()) this.images.delete(ref);
-    // A command handed in an earlier reply is confirmed by this poll (the body lists it as active or sends its receipt), or it never
-    // reached the body: the body polls one request at a time, so a poll handled after the delivering reply was sent either after
-    // the body took that reply or after it gave up on it. With a full receipt list one may be left out, so nothing is concluded.
-    const reported = new Set([...input.activeOperationIds, ...input.receipts.map(receipt => receipt.id)]);
-    for (const row of this.store.pending(bodyId)) {
-      if (row.command.connectionId !== input.connectionId || !row.delivered || row.confirmed) continue;
-      if (reported.has(row.command.id)) this.store.confirm(row.command.id);
-      else if (input.receipts.length < RECEIPTS_PER_POLL) this.store.undelivered(row.command.id);
-    }
+    this.confirmDeliveries(bodyId, input);
+    const sequence = input.observation.sequence;
     const commands: MinecraftControlCommand[] = [], cancel: string[] = [];
     for (const row of this.store.pending(bodyId)) {
       const c = row.command;
       const expired = this.expired(c);
       if (c.connectionId !== input.connectionId || expired || !this.allowed(c)) this.store.cancel(c.id);
       const cancelled = row.cancelled || this.store.receipt(c.id)?.outcome === 'cancelled' || expired || !this.allowed(c);
-      if (cancelled) { if (row.delivered && c.connectionId === input.connectionId) cancel.push(c.id); continue; }
-      if (!row.delivered && commands.length < 1 && c.connectionId === input.connectionId && this.store.deliver(c.id)) {
+      if (cancelled) {
+        if (row.delivered && c.connectionId === input.connectionId) {
+          cancel.push(c.id);
+          this.store.cancelSent(c.id, sequence);
+        }
+        continue;
+      }
+      if (!row.delivered && commands.length < 1 && c.connectionId === input.connectionId && this.store.deliver(c.id, sequence)) {
         commands.push(c);
         this.deliveries.set(c.id, this.options.now());
       }
     }
     return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged };
+  }
+  /**
+   * A command handed in an earlier reply is confirmed by this poll (the body lists it as active or sends its receipt), or it never
+   * reached the body: the body polls one request at a time, so a poll it sent after the delivering one was sent after the body
+   * took that reply or gave up on it. Review of run 6: a poll is placed by its sequence, not by when this thread reads it; one
+   * sent before the delivering reply (read late after a stall) says nothing. With a full receipt list one may be left out.
+   */
+  private confirmDeliveries(bodyId: string, input: MinecraftControlPoll): void {
+    const sequence = input.observation.sequence;
+    const reported = new Set([...input.activeOperationIds, ...input.receipts.map(receipt => receipt.id)]);
+    for (const row of this.store.pending(bodyId)) {
+      if (row.command.connectionId !== input.connectionId || !row.delivered || row.confirmed) continue;
+      if (row.deliveredSequence !== null && sequence <= row.deliveredSequence) continue;
+      const id = row.command.id;
+      if (reported.has(id)) this.store.confirm(id);
+      else if (input.receipts.length >= RECEIPTS_PER_POLL) continue;
+      // Cancelled meanwhile: never handed again and not settled on this poll alone; the body is told to cancel (`poll`), and only
+      // a poll sent after that reply that still reports nothing settles it.
+      else if (row.cancelled) {
+        if (row.cancelSequence !== null && sequence > row.cancelSequence) this.store.unheld(id, 'BODY_COMMAND_NOT_RECEIVED');
+      } else if (row.handings >= MINECRAFT_MAX_HANDINGS || !cleanup(row.command) && Date.parse(row.command.deadlineAt) <= this.options.now()) {
+        this.store.unheld(id, 'BODY_COMMAND_NOT_RECEIVED'); // Past its deadline the body would refuse it (`controlLoop.ts`).
+      } else this.store.undelivered(id);
+    }
   }
   /** A command this process waits for expires when its wait says so (time counted from delivery, without stalls); another by its deadline. */
   private expired(command: MinecraftControlCommand): boolean {

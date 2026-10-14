@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../../../contracts/minecraftControlContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
+import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
 
 /**
  * Operation receipts only, not a task or lease authority. A command handed in a poll reply is `delivered`; the body's next poll
@@ -8,6 +9,9 @@ import type { ActionLease } from '../../../contracts/actionThreadContract.js';
  * after the API's thread stalled went to a body that had already given up on that request, and the stop in it was marked
  * delivered and never sent again. A delivered command the next poll does not report never reached the body: it is handed again
  * under the same id (the body ignores an id it has seen), or, when it was cancelled meanwhile, settled as never handed over.
+ * Review of run 6: a poll is ordered by its observation sequence (the body observes anew for each poll, `nativeBody.ts`), and
+ * only a poll sent after the reply that handed a command (`delivered_sequence`) says anything about it; a cancelled one is told
+ * to cancel first and is settled only when a poll sent after that reply (`cancel_sequence`) still reports nothing.
  */
 export class MinecraftControlStore {
   constructor(private readonly db: DatabaseSync) {
@@ -18,6 +22,7 @@ export class MinecraftControlStore {
       CREATE INDEX IF NOT EXISTS fca_body_operations_body ON fca_body_operations(body_id,phase);
       CREATE TABLE IF NOT EXISTS fca_body_bindings(task_id TEXT PRIMARY KEY, body_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS fca_body_sessions(id TEXT PRIMARY KEY, context_json TEXT NOT NULL, receipt_json TEXT);`);
+    ensureColumns(db, 'fca_body_operations', { delivered_sequence: 'INTEGER', cancel_sequence: 'INTEGER', handings: 'INTEGER NOT NULL DEFAULT 0' });
   }
   insert(command: MinecraftControlCommand, at: string, admit?: () => boolean): void {
     this.db.exec('BEGIN IMMEDIATE');
@@ -31,23 +36,40 @@ export class MinecraftControlStore {
     this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  pending(bodyId: string): Array<{ command: MinecraftControlCommand; delivered: boolean; confirmed: boolean; cancelled: boolean }> {
-    return this.db.prepare("SELECT command_json,phase,cancelled FROM fca_body_operations WHERE body_id=? AND phase!='settled' ORDER BY created_at,id").all(bodyId)
+  pending(bodyId: string): Array<{ command: MinecraftControlCommand; delivered: boolean; confirmed: boolean; cancelled: boolean;
+    /** The sequence of the poll whose reply last handed it, and of the first whose reply carried its cancel (null: before this column). */
+    deliveredSequence: number | null; cancelSequence: number | null; handings: number }> {
+    return this.db.prepare("SELECT command_json,phase,cancelled,delivered_sequence,cancel_sequence,handings FROM fca_body_operations WHERE body_id=? AND phase!='settled' ORDER BY created_at,id").all(bodyId)
       .map(row => ({ command: JSON.parse(String(row.command_json)), delivered: row.phase === 'delivered' || row.phase === 'running',
-        confirmed: row.phase === 'running', cancelled: row.cancelled === 1 }));
+        confirmed: row.phase === 'running', cancelled: row.cancelled === 1,
+        deliveredSequence: row.delivered_sequence === null ? null : Number(row.delivered_sequence),
+        cancelSequence: row.cancel_sequence === null ? null : Number(row.cancel_sequence), handings: Number(row.handings) }));
   }
-  deliver(id: string): boolean { return this.db.prepare("UPDATE fca_body_operations SET phase='delivered' WHERE id=? AND phase='queued' AND cancelled=0").run(id).changes === 1; }
+  /** Handed in the reply to the poll of this observation sequence. */
+  deliver(id: string, sequence: number | null = null): boolean {
+    return this.db.prepare("UPDATE fca_body_operations SET phase='delivered',delivered_sequence=?,handings=handings+1 WHERE id=? AND phase='queued' AND cancelled=0")
+      .run(sequence, id).changes === 1;
+  }
   /** The body's poll after the delivery reported the command (active, or its receipt). */
   confirm(id: string): void { this.db.prepare("UPDATE fca_body_operations SET phase='running' WHERE id=? AND phase='delivered'").run(id); }
   /**
    * The body's poll after the delivery did not report the command: it never reached the body. Queued again to be handed under
-   * the same id; one cancelled meanwhile is known cancelled without a physical acknowledgement, as before its first delivery.
+   * the same id. One cancelled meanwhile stays `delivered` and is told to cancel (`cancelSent`, then `unheld`).
    */
-  undelivered(id: string): void {
-    const row = this.db.prepare('SELECT phase,cancelled FROM fca_body_operations WHERE id=?').get(id);
-    if (row?.phase !== 'delivered') return;
-    this.db.prepare("UPDATE fca_body_operations SET phase='queued' WHERE id=? AND phase='delivered'").run(id);
-    if (row.cancelled === 1) this.cancel(id);
+  undelivered(id: string): void { this.db.prepare("UPDATE fca_body_operations SET phase='queued' WHERE id=? AND phase='delivered' AND cancelled=0").run(id); }
+  /** Its cancel went out in the reply to the poll of this sequence (the first such reply sent after the delivery is kept). */
+  cancelSent(id: string, sequence: number): void {
+    this.db.prepare(`UPDATE fca_body_operations SET cancel_sequence=COALESCE(cancel_sequence,?) WHERE id=? AND phase='delivered'
+      AND (delivered_sequence IS NULL OR delivered_sequence<?)`).run(sequence, id, sequence);
+  }
+  /**
+   * A delivered command a poll sent after its delivery (and, when cancelled, after its cancel) does not report: the body holds
+   * nothing of it. Settled cancelled, nothing held, with the reason (`result`).
+   */
+  unheld(id: string, result: string): void {
+    const command = this.command(id);
+    if (!command || this.phase(id) !== 'delivered') return;
+    this.settle({ id, connectionId: command.connectionId, outcome: 'cancelled', inputsReleased: true, observedAt: new Date().toISOString(), result });
   }
   /** The phase of a command (`queued`, `delivered`, `running`, `settled`), or null. */
   phase(id: string): string | null {
