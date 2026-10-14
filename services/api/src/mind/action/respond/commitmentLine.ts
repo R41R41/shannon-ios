@@ -1,7 +1,7 @@
 import { CHARACTER_CORE, SHANNON_OWNER_NAME, characterCoreBlock, shannonOneLineVoice } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
-import { commitmentTimesGrounded } from './commitmentLineTime.js';
+import { canonicalTimePhrases, commitmentTimesGrounded } from './commitmentLineTime.js';
 
 /**
  * A promise's notice in her own words (owner decision 2026-10-14): when a promise of theirs is due, she writes the line at that
@@ -23,7 +23,7 @@ export interface CommitmentFacts {
   /** Someone other than the owner may see or hear her body now. */
   others: boolean;
   /** The owner-local day it is due (month, day, weekday's one character): a day or weekday her line names must be this one. */
-  dueOn?: { month: number; day: number; weekday: string };
+  dueOn?: { month: number; day: number; weekday: string; today: boolean };
 }
 
 /** The neutral factual line: the only fixed text for a promise, used when no line of hers could be written or trusted. */
@@ -98,7 +98,11 @@ export const COMMITMENT_LINE_INSTRUCTIONS = commitmentLineInstructions(false);
  * hers cannot be trusted).
  */
 export const commitmentLineInstructionsWithCore = (innerNote = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE')): string =>
-  `${characterCoreBlock(CHARACTER_CORE)}\n\n${commitmentLineInstructions(innerNote)}`;
+  `${characterCoreBlock(CHARACTER_CORE)}\n\n${commitmentLineInstructions(innerNote)}\n${COMMITMENT_TIME_RULE}`;
+
+/** The allowlist's rule (review of 508b6288): a line that says any other time, day, date or duration is replaced by the neutral one. */
+export const COMMITMENT_TIME_RULE = 'If you say the time, say it exactly as one of say_time_as (empty: say no time). Say no other time, '
+  + 'day, date, weekday, part of the day or duration, not even about the same moment.';
 
 export interface CommitmentLineWriter {
   /** Her line, or null when it could not be written or trusted. Never throws. */
@@ -106,8 +110,11 @@ export interface CommitmentLineWriter {
 }
 
 export function commitmentRequest(facts: CommitmentFacts): string {
+  // With the due day known (`commitmentFacts`), the exact words for its time: the only way her line may say it (allowlist).
+  const sayTimeAs = facts.dueOn ? canonicalTimePhrases(facts) : [];
   return JSON.stringify({
     others_present: facts.others, ...(facts.others ? {} : { promise: facts.title }),
     due: facts.when ?? 'today', state: facts.overdueMinutes && facts.overdueMinutes > 0 ? `overdue by ${facts.overdueMinutes} minutes` : 'due now',
+    ...(facts.dueOn ? { say_time_as: sayTimeAs } : {}),
   });
 }

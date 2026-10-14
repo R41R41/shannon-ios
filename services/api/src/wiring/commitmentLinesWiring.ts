@@ -65,5 +65,7 @@ export function commitmentFacts(candidate: { title: string; published_at: string
   // The day it is due (a promise with only a date is due today): a day or weekday her line names is checked against it.
   const day = localDateParts(new Date(dueAt ?? at), timeZone);
   const weekday = new Intl.DateTimeFormat('ja-JP', { timeZone, weekday: 'short' }).format(new Date(dueAt ?? at));
-  return { title: candidate.title, when, overdueMinutes, others, dueOn: { month: day.month, day: day.day, weekday } };
+  const now = localDateParts(new Date(at), timeZone);
+  const today = now.year === day.year && now.month === day.month && now.day === day.day;
+  return { title: candidate.title, when, overdueMinutes, others, dueOn: { month: day.month, day: day.day, weekday, today } };
 }

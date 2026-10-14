@@ -26,8 +26,10 @@ import { ownerPrivateRule } from '../src/mind/action/ownTime/autonomyLoopOwnerCo
 import { REACH_OUT_HELD_TOOL } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { autonomyModelCostUsd } from '../src/mind/action/ownTime/autonomyModels.js';
 import {
-  COMMITMENT_LINE_INSTRUCTIONS, commitmentLineInstructionsWithCore, groundedCommitmentLine, namesPromise, type CommitmentFacts, type CommitmentLineWriter,
+  COMMITMENT_LINE_INSTRUCTIONS, COMMITMENT_TIME_RULE, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, namesPromise,
+  type CommitmentFacts, type CommitmentLineWriter,
 } from '../src/mind/action/respond/commitmentLine.js';
+import { canonicalTimePhrases } from '../src/mind/action/respond/commitmentLineTime.js';
 import { commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { apiSourceFile } from './support/sources.js';
@@ -415,7 +417,7 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     const lines = commitmentLinePreparer({ writer, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => f.state.snapshot(key),
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false, log: line => logs.push(line) });
     const prepared = await lines(DUE);
-    expect(writer.asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水' } }]);
+    expect(writer.asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水', today: true } }]);
     f.initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', prepared);
     expect(f.last()?.content).toBe('ライ氏、9時20分ですよ！起こしてって言ってたの、ちゃんと覚えてますからね。');
     expect(logs).toEqual(['Shannon promise line: hers']);
@@ -458,49 +460,86 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
 
   it('is written with her core first (the prefix of her moment speech); switched off, the bytes of before', () => {
     expect(commitmentLineInstructionsWithCore(false).startsWith(characterCoreBlock(CHARACTER_CORE))).toBe(true);
-    expect(commitmentLineInstructionsWithCore(false).endsWith(COMMITMENT_LINE_INSTRUCTIONS)).toBe(true);
+    expect(commitmentLineInstructionsWithCore(false).endsWith(`${COMMITMENT_LINE_INSTRUCTIONS}\n${COMMITMENT_TIME_RULE}`)).toBe(true);
     const model = readFileSync(apiSourceFile('commitmentLineModel.ts'), 'utf8');
     expect(model).toMatch(/switchOn\(environment, 'SHANNON_PROMISE_ON_TIME'\) \? \{ \.\.\.COMMITMENT, instructions: \(\) => commitmentLineInstructionsWithCore\(\) \} : COMMITMENT/u);
   });
 });
 
-describe('a promise\'s time is read as a time, by its hour and its minute (review of b867e66c)', () => {
-  const morning: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水' } };
+describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c and 508b6288)', () => {
+  const morning: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水', today: true } };
+  const evening: CommitmentFacts = { ...morning, when: '21:20' };
   const said = (line: string, facts: CommitmentFacts = morning) => groundedCommitmentLine(line, facts) !== null;
 
-  it('accepts the promise\'s own time in its equivalent forms, and today\'s day, weekday and date', () => {
+  it('tells her the canonical words for the time, and accepts them and their exact equivalents', () => {
+    expect(canonicalTimePhrases(morning)).toEqual(['9時20分']);
+    expect(canonicalTimePhrases(evening)).toEqual(['夜の9時20分', '21時20分']);
+    expect(canonicalTimePhrases({ when: '今日' })).toEqual([]);
+    expect(JSON.parse(commitmentRequest(morning))).toMatchObject({ say_time_as: ['9時20分'] });
     for (const line of ['9時20分ですよ、起こしての時間！', '9:20、起こしてって言ってたやつ', '09:20になりました。起こしてですよ', '九時二十分！起こしてって言ったでしょ',
-      '今日の9時20分、起こしての約束ですよ', '水曜の朝9時20分、起こしてですよ', '10月14日の9時20分、起こしての時間', '午前9時20分、起こしての時間です']) {
+      '今日の9時20分、起こしての約束ですよ', '水曜の朝9時20分、起こしてですよ', '10月14日の9時20分、起こしての時間', '午前9時20分、起こしての時間です', '起こしての時間ですよ']) {
       expect(said(line), line).toBe(true);
     }
-    // A verbatim quote of the promise is its name, with the day word he said then.
     expect(said('ライ氏、「明日9:20に起こして」の時間ですよ', { ...morning, title: '明日9:20に起こして' })).toBe(true);
     expect(said('9時半！起こしての時間ですよ', { ...morning, when: '09:30' })).toBe(true);
-  });
-
-  it('refuses another hour or minute, another day, weekday or date, another half of the day, and numbers that are not its own', () => {
-    for (const line of ['20時だよ、起こして', '20時9分、起こして', '明日の9時20分、起こして', '午後9時20分、起こして', '21時20分、起こして', '夜の9時20分、起こして',
-      '火曜の9時20分、起こして', '10月15日の9時20分、起こして', '9時、起こして', '9時20分、起こして。1時間後にまた', '9時20分、起こして。30分過ぎてます', '20だよ、起こして']) {
-      expect(said(line), line).toBe(false);
+    for (const line of ['夜の9時20分、起こしての時間', '夜9時20分、起こしての時間', '21:20、起こしての時間', '21時20分、起こしての時間', '午後9時20分、起こしての時間']) {
+      expect(said(line, evening), line).toBe(true);
     }
-    // The old loose set of numbers would have passed these two.
-    expect(said('20時9分、起こして', { ...morning, title: '明日9:20に起こして' })).toBe(false);
-    expect(said('20時だよ、起こして', { ...morning, title: '明日9:20に起こして' })).toBe(false);
-  });
-
-  it('reads a bare hour of an evening promise as its 12-hour form (said at its own time), never the other way', () => {
-    const evening = { ...morning, when: '21:20' };
-    expect(said('9時20分ですよ、起こしての時間', evening)).toBe(true);
-    expect(said('夜9時20分、起こしての時間', evening)).toBe(true);
-    expect(said('21:20、起こしての時間', evening)).toBe(true);
-    expect(said('午前9時20分、起こしての時間', evening)).toBe(false);
-    expect(said('朝の9時20分、起こしての時間', evening)).toBe(false);
-  });
-
-  it('names no time for a promise that has none, and states its lateness only as it is', () => {
-    expect(said('9時に起こしての約束ですよ', { ...morning, when: '今日', overdueMinutes: null })).toBe(false);
     expect(said('9時20分の起こして、47分過ぎちゃった', { ...morning, overdueMinutes: 47 })).toBe(true);
-    expect(said('9時20分の起こして、30分過ぎちゃった', { ...morning, overdueMinutes: 47 })).toBe(false);
+  });
+
+  it('refuses every false accept the reviews found, and anything else that names a time, a day or a date', () => {
+    const wrong: Array<[string, CommitmentFacts]> = [
+      // b867e66c
+      ['20時だよ、起こして', morning], ['20時9分、起こして', morning], ['明日の9時20分、起こして', morning], ['午後9時20分、起こして', morning],
+      ['21時20分、起こして', morning], ['夜の9時20分、起こして', morning], ['火曜の9時20分、起こして', morning], ['10月15日の9時20分、起こして', morning],
+      ['9時、起こして', morning], ['9時20分、起こして。1時間後にまた', morning], ['9時20分、起こして。30分過ぎてます', morning], ['20だよ、起こして', morning],
+      ['午前9時20分、起こしての時間', evening], ['朝の9時20分、起こしての時間', evening],
+      // 508b6288
+      ['今夜は9時20分だね、起こして', morning], ['夜は9時20分、起こして', morning], ['9:20pm、起こして', morning], ['PM9:20、起こして', morning],
+      ['9:20am、起こして', evening], ['0時20分、起こして', { ...morning, when: '12:20' }], ['深夜12時20分、起こして', { ...morning, when: '12:20' }],
+      ['真夜中の起こして', morning], ['翌日の9時20分、起こして', morning], ['明々後日も起こして', morning], ['tomorrow 9:20、起こして', morning],
+      ['9時20分前だよ、起こして', morning], ['20分後に起こすね', { ...morning, overdueMinutes: 20 }],
+      // the bare 12-hour form of an evening time is no longer allowed
+      ['9時20分ですよ、起こしての時間', evening],
+      // other days, durations, parts of the day, kanji numbers, English
+      ['昨日の起こして', morning], ['今朝の起こして', morning], ['夕方の起こして', morning], ['十時間後に起こして', morning], ['九時二十五分、起こして', morning],
+      ['十九時二十分、起こして', morning], ['19:20、起こして', morning], ['11時20分、起こして', { ...morning, when: '01:20' }], ['2時間たった、起こして', morning],
+      ['tonight、起こして', morning], ['monday、起こして', morning], ['来週も起こして', morning], ['今日の起こして', { ...morning, dueOn: { ...morning.dueOn!, today: false } }],
+      ['9時20分ごろ、起こして', morning], ['9時20分過ぎ、起こして', morning], ['9時20分くらい、起こして', morning], ['正午に起こして', morning],
+      ['１０時、起こして', morning], ['9時20分の起こして、30分過ぎちゃった', { ...morning, overdueMinutes: 47 }], ['9時に起こしての約束ですよ', { ...morning, when: '今日', overdueMinutes: null }],
+    ];
+    for (const [line, facts] of wrong) expect(said(line, facts), `${line} (${facts.when})`).toBe(false);
+  });
+
+  it('accepts no random time phrase that differs from the fact (fuzz)', () => {
+    let seed = 20261014;
+    const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const periods = ['', '午前', '午後', '朝', '夜', '夕方', '昼', '深夜', '今夜', '朝の', '夜の', '昨夜', '翌朝', '今朝', '深夜の', '明日の', 'pm', 'am', '真夜中の'];
+    const suffixes = ['', 'am', 'pm', ' pm', '前', '後', 'ごろ', '過ぎ', '頃', 'くらい', '間'];
+    let tried = 0;
+    for (const facts of [morning, evening, { ...morning, when: '12:20' }, { ...morning, when: '00:20' }, { ...morning, when: '09:30' }]) {
+      const [hour, minute] = facts.when!.split(':').map(Number) as [number, number];
+      for (let index = 0; index < 1_000; index += 1) {
+        const h = random(25);
+        const m = random(60);
+        const period = periods[random(periods.length)]!;
+        const suffix = suffixes[random(suffixes.length)]!;
+        const form = random(4);
+        const time = form === 0 ? `${h}時${m}分` : form === 1 ? `${h}:${String(m).padStart(2, '0')}` : form === 2 ? `${h}時` : `${h}時半`;
+        const meant = form === 2 ? 0 : form === 3 ? 30 : m;
+        // The one reading that is the fact: its own hour in 24h with no half-of-day word, or its 12-hour hour with a true one.
+        const pm = ['午後', '夜', '夕方', '夜の'].includes(period) || (period === '昼' && h === 12);
+        const am = ['午前', '朝', '朝の'].includes(period);
+        const hour24 = period === '' ? h : pm ? (h === 12 ? 12 : h + 12) : am ? h : -1;
+        const sameInstant = hour24 === hour && meant === minute && suffix === '' && !(period === '昼' && hour !== 12);
+        if (sameInstant) continue;
+        tried += 1;
+        const line = `${period}${time}${suffix}、起こしての時間ですよ`;
+        expect(said(line, facts), `${line} for ${facts.when}`).toBe(false);
+      }
+    }
+    expect(tried).toBeGreaterThan(4_500);
   });
 });
 

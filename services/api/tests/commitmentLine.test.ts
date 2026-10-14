@@ -93,12 +93,12 @@ describe('at the moment it is due', () => {
   it('delivers her own line, written once, on the voiced path (it takes no moment cap)', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter('ライ氏、明日プレゼンの練習しよう、の約束の朝です。いっしょに始めましょうか。');
+    const writer = new FakeWriter('ライ氏、明日プレゼンの練習しよう、の約束ですよ。いっしょに始めましょうか。');
     const lines = prepare(f, writer);
     const prepared = await lines(NINE);
     expect(writer.asked).toEqual([expect.objectContaining({ title: '明日プレゼンの練習しよう', others: false })]);
     expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ライ氏、明日プレゼンの練習しよう、の約束の朝です。いっしょに始めましょうか。');
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ライ氏、明日プレゼンの練習しよう、の約束ですよ。いっしょに始めましょうか。');
     // Told once: nothing more is written or paid for.
     expect(await lines(NINE)).toEqual(new Map());
     expect(writer.asked).toHaveLength(1);
@@ -133,7 +133,7 @@ describe('at the moment it is due', () => {
     expect(await prepare(f, writer)('2026-09-24T15:00:00.000Z')).toEqual(new Map()); // 00:00 in Tokyo
     expect(writer.asked).toEqual([]);
     expect(commitmentFacts({ title: '歯医者に電話する', published_at: '2026-09-25T05:00:00.000Z' }, '2026-09-25T05:20:00.000Z', 'Asia/Tokyo', false))
-      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false, dueOn: { month: 9, day: 25, weekday: '金' } });
+      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false, dueOn: { month: 9, day: 25, weekday: '金', today: true } });
     f.close();
   });
 });
