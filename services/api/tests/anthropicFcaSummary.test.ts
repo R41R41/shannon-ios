@@ -17,7 +17,12 @@ describe('native FCA working-memory summary', () => {
     expect(result).toMatchObject({ '次': ['Check the result'], coversFromId: null, coversToId: null });
     expect(receipts).toHaveLength(1);
     expect(fixture.bodies).toHaveLength(1);
-    expect(fixture.bodies[0]).toMatchObject({ cache_control: { type: 'ephemeral', ttl: '1h' } });
+    // Nothing continues a summary request (Minebot lane 2026-10-14, task 788da00a: each summary wrote its whole unique input at the
+    // one-hour price and nothing read it): the protocol prefix and the fixed instructions carry the only breakpoints, no conversation tail.
+    expect(fixture.bodies[0]).not.toHaveProperty('cache_control');
+    const system = fixture.bodies[0]!.system as Array<{ text: string; cache_control?: unknown }>;
+    expect(system.map(block => block.cache_control)).toEqual([{ type: 'ephemeral', ttl: '1h' }, { type: 'ephemeral', ttl: '1h' }]);
+    expect(JSON.stringify(fixture.bodies[0]!.messages)).not.toContain('cache_control');
   });
   it('rejects an incomplete summary after recording spend, with no hidden repair call', async () => {
     const fixture = scriptedAnthropic([message([{ type: 'tool_use', id: 'summary', name: 'fca_history_summary', input: { template: '{"次":[]}' } }], 'tool_use', { model: 'claude-haiku-5-5', usage })]);

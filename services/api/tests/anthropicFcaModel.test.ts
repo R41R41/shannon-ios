@@ -107,6 +107,11 @@ describe('native one-step FCA model', () => {
     expect(system[1]!.text.startsWith(shannonIdentityPrompt())).toBe(true);
     expect(system[1]!.text).toContain(SHANNON_FCA_TASK_CAPABILITY.text);
     expect(system[1]!.text).not.toContain('Synthetic task');
+    // The fixed instructions end with their own breakpoint, so a new public epoch still reads them (Minebot lane 2026-10-14,
+    // task 788da00a: 1,792–1,798 cached tokens, only the tools and the protocol prefix); the conversation keeps the automatic one.
+    expect(system).toHaveLength(2);
+    expect(system[1]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    for (const body of fixture.bodies) expect(JSON.stringify(body.messages)).not.toContain('cache_control');
     for (const body of fixture.bodies) expect(body).toMatchObject({ model: 'claude-haiku-5-5', max_tokens: 4_000,
       thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, cache_control: { type: 'ephemeral', ttl: '1h' }, tool_choice: { type: 'auto' } });
     expect(fixture.receipts[1]).toMatchObject({ usageComplete: true, cachedInputTokens: 700, cacheCreationInputTokens: 0 });

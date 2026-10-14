@@ -7,7 +7,7 @@ import { claudeClient } from '../claude/claudeClient.js';
 import { sendClaudeOnce } from '../claude/claudeOnce.js';
 import { claudeToolLoop } from '../claude/claudeToolLoop.js';
 import type { ClaudeSend } from '../claude/claudeTransport.js';
-import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
+import { AnthropicUsageEvidenceError, cacheHaikuRequest, cacheOneShotRequest, validateHaikuCacheUsage } from './haikuCache.js';
 import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
@@ -46,6 +46,13 @@ export interface AnthropicFcaOptions {
   recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>;
   /** The owner's clock at each decision, so that 今日 and 明日 are his days (2026-10-13: a child read them in UTC). */
   clock?(): { localTime: string; timeZone: string };
+  /**
+   * Whether a later request continues this one's conversation (a task decision, whose turn the next decision replays: the
+   * default). A request that nothing continues (the history summary, `anthropicFcaSummary.ts`) caches only its fixed prefix and
+   * writes no conversation tail, which no later request could read and which costs twice the uncached price at the one-hour
+   * write (Minebot lane, 2026-10-14, task 788da00a: 22 summaries of 16–26k tokens each wrote all but 1,792 of them).
+   */
+  continued?: boolean;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -56,6 +63,7 @@ const CONTROL_TOOLS: Anthropic.Tool[] = [
   input_schema: { type: 'object', properties: { summary: { type: 'string', description: 'A nonempty, public summary, at most 2000 characters.' } },
     required: ['summary'], additionalProperties: false },
 }));
+const ONE_HOUR = { type: 'ephemeral' as const, ttl: '1h' as const };
 const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this clock, in the owner\'s time zone, never in UTC. '
   + 'Write explicit dates in searches and reports.';
 /** With `waiting` (`fcaWaitGate.ts`): nobody can answer the task, so a wait waits for nothing. Data for the decision, never her words. */
@@ -124,11 +132,16 @@ export class AnthropicFcaModel implements FcaModel {
       // epoch as [bootstrap, tool changes, decision]). The inline definitions therefore always follow the current decision
       // message and end the request; the stored round keeps them before the assistant's answer.
       const turn: Anthropic.MessageParam[] = [current, ...menu.appended];
-      return { turn, menu, body: cacheHaikuRequest({
-        model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
+      // The fixed instructions end with their own breakpoint, so that every decision and every task reads them from the cache
+      // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
+      // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
+      const system = [{ type: 'text' as const, text: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system, cache_control: ONE_HOUR }];
+      const request = {
+        model: this.model, max_tokens: this.maximumOutputTokens, system,
         messages: [...history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
-      }) };
+      };
+      return { turn, menu, body: this.options.continued === false ? cacheOneShotRequest(request) : cacheHaikuRequest(request) };
     }, value => observedFcaRequest(value.body), { model: this.model });
     logRequestSize(this.model, history, body);
     let message: Anthropic.Message, dispatched = false;
