@@ -12,8 +12,11 @@ import { SQLiteProactiveMoments } from '../mind/attention/store/proactiveMomentS
  * `SHANNON_PROACTIVE_MOMENTS` is on, her own time is on and the proactive gate is there (no message of hers without it); off, no
  * table is created, nothing is perceived and her loop is handed nothing.
  *
- * The decision asks Jev (`TYPESAFE_API_KEY`, the endpoint, model and price settings the other Jev callers read; 3 s in the
- * background unless `SHANNON_PROACTIVE_MOMENTS_JEV_TIMEOUT_MS`), one call per moment at most. Without a key she stays quiet.
+ * With `SHANNON_PROACTIVE_SELF` on (the default; owner decision 2026-10-14, by form: 「シャノン本人が決める」) no Jev is asked: a
+ * moment that passes the free checks and the caps is hers to decide in her loop's one call (`ownMomentSpeech.ts`), and her worker
+ * reads no `TYPESAFE_API_KEY` for it. Off, the decision asks Jev (`TYPESAFE_API_KEY`, the endpoint, model and price settings the
+ * other Jev callers read; 3 s in the background unless `SHANNON_PROACTIVE_MOMENTS_JEV_TIMEOUT_MS`), one call per moment at most;
+ * without a key she stays quiet.
  * The day's caps: `SHANNON_PROACTIVE_MOMENTS_MAX_DECISIONS` (24) and
  * `SHANNON_PROACTIVE_MOMENTS_MAX_MESSAGES` (8); every message is also inside her daily budget, as any step of hers.
  */
@@ -52,16 +55,22 @@ export function proactiveMomentsEnabled(environment: SwitchValues): boolean {
   return switchOn(environment, 'SHANNON_PROACTIVE_MOMENTS') && environment.SHANNON_AUTONOMY_ENABLED?.trim() === 'true';
 }
 
+/** She decides herself whether to speak at a moment (`SHANNON_PROACTIVE_SELF`, default on), while moments are on at all. */
+export function proactiveSelfEnabled(environment: SwitchValues): boolean {
+  return proactiveMomentsEnabled(environment) && switchOn(environment, 'SHANNON_PROACTIVE_SELF');
+}
+
 export function configuredProactiveMoments(
   environment: Readonly<Record<string, string | undefined>>, parts: ProactiveMomentParts,
 ): { moments: ProactiveMoments; close(): void } | null {
   if (!proactiveMomentsEnabled(environment) || !parts.gate) return null;
   const store = new SQLiteProactiveMoments(parts.databasePath);
-  const ask = momentAsk(environment, parts.fetcher);
+  const self = proactiveSelfEnabled(environment);
+  const ask = self ? null : momentAsk(environment, parts.fetcher);
   const moments = new ProactiveMoments({
     store, facts: (scopeKey, at) => momentFacts(parts, scopeKey, at), others: parts.body.others, blocked: parts.blocked,
     context: (scopeKey, at) => momentContext(parts, scopeKey, at),
-    ...(ask ? { ask } : {}), ...(parts.emit ? { emit: parts.emit } : {}), ...(parts.log ? { log: parts.log } : {}),
+    ...(self ? { self: true } : ask ? { ask } : {}), ...(parts.emit ? { emit: parts.emit } : {}), ...(parts.log ? { log: parts.log } : {}),
     usdPerDecision: ask ? jevUsdPerCall(environment) ?? JEV_FAIL_SAFE_USD : 0,
     maximumDecisionsPerDay: bounded(environment.SHANNON_PROACTIVE_MOMENTS_MAX_DECISIONS, 0, 200, 24),
     maximumMessagesPerDay: bounded(environment.SHANNON_PROACTIVE_MOMENTS_MAX_MESSAGES, 0, 50, 8),

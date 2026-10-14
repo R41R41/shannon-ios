@@ -7,7 +7,11 @@ import { openDatabase } from '../../../infra/sqlite/sqliteOpen.js';
  * metadata, written by `initiativeStore.ts`). Read by id, for the ids of one inbox answer; it writes nothing. Without the tables it
  * answers nothing.
  */
-export interface InitiativeSource { sourceItemId: string; createdAt: string; authored: boolean }
+export interface InitiativeSource {
+  sourceItemId: string; createdAt: string; authored: boolean;
+  /** A message of hers she chose to leave as text (`reachOut.spoken: false`, her moment speech, owner decision 2026-10-14). */
+  textOnly?: true;
+}
 
 export class SQLiteInitiativeSources {
   private readonly database: DatabaseSync;
@@ -25,7 +29,8 @@ export class SQLiteInitiativeSources {
       WHERE im.scope_key = ? AND im.initiative_id IN (${ids.map(() => '?').join(', ')})
     `).all(scopeKey, ...ids) as unknown as Array<{ initiative_id: string; source_item_id: string; created_at: string; metadata_json: string | null }>;
     for (const row of rows) {
-      found.set(row.initiative_id, { sourceItemId: row.source_item_id, createdAt: row.created_at, authored: authored(row.metadata_json) });
+      found.set(row.initiative_id, { sourceItemId: row.source_item_id, createdAt: row.created_at, authored: authored(row.metadata_json),
+        ...(textOnly(row.metadata_json) ? { textOnly: true as const } : {}) });
     }
     return found;
   }
@@ -48,4 +53,8 @@ export class SQLiteInitiativeSources {
 
 function authored(metadata: string | null): boolean {
   try { return metadata !== null && (JSON.parse(metadata) as { authoredOpening?: unknown }).authoredOpening === true; } catch { return false; }
+}
+
+function textOnly(metadata: string | null): boolean {
+  try { return metadata !== null && (JSON.parse(metadata) as { reachOut?: { spoken?: unknown } }).reachOut?.spoken === false; } catch { return false; }
 }

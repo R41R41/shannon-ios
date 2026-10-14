@@ -5,7 +5,8 @@ import { momentFresh, type ProactiveMoment, type ProactiveMomentKind } from '../
 
 /**
  * `proactive_moments` (owner decision 2026-10-14, `proactiveMoments.ts`): each moment she perceived, once per key, and what became
- * of it: still `perceived`, `wanted` (she would say something; her own time's reach-out writes it), `quiet` (she would rather stay
+ * of it: still `perceived`, `wanted` (she would say something, or, decided by `writer`, she decides herself when she writes; her
+ * own time's reach-out writes it or stays quiet), `quiet` (she would rather stay
  * quiet), `taken` (her reach-out step took it), `skipped` (a cap) or `expired`. Closed values only, never a word. Additive; created
  * by her own time's worker, which alone reads and writes it. Kept 30 days.
  */
@@ -107,7 +108,7 @@ export class SQLiteProactiveMoments {
   usage(scopeKey: string, since: string): { decisions: number; taken: number; costUsd: number } {
     const row = this.database.prepare(`
       SELECT
-        COALESCE(SUM(CASE WHEN decider = 'jev' THEN 1 ELSE 0 END), 0) AS decisions,
+        COALESCE(SUM(CASE WHEN decider IN ('jev', 'writer') THEN 1 ELSE 0 END), 0) AS decisions,
         COALESCE(SUM(CASE WHEN status = 'taken' THEN 1 ELSE 0 END), 0) AS taken,
         COALESCE(SUM(cost_usd), 0) AS cost
       FROM proactive_moments WHERE scope_key = ? AND perceived_at >= ?

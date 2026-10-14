@@ -225,6 +225,14 @@ export const SWITCHES = [
     doc: 'Owner 2026-10-14: moments she perceives (he came back, a long quiet, morning, late night, a story waiting) may lead her to speak in her own words.',
   },
   {
+    name: 'SHANNON_PROACTIVE_SELF', default: 'on', kind: 'default_on', owner: 'autonomy', requires: ['SHANNON_PROACTIVE_MOMENTS'],
+    doc: 'Owner 2026-10-14 (form): she decides herself whether to speak at a moment (core, inner note, her day, recent talk); off, the Jev judge.',
+  },
+  {
+    name: 'SHANNON_PROMISE_ON_TIME', default: 'on', kind: 'default_on', owner: 'outreach', requires: [],
+    doc: 'A due promise is told at its time, apart from the day\'s topic slot and the 90-minute topic cooldown, in her words; off, as before.',
+  },
+  {
     name: 'SHANNON_STUDY_SHOWING_LINE', default: 'off', kind: 'explicit_on', owner: 'autonomy', requires: [],
     doc: 'Owner 2026-10-14: off, telling him a piece writes no fixed line (the piece is readable; a story waiting is a moment of hers).',
   },

@@ -45,6 +45,9 @@ export const AUTONOMY_MODELS: readonly AutonomyModel[] = Object.freeze([
   { id: 'gpt-5.6-sol', provider: 'openai', label: 'GPT-5.6 Sol', purposes: ['prose', 'critique'], usdPerMillion: null },
 ]);
 
+/** Her moment speech (`ownMomentSpeech.ts`, owner decision 2026-10-14): Haiku, with its stable prefix cached for an hour. */
+export const AUTONOMY_SPEECH_MODEL = DEFAULT_HAIKU_MODEL;
+
 /** Used until she stores a preference of her own. Prose follows the owner's recommendation. */
 export const AUTONOMY_DEFAULT_MODEL: Readonly<Record<AutonomyModelPurpose, string>> = Object.freeze({
   prose: 'gemini-3.8-flash',

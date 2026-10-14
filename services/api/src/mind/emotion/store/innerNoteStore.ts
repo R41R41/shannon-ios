@@ -100,6 +100,18 @@ function noteOf(row: Row): StoredInnerNote {
   };
 }
 
+/**
+ * Her newest note read on a read-only connection of another process (her own time's moment speech, `wiring/momentSpeechWiring.ts`):
+ * nothing is created or written; null without the table (the API has not created it) or without a note. The caller checks that it
+ * is current and that nothing of it was forgotten (`noteForgotten`).
+ */
+export function readLatestInnerNote(database: DatabaseSync, scopeKey: string): StoredInnerNote | null {
+  const exists = database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'shannon_inner_notes'`).get();
+  if (!exists) return null;
+  const row = database.prepare(`SELECT ${COLUMNS} FROM shannon_inner_notes WHERE scope_key = ? ORDER BY sequence DESC LIMIT 1`).get(scopeKey);
+  return row ? noteOf(row as Row) : null;
+}
+
 export class SQLiteInnerNoteStore {
   private readonly database: DatabaseSync;
   private readonly owned: boolean;

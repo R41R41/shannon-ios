@@ -99,8 +99,9 @@ export class SQLiteReachOutSpeaker {
     `).get(scopeKey, `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}%:${originId}`));
   }
 
-  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string; subject?: string | null }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say', input.reason, input.subject, input, at) }, () => {
+  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string; subject?: string | null; spoken?: false }, at: string): ReachOutDelivery {
+    const intent = intentOf('say', input.reason, input.subject, input, at);
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent, ...(input.spoken === false ? { spoken: false as const } : {}) }, () => {
       const taken = new Set((this.database.prepare(`
         SELECT day_key FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
       `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:%`) as unknown as Array<{ day_key: string }>).map(row => row.day_key));
@@ -135,7 +136,10 @@ export class SQLiteReachOutSpeaker {
   }
 
   /** One assistant message and one initiative, under the key `slot` hands out inside the transaction; no key, no message. */
-  private write(scopeKey: string, input: { reason: ObservedReachOutReason; text: string; at: string; seen?: boolean; intent: ProactiveDeliveryIntent }, slot: () => string | null): ReachOutDelivery {
+  private write(
+    scopeKey: string, input: { reason: ObservedReachOutReason; text: string; at: string; seen?: boolean; intent: ProactiveDeliveryIntent; spoken?: false },
+    slot: () => string | null,
+  ): ReachOutDelivery {
     // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
     for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
       if (!this.tableExists(table)) return 'unavailable';
@@ -174,7 +178,8 @@ export class SQLiteReachOutSpeaker {
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
         VALUES (?, ?, ?, ?, 1, 'assistant', ?, ?, ?)
       `).run(randomUUID(), scopeKey, threadId, `initiative:${initiativeId}`, input.text, at, JSON.stringify({
-        initiativeId, sourceItemId, reachOut: { reason: input.reason },
+        // She chose to leave it as text (her moment speech, owner decision 2026-10-14): a body shows it and does not say it aloud.
+        initiativeId, sourceItemId, reachOut: { reason: input.reason, ...(input.spoken === false ? { spoken: false } : {}) },
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, threadId);
       if (this.gate) {

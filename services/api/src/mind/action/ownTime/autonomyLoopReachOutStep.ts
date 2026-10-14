@@ -9,12 +9,14 @@ import { agenticLoop, observeReachOut, ownerRepliedAt } from './autonomyLoopObse
 import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
-import { autonomyModelCostUsd } from './autonomyModels.js';
+import { autonomyInputTokensEstimate, autonomyModelCostUsd } from './autonomyModels.js';
 import { AUTONOMY_REACH_OUT_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
-import { STUDY_STATUS_LABEL } from './store/studyStore.js';
+import { STUDY_STATUS_LABEL, type StudyPiece } from './store/studyStore.js';
 import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../../contracts/withheldActionContract.js';
 import { generateModel } from './autonomyLoopCalls.js';
+import { OWN_MOMENT_SPEECH_V1, momentSpeechModel, momentSpeechPrompt, ownDayBlock, parsedMomentSpeech, type OwnDayFacts } from './ownMomentSpeech.js';
+import { ownerPrivateRule } from './autonomyLoopOwnerContext.js';
 
 /**
  * The step 「話しかける」 (owner decision 2026-10-02): from her own activity she may write one
@@ -33,7 +35,10 @@ export interface AutonomyReachOuts {
   /** While someone other than the owner may see or hear her body: the speak-time rule text and the marker for owner-private lines. Otherwise null. */
   audience(scopeKey: string, at: string): { instructions: string; marker: string } | null;
   /** `arisenAt`: when the thought that chose it was had (the proactive gate's intent expiry, Syzygy ADR-0008 stage 3). */
-  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string; subject?: string | null }, at: string): ReachOutDeliveryAnswer;
+  /** `spoken: false`: she chose to leave it as text (her moment speech); a body shows it and does not say it aloud. */
+  say(scopeKey: string, input: {
+    reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string; subject?: string | null; spoken?: false;
+  }, at: string): ReachOutDeliveryAnswer;
   /**
    * Her opening line of a call to his iPhone (`autonomyLoopPhoneStep.ts`), written as a message of hers. It is not one of
    * the day's messages: calls have no count of their own, and take none of `maximumPerDay`.
@@ -150,11 +155,25 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   try {
     owned = dependencies.loop.ownerContext ? dependencies.ownerContext?.forMessage(cycle.scopeKey, at, notes.map(note => note.title).join(' '), others !== null)?.section ?? null : null;
   } catch { owned = null; }
-  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}), ...(dependencies.loop.ownerContext && dependencies.ownerContext ? { notesPrivate: true } : {}),
+  // Owner decision 2026-10-14 (form): at a moment she decides herself whether to speak, with her core, her inner note, her own day
+  // and their recent talk in front of her (`ownMomentSpeech.ts`); without the port (`SHANNON_PROACTIVE_SELF` off) as before.
+  const self = moment && dependencies.momentSpeech ? {
+    prompt: momentSpeechPrompt({
+      localTime: localTime(at, config.timeZone), momentLine: moment.line, innerNote: momentInnerNote(dependencies, cycle.scopeKey, at, others !== null),
+      ownDay: ownDayBlock(ownDay(dependencies, cycle.scopeKey, at, shown), config.timeZone), ownerContext: owned,
+      privateRule: ownerPrivateRule('message', Boolean(owned)), others,
+    }),
+  } : null;
+  const prompt = self ? self.prompt : reachOutPrompt({
+    reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}),
+    ...(dependencies.loop.ownerContext && dependencies.ownerContext ? { notesPrivate: true } : {}),
     ...(moment ? { moment: { line: moment.line, rules: moment.rules } } : {}) });
-  const model = resolveAutonomyModel('prose', store.modelPreferences(cycle.scopeKey), id => dependencies.model.canUse(id));
+  const model = (self ? momentSpeechModel(id => dependencies.model.canUse(id)) : null)
+    ?? resolveAutonomyModel('prose', store.modelPreferences(cycle.scopeKey), id => dependencies.model.canUse(id));
   if (!model) return null;
-  const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: OUTPUT_TOKENS };
+  const outputTokens = self ? OWN_MOMENT_SPEECH_V1.outputTokens : OUTPUT_TOKENS;
+  const estimate = self ? { inputTokens: autonomyInputTokensEstimate(model, prompt.system, prompt.prompt), outputTokens }
+    : { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: OUTPUT_TOKENS };
   const costUsd = autonomyModelCostUsd(model, estimate, config.modelPrices);
   if (costUsd === null) return null;
   const label = REACH_OUT_REASON_LABEL[reason];
@@ -177,7 +196,9 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
-        const result = await generateModel(adapters.model,{ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
+        const result = await generateModel(adapters.model, {
+          model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: outputTokens, ...(self ? { cacheSystem: true as const } : {}), signal,
+        });
         reply = parsedModelObject(result.text);
         usage = result.usage;
       } catch (error) {
@@ -187,8 +208,12 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       }
       if (!reply || typeof reply.message !== 'string') return { outcome: 'failed', summary: `話しかけようとしましたが、言葉になりませんでした（理由: ${label}）。`, reasonCode: 'model_failed', usage };
       const text = reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS);
+      // Where she wants it said, when she decided herself (her moment speech): `text` is shown and not said aloud.
+      const where = self ? parsedMomentSpeech(reply)?.where ?? 'voice' : 'voice';
       // Silence is hers to choose.
-      if (!text) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, summary: `話しかけようかと思いましたが、やめておきました（理由: ${label}）。` };
+      if (!text) {
+        return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, ...(self ? { reasonCode: 'chose_silence' } : {}), summary: `話しかけようかと思いましたが、やめておきました（理由: ${label}）。` };
+      }
       // While she watches what follows, the message carries the time it is written, not the time the step began: an owner turn
       // that arrived while the model was writing is then not an answer to it, and she does not speak over that turn.
       const agentic = agenticLoop(dependencies);
@@ -206,7 +231,10 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       let acknowledged=true;
       try {
         await actionPermit();
-        delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay, arisenAt, subject }, writeAt);
+        delivery = adapters.reachOuts.say(cycle.scopeKey, {
+          reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay, arisenAt, subject,
+          ...(where === 'text' ? { spoken: false as const } : {}),
+        }, writeAt);
       } catch(error) { delivery = 'unavailable';acknowledged=error instanceof Error&&error.message==='ACTION_STOPPED'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
       const held = heldByGate(delivery, `持ち主に話しかけるの（理由: ${label}）`, usage);
@@ -237,6 +265,46 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
     },
   };
 }
+
+/** Her inner note for her moment speech, the owner alone only; nothing on any failure. */
+function momentInnerNote(dependencies: StepDependencies, scopeKey: string, at: string, others: boolean): string | null {
+  if (others) return null;
+  try { return dependencies.momentSpeech?.innerNote(scopeKey, at) || null; } catch { return null; }
+}
+
+/**
+ * 「ボクの今日」 from her own record and study: her own steps of today (not a touch's line), the stories she is writing and the
+ * notes of today that may go into a message (`shown`), and what is on her mind. Nothing on any failure.
+ */
+function ownDay(dependencies: StepDependencies, scopeKey: string, at: string, shown: (piece: StudyPiece) => boolean): OwnDayFacts {
+  const { store, config } = dependencies;
+  const dayKey = autonomyDayKey(at, config);
+  const today = (instant: string) => { try { return autonomyDayKey(instant, config) === dayKey; } catch { return false; } };
+  let activities: OwnDayFacts['activities'] = [];
+  try {
+    activities = (store.activity.days(scopeKey, { sinceDayKey: dayKey, limit: 200 }).find(day => day.dayKey === dayKey)?.entries ?? [])
+      .filter(entry => entry.kind === 'action' && entry.actor === 'shannon' && (entry.outcome === 'done' || entry.outcome === 'failed')
+        && !OWN_DAY_LEFT_OUT.has(entry.tool ?? '') && entry.occurredAt <= at)
+      .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+      .slice(-OWN_MOMENT_SPEECH_V1.activities).map(entry => ({ at: entry.occurredAt, summary: entry.summary }));
+  } catch { activities = []; }
+  let pieces: StudyPiece[] = [];
+  try { pieces = store.study.list(scopeKey).filter(piece => piece.status !== 'put_away' && !piece.deletedAt && shown(piece)); } catch { pieces = []; }
+  const stories = pieces.filter(piece => piece.kind === 'story').sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, OWN_MOMENT_SPEECH_V1.stories)
+    .map(piece => ({ title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status], version: piece.version, touchedToday: today(piece.updatedAt) }));
+  const notes = pieces.filter(piece => piece.kind === 'note' && !piece.origin && today(piece.createdAt))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, OWN_MOMENT_SPEECH_V1.notes).map(piece => ({ title: piece.title }));
+  let pursuits: OwnDayFacts['pursuits'] = [];
+  try {
+    pursuits = store.pursuits.list(scopeKey, at).filter(item => item.status === 'active').slice(0, OWN_MOMENT_SPEECH_V1.pursuits)
+      .map(item => ({ title: item.title, why: item.why }));
+  } catch { pursuits = []; }
+  return { activities, stories, notes, pursuits };
+}
+
+/** Steps of hers that are not her day: a touch's line (its own record), and her own considering of a moment. */
+const OWN_DAY_LEFT_OUT = new Set(['body.reaction', REACH_OUT_HELD_TOOL]);
 
 function momentOf(dependencies: StepDependencies, scopeKey: string, key: string, at: string): AutonomyMoment | null {
   try { return dependencies.moments?.get(scopeKey, key, at) ?? null; } catch { return null; }

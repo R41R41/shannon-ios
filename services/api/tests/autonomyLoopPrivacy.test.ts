@@ -552,6 +552,9 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyLoopLookStep.ts',
       // One message of her own: the step names two interfaces (the way her words leave, the owner's upcoming items as lines) and imports neither store.
       'autonomyLoopReachOutStep.ts',
+      // Her own decision at a moment (owner decision 2026-10-14): words and a pure prompt, and the interface her inner note arrives
+      // through as one finished block; no store (held below).
+      'ownMomentSpeech.ts',
       // Act, observe, think again: what a step led to as closed facts, the words for those facts, the wait after a message of hers,
       // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts',
@@ -615,6 +618,9 @@ describe('what reaches the prompts of her own activity', () => {
     }
     // The interface module holds words and a check, and imports nothing but vocabulary.
     expect(imports('autonomyLoopOwnerContext.ts')).toEqual(['@shannon/cognition']);
+    // Her moment speech: her core and the words of a prompt, the registry's model id; it opens nothing and calls nothing.
+    expect(imports('ownMomentSpeech.ts').sort()).toEqual(['@shannon/cognition', 'autonomyLoopPrompts.ts', 'autonomyModels.ts']);
+    expect(read('ownMomentSpeech.ts')).not.toMatch(/DatabaseSync|node:sqlite|SELECT |INSERT |fetch\(|\.generate\(/u);
     // The one module that reads the owner's context goes through the entry points a conversation uses: the disclosure gate, the
     // replay under forgetting and disclosure, the replay window, the deterministic recall of a turn, people memory, today's focus.
     const context = read('autonomyOwnerContext.ts');

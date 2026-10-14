@@ -1,4 +1,5 @@
 import { configuredMinecraftLifecycle } from './wiring/minecraftLifecycleWiring.js';
+import { configuredMomentSpeech } from './wiring/momentSpeechWiring.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { stage4Enabled,mindSocketPath } from './infra/config/stage4.js';
 import { MindSocketClient } from './infra/ipc/mindSocket.js';
@@ -202,6 +203,9 @@ const moments = configuredProactiveMoments(process.env, {
   emit: mindInbox?.emit ?? null,
   log: line => console.log(`Shannon moments: ${line}`),
 });
+// Owner decision 2026-10-14 (form: 「シャノン本人が決める」): at a moment she decides herself, in one Haiku call with her core, her inner
+// note (handed to her loop as one block, read-only), her own day and their recent talk. SHANNON_PROACTIVE_SELF=off: none, the Jev judge.
+const momentSpeech = moments ? configuredMomentSpeech(process.env, { databasePath, ownerScope: loopConfig.scopeKey, timeZone: config.timeZone }) : null;
 const model = configuredAutonomyTextModel(process.env, undefined, line => console.log(line));
 const planningMode = configuredPlanningMode(process.env, { path: databasePath, ownerScope: loopConfig.scopeKey, model,
   fallbackPlanning: scope => resolveAutonomyModel('planning', store.modelPreferences(scope), id => model.canUse(id)) });
@@ -231,6 +235,7 @@ const loop = new ShannonAutonomyLoop({
   ...(withheldActions ? { withheldFacts: withheldFactsReader(withheldActions.withheld, observer.body, at => clock(at, config.timeZone)) } : {}),
   ...(mindInbox ? { emitMindEvent: mindInbox.emit } : {}),
   ...(moments ? { moments: moments.moments } : {}),
+  ...(momentSpeech ? { momentSpeech: momentSpeech.speech } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -279,6 +284,7 @@ try {
   withheldActions?.close();
   mindInbox?.close();
   moments?.close();
+  momentSpeech?.close();
   proactiveGate?.close();
   skillCopies?.close();
   ownerContext?.close();

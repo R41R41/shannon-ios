@@ -65,6 +65,7 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 | Text turn (end of the turn context, `apiKernel.ts`) | the whole note and what happened since | `shown` only | nothing |
 | Voice turn (`apiLiveVoice.ts`) | the same | `shown` only | nothing |
 | Touch reaction (`bodyReactionPrompt.ts`) | 本音・建て前・つもり (a stance, not a line), the core's short form and its speech lines, the one-line voice without a fixed register, the scene first (below) | `shown` only | — |
+| Her moment speech in her own time (`ownMomentSpeech.ts`, owner decision 2026-10-14; read-only through `noteForgotten`, `wiring/momentSpeechWiring.ts`) | 本音・建て前・理由・つもり (a stance, not a line)・底, what she shows, her will during a sulk; a sulk run out only as 「さっきまでの気持ち」 | nothing (no moment arises) | — |
 | Jev `voice_route.v3` (`jevVoiceDecision.ts`) | `shannon_inner` (the English line) and an affect question that reads it | nothing (v1/v2) | nothing |
 | Body presence and the reaction's `mood` | face of `shown`, `tell`, `until` while the note is active | the same (no text) | the same |
 | Her identity (cached prefix) | the character core in place of the persona's identity, address, character and temperament lines (an AGI, not a maid; he made her, he is not her 持ち主) | the same | the same |

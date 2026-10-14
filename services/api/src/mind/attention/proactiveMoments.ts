@@ -10,8 +10,9 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * would want to say something now, and only then does her own-time reach-out write a message in her own words, which passes the
  * proactive gate of Syzygy ADR-0008 stage 3 like every message she starts. Nothing here holds a word she says.
  *
- * There is no moment of her mood, and no moment carries it: her inner state reaches the decision only through her inner note once
- * Syzygy ADR-0012 wires it. What she makes of it, a sulk included, is hers to decide; no rule here forbids or prescribes it (owner,
+ * There is no moment of her mood, and no moment carries it: her inner state reaches the decision only through her inner note
+ * (Syzygy ADR-0012), which her own decision reads (`ownMomentSpeech.ts`, `SHANNON_PROACTIVE_SELF`, owner decision 2026-10-14 by
+ * form: 「シャノン本人が決める」). What she makes of it, a sulk included, is hers to decide; no rule here forbids or prescribes it (owner,
  * 2026-10-14: 「そういう風にルール化するととたんにAGIから遠ざかる」). This file is pure: no database, no timer, no network.
  */
 export const PROACTIVE_MOMENT_KINDS = Object.freeze(['owner_returned', 'long_quiet', 'morning', 'late_night', 'awaiting_reaction'] as const);
@@ -143,7 +144,10 @@ export const MOMENT_MESSAGE_RULES = Object.freeze([
   '決まり文句のあいさつや、休むようにという定型の声かけだけで済むなら、言わずに message を空にする。',
 ]);
 
-/** The decision's one question: `JEV_QUESTION_SETS.proactiveMoment` (ADR-0008 §14: a change of wording is a new version). */
+/**
+ * The Jev decision's one question, used only with `SHANNON_PROACTIVE_SELF=off`: `JEV_QUESTION_SETS.proactiveMoment` (ADR-0008 §14:
+ * a change of wording is a new version).
+ */
 export const PROACTIVE_MOMENT_QUESTION = Object.freeze({
   type: 'noul' as const,
   instructions: [

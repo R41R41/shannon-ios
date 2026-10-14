@@ -34,7 +34,7 @@ export class AnthropicAutonomyTextModel {
     try {
       const body = cacheHaikuRequest({
         model: request.model, max_tokens: request.maximumOutputTokens,
-        system: [{ type: 'text', text: request.system }],
+        system: [{ type: 'text', text: request.system, ...(request.cacheSystem ? { cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } } : {}) }],
         messages: [{ role: 'user', content: request.prompt }],
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
       });

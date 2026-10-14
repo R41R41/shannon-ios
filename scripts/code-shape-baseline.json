@@ -16,7 +16,7 @@
       "long-line": 1
     },
     "packages/cognition/src/capabilities.ts": {
-      "long-line": 7
+      "long-line": 6
     },
     "packages/cognition/src/disclosure.ts": {
       "complex-function": 1
@@ -365,10 +365,10 @@
     "services/api/src/infra/models/anthropic/anthropicFcaModel.ts": {
       "complex-function": 1,
       "multi-statement-line": 2,
-      "long-line": 9
+      "long-line": 8
     },
     "services/api/src/infra/models/anthropic/anthropicFcaSummary.ts": {
-      "long-line": 3
+      "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicFcaTools.ts": {
       "complex-function": 1,
@@ -818,7 +818,7 @@
     },
     "services/api/src/mind/action/ownTime/autonomyLoopPrompts.ts": {
       "complex-function": 1,
-      "long-line": 18
+      "long-line": 17
     },
     "services/api/src/mind/action/ownTime/autonomyLoopProvenance.ts": {
       "long-line": 8
@@ -826,7 +826,7 @@
     "services/api/src/mind/action/ownTime/autonomyLoopReachOutStep.ts": {
       "complex-function": 2,
       "multi-statement-line": 1,
-      "long-line": 13
+      "long-line": 12
     },
     "services/api/src/mind/action/ownTime/autonomyLoopSessionPrompts.ts": {
       "long-line": 4
@@ -1768,11 +1768,11 @@
     "services/api/src/surfaces/body/bodyReaction.ts": {
       "complex-function": 3,
       "multi-statement-line": 1,
-      "long-line": 12
+      "long-line": 11
     },
     "services/api/src/surfaces/body/bodyReactionPrompt.ts": {
       "complex-function": 1,
-      "long-line": 6
+      "long-line": 5
     },
     "services/api/src/surfaces/body/bodyTouchWords.ts": {
       "long-line": 1
@@ -1861,7 +1861,7 @@
       "long-function": 1,
       "complex-function": 2,
       "multi-statement-line": 3,
-      "long-line": 4
+      "long-line": 3
     },
     "services/api/src/surfaces/outreach/store/ownOutreachStore.ts": {
       "long-line": 4
@@ -1870,7 +1870,7 @@
       "long-line": 1
     },
     "services/api/src/surfaces/outreach/store/reachOutSpeaker.ts": {
-      "long-line": 11
+      "long-line": 10
     },
     "services/api/src/surfaces/platform/platformPeopleSummaries.ts": {
       "long-line": 6
@@ -1987,7 +1987,7 @@
     },
     "services/api/src/wiring/fcaMinecraftRequests.ts": {
       "multi-statement-line": 1,
-      "long-line": 3
+      "long-line": 2
     },
     "services/api/src/wiring/fcaMinecraftTools.ts": {
       "complex-function": 1,

@@ -26,7 +26,7 @@ export function callKind(request: Pick<AutonomyTextRequest, 'system'>): ModelCal
   if (request.system.includes('[ひとりの時間]')) return 'think';
   if (request.system.includes('[読んだものをメモにする]')) return 'note';
   if (request.system.includes('[短い物語を書く]')) return 'draft';
-  if (request.system.includes('[自分から話しかける]')) return 'reach_out';
+  if (request.system.includes('[自分から話しかける]') || request.system.includes('[自分から話すかどうか]')) return 'reach_out';
   if (request.system.includes('[返事がないので、もう一度だけ声をかける]')) return 'follow_up';
   return 'revise';
 }
@@ -151,6 +151,7 @@ export interface LoopHarnessOptions {
   emitMindEvent?: StepDependencies['emitMindEvent'];
   /** Moments she perceived and wanted to speak of (owner decision 2026-10-14); absent, none. */
   moments?: StepDependencies['moments'];
+  momentSpeech?: StepDependencies['momentSpeech'];
   /** Syzygy ADR-0006/0008: the write-only taps of the prediction record; absent, as with their switches off. */
   prediction?: AutonomyPredictionTap;
   /** Syzygy ADR-0008 stage 1: the decision trace writer; absent, as with `SHANNON_DECISION_TRACES=off`. */
@@ -208,7 +209,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
     ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),
     ...(options.emitMindEvent ? { emitMindEvent: options.emitMindEvent } : {}), ...(options.executive ? { executive: options.executive } : {}),
-    ...(options.moments ? { moments: options.moments } : {}),
+    ...(options.moments ? { moments: options.moments } : {}), ...(options.momentSpeech ? { momentSpeech: options.momentSpeech } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

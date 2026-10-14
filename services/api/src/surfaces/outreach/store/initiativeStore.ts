@@ -8,6 +8,7 @@ import { commitmentAwaitingTodaySlot, dueCommitmentCandidate, neutralCommitmentL
 import { bodyLookIdOfSource } from '../../../contracts/bodyLookContract.js';
 import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
+import { promisePassesHold, tellDuePromises } from './promiseNotices.js';
 import type { ProactiveDeliveryGate } from '../../../mind/attention/attentionPorts.js';
 import { evaluationSummary, firstWritten, initiativeIntent, secureDatabaseFiles, type InitiativeWrite } from '../initiativeIntent.js';
 import { authoredWorldOpening, topicMatchesSource, worldVisibleInterests } from '../../../integrations/world/worldInterestRelevance.js';
@@ -40,53 +41,10 @@ interface InitiativeCandidate extends CandidateRow {
   thread_id?: string;
 }
 
-export interface InitiativeMessage {
-  id: string;
-  threadId: string;
-  content: string;
-  expression: 'curious' | 'excited' | 'thinking';
-  sourceTitle: string;
-  sourceURL: string;
-  createdAt: string;
-  readAt?: string;
-  /** Set when the message is what she says about one look at the room (`bodyLook.ts`). */
-  bodyLookId?: string;
-  /**
-   * Whether the message is about what she saw of the room (`roomLookSource.ts`): a notice outside the Talk must not
-   * quote it. Always sent by this store (true or false), so a client can tell this server from one without the field.
-   */
-  roomLook?: boolean;
-  /** `reach_out` with its `reason` when she started the message on her own from her own activity (`reachOutDelivery.ts`). */
-  kind?: 'reach_out'; reason?: string;
-}
-
-export interface InitiativeInbox {
-  unreadMessages(scopeKey: string): readonly InitiativeMessage[];
-  markRead(scopeKey: string, threadId?: string, readAt?: string): number;
-}
-
-export type InitiativeLoopResult = Readonly<{
-  considered: number;
-  sent: number;
-  stopped: 'quiet-hours' | 'no-owner' | 'today-is-enough' | 'recent-conversation' | 'nothing-worth-saying'
-    | 'reserved-for-commitment' | null;
-}>;
-
-export interface InitiativeEvaluationSummary {
-  windowDays: number;
-  runs: number;
-  eligibleRuns: number;
-  delivered: number;
-  deliveryRate: number;
-  candidatesConsidered: number;
-  repeatedCandidatesSuppressed: number;
-  deliveredBySource: readonly Readonly<{ sourceTitle: string; count: number }>[];
-  stopped: Readonly<Record<Exclude<InitiativeLoopResult['stopped'], null>, number>>;
-}
-
-export interface InitiativeEvaluationReader {
-  initiativeEvaluation(windowDays?: number, at?: string): InitiativeEvaluationSummary;
-}
+export type {
+  InitiativeEvaluationReader, InitiativeEvaluationSummary, InitiativeInbox, InitiativeLoopResult, InitiativeMessage,
+} from './initiativeStoreTypes.js';
+import type { InitiativeEvaluationSummary, InitiativeInbox, InitiativeLoopResult, InitiativeMessage } from './initiativeStoreTypes.js';
 
 export class SQLiteInitiativeStore implements InitiativeInbox {
   private readonly database: DatabaseSync;
@@ -94,7 +52,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   private commitmentLines: ReadonlyMap<string, string> = new Map();
 
   // gate: Syzygy ADR-0008 stage 3, the proactive gate every message she starts passes where it is written; absent (switched off), as before.
-  constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString(), private readonly gate: ProactiveDeliveryGate | null = null) {
+  // promisesOnTime (`SHANNON_PROMISE_ON_TIME`): due promises are told by `deliverDuePromises`, not by `runOnce` (`promiseNotices.ts`).
+  constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString(), private readonly gate: ProactiveDeliveryGate | null = null,
+    private readonly options: { promisesOnTime?: boolean } = {}) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.database.exec(`
@@ -175,7 +135,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'recent-conversation';
         continue;
       }
-      const promises = dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
+      // With promises told on time (`deliverDuePromises`), none of them waits for, or keeps, the day's slot of a topic.
+      const promises = this.options.promisesOnTime ? [] : dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
       considered += promises.length;
       const open = promises.filter(candidate => !delivered(candidate.item_id));
       if (open.length) {
@@ -183,7 +144,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         continue;
       }
       // A promise due later today keeps the day's only slot; a spontaneous topic can wait.
-      if (commitmentAwaitingTodaySlot(scope.scope_key, JSON.parse(scope.snapshot_json), at, timeZone, delivered)) {
+      if (!this.options.promisesOnTime && commitmentAwaitingTodaySlot(scope.scope_key, JSON.parse(scope.snapshot_json), at, timeZone, delivered)) {
         lastStop = 'reserved-for-commitment';
         continue;
       }
@@ -239,6 +200,15 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     }
     this.secureFiles();
     return this.finish({ considered, sent, stopped: sent > 0 ? null : lastStop }, at, repeatedSuppressed);
+  }
+
+  /** Due promises, told at their time (`SHANNON_PROMISE_ON_TIME`, `promiseNotices.ts`): her line when written and trusted, else the neutral one. */
+  deliverDuePromises(at = this.now(), timeZone = 'Asia/Tokyo', commitmentLines: ReadonlyMap<string, string> = new Map()): { due: number; sent: number } {
+    this.commitmentLines = commitmentLines;
+    const told = tellDuePromises(this.database, at, timeZone, (scopeKey, snapshot, candidate, dayKey) =>
+      this.persistMessage(scopeKey, parseState(snapshot), candidate, null, null, dayKey, at, true));
+    if (told.sent > 0) this.secureFiles();
+    return told;
   }
 
   initiativeEvaluation(windowDays = 30, at = this.now()): InitiativeEvaluationSummary {
@@ -328,6 +298,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
+    /** A due promise told at its time (`deliverDuePromises`): only the gate's own error and a repeat hold it. */
+    promiseOnTime = false,
   ): InitiativeWrite {
     const initiativeId = randomUUID();
     const threadId = candidate.thread_id ?? this.latestThread(scopeKey, createdAt);
@@ -378,7 +350,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       // Inside the transaction, after the day's slot (review): the limit refuses before the gate, and two writers cannot both pass.
       if (this.sentOnDay(scopeKey, dayKey)) { this.database.exec('ROLLBACK'); return 'skipped'; }
       const decision = this.gate?.decide(scopeKey, intent, createdAt, this.database);
-      if (decision?.verdict === 'hold') { this.database.exec('ROLLBACK'); this.gate!.hold(scopeKey, intent, decision, createdAt); return `held:${decision.code}`; }
+      if (decision?.verdict === 'hold' && !(promiseOnTime && promisePassesHold(decision.code))) {
+        this.database.exec('ROLLBACK'); this.gate!.hold(scopeKey, intent, decision, createdAt); return `held:${decision.code}`;
+      }
       const inserted = this.database.prepare(`
         INSERT OR IGNORE INTO initiative_messages
           (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,

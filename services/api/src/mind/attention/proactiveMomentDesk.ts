@@ -13,7 +13,8 @@ import type { ProactiveMomentDecision, SQLiteProactiveMoments, StoredProactiveMo
  *    conversation's workspace knows it too.
  * 2. **Decide, cheaply.** The free checks first (she may speak up at all now: nobody else may see or hear her, not paused, budget
  *    left, no conversation within ten minutes, no call with her body, the reach-out spacing, no session of hers open, the day's
- *    caps). Then one small Jev question: would she want to say something now? Without Jev, or when Jev fails, she stays quiet.
+ *    caps). Then, with `self` (the owner's decision of 2026-10-14), nothing more: whether she speaks is hers, in her loop's one
+ *    call. Without it one small Jev question: would she want to say something now? Without Jev, or when Jev fails, she stays quiet.
  * 3. **Speak, maybe.** A moment she wanted is taken by her loop as a one-step cycle (`autonomyLoop.ts`), whose reach-out step writes
  *    a message in her own words with the moment as a fact in front of her, through the proactive gate (owner active, intent expiry,
  *    the same intent within 30 minutes, topic reuse) and the activity record, inside her daily budget.
@@ -33,6 +34,12 @@ export interface ProactiveMomentPorts {
     'owner_spoke_within_minutes' | 'own_messages_today' | 'last_own_message_minutes_ago' | 'stories_awaiting_reaction'>;
   /** Jev's probability that she wants to speak now; absent, her message's writer decides. Throws on a failure. */
   ask?: (state: ProactiveMomentState, signal?: AbortSignal) => Promise<number>;
+  /**
+   * She decides herself (owner decision 2026-10-14, by form: 「シャノン本人が決める」, `SHANNON_PROACTIVE_SELF`): a moment that passes
+   * the free checks and the day's caps is handed to her loop, whose one call with her core, her inner note and her own day answers
+   * with her words or with silence (`ownMomentSpeech.ts`). No Jev is asked. Absent, the Jev question decides as before.
+   */
+  self?: boolean;
   /** ADR-0012's inner note, once it exists; absent until then. */
   innerNote?: InnerNoteReader;
   /** The mind's inbox (`EmitMindEvent`); absent with the workspace off. */
@@ -102,6 +109,11 @@ export class ProactiveMoments {
     if (blocked) return this.settle(scopeKey, moment, { status: 'skipped', reason: blocked }, at);
     const usage = store.usage(scopeKey, new Date(Date.parse(at) - DAY).toISOString());
     if (usage.taken >= this.ports.maximumMessagesPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'message_cap' }, at);
+    // She decides herself, when she writes (the decision's cap bounds her calls a day the same way).
+    if (this.ports.self) {
+      if (usage.decisions >= this.ports.maximumDecisionsPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'decision_cap' }, at);
+      return this.settle(scopeKey, moment, { status: 'wanted', decider: 'writer' }, at);
+    }
     // Without Jev nothing decides that she wants to speak: fail closed, quiet.
     if (!this.ports.ask) return this.settle(scopeKey, moment, { status: 'quiet', reason: 'no_decider' }, at);
     if (usage.decisions >= this.ports.maximumDecisionsPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'decision_cap' }, at);

@@ -37,6 +37,11 @@ export interface AutonomyTextRequest {
    * must fit). The field is sent per provider; one that refuses it is asked again without it, once, and not sent it again.
    */
   reasoning?: 'low';
+  /**
+   * Haiku only: the system is a stable prefix (her moment speech, `ownMomentSpeech.ts`) and gets its own one-hour breakpoint, so
+   * that only the prompt after it is new to the cache. Other providers ignore it; absent, every request is what it was.
+   */
+  cacheSystem?: true;
   signal?: AbortSignal;
 }
 

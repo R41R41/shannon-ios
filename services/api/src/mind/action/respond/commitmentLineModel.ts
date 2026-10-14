@@ -2,7 +2,10 @@ import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../../infra/mod
 import { claudeBackground, completeStructured, type BackgroundRoute, type ClaudeBackground } from '../../../infra/models/claude/claudeStructured.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../../infra/models/llmUsage.js';
 import { parseJson } from './store/dailyMindStore.js';
-import { commitmentLineInstructions, commitmentRequest, groundedCommitmentLine, type CommitmentFacts, type CommitmentLineWriter } from './commitmentLine.js';
+import { switchOn } from '@shannon/switches';
+import {
+  commitmentLineInstructions, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, type CommitmentFacts, type CommitmentLineWriter,
+} from './commitmentLine.js';
 import {
   lifecycleOutcomeLineInstructions, lifecycleOutcomeMessage, lifecycleOutcomeRequest, lifecyclePhraseSchema, type LifecycleOutcomeFacts,
   type LifecycleOutcomeLineWriter,
@@ -45,7 +48,9 @@ const LIFECYCLE_OUTCOME: FactLine<LifecycleOutcomeFacts> = {
 export function configuredCommitmentLineWriter(
   environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore, fetcher?: typeof fetch,
 ): CommitmentLineWriter | null {
-  return configuredFactLineWriter(environment, usageStore, COMMITMENT, fetcher);
+  // SHANNON_PROMISE_ON_TIME: her whole core leads the instructions (the prefix of her moment speech); off, the bytes of before.
+  const kind = switchOn(environment, 'SHANNON_PROMISE_ON_TIME') ? { ...COMMITMENT, instructions: () => commitmentLineInstructionsWithCore() } : COMMITMENT;
+  return configuredFactLineWriter(environment, usageStore, kind, fetcher);
 }
 
 /** The writer of a lifecycle operation's end (`lifecycleOutcomeLine.ts`), on the same model and budget; null when none is set. */

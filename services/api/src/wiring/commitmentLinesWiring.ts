@@ -19,12 +19,19 @@ export interface CommitmentLineParts {
   delivered: (scopeKey: string, itemId: string) => boolean;
   /** Someone other than the owner may see or hear her body now (a stream included). */
   others: (scopeKey: string, at: string) => boolean;
+  /** Closed codes only: whether a line is hers or the neutral one, never a word of either. */
+  log?: (line: string) => void;
 }
 
 const MINUTE = 60_000;
+/**
+ * A line is written again once it is this old: its facts say how late the promise is (2026-10-14: a line written at 09:22 would
+ * have said 「3分過ぎ」 when it was finally told at 10:07). With promises told on time it is written once, when it is due.
+ */
+const LINE_FRESH_MILLISECONDS = 10 * MINUTE;
 
 export function commitmentLinePreparer(parts: CommitmentLineParts): (at: string, signal?: AbortSignal) => Promise<ReadonlyMap<string, string>> {
-  const written = new Map<string, string>();
+  const written = new Map<string, { line: string; at: number }>();
   return async (at, signal) => {
     const lines = new Map<string, string>();
     const hour = localDateParts(new Date(at), parts.timeZone).hour;
@@ -35,8 +42,15 @@ export function commitmentLinePreparer(parts: CommitmentLineParts): (at: string,
       if (parts.delivered(parts.scopeKey, candidate.item_id)) continue;
       const key = `${candidate.item_id}\u0000${others ? 'others' : 'owner'}`;
       const facts = commitmentFacts(candidate, at, parts.timeZone, others);
-      if (!written.has(key)) written.set(key, await parts.writer?.write(parts.scopeKey, facts, signal) ?? neutralCommitmentLine(facts));
-      lines.set(candidate.item_id, written.get(key)!);
+      const before = written.get(key);
+      if (!before || Date.parse(at) - before.at > LINE_FRESH_MILLISECONDS) {
+        const hers = await parts.writer?.write(parts.scopeKey, facts, signal) ?? null;
+        // The neutral factual line is the fallback only: no writer, a failed write, or a line that did not state the promise.
+        const outcome = hers ? 'hers' : parts.writer ? 'neutral:unwritten_or_untrusted' : 'neutral:no_writer';
+        try { parts.log?.(`Shannon promise line: ${outcome}`); } catch { /* optional */ }
+        written.set(key, { line: hers ?? neutralCommitmentLine(facts), at: Date.parse(at) });
+      }
+      lines.set(candidate.item_id, written.get(key)!.line);
     }
     if (written.size > 256) written.clear();
     return lines;

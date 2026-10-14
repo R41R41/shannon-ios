@@ -16,6 +16,7 @@ import type { SelfInterestContextPort } from '../../self/selfPorts.js';
 import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
 import { preparePhoneCall, type AutonomyPhone } from './autonomyLoopPhoneStep.js';
 import { prepareReachOut, type AutonomyMoments, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
+import type { AutonomyMomentSpeech } from './ownMomentSpeech.js';
 import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
@@ -88,6 +89,12 @@ export interface StepDependencies {
    * reach-out step. Absent (`SHANNON_PROACTIVE_MOMENTS` off, no proactive gate), there are none and every cycle is what it was.
    */
   moments?: AutonomyMoments;
+  /**
+   * Her own decision at a moment (owner decision 2026-10-14, by form: 「シャノン本人が決める」, `ownMomentSpeech.ts`): her inner note as
+   * one finished block. Present, a moment's reach-out is her one Haiku call with her core, her note, her own day and their recent
+   * talk, and silence is an answer; absent (`SHANNON_PROACTIVE_SELF` off), the moment's message is written as before.
+   */
+  momentSpeech?: AutonomyMomentSpeech;
   /** Phoning the owner's iPhone; absent, a call is never planned and no prompt speaks of one. */
   phone?: AutonomyPhone;
   /** The owner's upcoming items, for a reach-out; absent, there are none. */

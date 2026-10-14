@@ -1,4 +1,4 @@
-import { SHANNON_OWNER_NAME, shannonOneLineVoice } from '@shannon/cognition';
+import { CHARACTER_CORE, SHANNON_OWNER_NAME, characterCoreBlock, shannonOneLineVoice } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
@@ -30,7 +30,40 @@ export function neutralCommitmentLine(facts: Pick<CommitmentFacts, 'title' | 'wh
 }
 
 const normalized = (text: string) => text.normalize('NFKC').replace(/[\s「」『』、。！？!?・]/gu, '').toLowerCase();
-const numbers = (text: string) => text.normalize('NFKC').match(/\d+/gu) ?? [];
+/** The numbers of a text as values (「09:20」 and 「9時20分」 both hold 9 and 20). */
+const numbers = (text: string) => (text.normalize('NFKC').match(/\d+/gu) ?? []).map(Number);
+
+/** The longest run of characters the two texts share. */
+function sharedRun(left: string, right: string): number {
+  let longest = 0;
+  for (let start = 0; start < right.length && right.length - start > longest; start += 1) {
+    for (let end = right.length; end - start > longest; end -= 1) {
+      if (left.includes(right.slice(start, end))) {
+        longest = end - start;
+        break;
+      }
+    }
+  }
+  return longest;
+}
+
+/** What is said of a promise apart from its time: its numbers and time marks, and the day words that were relative to when it was said. */
+const withoutTime = (text: string) => text.replace(/\d+|[:：時分]|明後日|明日|今日|今夜|今晩|今朝/gu, '');
+
+/**
+ * Whether a line names the promise: its whole title, or (2026-10-14: a 09:20 promise was told in the neutral line because her
+ * line said it in her own words) a run of at least half of what the title says apart from its time, four characters at least, as
+ * it was said. Its time is checked apart, as numbers (`groundedCommitmentLine`).
+ */
+export function namesPromise(line: string, title: string): boolean {
+  const said = normalized(line);
+  const promised = normalized(title);
+  if (!promised) return false;
+  if (said.includes(promised)) return true;
+  const what = withoutTime(promised);
+  if (!what) return false;
+  return sharedRun(withoutTime(said), what) >= Math.min(what.length, Math.max(4, Math.ceil(what.length / 2)));
+}
 
 /** Her line when it states the promise correctly, else null. */
 export function groundedCommitmentLine(line: unknown, facts: CommitmentFacts): string | null {
@@ -38,10 +71,10 @@ export function groundedCommitmentLine(line: unknown, facts: CommitmentFacts): s
   const text = line.replace(/\s+/gu, ' ').trim();
   if (!text || text.length > 200) return null;
   // While he is alone it names the promise; with anyone else there it does not.
-  const named = normalized(text).includes(normalized(facts.title));
+  const named = namesPromise(text, facts.title);
   if (facts.others ? named : !named) return null;
   // No time, date or count that the facts do not hold.
-  const known = new Set([...numbers(facts.title), ...numbers(facts.when ?? ''), ...(facts.overdueMinutes !== null ? [String(facts.overdueMinutes)] : [])]);
+  const known = new Set([...numbers(facts.title), ...numbers(facts.when ?? ''), ...(facts.overdueMinutes !== null ? [facts.overdueMinutes] : [])]);
   return numbers(text).every(value => known.has(value)) ? text : null;
 }
 
@@ -57,6 +90,15 @@ export const commitmentLineInstructions = (innerNote = switchOn(serverEnvironmen
 
 /** The instructions with the switch off (the bytes of before). */
 export const COMMITMENT_LINE_INSTRUCTIONS = commitmentLineInstructions(false);
+
+/**
+ * The promise's line in her voice through the same prefix as her moment speech (`SHANNON_PROMISE_ON_TIME`, 2026-10-14): her whole
+ * character core first, then these instructions; the promise's facts follow in the request. Still the facts alone: no mood, no
+ * inner note and no moment is given, and a sulk never holds it back (it is delivered whatever she writes, in the neutral line if
+ * hers cannot be trusted).
+ */
+export const commitmentLineInstructionsWithCore = (innerNote = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE')): string =>
+  `${characterCoreBlock(CHARACTER_CORE)}\n\n${commitmentLineInstructions(innerNote)}`;
 
 export interface CommitmentLineWriter {
   /** Her line, or null when it could not be written or trusted. Never throws. */

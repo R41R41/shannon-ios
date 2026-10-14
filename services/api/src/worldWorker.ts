@@ -23,6 +23,7 @@ import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import { configuredCommitmentLineWriter } from './mind/action/respond/commitmentLineModel.js';
+import { switchOn } from '@shannon/switches';
 import { commitmentLinePreparer } from './wiring/commitmentLinesWiring.js';
 import { SQLiteInitiativeSources } from './surfaces/outreach/store/initiativeSources.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
@@ -47,7 +48,10 @@ const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => 
 const proactiveGate = configuredProactiveGate(process.env, {
   databasePath, source: 'worker', withheld: withheldActions?.withheld.sink ?? null, emit: mindInbox?.emit ?? null, log: line => console.log(line),
 });
-const initiativeStore = new SQLiteInitiativeStore(databasePath, undefined, proactiveGate?.gate ?? null);
+// SHANNON_PROMISE_ON_TIME (default on): a due promise is told at its time by its own pass below, apart from the topic loop's day
+// slot, its 90-minute conversation cooldown and its 15-minute recheck (2026-10-14: a 09:20 promise was told at 10:07). Off, as before.
+const promisesOnTime = switchOn(process.env, 'SHANNON_PROMISE_ON_TIME');
+const initiativeStore = new SQLiteInitiativeStore(databasePath, undefined, proactiveGate?.gate ?? null, { promisesOnTime });
 const stateStore = new SQLiteShannonStore({ path: databasePath, now: nowISOString });
 const dailyMindStore = new SQLiteDailyMindStore(databasePath);
 const dailyMindDelegate = createConfiguredDailyMindModel(process.env, stateStore);
@@ -60,6 +64,7 @@ const commitmentLines = commitmentLinePreparer({
   writer: configuredCommitmentLineWriter(process.env, stateStore), scopeKey: configuredOwnerScope(process.env), timeZone: 'Asia/Tokyo',
   snapshot: scopeKey => stateStore.snapshot(scopeKey), delivered: (scopeKey, itemId) => initiativeSources.delivered(scopeKey, itemId),
   others: (scopeKey, at) => bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds),
+  log: line => console.log(line),
 });
 const pushStore = new SQLitePushNotificationStore(databasePath);
 // SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
@@ -80,6 +85,18 @@ process.once('SIGTERM', requestStop);
 console.log('Shannon world worker started');
 try {
   do {
+    if (promisesOnTime) {
+      // First on every pass (at most a minute apart), before any source is fetched: a promise does not wait for the world.
+      try {
+        const at = nowISOString();
+        const lines = await commitmentLines(at, shutdownController.signal).catch(() => new Map<string, string>());
+        const told = initiativeStore.deliverDuePromises(at, 'Asia/Tokyo', lines);
+        if (told.sent > 0) console.log(`Shannon promise delivered: ${told.sent}`);
+      } catch (error) {
+        if (stopping) break;
+        console.log(`Shannon promise pass failed: ${error instanceof Error ? error.name : 'unknown'}`);
+      }
+    }
     const sources = store.dueSources();
     for (const source of sources) {
       if (stopping) break;
@@ -104,7 +121,7 @@ try {
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();
       const dailyFocuses = await dailyMindStore.ensureForKnownScopes(store.latestItems(40), dailyMindModel, at);
-      const promises = await commitmentLines(at, shutdownController.signal).catch(() => new Map<string, string>());
+      const promises = promisesOnTime ? new Map<string, string>() : await commitmentLines(at, shutdownController.signal).catch(() => new Map<string, string>());
       const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses, morningBrief ? await morningBrief.candidates(at) : undefined, promises);
       nextInitiativeCheckAt = now + nextInitiativeDelayMilliseconds(initiative, at);
       if (initiative.sent > 0) console.log(`Shannon initiative delivered: ${initiative.sent}`);
