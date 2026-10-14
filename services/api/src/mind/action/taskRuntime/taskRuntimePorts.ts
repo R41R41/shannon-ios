@@ -128,4 +128,11 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
    * replaying anything (root/conversation run again, others fail as `unknown_retired`).
    */
   retireUnknown?(scopeKey: string, at: string): TaskView[];
+  /**
+   * The internal root's step the provider refused before anything ran (deterministic 4xx, history limit): closed as a known
+   * failure; the root returns to its inbox and the messages the step saw are delivered once more, then consumed (fix 2026-10-14).
+   */
+  closeRejectedStep?(step: TaskStep): boolean;
+  /** Every task waiting on messages while a delivered one is pending becomes ready (the tick's lost-wakeup sweep). */
+  wakePendingInboxes?(scopeKey: string): TaskView[];
 }

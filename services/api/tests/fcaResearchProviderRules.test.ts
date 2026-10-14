@@ -77,7 +77,7 @@ describe('FCA research decisions meet the provider request rules', () => {
 });
 
 describe('a refused FCA decision fails the research task at once and tells the owner', () => {
-  function runtime(model: FcaModel) {
+  function runtime(model: FcaModel, context?: string) {
     let time = Date.parse('2026-10-12T01:18:00.000Z');
     const now = () => new Date(time).toISOString();
     const h = actionHarness(now);
@@ -88,7 +88,7 @@ describe('a refused FCA decision fails the research task at once and tells the o
     cleanups.push(async () => { await driver.close(); h.close(); });
     const root = driver.runtime.ensureRoot('owner');
     const parent = driver.runtime.createChild('owner', root.id, { title: 'conversation', goal: 'talk' }, 'request-parent');
-    const child = driver.runtime.createChild('owner', parent.id, { title: '明日の天気', goal: '明日の東京の天気を調べる' }, 'request-child');
+    const child = driver.runtime.createChild('owner', parent.id, { title: '明日の天気', goal: '明日の東京の天気を調べる', ...(context ? { context } : {}) }, 'request-child');
     only = child.id;
     return { h, driver, parent, child, advance(milliseconds: number) { time += milliseconds; h.store.transaction(() => h.store.sweep(now())); } };
   }
@@ -157,6 +157,22 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'completed', summary: '晴れ' });
     expect(fixture.bodies).toHaveLength(2);
     // The same decision asked again: only the task's revision moved; no history was added by the failed attempt.
+    const sameDecision = (body: Record<string, unknown>) => JSON.stringify(body).replace(/\\"revision\\":\d+/gu, '');
+    expect(sameDecision(fixture.bodies[1]!)).toBe(sameDecision(fixture.bodies[0]!));
+  });
+
+  it('keeps the messages the step saw for its retry after a server error (2026-10-14)', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    const fixture = scriptedAnthropic(() => ++calls === 1
+      ? new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'overloaded' } }), { status: 529, headers: { 'content-type': 'application/json' } })
+      : message([call('fca_complete', 'complete-1', { summary: '晴れ' })], 'tool_use'));
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
+    const { driver, child } = runtime(model, '明日の東京の天気を調べて');
+    await settle(driver, () => ['completed', 'failed', 'unknown'].includes(driver.runtime.get('owner', child.id)?.phase ?? ''));
+    expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'completed', summary: '晴れ' });
+    expect(fixture.bodies).toHaveLength(2);
+    expect(JSON.stringify(fixture.bodies[0])).toContain('明日の東京の天気を調べて');
     const sameDecision = (body: Record<string, unknown>) => JSON.stringify(body).replace(/\\"revision\\":\d+/gu, '');
     expect(sameDecision(fixture.bodies[1]!)).toBe(sameDecision(fixture.bodies[0]!));
   });
