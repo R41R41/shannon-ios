@@ -124,11 +124,7 @@ export class AnthropicFcaModel implements FcaModel {
       const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       // A part this epoch's replay already showed in full is not restated (`anthropicFcaHistory.ts`, `elidedDecision`); the message is stored as sent.
-      const fields = { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
-        ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
-        ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-        ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
-        ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
+      const fields = decisionFields(input, ownerClock);
       const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify(elidedDecision(fields, restatedKnowledge(history))) };
       // A system message holding tool changes must immediately follow a user turn and be either the last message or
       // immediately followed by an assistant turn: it may not open the conversation (a live 400, 2026-10-12), nor sit between
@@ -140,12 +136,13 @@ export class AnthropicFcaModel implements FcaModel {
       // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
       // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
       const system = [{ type: 'text' as const, text: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system, cache_control: ONE_HOUR }];
+      const continued = this.options.continued !== false;
       const request = {
         model: this.model, max_tokens: this.maximumOutputTokens, system,
-        messages: [...history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
+        messages: [...continued ? markedHistory(history) : history, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
       };
-      return { turn, menu, body: this.options.continued === false ? cacheOneShotRequest(request) : cacheHaikuRequest(request) };
+      return { turn, menu, body: continued ? cacheHaikuRequest(request) : cacheOneShotRequest(request) };
     }, value => observedFcaRequest(value.body), { model: this.model });
     logRequestSize(this.model, history, body);
     let message: Anthropic.Message, dispatched = false;
@@ -263,6 +260,32 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
   console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
     nativeHistoryCharacters: JSON.stringify(history.filter(message => !definitional(message))).length,
     toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length }));
+}
+
+/** The decision message's fields, before the parts this epoch already showed are left out (`elidedDecision`). */
+function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown> | undefined): Record<string, unknown> {
+  return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
+    ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
+    ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
+    ...(input.recall ? { recall: input.recall } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body } : {}),
+    ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
+}
+
+/**
+ * The replay with a breakpoint on its last block, when that is a tool result or a text of a user turn: the end of the previous
+ * request's answer and results, a few blocks after the previous request's own last breakpoint. The automatic breakpoint at the end
+ * of the request looks back only about 20 blocks for a cached prefix, and an inline definitions message alone holds one block per
+ * tool (52–77 in Minebot lane task 788da00a), so after a selection change the end of the request could not reach the history
+ * already written. This one always can, and the request stays within four breakpoints (protocol, instructions, this, automatic).
+ * Only the request's copy carries the marker; the stored history never does, and a marker is not part of the cached content.
+ */
+function markedHistory(history: readonly Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const last = history.at(-1);
+  if (last?.role !== 'user' || !Array.isArray(last.content) || !last.content.length) return [...history];
+  const blocks = [...last.content], tail = blocks.at(-1)!;
+  if (tail.type !== 'tool_result' && tail.type !== 'text') return [...history];
+  blocks[blocks.length - 1] = { ...tail, cache_control: ONE_HOUR };
+  return [...history.slice(0, -1), { ...last, content: blocks }];
 }
 
 function nativeHistory(history: readonly unknown[]): Anthropic.MessageParam[] {

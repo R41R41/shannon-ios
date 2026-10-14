@@ -61,3 +61,12 @@ export function scriptedAnthropic(script: AnthropicMessage[] | ((body: Record<st
   }) as typeof fetch;
   return { fetcher, bodies };
 }
+
+/**
+ * A request's messages without their cache markers. A `cache_control` marker says where the provider may write or read a prefix;
+ * it is not part of the cached content, and an FCA decision moves its history breakpoint to its own last history block
+ * (`anthropicFcaModel.ts`, `markedHistory`). Append-only proofs compare the content.
+ */
+export function withoutCacheMarkers<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value, (key, child: unknown) => key === 'cache_control' ? undefined : child)) as T;
+}

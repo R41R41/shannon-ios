@@ -7,7 +7,7 @@ import { FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_TOOL } from '../src/infra/models/
 import { SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { TASK_TOOLS } from '../src/mind/tools/toolRunnerPorts.js';
-import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { anthropicRequestViolation } from './support/anthropicProviderRules.js';
 
 const input = (history: readonly unknown[] = []): FcaModelInput => ({
@@ -48,7 +48,7 @@ describe('FCA shared context native protocol', () => {
     expect(second.appraisals).toEqual([appraisal]);
     expect(second.auxiliaryResults).toEqual([{ id: 'metadata', ok: true, text: '{"received":true}' }]);
     expect(changes(second.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: FCA_CONTEXT_TOOL } }]);
-    expect((f.bodies[1]!.messages as unknown[]).slice(0, first.history.length)).toEqual(first.history);
+    expect(withoutCacheMarkers((f.bodies[1]!.messages as unknown[]).slice(0, first.history.length))).toEqual(first.history);
     expect(JSON.stringify(first.history)).toBe(original);
     expect(f.bodies[1]!.system).toEqual(f.bodies[0]!.system); expect(f.bodies[1]!.tools).toEqual(f.bodies[0]!.tools);
     // The current decision, then the added definition, which ends the request (a system message between two user messages is a

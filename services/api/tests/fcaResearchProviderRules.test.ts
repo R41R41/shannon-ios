@@ -9,7 +9,7 @@ import { TASK_TOOLS } from '../src/mind/tools/toolRunnerPorts.js';
 import { createTaskRuntimeWiring, rejectedTaskReport } from '../src/wiring/taskRuntimeWiring.js';
 import { retiredTaskReport } from '../src/mind/action/taskRuntime/store/taskRuntimeRecovery.js';
 import { actionHarness } from './support/actionThreadHarness.js';
-import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { anthropicRejection, anthropicRequestViolation } from './support/anthropicProviderRules.js';
 
 /**
@@ -62,7 +62,7 @@ describe('FCA research decisions meet the provider request rules', () => {
     const history = [...first.history, f.model.toolResults([{ id: 'search-1', text: '晴れ', ok: true }])];
     const second = await f.model.decide(researchInput(history), signal());
     expect(anthropicRequestViolation(f.bodies[1]!)).toBeNull();
-    expect((f.bodies[1]!.messages as unknown[]).slice(0, history.length)).toEqual(history);
+    expect(withoutCacheMarkers((f.bodies[1]!.messages as unknown[]).slice(0, history.length))).toEqual(history);
     expect(second.decision.kind).toBe('wait');
     expect(f.usage).toHaveLength(2);
   });

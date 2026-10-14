@@ -65,7 +65,11 @@
         "type": "tool_result",
         "tool_use_id": "old-call",
         "content": "合成された結果",
-        "is_error": false
+        "is_error": false,
+        "cache_control": {
+         "type": "ephemeral",
+         "ttl": "1h"
+        }
        }
       ]
      },

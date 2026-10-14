@@ -7,7 +7,7 @@ import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.
 import { claudeTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import type { ShannonToolDefinition } from '../src/mind/tools/toolRegistryPorts.js';
-import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
@@ -49,7 +49,7 @@ describe('native one-step FCA model', () => {
     expect(JSON.stringify(fixture.bodies[0]!.system)).not.toContain('First compact skill index');
     expect(JSON.parse(String((fixture.bodies[0]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('First compact skill index');
     expect(JSON.parse(String((fixture.bodies[1]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('Updated compact skill index');
-    expect((fixture.bodies[1]!.messages as unknown[]).slice(0, replay.length)).toEqual(replay);
+    expect(withoutCacheMarkers((fixture.bodies[1]!.messages as unknown[]).slice(0, replay.length))).toEqual(replay);
   });
   it('states in the dynamic context, not the cached prefix, that nobody can answer the task (Minebot lane run 1)', async () => {
     const fixture = harness([answer([call('task_list', 'list-1')]), answer([call('task_list', 'list-2')], nativeUsage(0, 700))]);
@@ -78,7 +78,7 @@ describe('native one-step FCA model', () => {
     ] });
     expect(fixture.bodies[0]!.tools).toEqual([...tools.map(tool => ({ ...claudeTool(tool), strict: false })),
       expect.objectContaining({ name: 'fca_wait', strict: true }), expect.objectContaining({ name: 'fca_complete', strict: true })]);
-    expect(fixture.bodies[0]!.messages).toEqual([...previous, { role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) }]);
+    expect(withoutCacheMarkers(fixture.bodies[0]!.messages)).toEqual([...previous, { role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) }]);
     expect(result.history).toEqual([{ role: 'user', content: JSON.stringify({ task: input().task, children: input().children, messages: input().messages }) },
       { role: 'assistant', content }]);
     expect(JSON.stringify(previous)).toBe(original);
@@ -99,7 +99,7 @@ describe('native one-step FCA model', () => {
     const next = input(first.history);
     next.messages = [{ id: 'message-2', text: 'New information', sourceTaskId: 'child-1' }];
     await fixture.model.decide(next, signal());
-    expect((fixture.bodies[1]!.messages as unknown[]).slice(0, 3)).toEqual(first.history);
+    expect(withoutCacheMarkers((fixture.bodies[1]!.messages as unknown[]).slice(0, 3))).toEqual(first.history);
     expect(fixture.bodies[0]!.system).toEqual(fixture.bodies[1]!.system);
     expect(fixture.bodies[0]!.tools).toEqual(fixture.bodies[1]!.tools);
     const system = fixture.bodies[0]!.system as Anthropic.TextBlockParam[];
@@ -111,7 +111,14 @@ describe('native one-step FCA model', () => {
     // task 788da00a: 1,792–1,798 cached tokens, only the tools and the protocol prefix); the conversation keeps the automatic one.
     expect(system).toHaveLength(2);
     expect(system[1]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-    for (const body of fixture.bodies) expect(JSON.stringify(body.messages)).not.toContain('cache_control');
+    // The second request also marks its last history block (the acknowledged control result): four breakpoints in all, and the
+    // stored history carries none.
+    expect(JSON.stringify(fixture.bodies[0]!.messages)).not.toContain('cache_control');
+    const replayed = fixture.bodies[1]!.messages as Array<{ content: Array<Record<string, unknown>> | string }>;
+    expect((replayed[2]!.content as Array<Record<string, unknown>>).at(-1)!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    expect(JSON.stringify(replayed).match(/cache_control/gu)).toHaveLength(1);
+    expect(JSON.stringify(fixture.bodies[1]).match(/cache_control/gu)).toHaveLength(4);
+    expect(JSON.stringify(first.history)).not.toContain('cache_control');
     for (const body of fixture.bodies) expect(body).toMatchObject({ model: 'claude-haiku-5-5', max_tokens: 4_000,
       thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, cache_control: { type: 'ephemeral', ttl: '1h' }, tool_choice: { type: 'auto' } });
     expect(fixture.receipts[1]).toMatchObject({ usageComplete: true, cachedInputTokens: 700, cacheCreationInputTokens: 0 });
