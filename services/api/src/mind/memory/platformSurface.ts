@@ -105,6 +105,8 @@ export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput 
       ownOutreach: turn.ownOutreach && turn.policy.ownerWrote,
       store: completed => turn.store(completed),
       ...(turn.perception ? { perception: turn.perception } : {}),
+      // Syzygy ADR-0013 stage 4: who wrote, by account, for her feeling events (used only while SHANNON_FEELING_AUDIENCE is on).
+      ...(turn.policy.speaker ? { feelingSpeaker: turn.policy.speaker } : {}),
     },
   };
 }
