@@ -14,6 +14,7 @@ import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { createFcaReadSources } from '../src/wiring/fcaReadSources.js';
 import { createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { FCA_PROVENANCE_LIMITS, fcaProvenanceForCheck } from '../src/mind/action/fca/fcaConversationSources.js';
+import { FcaProvenanceFoldCache } from '../src/mind/action/fca/fcaProvenanceFold.js';
 import { SkillMemory } from '../src/mind/memory/memoryPorts.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
@@ -68,6 +69,19 @@ function world(experiences = 120) {
 const memoryRow = (stepId: string, observedAt: string, recalled: readonly string[], read: readonly string[] = []): TaskSource => ({
   kind: 'memory', stepId, experienceId: null, threadId: null, observedAt, recalledMemoryIds: recalled, ...(read.length ? { readSourceIds: read } : {}) });
 
+/** The real source guard over a world, with a root and one Minecraft task under it. */
+function guard(f: Pick<ReturnType<typeof world>, 'w' | 'readSourceVisible'>, provenance?: FcaProvenanceFoldCache) {
+  const h = actionHarness(f.w.now); migrateAgentTasks(h.db); cleanups.push(() => h.close());
+  const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: f.w.now, canRunTask: () => false,
+    model: { async decide() { throw new Error('unused'); }, toolResults: results => ({ role: 'user', results }) } });
+  cleanups.push(() => driver.close());
+  const visible = createFcaSourceGuard({ runtime: driver.runtime, state: f.w.store, conversations: f.w.store, ownerScope: 'owner', ownerAlone: () => true,
+    readSourceVisible: f.readSourceVisible, ...(provenance ? { provenance } : {}) });
+  const root = driver.runtime.ensureRoot('owner');
+  const task = driver.runtime.createChild('owner', root.id, { title: '木のツルハシ', goal: '木のツルハシを作る', completionCriteria: '持ち物で確かめる' }, 'minecraft-cap');
+  return { driver, visible, task, root };
+}
+
 describe('fcaProvenanceForCheck: the same verdict over fewer sources', () => {
   it('keeps every id once at its earliest observation, the earliest time of all, and leaves conversation turns as they are', () => {
     const turn: TaskSource = { kind: 'conversation', stepId: 'turn-1', experienceId: 'exp-1', threadId: 'thread', observedAt: '2026-10-14T01:00:00.000Z', recalledMemoryIds: ['a'] };
@@ -108,18 +122,6 @@ describe('the provenance guard over a long Minecraft task (task 788da00a)', () =
     }
     return rows;
   }
-  function guard(f: ReturnType<typeof world>) {
-    const h = actionHarness(f.w.now); migrateAgentTasks(h.db); cleanups.push(() => h.close());
-    const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: f.w.now, canRunTask: () => false,
-      model: { async decide() { throw new Error('unused'); }, toolResults: results => ({ role: 'user', results }) } });
-    cleanups.push(() => driver.close());
-    const visible = createFcaSourceGuard({ runtime: driver.runtime, state: f.w.store, conversations: f.w.store, ownerScope: 'owner', ownerAlone: () => true,
-      readSourceVisible: f.readSourceVisible });
-    const root = driver.runtime.ensureRoot('owner');
-    const task = driver.runtime.createChild('owner', root.id, { title: '木のツルハシ', goal: '木のツルハシを作る', completionCriteria: '持ち物で確かめる' }, 'minecraft-cap');
-    return { driver, visible, task };
-  }
-
   it('shows a task with 100 rows over 64 distinct ids, with no cap and no stop', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const f = world(), g = guard(f);
@@ -245,5 +247,139 @@ describe('a Minecraft-shaped task with 60+ tool calls across several compactions
     expect(warn.mock.calls.some(([line]) => String(line).includes('fca_provenance_capped'))).toBe(false);
     expect(log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'))).toEqual([]);
     expect(driver.runtime.get('owner', task.id)?.phase).toBe('completed');
+  }, 120_000);
+});
+
+const iso = (milliseconds: number) => new Date(milliseconds).toISOString();
+const pad = (index: number) => String(index).padStart(4, '0');
+
+describe('a task the cap does not apply to is never folded (review of 6f6b6f80)', () => {
+  it('keeps a root with more than 64 times across a correction visible (runnable), where a capped task folds closed', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = world(200), g = guard(f);
+    const corrected = f.ids.at(-2)!;
+    f.w.advance(60_000);
+    f.memories.mutate('owner', { memoryId: corrected, action: 'correct', text: '訂正された内容' });
+    const boundary = Date.parse(f.w.now());
+    f.w.advance(10 * 60_000);
+    // 100 times, one new id each; the correction falls between the 49th and the 50th, and the corrected id is observed only at
+    // the 50th (after it). Folded to 64, the 49th and 50th share a bucket judged at the 49th's time, before the correction.
+    const rows = Array.from({ length: 100 }, (_, index) => memoryRow(`memory:root-${pad(index)}:x`,
+      iso(index < 49 ? boundary - (49 - index) * 1000 : boundary + (index - 48) * 1000), index === 49 ? [f.ids[index]!, corrected] : [f.ids[index]!]));
+    expect(fcaProvenanceForCheck(rows, Infinity)).toHaveLength(100);
+    const folded = fcaProvenanceForCheck(rows, FCA_PROVENANCE_LIMITS.sources);
+    expect(folded.find(source => source.recalledMemoryIds.includes(corrected))!.observedAt <= iso(boundary)).toBe(true);
+    expect(rows.every(row => g.visible.sources('owner', g.root, [row]))).toBe(true);
+    expect(g.visible.sources('owner', g.root, rows)).toBe(true);
+    expect(g.visible.sources('owner', { ...g.root, kind: 'conversation' }, rows)).toBe(true);
+    expect(g.visible.sources('owner', { ...g.root, kind: 'sleep', origin: 'maintenance' }, rows)).toBe(true);
+    // A capped task is folded and judged closed (stricter, never weaker): the accepted cost of a bounded walk.
+    expect(g.visible.sources('owner', g.task, rows)).toBe(false);
+  });
+});
+
+describe('the fold is computed once per set of rows (review of 6f6b6f80: 2,000 rows of 2,000 ids, ~164 ms a call)', () => {
+  it('reuses the fold of 2,000 rows of 2,000 ids for every repeated check, and folds again only when a row is added', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cache = new FcaProvenanceFoldCache();
+    const f = world(), g = guard(f, cache);
+    const ids = Array.from({ length: 2000 }, (_, index) => `memory-perf-${index}`);
+    const start = Date.parse(f.w.now());
+    const rows = Array.from({ length: 2000 }, (_, index) => memoryRow(`memory:perf-${pad(index)}:x`, iso(start + index * 1000), ids));
+    const began = performance.now();
+    g.visible.sources('owner', g.root, rows);
+    const first = performance.now() - began;
+    const again = performance.now();
+    for (let check = 0; check < 20; check++) g.visible.sources('owner', g.root, rows);
+    const repeated = (performance.now() - again) / 20;
+    expect(cache.misses).toBe(1);
+    expect(repeated).toBeLessThan(Math.max(first, 50)); // each repeat skips the per-id pass (measured: a few ms against ~100+)
+    g.visible.sources('owner', g.root, [...rows, memoryRow('memory:perf-new:x', iso(start + 3_000_000), ['memory-perf-new'])]);
+    expect(cache.misses).toBe(2);
+  });
+});
+
+/** A small deterministic generator (mulberry32), so that a failing case can be replayed from its seed. */
+function random(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * The reviewer's fuzz (review of 6f6b6f80): worlds with two corrections, a forget, a reject and a forget later restored, at random
+ * times between the rows' times; turns that recalled the corrected items; skill reads, one of a skill that does not exist; and
+ * task words that restate a corrected turn as it was before.
+ */
+function fuzzWorld(seed: number) {
+  const next = random(seed), w = memoryWorld(); cleanups.push(() => w.close());
+  const ids: string[] = [], said = (index: number) => `質問${index}について${String.fromCharCode(0x4e00 + index * 3)}${'あ'.repeat(24)}`;
+  for (let index = 0; index < 40; index++) {
+    w.advance(60_000);
+    const recalled = index >= 30 ? [ids[20 + (index % 10)]!, ids[20 + ((index + 3) % 10)]!] : index > 0 ? [ids[(index * 7) % index]!] : [];
+    ids.push(w.store.appendTurn('owner', `thread-${index % 2}`, said(index), `返答${index}${String.fromCharCode(0x5000 + index)}`, w.now(),
+      { capturedStateVersion: 0, messageEmotion: emotion, recalledMemoryIds: recalled }).id);
+  }
+  const skillDb = new DatabaseSync(':memory:'); cleanups.push(() => skillDb.close());
+  const skillMemory = new SkillMemory({ database: skillDb, createsSchema: true, defer: work => work() });
+  for (let index = 0; index < 3; index++) {
+    const added = skillMemory.create('owner', { draft: { name: `fuzz-skill-${index}`, description: `手順${index}`, steps: `本文${index}`, aids: '- 確認',
+      references: '- 元資料' }, evidence: [] }, { carries: () => false }, w.now());
+    if ('rejected' in added) throw new Error(added.rejected);
+  }
+  const skills = skillTurnPorts(skillMemory, scope => w.store.snapshot(scope), w.store);
+  const readSourceVisible = createFcaReadSources({ ownerScope: 'owner', ownerAlone: () => true, state: w.store, conversations: w.store,
+    skill: (scope, id, revision) => skills.readSource!(scope, id, revision) });
+  w.store.readSourceVisible = readSourceVisible;
+  // Six mutations at random slots between eight row times; a restore always after its forget.
+  const ops: Array<[MemoryMutationAction, string]> = [['correct', ids[22]!], ['correct', ids[25]!], ['forget', ids[27]!], ['reject', ids[28]!],
+    ['forget', ids[24]!], ['restore', ids[24]!]];
+  for (let index = ops.length - 1; index > 0; index--) { const swap = Math.floor(next() * (index + 1)); [ops[index], ops[swap]] = [ops[swap]!, ops[index]!]; }
+  const forgetAt = ops.findIndex(([action, id]) => action === 'forget' && id === ids[24]), restoreAt = ops.findIndex(([action]) => action === 'restore');
+  if (restoreAt < forgetAt) [ops[restoreAt], ops[forgetAt]] = [ops[forgetAt]!, ops[restoreAt]!];
+  const start = Date.parse(w.now()) + 60_000, times = Array.from({ length: 8 }, (_, slot) => iso(start + slot * 60_000));
+  const memories = new ShannonMemoryService(w.store, w.store, w.now);
+  let applied = 0;
+  ops.forEach(([action, memoryId], slot) => {
+    w.clock.at = start + slot * 60_000 + 30_000;
+    memories.mutate('owner', { memoryId, action, ...(action === 'correct' ? { text: `訂正${memoryId.slice(0, 4)}` } : {}) });
+    applied += 1;
+  });
+  w.clock.at = start + 9 * 60_000;
+  const reads = [...skills.indexSources!('owner')!, 'shannon-skill://missing-skill'];
+  return { w, ids, next, times, reads, readSourceVisible, applied, restated: [said(22), said(25)] };
+}
+type MemoryMutationAction = 'correct' | 'forget' | 'reject' | 'restore';
+
+describe('the batched verdict equals every row judged on its own, and folding never loosens it (800 random cases)', () => {
+  it('holds across corrections, a forget, a reject, a restore, recalled corrected turns, skill reads and restated words', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tally = { shown: 0, withheld: 0, cases: 0 };
+    for (let seed = 1; seed <= 8; seed++) {
+      const f = fuzzWorld(seed * 7919), g = guard(f);
+      expect(f.applied).toBe(6);
+      const pick = <T>(items: readonly T[]) => items[Math.floor(f.next() * items.length)]!;
+      for (let index = 0; index < 100; index++) {
+        const rows = Array.from({ length: 1 + Math.floor(f.next() * 6) }, (_, row) => memoryRow(`memory:fuzz-${seed}-${index}-${row}:x`, pick(f.times),
+          Array.from({ length: Math.floor(f.next() * 5) }, () => pick(f.ids)), Array.from({ length: Math.floor(f.next() * 3) }, () => pick(f.reads))));
+        const task = { ...g.task, goal: f.next() < 0.3 ? `${pick(f.restated)}を確かめる` : g.task.goal };
+        const batched = g.visible.sources('owner', task, rows);
+        const each = rows.every(row => g.visible.sources('owner', task, [row]));
+        expect(batched, `seed ${seed} case ${index}`).toBe(each);
+        for (const limit of [1, 2, 3]) {
+          const folded = g.visible.sources('owner', task, fcaProvenanceForCheck(rows, limit));
+          expect(!folded || batched, `seed ${seed} case ${index} limit ${limit}`).toBe(true);
+        }
+        tally.cases += 1; tally[batched ? 'shown' : 'withheld'] += 1;
+      }
+    }
+    expect(tally.cases).toBe(800);
+    expect(tally.shown).toBeGreaterThan(50);
+    expect(tally.withheld).toBeGreaterThan(50);
   }, 120_000);
 });
