@@ -83,4 +83,16 @@ describe('the relationship ledger', () => {
     expect(later).toBeCloseTo(after * (1 - RELATIONSHIP_PARAMETERS.irritationFade) ** 6, 3);
     expect(later).toBeLessThan(0.1);
   });
+
+  it('lets irritation fade through daily light teasing, while days of real insults still build it (re-review L-c)', () => {
+    const days = (count: number) => ['2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13'].map(day => ({
+      dayKey: day, events: Array.from({ length: count }, (_, minute) => event(day, minute, 'spoke', { tags: utteranceTags('ポンコツだなあ') })) }));
+    const insulted = foldRelationship([{ dayKey: '2026-10-06', events: Array.from({ length: 3 }, (_, minute) =>
+      event('2026-10-06', minute, 'spoke', { tags: utteranceTags('お前ポンコツだな') })) }], 'owner', '2026-10-07').scales.irritation;
+    const teased = foldRelationship([{ dayKey: '2026-10-06', events: Array.from({ length: 3 }, (_, minute) =>
+      event('2026-10-06', minute, 'spoke', { tags: utteranceTags('お前ポンコツだな') })) }, ...days(1)], 'owner', '2026-10-14').scales.irritation;
+    expect(teased).toBeLessThan(insulted * 0.1);
+    expect(foldRelationship(days(1), 'owner', '2026-10-14').scales.irritation).toBe(0);
+    expect(foldRelationship(days(3), 'owner', '2026-10-14').scales.irritation).toBeGreaterThan(0.4);
+  });
 });

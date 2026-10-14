@@ -101,9 +101,13 @@ function pulls(signals: DaySignals): RelationshipScales {
     trust: clamp(-(0.7 * v + 0.3 * b) + 0.3 * k + 0.1 * t, -1, 1),
     liking: clamp(-(0.4 * v + 0.4 * p) + 0.5 * k + 0.15 * t, -1, 1),
     respect: clamp(-(0.3 * v + 0.6 * p) + 0.3 * k, -1, 1),
-    irritation: clamp(Math.max(v, p, b)),
+    // Re-review L-c: a day of only minor provocation or residual blame (one light jab) is not new irritation: it fades instead.
+    irritation: Math.max(v, p, b) < MINOR_IRRITATION ? 0 : clamp(Math.max(v, p, b)),
   };
 }
+
+/** Below this, a day's provocation or residual blame is minor (a light jab a day): irritation fades on it. A model assumption. */
+export const MINOR_IRRITATION = 0.35;
 
 const daysBetween = (from: string, to: string) => Math.max(0, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000));
 
