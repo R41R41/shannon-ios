@@ -14,6 +14,14 @@ import type { TaskSourceStore } from './taskSourceStore.js';
  */
 export const INBOX_REDELIVERED = 'fca_inbox_redelivered';
 export const INBOX_WOKEN = 'fca_inbox_woken';
+/**
+ * The sweep's candidates, run every tick inside the write lock: it starts from the scope's running tasks and asks the inbox index
+ * (`fca_task_inbox`: target, consumed_by) whether one unconsumed message exists, so it never reads the message table itself,
+ * which is never pruned (review of 6bb8d9ff: scanning it by scope took 528 ms a tick at 200k messages).
+ */
+export const WAITING_WITH_INBOX_SQL = `SELECT t.task_id AS id FROM agent_tasks t JOIN fca_task_checkpoints c ON c.task_id=t.task_id
+  WHERE t.scope_key=? AND t.status='running' AND t.fca_kind NOT IN ('conversation','sleep') AND c.step_id IS NULL AND c.stop_requested=0
+  AND EXISTS (SELECT 1 FROM fca_task_messages m WHERE m.target_task_id=c.task_id AND m.consumed_by IS NULL)`;
 const terminal = (task: TaskRecord): boolean => ['completed', 'failed', 'cancelled'].includes(task.status);
 
 /** The canonical store's own internals, handed over as functions; every call runs inside its authority transaction. */
@@ -58,9 +66,7 @@ export class TaskInbox {
 
   /** The tick's sweep: the ids of tasks that waited for messages while a delivered one was pending, now ready. */
   wakePending(scope: string): string[] {
-    const candidates = this.db.prepare(`SELECT DISTINCT c.task_id AS id FROM fca_task_checkpoints c JOIN agent_tasks t ON t.task_id=c.task_id
-      JOIN fca_task_messages m ON m.target_task_id=c.task_id AND m.consumed_by IS NULL
-      WHERE m.scope_key=? AND t.status='running' AND c.step_id IS NULL AND c.stop_requested=0`).all(scope);
+    const candidates = this.db.prepare(WAITING_WITH_INBOX_SQL).all(scope);
     return candidates.map(row => String(row.id)).filter(id => this.wake(scope, id, 'pending_on_wait'));
   }
 
