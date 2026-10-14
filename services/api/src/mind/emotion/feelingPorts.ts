@@ -24,6 +24,7 @@ import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.j
 import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { OWNER_PRIVATE_MARK, type FeelingDays } from './feelingDays.js';
+import type { StreamFeeling } from './streamFeeling.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
 import { textRegisterBefore, textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
@@ -60,6 +61,8 @@ export interface FeelingPort {
    * (meant, teasing). Apart from `SHANNON_CORE_AFFECT`, so the shadow changes no Jev question.
    */
   readonly meaning?: boolean;
+  /** `SHANNON_FEELING_STREAM` (stage 5): comments, the stream's block, tell-off notices, and the afterglow for the owner alone. */
+  readonly stream?: StreamFeeling;
   /** `SHANNON_FEELING_AUDIENCE` (stage 4): keys by who wrote, light ledgers, audience layers and checks. */
   readonly audience?: boolean;
   /** `SHANNON_TEXT_REGISTER` (with the turn): her text reply's form and pacing follow the feeling turn and her composure. */
@@ -114,7 +117,9 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
 function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): string {
   const ledgerLine = handle.lines?.ledgerLine ?? '', repetitionLine = handle.lines?.repetitionLine ?? '';
-  const carried = handle.lines?.carriedLines ?? [];
+  // Stage 5: what the last stream left, for the owner alone only (「今日の配信疲れた…」).
+  const glow = handle.port.stream && handle.key.audience === 'owner_alone' ? handle.port.stream.afterglow(handle.scopeKey, handle.at, handle.snapshot) : '';
+  const carried = [...handle.lines?.carriedLines ?? [], ...(glow ? [glow] : [])];
   if (decision) {
     const extra = carried.length ? { carried } : {};
     return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience, ...extra });

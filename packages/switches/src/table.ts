@@ -261,6 +261,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 stage 4: events keyed by who wrote (account, never name), friend and light ledgers, audience layers, source cap, audience checks.',
   },
   {
+    name: 'SHANNON_FEELING_STREAM', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_AUDIENCE'],
+    doc: 'ADR-0013 stage 5: comments move her (crowd, caps, repeats collapsed), harassment ladder and floor, say-only moderation, stream register.',
+  },
+  {
     name: 'SHANNON_TEXT_REGISTER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
     doc: 'ADR-0013 item 10 (owner: B): text reply form (length, emoji, endings) and pacing (typing, split in two, sulk pause ≤20 s) from her feeling.',
   },
