@@ -23,6 +23,8 @@ Which turn is sent which way is listed under [Which turns are streamed](#which-t
 - `stream: "sentences"`: a successful turn is answered as NDJSON (below).
 - Any other value: `400` `stream is invalid`, no model call, nothing stored.
 
+A client that reads the reply aloud (the Windows body while 「話しかける」 is on) should also send `readAloud: true` (added 2026-10-14, optional, any client, with or without `stream`): a turn that is neither hard nor research then answers without the model thinking first, so the first sentence comes sooner ([skill-and-routing-contract.md](skill-and-routing-contract.md), "Thinking of a text turn"). The reply, the lines and the stored turn are otherwise the same. Absent or `false`: as before; a non-boolean: `400` `readAloud must be a boolean`.
+
 It is a field on the existing route, not a second route, so authentication, the per-device rate limit (20 chat requests a minute), the two-concurrent-chats limit, request validation and the 64 KiB body limit are the same code for both forms. A server older than this contract ignores the field and answers with JSON; a client must therefore look at `content-type` and accept both.
 
 ## Response

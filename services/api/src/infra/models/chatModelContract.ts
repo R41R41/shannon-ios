@@ -42,6 +42,11 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   generateThreadTitle?: boolean;
   /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
   spokenReply?: boolean;
+  /**
+   * The server decided this text turn answers without thinking first (`textTurnThinking`: light or read aloud, never hard or
+   * research). The Claude adapter sends Haiku `disabled` (Sonnet `between_tools`); the historical GPT profile ignores it.
+   */
+  skipThinking?: true;
   priorThreadSummary?: string;
   scopeKey: string;
   history: readonly ShannonConversationItem[];

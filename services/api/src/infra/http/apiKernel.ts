@@ -9,7 +9,7 @@ import { dispatchVoiceTurn } from '../../surfaces/voice/apiVoiceTurns.js';
 import { dispatchPreferenceRequest } from './apiPreferenceRoutes.js';
 import { dispatchLiveVoiceRequest, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode } from '../../surfaces/voice/apiLiveVoice.js';
 import {
-  badRequest,
+  badRequest, invalidChatFlag,
   objectBody,
   validAgentCommandType,
   validAgentHostHint,
@@ -85,7 +85,7 @@ import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextR
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
-import { finishTurn, routeTurn, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
+import { finishTurn, routeTurn, textTurnThinking, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { bindCompletedFeedback } from '../../mind/action/respond/turnFeedback.js';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
@@ -335,7 +335,7 @@ export class ShannonApiKernel {
       if (attachments === null) {
         return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
       }
-      if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return badRequest('webSearch must be a boolean');
+      if (invalidChatFlag(body)) return badRequest(`${invalidChatFlag(body)} must be a boolean`); // webSearch, readAloud
       const audience = chatAudienceTurn(body.audience); // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
       if (!audience || !validChatStream(body.stream)) return badRequest(audience ? 'stream is invalid' : 'audience is invalid');
       if (!audience.alone) this.toolServer.audience.noteOthers(body.scopeKey);
@@ -410,7 +410,7 @@ export class ShannonApiKernel {
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message, threadKey: threadId, ...textTurnClock(occurredAt),
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
+      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...textTurnThinking({ tier, tools: toolOffer.tools, readAloud: body.readAloud, answer: settled?.answer, research: [work, placeSkill, placeOptions.placeSearch, attachments.length, body.webSearch, settled?.web] }),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier), richBlocks: !surface,
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
