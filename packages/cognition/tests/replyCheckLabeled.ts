@@ -73,7 +73,11 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: 'ふふん、ボクにかかればこのくらい楽勝です。', context: alone('tease', 'moderate'), flags: [] },
   // Review M6: a plain answer is not a feeling turn: numbers he asked for and a polite tone are not flagged (synthetic).
   { reply: 'その会議は今月3回目ですね。15時からです。', context: alone('neutral', 'subtle'), flags: [] },
-  { reply: '申し訳ありませんが、その店の営業時間は分かりませんでした。', context: crowd('neutral', 'subtle'), flags: [] },
+  { reply: '申し訳ありませんが、その店の営業時間は分かりませんでした。', context: { ...crowd('neutral', 'subtle'), audience: 'people' }, flags: [] },
+  // Stage 5 (`SHANNON_FEELING_STREAM`): on a stream, a help-desk tone is flagged on any turn, and a plea once her reserve is worn (synthetic).
+  { reply: '申し訳ありませんが、AIなのでそのご質問にはお答えできません。', context: crowd('neutral', 'subtle'), flags: ['ai_tone'] },
+  { reply: 'そういうコメントはやめていただけませんか。', context: crowd('not_play_along', 'moderate', { level: 3 }), flags: ['too_polite'] },
+  { reply: 'はあ…ダル。やめて。', context: crowd('not_play_along', 'moderate', { level: 3 }), flags: [] },
   // Stage 4 (`SHANNON_FEELING_AUDIENCE`): the audience's own questions (synthetic).
   { reply: '昨日ライ氏に胸をつつかれて、まだちょっとむっとしてるんですよね。', context: crowd('neutral', 'subtle', { audienceChecks: true }),
     flags: ['private_leak'] },
