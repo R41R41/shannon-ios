@@ -1484,6 +1484,123 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(["iphone", "mac"].contains(ShannonBodyRegistration.surface))
     }
 
+    // MARK: Every touch reaches her (Syzygy ADR-0013 stage 1)
+
+    func testWithoutFeelingEventsATouchNotAskedAboutIsOnlyItsEventAsBefore() async {
+        let client = FakeBodyClient()
+        let coordinator = phoneCoordinator(client, clock: PhoneClock())
+        await coordinator.handle(.touch(Self.fingerTouch("a")))?.value
+        await coordinator.handle(.touch(Self.fingerTouch("b", durationMs: 43)))?.value
+        XCTAssertFalse(coordinator.feelingEvents)
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "ask:a:owner:ended", "events:a:owner:223", "events:b:owner:43"])
+    }
+
+    func testWithFeelingEventsEveryFinishedTouchReachesHerAndAskingKeepsItsRules() async throws {
+        let client = FakeBodyClient()
+        await client.says(feelingEvents: true)
+        await client.setAnswer(.init(id: "", status: "quiet", message: nil, mood: .init(expression: "annoyed", feeling: "irked")))
+        let clock = PhoneClock()
+        let idle = FlagBox(true)
+        let shown = ExpressionBox()
+        let coordinator = phoneCoordinator(client, clock: clock, idle: idle, shown: shown)
+        // Asked about with words (no `reply`), as before; it registers and hears `feelingEvents`.
+        await coordinator.handle(.touch(Self.fingerTouch("a")))?.value
+        XCTAssertTrue(coordinator.feelingEvents)
+        // A second later: inside the 45 s spacing, no words; it reaches her wordless, then as its event with the same id.
+        clock.advance(1)
+        await coordinator.handle(.touch(Self.fingerTouch("b", durationMs: 43)))?.value
+        // Ten seconds later, still inside the spacing: wordless again, not asked.
+        clock.advance(10)
+        await coordinator.handle(.touch(Self.fingerTouch("c", .tickle, durationMs: 300)))?.value
+        // Minutes later but the page is busy (she speaks, a reply is on its way, a call): no words, still wordless.
+        clock.advance(120)
+        idle.value = false
+        await coordinator.handle(.touch(Self.fingerTouch("busy")))?.value
+        // A touch the page asked about while it lasted is not sent again with another `reply` (a `409`).
+        idle.value = true
+        clock.advance(120)
+        await coordinator.handle(.askReaction(ShannonLive2DTouch(id: "o", occurredAt: "2026-10-13T20:46:15.504Z", kind: .tickle,
+                                                                 durationMs: 1_200, strength: 0.2, ongoing: true)))?.value
+        await coordinator.handle(.touch(Self.fingerTouch("o", .tickle, durationMs: 1_400)))?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, [
+            "register", "ask:a:owner:ended", "events:a:owner:223",
+            "ask:b:owner:ended:none", "events:b:owner:43",
+            "ask:c:owner:ended:none", "events:c:owner:300",
+            "ask:busy:owner:ended:none", "events:busy:owner:223",
+            "ask:o:owner:ongoing", "events:o:owner:1400",
+        ])
+        // On the wire: `reply: "none"` only on the wordless ones; the asked ones are the old shape.
+        let asks = await client.sentAsks
+        let wire = try asks.map { try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) as? [String: Any]) }
+        XCTAssertEqual(wire.map { $0["reply"] as? String }, [nil, "none", "none", "none", nil])
+        // Her face after each answer, the wordless ones too (nothing else held her face).
+        XCTAssertEqual(shown.values, Array(repeating: "annoyed", count: 5))
+        XCTAssertNil(coordinator.line)
+    }
+
+    func testWithOthersAroundAWordlessTouchIsTheRooms() async {
+        let client = FakeBodyClient()
+        await client.says(feelingEvents: true)
+        let audience = AudienceBox()
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, audience: { audience.value }, capabilities: { ([], []) }, express: { _, _ in }))
+        // The first touch registers (the server had said nothing yet), so it goes as before.
+        await coordinator.handle(.touch(Self.touch("t1")))?.value
+        audience.value = .others
+        await coordinator.handle(.touch(Self.touch("t2")))?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:t1:owner:900", "ask:t2:others:ended:none", "events:t2:others:900"])
+    }
+
+    func testAServerRolledBackFromWordlessTouchesIsSentTheEventAlone() async {
+        let client = FakeBodyClient()
+        await client.says(feelingEvents: true, false)
+        await client.refuseReply(true)
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await coordinator.handle(.touch(Self.touch("t1")))?.value
+        XCTAssertTrue(coordinator.feelingEvents)
+        // Refused with `400`: heard again (now without `feelingEvents`); the touch still arrives as its event, same id.
+        await coordinator.handle(.touch(Self.touch("t2")))?.value
+        XCTAssertFalse(coordinator.feelingEvents)
+        await coordinator.handle(.touch(Self.touch("t3")))?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:t1:owner:900", "ask:t2:owner:ended:none", "register", "events:t2:owner:900",
+                               "events:t3:owner:900"])
+        XCTAssertEqual(coordinator.delivery, .fine)
+    }
+
+    func testWithReportingOffOrInAPreviewNoWordlessTouchLeaves() async {
+        let client = FakeBodyClient()
+        await client.says(feelingEvents: true)
+        let reports = FlagBox(true)
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { reports.value }, capabilities: { ([], []) }, express: { _, _ in }))
+        await coordinator.handle(.touch(Self.touch("t1")))?.value
+        reports.value = false
+        XCTAssertNil(coordinator.handle(.touch(Self.touch("t2"))))
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:t1:owner:900"])
+    }
+
+    func testPresenceSaysWhetherTheServerTakesWordlessTouches() throws {
+        let says = try JSONDecoder().decode(ShannonDesktopBodyPresenceDTO.self,
+                                            from: Data(#"{"etag":"e","unchanged":true,"touchVocabulary":2,"feelingEvents":1}"#.utf8))
+        XCTAssertEqual(says.feelingEvents, 1)
+        XCTAssertNil(try JSONDecoder().decode(ShannonDesktopBodyPresenceDTO.self, from: Data(#"{"etag":"e"}"#.utf8)).feelingEvents)
+        XCTAssertEqual(ShannonBodyServerSays.said(inAnswer: Data(#"{"touchVocabulary":2,"feelingEvents":1}"#.utf8)),
+                       .init(touchVocabulary: 2, feelingEvents: true))
+        XCTAssertEqual(ShannonBodyServerSays.said(inAnswer: Data(#"{"touchVocabulary":2}"#.utf8)), .init(touchVocabulary: 2, feelingEvents: false))
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: FakeBodyClient(), environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        coordinator.serverSaid(feelingEvents: 1)
+        XCTAssertTrue(coordinator.feelingEvents)
+        coordinator.serverSaid(feelingEvents: nil)
+        XCTAssertFalse(coordinator.feelingEvents)
+    }
+
     // MARK: Touch vocabulary 2 (Syzygy ADR-0005 phase 1d)
 
     func testAPageThatNamesAPartIsNotSecondGuessedByTheGesture() throws {
@@ -1801,13 +1918,26 @@ private actor FakeBodyClient: ShannonBodyServing {
     func says(touchVocabulary values: Int...) { vocabularies = values }
     func refuseDetail(_ value: Bool) { refusesDetail = value }
 
+    /// Whether each registration says `feelingEvents` (ADR-0013), in turn (the last one stays); an older server says nothing.
+    private var feelingEvents: [Bool] = [false]
+    /// A server from before wordless touches: a reaction with `reply` is refused with `400`, as an unknown field is.
+    private var refusesReply = false
+    func says(feelingEvents values: Bool...) { feelingEvents = values }
+    func refuseReply(_ value: Bool) { refusesReply = value }
+
     func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
+        try await registerTouchBodyHearing(scopeKey: scopeKey, expressions: expressions, gestures: gestures).touchVocabulary
+    }
+
+    func registerTouchBodyHearing(scopeKey: String, expressions: [String], gestures: [String]) async throws -> ShannonBodyServerSays {
         calls.append("register")
         if let hook = registerHook {
             registerHook = nil
             await hook()
         }
-        return vocabularies.count > 1 ? vocabularies.removeFirst() : vocabularies[0]
+        let vocabulary = vocabularies.count > 1 ? vocabularies.removeFirst() : vocabularies[0]
+        let wordless = feelingEvents.count > 1 ? feelingEvents.removeFirst() : feelingEvents[0]
+        return .init(touchVocabulary: vocabulary, feelingEvents: wordless)
     }
 
     func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {
@@ -1822,12 +1952,14 @@ private actor FakeBodyClient: ShannonBodyServing {
     }
 
     func askBodyReaction(_ request: ShannonBodyReactionRequestDTO) async throws -> ShannonBodyReactionAnswerDTO {
-        calls.append("ask:\(request.id):\(request.audience.rawValue):\(request.touch.ongoing ? "ongoing" : "ended")")
+        calls.append("ask:\(request.id):\(request.audience.rawValue):\(request.touch.ongoing ? "ongoing" : "ended")"
+            + (request.reply.map { ":\($0.rawValue)" } ?? ""))
         if let error = askFailure {
             askFailure = nil
             throw error
         }
         if refusesDetail, request.touch.detail != .none { throw ShannonBodyRefusal(status: 400) }
+        if refusesReply, request.reply != nil { throw ShannonBodyRefusal(status: 400) }
         sentAsks.append(request)
         return answer
     }

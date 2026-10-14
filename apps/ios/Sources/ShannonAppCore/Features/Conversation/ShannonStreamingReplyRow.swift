@@ -12,29 +12,32 @@ struct ShannonStreamingReplyRow: View {
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
-        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-            HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
-                ShannonMessageAvatarView(face: face, size: 30)
-                Text("シャノン")
-                    .font(.shannon(.callout).weight(.semibold))
-                    .foregroundStyle(palette.textPrimary)
-                Text("· \(reply.phase == .writing ? "書いています…" : "途中で途切れました")")
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .font(.shannon(.caption2))
-            .foregroundStyle(reply.phase == .interrupted ? palette.danger : palette.textSecondary)
+        HStack(alignment: .top, spacing: ShannonSpacing.small) {
+            // The same place and size as her finished reply's face (`ShannonMessageRow.avatarSize`).
+            ShannonMessageAvatarView(face: face, size: ShannonMessageRow.avatarSize)
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
+                    Text("シャノン")
+                        .font(.shannon(.callout).weight(.semibold))
+                        .foregroundStyle(palette.textPrimary)
+                    Text("· \(reply.phase == .writing ? "書いています…" : "途中で途切れました")")
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .font(.shannon(.caption2))
+                .foregroundStyle(reply.phase == .interrupted ? palette.danger : palette.textSecondary)
 
-            ShannonRichMarkdownText(source: reply.text, palette: palette)
-                .textSelection(.enabled)
-                .tint(palette.action)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .opacity(reply.phase == .interrupted ? 0.72 : 1)
+                ShannonRichMarkdownText(source: reply.text, palette: palette)
+                    .textSelection(.enabled)
+                    .tint(palette.action)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(reply.phase == .interrupted ? 0.72 : 1)
 
-            if reply.phase == .interrupted {
-                Label("返事はここで途切れています", systemImage: "exclamationmark.circle")
-                    .font(.shannon(.caption))
-                    .foregroundStyle(palette.danger)
+                if reply.phase == .interrupted {
+                    Label("返事はここで途切れています", systemImage: "exclamationmark.circle")
+                        .font(.shannon(.caption))
+                        .foregroundStyle(palette.danger)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

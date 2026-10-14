@@ -68,11 +68,15 @@ public struct ShannonMessageEmotionDTO: Codable, Equatable, Sendable {
     /// The reply's own emotion kind (`SHANNON_EMOTION_KINDS`), absent from servers before 2026-10-05 and when
     /// the face comes from the quiet mood. Text, read through `face`: an unknown name shows the face.
     public var kind: String? = nil
+    /// The face the reply was shown with (Syzygy ADR-0013 D17, `SHANNON_SINGLE_FACE`): one id of the server's presentation
+    /// vocabulary, already the public layer's when anyone else was there. Absent from older servers; read it through
+    /// `ShannonPresentationFace`, which shows the usual face without it and the neutral face for an id it does not know.
+    public var presentationId: String? = nil
 }
 
 extension ShannonMessageEmotionDTO {
     private enum CodingKeys: String, CodingKey {
-        case valence, arousal, openness, expression, feeling, kind
+        case valence, arousal, openness, expression, feeling, kind, presentationId
     }
 
     /// `feeling` and `kind` are optional names: a value that is not text is read as absent, never as a failed reply.
@@ -84,6 +88,7 @@ extension ShannonMessageEmotionDTO {
         expression = try container.decode(ShannonExpressionDTO.self, forKey: .expression)
         feeling = (try? container.decodeIfPresent(String.self, forKey: .feeling)) ?? nil
         kind = (try? container.decodeIfPresent(String.self, forKey: .kind)) ?? nil
+        presentationId = (try? container.decodeIfPresent(String.self, forKey: .presentationId)) ?? nil
     }
 }
 

@@ -9,6 +9,10 @@ import Observation
 /// Her line is shown near the figure, and spoken where the surface answers in voice. During a voice
 /// conversation on this device the page asks nothing, so the app asks about a finished touch itself and
 /// her line is said in the call (`Environment.call`, `docs/body-contract.md`).
+///
+/// Every finished touch reaches her (Syzygy ADR-0013 stage 1): one she is not asked about goes, before its event, as a
+/// wordless reaction (`reply: "none"`), but only to a server that said `feelingEvents`. Asking keeps its rules (one in about
+/// 45 seconds, never while she speaks); a touch already asked about is not sent again with another `reply` (a `409`).
 @MainActor
 @Observable
 public final class ShannonBodyTouchCoordinator {
@@ -119,6 +123,8 @@ public final class ShannonBodyTouchCoordinator {
     /// The touch vocabulary the server said last (registration, or her desktop body's presence). Until it says 2 or more,
     /// touches leave the device exactly as before vocabulary 2 existed (`docs/body-contract.md`, "The signal").
     @ObservationIgnored public private(set) var touchVocabulary = ShannonBodyTouchVocabulary.unsaid
+    /// Whether the server said last that it takes wordless touches (ADR-0013). Until it says so, touches leave as before.
+    @ObservationIgnored public private(set) var feelingEvents = false
 
     @ObservationIgnored public var environment: Environment
     @ObservationIgnored private let scopeKey: String
@@ -152,8 +158,18 @@ public final class ShannonBodyTouchCoordinator {
             let audience = environment.audience()
             let event = ShannonBodyTouchEventDTO(touch: touch, audience: audience)
             guard asksItself(touch, audience: audience) else {
-                enqueue(event)
-                return Task { await self.flush() }
+                guard tellsWordless(touch) else {
+                    enqueue(event)
+                    return Task { await self.flush() }
+                }
+                // Not asked about: it still reaches her feeling, her ledger and her note, then follows as its event, same id.
+                let wordless = ShannonBodyReactionRequestDTO(scopeKey: scopeKey, touch: touch, audience: audience, reply: .wordless)
+                return Task {
+                    await self.tellWordless(wordless)
+                    guard self.sends else { return }
+                    self.enqueue(event)
+                    await self.flush()
+                }
             }
             // The question goes first, so that it is the touch's first message (the one her feeling and her stance are
             // taken from); the finished touch follows as its event with the same id, as after any question of the page.
@@ -193,6 +209,12 @@ public final class ShannonBodyTouchCoordinator {
         return true
     }
 
+    /// Whether this finished touch goes as a wordless reaction: the server said it takes them (on the last registration or
+    /// presence), and no question was sent for this touch (the page's or the app's), whose `reply` it would contradict.
+    private func tellsWordless(_ touch: ShannonLive2DTouch) -> Bool {
+        feelingEvents && !touch.ongoing && !askedTouchIDs.contains(touch.id)
+    }
+
     private func noteAsked(_ id: String, own: Bool) {
         let now = environment.now()
         lastAskAt = now
@@ -213,6 +235,11 @@ public final class ShannonBodyTouchCoordinator {
     /// What the server said of touch vocabulary 2 elsewhere (her desktop body's presence): nil is a server that says nothing.
     public func serverSaid(touchVocabulary value: Int?) {
         touchVocabulary = ShannonBodyTouchVocabulary.said(value)
+    }
+
+    /// What the server said of wordless touches elsewhere (her desktop body's presence): nil is a server that takes none.
+    public func serverSaid(feelingEvents value: Int?) {
+        feelingEvents = ShannonBodyFeelingEvents.said(value)
     }
 
     public func clearLine() {
@@ -303,6 +330,29 @@ public final class ShannonBodyTouchCoordinator {
         }
     }
 
+    /// A finished touch she is not asked about, with `reply: "none"`. Her face afterwards (`mood`) is shown when nothing else
+    /// holds her face (a line, her voice, a question). Whatever happens here, the touch follows as its event with the same id:
+    /// on a `400` (a server rolled back) the server is heard again, and only the event is sent.
+    private func tellWordless(_ request: ShannonBodyReactionRequestDTO) async {
+        guard let client else { return }
+        let startedAt = environment.now()
+        do {
+            if !registered { try await register(client) }
+            // Switched off, or the server no longer takes them, while registering.
+            guard sends, feelingEvents else { return }
+            let answer = try await client.askBodyReaction(request.sent(touchVocabulary: touchVocabulary))
+            guard environment.now().timeIntervalSince(startedAt) <= ShannonBodyRegistration.reactionTimeoutSeconds,
+                  environment.reportsTouch(), line == nil, !isSpeaking, !isAsking,
+                  let expression = answer.mood?.expression else { return }
+            environment.express(expression, answer.mood?.feeling)
+        } catch let refusal as ShannonBodyRefusal where refusal.status == 400 || refusal.code == "BODY_REACTION_NOT_A_BODY" {
+            registered = false
+            try? await register(client)
+        } catch {
+            // Her event still follows; a failure to report it is the event's to say.
+        }
+    }
+
     private func applyTouchReflex(_ touchID: String, audience: ShannonBodyAudience, client: any ShannonBodyServing) async {
         guard sends else { return }
         do {
@@ -335,8 +385,10 @@ public final class ShannonBodyTouchCoordinator {
 
     private func register(_ client: any ShannonBodyServing) async throws {
         let capabilities = environment.capabilities()
-        touchVocabulary = try await client.registerTouchBody(
+        let said = try await client.registerTouchBodyHearing(
             scopeKey: scopeKey, expressions: capabilities.expressions, gestures: capabilities.gestures)
+        touchVocabulary = said.touchVocabulary
+        feelingEvents = said.feelingEvents
         registered = true
     }
 

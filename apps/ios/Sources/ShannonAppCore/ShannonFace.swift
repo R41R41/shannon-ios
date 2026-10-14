@@ -111,6 +111,7 @@ public extension ConversationMessage.EmotionSnapshot {
             expression: emotion.expression,
             feeling: emotion.face.feeling,
             kind: emotion.kind,
+            presentationId: emotion.presentationId,
             stateVersion: stateVersion
         )
     }

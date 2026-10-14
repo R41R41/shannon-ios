@@ -28,9 +28,14 @@ public enum ShannonMessageAvatarMood {
 /// The small icon beside 「シャノン」 in a message (iPhone and Mac Talk), with no tile or frame: her eyes alone
 /// for the eye icon (ボット), a close-up of her face for the expression icon (ガール). Both change with the
 /// message's feeling. VoiceOver reads the feeling's name, as before.
+///
+/// A reply with a presentation id (Syzygy ADR-0013 D17) shows the face it was shown with, from that id
+/// (`ShannonPresentationFace`); without one, the face of its feeling as before.
 public struct ShannonMessageAvatarView: View {
     public let face: ShannonFace
     public let size: CGFloat
+    /// The reply's presentation id; nil shows `face`.
+    public var presentationID: String?
 
     @AppStorage(ShannonChatAvatarStyle.storageKey) private var styleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
@@ -42,18 +47,21 @@ public struct ShannonMessageAvatarView: View {
 
     public init(emotion: ConversationMessage.EmotionSnapshot?, size: CGFloat = 30) {
         self.init(face: ShannonMessageAvatarMood.face(for: emotion), size: size)
+        presentationID = emotion?.presentationId
     }
 
     public var body: some View {
         Group {
             if style == .secondAppIcon {
-                ShannonMessageEyesView(expression: face.expression, size: size)
+                ShannonMessageEyesView(expression: presentationID.map(ShannonPresentationFace.eyeExpression(for:)) ?? face.expression, size: size)
+            } else if let presentationID {
+                ShannonPresentationFaceView(id: presentationID, size: size)
             } else {
                 ShannonMessageFaceCloseUp(face: face, size: size)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(face.accessibilityDescription)
+        .accessibilityLabel(presentationID.map { "シャノン、\(ShannonPresentationFace.japaneseName(for: $0))" } ?? face.accessibilityDescription)
     }
 
     /// The one 「ボット／ガール」 choice decides it; individual settings keep their own avatar style.

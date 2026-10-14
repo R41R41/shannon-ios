@@ -70,6 +70,8 @@ struct ShannonConversationCache {
         let feeling: String?
         /// Absent in caches written before kinds existed (2026-10-05).
         let kind: String?
+        /// Absent in caches written before presentation ids existed (Syzygy ADR-0013, 2026-10-14).
+        let presentationId: String?
         let stateVersion: Int
 
         init(_ value: ConversationMessage.EmotionSnapshot) {
@@ -79,6 +81,7 @@ struct ShannonConversationCache {
             expression = value.expression
             feeling = value.feeling?.rawValue
             kind = value.kind
+            presentationId = value.presentationId
             stateVersion = value.stateVersion
         }
 
@@ -90,6 +93,7 @@ struct ShannonConversationCache {
                 expression: expression,
                 feeling: feeling.flatMap(ShannonFeelingDTO.init(rawValue:)),
                 kind: kind,
+                presentationId: presentationId,
                 stateVersion: stateVersion
             )
         }
