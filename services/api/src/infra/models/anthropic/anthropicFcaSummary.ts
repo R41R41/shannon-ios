@@ -1,4 +1,4 @@
-import { COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, compactionItem } from '@shannon/mind';
+import { COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, compactionItem, mergedTemplate } from '@shannon/mind';
 import type { FcaHistorySummarizer } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import type { ShannonToolDefinition } from '../../../mind/tools/toolRegistryPorts.js';
 import { createAnthropicFcaModel, type AnthropicFcaOptions } from './anthropicFcaModel.js';
@@ -20,10 +20,10 @@ export class FcaSummaryInvalidError extends Error {
  * Separate bounded inference, same native client/cache/accounting discipline; never executes a tool or hidden retry.
  *
  * The answer is read by the shared compaction rule (`checkedTemplate`): a template given as a JSON string or as an object, items
- * cut to 80 characters, the newest five kept, other keys and non-text dropped. Minebot lane run 2 (2026-10-14, task 94e879f8):
- * Haiku answered one `fca_history_summary` call (stop `tool_use`, 2,105 output tokens of 4,000) whose shape an exact check here
- * (exactly eight keys, at most five items, at most 80 characters, a string) refused, and the task was left unknown. Only an answer
- * with no usable summary at all is refused now.
+ * cut to 80 characters, the newest five kept, other keys and non-text dropped; a section it leaves out keeps the previous
+ * summary's items (`mergedTemplate`). Minebot lane run 2 (2026-10-14, task 94e879f8): Haiku answered one `fca_history_summary`
+ * call (stop `tool_use`, 2,105 output tokens of 4,000) whose shape an exact check here (exactly eight keys, at most five items, at
+ * most 80 characters, a string) refused, and the task was left unknown. Only an answer with no usable summary is refused now.
  */
 export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions): FcaHistorySummarizer {
   const model = createAnthropicFcaModel(options);
@@ -41,7 +41,9 @@ export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions): FcaH
     if (!row || !template) throw new FcaSummaryInvalidError('template');
     logSummaryShape(typeof raw === 'string' ? 'string' : 'object', row);
     if (COMPACTION_SECTIONS.every(section => !template[section].length)) throw new FcaSummaryInvalidError('empty');
-    return template;
+    // A section the answer leaves out keeps the previous summary's items (as the conversation replay does); one it gives replaces them.
+    const named = COMPACTION_SECTIONS.filter(section => Array.isArray(row[section]) || typeof row[section] === 'string');
+    return input.previous ? mergedTemplate(input.previous, template, named) : template;
   } };
 }
 

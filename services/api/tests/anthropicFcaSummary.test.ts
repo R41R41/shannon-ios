@@ -74,6 +74,18 @@ describe('a summary that misses the exact shape is read by the shared compaction
     expect(value).toMatchObject({ '詰まり': [], '次': ['次の事実'] });
   });
 
+  it('keeps the previous summary\'s items for a section the answer leaves out, and replaces one it gives (even as empty)', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const previous = { ...emptyTemplate(), '制約': ['夜は拠点から出ない'], '詰まり': ['斧がない'], '次': ['原木へ向かう'], coversFromId: 'fca-round:1', coversToId: 'fca-round:2' };
+    const fixture = scriptedAnthropic([message(call(JSON.stringify({ '目的': ['原木を集める'], '次': ['原木を3個掘る'], '詰まり': [] })), 'tool_use',
+      { model: 'claude-haiku-5-5', usage })]);
+    const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic-key', fetcher: fixture.fetcher, recordUsage() {} });
+    const result = await summarizer.summarize({ ...input, previous }, new AbortController().signal);
+    expect(result).toMatchObject({ '目的': ['原木を集める'], '制約': ['夜は拠点から出ない'], '詰まり': [], '次': ['原木を3個掘る'], '済み': [] });
+    const shape = info.mock.calls.map(args => String(args[0])).find(line => line.includes('fca_summary_shape'));
+    expect(JSON.parse(shape!)).toMatchObject({ missingSections: 5 });
+  });
+
   it('still refuses, with a closed reason and its spend recorded, an answer with no usable summary', async () => {
     for (const [content, reason] of [
       [[{ type: 'tool_use', id: 'done', name: 'fca_complete', input: { summary: '完了' } }], 'call'],
