@@ -241,6 +241,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 D7: in a strong scene (fast layer past her band, or blame), Haiku writes her feeling in 2-3 lines before a text reply; owner alone.',
   },
   {
+    name: 'SHANNON_INNER_NARRATOR', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_INNER_NOTE'],
+    doc: 'ADR-0013 §6: her inner note reads the fast layer and the ledger as narrator (honne not from her replies); intent and until unchanged.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

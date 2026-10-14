@@ -355,7 +355,7 @@ export class InnerNoteService implements InnerNotePort {
    * touching her.
    */
   private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
-    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger'> {
+    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger' | 'fastLayer'> {
     const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
     const day = innerNoteDay(at, this.timeZone);
     const today = this.partCounts(scopeKey, new Date(Date.parse(day.endsAt) - 86_400_000).toISOString(), at);
@@ -363,7 +363,9 @@ export class InnerNoteService implements InnerNotePort {
     const lines = kept?.dayKey === day.dayKey ? kept.lines.filter(said => eventVisible(snapshot, { kind: 'touch', at, touch: { phrase: '', said } })) : [];
     const touches = today.length || lines.length ? { today, lines } : null;
     const ledger = this.ledgerLine(scopeKey, at);
-    return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}), ...(ledger ? { ledger } : {}) };
+    const fast = this.fastLayer(scopeKey, at);
+    return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}), ...(ledger ? { ledger } : {}),
+      ...(fast !== null ? { fastLayer: fast } : {}) };
   }
 
   private partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[] {
@@ -373,6 +375,11 @@ export class InnerNoteService implements InnerNotePort {
   /** ADR-0013: the same ledger line her replies are given ('' without feeling events). */
   private ledgerLine(scopeKey: string, at: string): string {
     try { return this.body?.ledger?.(scopeKey, at) ?? ''; } catch { return ''; }
+  }
+
+  /** ADR-0013 §6: her fast layer in words while she is the narrator, else null (the reflection of before). */
+  private fastLayer(scopeKey: string, at: string): string | null {
+    try { return this.body?.fastLayer?.(scopeKey, at) ?? null; } catch { return null; }
   }
 
   private recent(scopeKey: string, at: string) {

@@ -102,6 +102,14 @@ Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_FEELING_TURN`
 - **Where**: after the feeling turn's block, under 「[いまの気持ち]（返事の前にボクが書いた独り言。気持ちとして読む。そのまま返事に書かない）」. Started with the turn, beside the Jev call; the reply waits at most 1.0 s beyond the moment its prompt is otherwise ready; late or failed, the reply goes on without it. The lines are not stored.
 - **Observer**: `feeling.sentence`: reason (`moved` | `blame`), written, line count, latency. Never the lines.
 
+## Stage 2: her inner note as narrator (`SHANNON_INNER_NARRATOR`)
+
+Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_INNER_NOTE`. ADR-0013 §6: the note stays, but no longer decides her feeling; it reads the fast layer and the ledger and tells her honne, tatemae and plan as the narrator.
+
+- The note's reflection is handed her fast layer now (the owner's key, folded from the day's events and advanced to the reflection's instant), in words, as `[いまのボク]（速い層。事実として）…` beside the ledger line (`InnerNoteBodyReader.fastLayer`, read at reflection, so a forgotten event is already out).
+- Its fixed instructions get one more section, 「[語り手として]」: the feeling has already moved; read it, do not decide it again; honne comes from the fast layer and the ledger, not from what she said in her replies. A separate cached prefix; without the switch the instructions and the input are byte for byte as before.
+- `intent` (one step per event) and `until` (and its caps) are unchanged; so are `shown` and the face (D12).
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).

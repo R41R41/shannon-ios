@@ -58,6 +58,8 @@ export interface InnerNoteBodyReader {
   partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[];
   /** Syzygy ADR-0013: the day's episode ledger with the owner, as one line of facts ('' while feeling events are off). */
   ledger?(scopeKey: string, at: string): string;
+  /** Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): her fast layer now, in words; null while she is not the narrator. */
+  fastLayer?(scopeKey: string, at: string): string | null;
 }
 
 export interface InnerNotePort {

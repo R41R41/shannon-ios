@@ -60,9 +60,17 @@ const HOOKS = `[フック]（本文と一緒に出す）
 - scale・until_minutes・day_reason: 上の仕組みのとおり。何もない時は until_minutes=null。
 ${ROUTE_FIELD}`;
 
-/** The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour). */
-export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE): string {
-  return [HEADER, characterCoreBlock(core), FIELDS, SYSTEM, QUESTIONS, HOOKS].join('\n\n');
+/**
+ * Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): the note no longer decides her feeling; it reads the fast layer and the ledger, and tells
+ * her honne, her tatemae and her plan as the narrator. Her replies were said to the moment, so they are not where her honne comes from.
+ */
+const NARRATOR = `[語り手として]
+- いまの気持ちは、もう動いている（[いまの${I}]、速い層）。メモはそれを決め直さず、読んで、本人の言葉で語る。
+- 本音は、速い層と今日の件（帳面）から読む。${I}が返事で言ったことを本音の元にしない（返事は、その場に合わせて言ったことがある）。`;
+
+/** The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour); one more section as narrator. */
+export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE, options: { narrator?: boolean } = {}): string {
+  return [HEADER, characterCoreBlock(core), FIELDS, SYSTEM, QUESTIONS, HOOKS, ...(options.narrator ? [NARRATOR] : [])].join('\n\n');
 }
 
 export interface InnerNoteReflectionFacts {
@@ -91,6 +99,8 @@ export interface InnerNoteReflectionFacts {
   ledger?: string;
   /** This day's turns that asked, allowed or refused touching her, oldest first (events with `consent`). */
   consents?: readonly InnerNoteEvent[];
+  /** Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): her fast layer now, in words (`fastLayerWords`). Present: she reflects as narrator. */
+  fastLayer?: string;
 }
 
 function minutesLeft(at: string, until: string): string {
@@ -137,6 +147,7 @@ export function innerNoteReflectionInput(facts: InnerNoteReflectionFacts): strin
     counts,
     ['[起きたこと]', ...facts.events.slice(-INNER_NOTE_LIMITS.events).map(event => innerNoteEventLine(event, at, timeZone))].join('\n'),
     ...touchLines(facts),
+    ...(facts.fastLayer ? [facts.fastLayer] : []),
     feelingLine(facts.feeling),
     ...(recent.length ? [['[直前の会話]', ...recent].join('\n')] : []),
     ...(facts.yesterday ? [`[前の日のこと]（出来事として覚えているだけ。態度は持ち越さない）${facts.yesterday}`] : []),

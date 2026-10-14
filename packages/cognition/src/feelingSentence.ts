@@ -55,11 +55,16 @@ const TURN_WORDS = Object.freeze({ spoke: '話しかけた', apologized: '謝っ
 const TAG_WORDS: Readonly<Record<UtteranceTag, string>> = Object.freeze({ insult: '悪口', lewd: '性的なからかい', ai_taunt: 'AI だとからかう',
   creator_insult: '作り手への悪口' });
 
+/** Her fast layer in words (the numbers stay in code), as facts: for her feeling sentence and, as narrator, her inner note. */
+export function fastLayerWords(core: CoreAffectState): string {
+  const { pad, mood, blame } = core;
+  return `[いまの${I}]（速い層。事実として）快さ: ${scale(pad.valence, PLEASURE, 'いい')}。高ぶり: ${scale(pad.arousal, AROUSAL, '高ぶっている')}。`
+    + `強気: ${scale(pad.dominance, DOMINANCE, '強気')}。相手を責めたい気持ち: ${scale(blame, BLAME, '強い')}。気分（ゆっくりした流れ）: ${scale(mood.valence, PLEASURE, 'いい')}。`;
+}
+
 /** The facts of one call, in words (the numbers stay in code), as the input after the cached instructions. */
 export function feelingSentenceInput(facts: FeelingSentenceFacts): string {
-  const { pad, mood, blame } = facts.core;
-  const now = `[いまの${I}]（速い層。事実として）快さ: ${scale(pad.valence, PLEASURE, 'いい')}。高ぶり: ${scale(pad.arousal, AROUSAL, '高ぶっている')}。`
-    + `強気: ${scale(pad.dominance, DOMINANCE, '強気')}。相手を責めたい気持ち: ${scale(blame, BLAME, '強い')}。気分（ゆっくりした流れ）: ${scale(mood.valence, PLEASURE, 'いい')}。`;
+  const now = fastLayerWords(facts.core);
   const tags = facts.turn.tags.map(tag => TAG_WORDS[tag]).join('、');
   const turn = `[この番] ${OWNER}が${TURN_WORDS[facts.turn.kind]}。${tags ? `言葉の種類: ${tags}。` : ''}`;
   return [now, ...(facts.ledgerLine ? [`[今日の件]（帳面。事実として）\n${facts.ledgerLine}`] : []), turn, 'いまの気持ちを2〜3行で書く。'].join('\n\n');

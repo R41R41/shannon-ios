@@ -6,7 +6,8 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  checkBeforeSending, checkReply, feelingSentenceBlock, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  checkBeforeSending, checkReply, feelingSentenceBlock,
+  fastLayerWords, advanceCoreAffect, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
@@ -46,6 +47,8 @@ export interface FeelingPort {
   readonly check?: boolean;
   /** `SHANNON_CORE_AFFECT`: the shadow's composure step is known to the check (its register flags); nothing else reads it. */
   readonly coreAffect?: boolean;
+  /** `SHANNON_INNER_NARRATOR` (with the fast layer): her inner note reads the fast layer and reflects as narrator. */
+  readonly narrator?: boolean;
   /** `SHANNON_FEELING_SENTENCE` (with the fast layer and the turn): Haiku writes her feeling in two or three lines in a strong scene. */
   readonly sentence?: FeelingSentenceWriter;
 }
@@ -346,6 +349,16 @@ export const feelingBody = Object.freeze({
   /** The owner's day as one ledger line, for her inner note's reflection ('' without a port). */
   ledgerLine: (port: FeelingPort | null, scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string =>
     (port ? port.events.linesFor(scopeKey, touchKey('owner'), at, snapshot)?.ledgerLine ?? '' : ''),
+  /** What her inner note reads of her feeling events (at reflection, so the port may come later): the ledger, and as narrator the fast layer. */
+  noteReader: (port: () => FeelingPort | null, snapshot: (scopeKey: string) => CompanionStateSnapshot) => ({
+    ledger: (scopeKey: string, at: string) => feelingBody.ledgerLine(port(), scopeKey, at, snapshot(scopeKey)),
+    fastLayer: (scopeKey: string, at: string): string | null => {
+      const feeling = port();
+      if (!feeling?.narrator || !feeling.coreAffect) return null;
+      const core = foldFeelingDynamics(feeling.events.today(scopeKey, at, snapshot(scopeKey)), touchKey('owner')).core;
+      return fastLayerWords(advanceCoreAffect(core, Date.parse(at)));
+    },
+  }),
   /** The body's face (a reaction's `mood`, presence) under `SHANNON_SINGLE_FACE`; without it, the face as it was. */
   mood: <T extends { expression: string; feeling?: string; tell?: 'blush' }>(port: FeelingPort | null, scopeKey: string,
     audience: 'owner' | 'others' | undefined, at: string, snapshot: CompanionStateSnapshot, mood: T, note: BodyNoteFace | null): T => {

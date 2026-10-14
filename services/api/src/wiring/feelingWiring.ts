@@ -49,6 +49,10 @@ function sentenceWriter(environment: Readonly<Record<string, string | undefined>
   return configuredFeelingSentenceWriter(environment, { ...(parts.usageStore ? { usageStore: parts.usageStore } : {}), now: parts.now });
 }
 
+/** `SHANNON_INNER_NARRATOR` with the inner note it changes (the fast layer it reads is checked where the port is composed). */
+const narratorOn = (environment: Readonly<Record<string, string | undefined>>) =>
+  switchOn(environment, 'SHANNON_INNER_NARRATOR') && switchOn(environment, 'SHANNON_INNER_NOTE');
+
 /** The cap, from the environment: a whole number from 0 (none) to 10 000; anything else is the default. */
 export function strongReplyDailyCap(environment: Readonly<Record<string, string | undefined>>): number {
   const value = Number(environment.SHANNON_FEELING_STRONG_REPLY_DAILY_CAP?.trim() || Number.NaN);
@@ -94,7 +98,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}) });
+    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), narrator: narratorOn(environment) });
 }
 
 /**
@@ -127,6 +131,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
   /** Stage 2 (`SHANNON_REPLY_CHECK`): her replies are checked. */
   check?: boolean;
+  /** Stage 2 (`SHANNON_INNER_NARRATOR`): her inner note reads the fast layer (only with the shadow). */
+  narrator?: boolean;
   /** Stage 2 (`SHANNON_FEELING_SENTENCE`): her feeling sentence's writer (used only with the shadow and the turn). */
   sentence?: FeelingSentenceWriter;
   /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
@@ -142,7 +148,7 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
-    ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}) };
+    ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}), ...(parts.narrator && parts.shadow ? { narrator: true } : {}) };
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean) => events?.noteCheck(scopeKey, found, rewritten);
