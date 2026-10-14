@@ -178,6 +178,29 @@ not stopped, not timed out, and whose task has not ended by any path: completed,
 Exit codes: `0` accepted, `1` refused or failed (also when the socket is absent), `2` usage. `SHANNON_OPERATOR` may stand in for
 `--operator`.
 
+## Skill import (`skills import`)
+
+This is the one operation outside Minecraft. It was added by the coordinator's choice on the owner's behalf (2026-10-14), because the owner holds no paired-device token outside the apps.
+
+```sh
+$N --import tsx services/api/src/opsCli.ts skills import dry-run --operator ryo --pack legacy-minecraft --revision draft-2
+$N --import tsx services/api/src/opsCli.ts skills import apply --operator ryo --pack legacy-minecraft --revision draft-2 \
+  --plan-hash <planHash from the reviewed dry-run> --approval-reference <owner approval reference>
+```
+
+- **Same import as the paired route.** The API runs exactly what `POST /v1/autonomy/skills/import/*` runs (`runSkillImport`, `infra/http/skillImportCommand.ts`):
+  - the same importer and app-owned packs only;
+  - the same validation, capacity check, plan hash and transaction;
+  - the same immutable receipt, which keeps `--approval-reference`.
+- **Reply.** The reply's `skillImport` is the paired route's body. The CLI prints the plan hash, capacity, each skill's name and SHA-256 (never the bodies), the problems, and the receipt.
+- **Exit code.** A dry-run that finds problems exits `1`.
+- **Retries.** Applying the same pack again answers its existing receipt (`idempotent=true`).
+- **Refusals.** A changed state is refused as `stale_plan`, and a failed validation as `validation_failed`.
+- **Records.**
+  - The audit names the operator (command `skill_import`).
+  - An applied pack is written to the activity record as adopted through the operator, with its approval reference.
+- **Gates.** It needs her skills on (`SHANNON_SKILLS`) and this socket (`SHANNON_OPERATOR_MINECRAFT`). It does not depend on who is present, a Minecraft body, or a lease.
+
 ## Switch
 
 `SHANNON_OPERATOR_MINECRAFT`, `explicit_on`, default off. A restart of `shannon-ios.service` applies it. Off: no socket (only its

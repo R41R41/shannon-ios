@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { skillImportEndpoint } from '../src/infra/http/skillImportCommand.js';
 
 /** Owner's paired-device HTTP client. It never opens SQLite, enables skills, or imports automatically. */
 const args = process.argv.slice(2);
@@ -12,11 +13,8 @@ const revision = value('--revision');
 const planHash = value('--plan-hash');
 const approvalReference = value('--approval-reference');
 if (!endpoint || !tokenFile || !packId || !revision || (mode === 'apply' && (!planHash || !approvalReference))) throw new Error('Missing required skill import argument');
-const url = new URL(endpoint);
-if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) throw new Error('Use HTTPS or a local HTTP server without URL credentials');
-url.pathname = `/v1/autonomy/skills/import/${mode}`;
-url.search = '';
-url.hash = '';
+// The server's base path is kept (`https://sh4nnon.com/companion`); it used to be replaced, and the import answered 404.
+const url = skillImportEndpoint(endpoint, mode);
 const token = readFileSync(tokenFile, 'utf8').trim();
 if (!token || /\s/u.test(token)) throw new Error('Invalid paired-device token file');
 const response = await fetch(url, { method: 'POST', redirect: 'error', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

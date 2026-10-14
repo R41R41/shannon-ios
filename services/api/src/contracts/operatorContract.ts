@@ -6,10 +6,14 @@ import { MINECRAFT_LIFECYCLE_ACTIONS, type MinecraftLifecycleAction } from './mi
  * one of three things on the owner's behalf: a Minecraft lifecycle operation, one Minecraft work request (the same common task
  * `minecraft.request` makes), or the cancel of such a request it started itself. Nothing else is offered: no conversation message
  * as the owner, no memory or note, no other tool, no setting, no credential.
+ *
+ * One addition (the coordinator's choice on the owner's behalf, 2026-10-14): `skills import`, the owner's skill-pack import
+ * (`runSkillImport`, the same importer, plan hash and receipt as the paired route) for an app-owned pack, because the owner holds
+ * no paired-device token outside the apps. It writes only what that route writes, and the audit names the operator.
  */
 export const OPERATOR_VIA = 'operator_cli';
-export const OPERATOR_DOMAINS = ['minecraft'] as const;
-export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'release'] as const;
+export const OPERATOR_DOMAINS = ['minecraft', 'skills'] as const;
+export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'release', 'skill_import'] as const;
 export type OperatorCommand = typeof OPERATOR_COMMANDS[number];
 export const OPERATOR_PATH = '/operator/v1/minecraft';
 /** Where the socket is, beside the database the CLI was told to use (never a guessed default path). */
@@ -41,6 +45,8 @@ export const OPERATOR_CODES = [
   'not_running', 'rate_limited', 'flooded', 'stopped', 'time_limit', 'settled', 'error',
   // Minecraft run 6 (2026-10-14): the body re-check (`minecraft release`) and a set_day asked before the login settled.
   'released', 'not_retained', 'not_confirmed', 'proof_refused', 'recheck_busy', 'not_settled',
+  // The skill import (`skills import`): the importer's refusals, as the paired route answers them.
+  'validation_failed', 'stale_plan',
 ] as const;
 export type OperatorCode = typeof OPERATOR_CODES[number];
 
@@ -49,12 +55,16 @@ export type OperatorInput =
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number }
   | { command: 'cancel'; taskId: string | null }
   /** A request to check the Minecraft body again and release what it proves released (never a force release). */
-  | { command: 'release' };
+  | { command: 'release' }
+  /** The owner's skill-pack import, dry-run or apply (`runSkillImport`). */
+  | { command: 'skill_import'; phase: 'dry-run' | 'apply'; packId: string; revision: string; planHash: string | null; approvalReference: string | null };
 export interface OperatorEnvelope { v: 1; operator: string; domain: string; op: string; args: Record<string, unknown> }
 export type OperatorParse = { ok: true; operator: string; input: OperatorInput } | { ok: false; operator: string; code: OperatorCode; message: string };
 export interface OperatorReply {
   operationId: string; outcome: 'accepted' | 'refused'; code: OperatorCode; message: string;
   taskId?: string; lifecycleId?: string; actionId?: string; deadlineAt?: string; budgetYen?: number;
+  /** `skills import`: the body the paired route would answer (the plan, the receipt, or the importer's refusal). */
+  skillImport?: unknown;
 }
 
 const OPERATOR_LABEL = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$/u;
@@ -110,7 +120,34 @@ function release(operator: string, args: Record<string, unknown>): OperatorParse
   return { ok: true, operator, input: { command: 'release' } };
 }
 
-/** Reads one envelope. Anything outside the Minecraft operations is `out_of_scope`, and the audit records it as such. */
+const PACK_SYMBOL = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/u;
+
+function skillImport(operator: string, args: Record<string, unknown>): OperatorParse {
+  const extra = Object.keys(args).find(key => !['phase', 'packId', 'revision', 'planHash', 'approvalReference'].includes(key));
+  if (extra !== undefined) {
+    return refuse(operator, 'invalid_input', `${extra.slice(0, 40).replace(/[^\x20-\x7e]/gu, '?')} is not an argument of this operation`);
+  }
+  const phase = args.phase === 'dry-run' || args.phase === 'apply' ? args.phase : null;
+  const symbol = (value: unknown) => typeof value === 'string' && PACK_SYMBOL.test(value);
+  if (!phase || !symbol(args.packId) || !symbol(args.revision)) {
+    return refuse(operator, 'invalid_input', 'skills import takes dry-run or apply, --pack and --revision');
+  }
+  const planHash = args.planHash ?? null, approvalReference = args.approvalReference ?? null;
+  const applying = typeof planHash === 'string' && /^[a-f0-9]{64}$/u.test(planHash) && symbol(approvalReference);
+  if (phase === 'apply' ? !applying : planHash !== null || approvalReference !== null) {
+    return refuse(operator, 'invalid_input', 'apply needs --plan-hash (64 hex) and --approval-reference; dry-run takes neither');
+  }
+  return { ok: true, operator, input: { command: 'skill_import', phase, packId: args.packId as string, revision: args.revision as string,
+    planHash: planHash as string | null, approvalReference: approvalReference as string | null } };
+}
+
+/** Outside Minecraft only `skills import` is offered; anything else is `out_of_scope`. */
+function otherDomain(operator: string, domain: string, op: string, args: Record<string, unknown>): OperatorParse {
+  if (domain === 'skills' && op === 'import') return skillImport(operator, args);
+  return refuse(operator, 'out_of_scope', 'only minecraft operations and skills import are offered to an operator');
+}
+
+/** Reads one envelope. Anything outside the Minecraft operations and the skill import is `out_of_scope`, and the audit says so. */
 export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (!record(value)) return refuse('unknown', 'invalid_input', 'a JSON object is required');
   const operator = operatorLabel(value.operator);
@@ -121,7 +158,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (!record(args) || typeof value.domain !== 'string' || typeof value.op !== 'string') {
     return refuse(operator, 'invalid_input', 'domain, op and args are required');
   }
-  if (value.domain !== 'minecraft') return refuse(operator, 'out_of_scope', 'only minecraft operations are offered to an operator');
+  if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = { request: ['goal', 'maxMinutes', 'budgetYen'], cancel: ['taskId', 'latest'] };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
   if (extra !== undefined) {

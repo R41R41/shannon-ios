@@ -14,15 +14,15 @@ The CLI uses owner-device authentication, not direct SQLite writes:
 
 ```sh
 node node_modules/tsx/dist/cli.mjs services/api/scripts/skill-import.ts dry-run \
-  --url https://sh4nnon.com --token-file /private/path/owner-device-token \
+  --url https://sh4nnon.com/companion --token-file /private/path/owner-device-token \
   --pack standard10 --revision draft-2
 node node_modules/tsx/dist/cli.mjs services/api/scripts/skill-import.ts apply \
-  --url https://sh4nnon.com --token-file /private/path/owner-device-token \
+  --url https://sh4nnon.com/companion --token-file /private/path/owner-device-token \
   --pack standard10 --revision draft-2 --plan-hash REVIEWED_PLAN_HASH \
   --approval-reference owner-request-reference
 ```
 
-The token file must remain private. HTTPS or local loopback is required. A client timeout is not proof of failed import: retry the same pack/plan and read its receipt.
+The client keeps the base URL's path, such as `/companion`; before 2026-10-14 it replaced the path, and the import answered 404. The token file must remain private. HTTPS or local loopback is required. Without a paired-device token file, the operator's socket runs the same import: `opsCli.ts skills import`, described in `docs/operator-minecraft-contract.md`. A client timeout is not proof of failed import: retry the same pack/plan and read its receipt.
 
 ## Common FCA execution
 

@@ -5,6 +5,7 @@ import { autonomyDayKey, type AutonomyConfig } from '../../mind/inhibition/auton
 import { SKILL_CAPACITY, SKILL_LIFECYCLE, type SkillMemory, type StoredSkill } from '../../mind/memory/memoryPorts.js';
 import type { SkillImporter, SkillPack } from '../../mind/memory/memoryPorts.js';
 import { readJson, sendJson } from './serverHttp.js';
+import { runSkillImport } from './skillImportCommand.js';
 
 /**
  * The owner's view and controls of her skills, for the app's 学び tab (Syzygy ADR-0008 stage 2, review scope gap;
@@ -88,18 +89,14 @@ export function createSkillsRoute(dependencies: SkillsRouteDependencies) {
       if (!dependencies.importer || !dependencies.pack) return sendJson(response, 403, { error: 'SKILL_IMPORT_DISABLED' });
       let raw: unknown;
       try { raw = await readJson(request, 2048); } catch { return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' }); }
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
-      const command = raw as Record<string, unknown>;
-      if (typeof command.packId !== 'string' || typeof command.revision !== 'string') return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
-      const pack = dependencies.pack(command.packId, command.revision);
-      if (!pack) return sendJson(response, 404, { error: 'SKILL_PACK_NOT_FOUND' });
-      if (path.endsWith('/dry-run')) return sendJson(response, 200, dependencies.importer.dryRun(scopeKey, pack));
-      if (typeof command.planHash !== 'string' || typeof command.approvalReference !== 'string') return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
-      const at = dependencies.now();
-      const result = dependencies.importer.apply(scopeKey, pack, { planHash: command.planHash, approvalReference: command.approvalReference }, at);
-      if ('rejected' in result) return sendJson(response, 409, result);
-      if (!result.idempotent) try { dependencies.record(scopeKey, 'import', result.receipt.receiptId, at); } catch (error) { console.error('Shannon skill import record failed', error instanceof Error ? error.name : 'unknown'); }
-      return sendJson(response, 200, result);
+      // The one import command, shared with the operator's socket (`skillImportCommand.ts`).
+      const result = runSkillImport(dependencies, scopeKey, path.endsWith('/dry-run') ? 'dry-run' : 'apply', raw);
+      if (result.applied) {
+        try { dependencies.record(scopeKey, 'import', result.applied.receiptId, result.at); } catch (error) {
+          console.error('Shannon skill import record failed', error instanceof Error ? error.name : 'unknown');
+        }
+      }
+      return sendJson(response, result.status, result.body);
     }
     if (path === SKILLS_PATH) {
       if (request.method !== 'GET') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
