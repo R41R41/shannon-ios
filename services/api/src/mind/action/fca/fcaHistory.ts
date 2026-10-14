@@ -29,13 +29,7 @@ const size = (value: unknown): number => JSON.stringify(value).length;
 export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec,
   overrides: Partial<FcaHistoryPolicy> = {}): FcaHistoryPlan {
   const policy = policyOf(overrides);
-  const projected = window.rounds.map(round => {
-    const messages = codec.project(round);
-    if (!messages) throw new Error('FCA_HISTORY_INCOMPLETE_ROUND');
-    const outcome: CompactionMessage = { id: `fca-round:${round.sequence}:status`, role: 'assistant',
-      content: `Committed task status after this round: ${round.status}. A requested completion is not proof of completion.` };
-    return { sequence: round.sequence, stepId: round.stepId, messages: [...messages, outcome] };
-  });
+  const projected = projectedRounds(window, codec);
   if (window.summary && (!window.summary.bootstrapText || window.summary.resetThroughSequence < window.summary.throughSequence)) {
     throw new Error('FCA_HISTORY_EPOCH_MISSING');
   }
@@ -70,30 +64,29 @@ function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy:
     && native + definitions <= policy.maximumReplayCharacters;
 }
 
+function projectedRounds(window: TaskHistoryWindow, codec: FcaHistoryCodec): ProjectedRound[] {
+  return window.rounds.map(round => {
+    const messages = codec.project(round);
+    if (!messages) throw new Error('FCA_HISTORY_INCOMPLETE_ROUND');
+    const outcome: CompactionMessage = { id: `fca-round:${round.sequence}:status`, role: 'assistant',
+      content: `Committed task status after this round: ${round.status}. A requested completion is not proof of completion.` };
+    return { sequence: round.sequence, stepId: round.stepId, messages: [...messages, outcome] };
+  });
+}
+
 /** The shortest any message of a clipped round becomes: enough to say what it was. */
 const CLIPPED_MESSAGE_CHARACTERS = 400;
 type ProjectedRound = { sequence: number; stepId: string; messages: CompactionMessage[] };
 const SUMMARY_CUT = (omitted: number) => `…（要約用に後略: ${omitted}字）`;
 const REPLAY_CUT = (omitted: number) => `…（長いため後略: ${omitted}字）`;
 
-/**
- * One round with its longest texts cut (the end marked) until `measure` fits `maximum`, or null when it cannot.
- * Every message stays, with its id, role and call id, so each tool call keeps its result.
- */
+/** One round, clipped as `levelClipped` does. */
 function clippedRound(round: ProjectedRound, measure: (round: ProjectedRound) => number, maximum: number,
   marker: (omitted: number) => string): ProjectedRound | null {
-  const messages = round.messages.map(message => ({ ...message }));
-  const over = () => measure({ ...round, messages }) - maximum;
-  for (let guard = 0; guard < messages.length * 4 && over() > 0; guard++) {
-    const longest = messages.reduce((best, message) => message.content.length > best.content.length ? message : best);
-    if (longest.content.length <= CLIPPED_MESSAGE_CHARACTERS) return null;
-    let keep = Math.max(CLIPPED_MESSAGE_CHARACTERS, longest.content.length - over() - 64);
-    // Never between the halves of a surrogate pair (review of 1a647abc).
-    if (/[\uD800-\uDBFF]/u.test(longest.content[keep - 1] ?? '')) keep -= 1;
-    longest.content = `${longest.content.slice(0, keep)}${marker(longest.content.length - keep)}`;
-  }
-  return over() > 0 ? null : { ...round, messages };
+  return levelClipped([round], ([candidate]) => measure(candidate!), maximum, marker)?.[0] ?? null;
 }
+const clippedCount = (clipped: readonly ProjectedRound[], original: readonly ProjectedRound[]) =>
+  clipped.reduce((count, round, index) => count + round.messages.filter((message, at) => message.content !== original[index]!.messages[at]!.content).length, 0);
 
 /**
  * The newest round alone is longer than the native budget and nothing older can be summarized (Minebot lane 2026-10-14: a
@@ -109,9 +102,91 @@ function clippedReplay(previous: FcaHistorySummaryInput['previous'], newest: Pro
   const replayOf = (round: ProjectedRound) => codec.bootstrap(JSON.stringify({ kind: 'fca_public_history', summary: previous, rounds: [round] }));
   const clipped = clippedRound(newest, round => size(replayOf(round)), policy.maximumNativeCharacters, REPLAY_CUT);
   if (!clipped) throw new Error('FCA_HISTORY_RECENT_LIMIT');
-  const clippedMessages = clipped.messages.filter((message, index) => message.content !== newest.messages[index]!.content).length;
+  const clippedMessages = clippedCount([clipped], [newest]);
   return { kind: 'ready', replay: { history: replayOf(clipped), summary: previous,
     summaryText: previous ? renderedCompaction(previous, 'text') : '', clippedMessages } };
+}
+
+/**
+ * The summary call answered, but with no usable summary (`SUMMARY_UNUSABLE`). Minebot lane run 2 (2026-10-14, task 94e879f8): such
+ * an answer left the step unknown and the task paused, though the call had come back and nothing had run. This step replays a fresh
+ * public epoch instead, as `clippedReplay` does: the existing summary and every uncovered round's public transcript, the longest
+ * texts cut and marked until it fits the native budget; only when even that cannot fit, the oldest rounds are left out and counted
+ * (`omittedRounds`). Nothing is stored: the original rounds stay whole, and the next step's compaction asks for a summary again (at
+ * most one summary call per batch, never a hidden retry).
+ */
+export function fallbackFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec,
+  overrides: Partial<FcaHistoryPolicy> = {}): FcaHistoryReplay & { omittedRounds: number } {
+  const policy = policyOf(overrides), maximum = policy.maximumNativeCharacters;
+  const projected = projectedRounds(window, codec);
+  const previous = window.summary?.template ?? null;
+  const replayOf = (rounds: readonly ProjectedRound[], omittedRounds: number) => codec.bootstrap(JSON.stringify({ kind: 'fca_public_history',
+    summary: previous, ...(omittedRounds ? { omittedRounds } : {}), rounds }));
+  // Each round's share of the replay with every text at its shortest, measured once (review of 8da89bc7: re-clipping every
+  // remaining round for each round left out took 56 s for 40 rounds). Keep the newest rounds whose shares fit, then clip them once.
+  const envelope = size(replayOf([], projected.length));
+  const shortest = projected.map(round => size(replayOf([waterClipped(round, CLIPPED_MESSAGE_CHARACTERS, REPLAY_CUT)], projected.length)) - envelope + 1);
+  let kept = 0;
+  for (let total = envelope; kept < projected.length && total + shortest[projected.length - 1 - kept]! <= maximum; kept++) {
+    total += shortest[projected.length - 1 - kept]!;
+  }
+  // The shares slightly overstate (a separator each, the longest count field) and are an estimate for any codec: the exact measure
+  // decides, from one round more than they allow, one round fewer at a time if it must.
+  for (kept = Math.min(projected.length, kept + 1); kept > 0; kept--) {
+    const omittedRounds = projected.length - kept, rounds = projected.slice(omittedRounds);
+    const clipped = levelClipped(rounds, candidate => size(replayOf(candidate, omittedRounds)), maximum, REPLAY_CUT);
+    if (!clipped) continue;
+    return { history: replayOf(clipped, omittedRounds), summary: previous, summaryText: previous ? renderedCompaction(previous, 'text') : '',
+      clippedMessages: clippedCount(clipped, rounds), omittedRounds };
+  }
+  throw new Error('FCA_HISTORY_RECENT_LIMIT');
+}
+
+/** A round with every text longer than `level` cut to it and marked, where the cut shortens it; never inside a surrogate pair (review of 1a647abc). */
+function waterClipped(round: ProjectedRound, level: number, marker: (omitted: number) => string): ProjectedRound {
+  return { ...round, messages: round.messages.map(message => {
+    let keep = level;
+    if (/[\uD800-\uDBFF]/u.test(message.content[keep - 1] ?? '')) keep -= 1;
+    const cut = `${message.content.slice(0, keep)}${marker(message.content.length - keep)}`;
+    return cut.length < message.content.length ? { ...message, content: cut } : { ...message };
+  }) };
+}
+
+/**
+ * Rounds with their longest texts cut to one common length (the highest that fits, found by halving: a bounded number of
+ * measures, each linear), the end marked, never below `CLIPPED_MESSAGE_CHARACTERS`; null when even that does not fit.
+ * Every message stays, with its id, role and call id.
+ */
+function levelClipped(rounds: readonly ProjectedRound[], measure: (rounds: ProjectedRound[]) => number, maximum: number,
+  marker: (omitted: number) => string): ProjectedRound[] | null {
+  const whole = rounds.map(round => ({ ...round, messages: round.messages.map(message => ({ ...message })) }));
+  if (measure(whole) <= maximum) return whole;
+  const at = (level: number) => rounds.map(round => waterClipped(round, level, marker));
+  const floor = at(CLIPPED_MESSAGE_CHARACTERS);
+  if (measure(floor) > maximum) return null;
+  let low = CLIPPED_MESSAGE_CHARACTERS, high = Math.max(low, ...rounds.flatMap(round => round.messages.map(message => message.content.length)));
+  let best = floor;
+  while (low < high) {
+    const level = Math.ceil((low + high) / 2), candidate = at(level);
+    const fits = measure(candidate) <= maximum;
+    low = fits ? level : low;
+    high = fits ? high : level - 1;
+    best = fits ? candidate : best;
+  }
+  return best;
+}
+
+/**
+ * Codes of a summary call that came back complete, its spend recorded, with nothing usable in it: the summarizer's own refusal and
+ * the decision model's closed checks of a finished answer. An abort, a lost response or a held permit is never one of them.
+ */
+const SUMMARY_UNUSABLE: ReadonlySet<string> = new Set(['FCA_SUMMARY_INVALID', 'FCA_MODEL_TRUNCATED', 'FCA_MODEL_REFUSED',
+  'FCA_MODEL_DECISION_MISSING', 'FCA_MODEL_OUTPUT_INVALID', 'FCA_MODEL_CALL_INVALID', 'FCA_MODEL_CONTROL_MIXED',
+  'FCA_MODEL_SUMMARY_INVALID', 'FCA_MODEL_TOOL_NOT_OFFERED']);
+function unusableSummary(error: unknown): { code: string; reason: string | null } | null {
+  if (!(error instanceof Error) || !SUMMARY_UNUSABLE.has(error.message)) return null;
+  const reason = (error as { reason?: unknown }).reason;
+  return { code: error.message, reason: typeof reason === 'string' && /^[a-z_]{1,32}$/u.test(reason) ? reason : null };
 }
 
 /** The oldest eligible rounds that fit the summary input, in order. */
@@ -130,6 +205,21 @@ function summaryInput(eligible: readonly ProjectedRound[], previous: FcaHistoryS
     break;
   }
   return input;
+}
+
+/** The step's replay after an unusable summary answer (`fallbackFcaHistory`), from a fresh window, logged content-free. */
+function summaryFallback(step: TaskStep, ports: FcaHistoryPorts, policy: FcaHistoryPolicy,
+  unusable: { code: string; reason: string | null }, batches: number): FcaHistoryReplay {
+  const current = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
+  if (!current) throw new Error('FCA_TASK_NOT_FOUND');
+  const { omittedRounds, ...replay } = fallbackFcaHistory(current, ports.codec, policy);
+  const clippedMessages = replay.clippedMessages ?? 0;
+  // Content-free: the closed code, the task's opaque id and what the fallback replay left out.
+  console.log(`Shannon FCA history summary unusable task=${step.taskId} code=${unusable.code}${unusable.reason ? ` reason=${unusable.reason}` : ''} `
+    + `fallback=public_epoch clipped=${clippedMessages} omittedRounds=${omittedRounds}`);
+  observerHandoff('compact', 'context', { phase: 'history_summary_fallback', code: unusable.code, reason: unusable.reason,
+    clippedMessages, omittedRounds, compactedBatches: batches });
+  return replay;
 }
 
 /** Uses the current action permit; derived summary writes never enqueue work or retry a model call. */
@@ -156,8 +246,16 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     if (!ports.summarizer) throw new Error('FCA_HISTORY_SUMMARIZER_REQUIRED');
     if (batches >= policy.maximumBatches) throw new Error('FCA_HISTORY_COMPACTION_LIMIT');
     observerHandoff('fca', 'compact', { roundCount: plan.input.rounds.length, batch: batches });
-    const template = await observeAsync('compact', { phase: 'summarize', roundCount: plan.input.rounds.length, batch: batches },
-      () => ports.summarizer!.summarize(plan.input, signal));
+    let template: unknown;
+    try {
+      template = await observeAsync('compact', { phase: 'summarize', roundCount: plan.input.rounds.length, batch: batches },
+        () => ports.summarizer!.summarize(plan.input, signal));
+    } catch (error) {
+      const unusable = unusableSummary(error);
+      if (!unusable || signal.aborted) throw error;
+      await checked();
+      return summaryFallback(step, ports, policy, unusable, batches);
+    }
     await checked();
     if (!observeSync('compact', { phase: 'commit', roundCount: plan.input.rounds.length },
       () => ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible), committed => ({ committed }))) throw new Error('FCA_HISTORY_COMMIT_FENCED');

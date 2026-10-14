@@ -276,6 +276,37 @@ describe('exact complete-round FCA history compaction', () => {
     expect(after.replay.summaryText).not.toBe('');
   });
 
+  it('replays a public epoch for the step when the summary answer is unusable, storing nothing (Minebot lane run 2, 2026-10-14)', async () => {
+    const f = fixture(); await f.append(10); const step = await f.begin();
+    const original = f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all();
+    const invalid = Object.assign(new Error('FCA_SUMMARY_INVALID'), { reason: 'template' });
+    let calls = 0;
+    const unusable = f.ports(async () => { calls++; throw invalid; });
+    const replay = await prepareFcaHistory(step, unusable, new AbortController().signal, policy);
+    expect(calls).toBe(1); // one summary call, never a hidden retry
+    expect(replay.history).toHaveLength(1);
+    expect(JSON.stringify(replay.history)).not.toMatch(/private-|signed-/u);
+    const epoch = JSON.parse((replay.history[0] as { content: string }).content) as { kind: string; omittedRounds?: number; rounds: Array<{ messages: Array<{ callId?: string }> }> };
+    expect(epoch.kind).toBe('fca_public_history');
+    expect(epoch.omittedRounds).toBeUndefined();
+    expect(epoch.rounds.flatMap(round => round.messages.flatMap(message => message.callId ? [message.callId] : [])))
+      .toEqual(Array.from({ length: 10 }, (_, index) => [`call-${index + 1}`, `call-${index + 1}`]).flat());
+    expect(f.window().summary).toBeNull();
+    expect(f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all()).toEqual(original);
+    // Too long even with every text at its shortest: the oldest rounds are left out, and counted, down to the newest one.
+    const narrow = await prepareFcaHistory(step, unusable, new AbortController().signal, { ...policy, maximumNativeCharacters: 1_000 });
+    const narrowEpoch = JSON.parse((narrow.history[0] as { content: string }).content) as { omittedRounds: number; rounds: Array<{ sequence: number }> };
+    expect(narrowEpoch.omittedRounds).toBeGreaterThan(0);
+    expect(narrowEpoch.rounds.at(-1)!.sequence).toBe(f.window().rounds.at(-1)!.sequence);
+    expect(narrowEpoch.omittedRounds + narrowEpoch.rounds.length).toBe(10);
+    expect(JSON.stringify(narrow.history).length).toBeLessThanOrEqual(1_000);
+    // A lost response or an abort is never treated as a known unusable answer.
+    await expect(prepareFcaHistory(step, f.ports(async () => { throw new Error('FCA_MODEL_RESPONSE_UNKNOWN'); }), new AbortController().signal, policy))
+      .rejects.toThrow('FCA_MODEL_RESPONSE_UNKNOWN');
+    const aborted = new AbortController();
+    await expect(prepareFcaHistory(step, f.ports(async () => { aborted.abort(); throw invalid; }), aborted.signal, policy)).rejects.toThrow('FCA_SUMMARY_INVALID');
+  });
+
   it('migrates old append-only history and records actual committed task status', async () => {
     const f = fixture(':memory:', true); await f.append(2);
     expect(f.window().rounds.map(round => round.status)).toEqual(['queued', 'queued']);
