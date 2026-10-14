@@ -104,7 +104,7 @@ export interface FeelingTurnHandle {
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
 
 function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
-  const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot, input.words);
+  const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot, input.words, input.channel);
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
   return { port, turn: randomUUID(), scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
@@ -167,7 +167,11 @@ function registerNow(handle: FeelingTurnHandle): FeelingRegister {
 /** The shadow's composure step for this key now (for the check's register flags only). */
 function composureLevel(handle: FeelingTurnHandle): number | undefined {
   const events = () => handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot);
-  return safely(() => foldFeelingDynamics(events(), handle.key, {}, { sourceCap: handle.port.audience === true }).composure.level, undefined);
+  // Re-review S4-4: with others in a place (a group, a call), her composure is the place's, each person a source within it.
+  const { key } = handle;
+  const place = handle.port.audience && key.sceneId && key.audience !== 'owner_alone' && !key.personKey.startsWith('scene:')
+    ? { personKey: `scene:${key.sceneId}`, audience: key.audience, sceneId: key.sceneId } : key;
+  return safely(() => foldFeelingDynamics(events(), place, {}, { sourceCap: handle.port.audience === true }).composure.level, undefined);
 }
 
 /** A reply's check: the one made before sending when there was one, else checked now (voice, and text turns not checked before). */
@@ -416,7 +420,7 @@ export const feelingBody = Object.freeze({
   /** The facts a touch line is told (the same ledger line, and the watch), for the touch's own audience. */
   lines: (port: FeelingPort | null, scopeKey: string, audience: 'owner' | 'others', at: string, snapshot: CompanionStateSnapshot): string => {
     if (!port) return '';
-    const lines = port.events.linesFor(scopeKey, touchKeyIn(port, scopeKey, audience, at), at, snapshot);
+    const lines = port.events.linesFor(scopeKey, touchKeyIn(port, scopeKey, audience, at), at, snapshot, '', 'body');
     // A touch line is not told the owner's marked matters (it has no check before it is said).
     const carried = (lines?.carriedTouchLines ?? []).filter(line => !line.startsWith(OWNER_PRIVATE_MARK));
     return [lines?.ledgerLine ?? '', ...carried, lines?.repetitionLine ?? ''].filter(Boolean).join('\n');

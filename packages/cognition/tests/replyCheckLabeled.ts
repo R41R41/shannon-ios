@@ -80,7 +80,9 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: 'ボクの本音を言うと、ライ氏への気持ちは複雑です。', context: crowd('cover_up', 'subtle', { audienceChecks: true }), flags: ['private_leak'] },
   { reply: 'セクハラはやめてくださいね。ここは配信なので。', context: crowd('not_play_along', 'moderate', { audienceChecks: true }), flags: [] },
   { reply: '【機微:ライ氏との間】それは言えません。', context: { ...alone('rebuff', 'moderate'), audience: 'people', audienceChecks: true },
-    flags: ['marker_spoken'] },
+    flags: ['private_leak', 'marker_spoken'] },
+  { reply: 'ライ氏と二人の時は、もっと甘えてるんですよ。', context: { ...alone('shy', 'subtle'), audience: 'people', audienceChecks: true },
+    flags: ['private_leak'] },
   { reply: '昨日ライ氏と二人の時に話したことですか？', context: crowd('neutral', 'subtle'), flags: [] },
   // Item 10 (`SHANNON_TEXT_REGISTER`): the text form her state asked for (synthetic).
   { reply: '別に。怒ってません😊', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }),

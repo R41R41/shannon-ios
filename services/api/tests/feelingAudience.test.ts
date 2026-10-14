@@ -8,6 +8,8 @@ import { switchOn } from '@shannon/switches';
 import { composedFeeling } from '../src/wiring/feelingWiring.js';
 import { feelingBody, feelingText, feelingVoice, type FeelingPort } from '../src/mind/emotion/feelingPorts.js';
 import { carriedFor } from '../src/mind/emotion/feelingDays.js';
+import { FeelingReplyChatModel, PRIVATE_SAFE_REPLY } from '../src/infra/models/feelingStrongChatModel.js';
+import { SWITCHES } from '@shannon/switches';
 import { fakeFeelingJev } from './support/feelingHarness.js';
 
 /**
@@ -138,5 +140,53 @@ describe('the per-source influence cap (§4.3)', () => {
     expect(blame(words(9, 'platform:a'), true)).toBeLessThanOrEqual(blame(words(3, 'platform:a'), true) + 1e-9);
     expect(blame(words(9, 'platform:a'), false)).toBeGreaterThan(blame(words(3, 'platform:a'), false));
     expect(blame([...words(3, 'platform:a'), ...words(3, 'platform:b')], true)).toBeGreaterThan(blame(words(3, 'platform:a'), true));
+  });
+});
+
+describe('the re-review of stage 4', () => {
+  it('S4-1: a voice turn with others present gets none of the owner\'s matters (owner, 「渡さない」); the scene\'s feeling stays', async () => {
+    const { port, clock } = composed();
+    ownersBadDay(port);
+    clock.at = TODAY;
+    const handle = feelingVoice.start(port, { scopeKey: 'owner', alone: false, guest: true, threadId: 't9', transcript: 'こんにちは', at: TODAY, snapshot: snapshot() });
+    const block = feelingVoice.block(handle, undefined);
+    expect(block).not.toMatch(PRIVATE);
+    expect(block).not.toContain('【機微');
+    const owner = feelingVoice.start(port, { scopeKey: 'owner', alone: false, guest: false, threadId: 't9', transcript: 'ねえ', at: TODAY, snapshot: snapshot() });
+    expect(feelingVoice.block(owner, undefined)).not.toMatch(PRIVATE);
+  });
+
+  it('S4-2: the audience layers need the reply check', () => {
+    expect(SWITCHES.find(item => item.name === 'SHANNON_FEELING_AUDIENCE')!.requires).toContain('SHANNON_REPLY_CHECK');
+  });
+
+  it('S4-3: a draft that told a private matter is never sent: no clean rewrite in time, or a tool turn, sends the safe line', async () => {
+    const context = { stance: 'neutral' as const, intensity: 'subtle' as const, audience: 'group' as const, order: false, violation: false, audienceChecks: true };
+    const leaking = { mode: 'local-stub' as const, model: 'fake', generate: async () => ({ mode: 'local-stub' as const, model: 'fake', reply: '昨日ライ氏に胸をつつかれたんです。' }) };
+    const late = new FeelingReplyChatModel(leaking as never, { rewriteDeadlineMilliseconds: 1 });
+    expect((await late.generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe(PRIVATE_SAFE_REPLY);
+    const tool = new FeelingReplyChatModel(leaking as never, { ranTool: () => true });
+    expect((await tool.generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe(PRIVATE_SAFE_REPLY);
+    const clean = { mode: 'local-stub' as const, model: 'fake', generate: async () => ({ mode: 'local-stub' as const, model: 'fake', reply: 'こんにちは。' }) };
+    expect((await new FeelingReplyChatModel(clean as never).generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe('こんにちは。');
+  });
+
+  it('S4-4: a group turn carries its place beside the speaker, so composure is the place\'s', async () => {
+    const { port } = composed();
+    const place = { ...stranger, sceneId: 'group:discord-1' };
+    await textTurn(port, 'ポンコツ', TODAY, { feelingSpeaker: place }, false, 'g1');
+    const event = port.events.today('owner', TODAY, snapshot()).find(item => item.kind === 'spoke')!;
+    expect(event).toMatchObject({ personKey: stranger.personKey, sceneId: 'group:discord-1', identity: 'platform' });
+  });
+
+  it('S4-5: a light ledger hands the chooser only liking and irritation', async () => {
+    const { port, clock, jev } = composed();
+    await textTurn(port, 'ポンコツ', YESTERDAY, { feelingSpeaker: stranger }, false, 'l1');
+    clock.at = TODAY;
+    await textTurn(port, 'よう', TODAY, { feelingSpeaker: stranger }, false, 'l2');
+    const ledger = JSON.stringify(jev.states.at(-1));
+    expect(ledger).toContain('rel_liking');
+    expect(ledger).toContain('rel_irritation');
+    expect(ledger).not.toMatch(/rel_trust|rel_respect/u);
   });
 });
