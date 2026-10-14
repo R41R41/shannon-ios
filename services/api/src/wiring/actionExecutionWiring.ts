@@ -27,6 +27,7 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
   const stop=()=>{clearInterval(heartbeat);signal?.removeEventListener('abort',externalStop);};
   return {view,execution:{lease,signal:controller.signal,checkpoint:code=>actions.checkpoint(lease,code),permit:async(resources=[],localSignal)=>{
     const waitingSignal=localSignal?AbortSignal.any([controller.signal,localSignal]):controller.signal;
+    let errors=0;
     while(!waitingSignal.aborted){
       try{
         const dispatched=await actions.dispatch(lease,resources);
@@ -34,7 +35,15 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
         if(waitingSignal.aborted)return false;
         if(dispatched)return true;
         if(!await actions.renew(lease)){controller.abort();return false;}
-      }catch{controller.abort();return false;}
+        renewedAt=Date.now();
+      }catch(error){
+        // As for the heartbeat: a missed IPC deadline or a busy database is transient, and the same dispatch is asked again (it is
+        // idempotent for its lease) while the lease is certainly still valid. Minecraft run 8 (2026-10-14): a step was held right
+        // after a compaction, possibly by one such failure. Logged as a closed code only.
+        errors+=1;
+        log(`Shannon action permit error code=${permitErrorCode(error)} attempt=${errors}`);
+        if(errors>ACTION_LIMITS.renewFailuresTolerated||Date.now()-renewedAt>=ACTION_LIMITS.leaseMs-RENEW_SAFETY_MS){controller.abort();return false;}
+      }
       try{await wait(25,undefined,{signal:waitingSignal});}
       catch{if(!localSignal?.aborted)controller.abort();return false;}
     }
@@ -47,6 +56,11 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
  */
 // Longer than the longest foreground turn (text deadline 50 s after admission, plus its writes), so a queued turn waits for it.
 export const FOREGROUND_QUEUE_WAIT_MS=75_000;
+/** A thrown permit call's closed code: the IPC's own error names, else a generic one. */
+function permitErrorCode(error:unknown):string {
+  const code=error instanceof Error?error.message:'';
+  return /^[A-Z][A-Z0-9_]{2,63}$/u.test(code)?code:'PERMIT_CALL_FAILED';
+}
 const log=(line:string)=>{
   try{console.warn(line);}catch{/* logging never fails a turn */}
 };

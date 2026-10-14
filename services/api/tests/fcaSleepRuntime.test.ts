@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validActionDraft } from '@shannon/mind';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { runFcaStep } from '../src/mind/action/fca/fcaRunner.js';
@@ -126,10 +126,14 @@ describe('scheduled sleep under the existing FCA authority', () => {
     const action = await f.actions.claim((await f.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request',
       sourceId: `fca:${task.id}:${task.revision}`, resources: [actionResource('owner', `fca:${task.id}`)] })).id);
     const step = f.driver.runtime.beginStep('owner', task.id, leaseOf(action!), task.revision)!;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(runFcaStep(step, { runtime: f.driver.runtime, ownerAlone: () => false, executionAllowed: () => true,
       permit: async () => { permits++; return true; }, model: { async decide() { calls++; return complete(); }, toolResults: value => value } },
     new AbortController().signal)).rejects.toThrow('FCA_EXECUTION_HELD');
     expect(calls).toBe(0); expect(permits).toBe(0); expect(f.store.get(action!.id)?.sent).toBe(false);
+    // Which check held it, as a closed reason (Minecraft run 8, 2026-10-14).
+    expect(warn.mock.calls.map(([line]) => String(line))).toContain(`Shannon FCA execution held task=${task.id} reason=owner_not_alone`);
+    warn.mockRestore();
   });
 
   it('refuses a changed ticket and revoked permission before dispatch, then runs after restoration', async () => {

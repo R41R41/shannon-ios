@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { acquireAction } from '../src/wiring/actionExecutionWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -39,6 +39,22 @@ describe('local cancellation of existing action resource admission', () => {
     expect(h.store.get(active!.view.id)?.resources).toContain(resource);
     await active!.finish('cancelled', 'local_admission_cancelled');
     expect(h.store.get(active!.view.id)?.state).toBe('cancelled');
+  });
+  it('asks again after a transient dispatch failure (a missed IPC deadline) and keeps the action, as the heartbeat does', async () => {
+    const h = actionHarness(now); cleanups.push(h.close);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let failures = 2;
+    const active = await acquireAction({ ...h.actions, async dispatch(...args: Parameters<typeof h.actions.dispatch>) {
+      if (failures-- > 0) throw new Error('MIND_IPC_DEADLINE');
+      return h.actions.dispatch(...args);
+    } }, { scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'task' });
+    cleanups.push(active!.stop);
+    expect(await active!.execution.permit([])).toBe(true);
+    expect(active!.execution.signal.aborted).toBe(false);
+    expect(warn.mock.calls.map(([line]) => String(line))).toEqual(['Shannon action permit error code=MIND_IPC_DEADLINE attempt=1',
+      'Shannon action permit error code=MIND_IPC_DEADLINE attempt=2']);
+    await active!.finish('completed', 'done');
+    warn.mockRestore();
   });
   it('still aborts the outer action on worker dispatch failure', async () => {
     const h = actionHarness(now); cleanups.push(h.close);

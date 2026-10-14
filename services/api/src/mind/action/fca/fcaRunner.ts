@@ -64,14 +64,26 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   };
   // Her own-time work (ADR-0009 stage 2, E4) is hers, not a conversation: it is held by its own gate, not by who is present.
   const ownTime = step.snapshot.task.origin === 'own_time';
-  const allowed = () => maintenance || ownTime ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
+  /** Why the step may not go on now, as a closed reason, or null. */
+  const heldReason = (): 'owner_not_alone' | 'execution_disallowed' | null => {
+    if (maintenance || ownTime) return ports.executionAllowed?.() === true ? null : 'execution_disallowed';
+    if (!ports.ownerAlone()) return 'owner_not_alone';
+    return ports.executionAllowed?.() ?? true ? null : 'execution_disallowed';
+  };
+  // Minecraft run 8 (2026-10-14): a step was held right after a compaction and nothing said which check held it. Content-free.
+  const held = (reason: string) => {
+    console.warn(`Shannon FCA execution held task=${step.taskId} reason=${reason}`);
+    return new Error('FCA_EXECUTION_HELD');
+  };
   const checked = () => observeAsync('gate', { phase: 'step_permit' }, async () => {
     signal.throwIfAborted();
-    if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
+    const before = heldReason();
+    if (before) throw held(before);
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
-    if (!await ports.permit()) throw new Error('FCA_EXECUTION_HELD');
+    if (!await ports.permit()) throw held('permit_denied');
     signal.throwIfAborted();
-    if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
+    const after = heldReason();
+    if (after) throw held(after);
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   }, () => ({ allowed: true }));
