@@ -123,7 +123,7 @@ describe('the eval scenes', () => {
     expect(carriedFor({ personKey: 'person:miki', audience: 'group', sceneId: null }, true)).toBeNull();
     expect(carriedFor({ personKey: 'owner', audience: 'group', sceneId: null }, true)).toBeNull();
     expect(carriedFor({ personKey: 'scene:stream-1', audience: 'stream', sceneId: 'stream-1' }, true)).toBeNull();
-    expect(relationshipParametersFor('person:miki').status).toBe('proposal');
+    expect(relationshipParametersFor('person:miki').status).toBe('approved');
     expect(relationshipParametersFor('platform:x').scales).toEqual(['liking', 'irritation']);
   });
 });
