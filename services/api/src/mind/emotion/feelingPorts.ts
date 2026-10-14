@@ -6,7 +6,7 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  continuedAfterRefusal, replyFacts, strongReplyReason,
+  continuedAfterRefusal, replyFacts, strongReplyReason, utteranceTags,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
@@ -92,7 +92,9 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const strong = handle.strong ? { replyModel: 'strong' as const } : {};
   const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...(handle.register !== 'normal' ? { register: handle.register } : {}), ...strong };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
-  if (input.words.trim()) record({ ...base, id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words), facts: {} });
+  const tags = utteranceTags(input.words);
+  const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words), facts: tags.length ? { tags } : {} };
+  if (input.words.trim()) record({ ...base, ...said });
   if (input.reply.trim()) record({ ...base, id: `reply:${handle.channel}:${input.turnId}`, kind: 'own_reply', facts });
   if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
 }

@@ -229,6 +229,10 @@ export const SWITCHES = [
     doc: 'Owner 2026-10-14: a strong feeling turn\'s text reply goes to Sonnet (capped a day by SHANNON_FEELING_STRONG_REPLY_DAILY_CAP); else Haiku.',
   },
   {
+    name: 'SHANNON_CORE_AFFECT', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 2 shadow: appraisal, core affect, blame and composure folded from her events and recorded beside the current state; no behaviour.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

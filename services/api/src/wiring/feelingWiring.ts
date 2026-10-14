@@ -1,5 +1,7 @@
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
-import { OWNER_AUDIENCE } from '@shannon/cognition';
+import { OWNER_AUDIENCE, type CompanionStateSnapshot, type FeelingEvent } from '@shannon/cognition';
+import { FeelingShadow } from '../mind/emotion/feelingShadow.js';
+import { SQLiteFeelingShadowStore } from '../mind/emotion/store/feelingShadowStore.js';
 import { FeelingEvents, type RepetitionSeed } from '../mind/emotion/feelingEvents.js';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../mind/memory/memoryVisibility.js';
@@ -66,6 +68,8 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   /** The conversation, for seeding the repetition watch with today's replies of the owner's Talk. */
   conversation?: ConversationStore;
   usageStore?: LlmUsageStore;
+  /** Her state now, for the stage-2 shadow (`SHANNON_CORE_AFFECT`). */
+  state?: (scopeKey: string) => CompanionStateSnapshot;
   /** The web search her Sonnet uses, as the app's Sonnet tier is handed it (the conversation model's). */
   webSearch?: WebSearchOperation;
 }): ConfiguredFeeling | null {
@@ -74,12 +78,13 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const chooser = turn ? configuredJevChooser(environment, { trace: parts.trace, now: parts.now, ...(parts.salt ? { salt: parts.salt } : {}),
     ...(parts.jevFetch ? { jevFetch: parts.jevFetch } : {}) }) : null;
   const singleFace = singleFaceEnabled(environment);
+  const shadow = switchOn(environment, 'SHANNON_CORE_AFFECT') && parts.state ? { shadow: { database: parts.databasePath, snapshot: parts.state } } : {};
   const jevInput = feelingTurnJevInput(environment);
   const seed = parts.conversation ? talkSeed(parts.conversation) : undefined;
   const sonnet = strongReplyModel(environment, parts);
   const strong = sonnet ? { strong: { cap: strongReplyDailyCap(environment), model: sonnet } } : {};
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong });
+    ...(seed ? { seed } : {}), ...strong, ...shadow });
 }
 
 /**
@@ -109,14 +114,25 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
-  singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel } }): ConfiguredFeeling {
+  singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
+  /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
+  shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot } }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
   const seed = parts.seed ? { seed: parts.seed } : {};
-  const events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed });
+  const shadowStore = parts.shadow ? new SQLiteFeelingShadowStore(parts.shadow.database) : null;
+  let events: FeelingEvents | null = null;
+  const shadow = shadowStore && parts.shadow
+    ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now }) : null;
+  const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
+  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong };
   const sonnet = parts.strong?.model;
-  const released = (scopeKey: string) => events.releaseStrong(scopeKey, parts.now());
-  return { port, wrap: model => (sonnet ? new FeelingStrongChatModel(model, sonnet, { released }) : model), close: () => store.close() };
+  const close = () => {
+    store.close();
+    shadowStore?.close();
+  };
+  const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
+  return { port, wrap: model => (sonnet ? new FeelingStrongChatModel(model, sonnet, { released }) : model), close };
 }

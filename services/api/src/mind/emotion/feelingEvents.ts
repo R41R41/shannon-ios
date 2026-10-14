@@ -64,7 +64,9 @@ export class FeelingEvents {
   private readonly presented = new Map<string, { id: string; utteranceId: string | null; at: number }>();
 
   constructor(private readonly options: { store: FeelingEventRecords; now: () => string; timeZone: string; partWord: (subject: string) => string;
-    reportError?: (error: unknown) => void; seed?: RepetitionSeed }) {}
+    reportError?: (error: unknown) => void; seed?: RepetitionSeed;
+    /** Stage 2 (`SHANNON_CORE_AFFECT`): told of every recorded event, after it is written (the shadow of her fast layer). */
+    onRecorded?: (scopeKey: string, event: FeelingEvent) => void }) {}
 
   get timeZone(): string { return this.options.timeZone; }
 
@@ -75,6 +77,7 @@ export class FeelingEvents {
         composure: 1, register: event.facts.register ?? 'normal', stance: event.facts.stance ?? null, opener: event.facts.opener ?? null },
       () => this.options.store.record(scopeKey, event, this.options.now()), written => ({ written }));
       this.prune(scopeKey);
+      this.options.onRecorded?.(scopeKey, event);
     } catch (error) { this.report(error); }
   }
 
