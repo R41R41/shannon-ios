@@ -4,8 +4,8 @@ import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../surfaces/text/threadTitle.js';
 import type { TurnCaptureRecord } from './turnCaptures.js';
-import { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
-export { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+import { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+export { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
 
 export class InMemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, Map<string, StoredConversationMessage[]>>();
@@ -21,6 +21,8 @@ export class InMemoryConversationStore implements ConversationStore {
   private readonly summaryChains = new Map<string, string>();
   private readonly replaySummaries = new Map<string, ReplaySummaryRecord>();
   private readonly replayEpochs = new Map<string, ReplayEpochRecord>();
+  private readonly voiceSummaryVersions = new Map<string, readonly VoiceSummaryRecord[]>();
+  private readonly voiceSummaryWants = new Map<string, string>();
 
   constructor(
     private readonly maximumConversationItems = 200,
@@ -276,6 +278,25 @@ export class InMemoryConversationStore implements ConversationStore {
   saveReplayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void {
     this.replayEpochs.set(`${scopeKey}\u0000${threadId}\u0000${channel}`, Object.freeze({ ...record }));
   }
+
+  voiceSummaries(scopeKey: string, threadId: string): readonly VoiceSummaryRecord[] {
+    return this.voiceSummaryVersions.get(`${scopeKey}\u0000${threadId}`) ?? [];
+  }
+  saveVoiceSummary(scopeKey: string, threadId: string, prepare: () => { record: VoiceSummaryRecord; keep: readonly number[] } | null): boolean {
+    const write = prepare();
+    if (!write) return false;
+    const { record, keep } = write;
+    const kept = this.voiceSummaries(scopeKey, threadId).filter(item => keep.includes(item.version) && item.version !== record.version);
+    const versions = [Object.freeze({ ...record }), ...kept].sort((left, right) => right.version - left.version);
+    this.voiceSummaryVersions.set(`${scopeKey}\u0000${threadId}`, Object.freeze(versions));
+    return true;
+  }
+  deleteVoiceSummaries(scopeKey: string, threadId: string, versions: readonly number[]): void {
+    const kept = this.voiceSummaries(scopeKey, threadId).filter(item => !versions.includes(item.version));
+    this.voiceSummaryVersions.set(`${scopeKey}\u0000${threadId}`, Object.freeze(kept));
+  }
+  voiceSummaryWanted(scopeKey: string, threadId: string): string | undefined { return this.voiceSummaryWants.get(`${scopeKey}\u0000${threadId}`); }
+  markVoiceSummaryWanted(scopeKey: string, threadId: string, at: string): void { this.voiceSummaryWants.set(`${scopeKey}\u0000${threadId}`, at); }
 
   threadOfTurn(scopeKey: string, experienceId: string): string | undefined {
     return [...this.conversations.get(scopeKey) ?? []].find(([, messages]) => messages.some(item => item.sourceExperienceId === experienceId))?.[0];

@@ -46,7 +46,30 @@ export interface ReplayEpochRecord {
   /** The budget the epoch was cut for: another budget starts a new epoch. */
   budgetCharacters: number;
   startedAt: string;
+  /**
+   * Voice under `SHANNON_VOICE_HISTORY_SUMMARY` (`voiceHistory.ts`): the version of the voice summary the epoch replays first,
+   * frozen for the epoch; 0 for an epoch without one. Absent: an epoch of the budget window.
+   */
+  summaryVersion?: number;
 }
+
+/**
+ * What was said in a voice call before its replayed exchanges (`voiceHistorySummary.ts`), one version per write; an epoch names
+ * the version it replays (`ReplayEpochRecord.summaryVersion`), so a newer version written in the background never changes the
+ * bytes of a running epoch. Built from what the owner alone would be replayed; judged at use like the replay summary.
+ */
+export interface VoiceSummaryRecord {
+  version: number;
+  summary: string;
+  /** The first and the last message it accounts for. */
+  coversFromMessageId: string;
+  coveredThroughMessageId: string;
+  /** When it was last built from visible messages only, without a previous summary; and when it was written. */
+  chainStartedAt: string; updatedAt: string;
+}
+
+/** What a voice summary write puts in the store (`saveVoiceSummary`). */
+export interface VoiceSummaryWrite { record: VoiceSummaryRecord; keep: readonly number[] }
 
 export type ReplayChannel = 'text' | 'voice';
 
@@ -210,6 +233,20 @@ export interface ConversationStore {
   saveReplayEpoch?(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void;
   /** False when this store keeps no epochs (its table was not created): the window is then computed as without them. */
   keepsReplayEpochs?(): boolean;
+  /** The thread's voice summaries, newest version first (`voiceHistorySummary.ts`). Absent: voice replays without one. */
+  voiceSummaries?(scopeKey: string, threadId: string): readonly VoiceSummaryRecord[];
+  /**
+   * Inside one write transaction: `prepare` reads what it needs (the running epoch's pinned version, the versions there are, the
+   * state for the forget re-check) and answers the version to write and the versions to keep beside it, or null to write nothing;
+   * then the version is written and every other version except `keep` removed. No forget commits between the check and the write.
+   * Answers whether it was written.
+   */
+  saveVoiceSummary?(scopeKey: string, threadId: string, prepare: () => VoiceSummaryWrite | null): boolean;
+  /** Removes these versions (a forget reached them). */
+  deleteVoiceSummaries?(scopeKey: string, threadId: string, versions: readonly number[]): void;
+  /** When a voice turn last found its window about to overflow: the background then extends the summary. */
+  voiceSummaryWanted?(scopeKey: string, threadId: string): string | undefined;
+  markVoiceSummaryWanted?(scopeKey: string, threadId: string, at: string): void;
   /** The thread a completed turn was stored in. */
   threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
   /** Her impressions of people (`impressions.ts`). Absent: none are read or written. */

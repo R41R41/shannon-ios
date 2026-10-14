@@ -39,9 +39,13 @@ import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbe
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
 import { ensureReplaySummarySchema, ensureReplaySummaryTemplateColumns, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
 import { ensureReplayEpochSchema, selectReplayEpoch, upsertReplayEpoch } from '../../mind/memory/store/sqliteReplayEpochs.js';
+import { ensureVoiceSummarySchema } from '../../mind/memory/store/voiceSummaryMigration.js';
+import {
+  insertVoiceSummary, voiceSummariesSwitchedOn, removeVoiceSummaries, selectVoiceSummaries, selectVoiceSummaryWanted, upsertVoiceSummaryWanted,
+} from '../../mind/memory/store/sqliteVoiceSummaries.js';
 import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from '../../mind/tools/store/sqliteToolTraces.js';
 import type { ToolTraceRecord } from '../../mind/tools/shannonToolTrace.js';
-import type { ReplayChannel, ReplayEpochRecord, ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
+import type { ReplayChannel, ReplayEpochRecord, ReplaySummaryRecord, VoiceSummaryRecord } from '../../mind/memory/store/conversationStore.js';
 import { SQLiteImpressionStore } from '../../mind/memory/store/sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from '../../mind/emotion/store/moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
@@ -108,6 +112,11 @@ export interface SQLiteShannonStoreOptions {
    */
   replayEpochs?: boolean;
   /**
+   * Voice summaries (`SHANNON_VOICE_HISTORY_SUMMARY`, with replay epochs and the voice plan): their two tables and the epoch's
+   * summary version (`sqliteVoiceSummaries.ts`). Absent: from those switches. Off: no table and no column.
+   */
+  voiceSummaries?: boolean;
+  /**
    * People facts (Syzygy ADR-0008 stage 3, F6): `temporal` adds the validity columns of `person_memory_items` (with their
    * backfill) and her impressions' temporal fields; `identity` the identity suggestions and the turns' speakers. Absent: nothing.
    */
@@ -144,6 +153,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly shadow: PredictionShadow | null;
   private readonly traces: DecisionTraces | null;
   private readonly epochsOn: boolean;
+  private readonly voiceSummariesOn: boolean;
   private readonly ledger: PredictionLedger | null;
   private readonly choices: ChoiceLedger | null;
   private readonly values: ValueVersions | null;
@@ -191,6 +201,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureReplaySummarySchema(this.context.database);
     this.epochsOn = options.replayEpochs ?? switchOn(serverEnvironment(), 'SHANNON_REPLAY_EPOCHS');
     if (this.epochsOn) ensureReplayEpochSchema(this.context.database);
+    this.voiceSummariesOn = this.epochsOn && (options.voiceSummaries ?? voiceSummariesSwitchedOn(serverEnvironment()));
+    if (this.voiceSummariesOn) ensureVoiceSummarySchema(this.context.database);
     if (options.structuredCompaction) ensureReplaySummaryTemplateColumns(this.context.database);
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
@@ -345,10 +357,32 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   }
   keepsReplayEpochs() { return this.epochsOn; }
   replayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel) {
-    return this.epochsOn ? selectReplayEpoch(this.context.database, scopeKey, threadId, channel) : undefined;
+    return this.epochsOn ? selectReplayEpoch(this.context.database, scopeKey, threadId, channel, this.voiceSummariesOn) : undefined;
   }
   saveReplayEpoch(scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord) {
-    if (this.epochsOn) this.context.transaction(() => upsertReplayEpoch(this.context.database, scopeKey, threadId, channel, record));
+    if (!this.epochsOn) return;
+    this.context.transaction(() => upsertReplayEpoch(this.context.database, scopeKey, threadId, channel, record, this.voiceSummariesOn));
+  }
+  voiceSummaries(scopeKey: string, threadId: string) {
+    return this.voiceSummariesOn ? selectVoiceSummaries(this.context.database, scopeKey, threadId) : [];
+  }
+  /** `prepare` runs inside the write transaction (BEGIN IMMEDIATE): no other connection commits a forget between it and the write. */
+  saveVoiceSummary(scopeKey: string, threadId: string, prepare: () => { record: VoiceSummaryRecord; keep: readonly number[] } | null) {
+    if (!this.voiceSummariesOn) return false;
+    return this.context.transaction(() => {
+      const write = prepare();
+      if (write) insertVoiceSummary(this.context.database, scopeKey, threadId, write.record, write.keep);
+      return Boolean(write);
+    });
+  }
+  deleteVoiceSummaries(scopeKey: string, threadId: string, versions: readonly number[]) {
+    if (this.voiceSummariesOn) this.context.transaction(() => removeVoiceSummaries(this.context.database, scopeKey, threadId, versions));
+  }
+  voiceSummaryWanted(scopeKey: string, threadId: string) {
+    return this.voiceSummariesOn ? selectVoiceSummaryWanted(this.context.database, scopeKey, threadId) : undefined;
+  }
+  markVoiceSummaryWanted(scopeKey: string, threadId: string, at: string) {
+    if (this.voiceSummariesOn) this.context.transaction(() => upsertVoiceSummaryWanted(this.context.database, scopeKey, threadId, at));
   }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }

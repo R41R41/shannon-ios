@@ -200,6 +200,11 @@ export const SWITCHES = [
     doc: 'Replayed history is rendered once per epoch and only appended to until its budget is passed (text; voice also needs the voice plan).',
   },
   {
+    name: 'SHANNON_VOICE_HISTORY_SUMMARY', default: 'on', kind: 'default_on', owner: 'model',
+    requires: ['SHANNON_REPLAY_EPOCHS', 'SHANNON_CLAUDE_CACHE_PLAN_VOICE'],
+    doc: 'Voice replays the last 4-8 exchanges after a summary of the call before them, frozen per epoch (owner 2026-10-14; off: the budget window).',
+  },
+  {
     name: 'SHANNON_MORNING_BRIEF', default: 'off', kind: 'explicit_on', owner: 'outreach', requires: [],
     doc: 'Morning brief (home weather, today\'s schedule, headlines) as the day\'s initiative, 07-10 owner time; needs SHANNON_OWNER_HOME_LOCATION.',
   },

@@ -25,6 +25,7 @@ export { type OwnerUpcoming } from './ownerUpcoming.js';
 export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
 export {
   type ConversationStore, type ReplayChannel, type ReplayEpochRecord, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext,
+  type VoiceSummaryRecord,
 } from './conversationContract.js';
 export { type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';

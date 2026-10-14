@@ -8,6 +8,7 @@ import {
   answer, cached, HAIKU, HAIKU_PRODUCTION, SONNET, spoken, text, toolCall, tools, voice, webSpoken, type ClaudeScenario, type ScenarioContext, type Settings,
 } from './claudeForegroundScenarios.js';
 import { planChat } from './claudePlanScenarios.js';
+import { voiceSummaryItem } from '../../src/mind/recall/voiceHistory.js';
 
 /**
  * Scenarios of the voice cache plan (Syzygy ADR-0009 stage 1, M6; `SHANNON_CLAUDE_CACHE_PLAN_VOICE` on): the spoken request
@@ -56,6 +57,26 @@ async function talk(context: ScenarioContext) {
   return replies;
 }
 
+/**
+ * Three voice turns of one epoch under the voice history's summary (owner decision 2026-10-14, `voiceHistory.ts`): each history
+ * begins with the epoch's frozen summary as a marked user turn, followed by the exchanges, so every request repeats the one before
+ * it up to its words, summary included. The model layer is unchanged: the summary arrives as the first history item.
+ */
+async function summaryTalk(context: ScenarioContext) {
+  const chat = voicePlanChat(context, HAIKU);
+  const summary = voiceSummaryItem('話題: 合成された前の話題\n気持ち: 落ち着いていた', '');
+  const exchanges = [['おはよう', reply(11)], ['書斎を見て', reply(12)]] as const;
+  const replies: string[] = [];
+  for (let n = 0; n < 3; n++) {
+    const history = [summary, ...exchanges.slice(0, n).flatMap(([heard, said]) => [
+      { role: 'user' as const, content: heard }, { role: 'assistant' as const, content: said },
+    ])];
+    const turn = { ...planVoice, history, message: ['おはよう', '書斎を見て', 'ありがとう'][n]!, turnContext: `合成された声の${n + 1}ターン目の文脈` };
+    replies.push((await chat.generateVoiceStreaming(turn, () => {})).reply);
+  }
+  return replies;
+}
+
 const unofferedCall = () => cached(message([{ type: 'tool_use', id: 'toolu_unoffered', name: 'tool_open', input: { name: 'study_list' } }],
   'tool_use', { id: 'msg_voice_unoffered' }), HAIKU.model, 0, 2_200);
 
@@ -79,6 +100,8 @@ export const VOICE_PLAN_SCENARIOS: readonly ClaudeScenario[] = [
   { name: VOICE_PLAN_TALK_SCENARIO, script: [
     spoken(HAIKU.model, reply(1)), toolCall(HAIKU.model), spoken(HAIKU.model, reply(2)), spoken(HAIKU.model, reply(3)),
   ], run: talk },
+  { name: 'plan-voice-summary-talk', script: [spoken(HAIKU.model, reply(11)), spoken(HAIKU.model, reply(12)), spoken(HAIKU.model, reply(13))],
+    run: summaryTalk },
   // Rich chat's lines under the text plan: in the system, where the plan-off request has them (they depend on the surface).
   { name: 'plan-text-rich-blocks', script: [answer(HAIKU.model)],
     run: c => planChat(c, HAIKU).generate({ ...text, richBlocks: true }) },

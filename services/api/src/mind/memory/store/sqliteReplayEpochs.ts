@@ -28,21 +28,41 @@ interface ReplayEpochRow {
   full_from_message_id: string;
   budget_characters: number;
   started_at: string;
+  summary_version?: number | null;
 }
 
-export function selectReplayEpoch(database: DatabaseSync, scopeKey: string, threadId: string, channel: ReplayChannel): ReplayEpochRecord | undefined {
+/** `withSummary`: the epoch's voice summary version is read too (`sqliteVoiceSummaries.ts` added its column). */
+export function selectReplayEpoch(
+  database: DatabaseSync, scopeKey: string, threadId: string, channel: ReplayChannel, withSummary = false,
+): ReplayEpochRecord | undefined {
   const row = database.prepare(`
-    SELECT epoch, start_message_id, full_from_message_id, budget_characters, started_at
+    SELECT epoch, start_message_id, full_from_message_id, budget_characters, started_at${withSummary ? ', summary_version' : ''}
     FROM conversation_replay_epochs WHERE scope_key = ? AND thread_id = ? AND channel = ?
   `).get(scopeKey, threadId, channel) as unknown as ReplayEpochRow | undefined;
   if (!row) return undefined;
+  const version = row.summary_version;
   return Object.freeze({
     epoch: Number(row.epoch), startMessageId: row.start_message_id, fullFromMessageId: row.full_from_message_id,
     budgetCharacters: Number(row.budget_characters), startedAt: row.started_at,
+    ...(withSummary && version !== null && version !== undefined ? { summaryVersion: Number(version) } : {}),
   });
 }
 
-export function upsertReplayEpoch(database: DatabaseSync, scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord): void {
+export function upsertReplayEpoch(
+  database: DatabaseSync, scopeKey: string, threadId: string, channel: ReplayChannel, record: ReplayEpochRecord, withSummary = false,
+): void {
+  if (withSummary) {
+    database.prepare(`
+      INSERT INTO conversation_replay_epochs
+        (scope_key, thread_id, channel, epoch, start_message_id, full_from_message_id, budget_characters, started_at, summary_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_key, thread_id, channel) DO UPDATE SET
+        epoch = excluded.epoch, start_message_id = excluded.start_message_id, full_from_message_id = excluded.full_from_message_id,
+        budget_characters = excluded.budget_characters, started_at = excluded.started_at, summary_version = excluded.summary_version
+    `).run(scopeKey, threadId, channel, record.epoch, record.startMessageId, record.fullFromMessageId, record.budgetCharacters, record.startedAt,
+      record.summaryVersion ?? null);
+    return;
+  }
   database.prepare(`
     INSERT INTO conversation_replay_epochs
       (scope_key, thread_id, channel, epoch, start_message_id, full_from_message_id, budget_characters, started_at)

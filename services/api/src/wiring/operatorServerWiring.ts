@@ -7,13 +7,13 @@ import { openDatabase, tableColumns } from '../infra/sqlite/sqliteOpen.js';
 import { autonomyDayKey, type AutonomyConfig } from '../mind/inhibition/autonomyBudget.js';
 import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyActivity.js';
 import type { RequesterOf } from '../mind/action/fca/fcaSpokenReport.js';
-import { OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
+import { OPERATOR_NOTE_KIND, OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 
-/** The note kind of the operator's lines in the owner's Talk. */
-export const OPERATOR_NOTE_KIND = 'operator-note';
+/** The note kind of the operator's lines in the owner's Talk (`operatorContract.ts`, where the voice replay reads it too). */
+export { OPERATOR_NOTE_KIND };
 const TICK_MS = 15_000;
 
 export interface OperatorServerAudit { store: OperatorAuditStore; enabled: boolean; close(): void }
