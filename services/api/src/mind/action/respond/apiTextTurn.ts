@@ -2,7 +2,9 @@ import { ownerTimeZone } from '../../../infra/time/localDate.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { randomUUID } from 'node:crypto';
 import { withCharacterCore, type InnerNotePort } from '../../emotion/innerNotePorts.js';
-import { withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
+import {
+  withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore, type FeelingSpeaker,
+} from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from '../../../integrations/aether/aetherContext.js';
 import type { AetherProposalStore } from '../../../integrations/aether/aetherProposal.js';
@@ -92,6 +94,8 @@ export interface TextTurnSurface {
   minecraftTools?: boolean;
   /** Only what may be shown to anyone: every memory entry marked 【機微 is left out (`withoutGuardedEntries`). */
   openOnly?: boolean;
+  /** Syzygy ADR-0013 stage 4: who wrote, by account, for her feeling events (`SHANNON_FEELING_AUDIENCE`). */
+  feelingSpeaker?: FeelingSpeaker;
   /**
    * A turn with others present is offered her Aether reading tools, held to 「シャノン用フォルダ」, and nothing else (owner
    * decisions 2026-10-06, Syzygy ADR-0007): the owner's own turn as `'shared'`, someone else's (`openOnly`) as `'guests'`

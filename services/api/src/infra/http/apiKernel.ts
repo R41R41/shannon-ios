@@ -363,7 +363,7 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
-    const feelingTurn = feelingText.start(this.feeling, { scopeKey: body.scopeKey, alone: audience.alone, surface: Boolean(surface), message, begun }); // 0013
+    const feelingTurn = feelingText.start(this.feeling, { scopeKey: body.scopeKey, alone: audience.alone, surface, message, begun }); // 0013
     // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
     const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
     // Who her tools are offered to, and (ADR-0008 stage 2) her read tools' plan and the turn's Jev call, beside recall (`textToolStart`).
