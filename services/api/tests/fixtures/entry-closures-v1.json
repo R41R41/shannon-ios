@@ -247,6 +247,7 @@
     "mind/action/fca/fcaHistory.ts",
     "mind/action/fca/fcaObservation.ts",
     "mind/action/fca/fcaProgressTools.ts",
+    "mind/action/fca/fcaProvenanceFold.ts",
     "mind/action/fca/fcaRecallContext.ts",
     "mind/action/fca/fcaReportCards.ts",
     "mind/action/fca/fcaReportGate.ts",
