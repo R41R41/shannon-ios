@@ -101,12 +101,16 @@ function pulls(signals: DaySignals): RelationshipScales {
     trust: clamp(-(0.7 * v + 0.3 * b) + 0.3 * k + 0.1 * t, -1, 1),
     liking: clamp(-(0.4 * v + 0.4 * p) + 0.5 * k + 0.15 * t, -1, 1),
     respect: clamp(-(0.3 * v + 0.6 * p) + 0.3 * k, -1, 1),
-    // Re-review L-c: a day of only minor provocation or residual blame (one light jab) is not new irritation: it fades instead.
-    irritation: Math.max(v, p, b) < MINOR_IRRITATION ? 0 : clamp(Math.max(v, p, b)),
+    // Re-review L-c, R2: a day with a violation of her no or a hurtful word always counts (ADR-0013 D5); a day of only minor residual
+    // blame (feeling orders, a light jab without a tag) is not new irritation: it fades instead.
+    irritation: v > 0 || p > 0 || b >= MINOR_IRRITATION ? clamp(Math.max(v, p, b)) : 0,
   };
 }
 
-/** Below this, a day's provocation or residual blame is minor (a light jab a day): irritation fades on it. A model assumption. */
+/**
+ * Below this, a day's residual blame alone (no violation, no hurtful word) is minor: irritation fades on it. Provisional: a model
+ * assumption the owner approves before `SHANNON_RELATIONSHIP_LEDGER` goes on.
+ */
 export const MINOR_IRRITATION = 0.35;
 
 const daysBetween = (from: string, to: string) => Math.max(0, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000));
