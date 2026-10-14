@@ -16,7 +16,9 @@ export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId =
     sessionId, generation: step.lease.generation, goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria };
 }
 /** Typed physical tools are ordinary tools in the same FCA loop, selected by the same Jev menu. */
-export function fcaMinecraftTools(parts: { control: MinecraftControl; step: TaskStep; ownerAlone(): boolean; sourcesVisible(): boolean }): FcaExternalTools {
+export function fcaMinecraftTools(parts: { control: MinecraftControl; step: TaskStep; ownerAlone(): boolean; sourcesVisible(): boolean;
+  /** A completed `mc.goal-evidence` result: its milestones may settle the task's skill uses (`fcaSkillOutcomes.ts`). */
+  evidence?(result: string | undefined): void }): FcaExternalTools {
   const { control, step } = parts;
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
   const frame = bodyId ? control.frame(bodyId) : null;
@@ -47,6 +49,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
       skill: current.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current) }, call.signal);
     active.stepOutcome = 'acknowledged';
+    if (receipt.outcome === 'completed' && current.name === 'goal-evidence') {
+      try { parts.evidence?.(receipt.result); } catch { /* learning never fails a step */ }
+    }
     return minecraftSkillResult(receipt);
   } };
 }

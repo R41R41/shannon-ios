@@ -20,6 +20,8 @@ export function fcaResearchTools(parts: {
   observeMemory?(ids: readonly string[]): boolean;
   /** Pin the original executor receipt under this segment, before returning private text. */
   observeRead?(operationId: string, receipt: { name: string; documents?: ToolDocuments; ok: boolean }): boolean;
+  /** A skill this task opened with `skill.read` (`fcaSkillOutcomes.ts`): noted as a use its later outcome settles. */
+  skillRead?(name: string): void;
 }): FcaExternalTools {
   const saved = parts.checkpoint && typeof parts.checkpoint === 'object' ? (parts.checkpoint as { fcaFolderReadDigests?: unknown }).fcaFolderReadDigests : undefined;
   if (saved !== undefined && (!Array.isArray(saved) || saved.length > 5000 || saved.some(entry => !Array.isArray(entry) || entry.length !== 2
@@ -98,7 +100,15 @@ export function fcaResearchTools(parts: {
         && ['failed', 'unavailable', 'timeout'].includes(result.failure ?? ''))) throw new Error('FCA_RESEARCH_RESULT_UNKNOWN');
       if (!result.ok || definition.effect !== 'write') effectUncommitted = priorEffect;
       live();
+      if (parts.task) noteSkillRead(parts.skillRead, call, result.ok);
       return result;
     },
   };
+}
+
+/** A task's successful `skill.read`, handed to its outcome tracker (`fcaSkillOutcomes.ts`); learning never fails a read. */
+function noteSkillRead(skillRead: ((name: string) => void) | undefined, call: { name: string; input: unknown }, ok: boolean): void {
+  const name = call.input && typeof call.input === 'object' ? (call.input as { name?: unknown }).name : undefined;
+  if (!skillRead || !ok || call.name !== 'skill.read' || typeof name !== 'string' || !name.trim()) return;
+  try { skillRead(name.trim()); } catch { /* learning never fails a read */ }
 }

@@ -106,13 +106,14 @@ export function skillHash(text: string): string {
 
 /**
  * The index of her skills for the profile layer (ADR-0008 §8 「目次は毎回、中身は必要なとき」): a header with how full it is
- * (`n/19`, Hermes Agent's capacity line) and one line per skill, at most `SKILL_INDEX_LINES` lines of at most `SKILL_INDEX_WIDTH`
+ * (`n/25`, Hermes Agent's capacity line) and one line per skill, at most `SKILL_INDEX_LINES` lines of at most `SKILL_INDEX_WIDTH`
  * characters. It is built only from what changes at night (the status, the name, the description, the order of creation), so it
  * stays the same all day and the provider's cache of the prompt's start holds. Skills on trial are listed (marked 試し) so that they
  * can be used and judged. The builder keeps the count within the capacity (consolidating in one batch); if it is ever over, the
  * last line says how many did not fit: nothing is cut off silently.
  */
-export const SKILL_INDEX_LINES = 20;
+// Owner decision 2026-10-14: 19 → 25 skills, so the six legacy Minecraft procedures fit beside the standard pack.
+export const SKILL_INDEX_LINES = 26;
 export const SKILL_INDEX_WIDTH = 80;
 /** How many skills fit the index (one line is its header). */
 export const SKILL_CAPACITY = SKILL_INDEX_LINES - 1;

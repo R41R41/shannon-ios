@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { NO_USES, isTaskUse, revisionGate, taskRead, taskSettle, writeSkillUses } from './skillTaskUses.js';
 import { tierOutcome } from '@shannon/learning';
 import { LockWaitMeter, loggedFailure, ownerDayKey, tableExists, underWriteLock, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import {
@@ -18,8 +19,8 @@ import { parentBaseline, versionRevisionId, type LineageNode } from './skillLine
  * Owner edits and pins retain their existing protections. Every stored body passes the current SkillBodyCheck.
  */
 export const SKILL_USE_NEXT_TURN_MINUTES = 30;
+export { FCA_TASK_USE_PREFIX, fcaSkillTaskKey } from './skillTaskUses.js';
 /** Uses kept on a skill: the window of the lifecycle plus room for those still waiting. */
-const USES_KEPT = 16;
 
 /** What a body must not carry (`conversationSecrets` and the owner-private check, handed in by the wiring); null: could not be read. */
 export interface SkillBodyCheck { carries(text: string): boolean }
@@ -113,6 +114,11 @@ export class SkillMemory {
     return skillId;
   }
 
+  /** A common FCA task's read of a skill (`skillTaskUses.ts`): one pending use per task and version, settled by its outcome. */
+  usedInTask(scopeKey: string, taskKey: string, name: string, at: string): string | null { return taskRead(this, scopeKey, taskKey, name, at); }
+  /** A task's outcome after its reads (a milestone or success 1, a death or failure 0): settles that task's pending uses. */
+  settleTask(scopeKey: string, taskKey: string, outcome: 0 | 1, at: string): number { return taskSettle(this, scopeKey, taskKey, outcome, at); }
+
   /** The owner's next turn in a Talk, as S (null: Jev was unsure, G alone): settles the uses of the turn before. */
   nextTurn(scopeKey: string, talk: string, serve: number | null, at: string): void {
     let waiting = false;
@@ -134,10 +140,11 @@ export class SkillMemory {
     this.now(at, () => {
       const before = Date.parse(at) - SKILL_USE_NEXT_TURN_MINUTES * 60_000;
       for (const skill of this.store.all(scopeKey)) {
-        const due = skill.uses.filter(use => use.o === null && Date.parse(use.at) < before).length;
+        const ripe = (use: SkillUse) => use.o === null && !isTaskUse(use.talk) && Date.parse(use.at) < before; // a task's reads wait for its outcome
+        const due = skill.uses.filter(ripe).length;
         if (!due) continue;
         settled += due;
-        this.writeUses(skill, skill.uses.map(use => use.o === null && Date.parse(use.at) < before ? { ...use, o: tierOutcome(use.g, null) } : use));
+        this.writeUses(skill, skill.uses.map(use => ripe(use) ? { ...use, o: tierOutcome(use.g, null) } : use));
       }
     });
     return settled;
@@ -259,7 +266,7 @@ export class SkillMemory {
    * while the skill is on trial, never to the owner's version or a pinned skill, never a change the audit saw reverted.
    */
   revise(scopeKey: string, skillId: string, expectedVersion: number, patch: SkillPatch, check: SkillBodyCheck | null, at: string,
-    actor: 'sleep' | 'shannon_copy' = 'sleep'): { version: number } | { rejected: SkillRejection } {
+    actor: 'sleep' | 'shannon_copy' | 'operator_authored' = 'sleep'): { version: number } | { rejected: SkillRejection } {
     let outcome: { version: number } | { rejected: SkillRejection } = { rejected: 'unavailable' };
     this.now(at, () => {
       const current = this.store.get(scopeKey, skillId);
@@ -268,7 +275,8 @@ export class SkillMemory {
       if (current.madeBy === 'owner_edit') { outcome = { rejected: 'owner_edited' }; return; }
       if (current.pinned) { outcome = { rejected: 'pinned' }; return; }
       if (current.version !== expectedVersion) { outcome = { rejected: 'stale' }; return; }
-      if (current.status === 'trial') { outcome = { rejected: 'on_trial' }; return; }
+      const gate = revisionGate(current, actor);
+      if ('rejected' in gate) { outcome = gate; return; }
       // ADR-0008 §14: an older version of hers may be the base (never the owner's); the trial is judged against that parent.
       const node = this.store.node(versionRevisionId(skillId, current.version));
       const base = patch.baseRevisionId && patch.baseRevisionId !== node ? this.store.revisions(scopeKey, skillId)
@@ -291,15 +299,19 @@ export class SkillMemory {
       if (this.revertedBefore(scopeKey, `skill:${skillId}`, skillHash(body.text), purposes)) { outcome = { rejected: 'audit_reverted' }; return; }
       const merged = closedSources([...current.sources, ...patch.evidence, ...purposes.map(id => `pattern:${id}`)]);
       if (!merged) { outcome = { rejected: 'too_many_sources' }; return; }
-      const baseline = base ? parentBaseline(base) : baselineRate(current.uses.filter(use => use.o !== null && use.v === current.version).map(use => use.o as 0 | 1));
+      const settled = current.uses.filter(use => use.o !== null && use.v === current.version).map(use => use.o as 0 | 1);
+      const baseline = gate.untried ? null : base ? parentBaseline(base) : baselineRate(settled);
       const auditId = `audit_${digest(`${skillId}\n${expectedVersion + 1}\n${randomUUID()}`)}`;
       this.store.insertAudit({ auditId, scopeKey, skillId, target: `skill:${skillId}`, kind: 'patch', fromVersion: base?.version ?? expectedVersion, toVersion: expectedVersion + 1, proposalHash: skillHash(body.text),
         diff: lineDiff(base?.body ?? current.body, body.text), purposePatternIds: purposes, baselineRate: baseline, lint: skillLint(body.text), proposedAt: at });
+      if (gate.untried && current.trialAuditId) this.store.decideAudit(scopeKey, current.trialAuditId, 'superseded', NO_USES, 'operator_revised', at);
       outcome = this.store.update(scopeKey, skillId, expectedVersion, {
-        name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text), madeBy: 'sleep', sources: merged,
-        purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: expectedVersion, audit: auditId }, actor, evidence: patch.evidence,
+        name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text), madeBy: gate.madeBy, sources: merged,
+        purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: gate.untried ? null : expectedVersion, audit: auditId },
+        actor, evidence: patch.evidence,
         lineage: { parent: base?.revisionId ?? node },
-      }, actor === 'shannon_copy' ? 'copy_edit' : base ? 'branched' : 'patched', at, 'trial') ? { version: expectedVersion + 1 } : { rejected: 'stale' };
+      }, gate.reason ?? (actor === 'shannon_copy' ? 'copy_edit' : base ? 'branched' : 'patched'), at, 'trial')
+        ? { version: expectedVersion + 1 } : { rejected: 'stale' };
     });
     return outcome;
   }
@@ -469,14 +481,7 @@ export class SkillMemory {
     }, reason, at, 'active') ? 'restored' : 'not_found';
   }
 
-  private writeUses(skill: StoredSkill, uses: readonly SkillUse[]): void {
-    const kept = [...uses.filter(use => use.o === null), ...uses.filter(use => use.o !== null).slice(-SKILL_LIFECYCLE.window)]
-      .sort((left, right) => left.at.localeCompare(right.at)).slice(-USES_KEPT);
-    const newlySettled = uses.filter(use => use.o === 1 && !skill.uses.some(old => old.id === use.id && old.o === 1)).length;
-    this.store.setUses(skill.scopeKey, skill.skillId, kept, skill.successes + newlySettled);
-    // ADR-0008 §14: each newly settled use counts on its version's node of the lineage.
-    for (const use of uses) if (use.o !== null && !skill.uses.some(old => old.id === use.id && old.o !== null)) this.store.tally(skill.skillId, use.v, use.o);
-  }
+  private writeUses(skill: StoredSkill, uses: readonly SkillUse[]): void { writeSkillUses(this.store, skill, uses); }
 
   private later(at: string, operation: () => void): void {
     this.defer(() => {

@@ -125,7 +125,7 @@ async function form() {
       'form.drafts': first.created >= 1 && stored.every(item => item.status === 'trial' && 'skill' in parseSkill(item.body) && item.purposePatternIds.length > 0),
       'form.night_limit': first.created === 2 && second.created === 0,
       'form.no_secret': first.rejections.includes('secret') && revisions.every(revision => !check.carries(revision.body)) && !stored.some(item => item.name === 'club-day'),
-      'form.index': lines[0]!.startsWith(SKILL_INDEX_HEADER) && lines[0]!.includes('2/19') && lines.length <= SKILL_INDEX_LINES && lines.every(line => [...line].length <= SKILL_INDEX_WIDTH) && world.skills.index(SCOPE) === index,
+      'form.index': lines[0]!.startsWith(SKILL_INDEX_HEADER) && lines[0]!.includes('2/25') && lines.length <= SKILL_INDEX_LINES && lines.every(line => [...line].length <= SKILL_INDEX_WIDTH) && world.skills.index(SCOPE) === index,
     }, { created: first.created, rejected: first.rejected }, 3);
   } finally { world.close(); }
 }

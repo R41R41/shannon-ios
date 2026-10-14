@@ -19,7 +19,13 @@ export interface SkillPack {
   sourceReference: string;
   referenceRevision: string;
   validatorRevision: string;
-  skills: readonly { name: string; body: string; sha256: string; tools: readonly string[]; conditionalTools?: readonly string[] }[];
+  /**
+   * `revises`: instead of a new skill, a new version of the operator-authored skill of the same name, through the ordinary revision
+   * path (`SkillMemory.revise`, actor `operator_authored`), only while its current body is exactly `bodySha256`.
+   */
+  skills: readonly {
+    name: string; body: string; sha256: string; tools: readonly string[]; conditionalTools?: readonly string[]; revises?: { bodySha256: string };
+  }[];
 }
 export interface SkillImportReceipt {
   receiptId: string;
@@ -40,7 +46,10 @@ export interface SkillImportPlan {
   receiptId: string;
   planHash: string;
   capacity: { used: number; added: number; limit: number };
-  skills: readonly { name: string; sha256: string; body: string; lint: readonly string[]; tools: readonly string[]; conditionalTools?: readonly string[] }[];
+  skills: readonly {
+    name: string; sha256: string; body: string; lint: readonly string[]; tools: readonly string[]; conditionalTools?: readonly string[];
+    revises?: { bodySha256: string };
+  }[];
   problems: readonly { name: string | null; code: string }[];
   existingReceipt: SkillImportReceipt | null;
 }

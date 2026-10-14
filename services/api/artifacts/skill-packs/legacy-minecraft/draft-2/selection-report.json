@@ -1,0 +1,1014 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "packRevision": "draft-2",
+  "observedAt": "2026-10-14T08:45:38.641286+00:00",
+  "knowledgeSha256": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "total": 2243,
+  "retired": 2043,
+  "active": 200,
+  "classification": "operator-curated legacy experiment procedures for the Nether and blaze-rod path; no canonical Shannon learned success",
+  "approval": "owner form 2026-10-14: the six groups as listed (five new, mc-night-retreat revised); skill capacity 19 -> 25",
+  "selection": {
+    "criteria": [
+      "Nether/blaze-rod path priority (iron, bucket, obsidian, portal, Nether movement, fortress, spawner, low health, food, night, pace)",
+      "Seeds and reflections kept apart (legacySource); retired items only where the retirement was capacity/consolidation, not contradiction",
+      "No coordinates, world facts, grants, restored inventories or old goal-tree mechanics",
+      "Native names and parameters checked against the body catalog source; the live catalog remains mandatory at use",
+      "No legacy confidence, support, uses or success counters imported; votes are reported only"
+    ],
+    "excluded": {
+      "alreadyImportedDraft1": [
+        "k-b9908999-ed1f-40c2-b834-a4151d11afaf",
+        "k-76a3237b-a39d-4606-9631-f6384485e7a0",
+        "k-fdff7e7d-3601-419d-8912-f60698513322",
+        "k-b7567c39-f334-4f34-8fc6-2359e7c59999",
+        "k-6703a43f-4f32-4c78-9b99-dbb29c74367b",
+        "seed-emergency-no-water (duplicate of k-76a3237b)"
+      ],
+      "retiredContradicted": [
+        "seed-emergency-shelter",
+        "seed-sleep-through-night",
+        "seed-wither-skeleton-height",
+        "seed-night-work-underground",
+        "seed-sheep-bed-first"
+      ],
+      "idleWaitUntilMorning": "30 retired reflections advising waiting for morning (e.g. k-41e08487, k-40b3d203, k-6e8a5e49)",
+      "lowPriority": [
+        "seed-piglin-barter",
+        "seed-survey-surface-early",
+        "seed-village-in-sight"
+      ],
+      "gap": "No legacy item describes finding a Nether fortress; mc-nether-travel step 6 is an operator hypothesis over current body tools"
+    },
+    "groups": {
+      "mc-nether-portal": [
+        "k-d2d520e2-c65d-43a8-8317-d1b117f66f70",
+        "k-1be5104b-d66a-4051-bc0b-99a16550f686",
+        "k-b92d4274-08ba-4f77-b974-1f4628993a18",
+        "k-504c5d6c-e1c0-4b37-a052-38ae8fa9da34",
+        "seed-shield-early",
+        "k-b10de235-fc88-4215-b8dd-1ed58617b965",
+        "k-034b4b37-82e9-4e7e-96b1-a53b37df14a9",
+        "k-43a43b1c-dabf-4159-866f-24163bdc6c6e",
+        "k-4dd379ae-bb07-4eef-a57b-227aa0120c9a",
+        "k-62c39cae-bf1e-48ef-9764-ca676a94a730",
+        "seed-nether-prepare",
+        "k-a0cff29c-f160-4b58-a7ec-f71e22a9e466"
+      ],
+      "mc-nether-travel": [
+        "seed-nether-cover",
+        "k-2f2c7cab-cd29-4b48-ab21-06cd23b2fa63",
+        "k-b44acf29-dd27-454d-bdcc-69be535498fd",
+        "k-ff362f07-c742-480d-a789-36f38cd6617c",
+        "k-add2d62e-6b22-4990-a599-10b6083a730b",
+        "k-4d837c22-8914-492b-ae59-2d0a863287f0"
+      ],
+      "mc-blaze-rods": [
+        "seed-blaze-slit-cage",
+        "seed-blaze-fire-resistance",
+        "k-2a290f18-3564-41e0-8509-c20f488d3bc6"
+      ],
+      "mc-low-health": [
+        "seed-slit-shelter",
+        "seed-shelter-stay-sealed",
+        "k-84bf2aaa-5a97-4a82-b70a-b03159bb9ba9",
+        "k-38a0e02d-4232-4ab5-bb7d-c62c8ccfb323",
+        "k-add2d62e-6b22-4990-a599-10b6083a730b",
+        "k-4d837c22-8914-492b-ae59-2d0a863287f0",
+        "k-2a290f18-3564-41e0-8509-c20f488d3bc6",
+        "seed-food-stock-before-depth"
+      ],
+      "mc-food-and-pace": [
+        "seed-food-stock-before-depth",
+        "seed-food-before-empty",
+        "seed-food-not-yet",
+        "seed-preparation-minimal",
+        "seed-no-fish-chasing",
+        "k-d10b7ded-a3d1-4605-a755-ff164c91b6b0",
+        "k-e4cbcf81-e5b2-4fb7-889e-125f9f1dc866",
+        "k-a54faf35-a98e-42ff-8e7d-afeb1de68e2b"
+      ],
+      "mc-night-retreat": [
+        "k-76a3237b-a39d-4606-9631-f6384485e7a0",
+        "seed-shelter-stay-sealed",
+        "seed-night-surface",
+        "seed-bed-from-sheep",
+        "k-d5dd8eef-6443-4131-886b-b6bd3d163bb9"
+      ]
+    },
+    "revision": {
+      "name": "mc-night-retreat",
+      "fromPack": "legacy-minecraft/draft-1",
+      "fromBodySha256": "a19505e4ff822f5fa980350284e0c70940547d39dbf776e728d8f483bec6cf34",
+      "path": "SkillMemory.revise actor operator_authored"
+    }
+  },
+  "selectedItems": [
+    {
+      "id": "k-d2d520e2-c65d-43a8-8317-d1b117f66f70",
+      "entrySha256": "a6bb5e4090c07295fd386765949683d72ac329641fb2edb07474906ef9f45a64",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface",
+          "low"
+        ],
+        "carryingAny": [
+          "iron_ingot",
+          "stick"
+        ],
+        "minHealth": 14,
+        "minFood": 8
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 18,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-1be5104b-d66a-4051-bc0b-99a16550f686",
+      "entrySha256": "fcd51d1bebb5dc1e871929577a1b04f15736560efaa4927634b363d3323ad6cf",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "carryingAny": [
+          "iron_ingot"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 5,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-b92d4274-08ba-4f77-b974-1f4628993a18",
+      "entrySha256": "90cad0080a985f81635fbcc9fa4b19366edc11e7104b967b684169cc4a954ace",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface"
+        ],
+        "carryingAny": [
+          "iron_ingot",
+          "crafting_table"
+        ],
+        "minHealth": 18,
+        "minFood": 14,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-504c5d6c-e1c0-4b37-a052-38ae8fa9da34",
+      "entrySha256": "80c990fc5b1e2b2a5bfdcceda37ba030916b66394840b38141b403fcccdb1921",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "carryingAny": [
+          "iron_ingot"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 6,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "seed-shield-early",
+      "entrySha256": "aa0e834cec335b1d9a00e04a2b0fc03472649a5f1b0309a1b36a853cddb59663",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "carryingAny": [
+          "iron_ingot",
+          "raw_iron"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 4,
+        "contradicted": 4
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-b10de235-fc88-4215-b8dd-1ed58617b965",
+      "entrySha256": "9c517ded54baca729cece06dbb8212e904300cb3607705b6da63b9ab39970302",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "carryingAny": [
+          "water_bucket"
+        ],
+        "inWater": false,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-034b4b37-82e9-4e7e-96b1-a53b37df14a9",
+      "entrySha256": "edf71c6c8f9408aab9a491827a700c50967223119b1f2129ef374d497b8b0fee",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "deep",
+          "cave"
+        ],
+        "carryingAny": [
+          "bucket"
+        ],
+        "inWater": false,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-43a43b1c-dabf-4159-866f-24163bdc6c6e",
+      "entrySha256": "d2be0583a86dfb1fb62c2a15cfccfdd12f626c681f44f04c4552405b8613aaa8",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "night",
+          "dusk"
+        ],
+        "depthBands": [
+          "cave",
+          "low"
+        ],
+        "carryingAny": [
+          "bucket"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-4dd379ae-bb07-4eef-a57b-227aa0120c9a",
+      "entrySha256": "102a112be557a99617b5f1ae1c0c9ad4d7153fc642f9280aae911ec44ffee3ac",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface"
+        ],
+        "carryingAny": [
+          "flint_and_steel"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-62c39cae-bf1e-48ef-9764-ca676a94a730",
+      "entrySha256": "078f7b49802dd648e73724cea391d3213479416c6a7f3102d32dd2f701309ef1",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day",
+          "dusk",
+          "night"
+        ],
+        "depthBands": [
+          "surface",
+          "high"
+        ],
+        "carryingAny": [
+          "flint_and_steel"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "seed-nether-prepare",
+      "entrySha256": "9655c13e719220f5ea256dcc8e2a23b455f3e415f9b2621df57e13fde2eb1272",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "carryingAny": [
+          "obsidian",
+          "flint_and_steel"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 0,
+        "contradicted": 2
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "k-a0cff29c-f160-4b58-a7ec-f71e22a9e466",
+      "entrySha256": "9369e53a7924a5031f61cc198e8c8ca7c2f14e1f0080a7e5b48942ddb0eae2df",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "surface",
+          "high"
+        ],
+        "carryingAny": [
+          "cobblestone",
+          "flint_and_steel"
+        ],
+        "minHealth": 14,
+        "minFood": 10,
+        "inWater": false,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-portal"
+      ]
+    },
+    {
+      "id": "seed-nether-cover",
+      "entrySha256": "f2847a62c9bb5b4341ebda393c2589b0db754ddff41d16f2aa450c28366363a6",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 15,
+        "contradicted": 10
+      },
+      "usedBy": [
+        "mc-nether-travel"
+      ]
+    },
+    {
+      "id": "k-2f2c7cab-cd29-4b48-ab21-06cd23b2fa63",
+      "entrySha256": "6c8d6f900f8dc02ff10f6b963c85629aa25489c103cf476fb2d31725372dfbe5",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "carryingAny": [
+          "cobblestone",
+          "netherrack"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-travel"
+      ]
+    },
+    {
+      "id": "k-b44acf29-dd27-454d-bdcc-69be535498fd",
+      "entrySha256": "28c37fed7c031031b57d33ff02f3d5dcb32e5bc099879dad6d0618be5d2c335d",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "maxHealth": 12,
+        "emergency": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-travel"
+      ]
+    },
+    {
+      "id": "k-ff362f07-c742-480d-a789-36f38cd6617c",
+      "entrySha256": "06d6bd751b2da140745f0d8d91ed46d90922da3acf2af868aa6ab47b79af6595",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "carryingAny": [
+          "iron_pickaxe",
+          "iron_chestplate"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-travel"
+      ]
+    },
+    {
+      "id": "k-add2d62e-6b22-4990-a599-10b6083a730b",
+      "entrySha256": "72082b1904a7ba6badb289c53eba4abd48e32edbbb391857d96b7e6f26aefd2f",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "depthBands": [
+          "low",
+          "cave"
+        ],
+        "maxHealth": 8,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-travel",
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "k-4d837c22-8914-492b-ae59-2d0a863287f0",
+      "entrySha256": "a1221d9e1719aef58a17fbadea9801eed4971085d9e741b8e251bc06a87e730b",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "carryingAny": [
+          "cobblestone",
+          "netherrack",
+          "cobbled_deepslate"
+        ],
+        "maxHealth": 6,
+        "emergency": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-nether-travel",
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "seed-blaze-slit-cage",
+      "entrySha256": "12df1dab8b61d140d5b9f395928d70126bfd0d47a67e6274e54805b39f03ed7c",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 3,
+        "contradicted": 3
+      },
+      "usedBy": [
+        "mc-blaze-rods"
+      ]
+    },
+    {
+      "id": "seed-blaze-fire-resistance",
+      "entrySha256": "fefd1139063498690e54e55b5c43fc074dd5836a467c2301220b95b4ab1a7f98",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 3,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-blaze-rods"
+      ]
+    },
+    {
+      "id": "k-2a290f18-3564-41e0-8509-c20f488d3bc6",
+      "entrySha256": "03979fdd7b48e85b59faf923e7b262376eddd3a21ccc32771bd87ce8f84614fa",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "the_nether"
+        ],
+        "threatsAny": [
+          "blaze"
+        ],
+        "carryingAny": [
+          "cobblestone"
+        ],
+        "maxHealth": 9,
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 3,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-blaze-rods",
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "seed-slit-shelter",
+      "entrySha256": "496e849358ed2047a71a4da1c045eeda8341e3fe13d73ad8103f4494680c0eca",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 9,
+        "contradicted": 3
+      },
+      "usedBy": [
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "seed-shelter-stay-sealed",
+      "entrySha256": "5fe1b2a60c27c9d723e6e957369e47605695ffd2f2a05700786429af1dfe492f",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "threatsPresent": true,
+        "tools": [
+          "dig-shelter",
+          "dig-block-at"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 17,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-low-health",
+        "mc-night-retreat"
+      ]
+    },
+    {
+      "id": "k-84bf2aaa-5a97-4a82-b70a-b03159bb9ba9",
+      "entrySha256": "440abad2c12687731f75108f7bed207c9c10d7ab9a50fb42c31dd501649f2a4d",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "emergency": true,
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 22,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "k-38a0e02d-4232-4ab5-bb7d-c62c8ccfb323",
+      "entrySha256": "d9968f9b8bef916b2c51334ac3f31180b83fbb84a95ea9d05423221259c32cb5",
+      "legacySource": "reflection",
+      "retired": true,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "cave",
+          "low"
+        ],
+        "maxHealth": 9,
+        "minFood": 14,
+        "emergency": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 1,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-low-health"
+      ]
+    },
+    {
+      "id": "seed-food-stock-before-depth",
+      "entrySha256": "a8c6c06e2e108df1d9dbeebb6f418e509cc4abc0a0ed4139e2e8f9a487331194",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "carryingAny": [
+          "iron_pickaxe",
+          "diamond_pickaxe",
+          "flint_and_steel",
+          "obsidian"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 5,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-low-health",
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "seed-food-before-empty",
+      "entrySha256": "1a260b26c303786db7c00ab40be9bcb2f1b163d4c8f86dee774fdf356c08611a",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "maxFood": 10
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 5,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "seed-food-not-yet",
+      "entrySha256": "ac6a1aaa8eb9fe9e84ed672e11484ff22bb3c8617eafaa7786620c041fbe07b9",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "minFood": 14
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 70,
+        "contradicted": 7
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "seed-preparation-minimal",
+      "entrySha256": "7da323f44819f3f2e1778bf28b2dd93409b041dffc923da17239e837d0e99a32",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {},
+      "cumulativeReflectionVotes": {
+        "supported": 42,
+        "contradicted": 11
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "seed-no-fish-chasing",
+      "entrySha256": "777b64e6c6352ab3afffb4b4d66fb11882fe843c3590dd4cd785e46b192d4f90",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "tools": [
+          "attack-continuously",
+          "attack-nearest"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 14,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "k-d10b7ded-a3d1-4605-a755-ff164c91b6b0",
+      "entrySha256": "8830ac6c2d47f676827570d8f1e8dae35cd0d358292a779e10d8ffd7cfca30cd",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface",
+          "high"
+        ],
+        "minHealth": 14,
+        "minFood": 12,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 40,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "k-e4cbcf81-e5b2-4fb7-889e-125f9f1dc866",
+      "entrySha256": "c9e3697ae9ea5af8c16c13d045986703176fdad30b57fe17e665d3fb3ef497ce",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "cave",
+          "low"
+        ],
+        "minHealth": 16,
+        "minFood": 13,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 45,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "k-a54faf35-a98e-42ff-8e7d-afeb1de68e2b",
+      "entrySha256": "18c524180ddd5c4ac897637aee65d57e419c4ad377eb6463dc2d97b228d791ed",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "surface",
+          "low"
+        ],
+        "carryingAny": [
+          "raw_iron",
+          "furnace"
+        ],
+        "minHealth": 16,
+        "minFood": 12,
+        "inWater": false,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 14,
+        "contradicted": 3
+      },
+      "usedBy": [
+        "mc-food-and-pace"
+      ]
+    },
+    {
+      "id": "k-76a3237b-a39d-4606-9631-f6384485e7a0",
+      "entrySha256": "103794ce0531ca7275beca800890accdc916a8d7fee12698be9f2248c9fa4412",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "night"
+        ],
+        "inWater": false,
+        "emergency": true,
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 36,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-night-retreat"
+      ]
+    },
+    {
+      "id": "seed-night-surface",
+      "entrySha256": "f6dae69c576e077ca3ae05f2753b90e63401d24e9dbcfcd66e407aa7a666ca3c",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "timeBands": [
+          "dusk",
+          "night"
+        ],
+        "depthBands": [
+          "surface",
+          "high"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 17,
+        "contradicted": 7
+      },
+      "usedBy": [
+        "mc-night-retreat"
+      ]
+    },
+    {
+      "id": "seed-bed-from-sheep",
+      "entrySha256": "3139dbb0d1cd4531062db22bb22e0c5b3b6b832cc8f48ac8f63a50e95c56c5d1",
+      "legacySource": "human-seed",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day",
+          "dawn"
+        ],
+        "othersAny": [
+          "sheep"
+        ],
+        "carryingNone": [
+          "*_bed"
+        ]
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 5,
+        "contradicted": 0
+      },
+      "usedBy": [
+        "mc-night-retreat"
+      ]
+    },
+    {
+      "id": "k-d5dd8eef-6443-4131-886b-b6bd3d163bb9",
+      "entrySha256": "f11ff899eb28430456874eaa73e23d27b58dc2e10f75e2b6fcdfb798d65cbf18",
+      "legacySource": "reflection",
+      "retired": false,
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "night"
+        ],
+        "carryingAny": [
+          "cobblestone"
+        ],
+        "minHealth": 16,
+        "minFood": 14,
+        "emergency": false,
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 10,
+        "contradicted": 1
+      },
+      "usedBy": [
+        "mc-night-retreat"
+      ]
+    }
+  ],
+  "nativeCatalog": {
+    "repository": "R41R41/Shannon",
+    "sourceRevision": "4b047cf",
+    "checkedNames": [
+      "accept-threat",
+      "attack-continuously",
+      "build-around-self",
+      "build-structure",
+      "dig-shelter",
+      "enter-portal",
+      "find-blocks",
+      "find-structure",
+      "goal-evidence",
+      "leave-water",
+      "list-nearby-entities",
+      "move-to",
+      "pickup-nearest-item",
+      "recall-places",
+      "sleep-in-bed",
+      "use-item"
+    ],
+    "structures": [
+      "nether_portal",
+      "slit_cage",
+      "slit_shelter"
+    ],
+    "unverified": []
+  },
+  "limitations": [
+    "Knowledge is a historical multi-run experiment snapshot (same as draft-1), not an isolated run.",
+    "Votes are reflection votes, not causal success evidence; the run that reached the Nether and rods with no death is cited only as provenance.",
+    "Live catalog availability and real-world retries of these procedures are unverified.",
+    "Raw knowledge, logs, positions and identities remain on the VM; only ids, entry hashes, condition symbols and vote counts are kept."
+  ]
+}

@@ -54,11 +54,26 @@ export class SkillImporter {
       try { toolProblems = this.dependencies.tools(scopeKey, entry.tools, entry.body, entry.conditionalTools ?? []); } catch { /* unavailable fails closed */ }
       if (toolProblems === null) bad(entry.name, 'tools_unavailable');
       else for (const code of toolProblems) bad(entry.name, code);
-      const occupied = all.find(skill => skill.name === entry.name);
-      if (occupied && !existingReceipt?.skills.some(item => item.skillId === occupied.skillId)) bad(entry.name, occupied.pinned ? 'pinned' : occupied.madeBy === 'owner_edit' ? 'owner_edited' : occupied.status === 'trial' ? 'on_trial' : 'name_taken');
-      return { name: entry.name, sha256: entry.sha256, body: entry.body, lint, tools: [...entry.tools], conditionalTools: [...(entry.conditionalTools ?? [])] };
+      const occupied = all.find(skill => skill.name === entry.name && (!entry.revises || skill.status !== 'retired'));
+      if (entry.revises) {
+        // A revision of an operator-authored skill whose current text is exactly the reviewed base; never the owner's or her own.
+        if (!sha256.test(entry.revises.bodySha256)) bad(entry.name, 'invalid_pack');
+        else if (!existingReceipt) {
+          if (!occupied) bad(entry.name, 'revision_target_missing');
+          else if (occupied.pinned) bad(entry.name, 'pinned');
+          else if (occupied.madeBy === 'owner_edit') bad(entry.name, 'owner_edited');
+          else if (occupied.madeBy !== 'operator_authored') bad(entry.name, 'name_taken');
+          else if (skillArtifactSha256(occupied.body) !== entry.revises.bodySha256) bad(entry.name, 'revision_base_changed');
+          else if (occupied.status === 'trial' && (occupied.trialBaseVersion !== null || occupied.uses.some(use => use.v === occupied.version))) {
+            bad(entry.name, 'on_trial');
+          }
+        }
+      } else if (occupied && !existingReceipt?.skills.some(item => item.skillId === occupied.skillId)) bad(entry.name, occupied.pinned ? 'pinned' : occupied.madeBy === 'owner_edit' ? 'owner_edited' : occupied.status === 'trial' ? 'on_trial' : 'name_taken');
+      return { name: entry.name, sha256: entry.sha256, body: entry.body, lint, tools: [...entry.tools], conditionalTools: [...(entry.conditionalTools ?? [])],
+        ...(entry.revises ? { revises: { bodySha256: entry.revises.bodySha256 } } : {}) };
     });
-    const capacity = { used: all.filter(skill => skill.status !== 'retired').length, added: existingReceipt ? 0 : pack.skills.length, limit: SKILL_CAPACITY };
+    const created = pack.skills.filter(entry => !entry.revises).length;
+    const capacity = { used: all.filter(skill => skill.status !== 'retired').length, added: existingReceipt ? 0 : created, limit: SKILL_CAPACITY };
     if (capacity.used + capacity.added > SKILL_CAPACITY) bad(null, 'over_capacity');
     // The exact reviewed content and collision state are fixed; no use counters or generated timestamps change the plan.
     const state = all.map(skill => ({ id: skill.skillId, name: skill.name, version: skill.version, hash: skill.bodyHash, pinned: skill.pinned, madeBy: skill.madeBy, status: skill.status, hold: skill.exportHold }));
@@ -83,6 +98,15 @@ export class SkillImporter {
       const imported = pack.skills.map(entry => {
         const checked = checkedSkillText(entry.body, this.dependencies.check(scopeKey));
         if (typeof checked === 'string') throw new Error('SKILL_IMPORT_CHECK_CHANGED');
+        if (entry.revises) {
+          const target = store.byName(scopeKey, entry.name);
+          if (!target) throw new Error('SKILL_IMPORT_REVISION_TARGET');
+          const patch = { draft: checked.ok, evidence: [`import:${plan.receiptId}`] };
+          const check = this.dependencies.check(scopeKey);
+          const revised = this.dependencies.memory.revise(scopeKey, target.skillId, target.version, patch, check, at, 'operator_authored');
+          if ('rejected' in revised) throw new Error(`SKILL_IMPORT_REVISION_${revised.rejected}`);
+          return { skillId: target.skillId, name: entry.name, bodySha256: entry.sha256, revisionId: versionRevisionId(target.skillId, revised.version) };
+        }
         const skillId = `skill_${skillArtifactSha256(`${plan.receiptId}\n${entry.name}`).slice(0, 40)}`;
         const auditId = `audit_${skillArtifactSha256(`${skillId}\nimport`).slice(0, 40)}`;
         const provenance: OperatorSkillProvenance = { origin: 'operator_authored', packId: pack.packId, packRevision: pack.revision, bodySha256: entry.sha256,

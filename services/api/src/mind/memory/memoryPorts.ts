@@ -11,7 +11,7 @@ export {
   type SkillDocument, type SkillProblem, type SkillSection, type SkillStatus,
 } from './skillDocument.js';
 export {
-  PATTERN_LIMITS, SKILL_MINIMUM_AGE_DAYS, SKILL_USE_NEXT_TURN_MINUTES, SkillMemory, type SkillBodyCheck, type SkillCreation, type SkillPatch, type SkillRejection,
+  FCA_TASK_USE_PREFIX, PATTERN_LIMITS, SKILL_MINIMUM_AGE_DAYS, SKILL_USE_NEXT_TURN_MINUTES, SkillMemory, fcaSkillTaskKey, type SkillBodyCheck, type SkillCreation, type SkillPatch, type SkillRejection,
 } from './skillMemory.js';
 export type { PatternLogEntry, SkillActor, SkillAuditEntry, SkillRevision, SkillUse, StoredPattern, StoredSkill } from './store/sqliteSkills.js';
 export { SKILL_LINEAGE, chosenBase, parentBaseline, rankedNodes, scoredLineage, versionRevisionId, type LineageNode, type ScoredNode } from './skillLineage.js';

@@ -26,6 +26,8 @@ export class MinecraftControl {
   private readonly captureMisses = new Map<string, { connectionId: string; at: number }>();
   /** When each body last arrived: a new connection, connected again, or alive again (`settling`). */
   private readonly arrivals = new Map<string, number>();
+  /** Told when a body on the same connection is seen alive and then dead (its facts' `alive` turns false). Listeners never throw. */
+  readonly deathListeners = new Set<(bodyId: string) => void>();
   /** The commands this process waits for, and when each was last handed to the body (`command`). */
   private readonly waiting = new Map<string, Waiting>();
   private readonly deliveries = new Map<string, number>();
@@ -82,6 +84,9 @@ export class MinecraftControl {
     this.frames.set(bodyId, { poll: { ...input, observation, skills: input.skills ?? old!.poll.skills }, received: this.options.now() });
     if (!old || old.poll.connectionId !== input.connectionId || (!old.poll.observation.connected && input.observation.connected)
       || (old.poll.observation.facts.alive === false && input.observation.facts.alive !== false)) this.arrivals.set(bodyId, this.options.now());
+    if (old?.poll.connectionId === input.connectionId && old.poll.observation.facts.alive !== false && input.observation.facts.alive === false) {
+      for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
+    }
     const acknowledged: string[] = [];
     for (const receipt of input.receipts) {
       const command = this.store.command(receipt.id);

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
-import { encodeSkill } from '../src/mind/memory/skillDocument.js';
+import { SKILL_CAPACITY, encodeSkill } from '../src/mind/memory/skillDocument.js';
 import { SkillImporter, skillArtifactSha256 } from '../src/mind/memory/skillImport.js';
 import type { SkillPack } from '../src/mind/memory/skillImportContract.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
@@ -44,7 +44,7 @@ describe('owner-only provenance-bearing skill import on real SQLite', () => {
     const candidate = pack('first', 'second');
     const plan = importer.dryRun('owner', candidate);
     expect(plan.problems).toEqual([]);
-    expect(plan.capacity).toEqual({ used: 0, added: 2, limit: 19 });
+    expect(plan.capacity).toEqual({ used: 0, added: 2, limit: SKILL_CAPACITY });
     expect(memory.store.all('owner')).toEqual([]);
     expect(database.prepare('SELECT COUNT(*) n FROM shannon_skill_imports').get()).toEqual({ n: 0 });
     const result = apply(importer, candidate);
@@ -119,9 +119,9 @@ describe('owner-only provenance-bearing skill import on real SQLite', () => {
     memory.store.setPinned('owner', created.skillId, false);
     memory.adoptOwnerEdit('owner', created.skillId, encodeSkill(document('first')).replace('結果を確かめる', '一覧を確かめる'), { documentId: 'copy-first', version: 2 }, pass, at);
     expect(importer.dryRun('owner', candidate).problems).toContainEqual({ name: 'first', code: 'owner_edited' });
-    for (let i = 0; i < 18; i++) memory.create('owner', { draft: document(`existing-${i}`), evidence: [] }, pass, at);
+    for (let i = 0; i < SKILL_CAPACITY - 1; i++) memory.create('owner', { draft: document(`existing-${i}`), evidence: [] }, pass, at);
     expect(apply(importer, pack('second'))).toMatchObject({ rejected: 'validation_failed', plan: { problems: [{ name: null, code: 'over_capacity' }] } });
-    expect(memory.store.all('owner')).toHaveLength(19);
+    expect(memory.store.all('owner')).toHaveLength(SKILL_CAPACITY);
   });
 
   it('rejects stale plans and changed revisions, never overrides or creates another version', () => {

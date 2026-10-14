@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-2",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=0e838a78fa1681acc6d418646f57e28301ec96c4006021febe10893b4dd5165d",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-nether-portal",
+      "path": "mc-nether-portal/SKILL.md",
+      "sha256": "547d4c1148359eba8f3dafaec07efb80810cd96b0c062021c84a5d47429ae8b7",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-nether-travel",
+      "path": "mc-nether-travel/SKILL.md",
+      "sha256": "cdb8ae569b29207c484845550a5e6f23205a5bf24386b329c102f292ab74919b",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-blaze-rods",
+      "path": "mc-blaze-rods/SKILL.md",
+      "sha256": "aceafa0ea323ee13ffc988ed4a3ac041b29a2d30dac0a62bb8c11c99ed1ff994",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-low-health",
+      "path": "mc-low-health/SKILL.md",
+      "sha256": "a078edf5baa7a9185567b0d3b047189b92e05635b27c05a098353b894a469ab9",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-food-and-pace",
+      "path": "mc-food-and-pace/SKILL.md",
+      "sha256": "00ede87da44903e79d6fd7635ef16e25c6e5c23bab0360dc65ebc2c540fc1b9a",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-night-retreat",
+      "path": "mc-night-retreat/SKILL.md",
+      "sha256": "cba8d5a686f5e61aea2f5eef69b3149bd34f94b5b3234cade858f500d4f7a539",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "revises": {
+        "bodySha256": "a19505e4ff822f5fa980350284e0c70940547d39dbf776e728d8f483bec6cf34"
+      }
+    }
+  ]
+}
