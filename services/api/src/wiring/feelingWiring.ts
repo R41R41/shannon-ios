@@ -15,7 +15,7 @@ import { switchOn } from '@shannon/switches';
 import { AnthropicChatModel } from '../infra/models/anthropic/anthropicChatModel.js';
 import { anthropicApiKey, sonnetSettings } from '../infra/models/anthropic/anthropicConfig.js';
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
-import { FeelingStrongChatModel } from '../infra/models/feelingStrongChatModel.js';
+import { FeelingReplyChatModel } from '../infra/models/feelingStrongChatModel.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
@@ -83,8 +83,9 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const seed = parts.conversation ? talkSeed(parts.conversation) : undefined;
   const sonnet = strongReplyModel(environment, parts);
   const strong = sonnet ? { strong: { cap: strongReplyDailyCap(environment), model: sonnet } } : {};
+  const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow });
+    ...(seed ? { seed } : {}), ...strong, ...shadow, check });
 }
 
 /**
@@ -115,6 +116,8 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
   singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
+  /** Stage 2 (`SHANNON_REPLY_CHECK`): her replies are checked. */
+  check?: boolean;
   /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
   shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot } }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
@@ -127,12 +130,15 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
-  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong };
-  const sonnet = parts.strong?.model;
+  const flags = { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}) };
+  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
+  const sonnet = parts.strong?.model ?? null;
+  const checked = (scopeKey: string, found: readonly string[], rewritten: boolean) => events?.noteCheck(scopeKey, found, rewritten);
+  const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
+  const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, { sonnet, checked, released }) : model);
   const close = () => {
     store.close();
     shadowStore?.close();
   };
-  const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
-  return { port, wrap: model => (sonnet ? new FeelingStrongChatModel(model, sonnet, { released }) : model), close };
+  return { port, wrap, close };
 }

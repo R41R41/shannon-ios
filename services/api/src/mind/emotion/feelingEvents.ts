@@ -58,6 +58,8 @@ const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 export class FeelingEvents {
   private readonly pruned = new Map<string, number>();
+  /** The reply check of a scope's turn in progress (checked before sending), taken when its reply is recorded. */
+  private readonly checks = new Map<string, { flags: readonly string[]; rewritten: boolean }>();
   /** Strong replies decided and not yet recorded, per scope and day, by when (a turn in flight counts; an abandoned one expires). */
   private readonly strongInFlight = new Map<string, number[]>();
   /** The presentation id a voice turn answered with, per scope, until its turn is stored (review P2-3). */
@@ -97,9 +99,13 @@ export class FeelingEvents {
     try {
       return observeSync('emotion', { phase: 'feeling.ledger', audience: key.audience, owner: key.personKey === OWNER_PERSON_KEY }, () => {
         const ledger = foldEpisodeLedger(this.today(scopeKey, at, snapshot), key);
-        const watch = watchRepetition(this.todaysReplies(scopeKey, key, at, snapshot), key.audience);
+        const replies = this.todaysReplies(scopeKey, key, at, snapshot);
+        const watch = watchRepetition(replies, key.audience);
+        // Stage 2 (`SHANNON_REPLY_CHECK`): what the check found in her last reply goes to the next feeling turn (absent without it).
+        const last = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0]?.facts.checkFlags;
+        const checked: Record<string, string> = last?.length ? { last_check: last.join('|') } : {};
         return { ledger, watch, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone), repetitionLine: repetitionLine(watch),
-          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch) } };
+          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked } };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);
@@ -145,6 +151,19 @@ export class FeelingEvents {
       this.report(error);
       return false;
     }
+  }
+
+  /** The check of a draft written before sending (`FeelingReplyChatModel`). */
+  noteCheck(scopeKey: string, flags: readonly string[], rewritten: boolean): void {
+    if (this.checks.size >= 64) this.checks.clear();
+    this.checks.set(scopeKey, { flags, rewritten });
+  }
+
+  /** The check noted for a scope's turn, once. */
+  takeCheck(scopeKey: string): { flags: readonly string[]; rewritten: boolean } | null {
+    const check = this.checks.get(scopeKey) ?? null;
+    this.checks.delete(scopeKey);
+    return check;
   }
 
   /** A strong reply's turn ended (its reply is recorded, or the turn failed): it no longer counts as in flight. */

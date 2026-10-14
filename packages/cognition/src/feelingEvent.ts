@@ -66,6 +66,9 @@ export interface FeelingEventFacts {
   register?: FeelingRegister;
   /** Closed tags of his words (`utteranceTags`: insult, lewd, ai_taunt, creator_insult); no words are kept. */
   tags?: readonly string[];
+  /** The reply check's flags on this reply (`SHANNON_REPLY_CHECK`), and whether it was rewritten before it was sent. */
+  checkFlags?: readonly string[];
+  rewritten?: true;
   /** The reply went to the stronger model (`SHANNON_FEELING_STRONG_REPLY_MODEL`): counted against the day's cap. */
   replyModel?: 'strong';
 }

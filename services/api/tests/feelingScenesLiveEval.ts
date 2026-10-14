@@ -52,7 +52,7 @@ function feelingConfigured(now: () => string) {
   const sonnet = switchOn(process.env, 'SHANNON_FEELING_STRONG_REPLY_MODEL') && apiKey
     ? new AnthropicChatModel({ apiKey, usageStore, settings: sonnetSettings(process.env) }) : null;
   return composedFeeling({ database: new DatabaseSync(':memory:'), now, timeZone: 'Asia/Tokyo', chooser, turn: true, singleFace: true,
-    ...(sonnet ? { strong: { cap: strongReplyDailyCap(process.env), model: sonnet } } : {}) });
+    check: switchOn(process.env, 'SHANNON_REPLY_CHECK'), ...(sonnet ? { strong: { cap: strongReplyDailyCap(process.env), model: sonnet } } : {}) });
 }
 
 const reports = [];

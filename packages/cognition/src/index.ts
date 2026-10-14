@@ -396,3 +396,4 @@ export * from './appraisal.js';
 export * from './coreAffect.js';
 export * from './composure.js';
 export * from './feelingDynamics.js';
+export * from './replyCheck.js';

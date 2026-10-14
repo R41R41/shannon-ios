@@ -233,6 +233,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 stage 2 shadow: appraisal, core affect, blame and composure folded from her events and recorded beside the current state; no behaviour.',
   },
   {
+    name: 'SHANNON_REPLY_CHECK', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 stage 2: her reply is checked (giving in, lecture, AI tone…); strong, order and public text turns before sending, one rewrite.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

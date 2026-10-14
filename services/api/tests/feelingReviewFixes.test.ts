@@ -22,7 +22,7 @@ describe('review of stage 1', () => {
     const calls: string[] = [];
     const pinned = answering('pinned', calls);
     const inner: ShannonChatModel = { ...answering('unpinned', calls), forTurn: () => pinned };
-    const wrapper = new FeelingStrongChatModel(inner, answering('sonnet', calls) as never);
+    const wrapper = new FeelingStrongChatModel(inner, { sonnet: answering('sonnet', calls) as never });
     const turn = wrapper.forTurn('owner');
     await turn.generate(request());
     expect(calls).toEqual(['pinned']);
@@ -33,7 +33,7 @@ describe('review of stage 1', () => {
     const calls: string[] = [];
     const released: string[] = [];
     const sonnet = { ...answering('sonnet', calls, true), outOfTimeTurn: async () => ({ mode: 'anthropic', model: 'sonnet', reply: '' }) };
-    const wrapper = new FeelingStrongChatModel(answering('haiku', calls, true), sonnet as never, { released: scope => released.push(scope), log: () => {} });
+    const wrapper = new FeelingStrongChatModel(answering('haiku', calls, true), { sonnet: sonnet as never, released: scope => { released.push(scope); }, log: () => {} });
     await expect(wrapper.generate(request({ feelingStrong: true }))).rejects.toThrow('down');
     expect(released).toEqual(['owner']);
   });

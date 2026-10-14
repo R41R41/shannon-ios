@@ -6,7 +6,8 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  continuedAfterRefusal, replyFacts, strongReplyReason, utteranceTags,
+  checkBeforeSending, checkReply, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
@@ -39,6 +40,10 @@ export interface FeelingPort {
   readonly jevInput?: FeelingTurnJevInput;
   /** `SHANNON_FEELING_STRONG_REPLY_MODEL` with the Anthropic key: a strong turn's text reply goes to Sonnet, at most `cap` a day. */
   readonly strong?: { cap: number };
+  /** `SHANNON_REPLY_CHECK`: her replies are checked (before sending on strong, order and public text turns; after, otherwise). */
+  readonly check?: boolean;
+  /** `SHANNON_CORE_AFFECT`: the shadow's composure step is known to the check (its register flags); nothing else reads it. */
+  readonly coreAffect?: boolean;
 }
 
 /** The facts block while the feeling turn is off (events on): the same ledger and watch lines, as facts. */
@@ -90,7 +95,9 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
     sourceId: input.sourceId, occurredAt: input.at };
   const stance = handle.decision && handle.decision.stance !== 'neutral' ? { turnStance: handle.decision.stance } : {};
   const strong = handle.strong ? { replyModel: 'strong' as const } : {};
-  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...(handle.register !== 'normal' ? { register: handle.register } : {}), ...strong };
+  const check = checkFacts(handle, input.reply);
+  const register = handle.register !== 'normal' ? { register: handle.register } : {};
+  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
   const tags = utteranceTags(input.words);
   const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words), facts: tags.length ? { tags } : {} };
@@ -99,22 +106,49 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
 }
 
+/** The reply check's context of a turn, or null without the check or a decision. */
+function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
+  if (!handle.port.check || !handle.decision) return null;
+  const violation = continuedAfterRefusal(handle.lines?.ledger, handle.at);
+  const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
+  return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
+    ...(level !== undefined ? { level } : {}) };
+}
+
+/** The shadow's composure step for this key now (for the check's register flags only). */
+function composureLevel(handle: FeelingTurnHandle): number | undefined {
+  return safely(() => foldFeelingDynamics(handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot), handle.key).composure.level, undefined);
+}
+
+/** A reply's check: the one made before sending when there was one, else checked now (voice, and text turns not checked before). */
+function checkFacts(handle: FeelingTurnHandle, reply: string): { checkFlags?: readonly string[]; rewritten?: true } {
+  const context = checkContext(handle);
+  if (!context) return {};
+  const before = handle.channel === 'text' ? handle.port.events.takeCheck(handle.scopeKey) : null;
+  const flags = before ? before.flags : checkReply(reply, context);
+  observeSync('emotion', { phase: 'feeling.reply_check', audience: handle.key.audience, before: Boolean(before) }, () => null,
+    () => ({ flags: [...flags], rewritten: before?.rewritten === true }));
+  return { ...(flags.length ? { checkFlags: flags } : {}), ...(before?.rewritten ? { rewritten: true as const } : {}) };
+}
+
 /**
  * Which model writes this text reply (owner decision 2026-10-14: 「気持ちが強い時だけSonnet」): the stronger one for a strong turn while
  * the day's cap allows, else the ordinary one. The Observer is told which and why, never the words.
  */
-function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true } {
-  const strong = handle.port.strong;
-  if (!strong || !handle.port.turn) return {};
+function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } {
+  const strong = handle.port.strong ?? { cap: 0 };
+  if (!handle.port.turn) return {};
   const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
   const continued = continuedAfterRefusal(handle.lines?.ledger, handle.at);
   const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued);
-  handle.strong = reason !== null && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
-  const capped = reason !== null && !handle.strong;
+  handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
+  const capped = reason !== null && Boolean(handle.port.strong) && !handle.strong;
   observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,
     () => ({ model: handle.strong ? 'sonnet' : 'haiku', reason: reason ?? 'none', capped }));
   if (capped) console.warn('Shannon feeling reply model: the day\'s cap of strong replies is reached; this reply stays on Haiku');
-  return handle.strong ? { feelingStrong: true } : {};
+  const check = checkContext(handle);
+  const before = check && checkBeforeSending(check) ? { feelingCheck: check } : {};
+  return { ...(handle.strong ? { feelingStrong: true as const } : {}), ...before };
 }
 
 /** The one face of a state for an audience, with its span (closed values only). */
@@ -175,7 +209,7 @@ export const feelingText = Object.freeze({
     return safely(() => blockOf(handle, handle.decision), '');
   },
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
-  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true } => (handle ? safely(() => routeReply(handle), {}) : {}),
+  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),
   /** The message face under `SHANNON_SINGLE_FACE`: the turn's stance, else the reply's feeling (never her own apology), else the mood. */
   face: (handle: FeelingTurnHandle | null, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, at: string): ReplyEmotion => {
     if (!handle?.port.singleFace) return resolved;
