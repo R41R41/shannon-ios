@@ -63,15 +63,15 @@ export const RELATIONSHIP_PARAMETERS: RelationshipParameters = Object.freeze({
 /**
  * Stage 4 (ADR-0013 §4.2, `SHANNON_FEELING_AUDIENCE`): a known friend's ledger, lighter than the owner's (it starts lower, moves and
  * fades a little faster, its floor is lower), and a stranger's or a viewer's light ledger (liking and irritation only, forgiven and
- * forgotten fast). Proposals for the owner's approval (2026-10-14); model assumptions.
+ * forgotten fast). Approved by the owner as proposed (2026-10-15, form 「この案でよい」); model assumptions until fitted.
  */
-export const FRIEND_RELATIONSHIP_PROPOSAL: RelationshipParameters = Object.freeze({
-  status: 'proposal',
+export const FRIEND_RELATIONSHIP_PARAMETERS: RelationshipParameters = Object.freeze({
+  status: 'approved',
   start: Object.freeze({ owner: RELATIONSHIP_PARAMETERS.start.owner, other: Object.freeze({ trust: 0.55, liking: 0.6, respect: 0.55, irritation: 0 }) }),
   lossRate: 0.25, gainRate: 0.08, recovery: 0.15, irritationFade: 0.4, irritationGain: 0.45, apologyRelief: 0.4, floorRatio: 0.6,
 });
-export const STRANGER_RELATIONSHIP_PROPOSAL: RelationshipParameters = Object.freeze({
-  status: 'proposal',
+export const STRANGER_RELATIONSHIP_PARAMETERS: RelationshipParameters = Object.freeze({
+  status: 'approved',
   start: Object.freeze({ owner: RELATIONSHIP_PARAMETERS.start.owner, other: Object.freeze({ trust: 0.5, liking: 0.5, respect: 0.5, irritation: 0 }) }),
   lossRate: 0.3, gainRate: 0.12, recovery: 0.3, irritationFade: 0.5, irritationGain: 0.5, apologyRelief: 0.4, floorRatio: 0.5,
   scales: Object.freeze(['liking', 'irritation'] as const),
@@ -87,7 +87,7 @@ export function relationshipClassOf(personKey: string): RelationshipClass {
 /** The parameters of a person's ledger by their class. */
 export function relationshipParametersFor(personKey: string): RelationshipParameters {
   const kind = relationshipClassOf(personKey);
-  return kind === 'owner' ? RELATIONSHIP_PARAMETERS : kind === 'friend' ? FRIEND_RELATIONSHIP_PROPOSAL : STRANGER_RELATIONSHIP_PROPOSAL;
+  return kind === 'owner' ? RELATIONSHIP_PARAMETERS : kind === 'friend' ? FRIEND_RELATIONSHIP_PARAMETERS : STRANGER_RELATIONSHIP_PARAMETERS;
 }
 
 /** One closed day of a person: its day key and its remembered events (the archive's, or today's). */

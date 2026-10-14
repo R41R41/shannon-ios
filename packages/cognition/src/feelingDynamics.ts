@@ -38,16 +38,16 @@ const round = (value: number) => Math.round(value * 1000) / 1000;
 /**
  * The per-source influence cap (ADR-0013 §4.3, stage 4): in a scene, one source moves her fast layer with at most `events` hurtful
  * events in `windowMs`; past it, its events are still recorded but felt as nothing new (a flood or a copy-paste is one thing, and one
- * person cannot swing the whole scene). A crowd is one source. A proposal for the owner's approval; the composure reserve keeps its own cap.
+ * person cannot swing the whole scene). A crowd is one source. Approved by the owner as proposed (2026-10-15); the composure reserve keeps its own cap.
  */
-export const SOURCE_INFLUENCE_PROPOSAL = Object.freeze({ events: 3, windowMs: 10 * 60_000 });
+export const SOURCE_INFLUENCE_PARAMETERS = Object.freeze({ events: 3, windowMs: 10 * 60_000 });
 
 function capped(appraisal: Appraisal, recent: number[], at: number): Appraisal {
   const hurt = appraisal.goodness < 0 || appraisal.provocation > 0 || appraisal.violation;
   if (!hurt) return appraisal;
-  const within = recent.filter(time => at - time < SOURCE_INFLUENCE_PROPOSAL.windowMs);
+  const within = recent.filter(time => at - time < SOURCE_INFLUENCE_PARAMETERS.windowMs);
   recent.splice(0, recent.length, ...within, at);
-  if (within.length < SOURCE_INFLUENCE_PROPOSAL.events) return appraisal;
+  if (within.length < SOURCE_INFLUENCE_PARAMETERS.events) return appraisal;
   return { ...appraisal, goodness: 0, provocation: 0, violation: false, unexpected: 0 };
 }
 

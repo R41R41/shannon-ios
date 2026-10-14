@@ -120,7 +120,7 @@ angry, teased and gets shy, in front of anyone; that continuity is not cut. One 
 | `stream` (stage 5) | used | never given |
 
 - **Who an event is about** (§4.1): by account only, never by a name or a look (ADR-0011 §8.2). A platform turn is keyed to the verified owner (`registered`), a remembered friend bound to the account (`person:<id>`, `platform`), or anyone else (`platform:<digest>`; the account id is not kept as it is). A 「友人も一緒」 call is one scene: its turns and the touches with others present during it (within 10 minutes of a turn of the call) are the call's, never the owner's.
-- **Ledgers by person** (§4.2): the owner's (stage 3); a known friend's, lighter, used only in that friend's own DM; a stranger's light ledger (liking and irritation, forgiven and forgotten fast, kept 30 days) used where they speak. Their coefficients are proposals awaiting the owner.
+- **Ledgers by person** (§4.2): the owner's (stage 3); a known friend's, lighter, used only in that friend's own DM; a stranger's light ledger (liking and irritation, forgiven and forgotten fast, kept 30 days) used where they speak. Their coefficients were approved by the owner as proposed (2026-10-15).
 - **One source cannot swing a scene** (§4.3): past three hurtful events in ten minutes, more from the same source are felt as nothing new.
 - **Checks per audience** (§4.6): in a group or a stream, a reply that tells the owner's private matters or her honne about him is flagged (`private_leak`) and, on text, rewritten once before it is sent; anywhere with others present, a privacy marker read out is flagged (`marker_spoken`).
 - The face is not restricted per audience (owner, 2026-10-14: 「嫉妬も甘えも出す」); only these content layers are.
