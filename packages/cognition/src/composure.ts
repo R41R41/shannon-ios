@@ -50,6 +50,9 @@ export const COMPOSURE_COEFFICIENTS = Object.freeze({
   slipDrop: 0.12,
 });
 const C = COMPOSURE_COEFFICIENTS;
+export type ComposureCoefficients = {
+  readonly [K in keyof typeof COMPOSURE_COEFFICIENTS]: (typeof COMPOSURE_COEFFICIENTS)[K] extends readonly number[] ? readonly number[] : number;
+};
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Number.isFinite(value) ? value : 0));
 
@@ -64,22 +67,29 @@ export function registerOfLevel(level: number): FeelingRegister {
 }
 
 /** The level a composure asks for from a level (going down at the thresholds, coming back only past them by the gap). */
-export function levelFor(composure: number, current: number, floor: number): number {
+export function levelFor(composure: number, current: number, floor: number, c: ComposureCoefficients = C): number {
   // In front of others the front starts at 1 (demure); alone her ordinary register is 0 and a worn reserve goes straight to 2.
   const step = (below: number) => (below === 0 ? floor : below + 1);
-  const down = step(C.downAt.filter(threshold => composure < threshold).length);
+  const down = step(c.downAt.filter(threshold => composure < threshold).length);
   // Coming back, a step is left only once composure is past its threshold by the gap (the gap was applied the wrong way: the level
   // could leave a step early and then fall back into it while composure rose).
-  const up = step(C.downAt.filter(threshold => composure < threshold + C.hysteresis).length);
+  const up = step(c.downAt.filter(threshold => composure < threshold + c.hysteresis).length);
   const asked = down > current ? down : Math.min(current, up);
   return Math.max(floor, Math.min(5, asked));
 }
 
-function recovered(state: ComposureState, at: number): ComposureState {
+function recovered(state: ComposureState, at: number, c: ComposureCoefficients): ComposureState {
   if (state.lastAt === null || !(at > state.lastAt)) return { ...state, lastAt: state.lastAt ?? at };
   const minutes = (at - state.lastAt) / 60_000;
-  const window = at - state.window.startedAt > C.windowMs ? { startedAt: at, bySource: {} } : state.window;
-  return { ...state, composure: clamp(state.composure + C.recoveryPerMinute * minutes, 0, 1), lastAt: at, window };
+  const window = at - state.window.startedAt > c.windowMs ? { startedAt: at, bySource: {} } : state.window;
+  return { ...state, composure: clamp(state.composure + c.recoveryPerMinute * minutes, 0, 1), lastAt: at, window };
+}
+
+/** The reserve at an instant after its last event: quiet gives back, and the register follows with its gap (stage 5). */
+export function composureAt(state: ComposureState, at: number, audience: FeelingAudience, c: ComposureCoefficients = C): ComposureState {
+  const base = recovered(state, at, c);
+  const floor = audience === 'owner_alone' ? 0 : 1;
+  return { ...base, level: levelFor(base.composure, Math.max(base.level, floor), floor, c) };
 }
 
 export interface ComposureStep {
@@ -91,20 +101,21 @@ export interface ComposureStep {
 }
 
 /** One event from one source in front of one audience. */
-export function stepComposure(state: ComposureState, appraisal: Appraisal, source: string, audience: FeelingAudience, at: number): ComposureStep {
-  const base = recovered(state, at);
+export function stepComposure(state: ComposureState, appraisal: Appraisal, source: string, audience: FeelingAudience, at: number,
+  c: ComposureCoefficients = C): ComposureStep {
+  const base = recovered(state, at, c);
   const floor = audience === 'owner_alone' ? 0 : 1;
   const coverUp = base.slipPending;
   const earlier = base.window.bySource[source] ?? 0;
-  const repeat = 1 + Math.min(C.repeatMax, C.repeatWeight * Math.round(earlier / Math.max(0.01, C.depletion)));
-  const weight = audience === 'owner_alone' ? C.ownerWeight : 1;
-  const wanted = C.depletion * appraisal.provocation * repeat * weight;
-  const taken = clamp(Math.min(wanted, C.sourceCap - earlier), 0, 1);
-  const kindness = appraisal.relief > 0 && appraisal.goodness > 0 ? C.kindness * appraisal.relief * 4 : 0;
+  const repeat = 1 + Math.min(c.repeatMax, c.repeatWeight * Math.round(earlier / Math.max(0.01, c.depletion)));
+  const weight = audience === 'owner_alone' ? c.ownerWeight : 1;
+  const wanted = c.depletion * appraisal.provocation * repeat * weight;
+  const taken = clamp(Math.min(wanted, c.sourceCap - earlier), 0, 1);
+  const kindness = appraisal.relief > 0 && appraisal.goodness > 0 ? c.kindness * appraisal.relief * 4 : 0;
   const composure = clamp(base.composure - taken + kindness, 0, 1);
-  const level = levelFor(composure, Math.max(base.level, floor), floor);
+  const level = levelFor(composure, Math.max(base.level, floor), floor, c);
   const crossed = level > Math.max(base.level, floor);
-  const slip = crossed && taken >= C.slipDrop && level >= 3;
+  const slip = crossed && taken >= c.slipDrop && level >= 3;
   return {
     state: { composure, level, lastAt: at, window: { startedAt: base.window.startedAt || at, bySource: { ...base.window.bySource, [source]: earlier + taken } },
       slipPending: slip },
