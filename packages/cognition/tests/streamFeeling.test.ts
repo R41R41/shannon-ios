@@ -85,11 +85,14 @@ describe('the §4.7 scenes (comments really move her; a ladder and a floor; neve
   });
 
   it('a threat needs a target and threatening words: a game stream\'s ordinary chat is not one (review T1)', () => {
-    for (const words of ['お前殺すぞ', 'シャノン晒してやる', 'ライ氏の住所特定したから晒す', '本名わかったからな', 'てめえ潰す', '配信者の自宅知ってるぞ']) {
+    for (const words of ['お前殺すぞ', 'シャノン晒してやる', 'ライ氏の住所特定したから晒す', '本名わかったからな', 'てめえ刺しに行く', '配信者の自宅知ってるぞ',
+      'こいつの住所特定した']) {
       expect(commentTags(words), words).toContain('threat');
     }
     for (const words of ['ゾンビ殺すの上手い', 'その敵ころすの早すぎ', '晒す前に保存しといて', 'クリーパー殺せ！', 'ボス潰すの気持ちいい', '特定のブロック集めて',
-      '晒し台作ろう', 'お前天才か', '家に帰ったら特定のアイテム探す', '殺すの上手すぎｗ', 'エンダーマン刺すな', 'シャノン倒すの早い']) {
+      '晒し台作ろう', 'お前天才か', '家に帰ったら特定のアイテム探す', '殺すの上手すぎｗ', 'エンダーマン刺すな', 'シャノン倒すの早い',
+      // Review U1.
+      'こいつ殺すわｗ（クリーパー）', 'このボスこいつ潰す', '配信者のスキン燃やす演出きた']) {
       expect(commentTags(words), words).not.toContain('threat');
     }
   });

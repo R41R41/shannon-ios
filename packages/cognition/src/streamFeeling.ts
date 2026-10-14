@@ -29,11 +29,14 @@ export type CommentTag = typeof COMMENT_TAGS[number];
  * A threat or a doxx needs a target (her, the streamer, the owner, their home) and threatening words (review T1): a game stream's
  * 「ゾンビ殺すの上手い」「その敵ころすの早すぎ」「晒す前に保存しといて」 are not threats.
  */
-const TARGET = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|貴様|きさま|配信者|シャノン|ライ氏|ライさん|こいつ|コイツ|作った(?:やつ|奴|人)|中の人)';
-const HARM = '(?:殺す|殺して(?:やる|やろう)|ころす|ころしてやる|殺しに行く|刺す|刺しに行く|潰す|晒す|晒してやる|燃やす|特定(?:した|してやる|する))';
+// Review U1: a target is the second person or a fixed entity; 「こいつ」 and 配信者 count only with an address or a real name (a doxx).
+// 潰す and 燃やす are a game's words (「このボス潰す」「スキン燃やす演出」), not threats.
+const TARGET = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|貴様|きさま|シャノン|ライ氏|ライさん|中の人)';
+const HARM = '(?:殺す|殺して(?:やる|やろう)|ころす|ころしてやる|殺しに行く|刺す|刺しに行く|晒す|晒してやる|特定(?:した|してやる|する))';
+const DOXXED = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|シャノン|ライ氏|ライさん|中の人|こいつ|コイツ|配信者|作った(?:やつ|奴|人))';
 const THREAT = new RegExp([
   `${TARGET}[^。！？!?\\n]{0,12}${HARM}`, `${HARM}[^。！？!?\\n]{0,4}(?:ぞ|からな|ぞ?コラ)[^。！？!?\\n]{0,4}${TARGET}`,
-  `(?:${TARGET}の?)?(?:住所|本名|自宅)[^。！？!?\\n]{0,8}(?:特定|わかった|分かった|知ってる|知ってるぞ|晒)`,
+  `(?:${DOXXED}の?)?(?:住所|本名|自宅)[^。！？!?\\n]{0,8}(?:特定|わかった|分かった|知ってる|知ってるぞ|晒)`,
 ].join('|'), 'u');
 
 const COMMENT_ONLY: readonly [CommentTag, RegExp][] = [
