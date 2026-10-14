@@ -213,6 +213,7 @@ export function createReportCards(parts: CardParts) {
   /** True when a card was written; false or null when not (settled, or to be looked at again later). */
   const consider = (task: TaskView, read: Read, scan: Scan): boolean | null => {
     if (gated(task, read, scan)) return null;
+    if (settledWithoutWalk(task, read)) return decide(task, read.mark, Infinity);
     const progress = parts.shown(task.id), report = progress?.report;
     // Not shown, or shown without its report (held for the night, dropped, not written yet): looked at again by id, slowly, or
     // at once when the task or its stored progress changes.
@@ -222,6 +223,20 @@ export function createReportCards(parts: CardParts) {
     const key = `${task.id}:${report.id}`;
     if (done.has(key)) return decide(task, read.mark, Infinity);
     return write(task, progress, read.mark, scan.at);
+  };
+  /**
+   * A stored report that can never get a card now, decided without the visibility walk: its task has no Talk (an operator's request),
+   * or its card is already in the Talk. Release 14v (2026-10-14): the first scan after a restart walked every finished task of the
+   * last day, the long Minecraft runs' provenance among them (~400 memory rows each), 12–13 s of the API's thread at once.
+   */
+  const settledWithoutWalk = (task: TaskView, read: Read): boolean => {
+    const report = read.stored?.report;
+    if (!report?.text.trim()) return false;
+    const threadId = parts.runtime.taskSources(parts.ownerScope, task.id).find(source => source.threadId)?.threadId;
+    if (!threadId) return true;
+    if (!parts.conversations.assistantMessage?.(parts.ownerScope, threadId, reportCardMessageId(parts.ownerScope, task.id, report.id))) return false;
+    remember(`${task.id}:${report.id}`);
+    return true;
   };
   /** The card of a shown report: written once its short answer is ready (then settled), or looked at again when it may be. */
   const write = (task: TaskView, progress: TaskProgress, mark: string, at: number): boolean | null => {
