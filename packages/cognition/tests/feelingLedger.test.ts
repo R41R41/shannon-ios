@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMEBACK_DRAWER, FEELING_TURN_HEADER, strongReplyReason, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
+  COMEBACK_DRAWER, FEELING_TURN_HEADER, continuedAfterRefusal, strongReplyReason, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
   parsedFeelingTurn, repetitionLine, replyFacts, utteranceKind, watchRepetition, type FeelingEvent,
 } from '../src/index.js';
 
@@ -214,5 +214,19 @@ describe('which model writes the reply (owner: 「気持ちが強い時だけSon
     expect(strongReplyReason(turn('not_play_along', 'subtle'), 'stream')).toBeNull();
     expect(strongReplyReason(turn('refuse_body', 'subtle'), 'owner_alone')).toBe('body_refusal');
     expect(strongReplyReason(turn('shy', 'subtle'), 'owner_alone', 'refuse')).toBe('body_refusal');
+  });
+});
+
+describe('「いや」のあとも触られ続けている時 (owner decision 2026-10-14)', () => {
+  it('is the same contact again after her no, lately, from the same person; another kind or another person is not', () => {
+    const refused = [touch(0), touch(1, { stance: 'dislike' })];
+    expect(continuedAfterRefusal(foldEpisodeLedger([...refused, touch(2)], owner), at(3))).toBe(true);
+    expect(continuedAfterRefusal(foldEpisodeLedger(refused, owner), at(3))).toBe(false);
+    expect(continuedAfterRefusal(foldEpisodeLedger([...refused, touch(2, { part: 'head', touchKind: 'pet' })], owner), at(3))).toBe(false);
+    expect(continuedAfterRefusal(foldEpisodeLedger([...refused, touch(2, {}, room)], owner), at(3))).toBe(false);
+    expect(continuedAfterRefusal(foldEpisodeLedger([...refused, touch(2)], owner), at(30))).toBe(false);
+    const subtle = parsedFeelingTurn({ stance: 'exasperated', intensity: 'subtle', drawer: 'none' });
+    expect(strongReplyReason(subtle, 'owner_alone', null, true)).toBe('continued_after_refusal');
+    expect(strongReplyReason(subtle, 'owner_alone', null, false)).toBeNull();
   });
 });

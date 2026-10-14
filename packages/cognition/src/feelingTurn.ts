@@ -1,5 +1,6 @@
 import { COMEBACK_DRAWERS, drawerHint, type ComebackDrawer } from './comebackDrawer.js';
 import { FEELING_REGISTERS, type FeelingAudience, type FeelingRegister } from './feelingEvent.js';
+import type { EpisodeLedger } from './episodeLedger.js';
 
 /**
  * The feeling turn v0 (Syzygy ADR-0013 D7, stage 1). Pure. The one face it feeds is `presentation.ts` (D12, D17).
@@ -105,11 +106,27 @@ export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingA
  * shown はっきり or stronger; with anyone else there, a declining stance (乗らない・毒づく・言い返す・呆れる…) at はっきり or stronger;
  * a turn of refusing with her body (払う・隠す), or right after a touch she refused. Null: the ordinary model.
  */
-export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal';
+export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal' | 'continued_after_refusal';
+
+/** How fresh the last touch after her no must be for the turn to be its continuation. */
+export const CONTINUED_AFTER_REFUSAL_MILLISECONDS = 10 * 60_000;
+
+/**
+ * Owner decision 2026-10-14 (form): 「いや」のあとも触られ続けている時も Sonnet. The ledger of this person (it is keyed by person and
+ * audience, so nobody else's touches count) shows a no today on one kind of contact, and that same contact went on after it, lately.
+ * Another kind of contact than the one she refused does not count.
+ */
+export function continuedAfterRefusal(ledger: Pick<EpisodeLedger, 'episodes'> | null | undefined, at: string): boolean {
+  const now = Date.parse(at);
+  return (ledger?.episodes ?? []).some(episode => episode.noAt !== null && episode.afterNo > 0 && episode.lastAt > episode.noAt
+    && now - Date.parse(episode.lastAt) >= 0 && now - Date.parse(episode.lastAt) <= CONTINUED_AFTER_REFUSAL_MILLISECONDS);
+}
 const DECLINING_STANCES: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky']);
 
-export function strongReplyReason(decision: FeelingTurnDecision | null, audience: FeelingAudience, touchStance?: string | null): StrongReplyReason | null {
+export function strongReplyReason(decision: FeelingTurnDecision | null, audience: FeelingAudience, touchStance?: string | null,
+  continued = false): StrongReplyReason | null {
   if (decision?.stance === 'refuse_body' || touchStance === 'refuse') return 'body_refusal';
+  if (continued) return 'continued_after_refusal';
   if (!decision || decision.stance === 'neutral' || decision.intensity === 'subtle') return null;
   return audience !== 'owner_alone' && DECLINING_STANCES.has(decision.stance) ? 'public_decline' : 'intensity';
 }

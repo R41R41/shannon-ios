@@ -6,7 +6,7 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  replyFacts, strongReplyReason,
+  continuedAfterRefusal, replyFacts, strongReplyReason,
   presentFor, presentationIdOf, publicPresentationId, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
@@ -105,7 +105,8 @@ function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true } {
   const strong = handle.port.strong;
   if (!strong || !handle.port.turn) return {};
   const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
-  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null);
+  const continued = continuedAfterRefusal(handle.lines?.ledger, handle.at);
+  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued);
   handle.strong = reason !== null && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
   const capped = reason !== null && !handle.strong;
   observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,

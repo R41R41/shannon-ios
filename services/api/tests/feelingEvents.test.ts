@@ -254,6 +254,23 @@ describe('strong feeling turns on Sonnet (owner: 「気持ちが強い時だけS
     expect(served).toEqual(['sonnet-fake', 'haiku-fake', 'sonnet-fake']);
   });
 
+  it('sends a かすかに turn to Sonnet when the contact she refused goes on (the s1 pattern), and not for another kind or person', async () => {
+    const subtle = () => ({ stance: 'exasperated', intensity: 'subtle', drawer: 'none' });
+    const play = async (after: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+      const { harness, served, at } = await routed(5, subtle);
+      harness.speaker.decision = { say: true, text: 'いやです', feeling: 'annoyed', stance: 'dislike' };
+      await harness.react({ type: 'poke', part: 'chest' });
+      at('2026-10-14T04:00:40.000Z');
+      await harness.react({ type: 'poke', part: 'chest', ...after }, { reply: 'none', ...extra });
+      at('2026-10-14T04:01:20.000Z');
+      await harness.send('POST', '/v1/chat', { message: 'ねえ、怒った？' }, 'iphone');
+      return served;
+    };
+    expect(await play({})).toEqual(['sonnet-fake']);
+    expect(await play({ type: 'pet', part: 'head' })).toEqual(['haiku-fake']);
+    expect(await play({}, { audience: 'others' })).toEqual(['haiku-fake']);
+  });
+
   it('marks nothing while the strong model is off, even on a strong turn', async () => {
     const on = await harnessWith();
     await on.chat('怒って見せて');
