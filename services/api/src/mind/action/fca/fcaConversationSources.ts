@@ -51,6 +51,11 @@ export const FCA_MEMORY_EPOCH_MS = 2_000;
  * never capped (never hidden, never stopped by this): their provenance accumulates by design, a conversation's check walks its
  * current step and at most `FCA_CONTEXT_ITEMS` inbox reports, and a turn's own budget bounds its time.
  * Production on 2026-10-12 carried at most 14 sources and ~500 ids.
+ *
+ * `sources` bounds the walk's sources after `fcaProvenanceForCheck`: a task's memory observations (one recall and one skill index
+ * per step) are folded to at most this many, so only conversation turns can reach it. `recalledIds` bounds its distinct ids,
+ * which nothing folds. 2026-10-14 (task 788da00a, Minecraft): 23 steps left 65 memory rows over 64 distinct ids, and the row
+ * count alone stopped the task as `fca_provenance_capped`, its step closing unknown.
  */
 export const FCA_PROVENANCE_LIMITS = Object.freeze({ sources: 64, recalledIds: 2_000 });
 /** What the parent of a capped task is told: fixed words, carrying nothing of what the task read. */
@@ -126,18 +131,20 @@ export function createFcaSourceGuard(parts: {
       } catch { console.warn('Shannon FCA capped task not reported code=fca_capped_report_failed'); }
     }).unref?.();
   };
-  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, sources, pendingStepId) => {
+  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, rows, pendingStepId) => {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
       if (!parts.ownerAlone()) return false;
       if (task.scopeKey !== scopeKey) return false;
-      if (!sources.length) return true; // Direct owner API tasks have no inherited conversation source.
+      if (!rows.length) return true; // Direct owner API tasks have no inherited conversation source.
+      // The same verdict over fewer sources: every memory id once, at the earliest time it was observed (`fcaProvenanceForCheck`).
+      const sources = fcaProvenanceForCheck(rows);
       const recalledIds = new Set(sources.flatMap(source => source.recalledMemoryIds)).size;
       if (cappable(task) && (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds)) {
         if (clock() - cappedLoggedAt >= 60_000) {
           cappedLoggedAt = clock();
-          console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} ids=${recalledIds}`);
+          console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} rows=${rows.length} ids=${recalledIds}`);
         }
         stopCapped(scopeKey, task);
         return false;
@@ -208,6 +215,62 @@ export function createFcaSourceGuard(parts: {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
   }, { sources: sourcesVisible, progress, content });
+}
+
+/**
+ * A task's provenance in the form one check walks, with the same verdict as its rows. A task observes memory every step (its
+ * recall packet and the skill index, each one row of its own however often the same ids recur), and inherits its parent's rows,
+ * so their number grows with its steps; the distinct ids barely do (2026-10-14: 65 rows, 64 ids). Conversation turns are kept
+ * as they are: each is judged as its own turn.
+ *
+ * Memory rows become one source per time: each recalled and each read id at the earliest time any row observed it, and the
+ * earliest time of all (where the task's own words are judged) even without an id. Every rule that depends on that time
+ * (a correction's boundary, a withholding rule's boundary: `observedAt <= boundary`) withholds an earlier observation whenever it
+ * withholds a later one, and the rest (a forget, a source that went away) do not depend on it; so the earliest is the strictest,
+ * and nothing a row would withhold is shown.
+ *
+ * Over `limit` sources, consecutive times fold into one at the earliest of them: stricter still (an id observed only after a
+ * correction may be judged as before it, closed), never weaker; the walk stays bounded instead of the task being stopped.
+ */
+export function fcaProvenanceForCheck(rows: readonly TaskSource[], limit: number = FCA_PROVENANCE_LIMITS.sources): TaskSource[] {
+  const kept = rows.filter(row => row.kind !== 'memory'), memory = rows.filter((row): row is MemoryRow => row.kind === 'memory');
+  if (memory.length < 2) return [...rows];
+  // Every row's time, its step the first of its rows (deterministic); then each id at the earliest row that observed it.
+  const groups = new Map<string, ProvenanceGroup>();
+  for (const row of memory) {
+    const known = groups.get(row.observedAt);
+    if (!known) groups.set(row.observedAt, { at: row.observedAt, stepId: row.stepId, recalled: new Set(), read: new Set() });
+    else if (row.stepId < known.stepId) known.stepId = row.stepId;
+  }
+  for (const [id, at] of earliestObservations(memory, row => row.recalledMemoryIds)) groups.get(at)!.recalled.add(id);
+  for (const [id, at] of earliestObservations(memory, row => row.readSourceIds ?? [])) groups.get(at)!.read.add(id);
+  const times = [...groups.keys()].sort(), first = times[0]!;
+  let ordered = times.map(at => groups.get(at)!).filter(item => item.at === first || item.recalled.size || item.read.size);
+  const room = Math.max(1, limit - kept.length);
+  if (ordered.length > room) {
+    const all = ordered;
+    ordered = Array.from({ length: room }, (_, index) => {
+      const bucket = all.slice(Math.floor(index * all.length / room), Math.floor((index + 1) * all.length / room));
+      const union = (pick: (item: ProvenanceGroup) => Set<string>) => new Set(bucket.flatMap(item => [...pick(item)]));
+      return { at: bucket[0]!.at, stepId: bucket[0]!.stepId, recalled: union(item => item.recalled), read: union(item => item.read) };
+    });
+  }
+  return [...kept, ...ordered.map((item): TaskSource => ({ kind: 'memory', stepId: item.stepId, experienceId: null, threadId: null,
+    observedAt: item.at, recalledMemoryIds: [...item.recalled].sort(),
+    ...(item.read.size ? { readSourceIds: [...item.read].sort() } : {}) }))];
+}
+type MemoryRow = Extract<TaskSource, { kind: 'memory' }>;
+type ProvenanceGroup = { at: string; stepId: string; recalled: Set<string>; read: Set<string> };
+/** Each id with the earliest time any row observed it. */
+function earliestObservations(rows: readonly MemoryRow[], ids: (row: MemoryRow) => readonly string[]): Map<string, string> {
+  const earliest = new Map<string, string>();
+  for (const row of rows) {
+    for (const id of ids(row)) {
+      const known = earliest.get(id);
+      if (known === undefined || row.observedAt < known) earliest.set(id, row.observedAt);
+    }
+  }
+  return earliest;
 }
 
 /**

@@ -132,7 +132,8 @@ describe('the provenance cap', () => {
     await f.build();
     const child = f.runtime.get('owner', f.children[0]!)!;
     vi.spyOn(f.runtime, 'send').mockImplementation(() => { throw new Error('FCA_MAINTENANCE_INPUT'); }); // As a maintenance parent answers.
-    expect(f.visible.sources('owner', child, spread(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now()))).toBe(false);
+    // Memory rows alone no longer reach the source cap (they are folded, `fcaProvenanceForCheck`); the id cap still stops.
+    expect(f.visible.sources('owner', child, many(FCA_PROVENANCE_LIMITS.recalledIds + 1, f.world.now()))).toBe(false);
     await new Promise(resolve => setImmediate(resolve));
     expect(['stopped', 'stopping']).toContain(f.runtime.get('owner', child.id)!.phase);
     expect(warn.mock.calls.some(([line]) => String(line).includes('code=fca_capped_report_failed'))).toBe(true);

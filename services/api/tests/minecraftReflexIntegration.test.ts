@@ -242,6 +242,19 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     expect(f.commands.length).toBe(sent);
   });
 
+  it('never offers minecraft.reflex nor sends a capture to a body that says it has no renderer, even in danger (task 788da00a)', async () => {
+    const f = fixture(() => wait(), { noImage: true });
+    f.facts({ rendererConfigured: false, imageAvailable: false });
+    expect(f.control.imagesUnavailable('minecraft:world')).toBe(true);
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision');
+    expect(f.modelInputs[0]!.tools.some(tool => tool.name === 'minecraft.reflex')).toBe(false);
+    f.danger(true);
+    for (let i = 0; i < 20; i++) { f.pump(); await delay(1); }
+    expect(f.entryCalls()).toBe(0);
+    expect(f.commands.filter(command => command.kind === 'capture')).toEqual([]);
+    await f.driver.drain();
+  });
+
   it.each(['deadline', 'close'] as const)('unwinds a competing body resource wait on local %s without aborting the enclosing action', async mode => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => answer.promise, { sessionMilliseconds: mode === 'deadline' ? 30 : 20_000 });
