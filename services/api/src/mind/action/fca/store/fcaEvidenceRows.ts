@@ -88,8 +88,9 @@ export class FcaPrepareTrace {
   parsedBytes = 0;
   yields = 0;
   walked = 0;
+  partial = 0;
   reused = 0;
-  constructor(private readonly walks?: () => { walked: number; reused: number }) {}
+  constructor(private readonly walks?: () => { walked: number; reused: number; partial?: number }) {}
   time<T>(name: string, work: () => T): T {
     const at = performance.now();
     try { return work(); } finally { this.spent.push([name, performance.now() - at]); }
@@ -101,6 +102,7 @@ export class FcaPrepareTrace {
       const after = this.walks?.();
       if (before && after) {
         this.walked += after.walked - before.walked;
+        this.partial += (after.partial ?? 0) - (before.partial ?? 0);
         this.reused += after.reused - before.reused;
       }
     }
@@ -113,7 +115,8 @@ export class FcaPrepareTrace {
     const total = performance.now() - this.started;
     const parts = this.spent.map(([name, ms]) => `${name}=${Math.round(ms)}ms`).join(' ');
     console.info(`Shannon FCA evidence prepare outcome=${outcome} total=${Math.round(total)}ms ${parts} rows=${this.rows} `
-      + `rowChecks=${this.rowChecks} covered=${this.covered} reduced=${this.reduced} deduped=${this.deduped} walks=${this.walked} reused=${this.reused} `
+      + `rowChecks=${this.rowChecks} covered=${this.covered} reduced=${this.reduced} deduped=${this.deduped} `
+      + `walks=${this.walked} partial=${this.partial} reused=${this.reused} `
       + `parsedBytes=${this.parsedBytes} yields=${this.yields}`);
   }
 }

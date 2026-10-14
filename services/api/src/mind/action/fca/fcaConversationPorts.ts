@@ -60,7 +60,7 @@ export interface FcaSourceGuard {
   /** What a walk of `candidate` still checks after `verified` was found visible, same task and moment (`foldedProvenanceResidual`). */
   residual?(scopeKey: string, task: TaskView, verified: readonly TaskSource[], candidate: readonly TaskSource[]): TaskSource[] | null;
   /** Content-free counts since the guard was made: verdicts that walked the provenance, and verdicts reused within their window. */
-  walks?(): { walked: number; reused: number };
+  walks?(): { walked: number; reused: number; partial?: number };
 }
 
 export { createFcaConversationBridge } from './fcaConversation.js';

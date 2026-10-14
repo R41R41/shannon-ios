@@ -120,7 +120,21 @@ export function createFcaSourceGuard(parts: {
     return [...representative.values()].every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
   };
   const capped = new Set<string>();
-  const counts = { walked: 0, reused: 0 };
+  const counts = { walked: 0, reused: 0, partial: 0 };
+  /**
+   * Per task (its words and pending step): the latest provenance found visible, folded, with the receipts its walk consulted.
+   * Minecraft runs 7, 9 and 10 (2026-10-14): each step adds a recall and a skill-index row, so every check keyed by the new sources
+   * walked the whole provenance (~300 memory rows, 1–5 s of the API's thread on the VM). A check whose base is still usable under
+   * the same rules as a stored verdict (same state version, within `FCA_SOURCE_VERDICT_MS` of the base's own walk, every receipt
+   * it consulted unchanged, who can hear asked again) walks only what the base did not check. Every check of the new provenance is
+   * then either made now or was passed by the base's walk, at the same or an earlier time, under the same state.
+   */
+  type Base = Verdict & { folded: readonly TaskSource[] };
+  const bases = new Map<string, Base>();
+  const usableBase = (base: Base | undefined, epoch: Epoch, scopeKey: string, version: number, at: number): Base | null => {
+    if (!base || base.version !== version || at < base.at || at - base.at >= FCA_SOURCE_VERDICT_MS) return null;
+    return readsUnchanged(epoch, scopeKey, base.reads) ? base : null;
+  };
   /** Once per task, after the current check (never inside a caller's transaction): its parent is told, then it is stopped. */
   const stopCapped = (scopeKey: string, task: TaskView) => {
     if (capped.has(task.id)) return;
@@ -163,15 +177,21 @@ export function createFcaSourceGuard(parts: {
         counts.reused += 1;
         return known.visible;
       }
-      counts.walked += 1;
+      const baseKey = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null]);
+      const base = usableBase(bases.get(baseKey), epoch, scopeKey, state.version, at);
+      // With a base, only what it did not check (`foldedProvenanceResidual`); without one, all of it.
+      const walked = base ? foldedProvenanceResidual(base.folded, sources) : sources;
+      if (base) counts.partial += 1; else counts.walked += 1;
       const reads = recordedReads(epoch, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
       const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, epoch.candidates, reads.check, epoch.withheld);
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
       // memory chunk used to build its own and walk the whole graph again.
-      const visible = withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, sources, pendingStepId, state, withholding));
-      for (const [stale, verdict] of verdicts) if (at - verdict.at >= FCA_SOURCE_VERDICT_MS || at < verdict.at) verdicts.delete(stale);
-      if (verdicts.size >= FCA_SOURCE_VERDICTS_KEPT) verdicts.delete(verdicts.keys().next().value!);
-      verdicts.set(key, { version: state.version, at, visible, reads: reads.list() });
+      const visible = !walked.length
+        || withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding));
+      // A verdict resting on a base is as old as the base and asks again every read the base consulted.
+      const verdict = { version: state.version, at: base?.at ?? at, visible, reads: [...base?.reads ?? [], ...reads.list()] };
+      remember(verdicts, key, verdict, at);
+      if (visible) remember(bases, baseKey, { ...verdict, folded: sources }, at);
       return visible;
     } catch { return false; }
   };
@@ -251,6 +271,13 @@ export function createFcaSourceGuard(parts: {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
   }, { sources: sourcesVisible, progress, content, covers, residual, walks: () => ({ ...counts }) });
+}
+
+/** Keeps an entry, dropping those past `FCA_SOURCE_VERDICT_MS` (or from a later clock) and the oldest past `FCA_SOURCE_VERDICTS_KEPT`. */
+function remember<T extends { at: number }>(entries: Map<string, T>, key: string, entry: T, at: number): void {
+  for (const [stale, value] of entries) if (at - value.at >= FCA_SOURCE_VERDICT_MS || at < value.at) entries.delete(stale);
+  if (entries.size >= FCA_SOURCE_VERDICTS_KEPT) entries.delete(entries.keys().next().value!);
+  entries.set(key, entry);
 }
 
 /**
