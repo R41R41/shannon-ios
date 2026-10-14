@@ -5,6 +5,7 @@ import type { ShannonToolRunner } from '../mind/tools/toolRunnerPorts.js';
 import { toolSessionMemory, type ToolDocuments } from '../mind/tools/shannonToolTypes.js';
 import { webReadUnknown } from '../mind/tools/shannonReadTools.js';
 import { MEMORY_TOOLS } from '../mind/tools/memoryToolDefinitions.js';
+import { toolFailure } from '../mind/tools/toolRegistryPorts.js';
 import type { FcaExternalTools } from '../mind/action/fca/fcaPorts.js';
 import type { TaskOrigin } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -75,22 +76,33 @@ export function fcaResearchTools(parts: {
       const definition = definitions.find(tool => tool.name === call.name)!;
       const priorEffect = effectUncommitted;
       let readStage = 0;
+      /**
+       * A read with no effect outside (`read`, cost `none`) whose result cannot be shown now is a known failure, its text withheld
+       * from the model, and the task goes on (Minecraft run 11, 2026-10-15: one such hold closed the step unknown and the task was
+       * retired). Anything with an effect outside still throws: its step stays unknown, as before.
+       */
+      const effectFree = effectFreeRead(definition);
+      let readWithheld = false;
+      const withheld = () => {
+        if (!effectFree) throw new Error('FCA_SOURCE_WITHHELD');
+        readWithheld = true;
+      };
       const result = await parts.tools.call(call.name, call.input, { scopeKey: parts.scopeKey,
         surface: 'text', audience: 'owner_alone', placeSearch: parts.placeSearch, memory: Object.assign(memory, { turnKey: call.operationId }), secrets,
         beforeExecution() { beforeExecution(); if (definition.effect === 'write' || definition.cost === 'model') effectUncommitted = true; },
         observeRead(receipt) {
           call.signal.throwIfAborted(); live();
           if (receipt.ok && receipt.text && new MemoryWithholding(parts.state.snapshot(parts.scopeKey), parts.conversations, parts.scopeKey)
-            .withholdsReply({ text: receipt.text, observedAt: new Date().toISOString(), recalledMemoryIds: [] })) throw new Error('FCA_SOURCE_WITHHELD');
-          if (!parts.observeRead?.(`${call.operationId}:read:${readStage++}`, receipt)) throw new Error('FCA_SOURCE_WITHHELD');
+            .withholdsReply({ text: receipt.text, observedAt: new Date().toISOString(), recalledMemoryIds: [] })) return withheld();
+          if (!parts.observeRead?.(`${call.operationId}:read:${readStage++}`, receipt)) return withheld();
           live();
         },
         afterExecution(receipt) {
           call.signal.throwIfAborted(); live();
           const tool = definitions.find(tool => tool.name === call.name)!;
           if (tool.effect === 'read' && receipt.ok && new MemoryWithholding(parts.state.snapshot(parts.scopeKey), parts.conversations, parts.scopeKey)
-            .withholdsReply({ text: receipt.text, observedAt: new Date().toISOString(), recalledMemoryIds: [] })) throw new Error('FCA_SOURCE_WITHHELD');
-          if (tool.effect === 'read' && tool.domain !== 'memory_read' && parts.observeRead && !parts.observeRead(call.operationId, receipt)) throw new Error('FCA_SOURCE_WITHHELD');
+            .withholdsReply({ text: receipt.text, observedAt: new Date().toISOString(), recalledMemoryIds: [] })) return withheld();
+          if (tool.effect === 'read' && tool.domain !== 'memory_read' && parts.observeRead && !parts.observeRead(call.operationId, receipt)) return withheld();
           live();
         },
         ...(parts.observeMemory ? { observeMemory: parts.observeMemory } : {}), timeMilliseconds: 45_000, acknowledgementOwner: 'fca' }, call.signal);
@@ -100,11 +112,20 @@ export function fcaResearchTools(parts: {
         && ['failed', 'unavailable', 'timeout'].includes(result.failure ?? ''))) throw new Error('FCA_RESEARCH_RESULT_UNKNOWN');
       if (!result.ok || definition.effect !== 'write') effectUncommitted = priorEffect;
       live();
+      // Nothing of a withheld read reaches the model: a fixed failure in its place.
+      if (readWithheld) return WITHHELD_READ;
       if (parts.task) noteSkillRead(parts.skillRead, call, result.ok);
       return result;
     },
   };
 }
+
+/** A read with no effect outside: nothing is changed or paid for by running it again. */
+function effectFreeRead(definition: { effect: string; cost: string }): boolean {
+  return definition.effect === 'read' && definition.cost === 'none';
+}
+/** The result of a read withheld after it ran: fixed words, nothing of what it read. */
+const WITHHELD_READ = toolFailure('unavailable', 'この結果は今は使えません。', { retryable: false });
 
 /** A task's successful `skill.read`, handed to its outcome tracker (`fcaSkillOutcomes.ts`); learning never fails a read. */
 function noteSkillRead(skillRead: ((name: string) => void) | undefined, call: { name: string; input: unknown }, ok: boolean): void {

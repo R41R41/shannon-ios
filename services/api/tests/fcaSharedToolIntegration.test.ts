@@ -144,15 +144,16 @@ describe('common FCA registry adapters under real task/action SQLite authority',
     expect(f.visible('owner', f.task.id)).toBe(false); expect(f.visible('owner', child.id)).toBe(false);
   });
 
-  it('withholds a revoked asynchronous private read before native history commits and never automatically reruns the segment', async () => {
+  it('withholds a revoked asynchronous private read before native history, as a known failure that keeps the task running', async () => {
     let reads = 0;
     const f = fixture(() => call('notion.read', { query: 'shared reference' }));
     f.tools.useReads({ notion: async () => { reads++; f.setConnected(false); return { text: 'Revoked private page', sources: [], sourceIds: ['notion-page://0123456789abcdef0123456789abcdef'] }; } });
     await f.driver.tick(); await f.driver.drain();
-    expect(reads).toBe(1); expect(f.driver.runtime.get('owner', f.task.id)!.phase).toBe('unknown');
-    expect(f.driver.runtime.snapshot('owner', f.task.id)!.history).toEqual([]);
-    f.setConnected(true); for (let i = 0; i < 2; i++) { await f.driver.tick(); await f.driver.drain(); }
-    expect(reads).toBe(1);
+    // A read with no effect outside (Minecraft run 11, 2026-10-15): its step is not unknown; nothing it read reaches the history.
+    expect(reads).toBe(1); expect(f.driver.runtime.get('owner', f.task.id)!.phase).not.toBe('unknown');
+    const history = JSON.stringify(f.driver.runtime.snapshot('owner', f.task.id)!.history);
+    expect(history).not.toContain('Revoked private page');
+    expect(history).toContain('この結果は今は使えません。');
   });
 
   it('holds a handed-out folder write with a lost receipt on the original action and does not acknowledge or replay it', async () => {
