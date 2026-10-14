@@ -60,6 +60,8 @@ export interface InnerNoteBodyReader {
   ledger?(scopeKey: string, at: string): string;
   /** Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): her fast layer now, in words; null while she is not the narrator. */
   fastLayer?(scopeKey: string, at: string): string | null;
+  /** Stage 3 (`SHANNON_RELATIONSHIP_LEDGER`): the owner's relationship line ('' when nothing is off); null while it is off. */
+  relationship?(scopeKey: string, at: string): string | null;
 }
 
 export interface InnerNotePort {

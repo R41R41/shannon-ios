@@ -20,6 +20,8 @@ import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
 import { configuredFeelingSentenceWriter, type FeelingSentenceWriter } from '../infra/models/feelingSentenceModel.js';
+import { FeelingDays, type FeelingDayFeatures } from '../mind/emotion/feelingDays.js';
+import { SQLiteFeelingDayStore } from '../mind/emotion/store/feelingDayStore.js';
 
 export interface ConfiguredFeeling {
   port: FeelingPort;
@@ -104,7 +106,8 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn) });
+    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
+    days: feelingDayFeatures(environment) });
 }
 
 /**
@@ -141,6 +144,21 @@ function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: Feelin
     ...(parts.textRegister && parts.turn ? { textRegister: true } : {}) };
 }
 
+/** Stage 3's closed days, when any of what they carry is on; else nothing is opened and no table is made. */
+function closedDays(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; days?: FeelingDayFeatures },
+  events: SQLiteFeelingEventStore): { days: { days?: FeelingDays }; store: SQLiteFeelingDayStore | null } {
+  const features = parts.days;
+  if (!features || !(features.relationship || features.episodes || features.boundaries)) return { days: {}, store: null };
+  const store = new SQLiteFeelingDayStore(parts.database);
+  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features }) }, store };
+}
+
+/** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read). */
+export function feelingDayFeatures(environment: Readonly<Record<string, string | undefined>>): FeelingDayFeatures {
+  return { relationship: switchOn(environment, 'SHANNON_RELATIONSHIP_LEDGER'), episodes: switchOn(environment, 'SHANNON_EPISODE_MEMORY'),
+    boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY') };
+}
+
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
   singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
@@ -155,7 +173,9 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   /** Stage 2 (`SHANNON_FEELING_SENTENCE`): her feeling sentence's writer (used only with the shadow and the turn). */
   sentence?: FeelingSentenceWriter;
   /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
-  shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot } }): ConfiguredFeeling {
+  shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot };
+  /** Stage 3: what is carried across days (the closed-day table opens only when one of them is on). */
+  days?: FeelingDayFeatures }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
   const seed = parts.seed ? { seed: parts.seed } : {};
   const shadowStore = parts.shadow ? new SQLiteFeelingShadowStore(parts.shadow.database) : null;
@@ -163,11 +183,12 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const shadow = shadowStore && parts.shadow
     ? new FeelingShadow({ events: () => events, store: shadowStore, snapshot: parts.shadow.snapshot, now: parts.now }) : null;
   const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
-  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded });
+  const closed = closedDays(parts, store);
+  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = portFlags(parts);
-  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
+  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags, ...closed.days };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);
   const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
@@ -175,6 +196,7 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const close = () => {
     store.close();
     shadowStore?.close();
+    closed.store?.close();
   };
   return { port, wrap, close };
 }

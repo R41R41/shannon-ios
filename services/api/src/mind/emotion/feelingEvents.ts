@@ -4,6 +4,7 @@ import {
   type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type RepetitionWatch,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
+import type { FeelingDays } from './feelingDays.js';
 
 /**
  * Her feeling events and what is folded from them (Syzygy ADR-0013 stage 1, items 1, 3 and 8): the one entrance every touch, word
@@ -35,6 +36,8 @@ export interface FeelingLines {
   repetitionLine: string;
   /** Closed numbers for the chooser and the Observer. */
   facts: Record<string, number | string>;
+  /** Stage 3: what is carried from the days before (the relationship line, episodes, boundaries), for this key's own audience. */
+  carriedLines: readonly string[];
 }
 
 export interface FeelingKey {
@@ -68,7 +71,9 @@ export class FeelingEvents {
   constructor(private readonly options: { store: FeelingEventRecords; now: () => string; timeZone: string; partWord: (subject: string) => string;
     reportError?: (error: unknown) => void; seed?: RepetitionSeed;
     /** Stage 2 (`SHANNON_CORE_AFFECT`): told of every recorded event, after it is written (the shadow of her fast layer). */
-    onRecorded?: (scopeKey: string, event: FeelingEvent) => void }) {}
+    onRecorded?: (scopeKey: string, event: FeelingEvent) => void;
+    /** Stage 3: her closed days and what is carried across them (absent: nothing is carried). */
+    days?: FeelingDays }) {}
 
   get timeZone(): string { return this.options.timeZone; }
 
@@ -109,8 +114,9 @@ export class FeelingEvents {
         // Stage 2 (`SHANNON_REPLY_CHECK`): what the check found in her last reply goes to the next feeling turn (absent without it).
         const last = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0]?.facts.checkFlags;
         const checked: Record<string, string> = last?.length ? { last_check: last.join('|') } : {};
+        const carried = this.options.days?.carried(scopeKey, key, at, snapshot) ?? { lines: [], facts: {} };
         return { ledger, watch, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone), repetitionLine: repetitionLine(watch),
-          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked } };
+          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked, ...carried.facts }, carriedLines: carried.lines };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);

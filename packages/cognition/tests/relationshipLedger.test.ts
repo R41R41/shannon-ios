@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RELATIONSHIP_PROPOSAL, feelingActor, foldRelationship, relationshipLine, utteranceTags, type FeelingEvent, type RelationshipDay,
+  RELATIONSHIP_PARAMETERS, feelingActor, foldRelationship, relationshipLine, utteranceTags, type FeelingEvent, type RelationshipDay,
 } from '../src/index.js';
 
 /** The relationship ledger (ADR-0013 D5, stage 3): it drops easily, recovers slowly, never below its floor, and moves once a day. */
@@ -19,13 +19,13 @@ const kindDay = (day: string): RelationshipDay => ({ dayKey: day, events: [event
 describe('the relationship ledger', () => {
   it('starts where the owner starts, and nothing is off', () => {
     const state = foldRelationship([], 'owner', '2026-10-14');
-    expect(state.scales).toEqual(RELATIONSHIP_PROPOSAL.start.owner);
+    expect(state.scales).toEqual(RELATIONSHIP_PARAMETERS.start.owner);
     expect(relationshipLine(state, 'ライ氏')).toBe('');
   });
 
   it('remembers the day before the next morning: trust lower, irritation left (scene 3)', () => {
     const state = foldRelationship([badDay('2026-10-13')], 'owner', '2026-10-14');
-    expect(state.scales.trust).toBeLessThan(RELATIONSHIP_PROPOSAL.start.owner.trust);
+    expect(state.scales.trust).toBeLessThan(RELATIONSHIP_PARAMETERS.start.owner.trust);
     expect(state.scales.irritation).toBeGreaterThan(0.2);
     expect(relationshipLine(state, 'ライ氏')).toMatch(/いらだち: (?:少し)?残っている|強く残っている/u);
     expect(relationshipLine(state, 'ライ氏')).not.toMatch(/\d/u);
@@ -33,12 +33,12 @@ describe('the relationship ledger', () => {
 
   it('moves once a day: today\'s events wait for the night', () => {
     const today = foldRelationship([badDay('2026-10-14')], 'owner', '2026-10-14');
-    expect(today.scales).toEqual(RELATIONSHIP_PROPOSAL.start.owner);
+    expect(today.scales).toEqual(RELATIONSHIP_PARAMETERS.start.owner);
   });
 
   it('comes back slowly with an apology and quiet days, more slowly than it fell', () => {
     const fell = foldRelationship([badDay('2026-10-13')], 'owner', '2026-10-14');
-    const lost = RELATIONSHIP_PROPOSAL.start.owner.trust - fell.scales.trust;
+    const lost = RELATIONSHIP_PARAMETERS.start.owner.trust - fell.scales.trust;
     const apology: RelationshipDay = { dayKey: '2026-10-14', events: [event('2026-10-14', 0, 'apologized')] };
     const next = foldRelationship([badDay('2026-10-13'), apology], 'owner', '2026-10-15');
     expect(next.scales.irritation).toBeLessThan(fell.scales.irritation);
@@ -52,8 +52,8 @@ describe('the relationship ledger', () => {
   it('never falls below its floor, however many bad days', () => {
     const days = Array.from({ length: 20 }, (_, index) => badDay(`2026-09-${String(index + 1).padStart(2, '0')}`));
     const state = foldRelationship(days, 'owner', '2026-10-14');
-    expect(state.scales.trust).toBeGreaterThanOrEqual(RELATIONSHIP_PROPOSAL.floorRatio * state.peak.trust - 1e-9);
-    expect(state.scales.liking).toBeGreaterThanOrEqual(RELATIONSHIP_PROPOSAL.floorRatio * state.peak.liking - 1e-9);
+    expect(state.scales.trust).toBeGreaterThanOrEqual(RELATIONSHIP_PARAMETERS.floorRatio * state.peak.trust - 1e-9);
+    expect(state.scales.liking).toBeGreaterThanOrEqual(RELATIONSHIP_PARAMETERS.floorRatio * state.peak.liking - 1e-9);
     expect(state.scales.irritation).toBeLessThanOrEqual(1);
   });
 
@@ -68,7 +68,7 @@ describe('the relationship ledger', () => {
     const words = (day: string): RelationshipDay => ({ dayKey: day,
       events: [1, 2, 3].map(minute => event(day, minute, 'spoke', { tags: utteranceTags('お前ポンコツだな') }) ) });
     const state = foldRelationship([words('2026-10-13')], 'owner', '2026-10-14');
-    const start = RELATIONSHIP_PROPOSAL.start.owner;
+    const start = RELATIONSHIP_PARAMETERS.start.owner;
     expect(start.respect - state.scales.respect).toBeGreaterThan(start.trust - state.scales.trust);
   });
 });

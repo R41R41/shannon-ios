@@ -144,6 +144,17 @@ Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_INNER_NOTE`. 
 - Its fixed instructions get one more section, 「[語り手として]」: the feeling has already moved; read it, do not decide it again; honne comes from the fast layer and the ledger, not from what she said in her replies. A separate cached prefix; without the switch the instructions and the input are byte for byte as before.
 - `intent` (one step per event) and `until` (and its caps) are unchanged; so are `shown` and the face (D12).
 
+## Stage 3: her closed days and the relationship ledger (`SHANNON_RELATIONSHIP_LEDGER`)
+
+Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. The old `shannon_trust_ledger` (ADR-0008 F6, inert) is left as it is (coordinator, 2026-10-14).
+
+- **Closed days** (`emotion/006_feeling_days`, table `shannon_feeling_days`, made only when a stage-3 switch opens its store): once her day is over (3:00 owner time), the next use closes it: its events about him and her refusals, in their closed form (kinds, parts, stances, refusal, tags, meaning, told boundaries, source ids; never words), one row per day, person, audience and scene. A process closes the days it missed, up to 30 back. Kept 400 days.
+- **Forgetting**: every fold reads the closed days through the forgetting filter (`remembered`): a forgotten source is left out, and the relationship, boundaries and episodes are computed again without it. Nothing derived is stored.
+- **The ledger** (`relationshipLedger.ts`): per known person (the owner; never anyone unknown or a whole scene), trust, liking, respect and irritation, moved once per closed day. Coefficients approved by the owner as proposed (2026-10-14, form 「この案でよい」): starts owner 0.8 / 0.85 / 0.8 / 0, others 0.5 / 0.5 / 0.5 / 0; loss rate 0.30, gain rate 0.06, quiet-day recovery to the highest value 0.12; irritation fade 0.30, accumulation 0.50, apology relief 0.35; floor 0.7 × the highest value for trust and liking. Day signals: touches after her no (violation), tagged words (provocation), kind words, apologies, the blame left at the day's end.
+- **Where it goes**: a line in words, only when something is off, 「[ライ氏との間]（日をまたいで持っているもの。事実として。すねた態度は持ち越さない）信頼: 少し下がっている、…、いらだち: 少し残っている」, after the day's ledger in the feeling turn's block (or the facts block), the touch line's facts, and her inner note's reflection. The chooser gets `rel_trust`, `rel_liking`, `rel_respect`, `rel_irritation`.
+- **ADR-0012 D4 as revised**: with the line handed to her reflection, its fixed rule reads 「すねた態度や一日の気持ちは、次の日には持ち越されない（仕組み）。ただし関係の帳簿…は日をまたいで持ち越され、ゆっくり戻る」. The day's close (intent none, until null) is unchanged.
+- **Observer**: `feeling.relationship`: the four values and the highest trust and liking.
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).

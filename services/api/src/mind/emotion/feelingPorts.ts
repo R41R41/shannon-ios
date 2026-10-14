@@ -22,6 +22,7 @@ import type { JevChooser } from '../../infra/models/jev/jevChoice.js';
 import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.js';
 import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
+import type { FeelingDays } from './feelingDays.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
 import { textRegisterBefore, textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
@@ -39,6 +40,8 @@ export const feelingTurnEnabled = (environment: Environment = serverEnvironment(
 
 export interface FeelingPort {
   readonly events: FeelingEvents;
+  /** Stage 3: her closed days and what is carried across them (`SHANNON_RELATIONSHIP_LEDGER`, episode and boundary memory). */
+  readonly days?: FeelingDays;
   /** Jev for the text feeling turn; null without `TYPESAFE_API_KEY` (then 「ふつう」 and the facts). */
   readonly chooser: JevChooser | null;
   readonly turn: boolean;
@@ -108,8 +111,12 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
 function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): string {
   const ledgerLine = handle.lines?.ledgerLine ?? '', repetitionLine = handle.lines?.repetitionLine ?? '';
-  if (decision) return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience });
-  const facts = [ledgerLine, ledgerLine ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
+  const carried = handle.lines?.carriedLines ?? [];
+  if (decision) {
+    const extra = carried.length ? { carried } : {};
+    return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience, ...extra });
+  }
+  const facts = [ledgerLine, ...carried, ledgerLine || carried.length ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
   return facts.length ? [FEELING_FACTS_HEADER, ...facts].join('\n') : '';
 }
 
@@ -391,7 +398,7 @@ export const feelingBody = Object.freeze({
   lines: (port: FeelingPort | null, scopeKey: string, audience: 'owner' | 'others', at: string, snapshot: CompanionStateSnapshot): string => {
     if (!port) return '';
     const lines = port.events.linesFor(scopeKey, touchKey(audience), at, snapshot);
-    return [lines?.ledgerLine ?? '', lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
+    return [lines?.ledgerLine ?? '', ...(lines?.carriedLines ?? []), lines?.repetitionLine ?? ''].filter(Boolean).join('\n');
   },
   /** The owner's day as one ledger line, for her inner note's reflection ('' without a port). */
   ledgerLine: (port: FeelingPort | null, scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string =>
@@ -404,6 +411,11 @@ export const feelingBody = Object.freeze({
       if (!feeling?.narrator || !feeling.coreAffect) return null;
       const core = foldFeelingDynamics(feeling.events.today(scopeKey, at, snapshot(scopeKey)), touchKey('owner')).core;
       return fastLayerWords(advanceCoreAffect(core, Date.parse(at)));
+    },
+    relationship: (scopeKey: string, at: string): string | null => {
+      const feeling = port();
+      if (!feeling?.days?.features.relationship) return null;
+      return feeling.days.carried(scopeKey, touchKey('owner'), at, snapshot(scopeKey)).lines.find(line => line.startsWith('[ライ氏との間]')) ?? '';
     },
   }),
   /** The body's face (a reaction's `mood`, presence) under `SHANNON_SINGLE_FACE`; without it, the face as it was. */

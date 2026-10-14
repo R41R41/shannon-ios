@@ -12,6 +12,8 @@ import { soothingIn } from './affect.js';
  */
 export const FEELING_EVENT_KINDS = [
   'touched', 'spoke', 'apologized', 'praised', 'feeling_order', 'own_reply', 'own_refusal', 'own_motion', 'game', 'comment', 'crowd_comment',
+  // Stage 3 (`SHANNON_BOUNDARY_MEMORY`): she took a boundary she was told as her own, in her inner note's reflection.
+  'own_boundary',
 ] as const;
 export type FeelingEventKind = typeof FEELING_EVENT_KINDS[number];
 
@@ -73,6 +75,8 @@ export interface FeelingEventFacts {
   rewritten?: true;
   /** The reply went to the stronger model (`SHANNON_FEELING_STRONG_REPLY_MODEL`): counted against the day's cap. */
   replyModel?: 'strong';
+  /** Stage 3 (`SHANNON_BOUNDARY_MEMORY`): his words told her to refuse something (「嫌だって言わないと」): its subject, a part or `body`. */
+  toldBoundary?: string;
 }
 
 export interface FeelingEvent {

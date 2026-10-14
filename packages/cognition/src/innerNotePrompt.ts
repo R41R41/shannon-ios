@@ -68,9 +68,21 @@ const NARRATOR = `[語り手として]
 - いまの気持ちは、もう動いている（[いまの${I}]、速い層）。メモはそれを決め直さず、読んで、本人の言葉で語る。
 - 本音は、速い層と今日の件（帳面）から読む。${I}が返事で言ったことを本音の元にしない（返事は、その場に合わせて言ったことがある）。`;
 
-/** The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour); one more section as narrator. */
-export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE, options: { narrator?: boolean } = {}): string {
-  return [HEADER, characterCoreBlock(core), FIELDS, SYSTEM, QUESTIONS, HOOKS, ...(options.narrator ? [NARRATOR] : [])].join('\n\n');
+/**
+ * ADR-0012 D4 as ADR-0013 §6 revises it (`SHANNON_RELATIONSHIP_LEDGER`): the sulking attitude still closes with the day, but the
+ * relationship ledger's values carry over and come back slowly (owner: 「下がって、ゆっくり戻る」).
+ */
+const DAY_END = '- 一日の気持ちは、次の日には持ち越されない（仕組み）。';
+const DAY_END_CARRIED = '- すねた態度や一日の気持ちは、次の日には持ち越されない（仕組み）。ただし関係の帳簿（信頼・好意・尊敬・いらだち）は日をまたいで持ち越され、'
+  + 'ゆっくり戻る（仕組み。[〜との間] の行）。';
+
+/**
+ * The fixed instructions of a reflection: the same bytes for every call of one core version (cached for an hour); one more section as
+ * narrator; the day's end as revised when the relationship ledger carries over.
+ */
+export function innerNoteReflectionInstructions(core: CharacterCore = CHARACTER_CORE, options: { narrator?: boolean; carryOver?: boolean } = {}): string {
+  const system = options.carryOver ? SYSTEM.replace(DAY_END, DAY_END_CARRIED) : SYSTEM;
+  return [HEADER, characterCoreBlock(core), FIELDS, system, QUESTIONS, HOOKS, ...(options.narrator ? [NARRATOR] : [])].join('\n\n');
 }
 
 export interface InnerNoteReflectionFacts {
@@ -101,6 +113,8 @@ export interface InnerNoteReflectionFacts {
   consents?: readonly InnerNoteEvent[];
   /** Syzygy ADR-0013 §6 (`SHANNON_INNER_NARRATOR`): her fast layer now, in words (`fastLayerWords`). Present: she reflects as narrator. */
   fastLayer?: string;
+  /** Stage 3 (`SHANNON_RELATIONSHIP_LEDGER`): the relationship line ('' when nothing is off). Present: ADR-0012 D4 as revised. */
+  relationship?: string;
 }
 
 function minutesLeft(at: string, until: string): string {
@@ -148,6 +162,7 @@ export function innerNoteReflectionInput(facts: InnerNoteReflectionFacts): strin
     ['[起きたこと]', ...facts.events.slice(-INNER_NOTE_LIMITS.events).map(event => innerNoteEventLine(event, at, timeZone))].join('\n'),
     ...touchLines(facts),
     ...(facts.fastLayer ? [facts.fastLayer] : []),
+    ...(facts.relationship ? [facts.relationship] : []),
     feelingLine(facts.feeling),
     ...(recent.length ? [['[直前の会話]', ...recent].join('\n')] : []),
     ...(facts.yesterday ? [`[前の日のこと]（出来事として覚えているだけ。態度は持ち越さない）${facts.yesterday}`] : []),

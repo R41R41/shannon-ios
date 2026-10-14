@@ -50,7 +50,8 @@ export class ClaudeInnerNoteReflector implements InnerNoteReflector {
   async reflect(request: InnerNoteReflectionRequest) {
     this.last = null;
     // Syzygy ADR-0013 §6: with her fast layer handed, she reflects as narrator (one more fixed section; without it, the same bytes).
-    const instructions = innerNoteReflectionInstructions(CHARACTER_CORE, { narrator: request.facts.fastLayer !== undefined });
+    const instructions = innerNoteReflectionInstructions(CHARACTER_CORE, { narrator: request.facts.fastLayer !== undefined,
+      carryOver: request.facts.relationship !== undefined });
     const answer = await completeStructured('inner_note', instructions, innerNoteReflectionInput(request.facts),
       INNER_NOTE_REFLECTION_SCHEMA, { claude: this.claude, scopeKey: request.scopeKey, maximumOutputTokens: INNER_NOTE_SERVICE_LIMITS.maximumOutputTokens,
         effort: 'low', cacheSystem: true, ...(request.signal ? { signal: request.signal } : {}) });

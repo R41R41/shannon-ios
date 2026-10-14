@@ -245,6 +245,18 @@ export const SWITCHES = [
     doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v5).',
   },
   {
+    name: 'SHANNON_RELATIONSHIP_LEDGER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: trust, liking, respect and irritation per person, moved nightly from her closed days (drops fast, recovers slowly, floor).',
+  },
+  {
+    name: 'SHANNON_EPISODE_MEMORY', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: a closed day\'s incidents become episodes she recalls later (yesterday\'s, older ones when their subject comes up).',
+  },
+  {
+    name: 'SHANNON_BOUNDARY_MEMORY', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
+    doc: 'ADR-0013 stage 3: her boundaries with their basis and origin (self or told); a told one is hers only once she endorses it in reflection.',
+  },
+  {
     name: 'SHANNON_TEXT_REGISTER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN'],
     doc: 'ADR-0013 item 10 (owner: B): text reply form (length, emoji, endings) and pacing (typing, split in two, sulk pause ≤20 s) from her feeling.',
   },

@@ -16,7 +16,7 @@ import { foldFeelingDynamics } from './feelingDynamics.js';
  * - Irritation builds from what she said no to and was done anyway, insults and the blame left at the day's end; it fades each day, and an
  *   apology that day relieves part of it.
  *
- * Every coefficient is a proposal for the owner's approval (`RELATIONSHIP_PROPOSAL`, ADR-0008 F6, ADR-0013 D14): none is fitted yet.
+ * The coefficients (`RELATIONSHIP_PARAMETERS`, ADR-0008 F6, ADR-0013 D14) were approved by the owner as proposed; none is fitted yet.
  */
 export const RELATIONSHIP_SCALES = ['trust', 'liking', 'respect', 'irritation'] as const;
 export type RelationshipScale = typeof RELATIONSHIP_SCALES[number];
@@ -42,9 +42,9 @@ export interface RelationshipParameters {
   floorRatio: number;
 }
 
-/** The proposal (2026-10-14): model assumptions for the owner to approve or change. */
-export const RELATIONSHIP_PROPOSAL: RelationshipParameters = Object.freeze({
-  status: 'proposal',
+/** Approved by the owner as proposed (2026-10-14, form: 「この案でよい」); model assumptions until fitted to her own data (D14). */
+export const RELATIONSHIP_PARAMETERS: RelationshipParameters = Object.freeze({
+  status: 'approved',
   start: Object.freeze({
     owner: Object.freeze({ trust: 0.8, liking: 0.85, respect: 0.8, irritation: 0 }),
     other: Object.freeze({ trust: 0.5, liking: 0.5, respect: 0.5, irritation: 0 }),
@@ -136,7 +136,7 @@ function step(state: RelationshipState, signals: DaySignals, parameters: Relatio
 
 /** The relationship with one person after their closed days (oldest first), rested up to `today` (a day key). */
 export function foldRelationship(days: readonly RelationshipDay[], personKey: string, today: string,
-  parameters: RelationshipParameters = RELATIONSHIP_PROPOSAL): RelationshipState {
+  parameters: RelationshipParameters = RELATIONSHIP_PARAMETERS): RelationshipState {
   const start = personKey === OWNER_PERSON_KEY ? parameters.start.owner : parameters.start.other;
   let state: RelationshipState = { personKey, scales: start, peak: { trust: start.trust, liking: start.liking, respect: start.respect }, dayKey: null };
   for (const day of [...days].filter(item => item.dayKey < today).sort((a, b) => a.dayKey.localeCompare(b.dayKey))) {

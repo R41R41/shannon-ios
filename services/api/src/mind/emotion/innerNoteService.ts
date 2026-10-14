@@ -355,7 +355,7 @@ export class InnerNoteService implements InnerNotePort {
    * touching her.
    */
   private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
-    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger' | 'fastLayer'> {
+    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents' | 'ledger' | 'fastLayer' | 'relationship'> {
     const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
     const day = innerNoteDay(at, this.timeZone);
     const today = this.partCounts(scopeKey, new Date(Date.parse(day.endsAt) - 86_400_000).toISOString(), at);
@@ -364,8 +364,9 @@ export class InnerNoteService implements InnerNotePort {
     const touches = today.length || lines.length ? { today, lines } : null;
     const ledger = this.ledgerLine(scopeKey, at);
     const fast = this.fastLayer(scopeKey, at);
+    const relationship = this.relationship(scopeKey, at);
     return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}), ...(ledger ? { ledger } : {}),
-      ...(fast !== null ? { fastLayer: fast } : {}) };
+      ...(fast !== null ? { fastLayer: fast } : {}), ...(relationship !== null ? { relationship } : {}) };
   }
 
   private partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[] {
@@ -380,6 +381,11 @@ export class InnerNoteService implements InnerNotePort {
   /** ADR-0013 §6: her fast layer in words while she is the narrator, else null (the reflection of before). */
   private fastLayer(scopeKey: string, at: string): string | null {
     try { return this.body?.fastLayer?.(scopeKey, at) ?? null; } catch { return null; }
+  }
+
+  /** Stage 3: the relationship line while the ledger carries over (ADR-0012 D4 as revised), else null. */
+  private relationship(scopeKey: string, at: string): string | null {
+    try { return this.body?.relationship?.(scopeKey, at) ?? null; } catch { return null; }
   }
 
   private recent(scopeKey: string, at: string) {
