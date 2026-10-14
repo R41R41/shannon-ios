@@ -481,7 +481,7 @@ async function completeLiveVoiceDelegation(
       ...(feedbackRecordId ? { feedbackRecordId } : {}),
       webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
       ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(), ...(completion.truncated ? { truncated: true } : {}),
-      ...feelingVoice.presented(feelingTurn, expressiveEmotion, emotionState, occurredAt), // ADR-0013 D17: the bubble's icon id.
+      ...feelingVoice.presented(feelingTurn, expressiveEmotion, emotionState, occurredAt, utteranceId), // ADR-0013 D17: the icon id.
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
       ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,

@@ -225,21 +225,27 @@ export const feelingVoice = Object.freeze({
     return safely(() => blockOf(handle, handle.decision), '');
   },
   /** D17 on the delegation's answer: the presentation id of the spoken reply (her stance, else its feeling, else her mood). */
-  presented: (handle: FeelingTurnHandle | null, feeling: ShannonExpressiveEmotion, snapshot: CompanionStateSnapshot | null, at: string)
-    : { presentationId?: string } => {
+  presented: (handle: FeelingTurnHandle | null, feeling: ShannonExpressiveEmotion, snapshot: CompanionStateSnapshot | null, at: string,
+    utteranceId?: string) : { presentationId?: string } => {
     if (!handle?.port.singleFace || !snapshot) return {};
     return safely<{ presentationId?: string }>(() => {
       const stance = handle.decision && handle.decision.stance !== 'neutral' ? { kind: 'turn' as const, stance: handle.decision.stance } : undefined;
       const visible = feeling.visibility !== 'hidden' && feeling.primary !== 'neutral' ? { feeling: feeling.primary } : {};
       const extra = { mood: faceForMood(snapshot.emotion), ...visible, ...(stance ? { stance } : {}), ...turnHints(handle) };
       const state = faceState(handle.port, handle.scopeKey, handle.key, at, snapshot, extra);
-      return { presentationId: presentFor(state, handle.key.audience, 'icon').id };
+      const id = presentFor(state, handle.key.audience, 'icon').id;
+      handle.port.events.notePresented(handle.scopeKey, id, utteranceId ?? null, at);
+      return { presentationId: id };
     }, {});
   },
-  /** D17 on the stored voice turn: its face's presentation id (the public layer's with anyone else there). */
-  stored: (port: FeelingPort | null, emotion: ShannonMessageEmotion, others: boolean): ShannonMessageEmotion => {
+  /**
+   * D17 on the stored voice turn: the id its answer was presented with (review P2-3: stance included), else its face's; the public layer's
+   * with anyone else there.
+   */
+  stored: (port: FeelingPort | null, emotion: ShannonMessageEmotion, others: boolean, turn: { scopeKey: string; utteranceId?: string; at: string })
+    : ShannonMessageEmotion => {
     if (!port?.singleFace) return emotion;
-    const id = presentationIdOf(emotion);
+    const id = safely(() => port.events.takePresented(turn.scopeKey, turn.utteranceId ?? null, turn.at), null) ?? presentationIdOf(emotion);
     return Object.freeze({ ...emotion, presentationId: others ? publicPresentationId(id) : id });
   },
   ended: (handle: FeelingTurnHandle | null, input: { at: string; transcript: string; reply: string; utteranceId?: string }) => {

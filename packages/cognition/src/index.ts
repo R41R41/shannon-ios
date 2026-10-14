@@ -118,6 +118,8 @@ export {
   messageEmotionForOthers,
   messageEmotionKind,
   publicPresentationId,
+  publicFace,
+  OWNER_ONLY_EXPRESSIONS,
   SINGLE_FACE_FEELINGS,
   isSingleFaceFeeling,
   singleFace,

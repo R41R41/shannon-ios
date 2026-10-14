@@ -117,5 +117,6 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong };
   const sonnet = parts.strong?.model;
-  return { port, wrap: model => (sonnet ? new FeelingStrongChatModel(model, sonnet) : model), close: () => store.close() };
+  const released = (scopeKey: string) => events.releaseStrong(scopeKey, parts.now());
+  return { port, wrap: model => (sonnet ? new FeelingStrongChatModel(model, sonnet, { released }) : model), close: () => store.close() };
 }

@@ -48,14 +48,20 @@ export const FEELING_EVENT_LIMITS = Object.freeze({
   stanceFreshMilliseconds: 10 * 60_000,
   retentionDays: 30,
   pruneEveryMilliseconds: 60 * 60_000,
+  /** A strong reply decided and never recorded (its turn failed) stops counting against the cap after this. */
+  strongInFlightMilliseconds: 5 * 60_000,
+  /** A voice turn is stored within this of its answer. */
+  presentedFreshMilliseconds: 10 * 60_000,
 });
 
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 export class FeelingEvents {
   private readonly pruned = new Map<string, number>();
-  /** Strong replies decided and not yet recorded, per scope and day (a turn in flight counts against the cap). */
-  private readonly strongInFlight = new Map<string, number>();
+  /** Strong replies decided and not yet recorded, per scope and day, by when (a turn in flight counts; an abandoned one expires). */
+  private readonly strongInFlight = new Map<string, number[]>();
+  /** The presentation id a voice turn answered with, per scope, until its turn is stored (review P2-3). */
+  private readonly presented = new Map<string, { id: string; utteranceId: string | null; at: number }>();
 
   constructor(private readonly options: { store: FeelingEventRecords; now: () => string; timeZone: string; partWord: (subject: string) => string;
     reportError?: (error: unknown) => void; seed?: RepetitionSeed }) {}
@@ -126,10 +132,11 @@ export class FeelingEvents {
       const key = `${scopeKey}\u0000${day.dayKey}`;
       const recorded = this.options.store.between(scopeKey, since, at)
         .filter(event => event.kind === 'own_reply' && event.facts.replyModel === 'strong').length;
-      const pending = this.strongInFlight.get(key) ?? 0;
-      if (recorded + pending >= cap) return false;
+      const now = Date.parse(at);
+      const pending = (this.strongInFlight.get(key) ?? []).filter(started => now - started < FEELING_EVENT_LIMITS.strongInFlightMilliseconds);
+      if (recorded + pending.length >= cap) return false;
       if (this.strongInFlight.size >= 64) this.strongInFlight.clear();
-      this.strongInFlight.set(key, pending + 1);
+      this.strongInFlight.set(key, [...pending, now]);
       return true;
     } catch (error) {
       this.report(error);
@@ -140,8 +147,25 @@ export class FeelingEvents {
   /** A strong reply's turn ended (its reply is recorded, or the turn failed): it no longer counts as in flight. */
   releaseStrong(scopeKey: string, at: string): void {
     const key = `${scopeKey}\u0000${innerNoteDay(at, this.options.timeZone).dayKey}`;
-    const pending = this.strongInFlight.get(key) ?? 0;
-    if (pending <= 1) this.strongInFlight.delete(key); else this.strongInFlight.set(key, pending - 1);
+    const pending = this.strongInFlight.get(key) ?? [];
+    if (pending.length <= 1) this.strongInFlight.delete(key); else this.strongInFlight.set(key, pending.slice(1));
+  }
+
+  /** A voice turn answered with this presentation id (the stored turn keeps the same id). */
+  notePresented(scopeKey: string, id: string, utteranceId: string | null, at: string): void {
+    if (this.presented.size >= 64) this.presented.clear();
+    this.presented.set(scopeKey, { id, utteranceId, at: Date.parse(at) });
+  }
+
+  /** The id a voice turn answered with, once, while fresh and for the same utterance when both name one. */
+  takePresented(scopeKey: string, utteranceId: string | null, at: string): string | null {
+    const noted = this.presented.get(scopeKey);
+    if (!noted) return null;
+    const fresh = Date.parse(at) - noted.at <= FEELING_EVENT_LIMITS.presentedFreshMilliseconds;
+    const same = !utteranceId || !noted.utteranceId || utteranceId === noted.utteranceId;
+    if (!fresh || !same) return null;
+    this.presented.delete(scopeKey);
+    return noted.id;
   }
 
   /** The newest stance of a key while it is fresh (the feeling turn's on her reply, or how she took a touch). */

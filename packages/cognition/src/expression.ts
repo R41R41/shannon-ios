@@ -39,7 +39,7 @@ export type ShannonFeeling = 'proud' | 'flustered' | 'apologetic';
  */
 export const SINGLE_FACE_FEELINGS = Object.freeze({
   businessSmile: 'joyful', strainedSmile: 'wry', blankFace: 'calm', listless: 'sleepy', tongueClick: 'annoyed', coverUp: 'amused',
-  irked: 'annoyed', banVerdict: 'annoyed', flatStare: 'exasperated', turnAway: 'jealous', tsun: 'jealous', holdingBackTears: 'sad',
+  irked: 'annoyed', banVerdict: 'annoyed', flatStare: 'exasperated', turnAway: 'annoyed', tsun: 'jealous', holdingBackTears: 'sad',
 } as const satisfies Readonly<Record<string, ShannonExpression>>);
 export type SingleFaceFeeling = keyof typeof SINGLE_FACE_FEELINGS;
 export const isSingleFaceFeeling = (value: unknown): value is SingleFaceFeeling => typeof value === 'string' && Object.hasOwn(SINGLE_FACE_FEELINGS, value);
@@ -77,6 +77,19 @@ const OWNER_ONLY_PRESENTATION_IDS: ReadonlySet<string> = new Set(['jealous', 'te
 
 /** A presentation id as anyone but the owner may see it: an owner-only one becomes 「calm」. */
 export const publicPresentationId = (id: string): string => (OWNER_ONLY_PRESENTATION_IDS.has(id) ? 'calm' : id);
+
+/** Expressions of the owner-only layer (嫉妬, 甘え): an older body falls back to `expression`, so a public face never names one. */
+export const OWNER_ONLY_EXPRESSIONS: ReadonlySet<ShannonExpression> = new Set<ShannonExpression>(['jealous', 'tender']);
+
+/**
+ * A face as anyone but the owner may see it (ADR-0013 D17; review of 2026-10-14): its feeling only when that name is public, and never an
+ * owner-only expression, also as the fallback an older body shows.
+ */
+export function publicFace<T extends ShannonFace>(shown: T): T {
+  const feeling = shown.feeling && publicPresentationId(shown.feeling) === shown.feeling ? { feeling: shown.feeling } : {};
+  const { feeling: _feeling, ...rest } = shown;
+  return { ...rest, ...feeling, expression: OWNER_ONLY_EXPRESSIONS.has(shown.expression) ? 'calm' : shown.expression } as T;
+}
 
 const face = (expression: ShannonExpression, feeling?: ShannonFeeling): ShannonFace =>
   Object.freeze(feeling ? { expression, feeling } : { expression });

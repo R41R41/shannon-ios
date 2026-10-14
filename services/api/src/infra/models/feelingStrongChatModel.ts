@@ -16,19 +16,36 @@ export class FeelingStrongChatModel implements ShannonChatModel {
   readonly model: string;
   private readonly strong: TieredChatModel;
 
-  constructor(private readonly inner: ShannonChatModel, sonnet: AnthropicChatModel, log?: (line: string) => void) {
+  constructor(private readonly inner: ShannonChatModel, private readonly sonnet: AnthropicChatModel,
+    private readonly options: { log?: (line: string) => void; released?: (scopeKey: string) => void } = {}) {
     this.mode = inner.mode;
     this.model = inner.model;
-    this.strong = new TieredChatModel(inner, sonnet, log);
+    this.strong = new TieredChatModel(inner, sonnet, options.log);
+  }
+
+  /**
+   * The model of one turn (review P2-1): the model of before pins the owner's model mode at the turn's admission (`PrimaryModeChatModel`);
+   * the turn's own wrapper keeps that pin.
+   */
+  forTurn(scopeKey: string): ShannonChatModel {
+    return new FeelingStrongChatModel(this.inner.forTurn?.(scopeKey) ?? this.inner, this.sonnet, this.options);
   }
 
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
-    return request.feelingStrong ? this.strong.generate(asSonnet(request)) : this.inner.generate(plain(request));
+    return request.feelingStrong ? this.released(request, this.strong.generate(asSonnet(request))) : this.inner.generate(plain(request));
   }
 
   generateStreaming(request: ShannonChatModelRequest, onReplyText: (text: string) => void | Promise<void>): Promise<ShannonChatModelResult> {
-    if (request.feelingStrong) return this.strong.generateStreaming(asSonnet(request), onReplyText);
+    if (request.feelingStrong) return this.released(request, this.strong.generateStreaming(asSonnet(request), onReplyText));
     return this.inner.generateStreaming ? this.inner.generateStreaming(plain(request), onReplyText) : this.inner.generate(plain(request));
+  }
+
+  /** A strong turn that fails (review P3a) no longer counts against the day's cap; the error goes on as it was. */
+  private async released(request: ShannonChatModelRequest, answer: Promise<ShannonChatModelResult>): Promise<ShannonChatModelResult> {
+    try { return await answer; } catch (error) {
+      this.options.released?.(request.scopeKey);
+      throw error;
+    }
   }
 
   generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMEBACK_DRAWER, FEELING_TURN_HEADER, continuedAfterRefusal, strongReplyReason, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
+  COMEBACK_DRAWER, FEELING_TURN_HEADER, OWNER_ONLY_EXPRESSIONS, publicPresentationId, continuedAfterRefusal, strongReplyReason, SHANNON_EMOTION_KINDS, drawersFor, stancesFor, SINGLE_FACE_FEELINGS, drawerHint, messageEmotionForOthers, presentFor, drawersIn, episodeLine, faceFor, feelingActor, feelingTurnBlock, foldEpisodeLedger, neutralFeelingTurn,
   parsedFeelingTurn, repetitionLine, replyFacts, utteranceKind, watchRepetition, type FeelingEvent,
 } from '../src/index.js';
 
@@ -228,5 +228,22 @@ describe('「いや」のあとも触られ続けている時 (owner decision 20
     const subtle = parsedFeelingTurn({ stance: 'exasperated', intensity: 'subtle', drawer: 'none' });
     expect(strongReplyReason(subtle, 'owner_alone', null, true)).toBe('continued_after_refusal');
     expect(strongReplyReason(subtle, 'owner_alone', null, false)).toBeNull();
+  });
+});
+
+describe('a public face never falls back to an owner-only expression (review P2-2)', () => {
+  it('maps every public single face to a public nearest face, and keeps owner-only faces out of public presentations', () => {
+    for (const [name, nearest] of Object.entries(SINGLE_FACE_FEELINGS)) {
+      if (publicPresentationId(name) === name) expect(OWNER_ONLY_EXPRESSIONS.has(nearest), name).toBe(false);
+    }
+    expect(SINGLE_FACE_FEELINGS.turnAway).toBe('annoyed');
+    const mood = { expression: 'tender' as const };
+    for (const audience of ['people', 'group', 'stream'] as const) {
+      for (const stance of ['accept', 'refuse_body', 'sulk', 'affectionate', 'shy'] as const) {
+        const shown = presentFor({ mood, stance: { kind: 'turn', stance } }, audience, 'face');
+        expect(OWNER_ONLY_EXPRESSIONS.has(shown.expression), `${audience} ${stance}`).toBe(false);
+      }
+    }
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'accept' } }, 'owner_alone', 'face').expression).toBe('tender');
   });
 });

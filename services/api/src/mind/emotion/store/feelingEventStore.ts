@@ -61,8 +61,9 @@ export class SQLiteFeelingEventStore {
 
   /** The events of a scope in a span of time, oldest first (bounded). */
   between(scopeKey: string, since: string, until: string, limit = 2_000): FeelingEvent[] {
+    // The newest `limit` of the span (a long day keeps its latest rows), returned oldest first.
     return (this.database.prepare(`SELECT ${COLUMNS} FROM shannon_feeling_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ?
-      ORDER BY occurred_at ASC LIMIT ?`).all(scopeKey, since, until, limit) as Row[]).flatMap(row => eventOf(row) ?? []);
+      ORDER BY occurred_at DESC LIMIT ?`).all(scopeKey, since, until, limit) as Row[]).reverse().flatMap(row => eventOf(row) ?? []);
   }
 
   /** Her newest own replies of one audience (for the repetition watch), newest first. */
