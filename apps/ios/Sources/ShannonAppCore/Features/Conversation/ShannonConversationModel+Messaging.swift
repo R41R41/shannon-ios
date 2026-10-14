@@ -14,6 +14,8 @@ extension ShannonConversationModel {
     ) async -> Bool {
         let text = (explicitText ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard (!text.isEmpty || !attachments.isEmpty || photoJPEGData != nil), !isSending else { return false }
+        // A reply still held at her pace goes in whole first, so his message follows it in the history (ADR-0013 item 10).
+        flushPacedReply()
         draft = ""
         draftResetToken &+= 1
         clearDraftWriteBack(of: text)
@@ -259,6 +261,7 @@ extension ShannonConversationModel {
         )]
         if selectedThreadId == requestedThreadID || selectedThreadId == response.threadId {
             selectedThreadId = response.threadId
+            flushPacedReply()
             messages.append(contentsOf: pair)
             feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
             feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)

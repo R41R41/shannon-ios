@@ -247,6 +247,37 @@ final class ShannonChatStreamTests: XCTestCase {
     }
 
     @MainActor
+    func testHeMaySendWhileHerReplyIsHeldAndItGoesInWholeFirst() async {
+        let register = ShannonTextRegisterDTO(pauseMs: 20_000, typingMs: 3_000, split: true, gapMs: 1_000)
+        var response = Fixture.response(reply: "……別に。気にしてません。", turnId: "turn-1")
+        response.textRegister = register
+        let client = StreamingClient(sentences: ["……別に。", "気にしてません。"], outcome: .success(response), register: register)
+        let model = ShannonConversationModel(client: client)
+        let gate = PacingGate()
+        model.pacingSleep = { _ in await gate.waitFirst() }
+
+        model.draft = "怒ってる？"
+        let first = Task { await model.sendDraft() }
+        while model.replyPacing == nil { await Task.yield() }
+        // Her sulk: nothing of the reply shows, and the composer is free (a 20 s pause must not lock him out).
+        XCTAssertFalse(model.isSending)
+        XCTAssertEqual(model.messages.map(\.text), ["怒ってる？"])
+
+        model.draft = "ごめんって"
+        let sent = await model.sendDraft()
+        XCTAssertTrue(sent)
+        // The held reply went in whole and unsplit before his message; his own turn then ran (its pace not waited here).
+        XCTAssertEqual(model.messages.map(\.text), ["怒ってる？", "……別に。気にしてません。", "ごめんって", "……別に。気にしてません。"])
+        await gate.release()
+        await first.value
+        XCTAssertEqual(model.messages.count, 4, "the first send adds nothing more once its reply went in")
+        XCTAssertEqual(model.messages[1].turnID, "turn-1")
+        XCTAssertNil(model.replyPacing)
+        XCTAssertFalse(model.isSending)
+        XCTAssertFalse(model.showsTypingIndicator)
+    }
+
+    @MainActor
     func testAnUrgentReplyAndAnOlderServerAreShownAtOnceAsBefore() async {
         for register in [ShannonTextRegisterDTO(pauseMs: 20_000, typingMs: 8_000, split: true, gapMs: 2_000, bypass: "safety"), nil] {
             var response = Fixture.response(reply: "はい。元気です。")
@@ -437,6 +468,26 @@ private enum Fixture {
 private actor ProgressRecorder {
     private(set) var texts: [String] = []
     func record(_ progress: ShannonChatStreamProgress) { texts.append(progress.text) }
+}
+
+/// Holds the first wait of a pace until released; every later wait returns at once.
+private actor PacingGate {
+    private var used = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func waitFirst() async {
+        guard !used else { return }
+        used = true
+        guard !released else { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func release() {
+        released = true
+        waiter?.resume()
+        waiter = nil
+    }
 }
 
 @MainActor

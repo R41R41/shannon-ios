@@ -11,6 +11,9 @@ extension ShannonConversationModel {
         photoJPEGData: Data? = nil
     ) async -> String? {
         errorMessage = nil
+        flushPacedReply()
+        sendGeneration &+= 1
+        let generation = sendGeneration
         isSending = true
         isSearchingMemory = ShannonMemoryRecallCue.matches(text)
         defer { isSearchingMemory = false }
@@ -101,7 +104,8 @@ extension ShannonConversationModel {
                 // Older servers expose title changes through the existing thread-list API.
                 await loadThreads(force: true)
             }
-            isSending = false
+            // A send he made while her reply was held at her pace owns `isSending` now.
+            if sendGeneration == generation { isSending = false }
             // She looks through this app's camera: what she saw arrives as her next message.
             if let ask = response.appLook { Task { await performAppLook(ask) } }
             return response.reply

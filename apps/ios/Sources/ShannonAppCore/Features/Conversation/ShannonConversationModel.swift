@@ -23,6 +23,11 @@ public final class ShannonConversationModel {
     @ObservationIgnored var pacingSleep: @Sendable (TimeInterval) async -> Void = { seconds in
         try? await Task.sleep(for: .milliseconds(Int(seconds * 1_000)))
     }
+    /// The reply held at her pace, put in whole if he sends meanwhile; and the wait to cut short then.
+    @ObservationIgnored var heldPacedReply: ConversationMessage?
+    @ObservationIgnored var pacingWait: Task<Void, Never>?
+    /// Counts sends: a send that ends after a later one began leaves `isSending` to the later one.
+    @ObservationIgnored var sendGeneration = 0
     /// True while a pending text reply includes a memory search (FTS, and semantic recall when enabled).
     public internal(set) var isSearchingMemory = false
     public internal(set) var isLoadingHistory = false

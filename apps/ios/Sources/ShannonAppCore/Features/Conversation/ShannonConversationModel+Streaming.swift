@@ -135,18 +135,28 @@ extension ShannonConversationModel {
 
     /// Shows `reply` at its pace: her typing hidden for what is left of the pause, then her typing, then the reply, or its
     /// first sentence, her typing again and the whole reply (the same message, so the history keeps one).
+    /// He may write and send meanwhile (a sulk's pause can be 20 s): sending puts the held reply in whole at once
+    /// (`flushPacedReply`), and this returns without touching it again.
     func showPaced(_ reply: ConversationMessage, _ pacing: ShannonReplyPacing) async {
         guard !pacing.isImmediate else {
             messages.append(reply)
             return
         }
+        heldPacedReply = reply
+        // The composer is free while she takes her time.
+        isSending = false
         replyPacing = ShannonReplyPacingState(threadID: selectedThreadId, showsTyping: pacing.pause == 0)
-        defer { replyPacing = nil }
+        defer {
+            if heldPacedReply?.id == reply.id {
+                heldPacedReply = nil
+                replyPacing = nil
+            }
+        }
         if pacing.pause > 0 {
-            await pacingSleep(pacing.pause)
+            guard await pacedWait(pacing.pause, for: reply.id) else { return }
             replyPacing?.showsTyping = true
         }
-        if pacing.typing > 0 { await pacingSleep(pacing.typing) }
+        if pacing.typing > 0 { guard await pacedWait(pacing.typing, for: reply.id) else { return } }
         guard pacing.parts.count == 2 else {
             messages.append(reply)
             return
@@ -155,7 +165,30 @@ extension ShannonConversationModel {
         messages.append(ConversationMessage(
             id: reply.id, role: .shannon, text: pacing.parts[0], sentAt: reply.sentAt, emotionSnapshot: reply.emotionSnapshot))
         replyPacing?.showsTyping = true
-        if pacing.gap > 0 { await pacingSleep(pacing.gap) }
+        if pacing.gap > 0 { guard await pacedWait(pacing.gap, for: reply.id) else { return } }
+        placeWhole(reply)
+    }
+
+    /// Waits for the pace; false when the reply was put in meanwhile (he sent something).
+    private func pacedWait(_ seconds: TimeInterval, for id: UUID) async -> Bool {
+        let sleep = pacingSleep
+        let wait = Task { await sleep(seconds) }
+        pacingWait = wait
+        await wait.value
+        return heldPacedReply?.id == id
+    }
+
+    /// He sends while a reply is held at her pace: the reply goes in whole and unsplit now, before his message.
+    func flushPacedReply() {
+        guard let reply = heldPacedReply else { return }
+        heldPacedReply = nil
+        replyPacing = nil
+        pacingWait?.cancel()
+        placeWhole(reply)
+    }
+
+    /// The whole reply in the history: in place of its first sentence, or appended.
+    private func placeWhole(_ reply: ConversationMessage) {
         if let index = messages.firstIndex(where: { $0.id == reply.id }) {
             messages[index] = reply
         } else {
