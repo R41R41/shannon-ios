@@ -21,6 +21,8 @@ export interface FcaEvidenceOptions {
   sourcesCovered?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean;
   /** Minutes a segment of held body actions may stay open after its newest (`SHANNON_FCA_SEGMENT_STALE_MINUTES`, default 30). */
   segmentStaleMinutes?: number;
+  /** What a walk of `candidate` still checks once `verified` was found visible (`FcaSourceGuard.residual`); null: walk it whole. */
+  sourcesResidual?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): readonly TaskSource[] | null;
   /** The source guard's walk counts (`FcaSourceGuard.walks`), for the prepare line only. */
   walkCounts?(): { walked: number; reused: number };
   taskVisible(scopeKey: string, taskId: string): boolean;
@@ -95,9 +97,10 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   }
   /** How this prepare judges a stored row: the guard's walk, and for the step's own task its coverage by the verified sources. */
   private judge(step: TaskStep, verified: readonly TaskSource[]): FcaEvidenceJudge {
-    const covered = this.options.sourcesCovered;
+    const covered = this.options.sourcesCovered, residual = this.options.sourcesResidual;
     return { taskId: step.taskId, walk: (row, sources) => this.options.sourcesVisible(row.scope_key, row.task_id, sources),
-      ...(covered ? { covered: (sources: readonly TaskSource[]) => covered(step.scopeKey, step.taskId, verified, sources) } : {}) };
+      ...(covered ? { covered: (sources: readonly TaskSource[]) => covered(step.scopeKey, step.taskId, verified, sources) } : {}),
+      ...(residual ? { residual: (sources: readonly TaskSource[]) => residual(step.scopeKey, step.taskId, verified, sources) } : {}) };
   }
   /** After a yield: the lease and the verified sources again (or the step is held), then each walked set (or its rows are left out). */
   private stillVisible(step: TaskStep, verified: readonly TaskSource[], chosen: FcaVisibleRows<EvidenceRow>, trace: FcaPrepareTrace): EvidenceRow[] {

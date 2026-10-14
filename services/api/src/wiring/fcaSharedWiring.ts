@@ -35,6 +35,10 @@ export function createFcaSharedWiring(parts: {
       const task = parts.runtime.get(scope, id);
       return Boolean(task && parts.visible.covers?.(scope, task, verified, candidate));
     },
+    sourcesResidual: (scope, id, verified, candidate) => {
+      const task = parts.runtime.get(scope, id);
+      return task && parts.visible.residual ? parts.visible.residual(scope, task, verified, candidate) : null;
+    },
     ...(parts.visible.walks ? { walkCounts: parts.visible.walks } : {}),
     observeContext: (step, ids) => {
       if (!parts.runtime.inheritTaskSources(step, ids)) return false;

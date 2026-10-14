@@ -8,7 +8,7 @@ import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRunti
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
-import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers } from './fcaProvenanceFold.js';
+import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers, foldedProvenanceResidual } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
 export function conversationFcaProvenance(state: CompanionStateSnapshot, conversations: ConversationStore,
@@ -236,10 +236,21 @@ export function createFcaSourceGuard(parts: {
       return foldedProvenanceCovers(fcaProvenanceForCheck(verified, limit, folds), folded);
     } catch { return false; }
   };
+  /** The part of `candidate` a walk still has to check after `verified` was found visible (`foldedProvenanceResidual`); null: walk it whole. */
+  const residual: NonNullable<FcaSourceGuard['residual']> = (scopeKey, task, verified, candidate) => {
+    try {
+      if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || task.scopeKey !== scopeKey) return null;
+      const limit = cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity;
+      const folded = fcaProvenanceForCheck(candidate, limit, folds);
+      const ids = new Set(folded.flatMap(source => source.recalledMemoryIds)).size;
+      if (cappable(task) && (folded.length > limit || ids > FCA_PROVENANCE_LIMITS.recalledIds)) return null;
+      return foldedProvenanceResidual(fcaProvenanceForCheck(verified, limit, folds), folded);
+    } catch { return null; }
+  };
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string) => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
-  }, { sources: sourcesVisible, progress, content, covers, walks: () => ({ ...counts }) });
+  }, { sources: sourcesVisible, progress, content, covers, residual, walks: () => ({ ...counts }) });
 }
 
 /**

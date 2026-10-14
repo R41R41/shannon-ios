@@ -53,6 +53,7 @@ function wired(f: Run6RecallShape) {
   const options: FcaEvidenceOptions = { db: h.db, state: f.world.store, now: f.world.now, validStep: () => true,
     sourcesVisible: (scope, id, sources) => { const view = runtime.get(scope, id); return Boolean(view && visible.sources(scope, view, sources)); },
     sourcesCovered: (scope, id, verified, candidate) => { const view = runtime.get(scope, id); return Boolean(view && visible.covers!(scope, view, verified, candidate)); },
+    sourcesResidual: (scope, id, verified, candidate) => { const view = runtime.get(scope, id); return view ? visible.residual!(scope, view, verified, candidate) : null; },
     walkCounts: visible.walks, taskVisible: (scope, id) => visible(scope, id), observeContext: () => true };
   return { h, runtime, visible, root, task, options, evidence: new SQLiteFcaEvidenceStore(options) };
 }
@@ -82,7 +83,7 @@ describe('the evidence store\'s choice of rows (P1)', () => {
     // step's verified sources and the eight admitted sets again at its end.
     expect(f.calls.visible).toBe(2 + 8 + 1 + 8);
     expect(lines()).toHaveLength(1);
-    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms select=\d+ms affect=\d+ms rows=8 rowChecks=16 covered=0 deduped=0 walks=0 reused=0 parsedBytes=\d+ yields=8$/u);
+    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms select=\d+ms affect=\d+ms rows=8 rowChecks=16 covered=0 reduced=0 deduped=0 walks=0 reused=0 parsedBytes=\d+ yields=8$/u);
   });
 
   it('judges an identical stored set once, and goes on past hidden rows', async () => {
@@ -207,9 +208,31 @@ describe('a row of the step\'s own task covered by its verified sources (P1 b): 
     expect(w.visible.sources('owner', w.task, verified)).toBe(true);
     expect(w.visible.sources('owner', w.task, earlier)).toBe(false);
     expect(w.visible.covers!('owner', w.task, verified, earlier)).toBe(false);
+    // What a walk still checks after the verified one (Minecraft run 9): the corrected id among a few, and hidden as the whole is.
+    const rest = w.visible.residual!('owner', w.task, verified, earlier)!;
+    expect(rest.flatMap(source => source.recalledMemoryIds)).toContain(corrected);
+    expect(rest.flatMap(source => source.recalledMemoryIds).length).toBeLessThan(prefix);
+    expect(w.visible.sources('owner', w.task, rest)).toBe(false);
     const id = insertOutcome(w.h.db, w.task.id, 'step-prefix', 'call', earlier, at(prefix));
     const context = await w.evidence.prepare(stepOf(w.task, verified));
     expect(context.recentOutcomes.map(item => item.eventId)).not.toContain(id);
+  });
+
+  it('walks only the rest of a visible prefix the buckets moved, and shows it (Minecraft run 9)', async () => {
+    const lines = quiet();
+    const f = world(), w = wired(f), pool = clean(f);
+    const full = 130, prefix = 100, start = Date.parse(f.world.now());
+    const rows = Array.from({ length: full }, (_, index) => memoryRow(`memory:${String(index).padStart(3, '0')}`, iso(start + index * 1_000), [pool[index]!]));
+    const earlier = rows.slice(0, prefix);
+    expect(w.visible.covers!('owner', w.task, rows, earlier)).toBe(false);
+    const rest = w.visible.residual!('owner', w.task, rows, earlier)!;
+    expect(rest.length).toBeGreaterThan(0);
+    expect(rest.flatMap(source => source.recalledMemoryIds).length).toBeLessThan(prefix / 2);
+    const id = insertOutcome(w.h.db, w.task.id, 'step-prefix', 'call', earlier, iso(start + prefix * 1_000));
+    const context = await w.evidence.prepare(stepOf(w.task, rows));
+    expect(context.recentOutcomes.map(item => item.eventId)).toEqual([id]);
+    expect(w.visible.sources('owner', w.task, earlier)).toBe(true);
+    expect(lines().at(-1)).toContain('reduced=1');
   });
 });
 

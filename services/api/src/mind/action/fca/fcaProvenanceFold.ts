@@ -151,3 +151,30 @@ function earlierOrSame(known: ReadonlyMap<string, string>, ids: readonly string[
 function canonicalSource(source: TaskSource): string {
   return JSON.stringify(source, Object.keys(source).sort());
 }
+
+/**
+ * What a walk of `candidate` checks that the verified walk did not (Minecraft run 9, 2026-10-14: past the fold limit each new memory
+ * id moved the buckets, `foldedProvenanceCovers` declined every earlier row, and each row's full walk blocked the API's thread for
+ * 2–3 s; on that task's rows only 1–6 of ~125 ids were not covered). Both are folded lists of one task, as for the coverage above.
+ * The result is the candidate's conversation sources the verified list does not hold, and its memory sources at their own times
+ * with only the ids and receipts not checked at the same or an earlier time by the verified walk (a source left with none is kept
+ * only when it is earlier than every verified memory source: the task's words are judged there). Every check of the candidate is
+ * either made by the result's walk or passed in the verified walk, so the candidate is visible exactly when the result is (the
+ * result folds to itself: each id is in one source, and no source is past the limit). Empty: covered.
+ */
+export function foldedProvenanceResidual(verified: readonly TaskSource[], candidate: readonly TaskSource[]): TaskSource[] {
+  const known = coverageOf(verified), residual: TaskSource[] = [];
+  for (const source of candidate) {
+    if (source.kind !== 'memory') {
+      if (!known.turns.has(canonicalSource(source))) residual.push(source);
+      continue;
+    }
+    const recalled = source.recalledMemoryIds.filter(id => !earlierOrSame(known.recalled, [id], source.observedAt));
+    const read = (source.readSourceIds ?? []).filter(id => !earlierOrSame(known.read, [id], source.observedAt));
+    const words = known.earliest === null || source.observedAt < known.earliest;
+    if (!recalled.length && !read.length && !words) continue;
+    const { readSourceIds: _reads, ...rest } = source;
+    residual.push({ ...rest, recalledMemoryIds: recalled, ...(read.length ? { readSourceIds: read } : {}) });
+  }
+  return residual;
+}
