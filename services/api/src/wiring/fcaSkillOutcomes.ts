@@ -1,4 +1,5 @@
 import { fcaSkillTaskKey, type SkillMemory } from '../mind/memory/memoryPorts.js';
+import type { SkillMilestone } from '../mind/memory/skillImportContract.js';
 import type { TaskPhase } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 
@@ -11,10 +12,11 @@ interface Milestones { netherReached: boolean | null; blazeRods: number | null }
 /**
  * Her skills read by a Minecraft task, judged by what that task then does (Syzygy TI-REQ: trial skills from the old Minebot
  * knowledge must stay when right and retire when wrong). A `skill.read` in the task's loop is one pending use
- * (`SkillMemory.usedInTask`); the task's next outcome settles every use still pending (`settleTask`): a new milestone (the Nether
- * reached, or blaze rods held where there were fewer) or the task completed is 1; the body's death or the task failed is 0. A task stopped,
- * or a read with nothing after it, leaves its uses pending: they judge nothing. The trial itself is judged at night by the
- * existing rule (`SKILL_LIFECYCLE`: three uses, two successes). Process-local: after a restart pending uses stay pending.
+ * (`SkillMemory.usedInTask`). A new milestone (the Nether reached; blaze rods held where there were fewer) is 1 for the uses of the
+ * skills that name it as their aim (`targetMilestone`); the task completed is 1, the task failed or the body's death 0, for every use
+ * still pending. A stopped task's pending uses are dropped; a read with nothing after it stays pending and judges nothing. The
+ * trial itself is judged at night by the existing rule (`SKILL_LIFECYCLE`: three uses, two successes). Process-local: after a
+ * restart pending uses stay pending.
  */
 export interface FcaSkillOutcomes {
   /** Noted only for a task its loop offers a Minecraft body (bound, or the one body there is). */
@@ -22,7 +24,7 @@ export interface FcaSkillOutcomes {
   /** The text of a completed `mc.goal-evidence` result for the task. */
   evidence(scopeKey: string, taskId: string, result: string | undefined): void;
   died(bodyId: string): void;
-  /** Settles tasks that reached `completed` or `failed`, and forgets stopped ones. */
+  /** Settles tasks that reached `completed` or `failed`, and drops the pending uses of stopped ones. */
   tick(phase: (scopeKey: string, taskId: string) => TaskPhase | null): void;
 }
 
@@ -30,10 +32,8 @@ const TRACKED = 64;
 
 export function createFcaSkillOutcomes(parts: {
   skills: Pick<SkillMemory, 'usedInTask' | 'settleTask'>;
-  /** The Minecraft body a task is bound to, if any. */
+  /** The Minecraft body a task's loop is offered: the one it is bound to, or else the only one connected. Reads and deaths use it. */
   bodyOf(taskId: string): string | null;
-  /** The body a task's loop is offered (bound, or the only one connected); default `bodyOf`. */
-  offered?(taskId: string): string | null;
   now(): string;
   log?(line: string): void;
 }): FcaSkillOutcomes {
@@ -48,16 +48,16 @@ export function createFcaSkillOutcomes(parts: {
     }
     return found;
   };
-  const settle = (scopeKey: string, taskId: string, outcome: 0 | 1, why: string) => {
+  const settle = (scopeKey: string, taskId: string, outcome: 0 | 1 | null, why: string, milestone?: SkillMilestone) => {
     try {
-      const settled = parts.skills.settleTask(scopeKey, fcaSkillTaskKey(taskId), outcome, parts.now());
+      const settled = parts.skills.settleTask(scopeKey, fcaSkillTaskKey(taskId), outcome, parts.now(), milestone);
       if (settled) parts.log?.(`fca skill uses settled: ${settled} ${why} ${outcome}`);
     } catch { /* learning never fails a task */ }
   };
   return {
     read(scopeKey, taskId, name) {
       try {
-        if ((parts.offered ?? parts.bodyOf)(taskId) === null) return;
+        if (parts.bodyOf(taskId) === null) return;
         if (parts.skills.usedInTask(scopeKey, fcaSkillTaskKey(taskId), name, parts.now())) entry(scopeKey, taskId).reads = true;
       } catch { /* learning never fails a read */ }
     },
@@ -69,7 +69,9 @@ export function createFcaSkillOutcomes(parts: {
       task.milestones = { netherReached: next.netherReached ?? before?.netherReached ?? null, blazeRods: next.blazeRods ?? before?.blazeRods ?? null };
       const nether = before?.netherReached === false && next.netherReached === true;
       const rods = before?.blazeRods !== null && before?.blazeRods !== undefined && next.blazeRods !== null && next.blazeRods > before.blazeRods;
-      if (task.reads && (nether || rods)) settle(scopeKey, taskId, 1, nether ? 'nether_reached' : 'blaze_rods');
+      // A milestone credits only the skills that name it as their aim; the others wait for the task's end or a death.
+      if (task.reads && nether) settle(scopeKey, taskId, 1, 'nether_reached', 'nether');
+      if (task.reads && rods) settle(scopeKey, taskId, 1, 'blaze_rods', 'blaze_rods');
     },
     died(bodyId) {
       for (const task of tasks.values()) if (task.reads && parts.bodyOf(task.taskId) === bodyId) settle(task.scopeKey, task.taskId, 0, 'death');
@@ -81,7 +83,11 @@ export function createFcaSkillOutcomes(parts: {
         if (current === 'completed' || current === 'failed') {
           if (task.reads) settle(task.scopeKey, task.taskId, current === 'completed' ? 1 : 0, current);
           tasks.delete(key);
-        } else if (current === 'stopped' || current === null) tasks.delete(key);
+        } else if (current === 'stopped') {
+          // Stopped: its pending reads are dropped, so they never push settled uses out of the skill's window.
+          if (task.reads) settle(task.scopeKey, task.taskId, null, 'stopped');
+          tasks.delete(key);
+        } else if (current === null) tasks.delete(key);
       }
     },
   };
@@ -92,8 +98,8 @@ export function withSkillOutcomes<T extends { control: MinecraftControl }>(minec
   skills: Pick<SkillMemory, 'usedInTask' | 'settleTask'> | null | undefined, now?: () => string): (T & { skillOutcomes: FcaSkillOutcomes | null }) | null {
   if (!minecraft) return null;
   const { control } = minecraft;
-  const skillOutcomes = skills ? createFcaSkillOutcomes({ skills, bodyOf: taskId => control.store.body(taskId),
-    offered: taskId => control.store.body(taskId) ?? (control.available().length === 1 ? control.available()[0]! : null),
+  const skillOutcomes = skills ? createFcaSkillOutcomes({ skills,
+    bodyOf: taskId => control.store.body(taskId) ?? (control.available().length === 1 ? control.available()[0]! : null),
     now: now ?? (() => new Date().toISOString()), log: line => console.log(line) }) : null;
   if (skillOutcomes) control.deathListeners.add(bodyId => skillOutcomes.died(bodyId));
   return Object.assign(minecraft, { skillOutcomes });

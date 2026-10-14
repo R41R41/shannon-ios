@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { SKILL_LIFECYCLE } from './skillDocument.js';
 import type { SQLiteSkills, SkillActor, SkillUse, StoredSkill } from './store/sqliteSkills.js';
+import type { SkillMilestone } from './skillImportContract.js';
 
 /** How many uses a skill keeps: every pending one and the last resolved window, at most this many in all. */
 const USES_KEPT = 16;
@@ -16,6 +17,8 @@ export const FCA_TASK_USE_PREFIX = 'fca:';
 export function fcaSkillTaskKey(taskId: string): string {
   return `${FCA_TASK_USE_PREFIX}${createHash('sha256').update(taskId).digest('hex').slice(0, 40)}`;
 }
+/** The body milestones a skill may aim at (`SkillMilestone`). */
+export const SKILL_MILESTONES: readonly SkillMilestone[] = Object.freeze(['nether', 'blaze_rods']);
 export const isTaskUse = (talk: string): boolean => talk.startsWith(FCA_TASK_USE_PREFIX);
 
 /** Writes a skill's uses: the successes and each newly settled use on its version's node of the lineage (ADR-0008 §14). */
@@ -41,12 +44,17 @@ export function taskRead(memory: TaskUseMemory, scopeKey: string, taskKey: strin
   return skillId;
 }
 
-/** `SkillMemory.settleTask`: how many pending uses of the task were settled. */
-export function taskSettle(memory: TaskUseMemory, scopeKey: string, taskKey: string, outcome: 0 | 1, at: string): number {
+/**
+ * `SkillMemory.settleTask`: how many pending uses of the task were settled (outcome 1 or 0) or dropped (null: the task stopped, so
+ * they never push settled uses out). With a milestone, only the skills that name it as their aim are settled; the others wait for
+ * the task's completion, failure or the body's death.
+ */
+export function taskSettle(memory: TaskUseMemory, scopeKey: string, taskKey: string, outcome: 0 | 1 | null, at: string, milestone?: SkillMilestone): number {
   let settled = 0;
   if (!isTaskUse(taskKey)) return settled;
   memory.write(at, () => {
     for (const skill of memory.store.all(scopeKey)) {
+      if (milestone && skill.provenance?.targetMilestone !== milestone) continue;
       const next = settledTaskUses(skill.uses, taskKey, outcome);
       if (!next) continue;
       settled += next.count;
@@ -63,10 +71,12 @@ export function withTaskUse(skill: StoredSkill, taskKey: string, at: string): Sk
   return [...skill.uses, { id, at: new Date(at).toISOString(), talk: taskKey, v: skill.version, g: 0, o: null }];
 }
 
-/** The task's pending uses settled with its outcome (1: a milestone or success; 0: a death or failure), or null when none was pending. */
-export function settledTaskUses(uses: readonly SkillUse[], taskKey: string, outcome: 0 | 1): { uses: SkillUse[]; count: number } | null {
-  const count = uses.filter(use => use.o === null && use.talk === taskKey).length;
-  return count ? { count, uses: uses.map(use => use.o === null && use.talk === taskKey ? { ...use, g: outcome, o: outcome } : use) } : null;
+/** The task's pending uses settled with its outcome (1 a success, 0 a failure) or dropped (null), or null when none was pending. */
+export function settledTaskUses(uses: readonly SkillUse[], taskKey: string, outcome: 0 | 1 | null): { uses: SkillUse[]; count: number } | null {
+  const pending = (use: SkillUse) => use.o === null && use.talk === taskKey;
+  const count = uses.filter(pending).length;
+  if (!count) return null;
+  return { count, uses: outcome === null ? uses.filter(use => !pending(use)) : uses.map(use => pending(use) ? { ...use, g: outcome, o: outcome } : use) };
 }
 
 export const NO_USES = Object.freeze({ uses: 0, successes: 0 });

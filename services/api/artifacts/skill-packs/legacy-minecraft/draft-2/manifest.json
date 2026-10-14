@@ -14,7 +14,8 @@
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
-      ]
+      ],
+      "milestone": "nether"
     },
     {
       "name": "mc-nether-travel",
@@ -23,7 +24,8 @@
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
-      ]
+      ],
+      "milestone": "nether"
     },
     {
       "name": "mc-blaze-rods",
@@ -32,16 +34,18 @@
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
-      ]
+      ],
+      "milestone": "blaze_rods"
     },
     {
       "name": "mc-low-health",
       "path": "mc-low-health/SKILL.md",
-      "sha256": "a078edf5baa7a9185567b0d3b047189b92e05635b27c05a098353b894a469ab9",
+      "sha256": "3e25916c251021fad7d436d84105e4a77a98360c365c0ac7eb70bb350841bcd4",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
-      ]
+      ],
+      "milestone": "none"
     },
     {
       "name": "mc-food-and-pace",
@@ -50,19 +54,21 @@
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
-      ]
+      ],
+      "milestone": "none"
     },
     {
       "name": "mc-night-retreat",
       "path": "mc-night-retreat/SKILL.md",
-      "sha256": "cba8d5a686f5e61aea2f5eef69b3149bd34f94b5b3234cade858f500d4f7a539",
+      "sha256": "9b374b07e77c6c9e3497beff138fd41541c39a6904ecb158d16ebeade44a2aa3",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
       ],
       "revises": {
         "bodySha256": "a19505e4ff822f5fa980350284e0c70940547d39dbf776e728d8f483bec6cf34"
-      }
+      },
+      "milestone": "none"
     }
   ]
 }

@@ -10,7 +10,11 @@ export interface OperatorSkillProvenance {
   referenceRevision: string;
   validatorRevision: string;
   importReceiptId: string;
+  /** The body milestone whose arrival after a task read this skill is its success (`skillTaskUses.ts`); absent, none. */
+  targetMilestone?: SkillMilestone;
 }
+/** A Minecraft body milestone from `mc.goal-evidence` (the Nether reached, blaze rods held) a skill may name as its aim. */
+export type SkillMilestone = 'nether' | 'blaze_rods';
 export interface SkillPack {
   schemaVersion: 1;
   packId: string;
@@ -25,6 +29,7 @@ export interface SkillPack {
    */
   skills: readonly {
     name: string; body: string; sha256: string; tools: readonly string[]; conditionalTools?: readonly string[]; revises?: { bodySha256: string };
+    milestone?: SkillMilestone;
   }[];
 }
 export interface SkillImportReceipt {

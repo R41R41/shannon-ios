@@ -206,9 +206,13 @@ ADR-0008 §8 「記憶は目次は毎回、中身は必要なとき」, with Wik
 - **A use by a Minecraft task** (owner decision 2026-10-14; `mind/memory/skillTaskUses.ts`, `wiring/fcaSkillOutcomes.ts`).
   - When a common FCA task offered a Minecraft body reads a skill with `skill.read`, the skill gets one pending use per task and version. Its `talk` is `fca:` followed by a digest of the task id.
   - Only that task's later outcome settles the use:
-    - 1: the body's `mc.goal-evidence` milestones show progress after a first known value (`netherReached` turns true, or `blazeRods` rises), or the task completes.
-    - 0: the body dies (its `alive` fact turns false on the same connection), or the task fails.
-  - Null milestones are unknown, not failure. A stopped task, or a read with nothing after it, leaves the use pending.
+    - 1 by milestone: the body's `mc.goal-evidence` milestones show progress after a first known value. This settles only the skills that name that milestone as their aim (a pack's `milestone`, kept as `targetMilestone` in their provenance):
+      - `nether`: `netherReached` turns true.
+      - `blaze_rods`: `blazeRods` rises.
+    - 1 by completion: the task completes. This settles every pending use.
+    - 0: the body the task is offered dies (its `alive` fact turns false on the same connection), or the task fails. "Offered" means the body the task is bound to, or else the only connected body.
+  - Null milestones are unknown, not failure.
+  - A stopped task's pending uses are dropped. A read with nothing after it stays pending.
   - The night never settles these uses from G. The trial is judged by the same rule as other uses (three uses, two successes) at night.
   - The tracker lives in the process: after a restart, pending uses stay pending.
 - **An operator pack revision** (`revises.bodySha256` in a pack's manifest). The pack gives a new version of an operator-authored skill whose current body matches that hash exactly, through `SkillMemory.revise` with actor `operator_authored`. It never overwrites.

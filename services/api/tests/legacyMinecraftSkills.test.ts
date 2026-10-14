@@ -6,7 +6,7 @@ import { FCA_TASK_USE_PREFIX, SkillMemory, fcaSkillTaskKey } from '../src/mind/m
 import { SkillImporter, skillArtifactSha256 } from '../src/mind/memory/skillImport.js';
 import type { SkillPack } from '../src/mind/memory/skillImportContract.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
-import { createFcaSkillOutcomes } from '../src/wiring/fcaSkillOutcomes.js';
+import { createFcaSkillOutcomes, withSkillOutcomes } from '../src/wiring/fcaSkillOutcomes.js';
 import { fcaResearchTools } from '../src/wiring/fcaResearchWiring.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { inActionExecution } from '../src/infra/context/actionExecution.js';
@@ -56,6 +56,7 @@ describe('legacy-minecraft draft-2: five new trials and a revision of mc-night-r
     for (const entry of pack.skills) {
       expect(entry.body).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
       expect(entry.body).toContain('旧Minebot実験');
+      expect(entry.body).not.toMatch(/朝まで待つ|回復を待つ/u);
     }
   });
 
@@ -83,6 +84,14 @@ describe('legacy-minecraft draft-2: five new trials and a revision of mc-night-r
     expect(audits.map(entry => [entry.kind, entry.status])).toEqual(expect.arrayContaining([['create', 'superseded'], ['patch', 'trial']]));
     expect(memory.open('owner', 'mc-night-retreat')).not.toBeNull();
     for (const name of ['mc-nether-portal', 'mc-blaze-rods']) expect(memory.store.byName('owner', name)).toMatchObject({ status: 'trial', provenance: { packRevision: 'draft-2' } });
+    expect(['mc-nether-portal', 'mc-nether-travel', 'mc-blaze-rods', 'mc-low-health', 'mc-food-and-pace', 'mc-night-retreat']
+      .map(name => memory.store.byName('owner', name)!.provenance?.targetMilestone ?? 'none')).toEqual(['nether', 'nether', 'blaze_rods', 'none', 'none', 'none']);
+    // A milestone is only the aim of a new skill, and only one the body reports.
+    const pack = draft2();
+    const bad = (milestone: unknown, revises = false) => importer.dryRun('owner', { ...pack, revision: 'draft-x', skills: [{ ...pack.skills[0]!, name: 'mc-x', milestone,
+      ...(revises ? { revises: { bodySha256: pack.skills[0]!.sha256 } } : {}) } as never] }).problems;
+    expect(bad('dragon')).toContainEqual({ name: 'mc-x', code: 'invalid_milestone' });
+    expect(bad('nether', true)).toContainEqual({ name: 'mc-x', code: 'invalid_milestone' });
     // The same pack again: the same receipt, nothing written.
     expect(apply(draft2(), later(2))).toMatchObject({ idempotent: true, receipt: { receiptId: result.receipt.receiptId } });
     expect(memory.store.byName('owner', 'mc-night-retreat')!.version).toBe(2);
@@ -175,10 +184,17 @@ describe('a Minecraft task reading a skill: a use its outcome settles', () => {
     outcomes.died('minecraft:a');
     expect(pending('dead', 'mc-low-health')).toBe(0);
 
+    // A milestone credits only the skills aiming at it: a skill without one waits for the task's end.
+    outcomes.read('owner', 'done', 'mc-low-health');
+    outcomes.evidence('owner', 'done', evidence({ netherReached: false, blazeRods: 0 }));
+    outcomes.evidence('owner', 'done', evidence({ netherReached: true, blazeRods: 1 }));
+    expect(pending('done', 'mc-low-health')).toBeNull();
     for (const task of ['done', 'fail', 'stop']) outcomes.read('owner', task, 'mc-food-and-pace');
     const phases: Record<string, 'completed' | 'failed' | 'stopped'> = { done: 'completed', fail: 'failed', stop: 'stopped' };
     outcomes.tick((_scope, task) => phases[task] ?? 'executing');
-    expect([pending('done', 'mc-food-and-pace'), pending('fail', 'mc-food-and-pace'), pending('stop', 'mc-food-and-pace')]).toEqual([1, 0, null]);
+    expect([pending('done', 'mc-food-and-pace'), pending('done', 'mc-low-health'), pending('fail', 'mc-food-and-pace')]).toEqual([1, 1, 0]);
+    // Stopped: its pending read is dropped, never left to push settled uses out.
+    expect(memory.store.byName('owner', 'mc-food-and-pace')!.uses.some(use => use.talk === fcaSkillTaskKey('stop'))).toBe(false);
     outcomes.evidence('owner', 'nether', 'not json');
   });
 
@@ -212,5 +228,17 @@ describe('a Minecraft task reading a skill: a use its outcome settles', () => {
       poll(false); poll(true); poll(false); poll(false); poll(false, 'other');
       expect(deaths).toEqual(['minecraft:world']);
     } finally { h.close(); }
+  });
+
+  it('settles a death of the only connected body for a task not yet bound to it, as reads count it', () => {
+    const { memory } = imported();
+    const listeners = new Set<(body: string) => void>();
+    const control = { store: { body: () => null }, available: () => ['minecraft:only'], deathListeners: listeners };
+    const minecraft = withSkillOutcomes({ control: control as never }, memory, () => later(5))!;
+    minecraft.skillOutcomes!.read('owner', 'unbound', 'mc-low-health');
+    expect(memory.store.byName('owner', 'mc-low-health')!.uses).toMatchObject([{ talk: fcaSkillTaskKey('unbound'), o: null }]);
+    for (const listener of listeners) listener('minecraft:only');
+    expect(memory.store.byName('owner', 'mc-low-health')!.uses).toMatchObject([{ talk: fcaSkillTaskKey('unbound'), o: 0 }]);
+    expect(withSkillOutcomes(null, memory)).toBeNull();
   });
 });

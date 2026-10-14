@@ -4,6 +4,7 @@ import { checkedSkillText } from './skillMemoryParts.js';
 import { lineDiff, SKILL_CAPACITY, skillHash, skillLint } from './skillDocument.js';
 import { versionRevisionId } from './skillLineage.js';
 import type { OperatorSkillProvenance, SkillImportPlan, SkillImportReceipt, SkillPack } from './skillImportContract.js';
+import { SKILL_MILESTONES } from './skillTaskUses.js';
 
 export const skillArtifactSha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const symbol = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/u;
@@ -45,6 +46,8 @@ export class SkillImporter {
       if (names.has(entry.name)) bad(entry.name, 'duplicate_name');
       names.add(entry.name);
       if (!sha256.test(entry.sha256) || skillArtifactSha256(entry.body) !== entry.sha256) bad(entry.name, 'hash_mismatch');
+      // A milestone is the aim of a new skill only; a revision keeps the skill's own provenance.
+      if (entry.milestone !== undefined && (entry.revises || !SKILL_MILESTONES.includes(entry.milestone))) bad(entry.name, 'invalid_milestone');
       const checked = checkedSkillText(entry.body, check);
       if (typeof checked === 'string') bad(entry.name, checked === 'unavailable' ? 'check_unavailable' : 'unsafe_body');
       else if (checked.ok.name !== entry.name) bad(entry.name, 'name_mismatch');
@@ -110,7 +113,8 @@ export class SkillImporter {
         const skillId = `skill_${skillArtifactSha256(`${plan.receiptId}\n${entry.name}`).slice(0, 40)}`;
         const auditId = `audit_${skillArtifactSha256(`${skillId}\nimport`).slice(0, 40)}`;
         const provenance: OperatorSkillProvenance = { origin: 'operator_authored', packId: pack.packId, packRevision: pack.revision, bodySha256: entry.sha256,
-          sourceAuthor: pack.sourceAuthor, sourceReference: pack.sourceReference, referenceRevision: pack.referenceRevision, validatorRevision: pack.validatorRevision, importReceiptId: plan.receiptId };
+          sourceAuthor: pack.sourceAuthor, sourceReference: pack.sourceReference, referenceRevision: pack.referenceRevision, validatorRevision: pack.validatorRevision, importReceiptId: plan.receiptId,
+          ...(entry.milestone ? { targetMilestone: entry.milestone } : {}) };
         store.insertAudit({ auditId, scopeKey, skillId, target: `name:${entry.name}`, kind: 'create', fromVersion: null, toVersion: 1,
           proposalHash: skillHash(entry.body), diff: lineDiff('', entry.body), purposePatternIds: [], baselineRate: null, lint: skillLint(entry.body), proposedAt: at });
         store.insert({ skillId, scopeKey, name: entry.name, description: checked.ok.description, body: entry.body, bodyHash: skillHash(entry.body),

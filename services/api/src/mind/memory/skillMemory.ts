@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NO_USES, isTaskUse, revisionGate, taskRead, taskSettle, writeSkillUses } from './skillTaskUses.js';
+import type { SkillMilestone } from './skillImportContract.js';
 import { tierOutcome } from '@shannon/learning';
 import { LockWaitMeter, loggedFailure, ownerDayKey, tableExists, underWriteLock, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import {
@@ -114,10 +115,10 @@ export class SkillMemory {
     return skillId;
   }
 
-  /** A common FCA task's read of a skill (`skillTaskUses.ts`): one pending use per task and version, settled by its outcome. */
+  /** A common FCA task's read of a skill, and its outcome (`skillTaskUses.ts`: 1 success, 0 death or failure, null stopped). */
   usedInTask(scopeKey: string, taskKey: string, name: string, at: string): string | null { return taskRead(this, scopeKey, taskKey, name, at); }
-  /** A task's outcome after its reads (a milestone or success 1, a death or failure 0): settles that task's pending uses. */
-  settleTask(scopeKey: string, taskKey: string, outcome: 0 | 1, at: string): number { return taskSettle(this, scopeKey, taskKey, outcome, at); }
+  settleTask(scopeKey: string, taskKey: string, outcome: 0 | 1 | null, at: string, milestone?: SkillMilestone): number {
+    return taskSettle(this, scopeKey, taskKey, outcome, at, milestone); }
 
   /** The owner's next turn in a Talk, as S (null: Jev was unsure, G alone): settles the uses of the turn before. */
   nextTurn(scopeKey: string, talk: string, serve: number | null, at: string): void {

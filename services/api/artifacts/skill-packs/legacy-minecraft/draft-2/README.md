@@ -24,3 +24,10 @@
 本番導入は、root担当が公開済みの exact source で owner の dry-run を行い、次を確かめてから apply する別の段階。
 - 上限（25）、衝突、本文hash、改訂元の本文hash。
 - 本番の plan hash。
+
+manifest の `milestone` は各スキルが目指す身体の節目。
+- `mc-nether-portal`、`mc-nether-travel`: `nether`
+- `mc-blaze-rods`: `blaze_rods`
+- その他: `none`
+
+新設スキルでは provenance の `targetMilestone` として保存する。節目による成功は、その節目を宣言したスキルの使用だけを判定する。それ以外のスキルは、タスクの完了・失敗、または死亡で判定する。
