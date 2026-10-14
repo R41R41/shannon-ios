@@ -106,7 +106,7 @@ export interface ScenarioDriver {
 
 const INTENSITY_WORDS: Readonly<Record<string, string>> = Object.freeze({ かすかに: 'subtle', はっきり: 'moderate', 強く: 'strong' });
 
-function stanceOf(block: string): { stance: string | null; intensity: string | null } {
+export function stanceOf(block: string): { stance: string | null; intensity: string | null } {
   const match = /構え: ([^（\n]+)（([^）]+)）/u.exec(block);
   if (!match) return { stance: block.includes('構え: ふつう') ? 'neutral' : null, intensity: null };
   const word = match[1]!;
