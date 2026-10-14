@@ -27,6 +27,8 @@ export interface FcaStepPorts {
   /** Existing lease/resource gate, rechecked before each model or tool operation. */
   permit(): Promise<boolean>;
   selector?: FcaToolSelector;
+  /** This task acts through a body (bound, or made from a body request): a reselection never leaves out all its body tools. */
+  keepBodyTools?(): boolean;
   recall?: TaskRecall;
   evidence?: FcaEvidence;
   observeMemory?(ids: readonly string[]): boolean;
@@ -117,7 +119,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       history: replay?.history ?? step.snapshot.history, tools: catalog };
   }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
-  const selection = ports.selector ? await selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector, step.scopeKey, signal) : null;
+  const selection = ports.selector ? await selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector, step.scopeKey, signal,
+    { keepBodyTools: ports.keepBodyTools?.() === true }) : null;
   if (selection) {
     input.tools = selectedFcaTools(catalog, selection);
   }

@@ -15,20 +15,26 @@ const catalog = [tool('task.list', 'task_runtime'), tool('skill.read', 'skills')
 const input = { task: { id: 't', title: '鉄', goal: '鉄のツルハシ', completionCriteria: '持ち物' }, messages: [], tools: catalog, history: [] } as unknown as FcaModelInput;
 const choosing = (names: string[]) => ({ async select() { return { names, source: 'jev' as const }; } });
 const signal = new AbortController().signal;
+const body = { keepBodyTools: true };
 
 describe('the tool selection keeps a body\'s tools (run 9, item 2)', () => {
   it('keeps the previous selection\'s body tools when a reselection leaves every one out', async () => {
-    const first = await selectFcaTools(input, catalog, undefined, choosing(['task.list', 'mc.move-to', 'mc.dig-block-at']), 'owner', signal);
+    const first = await selectFcaTools(input, catalog, undefined, choosing(['task.list', 'mc.move-to', 'mc.dig-block-at']), 'owner', signal, body);
     expect(first.names).toEqual(['task.list', 'mc.move-to', 'mc.dig-block-at']);
-    const again = await selectFcaTools(input, catalog, { ...first, refresh: true }, choosing(['task.list', 'skill.read']), 'owner', signal);
+    const again = await selectFcaTools(input, catalog, { ...first, refresh: true }, choosing(['task.list', 'skill.read']), 'owner', signal, body);
     expect(again.names).toEqual(['task.list', 'skill.read', 'mc.move-to', 'mc.dig-block-at']);
   });
   it('adds every body tool when there is no previous one, and changes nothing when one is chosen or none is offered', async () => {
-    expect((await selectFcaTools(input, catalog, undefined, choosing(['skill.read']), 'owner', signal)).names)
+    expect((await selectFcaTools(input, catalog, undefined, choosing(['skill.read']), 'owner', signal, body)).names)
       .toEqual(['skill.read', 'minecraft.observe', 'mc.move-to', 'mc.dig-block-at', 'mc.wait-time']);
-    expect((await selectFcaTools(input, catalog, undefined, choosing(['mc.wait-time']), 'owner', signal)).names).toEqual(['mc.wait-time']);
+    expect((await selectFcaTools(input, catalog, undefined, choosing(['mc.wait-time']), 'owner', signal, body)).names).toEqual(['mc.wait-time']);
     const plain = catalog.slice(0, 2);
-    expect((await selectFcaTools({ ...input, tools: plain }, plain, undefined, choosing(['task.list']), 'owner', signal)).names).toEqual(['task.list']);
+    expect((await selectFcaTools({ ...input, tools: plain }, plain, undefined, choosing(['task.list']), 'owner', signal, body)).names).toEqual(['task.list']);
+  });
+  it('keeps the selector\'s exclusion for a task that is not a body task, though a connected body puts its tools in the catalog', async () => {
+    const research = { ...input, task: { id: 'r', title: '調べもの', goal: '空港までの時間', completionCriteria: '出典つき' } } as unknown as FcaModelInput;
+    expect((await selectFcaTools(research, catalog, undefined, choosing(['task.list', 'skill.read']), 'owner', signal)).names).toEqual(['task.list', 'skill.read']);
+    expect((await selectFcaTools(research, catalog, undefined, choosing(['task.list']), 'owner', signal, { keepBodyTools: false })).names).toEqual(['task.list']);
   });
 });
 
@@ -54,7 +60,9 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     expect(at({ health: 8 })).toEqual(['mc-low-health（体力が半分以下）']);
     expect(at({ food: 4 })).toEqual(['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
     expect(at({}, { failedStepsInARow: 3 })).toEqual(['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
-    expect(at({}, { failedStepsInARow: 0, idleWaitSeconds: 390 })).toEqual(['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
+    expect(at({}, { failedStepsInARow: 0, recentIdleWaits: 2 })).toEqual(['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
+    // One recent wait, or many long ago (no longer among the latest results), names nothing.
+    expect(at({}, { failedStepsInARow: 0, recentIdleWaits: 1 })).toEqual([]);
     expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)'] })).toEqual(['mc-nether-portal（鉄のツルハシがありネザーへ向かう前）']);
     expect(at({ inventory: ['iron_pickaxe×1'] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
     expect(minecraftSkillPointers(minecraftSituation(observation({ dimension: 'the_nether', nearbyEntities: [{ name: 'blaze', distance: 20 }] },
@@ -75,5 +83,12 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     const step = { snapshot: { task: { createdAt: '2026-10-14T11:16:55.000Z' }, checkpoint: null } } as unknown as TaskStep;
     expect(minecraftPace(step, [], Date.parse('2026-10-14T11:40:00.000Z'), null, 390_000)).toMatchObject({ idleWaitSeconds: 390 });
     expect(minecraftPace(step, [], Date.parse('2026-10-14T11:40:00.000Z'))).not.toHaveProperty('idleWaitSeconds');
+  });
+  it('puts safety and the Nether path before food and pace, so food and pace never pushes them out', () => {
+    const nether = observation({ dimension: 'the_nether', health: 6, food: 3, nearbyEntities: [{ name: 'blaze', distance: 10 }] }, { dimension: 'the_nether' });
+    expect(minecraftSkillPointers(minecraftSituation(nether, { failedStepsInARow: 4, recentIdleWaits: 3 }), LEGACY))
+      .toEqual(['mc-low-health（体力が半分以下）', 'mc-nether-travel（ネザーにいる）', 'mc-blaze-rods（ネザーでブレイズが近い）']);
+    expect(minecraftSkillPointers(minecraftSituation(observation({ food: 3, inventory: ['iron_pickaxe×1'] }), calm), LEGACY))
+      .toEqual(['mc-nether-portal（鉄のツルハシがありネザーへ向かう前）', 'mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
   });
 });

@@ -12,7 +12,7 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(va
 
 /** Selection changes only with new admitted input, task/child context, catalog definitions, or a known tool failure. */
 export async function selectFcaTools(input: FcaModelInput, catalog: readonly ShannonToolDefinition[], prior: unknown,
-  selector: FcaToolSelector, scopeKey: string, signal: AbortSignal): Promise<FcaToolState> {
+  selector: FcaToolSelector, scopeKey: string, signal: AbortSignal, options: { keepBodyTools?: boolean } = {}): Promise<FcaToolState> {
   const previous = readState(prior);
   const inputKey = input.messages.length ? digest(input.messages) : previous?.inputKey ?? '';
   const { id, title, goal, completionCriteria } = input.task;
@@ -32,7 +32,8 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   signal.throwIfAborted();
   const valid = Array.isArray(result?.names) && result.names.every(name => typeof name === 'string' && known.has(name))
     && new Set(result.names).size === result.names.length && ['jev', 'fallback'].includes(result.source);
-  const wanted = keptBodyTools(new Set(valid ? result.names : [...known]), catalog, previous);
+  const chosen = new Set(valid ? result.names : [...known]);
+  const wanted = options.keepBodyTools ? keptBodyTools(chosen, catalog, previous) : chosen;
   observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: valid ? result.source : 'fallback', selectedCount: wanted.size });
   return { version: 1, key, inputKey, names: catalog.filter(tool => wanted.has(tool.name)).map(tool => tool.name),
     opened: previous?.key === key ? previous.opened.filter(name => known.has(name)) : [],
@@ -40,7 +41,9 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
 }
 
 /**
- * A body's tools are never all left out while the catalog offers them (it does only while a body is bound and its frame is fresh):
+ * A body task's tools (`keepBodyTools`: a task with a bound body, or made from a Minecraft request) are never all left out while the
+ * catalog offers them; any other task keeps the selector's choice (review of 0efd5acb: a single connected body puts its tools in
+ * every task's catalog):
  * Minecraft run 9 (2026-10-14), after an interrupted move the selection was made again without any `mc.*` tool, and she reported
  * that her body's tools were gone and waited. Then the body tools of the previous selection are kept, or all of them without one.
  */

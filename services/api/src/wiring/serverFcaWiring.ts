@@ -9,7 +9,7 @@ import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
-import { admittedMinecraftRequest, fcaMinecraftRequests } from './fcaMinecraftRequests.js';
+import { admittedMinecraftRequest, fcaMinecraftRequests, MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
 import { createFcaTouchWiring } from './fcaTouchWiring.js';
 import { touchSourcesVisible } from './fcaTouchSources.js';
 import { underWriteLock } from '../infra/sqlite/lockWaits.js';
@@ -146,7 +146,10 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         const observations = [createFcaTaskObservationMonitor({ runtime: _runtime, step, allowed: parts.ownerAlone, sourcesVisible, taskVisible, observeTasks })];
         // The operator's CLI can only start and stop a request: nobody can answer a task it handed over (Minebot lane run 1).
         const waitCounterpart = () => operatorRequester(operatorAudit, parts.ownerScope)(step.snapshot.task) !== 'operator';
-        return ({ selector, observations, waitCounterpart, ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
+        const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
+          || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
+        return ({ selector, observations, waitCounterpart, keepBodyTools, ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0,
         taskVisible: id => id === step.taskId ? visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0 : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },

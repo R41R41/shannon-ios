@@ -276,7 +276,8 @@ export function createMinecraftTaskBody(parts: {
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
-      const pointers = minecraftSkillPointers(minecraftSituation(observation, pace), parts.skillNames?.() ?? new Set());
+      const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
+      const pointers = minecraftSkillPointers(minecraftSituation(observation, { ...pace, recentIdleWaits }), parts.skillNames?.() ?? new Set());
       return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace,
         ...(pointers.length ? { skillPointers: pointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE } : {}) };
     },

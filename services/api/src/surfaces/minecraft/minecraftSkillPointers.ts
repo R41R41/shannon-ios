@@ -13,20 +13,25 @@ export interface MinecraftSituation {
 }
 type Pointer = { skill: string; when: string; applies(situation: MinecraftSituation): boolean };
 const POINTERS: readonly Pointer[] = Object.freeze([
+  // Safety first, then the Nether path, and food and pace last (review of 0efd5acb: they must not push the Nether ones out).
   { skill: 'mc-night-retreat', when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
   { skill: 'mc-low-health', when: '体力が半分以下', applies: s => s.lowHealth },
-  { skill: 'mc-food-and-pace', when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
-  { skill: 'mc-nether-portal', when: '鉄のツルハシがありネザーへ向かう前', applies: s => s.readyForNether },
   { skill: 'mc-nether-travel', when: 'ネザーにいる', applies: s => s.inNether },
   { skill: 'mc-blaze-rods', when: 'ネザーでブレイズが近い', applies: s => s.blazeNear },
+  { skill: 'mc-nether-portal', when: '鉄のツルハシがありネザーへ向かう前', applies: s => s.readyForNether },
+  { skill: 'mc-food-and-pace', when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
 ]);
 /** The note beside the pointers: fixed words. */
 export const MINECRAFT_SKILL_POINTER_NOTE = 'いまの状況に合うスキル。動く前に skill_read で開いて手順を確かめる。';
 const NIGHT_START = 13_000, NIGHT_END = 23_000, DARK_SOON_SECONDS = 60, THREAT_NEAR = 16, HALF_HEALTH = 10, HUNGRY = 6;
-const STALLED_STEPS = 3, IDLE_WAIT_SECONDS = 60;
+const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
 
 /** The pace facts the situation reads (`minecraftPace`). */
-export interface MinecraftPaceFacts { failedStepsInARow: number; idleWaitSeconds?: number; milestones?: { netherReached: boolean | null } }
+export interface MinecraftPaceFacts {
+  failedStepsInARow: number; milestones?: { netherReached: boolean | null };
+  /** Her `mc.wait-time` calls among her latest tool results (at most six): only recent waits count, never the task's total. */
+  recentIdleWaits?: number;
+}
 
 export function minecraftSituation(observation: BodyObservation | null, pace: MinecraftPaceFacts): MinecraftSituation {
   const world = record(observation?.state.world) ?? {};
@@ -36,7 +41,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   return {
     ...darkness(world, overworld), threatNear: entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
-    stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.idleWaitSeconds ?? 0) >= IDLE_WAIT_SECONDS,
+    stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
     readyForNether: overworld && pace.milestones?.netherReached !== true
       && carriedItems(world, facts).some(item => /^(iron|diamond|netherite)_pickaxe/u.test(item)),
     inNether: nether,
