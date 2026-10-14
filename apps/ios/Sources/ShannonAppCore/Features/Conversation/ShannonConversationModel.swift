@@ -17,6 +17,12 @@ public final class ShannonConversationModel {
     /// Her reply while it is being written, sentence by sentence, or what arrived of it before the stream broke
     /// (`ShannonConversationModel+Streaming.swift`). Never in `messages` and never cached: `done` replaces it.
     public internal(set) var streamingReply: ShannonStreamingReply?
+    /// While a reply is drawn at her pace (Syzygy ADR-0013 item 10): whether her typing shows. Nil otherwise.
+    public internal(set) var replyPacing: ShannonReplyPacingState?
+    /// Waits for the pace (a test hands one that records instead of sleeping).
+    @ObservationIgnored var pacingSleep: @Sendable (TimeInterval) async -> Void = { seconds in
+        try? await Task.sleep(for: .milliseconds(Int(seconds * 1_000)))
+    }
     /// True while a pending text reply includes a memory search (FTS, and semantic recall when enabled).
     public internal(set) var isSearchingMemory = false
     public internal(set) var isLoadingHistory = false

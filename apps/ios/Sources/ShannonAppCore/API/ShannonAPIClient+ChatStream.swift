@@ -10,11 +10,15 @@ public struct ShannonChatStreamProgress: Equatable, Sendable {
     public let threadId: String?
     public let text: String
     public let sentenceCount: Int
+    /// Her pace for this reply, from `start` (Syzygy ADR-0013 item 10). While it asks for a pace, the sentences are held
+    /// and drawn at that pace once the reply is whole.
+    public var textRegister: ShannonTextRegisterDTO?
 
-    public init(threadId: String?, text: String, sentenceCount: Int) {
+    public init(threadId: String?, text: String, sentenceCount: Int, textRegister: ShannonTextRegisterDTO? = nil) {
         self.threadId = threadId
         self.text = text
         self.sentenceCount = sentenceCount
+        self.textRegister = textRegister
     }
 }
 
@@ -56,7 +60,7 @@ public struct ShannonChatStreamInterrupted: Error, Sendable {
 
 /// One NDJSON line of the chat stream. Unknown types are kept as `.unknown` and ignored, as the contract asks.
 public enum ShannonChatStreamEvent: Equatable, Sendable {
-    case start(threadId: String?, audience: String?, turnId: String?)
+    case start(threadId: String?, audience: String?, turnId: String?, textRegister: ShannonTextRegisterDTO? = nil)
     case sentence(index: Int, text: String)
     case done(ChatResponseDTO, fallback: String?)
     case error(status: Int, code: String?)
@@ -67,7 +71,12 @@ public enum ShannonChatStreamEvent: Equatable, Sendable {
     }
 
     private struct Envelope: Decodable { let type: String }
-    private struct Start: Decodable { let threadId: String?; let audience: String?; let turnId: String? }
+    private struct Start: Decodable {
+        let threadId: String?
+        let audience: String?
+        let turnId: String?
+        let textRegister: ShannonTextRegisterDTO?
+    }
     private struct Sentence: Decodable { let index: Int; let text: String }
     private struct Done: Decodable { let response: ChatResponseDTO; let fallback: String? }
     private struct Failure: Decodable { let status: Int?; let error: String? }
@@ -87,7 +96,7 @@ public enum ShannonChatStreamEvent: Equatable, Sendable {
             switch type {
             case "start":
                 let start = try decoder.decode(Start.self, from: data)
-                return .start(threadId: start.threadId, audience: start.audience, turnId: start.turnId)
+                return .start(threadId: start.threadId, audience: start.audience, turnId: start.turnId, textRegister: start.textRegister)
             case "sentence":
                 let sentence = try decoder.decode(Sentence.self, from: data)
                 return .sentence(index: sentence.index, text: sentence.text)
@@ -122,6 +131,7 @@ public struct ShannonChatStreamAssembler: Sendable {
 
     public private(set) var threadId: String?
     public private(set) var turnId: String?
+    public private(set) var textRegister: ShannonTextRegisterDTO?
     public private(set) var sentences: [String] = []
     public private(set) var isFinished = false
 
@@ -131,7 +141,7 @@ public struct ShannonChatStreamAssembler: Sendable {
     public var text: String { sentences.joined() }
 
     public var progress: ShannonChatStreamProgress {
-        ShannonChatStreamProgress(threadId: threadId, text: text, sentenceCount: sentences.count)
+        ShannonChatStreamProgress(threadId: threadId, text: text, sentenceCount: sentences.count, textRegister: textRegister)
     }
 
     /// Applies one event. `error` throws `ShannonChatStreamRetracted`; a sentence out of order throws `OutOfOrder`.
@@ -139,9 +149,10 @@ public struct ShannonChatStreamAssembler: Sendable {
     public mutating func apply(_ event: ShannonChatStreamEvent) throws -> Step {
         guard !isFinished else { return .ignored }
         switch event {
-        case let .start(threadId, _, turnId):
+        case let .start(threadId, _, turnId, textRegister):
             self.threadId = threadId ?? self.threadId
             self.turnId = turnId ?? self.turnId
+            self.textRegister = textRegister ?? self.textRegister
             return .started
         case let .sentence(index, text):
             guard index == sentences.count else { throw OutOfOrder(expected: sentences.count, received: index) }

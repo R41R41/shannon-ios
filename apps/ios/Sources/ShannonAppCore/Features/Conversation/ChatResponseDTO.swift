@@ -16,6 +16,8 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public var feedback: ShannonFeedbackDTO? = nil
     /// She looks through this app's camera now: capture one frame and answer it.
     public var appLook: ShannonAppLookAskDTO? = nil
+    /// Her register and pace for this reply (Syzygy ADR-0013 item 10); absent from an older server or while switched off.
+    public var textRegister: ShannonTextRegisterDTO? = nil
 
     public init(
         mode: String,

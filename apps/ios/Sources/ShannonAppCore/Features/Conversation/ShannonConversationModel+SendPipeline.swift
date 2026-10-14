@@ -65,7 +65,9 @@ extension ShannonConversationModel {
             selectedThreadId = response.threadId
             let organizeSession = response.uiBlocks?.compactMap(\.session).first
             let replyMessage = Self.reconciledReply(response, provisionalID: replyID)
-            messages.append(replyMessage)
+            // Her pace (ADR-0013 item 10): none from an older server or while off, and none for urgent, safety, promise
+            // and system replies, which are shown at once and whole.
+            await showPaced(replyMessage, ShannonReplyPacing.plan(response.textRegister, reply: response.reply, sentAt: sentAt, now: Date()))
             feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
             feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)
             // The reply never waits for memory extraction; what was captured is fetched afterwards.

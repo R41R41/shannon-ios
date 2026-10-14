@@ -60,9 +60,10 @@ extension ShannonConversationModel {
         return streamingReply
     }
 
-    /// The waiting indicator stands until her first sentence arrives.
+    /// The waiting indicator stands until her first sentence arrives; while a reply is drawn at her pace, the pace decides.
     public var showsTypingIndicator: Bool {
-        isSending && visibleStreamingReply == nil
+        if let replyPacing { return replyPacing.showsTyping }
+        return isSending && visibleStreamingReply == nil
     }
 
     /// Whether the last failed message is being checked against the Talk before it may be sent again.
@@ -83,6 +84,8 @@ extension ShannonConversationModel {
 
     func streamingReplyDidGrow(_ id: UUID, _ progress: ShannonChatStreamProgress) {
         guard streamingReply?.id == id, streamingReply?.phase == .writing else { return }
+        // A reply with a pace (ADR-0013 item 10) is held and drawn at that pace once whole; a bypass is shown as it comes.
+        if let register = progress.textRegister, register.bypass == nil { return }
         streamingReply?.text = progress.text
     }
 
@@ -126,6 +129,38 @@ extension ShannonConversationModel {
             turnID: response.turnId,
             feedback: response.feedback
         )
+    }
+
+    // MARK: Her pace (Syzygy ADR-0013 item 10)
+
+    /// Shows `reply` at its pace: her typing hidden for what is left of the pause, then her typing, then the reply, or its
+    /// first sentence, her typing again and the whole reply (the same message, so the history keeps one).
+    func showPaced(_ reply: ConversationMessage, _ pacing: ShannonReplyPacing) async {
+        guard !pacing.isImmediate else {
+            messages.append(reply)
+            return
+        }
+        replyPacing = ShannonReplyPacingState(threadID: selectedThreadId, showsTyping: pacing.pause == 0)
+        defer { replyPacing = nil }
+        if pacing.pause > 0 {
+            await pacingSleep(pacing.pause)
+            replyPacing?.showsTyping = true
+        }
+        if pacing.typing > 0 { await pacingSleep(pacing.typing) }
+        guard pacing.parts.count == 2 else {
+            messages.append(reply)
+            return
+        }
+        // The first message carries her face only: its actions (reactions, feedback, places) come with the whole reply.
+        messages.append(ConversationMessage(
+            id: reply.id, role: .shannon, text: pacing.parts[0], sentAt: reply.sentAt, emotionSnapshot: reply.emotionSnapshot))
+        replyPacing?.showsTyping = true
+        if pacing.gap > 0 { await pacingSleep(pacing.gap) }
+        if let index = messages.firstIndex(where: { $0.id == reply.id }) {
+            messages[index] = reply
+        } else {
+            messages.append(reply)
+        }
     }
 
     // MARK: A turn whose end this device did not see

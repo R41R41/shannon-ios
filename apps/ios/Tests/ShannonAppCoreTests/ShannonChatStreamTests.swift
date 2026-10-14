@@ -206,6 +206,105 @@ final class ShannonChatStreamTests: XCTestCase {
         XCTAssertEqual(model.draft, "", "the draft is cleared on accept, as before")
     }
 
+    // MARK: Her pace (Syzygy ADR-0013 item 10)
+
+    @MainActor
+    func testAPacedReplyIsHeldThenDrawnAfterAPauseHerTypingAndTwoMessages() async {
+        let register = ShannonTextRegisterDTO(pauseMs: 2_000, typingMs: 3_000, split: true, gapMs: 1_500, parts: ["はい。", "元気です。"])
+        var response = Fixture.response(reply: "はい。元気です。", expression: .annoyed, turnId: "turn-1")
+        response.textRegister = register
+        let seen = SeenReplies()
+        let client = StreamingClient(sentences: ["はい。", "元気です。"], outcome: .success(response), register: register)
+        let model = ShannonConversationModel(client: client)
+        await client.setProbe { @MainActor in
+            seen.replies.append(model.visibleStreamingReply)
+            seen.typing.append(model.showsTypingIndicator)
+        }
+        let steps = PacingSteps()
+        model.pacingSleep = { seconds in
+            await MainActor.run {
+                steps.record(seconds, typing: model.showsTypingIndicator, texts: model.messages.filter { $0.role == .shannon }.map(\.text))
+            }
+        }
+
+        model.draft = "元気？"
+        await model.sendDraft()
+
+        // While it was written, nothing of it showed: her typing stood.
+        XCTAssertEqual(seen.replies.map { $0?.text }, [nil, nil])
+        XCTAssertEqual(seen.typing, [true, true])
+        // Then: the pause with her typing hidden, her typing, the first sentence with her typing again, the whole reply.
+        XCTAssertEqual(steps.seconds.count, 3)
+        XCTAssertEqual(steps.seconds[0], 2, accuracy: 0.5)
+        XCTAssertEqual(steps.seconds[1], 3)
+        XCTAssertEqual(steps.seconds[2], 1.5)
+        XCTAssertEqual(steps.typing, [false, true, true])
+        XCTAssertEqual(steps.texts, [[], [], ["はい。"]])
+        XCTAssertEqual(model.messages.map(\.text), ["元気？", "はい。元気です。"], "one message in the history")
+        XCTAssertEqual(model.messages.last?.turnID, "turn-1")
+        XCTAssertNil(model.replyPacing)
+        XCTAssertFalse(model.showsTypingIndicator)
+    }
+
+    @MainActor
+    func testAnUrgentReplyAndAnOlderServerAreShownAtOnceAsBefore() async {
+        for register in [ShannonTextRegisterDTO(pauseMs: 20_000, typingMs: 8_000, split: true, gapMs: 2_000, bypass: "safety"), nil] {
+            var response = Fixture.response(reply: "はい。元気です。")
+            response.textRegister = register
+            let seen = SeenReplies()
+            let client = StreamingClient(sentences: ["はい。", "元気です。"], outcome: .success(response), register: register)
+            let model = ShannonConversationModel(client: client)
+            await client.setProbe { @MainActor in seen.replies.append(model.visibleStreamingReply) }
+            let steps = PacingSteps()
+            model.pacingSleep = { seconds in await MainActor.run { steps.record(seconds, typing: false, texts: []) } }
+            model.draft = "元気？"
+            await model.sendDraft()
+            XCTAssertEqual(seen.replies.map { $0?.text }, ["はい。", "はい。元気です。"], "streamed as it comes")
+            XCTAssertEqual(steps.seconds, [], "never delayed")
+            XCTAssertEqual(model.messages.map(\.text), ["元気？", "はい。元気です。"])
+        }
+    }
+
+    func testThePaceSubtractsWhatHasPassedAndKeepsItsCaps() throws {
+        let sent = Date(timeIntervalSince1970: 1_000)
+        let register = ShannonTextRegisterDTO(pauseMs: 12_000, typingMs: 4_000, split: true, gapMs: 1_000)
+        // Six seconds of writing: six seconds of the pause are left, then her typing whole.
+        let mid = ShannonReplyPacing.plan(register, reply: "……別に。気にしてません。", sentAt: sent, now: sent.addingTimeInterval(6))
+        XCTAssertEqual(mid, .init(pause: 6, typing: 4, parts: ["……別に。", "気にしてません。"], gap: 1))
+        // The pause passed while she wrote: her typing has shown since he sent, so only what is left of it.
+        let late = ShannonReplyPacing.plan(.init(pauseMs: 2_000, typingMs: 5_000), reply: "で？", sentAt: sent, now: sent.addingTimeInterval(3))
+        XCTAssertEqual(late, .init(pause: 0, typing: 2, parts: ["で？"], gap: 0))
+        // Caps: a pause of at most 20 s, typing and the gap at most 8 s; a negative value is none.
+        let capped = ShannonReplyPacing.plan(.init(pauseMs: 99_000, typingMs: 99_000, split: true, gapMs: 99_000, parts: ["a", "b"]),
+                                             reply: "ab", sentAt: sent, now: sent)
+        XCTAssertEqual(capped, .init(pause: 20, typing: 8, parts: ["a", "b"], gap: 8))
+        XCTAssertEqual(ShannonReplyPacing.plan(.init(pauseMs: -5, typingMs: -1), reply: "x", sentAt: sent, now: sent), .immediate("x"))
+        // One sentence is one message, split or not; every bypass, and an older server, is at once and whole.
+        XCTAssertEqual(ShannonReplyPacing.plan(.init(split: true), reply: "はい。", sentAt: sent, now: sent).parts, ["はい。"])
+        for bypass in ["urgent", "safety", "promise", "system", "aNewerOne"] {
+            XCTAssertEqual(ShannonReplyPacing.plan(.init(pauseMs: 5_000, typingMs: 3_000, split: true, bypass: bypass),
+                                                   reply: "地震です。逃げて。", sentAt: sent, now: sent), .immediate("地震です。逃げて。"))
+        }
+        XCTAssertEqual(ShannonReplyPacing.plan(nil, reply: "はい。どうも。", sentAt: sent, now: sent), .immediate("はい。どうも。"))
+        XCTAssertEqual(ShannonReplyPacing.splitParts(nil, reply: "えっ！？ほんとに？"), ["えっ！？", "ほんとに？"])
+    }
+
+    func testTheRegisterIsReadFromStartAndDoneAndNeverBreaksAReply() throws {
+        let start = try ShannonChatStreamEvent.parse(line: #"{"type":"start","threadId":"t-1","audience":"owner","turnId":null,"textRegister":{"version":1,"pauseMs":4000,"typingMs":3000,"split":true,"gapMs":1200,"emoji":"none"}}"#)
+        guard case let .start(_, _, _, register)? = start else { return XCTFail("start") }
+        XCTAssertEqual(register?.pauseMs, 4_000)
+        XCTAssertEqual(register?.emoji, "none")
+        var assembler = ShannonChatStreamAssembler()
+        _ = try assembler.apply(try XCTUnwrap(start))
+        XCTAssertEqual(assembler.progress.textRegister?.gapMs, 1_200)
+        // An older server's start, and a register of another shape: read as none, never a failed reply.
+        XCTAssertEqual(try ShannonChatStreamEvent.parse(line: #"{"type":"start","threadId":"t-1"}"#), .start(threadId: "t-1", audience: nil, turnId: nil))
+        let odd = try JSONDecoder().decode(ShannonTextRegisterDTO.self, from: Data(#"{"pauseMs":"soon","split":true}"#.utf8))
+        XCTAssertNil(odd.pauseMs)
+        XCTAssertEqual(odd.split, true)
+        XCTAssertNoThrow(try JSONDecoder().decode([ShannonTextRegisterDTO].self, from: Data(#"["oops"]"#.utf8)))
+    }
+
     @MainActor
     func testARetractedReplyIsDiscardedAndOffersResend() async {
         let client = StreamingClient(
@@ -341,6 +440,18 @@ private actor ProgressRecorder {
 }
 
 @MainActor
+private final class PacingSteps {
+    var seconds: [TimeInterval] = []
+    var typing: [Bool] = []
+    var texts: [[String]] = []
+    func record(_ value: TimeInterval, typing shows: Bool, texts shown: [String]) {
+        seconds.append(value)
+        typing.append(shows)
+        texts.append(shown)
+    }
+}
+
+@MainActor
 private final class SeenReplies {
     var replies: [ShannonStreamingReply?] = []
     var typing: [Bool] = []
@@ -357,13 +468,16 @@ private actor StreamingClient: ShannonAPIClientProtocol, ShannonChatStreamServin
     let sentences: [String]
     let outcome: Outcome
     let history: ConversationHistoryResponseDTO?
+    /// `start.textRegister` (ADR-0013 item 10), carried on every progress as the assembler does.
+    let register: ShannonTextRegisterDTO?
     private(set) var sendCount = 0
     private var probe: (@MainActor @Sendable () -> Void)?
 
-    init(sentences: [String], outcome: Outcome, history: ConversationHistoryResponseDTO? = nil) {
+    init(sentences: [String], outcome: Outcome, history: ConversationHistoryResponseDTO? = nil, register: ShannonTextRegisterDTO? = nil) {
         self.sentences = sentences
         self.outcome = outcome
         self.history = history
+        self.register = register
     }
 
     func setProbe(_ probe: @escaping @MainActor @Sendable () -> Void) { self.probe = probe }
@@ -387,7 +501,7 @@ private actor StreamingClient: ShannonAPIClientProtocol, ShannonChatStreamServin
         var text = ""
         for (index, sentence) in sentences.enumerated() {
             text += sentence
-            await onProgress(ShannonChatStreamProgress(threadId: "t-1", text: text, sentenceCount: index + 1))
+            await onProgress(ShannonChatStreamProgress(threadId: "t-1", text: text, sentenceCount: index + 1, textRegister: register))
             if let probe { await probe() }
         }
         switch outcome {
