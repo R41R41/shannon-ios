@@ -8,7 +8,7 @@ export interface FeelingChoice { stance: string; intensity: string; drawer: stri
 export type FeelingPolicy = (state: { utterance?: string; shannon_feeling?: Record<string, unknown> }) => FeelingChoice;
 
 /** A fake Jev behind the real `JevChooser` (so the parse, the fallback and the trace are the server's own). */
-export function fakeFeelingJev(policy: FeelingPolicy, options: { delayMilliseconds?: number } = {}) {
+export function fakeFeelingJev(policy: FeelingPolicy, options: { delayMilliseconds?: number; meaning?: { deliberate: number; teasing: number } } = {}) {
   const states: Record<string, unknown>[] = [];
   const questions: Record<string, unknown>[] = [];
   const traces: JevChoiceTrace[] = [];
@@ -19,7 +19,9 @@ export function fakeFeelingJev(policy: FeelingPolicy, options: { delayMillisecon
       questions.push(asked as Record<string, unknown>);
       if (options.delayMilliseconds) await new Promise(resolve => setTimeout(resolve, options.delayMilliseconds));
       const choice = policy(state as Parameters<FeelingPolicy>[0]);
-      return { answers: { stance: { choice: choice.stance }, intensity: { choice: choice.intensity }, drawer: { choice: choice.drawer } } };
+      const read = options.meaning && 'deliberate' in asked
+        ? { deliberate: { noul: options.meaning.deliberate }, teasing: { noul: options.meaning.teasing } } : {};
+      return { answers: { stance: { choice: choice.stance }, intensity: { choice: choice.intensity }, drawer: { choice: choice.drawer }, ...read } };
     },
   };
   const chooser = new JevChooser(client, { usdPerCall: null, cacheMilliseconds: 0, trace: (_scope, trace) => { traces.push(trace); } });

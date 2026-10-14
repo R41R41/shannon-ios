@@ -100,7 +100,9 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
   const tags = utteranceTags(input.words);
-  const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words), facts: tags.length ? { tags } : {} };
+  const meaning = handle.decision?.meaning ? { meaning: handle.decision.meaning } : {};
+  const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words),
+    facts: { ...(tags.length ? { tags } : {}), ...meaning } };
   if (input.words.trim()) record({ ...base, ...said });
   if (input.reply.trim()) record({ ...base, id: `reply:${handle.channel}:${input.turnId}`, kind: 'own_reply', facts });
   if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
@@ -198,7 +200,7 @@ export const feelingText = Object.freeze({
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
         utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion,
-        ...(port.jevInput ? { jevInput: port.jevInput } : {}) }) : null;
+        ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.coreAffect ? { reading: true } : {}) }) : null;
       return handle;
     }, null);
   },
@@ -249,7 +251,8 @@ export const feelingVoice = Object.freeze({
   route: (handle: FeelingTurnHandle | null, transcript: string, snapshot: CompanionStateSnapshot | null): { shannonFeeling?: Record<string, unknown> } => {
     if (!handle?.port.turn) return {};
     return { shannonFeeling: feelingTurnState({ scopeKey: handle.scopeKey, surface: 'voice', audience: handle.key.audience, utterance: transcript,
-      lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 } }) };
+      lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 },
+      ...(handle.port.coreAffect ? { reading: true } : {}) }) };
   },
   /** The block after the router answered (its feeling, or 「ふつう」 when the router fell back). */
   block: (handle: FeelingTurnHandle | null, decided: FeelingTurnDecision | undefined): string => {

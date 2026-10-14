@@ -29,6 +29,8 @@ export interface FeelingTurnDecision {
   register: FeelingRegister;
   /** `jev`: chosen; `fallback`: Jev did not answer in time or answered something unusable: 「ふつう」. */
   source: 'jev' | 'fallback';
+  /** Stage 2 (`SHANNON_CORE_AFFECT`): Jev's reading of the words' meaning for her appraisal: meant, and teasing (each 0..1). */
+  meaning?: { deliberate: number; teasing: number };
 }
 
 /** The menu as the chooser reads it (English, a fixed question set: a change of wording is a new version). */

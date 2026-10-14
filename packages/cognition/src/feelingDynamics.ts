@@ -56,7 +56,9 @@ export function foldFeelingDynamics(events: readonly FeelingEvent[], key: { pers
   const series: FeelingPoint[] = [];
   for (const event of mine) {
     const at = Date.parse(event.occurredAt);
-    const appraisal = appraise(event, context, meaning[event.id] ?? {});
+    // The chooser's reading kept on the event (stage 2), else one handed in by id.
+    const read = event.facts.meaning ? { deliberate: event.facts.meaning.deliberate, teasing: event.facts.meaning.teasing >= 0.5 } : meaning[event.id] ?? {};
+    const appraisal = appraise(event, context, read);
     core = stepCoreAffect(core, appraisal, at);
     const step = stepComposure(composure, appraisal, event.personKey, key.audience, at);
     composure = step.state;

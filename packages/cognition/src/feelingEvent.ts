@@ -64,6 +64,8 @@ export interface FeelingEventFacts {
   /** The feeling turn's stance and register for the turn this reply answered. */
   turnStance?: string;
   register?: FeelingRegister;
+  /** Stage 2: Jev's reading of his words for her appraisal (`AppraisalMeaning`): meant and teasing, 0..1. */
+  meaning?: { deliberate: number; teasing: number };
   /** Closed tags of his words (`utteranceTags`: insult, lewd, ai_taunt, creator_insult); no words are kept. */
   tags?: readonly string[];
   /** The reply check's flags on this reply (`SHANNON_REPLY_CHECK`), and whether it was rewritten before it was sent. */

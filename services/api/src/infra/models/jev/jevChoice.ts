@@ -95,6 +95,9 @@ export const JEV_QUESTION_SETS = Object.freeze({
   feelingTurn: 'feeling_turn.v1',
   /** The voice route that also asks the feeling turn's questions (either route set above, plus those). */
   voiceRouteFeeling: 'voice_route.v4',
+  /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's call (text and voice). */
+  feelingMeaning: 'feeling_meaning.v1',
+  voiceRouteFeelingMeaning: 'voice_route.v5',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';
