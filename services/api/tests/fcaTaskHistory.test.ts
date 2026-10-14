@@ -7,6 +7,7 @@ import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTask
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
 import { planFcaHistory, prepareFcaHistory } from '../src/mind/action/fca/fcaHistory.js';
+import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummaryInput } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -44,8 +45,8 @@ function fixture(path = ':memory:', legacy = false) {
       sourceId: `fca:${task.id}:${current.revision}`, resources: [actionResource('owner', `fca:${task.id}`)] })).id);
     expect(action).not.toBeNull(); const step = runtime.beginStep('owner', task.id, leaseOf(action!)); expect(step).not.toBeNull(); return step!;
   }
-  async function finish(step: TaskStep, index: number) {
-    expect(runtime.commitStep(step, { disposition: 'continue', history: entries(index) })).not.toBeNull();
+  async function finish(step: TaskStep, index: number, history: unknown[] = entries(index)) {
+    expect(runtime.commitStep(step, { disposition: 'continue', history })).not.toBeNull();
     await h.actions.finish(step.lease, 'completed', 'fca_segment_committed'); runtime.acknowledgeReceipt('owner', step.id);
   }
   async function append(count: number) { for (let index = 1; index <= count; index++) await finish(await begin(), index); }
@@ -188,14 +189,15 @@ describe('exact complete-round FCA history compaction', () => {
     expect(f.window().summary).toBeNull();
   });
 
-  it('keeps fewer recent rounds native when the recent ones alone are too long (owner test 2026-10-13: two research rounds)', async () => {
+  it('keeps fewer recent rounds in the bootstrap when they would pass its share of the budget (owner test 2026-10-13: two research rounds)', async () => {
     const f = fixture(); await f.append(3); const window = f.window();
     const plan = planFcaHistory(window, codec, { ...policy, maximumNativeCharacters: 1 });
     expect(plan.kind).toBe('compact');
     if (plan.kind !== 'compact') return;
-    // Three rounds, all recent by the policy: the oldest is summarized, the two newest stay (the next batch goes on if needed).
-    expect(plan.input.rounds.map(round => round.sequence)).toEqual([window.rounds[0]!.sequence]);
-    expect(plan.request.retained.map(round => round.sequence)).toEqual(window.rounds.slice(1).map(round => round.sequence));
+    // Three rounds, all recent by the policy, but their bootstrap would pass its share of the budget (a third): only the newest
+    // stays whole, and the two older ones are summarized in one call (Minebot lane 2026-10-14, task 788da00a: a summary per step).
+    expect(plan.input.rounds.map(round => round.sequence)).toEqual(window.rounds.slice(0, 2).map(round => round.sequence));
+    expect(plan.request.retained.map(round => round.sequence)).toEqual([window.rounds[2]!.sequence]);
   });
 
   it('covers a round longer than the summary input whole, its longest texts shortened for the summary only', async () => {
@@ -305,6 +307,59 @@ describe('exact complete-round FCA history compaction', () => {
       .rejects.toThrow('FCA_MODEL_RESPONSE_UNKNOWN');
     const aborted = new AbortController();
     await expect(prepareFcaHistory(step, f.ports(async () => { aborted.abort(); throw invalid; }), aborted.signal, policy)).rejects.toThrow('FCA_SUMMARY_INVALID');
+  });
+
+  /** A decision-shaped round: a decision message with a long recall packet (restated each decision), a call and its result. */
+  const decisionRound = (index: number) => [
+    { role: 'user', content: JSON.stringify({ task: { id: 'task', title: 'history', goal: 'history', completionCriteria: '' }, messages: [],
+      recall: { status: 'ready', items: [{ id: `memory-${index}`, summary: '記憶'.repeat(2_500) }] }, body: `観測 ${index} ${'x'.repeat(800)}` }) },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: `signed-${index}` }, { type: 'tool_use', id: `call-${index}`, name: 'task_list', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: `call-${index}`, content: `結果 ${index} ${'y'.repeat(200)}` }] },
+  ];
+  const hysteresis: Partial<FcaHistoryPolicy> = { maximumNativeCharacters: 6_000, recentRounds: 6, maximumRounds: 24, maximumSummaryCharacters: 5_000, maximumBatches: 8 };
+
+  it('measures a decision message without its restated parts, which the whole replay bound still counts', async () => {
+    const f = fixture(); const step = await f.begin(); await f.finish(step, 1, decisionRound(1));
+    // 5,000 characters of recall alone pass the 6,000-character native budget with the rest of the round: the public part does not.
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, hysteresis)).toMatchObject({ kind: 'ready', replay: { summary: null } });
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, hysteresis)).not.toHaveProperty('replay.clippedMessages');
+    expect(planFcaHistory(f.window(), { ...anthropicFcaHistoryCodec, measured: undefined }, hysteresis))
+      .toMatchObject({ kind: 'ready', replay: { clippedMessages: expect.any(Number) } });
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...hysteresis, maximumReplayCharacters: 5_000 }))
+      .toMatchObject({ kind: 'ready', replay: { clippedMessages: expect.any(Number) } });
+  });
+
+  it('compacts a replay whose estimated tokens pass the bound below the price step, though its characters fit', async () => {
+    const f = fixture();
+    for (let index = 1; index <= 3; index++) { const step = await f.begin(); await f.finish(step, index, decisionRound(index)); }
+    const tokens = anthropicFcaHistoryCodec.tokens!(f.window().rounds.flatMap(round => round.entries));
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...hysteresis, maximumReplayTokens: tokens })).toMatchObject({ kind: 'ready' });
+    const over = planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...hysteresis, maximumReplayTokens: tokens - 1 });
+    expect(over.kind).toBe('compact');
+    // Without an estimate from the codec, characters alone decide, as before.
+    expect(planFcaHistory(f.window(), { ...anthropicFcaHistoryCodec, tokens: undefined }, { ...hysteresis, maximumReplayTokens: 1 })).toMatchObject({ kind: 'ready' });
+  });
+
+  it('keeps a post-summary bootstrap within a third of the budget, so a summary leaves room for several native rounds', async () => {
+    const f = fixture(); const inputs: FcaHistorySummaryInput[] = []; const summarySteps: number[] = [];
+    for (let index = 1; index <= 24; index++) {
+      const step = await f.begin(), before = inputs.length;
+      const replay = await prepareFcaHistory(step, { ...f.ports(async input => { inputs.push(structuredClone(input)); return summary; }),
+        codec: anthropicFcaHistoryCodec }, new AbortController().signal, hysteresis);
+      if (inputs.length > before) {
+        summarySteps.push(index);
+        expect(f.window().summary!.bootstrapText.length).toBeLessThanOrEqual(2_000 + JSON.stringify(summary).length + 200);
+        expect(replay.history).toEqual([{ role: 'user', content: f.window().summary!.bootstrapText }]);
+      }
+      await f.finish(step, index, decisionRound(index));
+    }
+    // Every round is covered once, in order, and a summary step is followed by native steps (Minebot lane 2026-10-14: every step).
+    expect(inputs.flatMap(input => input.rounds.map(round => round.sequence))).toEqual(
+      Array.from({ length: inputs.flatMap(input => input.rounds).length }, (_, index) => index + 1));
+    expect(summarySteps.length).toBeLessThanOrEqual(8);
+    const gaps = summarySteps.slice(1).map((value, index) => value - summarySteps[index]!);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(3);
+    expect(inputs.some(input => input.rounds.length > 1)).toBe(true);
   });
 
   it('migrates old append-only history and records actual committed task status', async () => {

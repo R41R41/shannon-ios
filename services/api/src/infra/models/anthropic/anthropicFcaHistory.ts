@@ -1,3 +1,4 @@
+import type Anthropic from '@anthropic-ai/sdk';
 import type { CompactionMessage } from '@shannon/mind';
 import type { FcaHistoryCodec } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
@@ -10,6 +11,13 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
     const message = object(entry);
     return !!message && isFcaToolChangeMessage(message);
   },
+  // A decision message counts against the native budget without the parts each decision restates (`publicDecision`); the token
+  // bound of the whole replay still counts them.
+  measured(entry) {
+    const message = object(entry);
+    return message?.role === 'user' && typeof message.content === 'string' ? { ...message, content: publicDecision(message.content) } : entry;
+  },
+  tokens: entries => estimatedAnthropicTokens(entries),
   project(round) {
     const result: CompactionMessage[] = [];
     const calls = new Set<string>(), pending = new Set<string>();
@@ -97,4 +105,99 @@ function resultText(value: unknown): string | null {
 }
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+/**
+ * What a decision message restates only when it changed within one replay epoch (Minebot lane, 2026-10-14, task 788da00a: of each
+ * stored decision message's 62–77k characters, the recall packet was 32–40k and the catalog 19k; the catalog was the same on every
+ * step and six to eight of the eight recalled memories were the same as the step before, byte for byte). Each native round stores
+ * the message exactly as it was sent, so the replay stays append-only and every signed block keeps its original prefix; only what
+ * the next message says changes. The epoch is the replay itself: a new public epoch (a summary, a clipped or fallback replay)
+ * starts from a bootstrap that names these parts without their text (`publicDecision` above), so its first
+ * decision states them all again.
+ */
+export const UNCHANGED = Object.freeze({ unchanged: true as const });
+const ELIDED = ['catalog', 'skillIndex', 'contextInstructions', 'progressInstructions'] as const;
+
+/** The fixed rule for reading an elided decision message; it belongs to the cached instructions, never to a message. */
+export const FCA_RESTATED_RULE = 'Within this conversation a decision message restates only what changed since an earlier decision message: '
+  + 'a part given as {"unchanged":true} (catalog, skillIndex, contextInstructions, progressInstructions) '
+  + 'is exactly its latest full value in an earlier decision message. '
+  + 'recall.items holds memories in full; recall.knownItemIds names memories that are current '
+  + 'and unchanged since their latest full appearance earlier in this conversation. '
+  + 'Only the memories in the latest recall.items and recall.knownItemIds are current recall: '
+  + 'an earlier memory the latest decision message does not name is no longer available, so do not rely on it or repeat it.';
+
+export interface RestatedKnowledge {
+  /** The latest full value of each elidable part, as JSON. */
+  parts: ReadonlyMap<string, string>;
+  /** The latest full text of each memory the replay showed, as JSON, by memory id. */
+  memories: ReadonlyMap<string, string>;
+}
+
+/** What the replayed decision messages of this epoch already showed in full. Anything that is not a decision message is ignored. */
+export function restatedKnowledge(history: readonly Anthropic.MessageParam[]): RestatedKnowledge {
+  const parts = new Map<string, string>(), memories = new Map<string, string>();
+  for (const message of history) {
+    if (message.role !== 'user' || typeof message.content !== 'string') continue;
+    const row = decisionRow(message.content);
+    if (!row) continue;
+    for (const key of ELIDED) if (key in row && !unchanged(row[key])) parts.set(key, JSON.stringify(row[key]));
+    const recall = object(row.recall);
+    for (const item of Array.isArray(recall?.items) ? recall.items : []) {
+      const memory = object(item);
+      if (memory && typeof memory.id === 'string') memories.set(memory.id, JSON.stringify(memory));
+    }
+  }
+  return { parts, memories };
+}
+
+/**
+ * The decision message's fields with every unchanged part replaced by `UNCHANGED`. A memory is referenced by id only when it is in
+ * the current packet, which the recall port has just read through the current forgetting and audience controls
+ * (`taskRecall.ts`, `packet`), and its text equals its latest full appearance in this epoch; a memory withheld or forgotten since
+ * is not in the packet, so it is never named as current. Field order is kept.
+ */
+export function elidedDecision(fields: Record<string, unknown>, knowledge: RestatedKnowledge): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if ((ELIDED as readonly string[]).includes(key)) result[key] = knowledge.parts.get(key) === JSON.stringify(value) ? UNCHANGED : value;
+    else if (key === 'recall') result[key] = elidedRecall(value as RecallFields, knowledge);
+    else result[key] = value;
+  }
+  return result;
+}
+
+/** A recall packet as a decision message gives it (`modelRecall` in `anthropicFcaModel.ts`). */
+type RecallFields = Record<string, unknown> & { items: readonly ({ id: string } & Record<string, unknown>)[] };
+function elidedRecall(packet: RecallFields, knowledge: RestatedKnowledge): Record<string, unknown> {
+  const items: unknown[] = [], known: string[] = [];
+  for (const item of packet.items) {
+    if (knowledge.memories.get(item.id) === JSON.stringify(item) && !known.includes(item.id)) known.push(item.id);
+    else items.push(item);
+  }
+  return { ...packet, items, ...(known.length ? { knownItemIds: known } : {}) };
+}
+
+/** A decision message's fields (`AnthropicFcaModel.decide`): a JSON object with its task. A bootstrap or a tool result is not one. */
+function decisionRow(text: string): Record<string, unknown> | null {
+  if (!text.startsWith('{')) return null;
+  try {
+    const row = object(JSON.parse(text));
+    return row && object(row.task) ? row : null;
+  } catch { return null; }
+}
+const unchanged = (value: unknown) => object(value)?.unchanged === true && Object.keys(value as object).length === 1;
+
+/**
+ * A conservative estimate of Claude's input tokens for a request or part of one, from its JSON: 1.1 tokens a non-ASCII character
+ * and one per 2.2 others (quotes, keys, escapes and English). Minebot lane task 788da00a (2026-10-14): a first decision of 66,072
+ * tokens held about 24,000 non-ASCII and 90,000 other characters, which this puts at about 68,000 before its JSON escapes, and
+ * higher with them. It bounds the replay below the 100k-token price step (`maximumReplayTokens`); provider usage stays the record.
+ */
+export function estimatedAnthropicTokens(value: unknown): number {
+  const text = JSON.stringify(value) ?? '';
+  const wide = text.match(/[^\u0000-\u007f]/gu)?.length ?? 0;
+  const narrow = text.length - wide;
+  return Math.ceil(wide * 1.1 + narrow / 2.2);
 }

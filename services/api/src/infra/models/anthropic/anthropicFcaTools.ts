@@ -4,7 +4,8 @@ import type { FcaModelInput } from '../../../mind/action/fca/fcaPorts.js';
 import { providerToolName, toolOpenDefinition, TOOL_OPEN_NAME } from '../../../mind/tools/toolRegistryPorts.js';
 import { claudeTool } from './anthropicRequest.js';
 
-export const FCA_MENU_INSTRUCTIONS = `The current user context contains the full allowed tool catalog by provider name and description.
+export const FCA_MENU_INSTRUCTIONS = `The decision messages contain the full allowed tool catalog by provider name and description:
+the current one, or the latest full one when the current one is {"unchanged":true}.
 Only selected tools currently have loaded schemas. If another catalog tool is needed, call tool_open with its provider name first; its definition is available from the next decision.
 Opening a definition executes nothing and grants no new authority. An unavailable or unselected tool is not evidence that the task cannot be done.`;
 

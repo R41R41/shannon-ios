@@ -7,7 +7,7 @@ import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import type { TaskHistoryRound } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS } from '../src/mind/tools/toolRunnerPorts.js';
 import { shannonTool } from '../src/mind/tools/toolRegistryPorts.js';
-import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers } from './support/anthropicFixtures.js';
 
 const catalog = [...TASK_TOOLS, shannonTool('web.search')!];
 const input = (selected: string[], history: readonly unknown[] = []): FcaModelInput => ({
@@ -55,7 +55,7 @@ describe('FCA selected native schemas', () => {
     const saved = JSON.stringify(old);
     const second = await f.model.decide(input(['task.list', 'web.search'], old), signal());
     expect(systemChanges(second.history)).toEqual([{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { ...claudeTool(shannonTool('web.search')!), strict: false } } }]);
-    expect((f.bodies[1]!.messages as unknown[]).slice(0, old.length)).toEqual(old);
+    expect(withoutCacheMarkers((f.bodies[1]!.messages as unknown[]).slice(0, old.length))).toEqual(old);
     expect(JSON.stringify(old)).toBe(saved);
     const prefix = [...old, ...second.history];
     const third = await f.model.decide(input(['web.search'], prefix), signal());
@@ -102,7 +102,7 @@ describe('FCA selected native schemas', () => {
     expect(secondBody).not.toMatch(/PRIVATE_NATIVE_THINKING|OPAQUE_SIGNATURE|OPAQUE_REDACTED/u);
     const next = [...bootstrap, ...second.history, f.model.toolResults([{ id: 'after', text: 'New result', ok: true }])];
     await f.model.decide(input(['task.list'], next), signal());
-    expect((f.bodies[2]!.messages as unknown[]).slice(0, next.length)).toEqual(next);
+    expect(withoutCacheMarkers((f.bodies[2]!.messages as unknown[]).slice(0, next.length))).toEqual(next);
     expect(JSON.stringify(f.bodies[2])).toContain('NEW_SIGNATURE');
     expect(JSON.stringify(originals)).toBe(originalBytes);
   });
