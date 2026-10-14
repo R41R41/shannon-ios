@@ -197,11 +197,20 @@ export function createFcaSourceGuard(parts: {
   };
   const everySourceVisible = (checked: typeof parts, scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId: string | undefined,
     state: CompanionStateSnapshot, withholding: MemoryWithholding): boolean => {
+    // One fresh read of each remembered turn for the whole walk: each 40-id read used to fetch every turn of its lineage again, one
+    // query and one parse each. Minecraft run 10 (2026-10-14), profiled on a copy of the production database: 5,366 fetches of
+    // 190 distinct turns, 0.9–1.5 s a walk; with one read each, 0.4–0.6 s. The rows are read now, as before, only not again.
+    const turns = new Map<string, ShannonExperience | null>();
+    const experience = (id: string) => {
+      if (!turns.has(id)) turns.set(id, parts.conversations.experiencesById?.(scopeKey, [id])[0] ?? null);
+      return turns.get(id)!;
+    };
+    const shared = { state, withholding, experience };
     for (const source of sources) {
       if (source.kind === 'memory') {
         const memory = createTaskMemory({ ...checked, now: () => source.observedAt });
         const ids = [...new Set(source.recalledMemoryIds)];
-        for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }, { state, withholding }).length !== ids.slice(offset, offset + 40).length) return false;
+        for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }, shared).length !== ids.slice(offset, offset + 40).length) return false;
         if (source.readSourceIds?.some(id => !checked.readSourceVisible?.(scopeKey, id, source.observedAt))
           || withholding.withholdsReply({ text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n'),
             observedAt: source.observedAt, recalledMemoryIds: source.recalledMemoryIds })) return false;

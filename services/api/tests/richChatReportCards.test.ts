@@ -94,7 +94,9 @@ describe('report cards (rich chat)', () => {
     let stored: TaskProgress = { currentStep: 'fca.result', status: 'failed', startedAt: task.updatedAt, updatedAt: task.updatedAt, findings: [],
       report: { id: 'report-1', text: '調べきれませんでした。', updatedAt: task.updatedAt } };
     let asked = 0, at = AT;
-    const cards = createReportCards({ runtime: { list: () => [task], get: (_scope, id) => id === parent.id ? parent : task, taskSources: () => [],
+    // From a Talk (a task without one has no card to look for: `settledWithoutWalk`).
+    const talk: TaskSource[] = [{ kind: 'conversation', stepId: 's', experienceId: 'turn-1', threadId: 'thread-1', observedAt: task.updatedAt, recalledMemoryIds: [] }];
+    const cards = createReportCards({ runtime: { list: () => [task], get: (_scope, id) => id === parent.id ? parent : task, taskSources: () => talk,
       progress: () => stored }, ownerScope: 'owner', conversations: { assistantMessage: () => null, appendReportCardOnce: () => null } as never,
       now: () => at, ownerAlone: () => true,
       shown: () => { asked += 1; const { report: _dropped, ...rest } = stored; return rest; } }); // The gate drops it (an hour late).
@@ -113,6 +115,26 @@ describe('report cards (rich chat)', () => {
     expect(cards.tick()).toBe(0);
     clock.alone = true;
     expect(cards.tick()).toBe(1);
+  });
+
+  it('walks nothing for a report that can never get a card: no Talk, or its card already there after a restart (release 14v)', () => {
+    const { threadId, cards, progress } = harness({ spoken: '近いのはA店です。' });
+    expect(cards.tick()).toBe(1);
+    const task = { id: 'task-1', parentId: 'conversation-1', kind: 'research', origin: 'owner_request', title: '近くの店を比べる',
+      phase: 'completed', updatedAt: new Date(AT - 5_000).toISOString() } as TaskView;
+    const parent = { id: 'conversation-1', kind: 'conversation' } as TaskView;
+    const sources: TaskSource[] = [{ kind: 'conversation', stepId: 's', experienceId: 'turn-1', threadId, observedAt: new Date(AT).toISOString(), recalledMemoryIds: [] }];
+    for (const taskSources of [sources, []]) {
+      let asked = 0;
+      // A new scan, as after a restart, with the stored progress to read.
+      const again = createReportCards({ runtime: { list: () => [task], get: (_scope, id) => id === parent.id ? parent : task, taskSources: () => taskSources,
+        progress: () => progress }, ownerScope: 'owner', conversations: store, now: () => AT, ownerAlone: () => true,
+        shown: () => { asked += 1; return progress; } });
+      expect(again.tick()).toBe(0);
+      again.tick();
+      expect(asked).toBe(0);
+    }
+    expect(store.conversationHistory('owner', threadId).filter(message => message.reportCard)).toHaveLength(1);
   });
 
   it('survives a restart of the scan without a second card', () => {
