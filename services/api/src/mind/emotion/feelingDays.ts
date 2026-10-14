@@ -1,5 +1,5 @@
 import {
-  OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, closedDayGroups, foldRelationship, innerNoteDay, relationshipFacts, relationshipLine,
+  OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, closedDayGroups, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts, relationshipLine,
   type CompanionStateSnapshot, type FeelingEvent, type RelationshipDay,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -39,7 +39,8 @@ export class FeelingDays {
   private readonly closedThrough = new Map<string, string>();
 
   constructor(private readonly options: { events: { between(scopeKey: string, since: string, until: string, limit?: number): FeelingEvent[] };
-    store: ClosedDayRecords; timeZone: string; now: () => string; features: FeelingDayFeatures; reportError?: (error: unknown) => void }) {}
+    store: ClosedDayRecords; timeZone: string; now: () => string; features: FeelingDayFeatures; partWord: (subject: string) => string;
+    reportError?: (error: unknown) => void }) {}
 
   get features(): FeelingDayFeatures { return this.options.features; }
 
@@ -75,21 +76,32 @@ export class FeelingDays {
     return [...byDay].map(([dayKey, events]) => ({ dayKey, events })).sort((a, b) => a.dayKey.localeCompare(b.dayKey));
   }
 
-  /** What a turn of this key is handed of the days before (owner: the relationship line; nothing for anyone unknown or a scene). */
-  carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot): CarriedLines {
-    if (!this.options.features.relationship || !knownPerson(key)) return { lines: [], facts: {} };
+  /**
+   * What a turn of this key is handed of the days before: the relationship line, the episodes recalled (yesterday's, or older ones his
+   * `words` name), and her boundaries; nothing for anyone unknown or a scene.
+   */
+  carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = ''): CarriedLines {
+    const { features } = this.options;
+    if (!(features.relationship || features.episodes) || !knownPerson(key)) return { lines: [], facts: {} };
     try {
       this.close(scopeKey, at);
       const days = this.history(scopeKey, key.personKey, at, snapshot);
       const today = innerNoteDay(at, this.options.timeZone).dayKey;
-      const state = observeSync('emotion', { phase: 'feeling.relationship', owner: key.personKey === OWNER_PERSON_KEY, days: days.length },
-        () => foldRelationship(days, key.personKey, today), value => ({ ...value.scales, peakTrust: value.peak.trust, peakLiking: value.peak.liking }));
-      const line = relationshipLine(state, key.personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人');
-      return { lines: line ? [line] : [], facts: relationshipFacts(state) };
+      const relationship = features.relationship ? this.relationship(days, key.personKey, today) : { lines: [], facts: {} };
+      const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: key.personKey === OWNER_PERSON_KEY },
+        () => recallEpisodes(days, key.personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
+      return { lines: [...relationship.lines, ...(episodes ? [episodes] : [])], facts: relationship.facts };
     } catch (error) {
       this.report(error);
       return { lines: [], facts: {} };
     }
+  }
+
+  private relationship(days: ReturnType<FeelingDays['history']>, personKey: string, today: string): CarriedLines {
+    const state = observeSync('emotion', { phase: 'feeling.relationship', owner: personKey === OWNER_PERSON_KEY, days: days.length },
+      () => foldRelationship(days, personKey, today), value => ({ ...value.scales, peakTrust: value.peak.trust, peakLiking: value.peak.liking }));
+    const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人');
+    return { lines: line ? [line] : [], facts: relationshipFacts(state) };
   }
 
   private closeDay(scopeKey: string, dayKey: string, start: number, at: string): void {

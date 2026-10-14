@@ -105,7 +105,7 @@ export class FeelingEvents {
   }
 
   /** The ledger and the watch of one key, as lines for that key's own audience and as numbers. */
-  linesFor(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot): FeelingLines | null {
+  linesFor(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = ''): FeelingLines | null {
     try {
       return observeSync('emotion', { phase: 'feeling.ledger', audience: key.audience, owner: key.personKey === OWNER_PERSON_KEY }, () => {
         const ledger = foldEpisodeLedger(this.today(scopeKey, at, snapshot), key);
@@ -114,7 +114,7 @@ export class FeelingEvents {
         // Stage 2 (`SHANNON_REPLY_CHECK`): what the check found in her last reply goes to the next feeling turn (absent without it).
         const last = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0]?.facts.checkFlags;
         const checked: Record<string, string> = last?.length ? { last_check: last.join('|') } : {};
-        const carried = this.options.days?.carried(scopeKey, key, at, snapshot) ?? { lines: [], facts: {} };
+        const carried = this.options.days?.carried(scopeKey, key, at, snapshot, words) ?? { lines: [], facts: {} };
         return { ledger, watch, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone), repetitionLine: repetitionLine(watch),
           facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked, ...carried.facts }, carriedLines: carried.lines };
       }, lines => lines.facts);

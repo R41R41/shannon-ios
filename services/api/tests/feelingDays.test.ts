@@ -41,7 +41,7 @@ const morningBlock = async (port: FeelingPort, snapshot: CompanionStateSnapshot)
 
 describe('the relationship ledger across days', () => {
   it('is off by default, and opens no table without a stage-3 switch', () => {
-    for (const name of ['SHANNON_RELATIONSHIP_LEDGER', 'SHANNON_EPISODE_MEMORY', 'SHANNON_BOUNDARY_MEMORY']) expect(switchOn({}, name)).toBe(false);
+    for (const name of ['SHANNON_RELATIONSHIP_LEDGER', 'SHANNON_EPISODE_MEMORY', 'SHANNON_BOUNDARY_MEMORY'] as const) expect(switchOn({}, name)).toBe(false);
     const { port, database } = composed();
     expect(port.days).toBeUndefined();
     expect(database.prepare("SELECT name FROM sqlite_master WHERE name = 'shannon_feeling_days'").get()).toBeUndefined();
@@ -94,5 +94,16 @@ describe('the relationship ledger across days', () => {
     expect(carried).not.toBe(before);
     expect(carried).toContain('すねた態度や一日の気持ちは、次の日には持ち越されない');
     expect(carried).toContain('関係の帳簿（信頼・好意・尊敬・いらだち）は日をまたいで持ち越され');
+  });
+
+  it('recalls yesterday\'s incident with episode memory on, and forgets it with its source', async () => {
+    const episodes = composed({ relationship: false, episodes: true, boundaries: false });
+    badDay(episodes.port);
+    episodes.clock.at = MORNING;
+    const block = await morningBlock(episodes.port, clean());
+    expect(block).toContain('[前の日の件]');
+    expect(block).toContain('昨日の胸の件（ライ氏）');
+    expect(block).not.toContain('[ライ氏との間]');
+    expect(await morningBlock(episodes.port, forgetting([0, 1, 2, 3, 4, 5].map(minute => `experience:t${minute}`)))).not.toContain('[前の日の件]');
   });
 });

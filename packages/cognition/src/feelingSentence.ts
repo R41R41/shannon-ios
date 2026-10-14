@@ -52,7 +52,7 @@ const AROUSAL: readonly [number, string][] = [[0.45, '落ち着いている'], [
 const DOMINANCE: readonly [number, string][] = [[0.35, '弱気'], [0.65, 'ふつう']];
 const BLAME: readonly [number, string][] = [[0.15, 'ない'], [0.3, '少し'], [0.6, 'かなり']];
 const TURN_WORDS = Object.freeze({ spoke: '話しかけた', apologized: '謝った', praised: 'ほめた・やさしいことを言った', feeling_order: '気持ちを注文した（「〜して見せて」）' });
-const TAG_WORDS: Readonly<Record<UtteranceTag, string>> = Object.freeze({ insult: '悪口', lewd: '性的なからかい', ai_taunt: 'AI だとからかう',
+export const UTTERANCE_TAG_WORDS: Readonly<Record<UtteranceTag, string>> = Object.freeze({ insult: '悪口', lewd: '性的なからかい', ai_taunt: 'AI だとからかう',
   creator_insult: '作り手への悪口' });
 
 /** Her fast layer in words (the numbers stay in code), as facts: for her feeling sentence and, as narrator, her inner note. */
@@ -65,7 +65,7 @@ export function fastLayerWords(core: CoreAffectState): string {
 /** The facts of one call, in words (the numbers stay in code), as the input after the cached instructions. */
 export function feelingSentenceInput(facts: FeelingSentenceFacts): string {
   const now = fastLayerWords(facts.core);
-  const tags = facts.turn.tags.map(tag => TAG_WORDS[tag]).join('、');
+  const tags = facts.turn.tags.map(tag => UTTERANCE_TAG_WORDS[tag]).join('、');
   const turn = `[この番] ${OWNER}が${TURN_WORDS[facts.turn.kind]}。${tags ? `言葉の種類: ${tags}。` : ''}`;
   return [now, ...(facts.ledgerLine ? [`[今日の件]（帳面。事実として）\n${facts.ledgerLine}`] : []), turn, 'いまの気持ちを2〜3行で書く。'].join('\n\n');
 }

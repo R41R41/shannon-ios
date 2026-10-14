@@ -101,7 +101,7 @@ export interface FeelingTurnHandle {
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
 
 function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
-  const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot);
+  const lines = port.events.linesFor(input.scopeKey, input.key, input.at, input.snapshot, input.words);
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
   return { port, turn: randomUUID(), scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
@@ -415,7 +415,7 @@ export const feelingBody = Object.freeze({
     relationship: (scopeKey: string, at: string): string | null => {
       const feeling = port();
       if (!feeling?.days?.features.relationship) return null;
-      return feeling.days.carried(scopeKey, touchKey('owner'), at, snapshot(scopeKey)).lines.find(line => line.startsWith('[ライ氏との間]')) ?? '';
+      return feeling.days.carried(scopeKey, touchKey('owner'), at, snapshot(scopeKey)).lines.join('\n');
     },
   }),
   /** The body's face (a reaction's `mood`, presence) under `SHANNON_SINGLE_FACE`; without it, the face as it was. */

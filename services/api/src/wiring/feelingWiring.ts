@@ -150,7 +150,7 @@ function closedDays(parts: { database: string | DatabaseSync; now: () => string;
   const features = parts.days;
   if (!features || !(features.relationship || features.episodes || features.boundaries)) return { days: {}, store: null };
   const store = new SQLiteFeelingDayStore(parts.database);
-  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features }) }, store };
+  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord }) }, store };
 }
 
 /** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read). */

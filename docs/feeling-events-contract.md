@@ -155,6 +155,15 @@ Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. The old `shannon_trust
 - **ADR-0012 D4 as revised**: with the line handed to her reflection, its fixed rule reads 「すねた態度や一日の気持ちは、次の日には持ち越されない（仕組み）。ただし関係の帳簿…は日をまたいで持ち越され、ゆっくり戻る」. The day's close (intent none, until null) is unchanged.
 - **Observer**: `feeling.relationship`: the four values and the highest trust and liking.
 
+## Stage 3: episode memory (`SHANNON_EPISODE_MEMORY`)
+
+Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. D4: 「その日の終わりに、件は出来事の記憶になる」.
+
+- An episode is an incident of a known person's closed day: a touch she said no to (whether it went on, and whether he apologized), or words that hurt (closed tags: 悪口, 性的なからかい, AI だとからかう, 作り手への悪口). An ordinary day has none.
+- Recall (`recallEpisodes`): the latest day with an incident while it is near (up to 3 days ago), and older ones only when his words this turn name their subject (a part's word); at most two lines, under 「[前の日の件]（出来事として覚えているだけ。事実として。態度は持ち越さない）」, e.g. 「昨日の胸の件（ライ氏）: 「いや」と言ったあとも何度も触れられた、謝られていない」. No numbers; the day as 昨日, おととい or the date.
+- It goes where the relationship line goes (the feeling turn's or the facts block, the touch line, her inner note's reflection); a turn hands its words for the recall (the touch line hands none, so only the near day). Forgetting: computed from the closed days through the filter, so a forgotten source leaves no episode.
+- Observer: `feeling.episodes` (lines recalled).
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).
