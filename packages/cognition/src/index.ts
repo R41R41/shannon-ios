@@ -391,3 +391,8 @@ export * from './repetitionWatch.js';
 export * from './comebackDrawer.js';
 export * from './feelingTurn.js';
 export * from './presentation.js';
+// Syzygy ADR-0013 stage 2: appraisal, core affect and mood, the composure reserve, and their fold.
+export * from './appraisal.js';
+export * from './coreAffect.js';
+export * from './composure.js';
+export * from './feelingDynamics.js';
