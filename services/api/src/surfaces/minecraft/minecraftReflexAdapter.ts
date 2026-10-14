@@ -219,20 +219,35 @@ export function createMinecraftTaskBody(parts: {
     },
   };
   const controller = createReflexController(ports);
+  /**
+   * RUNNER SEMANTICS (Minecraft run 10, 2026-10-14): a session makes the step's decision stale (`revision`, read by `guard`) only when
+   * it interrupted a body tool in flight (or is her own `minecraft.reflex` call), or when it touched the body: it sent a body
+   * action, its control is held, or it failed. One that only observed and returned leaves the decision made meanwhile valid; in run
+   * 10 such sessions discarded the FCA's last 20 decisions (every tool result 「身体の状態が変わりました」).
+   */
   const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal, entry?: ReflexEntryFacts) => {
-    revision += 1; modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
-    const job = controller.run(request, signal); active = job;
+    const interrupting = mode === 'explicit' || activeAction !== undefined;
+    if (interrupting) revision += 1;
+    modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
+    const job = controller.run(request, signal);
     if (entry) governor.began(step.taskId, now(), entry);
     // Effective: a body action completed in it. A session that only observed and returned is followed by its mode's cooldown.
     const ended = (effective: boolean) => { if (entry) governor.ended(step.taskId, now(), entry, effective); };
-    void job.then(receipt => {
+    const touched = () => { if (!interrupting) revision += 1; };
+    // `active` settles only after this bookkeeping, so `guard` compares the revision as the session left it.
+    const settled = job.then(receipt => {
       if (receipt?.control === 'held') unknown = true;
+      if (receipt && (receipt.actions.length > 0 || receipt.control === 'held')) touched();
       ended(!!receipt?.actions.some(action => action.outcome === 'completed'));
+      return receipt;
     }, error => {
       fault = error; unknown = true;
+      touched();
       ended(false);
-    })
-      .finally(() => { if (active === job) active = null; });
+      return null;
+    });
+    active = settled;
+    void settled.finally(() => { if (active === settled) active = null; });
     return job;
   };
   const tick = async () => {
@@ -311,7 +326,10 @@ export function createMinecraftTaskBody(parts: {
       const abort = new AbortController(); toolAborts.add(abort);
       const cancel = () => abort.abort(); parent.addEventListener('abort', cancel, { once: true });
       cleanupListeners.add(() => parent.removeEventListener('abort', cancel));
-      if (parent.aborted || active) abort.abort(); return abort.signal;
+      // A tool cut off by a session in progress leaves the decision stale even when the session itself touches nothing.
+      if (active) revision += 1;
+      if (parent.aborted || active) abort.abort();
+      return abort.signal;
     },
     noteCall(call, operationId) {
       decided = true;

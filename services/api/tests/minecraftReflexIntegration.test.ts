@@ -257,6 +257,24 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     expect(f.db.prepare("SELECT state FROM mind_actions WHERE kind='agentTask'").all()).not.toContainEqual({ state: 'unknown' });
   });
 
+  it('runs the decision made while a session only looked and returned: no stale result (run 10, runner semantics)', async () => {
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => f.modelInputs.length === 1 ? answer.promise : wait(), { choose: 'return', dangerHealth: 6 });
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
+    f.danger(true); f.danger(true);
+    await f.until(() => f.commands.some(c => c.kind === 'release') && f.store.safe(f.task.id), 'observe-only session returned');
+    expect(f.commands.some(c => c.kind === 'reflex')).toBe(false);
+    expect(f.bodies[0]!.revision()).toBe(0);
+    f.danger(false);
+    answer.resolve(move());
+    // Run 10: from 21:56 every decision came back 「身体の状態が変わりました」 after such sessions and nothing ran.
+    await f.until(() => f.commands.some(c => c.kind === 'skill'), 'the decision ran its tool');
+    await f.until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing', 'step committed'); await f.driver.drain();
+    const results = f.driver.runtime.snapshot('owner', f.task.id)!.history.find(entry => (entry as { role?: string }).role === 'tool_results');
+    expect(results).toMatchObject({ results: [{ id: 'move', ok: true }] });
+  });
+
   it('holds a new danger entry for its cooldown after a session that did nothing, then enters again (run 10)', async () => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => answer.promise, { choose: 'return', dangerHealth: 6 });
@@ -343,13 +361,16 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     const competitor = await f.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: 'another-body-owner' });
     expect(await f.actions.dispatch(leaseOf(competitor!), [actionResource('minebot', 'minecraft-body')])).toBe(true);
     await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
-    f.danger(true); await f.until(() => f.entryCalls() === 1 && f.bodies[0]!.revision() === 1, 'reflex waits for existing resource');
+    f.danger(true); await f.until(() => f.entryCalls() === 1, 'reflex waits for existing resource');
+    for (let i = 0; i < 5; i++) { f.pump(); await delay(1); }
     if (mode === 'close') await f.bodies[0]!.close();
     await f.until(() => (f.driver.runtime.snapshot('owner', f.task.id)?.messages.length ?? 0) > 0, 'bounded handoff returned without a physical command');
     expect(f.commands).toEqual([]);
     expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('executing');
     const event = JSON.parse(f.driver.runtime.snapshot('owner', f.task.id)!.messages[0]!.text);
     expect(event).toMatchObject({ phase: 'returned', reason: mode === 'deadline' ? 'deadline' : 'cancelled' });
+    // Nothing physical happened and no tool was cut off: the decision being made stays valid (run 10, runner semantics).
+    expect(f.bodies[0]!.revision()).toBe(0);
     expect((await f.actions.get('owner', competitor!.id))?.state).toBe('running');
     expect(f.db.prepare("SELECT state FROM mind_actions WHERE kind='agentTask'").get()?.state).toBe('running');
     answer.resolve(wait()); await f.driver.drain();
