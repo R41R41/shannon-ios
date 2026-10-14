@@ -137,17 +137,26 @@ struct ShannonMessageRow: View {
         }
     }
 
+    /// Her face as this reply felt, a small round face to the left of the reply (Syzygy ADR-0013 D17, owner choice A).
+    static let avatarSize: CGFloat = 36
+
     func shannonReply(_ palette: ShannonPalette) -> some View {
+        HStack(alignment: .top, spacing: ShannonSpacing.small) {
+            ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: Self.avatarSize)
+            shannonReplyContent(palette)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    func shannonReplyContent(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
-                // Her eyes or face as this message felt (no tile); the name beside it is the same face.
-                ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: 30)
-
                 Text("シャノン")
                     .font(.shannon(.callout).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
 
-                if let face = message.emotionSnapshot?.face {
+                // A reply with a presentation id shows its face without a name (option A); an older one keeps its name.
+                if let face = message.emotionSnapshot?.face, message.emotionSnapshot?.presentationId == nil {
                     Text("· \(face.japaneseName)")
                 }
                 Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")

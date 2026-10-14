@@ -53,6 +53,8 @@ extension ShannonDesktopBody {
             etag = presence.etag
             // A fact of the server on every answer, `unchanged` too: her touches carry vocabulary 2 only while it says 2.
             touch.serverSaid(touchVocabulary: presence.touchVocabulary)
+            // Syzygy ADR-0013: likewise whether it takes wordless touches.
+            touch.serverSaid(feelingEvents: presence.feelingEvents)
             if presence.unchanged != true { apply(presence) }
             return Double(min(10, max(3, presence.pollAfterSeconds ?? 10)))
         } catch let refusal as ShannonBodyRefusal {

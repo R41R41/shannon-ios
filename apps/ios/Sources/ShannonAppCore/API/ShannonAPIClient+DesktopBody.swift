@@ -47,12 +47,15 @@ public struct ShannonDesktopBodyPresenceDTO: Decodable, Equatable, Sendable {
     public let ownerCallElsewhere: Elsewhere?
     /// Touch vocabulary 2 (`docs/body-contract.md`, "The signal"): on every answer, `unchanged` too; absent from an older server.
     public let touchVocabulary: Int?
+    /// Syzygy ADR-0013: 1 while the server takes wordless touches (`ShannonBodyFeelingEvents`); on every answer, absent otherwise.
+    public let feelingEvents: Int?
 
     public init(
         etag: String, pollAfterSeconds: Int? = 10, unchanged: Bool? = nil, mood: Mood? = nil, doing: String? = nil,
         study: Study? = nil, look: Look? = nil, reachOut: ReachOut? = nil, ownerCallElsewhere: Elsewhere? = nil,
-        touchVocabulary: Int? = nil
+        touchVocabulary: Int? = nil, feelingEvents: Int? = nil
     ) {
+        self.feelingEvents = feelingEvents
         self.etag = etag
         self.pollAfterSeconds = pollAfterSeconds
         self.unchanged = unchanged
@@ -187,6 +190,11 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
 
     @discardableResult
     public func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws -> Int {
+        try await registerDesktopBodyHearing(scopeKey: scopeKey, expressions: expressions, gestures: gestures, camera: camera).touchVocabulary
+    }
+
+    /// The registration with both facts the server says (touch vocabulary, ADR-0013 `feelingEvents`).
+    func registerDesktopBodyHearing(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws -> ShannonBodyServerSays {
         let connection = api.currentConnection()
         var request = request(path: "/v1/body/capabilities", method: "PUT", connection: connection)
         request.httpBody = try JSONEncoder().encode(Capabilities(
@@ -194,7 +202,7 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
             expressions: ShannonBodyRegistration.identifiers(expressions, limit: 64),
             gestures: ShannonBodyRegistration.identifiers(gestures, limit: 32),
             flags: ["camera": camera, "fcaTouchV1": true], surface: "mac"))
-        return ShannonBodyTouchVocabulary.said(inAnswer: try await send(request).0)
+        return ShannonBodyServerSays.said(inAnswer: try await send(request).0)
     }
 
     public func sendBodyEvents(scopeKey: String, events: [ShannonDesktopBodyEventDTO]) async throws {
@@ -247,6 +255,10 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
     @discardableResult
     public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
         try await registerDesktopBody(scopeKey: scopeKey, expressions: expressions, gestures: gestures, camera: await camera())
+    }
+
+    public func registerTouchBodyHearing(scopeKey: String, expressions: [String], gestures: [String]) async throws -> ShannonBodyServerSays {
+        try await registerDesktopBodyHearing(scopeKey: scopeKey, expressions: expressions, gestures: gestures, camera: await camera())
     }
 
     public func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {

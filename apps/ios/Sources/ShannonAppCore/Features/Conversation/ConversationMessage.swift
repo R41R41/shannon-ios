@@ -22,6 +22,9 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         /// The reply's own kind as the server named it (`messageEmotion.kind`). Kept as text, also when this
         /// build has no icon for it, so a later build can show it; read it through `face`.
         public let kind: String?
+        /// The face this reply was shown with (`messageEmotion.presentationId`, Syzygy ADR-0013 D17), kept per reply so the
+        /// history shows how she felt then. Nil from older servers and older caches: the usual face.
+        public let presentationId: String?
         public let stateVersion: Int
 
         public init(
@@ -31,6 +34,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             expression: ShannonExpressionDTO,
             feeling: ShannonFeelingDTO? = nil,
             kind: String? = nil,
+            presentationId: String? = nil,
             stateVersion: Int
         ) {
             self.valence = valence
@@ -39,6 +43,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             self.expression = expression
             self.feeling = feeling
             self.kind = kind
+            self.presentationId = presentationId
             self.stateVersion = stateVersion
         }
     }

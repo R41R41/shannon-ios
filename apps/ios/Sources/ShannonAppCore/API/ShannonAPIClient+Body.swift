@@ -46,6 +46,47 @@ public enum ShannonBodyTouchVocabulary {
     }
 }
 
+/// Wordless touches (Syzygy ADR-0013 stage 1; `docs/body-contract.md`, "A wordless touch"): a server that says
+/// `feelingEvents` 1 or more, on `PUT /v1/body/capabilities` or on presence, takes a finished touch the body asks no words
+/// for on `POST /v1/body/reactions` with `reply: "none"`. It reaches her feeling, her day's ledger and her inner note, and
+/// no model is asked for words. A server that says nothing (older, or switched off) is sent the old shape only.
+public enum ShannonBodyFeelingEvents {
+    /// Whether a server that said this number takes wordless touches.
+    public static func said(_ value: Int?) -> Bool { (value ?? 0) >= 1 }
+
+    /// The flag in an answer of `PUT /v1/body/capabilities`; an answer that says none (or cannot be read) is the old server.
+    static func said(inAnswer answer: Data) -> Bool {
+        said((try? JSONDecoder().decode(FeelingEventsDTO.self, from: answer))?.feelingEvents)
+    }
+
+    private struct FeelingEventsDTO: Decodable {
+        let feelingEvents: Int?
+    }
+}
+
+/// What a registration answered: the touch vocabulary and whether wordless touches are taken.
+public struct ShannonBodyServerSays: Equatable, Sendable {
+    public var touchVocabulary: Int
+    public var feelingEvents: Bool
+
+    public init(touchVocabulary: Int, feelingEvents: Bool = false) {
+        self.touchVocabulary = touchVocabulary
+        self.feelingEvents = feelingEvents
+    }
+
+    /// Both facts of an answer of `PUT /v1/body/capabilities`.
+    static func said(inAnswer answer: Data) -> Self {
+        .init(touchVocabulary: ShannonBodyTouchVocabulary.said(inAnswer: answer), feelingEvents: ShannonBodyFeelingEvents.said(inAnswer: answer))
+    }
+}
+
+/// `reply` on `POST /v1/body/reactions` (ADR-0013): `none` asks for no words. Absent is as before (words may come).
+/// (`wordless` rather than `none`, so that it is never read as an absent optional.)
+public enum ShannonBodyReactionReply: String, Codable, Equatable, Sendable {
+    case words
+    case wordless = "none"
+}
+
 /// One finished touch, as `POST /v1/body/events` takes it. Facts only: there is no text field.
 public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
     public let id: String
@@ -142,9 +183,12 @@ public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
     public private(set) var touch: Touch
     public let audience: ShannonBodyAudience
     public let occurredAt: String
+    /// ADR-0013: `.wordless` for a wordless touch, sent only to a server that said `feelingEvents`; nil leaves the field out.
+    public var reply: ShannonBodyReactionReply?
 
-    public init(scopeKey: String, touch: ShannonLive2DTouch, audience: ShannonBodyAudience) {
+    public init(scopeKey: String, touch: ShannonLive2DTouch, audience: ShannonBodyAudience, reply: ShannonBodyReactionReply? = nil) {
         self.scopeKey = scopeKey
+        self.reply = reply
         id = touch.id
         self.touch = Touch(
             type: touch.kind.rawValue, durationMs: touch.durationMs, strength: touch.strength, ongoing: touch.ongoing,
@@ -210,10 +254,19 @@ public protocol ShannonBodyServing: Sendable {
     /// Answers the touch vocabulary the server said (`ShannonBodyTouchVocabulary.said`).
     @discardableResult
     func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int
+    /// The same registration, answering both facts the server says (ADR-0013: `feelingEvents` too).
+    func registerTouchBodyHearing(scopeKey: String, expressions: [String], gestures: [String]) async throws -> ShannonBodyServerSays
     func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws
     func askBodyReaction(_ request: ShannonBodyReactionRequestDTO) async throws -> ShannonBodyReactionAnswerDTO
     func claimTouchReflex(scopeKey: String, touchId: String) async throws -> ShannonTouchReflexDirective?
     func reportTouchReflex(scopeKey: String, operationId: String, outcome: ShannonTouchReflexOutcome) async throws
+}
+
+public extension ShannonBodyServing {
+    /// A client that knows only the vocabulary: a server that takes no wordless touches.
+    func registerTouchBodyHearing(scopeKey: String, expressions: [String], gestures: [String]) async throws -> ShannonBodyServerSays {
+        .init(touchVocabulary: try await registerTouchBody(scopeKey: scopeKey, expressions: expressions, gestures: gestures))
+    }
 }
 
 public enum ShannonBodyRegistration {
@@ -247,6 +300,10 @@ public enum ShannonBodyRegistration {
 extension ShannonAPIClient: ShannonBodyServing, ShannonBodyCallReporting {
     @discardableResult
     public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
+        try await registerTouchBodyHearing(scopeKey: scopeKey, expressions: expressions, gestures: gestures).touchVocabulary
+    }
+
+    public func registerTouchBodyHearing(scopeKey: String, expressions: [String], gestures: [String]) async throws -> ShannonBodyServerSays {
         let connection = currentConnection()
         var request = bodyRequest(path: "/v1/body/capabilities", method: "PUT", connection: connection)
         request.httpBody = try JSONEncoder().encode(TouchBodyCapabilitiesDTO(
@@ -256,7 +313,7 @@ extension ShannonAPIClient: ShannonBodyServing, ShannonBodyCallReporting {
             flags: [ShannonBodyRegistration.touchOnlyFlag: true, "fcaTouchV1": true],
             surface: ShannonBodyRegistration.surface
         ))
-        return ShannonBodyTouchVocabulary.said(inAnswer: try await bodyData(for: request))
+        return ShannonBodyServerSays.said(inAnswer: try await bodyData(for: request))
     }
 
     public func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {

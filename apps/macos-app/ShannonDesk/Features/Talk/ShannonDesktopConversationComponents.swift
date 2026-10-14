@@ -35,68 +35,73 @@ struct DesktopMessageView: View {
                 id: ShannonDesktopConversationOutline.requestAnchorID(messageID: message.id)
             ))
         } else {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: ShannonDesktopSpacing.small) {
-                    // The avatar follows 設定 › 外観 › アバター, as on the iPhone (A14): her eyes or a close-up of her
-                    // face as this message felt, with no tile.
-                    ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: 24)
-                    Text("シャノン")
-                        .font(.shannonDesktop(.callout).weight(.semibold))
-                    Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)
-                        .font(.shannonDesktop(.caption))
-                        .foregroundStyle(.secondary)
-                    Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.shannonDesktop(.caption))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("返答をコピー")
-                }
-                DesktopMarkdownView(source: message.text, messageID: message.id)
-                if !message.artifacts.isEmpty {
-                    VStack(spacing: ShannonDesktopSpacing.small) {
-                        ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in
-                            DesktopArtifactCard(artifact: artifact)
+            HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
+                // The avatar follows 設定 › 外観 › アバター, as on the iPhone (A14): her eyes or her face as this reply
+                // felt, a small round face to the left of the reply (Syzygy ADR-0013 D17, owner choice A), with no tile.
+                ShannonMessageAvatarView(emotion: message.emotionSnapshot, size: 36)
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: ShannonDesktopSpacing.small) {
+                        Text("シャノン")
+                            .font(.shannonDesktop(.callout).weight(.semibold))
+                        // A reply with a presentation id shows its face without a name (Syzygy ADR-0013 D17, option A).
+                        if message.emotionSnapshot?.presentationId == nil {
+                            Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)
+                                .font(.shannonDesktop(.caption))
+                                .foregroundStyle(.secondary)
                         }
+                        Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.shannonDesktop(.caption))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(message.text, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("返答をコピー")
                     }
-                    .padding(.top, 2)
-                }
-                if !message.places.isEmpty {
-                    ShannonPlaceMapCard(places: message.places)
-                        .frame(maxWidth: 520, alignment: .leading)
-                }
-                if let studyPiece = message.studyPiece {
-                    ShannonStudyPieceLinkCard(link: studyPiece)
-                }
-                if let attribution = message.sourceAttribution,
-                   let sourceURL = safeSourceURL(attribution.url) {
-                    Link(destination: sourceURL) {
-                        HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
-                            Image(systemName: "link")
-                                .foregroundStyle(Color.shannonActionColor)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("出典 · \(attribution.title)")
-                                    .font(.shannonDesktop(.caption).weight(.semibold))
-                                Text("選んだ理由: \(attribution.reason)")
+                    DesktopMarkdownView(source: message.text, messageID: message.id)
+                    if !message.artifacts.isEmpty {
+                        VStack(spacing: ShannonDesktopSpacing.small) {
+                            ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in
+                                DesktopArtifactCard(artifact: artifact)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+                    if !message.places.isEmpty {
+                        ShannonPlaceMapCard(places: message.places)
+                            .frame(maxWidth: 520, alignment: .leading)
+                    }
+                    if let studyPiece = message.studyPiece {
+                        ShannonStudyPieceLinkCard(link: studyPiece)
+                    }
+                    if let attribution = message.sourceAttribution,
+                       let sourceURL = safeSourceURL(attribution.url) {
+                        Link(destination: sourceURL) {
+                            HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
+                                Image(systemName: "link")
+                                    .foregroundStyle(Color.shannonActionColor)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("出典 · \(attribution.title)")
+                                        .font(.shannonDesktop(.caption).weight(.semibold))
+                                    Text("選んだ理由: \(attribution.reason)")
+                                        .font(.shannonDesktop(.caption2))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "arrow.up.right")
                                     .font(.shannonDesktop(.caption2))
                                     .foregroundStyle(.secondary)
                             }
-                            Spacer(minLength: 0)
-                            Image(systemName: "arrow.up.right")
-                                .font(.shannonDesktop(.caption2))
-                                .foregroundStyle(.secondary)
+                            .padding(ShannonDesktopSpacing.medium)
+                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
                         }
-                        .padding(ShannonDesktopSpacing.medium)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("出典 \(attribution.title)。選んだ理由 \(attribution.reason)")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("出典 \(attribution.title)。選んだ理由 \(attribution.reason)")
                 }
             }
         }
