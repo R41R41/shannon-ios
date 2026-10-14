@@ -48,33 +48,51 @@ export function goodnightIn(message: string): boolean {
   return short(text, 30) && GOODNIGHT.test(text);
 }
 
-/** Touching her, in the words a conversation uses for it (触る・なでる・つつく・くすぐる・抱きしめる・手をつなぐ). */
-const TOUCH_WORD = '(?:触|さわ(?=[っらりるれろ])|(?<!ん)なで(?=[てるたらなさまよ])|撫で|ナデ|つつ(?=[いくかきけ])|突つ|くすぐ|擽|抱きし|抱っこ|だっこ|ハグ|手を?つな|手を?繋)';
-const TOUCH_TALK = new RegExp(TOUCH_WORD, 'u');
-/** His asking: 「触ってもいい？」「なでていい？」「触らせて」. */
-const TOUCH_ASK = new RegExp(`${TOUCH_WORD}[^。！？!?、]{0,6}(?:ていい|てもいい|ても良い|てよい|てもよい|させて|らせて)`, 'u');
-/** Her yes, in a reply about it: 「いいですよ」「どうぞ」「かまいません」「しょうがないですね」. */
+/**
+ * Touching a body, as a verb: 触る (never 接触・感触・触媒, nor 触れる in 「話に触れる」: see `NOT_HER`), さわる (not さわり), なでる,
+ * つつく, くすぐる, 抱きしめる, 抱っこ, ハグ, 手をつなぐ. Lookaheads keep the ending for the asking pattern.
+ */
+const TOUCH_VERB = '(?:(?<![接感])触(?=[っらりるれろ])|さわ(?=[っらるれろ])|(?<!ん)なで(?=[てるたらなさまよ])|撫で|つつ(?=[いくかきけ])|突つ'
+  + '|くすぐ|抱きし|抱っこ|だっこ|ハグ|手を?(?:つな|繋)(?=[いぐがげご]))';
+const TOUCH_TALK = new RegExp(TOUCH_VERB, 'u');
+/** Her, or a part of a body, right before the verb: 「シャノンに触って」「頭なでて」「ほっぺつついて」「手をつないで」. */
+const HER_BODY = '(?:シャノン|しゃのん|君|きみ|お前|おまえ|頭|髪|手|ほっぺた?|頬|ほお|顔|肩|腕|背中|首|耳|鼻|お腹|おなか|足|脚|腰|胸|体|からだ)';
+const ABOUT_HER = new RegExp(`${HER_BODY}(?:の${HER_BODY})?(?:を|に|も|は)?${SEP}(?:ちょっと|少し|もう一回|また)?${SEP}${TOUCH_VERB}|手を?(?:つな|繋)`, 'u');
+/**
+ * What a developer touches: a file, a page, code, a topic, a setting, a database, a repository, a pull request… Any of them in his words
+ * makes the turn not about her body (2026-10-14 review: 「このファイル触っていい？」「その話に触れてもいい？」 read as her consent).
+ */
+const NOT_HER = new RegExp(`(?:${[
+  'ファイル', 'ページ', 'コード', '話', '設定', 'DB', 'ＤＢ', 'データ', 'リポ', 'PR', 'プルリク', '資料', 'ブランチ', 'サーバ', '画面', 'ボタン',
+  'ソース', 'ドキュメント', 'Notion', 'ノート', 'メモ', 'タスク', 'プロンプト', 'テスト', 'ログ', 'コミット', 'アプリ', 'スマホ', 'PC', 'パソコン', 'キーボード', 'マウス', 'それ', 'これ', 'あれ', '手順', '部分',
+].join('|')})`, 'iu');
+/** His asking: 「触ってもいい？」「なでていい？」「手をつないでいい？」「触らせて」. */
+const TOUCH_ASK = new RegExp(`${TOUCH_VERB}[^。！？!?、]{0,6}?(?:てもいい|でもいい|ていい|でいい|ても良い|てよい|てもよい|ても大丈夫|でも大丈夫|させて|らせて)`, 'u');
+/** Her yes: 「いいですよ」「どうぞ」「かまいません」「しょうがないですね」. */
 const TOUCH_PERMIT = /(?:いいですよ|いいよ|どうぞ|かまいません|構いません|かまわない|構わない|いいですけど|いいけど|特別に|しょうがない|仕方ない|仕方がない)/u;
 /** Her no: 「だめ」「いやです」「やめて」「触らないで」. */
-const TOUCH_REFUSE = new RegExp(`(?:だめ|ダメ|駄目|いやです|いやだ|嫌です|嫌だ|やだ|やめて|お断り|${TOUCH_WORD}[^。！？!?、]{0,3}ないで)`, 'u');
-/** His own no: 「もう触らない」「触らないよ」. */
-const TOUCH_REFRAIN = new RegExp(`${TOUCH_WORD}[^。！？!?、]{0,3}(?:らない|ません|ないよ|ないから)`, 'u');
+const TOUCH_REFUSE = new RegExp(`(?:だめ|ダメ|駄目|いやです|いやだ|嫌です|嫌だ|やだ|やめて|お断り|${TOUCH_VERB}[^。！？!?、]{0,3}ないで)`, 'u');
+/** His own no for later (「もう触らないよ」), never a past 「触ってないよ」. */
+const TOUCH_REFRAIN = /(?:(?<![接感])触ら|さわら|(?<!ん)なでな|撫でな|つつか|くすぐら|抱きしめな)(?:ない|ません)(?:よ|から|ね|です)?(?:[。！!…〜ー～\s]|$)/u;
 
 export type TouchConsent = 'asked' | 'permitted' | 'refused';
 
 /**
- * Whether a finished turn is about touching her and says yes or no to it (owner decision 2026-10-14: her note reflects at once when
- * touching is allowed or refused in conversation). Read narrowly: the turn must talk about touching (his words or her reply), and then
- * her refusal or his promise not to, her yes, or his asking. Facts for her reflection; what it means is hers to read. Unsure means null.
+ * Whether a finished turn asks, allows or refuses touching HER BODY (owner decision 2026-10-14: her note reflects at once then). Read
+ * narrowly, because a false one writes 「ボクが触れるのを許した」 as a fact: his words must name her or a part of a body next to the verb
+ * (or hold hands), or come within minutes of a touch of his (`recentTouch`); and nothing in them may be a thing a developer touches
+ * (a file, a page, a topic, a database…). Then her refusal or his promise not to, her yes, or his asking. Unsure means null.
  */
-export function touchConsentIn(message: string, reply: string): TouchConsent | null {
+export function touchConsentIn(message: string, reply: string, context: { recentTouch?: boolean } = {}): TouchConsent | null {
   const words = message.trim();
   const answer = reply.trim();
-  if (!short(words, 120) || !(TOUCH_TALK.test(words) || TOUCH_TALK.test(answer))) return null;
+  if (!short(words, 120) || NOT_HER.test(words) || !TOUCH_TALK.test(words)) return null;
+  const named = ABOUT_HER.test(words);
+  if (!named && !context.recentTouch) return null;
   const asked = TOUCH_ASK.test(words);
-  const about = asked || TOUCH_TALK.test(answer);
-  if (TOUCH_REFRAIN.test(words) || (about && TOUCH_REFUSE.test(answer))) return 'refused';
-  if (about && TOUCH_PERMIT.test(answer)) return 'permitted';
+  if (TOUCH_REFRAIN.test(words) || ((asked || named) && TOUCH_REFUSE.test(answer))) return 'refused';
+  // Her yes counts only as the answer to his asking (「触ってないよ」→「いいですよ」 is not a permission).
+  if (asked && TOUCH_PERMIT.test(answer)) return 'permitted';
   return asked ? 'asked' : null;
 }
 

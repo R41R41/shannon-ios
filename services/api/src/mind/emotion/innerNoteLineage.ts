@@ -114,11 +114,12 @@ export function lineage(own: readonly (string | undefined)[], previous: Pick<Sto
 /**
  * The one event a finished turn is, if any: his apology, his kind word, a tease, touching her asked, allowed or refused, or a reply she
  * felt strongly; and whether it is his goodnight to her. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her, not a
- * word in passing. A turn about touching her rides on an apology or a tease of the same turn as `consent`, and is its own event
- * otherwise (owner decision 2026-10-14: such a turn, her own yes or no included, makes her reflect at once).
+ * word in passing. A turn about touching her body (named, or within minutes of his touch: `recentTouch`) rides on an apology or a
+ * tease of the same turn as `consent`, and is its own event otherwise (owner decision 2026-10-14: such a turn, her own yes or no
+ * included, makes her reflect at once).
  */
-export function turnEvent(turn: InnerNoteTurn): { event: InnerNoteEvent | null; goodnight: boolean } {
-  const consent = touchConsentIn(turn.userMessage, turn.reply);
+export function turnEvent(turn: InnerNoteTurn, context: { recentTouch?: boolean } = {}): { event: InnerNoteEvent | null; goodnight: boolean } {
+  const consent = touchConsentIn(turn.userMessage, turn.reply, context);
   const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200), ...(consent ? { consent } : {}) };
   const goodnight = goodnightIn(turn.userMessage);
   const soothing = soothingIn(turn.userMessage) ?? (apologyIn(turn.userMessage) ? 'apology' : null);
