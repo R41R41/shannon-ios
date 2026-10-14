@@ -1,5 +1,5 @@
 import { EMPTY_APPRAISAL_CONTEXT, appraise, nextAppraisalContext, type Appraisal, type AppraisalContext, type AppraisalMeaning } from './appraisal.js';
-import { createComposure, registerOfLevel, stepComposure, type ComposureState } from './composure.js';
+import { createComposure, registerOfLevel, stepComposure, type ComposureCoefficients, type ComposureState } from './composure.js';
 import { coreAffectLabel, createCoreAffect, stepCoreAffect, type CoreAffectLabel, type CoreAffectState } from './coreAffect.js';
 import { belongsTo } from './episodeLedger.js';
 import type { FeelingAudience, FeelingEvent, FeelingRegister } from './feelingEvent.js';
@@ -61,7 +61,7 @@ function pointOf(event: FeelingEvent, core: CoreAffectState, composure: Composur
 
 /** Folds the events of one key (person or scene, and audience) in time order. `meaning` may add the chooser's reading per event id. */
 export function foldFeelingDynamics(events: readonly FeelingEvent[], key: { personKey: string; audience: FeelingAudience; sceneId: string | null },
-  meaning: Readonly<Record<string, AppraisalMeaning>> = {}, options: { sourceCap?: boolean } = {}): FeelingDynamics {
+  meaning: Readonly<Record<string, AppraisalMeaning>> = {}, options: { sourceCap?: boolean; composure?: ComposureCoefficients } = {}): FeelingDynamics {
   // A scene (a stream, a call) holds the events of everyone in it; each person stays the source of their own provocations.
   const scene = key.sceneId !== null && key.personKey.startsWith('scene:');
   const inScene = (event: FeelingEvent) => scene && event.sceneId === key.sceneId && event.audience === key.audience;
@@ -80,7 +80,8 @@ export function foldFeelingDynamics(events: readonly FeelingEvent[], key: { pers
     sources.set(event.personKey, recent);
     const appraisal = scene && options.sourceCap ? capped(raw, recent, at) : raw;
     core = stepCoreAffect(core, appraisal, at);
-    const step = stepComposure(composure, appraisal, event.personKey, key.audience, at);
+    // The composure reserve has its own per-source cap (§4.8), so it reads every provocation; the influence cap is the mood's (§4.3).
+    const step = stepComposure(composure, raw, event.personKey, key.audience, at, options.composure);
     composure = step.state;
     context = nextAppraisalContext(context, event, appraisal);
     series.push(pointOf(event, core, composure, step));

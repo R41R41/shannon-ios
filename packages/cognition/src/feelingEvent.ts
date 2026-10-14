@@ -77,6 +77,11 @@ export interface FeelingEventFacts {
   replyModel?: 'strong';
   /** Stage 3 (`SHANNON_BOUNDARY_MEMORY`): his words told her to refuse something (「嫌だって言わないと」): its subject, a part or `body`. */
   toldBoundary?: string;
+  /** Stage 5 (`SHANNON_FEELING_STREAM`): what kind of words a comment was, and a digest of them (repeats collapse; the text is never kept). */
+  commentKind?: 'spoke' | 'apologized' | 'praised' | 'feeling_order';
+  digest?: string;
+  /** Stage 5: her tell-off to a viewer, a notice for the moderator (the owner); she has no tool to act on it (owner: 「言うだけ」). */
+  tellOff?: { viewer: string; reason: string };
 }
 
 export interface FeelingEvent {

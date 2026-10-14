@@ -403,3 +403,4 @@ export * from './relationshipLedger.js';
 export * from './feelingDays.js';
 export * from './episodeMemory.js';
 export * from './boundaryMemory.js';
+export * from './streamFeeling.js';
