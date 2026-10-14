@@ -13,8 +13,10 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 - **One writer.** Only the reflection writes a note (`mind/emotion/innerNoteService.ts`, `innerNoteReflection.ts`). A reply reads
   it and never rewrites it.
 - **When she reflects.** After a touch of the owner alone (her stance, her reflex, her line), his apology or kind word
-  (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a turn about touching her that asked, allowed or refused it (`touchConsentIn`,
-  trigger `consent`, her own yes or no included; owner decision 2026-10-14), a reply she felt at moderate or stronger; when her sulk's time runs out
+  (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a turn about touching her body that asked, allowed or refused it (`touchConsentIn`,
+  trigger `consent`, her own yes or no included; owner decision 2026-10-14; read narrowly, since a false one writes 「ボクが触れるのを
+  許した」 as a fact: his words name her or a part of a body next to the verb, or hold hands, or come within 5 minutes of a touch of
+  his; a file, a page, a topic, a database and the like in his words, 接触・感触・触媒, さわり and a past 「触ってないよ」 never count), a reply she felt at moderate or stronger; when her sulk's time runs out
   (its `until`, or an ordinary sulk's hour); when an ordinary sulk without `until` finds the numbers back in their usual band (D2.4,
   once per episode); when her day ends. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her — 「ごめん、ちょっと
   待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)
@@ -44,7 +46,8 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   failed closing reflection still closes the newest note. A closed note is never read as her present attitude; the next day's first
   reflection is told the summary as something that happened.
 - **What a reflection is told of her body** (owner alone; 2026-10-14). Facts, so that she reads for herself whether it was on
-  purpose (わざと): how often each part was touched since her day began (the body's own count, without what he had her forget), her
+  purpose (わざと): how often each part was touched since her day began (the body's own count, read when she reflects, so a touch he
+  had her forget in the meantime is left out), her
   recent lines about touches (at most five), and the day's turns about touching (asked, allowed, refused). Its questions ask whether a
   touch was on purpose, and that つもり is a stance, not a line to say; the touch prompt labels つもり so.
 - **No rules of behavior in her prompt** (owner, 2026-10-14). The character core and the note describe who she is and how she

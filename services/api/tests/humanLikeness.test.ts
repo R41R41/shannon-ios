@@ -8,7 +8,7 @@ import {
 import { BODY_REACTION_LIMITS } from '../src/contracts/bodyReactionContract.js';
 import { BODY_REACTION_HONNE_LINE, BODY_REACTION_INNER_RULES, BODY_REACTION_OTHERS_RULE } from '../src/surfaces/body/bodyReactionPrompt.js';
 import { VOICE_HONNE_LINE } from '../src/surfaces/body/bodyReaction.js';
-import type { InnerNotePort, InnerNoteTouch, InnerNoteTurn } from '../src/mind/emotion/innerNotePorts.js';
+import type { InnerNoteBodyReader, InnerNotePort, InnerNoteTouch, InnerNoteTurn } from '../src/mind/emotion/innerNotePorts.js';
 import { InnerNoteService } from '../src/mind/emotion/innerNoteService.js';
 import type { InnerNoteReflector } from '../src/mind/emotion/innerNoteReflection.js';
 import { SQLiteInnerNoteStore } from '../src/mind/emotion/store/innerNoteStore.js';
@@ -31,6 +31,8 @@ class RecordingPort implements InnerNotePort {
   turnEnded(turn: InnerNoteTurn): void { this.turns.push(turn); }
   touched(touch: InnerNoteTouch): void { this.touches.push(touch); }
   bind(): void {}
+  body: InnerNoteBodyReader | null = null;
+  useBody(reader: InnerNoteBodyReader): void { this.body = reader; }
 }
 
 const chest = { type: 'poke', durationMs: 200, ongoing: false, region: 'body', part: 'chest', gesture: 'poke' };
@@ -95,9 +97,9 @@ describe('the touch prompt with her note on (A)', () => {
     expect(prompt).toContain(BODY_REACTION_OTHERS_RULE);
   });
 
-  it('tells her note the part, the counts by part since her day began and her recent lines (owner alone only)', async () => {
+  it('tells her note the part and her recent lines, and hands it the counts by part (owner alone only)', async () => {
     const port = new RecordingPort();
-    const { said, speaker, advance } = await reactionHarness({ innerNote: port });
+    const { said, speaker, advance, now } = await reactionHarness({ innerNote: port });
     speaker.script = call => ({ say: true, text: `ひとこと${call}`, feeling: 'surprised' as const, stance: 'unsure' as const });
     await said(chest);
     advance(40 * SECOND);
@@ -107,10 +109,11 @@ describe('the touch prompt with her note on (A)', () => {
     advance(40 * SECOND);
     await said(chest, { audience: 'others' });
     expect(port.touches.map(touch => touch.part)).toEqual(['胸', '胸', '頭', '胸']);
-    expect(port.touches[2]).toMatchObject({ today: [{ part: '胸', count: 2 }, { part: '頭', count: 1 }], lines: ['ひとこと1', 'ひとこと2', 'ひとこと3'] });
+    expect(port.touches[2]).toMatchObject({ lines: ['ひとこと1', 'ひとこと2', 'ひとこと3'] });
     // With others present nothing of her day is handed on (the note takes no touch anyone else may have made).
-    expect(port.touches[3]).not.toHaveProperty('today');
     expect(port.touches[3]).not.toHaveProperty('lines');
+    // The counts are read when she reflects, of the owner's touches alone.
+    expect(port.body!.partCounts('owner', '2026-10-01T00:00:00.000Z', now())).toEqual([{ part: '胸', count: 2 }, { part: '頭', count: 1 }]);
   });
 });
 
@@ -142,11 +145,13 @@ describe('the voice knows its preceding line was a touch line (B)', () => {
     expect(chatModel.voiceRequests[2]!.turnContext ?? '').not.toContain('[さっきの体のこと]');
   });
 
-  it('without her note: the same facts, without the line about 本音 and 建て前', async () => {
+  it('without her note (SHANNON_INNER_NOTE off): nothing of it, the voice turn as before', async () => {
     const { delegate, chatModel } = await answering();
     await delegate('そんなにびっくりする？', { reactionId: 'touch-1' });
-    expect(chatModel.voiceRequests[0]!.turnContext).toContain('ボクの受け取り（本音）: いや');
-    expect(chatModel.voiceRequests[0]!.turnContext).not.toContain(VOICE_HONNE_LINE);
+    expect(chatModel.voiceRequests[0]!.precedingReply).toBe('ひゃっ、いきなり？');
+    for (const absent of ['[さっきの体のこと]', '受け取り', '体に触れられて言ったひとこと', VOICE_HONNE_LINE]) {
+      expect(chatModel.voiceRequests[0]!.turnContext ?? '').not.toContain(absent);
+    }
   });
 
   it('never names the part or her reception while anyone else may hear, and a friend\'s own call gets nothing of it', async () => {
@@ -172,7 +177,7 @@ const draft = (): InnerNoteDraft => ({
   routeSummary: 'Shannon is a little flustered.', summary: null,
 });
 
-function service(limits: Record<string, number> = {}) {
+function service(limits: Record<string, number> = {}, counts: { part: string; count: number }[] = []) {
   let now = T0;
   const facts: InnerNoteReflectionFacts[] = [];
   const logs: string[] = [];
@@ -181,6 +186,7 @@ function service(limits: Record<string, number> = {}) {
   const snapshot: CompanionStateSnapshot = createInitialCompanionState('owner', T0);
   const notes = new InnerNoteService({ store, reflector, state: { snapshot: () => snapshot }, ownerScope: 'owner', timeZone: 'Asia/Tokyo', now: () => now,
     manual: true, limits, log: line => logs.push(line) });
+  notes.useBody({ partCounts: () => counts });
   const at = (seconds: number) => { now = new Date(Date.parse(T0) + seconds * 1_000).toISOString(); return now; };
   const touch = (seconds: number, part: string, extra: Partial<InnerNoteTouch> = {}): InnerNoteTouch => ({ scopeKey: 'owner', audience: 'owner',
     at: at(seconds), touchId: `t-${seconds}`, phrase: `ライ氏に${part}をつつかれた`, kind: 'poke', part, stance: 'unsure', ...extra });
@@ -206,12 +212,12 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
 
   it('reflects when touching is allowed or refused in conversation, her own yes or no included', async () => {
     const { notes, facts, store, turn } = service();
-    notes.turnEnded(turn(0, '触ってもいい？', 'もちろんいいですよ'));
+    notes.turnEnded(turn(0, 'シャノン、触ってもいい？', 'もちろんいいですよ'));
     await notes.flush('owner');
     expect(facts).toHaveLength(1);
-    expect(facts[0]!.events).toMatchObject([{ kind: 'consent', consent: 'permitted', words: '触ってもいい？', reply: 'もちろんいいですよ' }]);
+    expect(facts[0]!.events).toMatchObject([{ kind: 'consent', consent: 'permitted', words: 'シャノン、触ってもいい？', reply: 'もちろんいいですよ' }]);
     expect(store.latest('owner')!.triggers).toEqual(['consent']);
-    notes.turnEnded(turn(60, 'もう一回なでていい？', 'だめです'));
+    notes.turnEnded(turn(60, 'もう一回頭なでていい？', 'だめです'));
     await notes.flush('owner');
     expect(facts[1]!.events.at(-1)).toMatchObject({ kind: 'consent', consent: 'refused' });
     // An ordinary turn is not one.
@@ -220,11 +226,27 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
     expect(facts).toHaveLength(2);
   });
 
-  it('gives the reflection today\'s counts by part, her recent touch lines and the turns about touching, and asks her whether it was on purpose', async () => {
+  it('counts 「触ってもいい？」 without her name or a part only within minutes of a touch of his', async () => {
     const { notes, facts, touch, turn } = service();
     notes.turnEnded(turn(0, '触ってもいい？', 'もちろんいいですよ'));
     await notes.flush('owner');
-    notes.touched(touch(12, '胸', { said: 'えっ、また！？', today: [{ part: '胸', count: 2 }, { part: '頭', count: 1 }], lines: ['ひゃっ', 'えっ、また！？'] }));
+    expect(facts).toHaveLength(0);
+    notes.touched(touch(10, '頭'));
+    await notes.flush('owner');
+    notes.turnEnded(turn(70, '触ってもいい？', 'もちろんいいですよ'));
+    await notes.flush('owner');
+    expect(facts.at(-1)!.events.at(-1)).toMatchObject({ kind: 'consent', consent: 'permitted' });
+    const before = facts.length;
+    notes.turnEnded(turn(10 + 6 * 60, '触ってもいい？', 'もちろんいいですよ'));
+    await notes.flush('owner');
+    expect(facts).toHaveLength(before);
+  });
+
+  it('gives the reflection today\'s counts by part, her recent touch lines and the turns about touching, and asks her whether it was on purpose', async () => {
+    const { notes, facts, touch, turn } = service({}, [{ part: '胸', count: 2 }, { part: '頭', count: 1 }]);
+    notes.turnEnded(turn(0, 'シャノン、触ってもいい？', 'もちろんいいですよ'));
+    await notes.flush('owner');
+    notes.touched(touch(12, '胸', { said: 'えっ、また！？', lines: ['ひゃっ', 'えっ、また！？'] }));
     await notes.flush('owner');
     const last = facts.at(-1)!;
     expect(last.touches).toEqual({ today: [{ part: '胸', count: 2 }, { part: '頭', count: 1 }], lines: ['ひゃっ', 'えっ、また！？'] });
@@ -248,7 +270,7 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
     expect(facts.filter(fact => fact.events.every(event => event.kind === 'touch'))).toHaveLength(24);
     expect(logs).toContain('inner_note_touch_cap');
     const capped = service({ reflectionsPerDay: 2 });
-    for (const [index, words] of ['触ってもいい？', 'なでていい？', 'つついていい？'].entries()) {
+    for (const [index, words] of ['シャノン、触ってもいい？', '頭なでていい？', 'ほっぺつついていい？'].entries()) {
       capped.notes.turnEnded(capped.turn(index * 60, words, 'いいですよ'));
       await capped.notes.flush('owner');
     }
@@ -257,16 +279,54 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
   });
 
   it('reads a turn about touching narrowly', () => {
-    expect(touchConsentIn('触ってもいい？', 'もちろんいいですよ')).toBe('permitted');
-    expect(touchConsentIn('なでていい？', 'だめです')).toBe('refused');
-    expect(touchConsentIn('もう触らないよ', 'そうしてください')).toBe('refused');
-    expect(touchConsentIn('ちょっと触らせて', 'えっと……')).toBe('asked');
-    expect(touchConsentIn('今日の天気は？', 'いいですよ、晴れです')).toBeNull();
-    expect(touchConsentIn('この資料を触っておいて', '了解です')).toBeNull();
-    expect(touchConsentIn('みんなで行っていい？', 'いいですよ')).toBeNull();
-    expect(touchConsentIn('原稿は進みつつありません', 'そうですか')).toBeNull();
-    expect(touchConsentIn('なでなでしていい？', 'しょうがないですね')).toBe('permitted');
-    expect(touchConsentIn('つついてもいい？', 'やだ')).toBe('refused');
+    // Her body, named or held: counted.
+    expect(touchConsentIn('シャノン、触ってもいい？', 'もちろんいいですよ')).toBe('permitted');
+    expect(touchConsentIn('頭なでていい？', 'だめです')).toBe('refused');
+    expect(touchConsentIn('手をつないでいい？', 'しょうがないですね')).toBe('permitted');
+    expect(touchConsentIn('ほっぺつついてもいい？', 'やだ')).toBe('refused');
+    expect(touchConsentIn('君の髪なでてもいい？', 'えっと……')).toBe('asked');
+    // Right after a touch of his, without naming her.
+    expect(touchConsentIn('触ってもいい？', 'もちろんいいですよ', { recentTouch: true })).toBe('permitted');
+    expect(touchConsentIn('もう触らないよ', 'そうしてください', { recentTouch: true })).toBe('refused');
+    expect(touchConsentIn('ちょっと触らせて', 'えっと……', { recentTouch: true })).toBe('asked');
+    // Without either: not about her body.
+    expect(touchConsentIn('触ってもいい？', 'もちろんいいですよ')).toBeNull();
+    expect(touchConsentIn('なでなでしていい？', 'しょうがないですね')).toBeNull();
+    // What a developer touches, and words that only contain 触 (review of e47da81c): never, even right after a touch.
+    for (const [words, reply] of [['このファイル触っていい？', 'いいですよ'], ['Notionのページ触っていい？', 'どうぞ'], ['その話に触れてもいい？', 'いいですよ'],
+      ['さわりだけ話していい？', 'いいよ'], ['接触しませんでした', 'だめですよ'], ['触ってないよ', 'いいですよ'], ['触ってないよ', 'ほんとですか？'],
+      ['DBに触っても大丈夫？', '大丈夫です'], ['この手順触っていい？', 'どうぞ'], ['今日の天気は？', 'いいですよ、晴れです'], ['この資料を触っておいて', '了解です'],
+      ['みんなで行っていい？', 'いいですよ'], ['原稿は進みつつありません', 'そうですか'], ['触媒の話をしよう', 'いいですよ'], ['感触はどう？', 'いいですよ']] as const) {
+      expect(touchConsentIn(words, reply), words).toBeNull();
+      expect(touchConsentIn(words, reply, { recentTouch: true }), `${words} (after a touch)`).toBeNull();
+    }
+  });
+});
+
+describe('her note counts her body when it reflects, after any forgetting (C, review of e47da81c)', () => {
+  it('leaves a burst he had her forget out of the counts of a later reflection', async () => {
+    const facts: InnerNoteReflectionFacts[] = [];
+    const reflector: InnerNoteReflector = { model: 'test', async reflect(request) { facts.push(request.facts); return { draft: draft(), usage: null }; } };
+    let clock = () => '';
+    const notes = new InnerNoteService({ store: new SQLiteInnerNoteStore(new DatabaseSync(':memory:')), reflector, ownerScope: 'owner', timeZone: 'Asia/Tokyo',
+      state: { snapshot: scope => harness.stateStore.snapshot(scope) }, now: () => clock(), manual: true });
+    const harness = await reactionHarness({ innerNote: notes });
+    clock = harness.now;
+    await harness.said(chest);
+    harness.advance(40 * SECOND);
+    await harness.said(head);
+    const chestBurst = harness.reactionStore.burstOfTouch('owner', 'touch-1')!.id;
+    harness.advance(40 * SECOND);
+    harness.stateStore.apply('owner', { type: 'memory-control-upserted', control: {
+      memoryId: chestBurst, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: harness.now(), changeReason: 'ライ氏が忘れてと言った',
+    } });
+    const before = facts.length;
+    notes.turnEnded({ scopeKey: 'owner', surface: 'voice', alone: true, at: harness.now(), userMessage: 'シャノン、頭なでてもいい？', reply: 'いいですよ', feeling: null });
+    await notes.flush('owner');
+    expect(facts.length).toBeGreaterThan(before);
+    const last = facts.at(-1)!;
+    expect(last.events.at(-1)).toMatchObject({ kind: 'consent', consent: 'permitted' });
+    expect(last.touches?.today).toEqual([{ part: '頭', count: 1 }]);
   });
 });
 

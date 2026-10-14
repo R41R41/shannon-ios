@@ -8,7 +8,7 @@ import { observeAsync, withObserverRun } from '../../infra/observer/observerCont
 import { INNER_NOTE_SERVICE_LIMITS } from '../../contracts/innerNoteContract.js';
 import { emotionTiming } from './emotionTiming.js';
 import type { InnerNoteReflector } from './innerNoteReflection.js';
-import type { InnerNotePort, InnerNoteTouch, InnerNoteTurn } from './innerNotePorts.js';
+import type { InnerNoteBodyReader, InnerNotePort, InnerNoteTouch, InnerNoteTurn } from './innerNotePorts.js';
 import { eventVisible, forgetIndex, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
 import { InnerNoteTouchSessions } from './innerNoteTouchSessions.js';
 import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteStore.js';
@@ -74,8 +74,11 @@ export class InnerNoteService implements InnerNotePort {
   private chain: Promise<void> = Promise.resolve();
   private sweeper: ReturnType<typeof setInterval> | null = null;
   private readonly touches: InnerNoteTouchSessions;
-  /** The newest touch's facts of her body this day (counts by part, her recent lines), for the next reflection. */
-  private readonly bodyDay = new Map<string, { dayKey: string; today: readonly { part: string; count: number }[]; lines: readonly string[] }>();
+  /** Her recent touch lines as the newest touch handed them on, for the next reflection of that day. */
+  private readonly bodyLines = new Map<string, { dayKey: string; lines: readonly string[] }>();
+  /** When the owner alone last touched her: a turn about touching soon after it is about her body. */
+  private readonly lastTouchAt = new Map<string, number>();
+  private body: InnerNoteBodyReader | null = null;
 
   constructor(private readonly dependencies: InnerNoteServiceDependencies) {
     this.timeZone = dependencies.timeZone;
@@ -116,7 +119,9 @@ export class InnerNoteService implements InnerNotePort {
   turnEnded(turn: InnerNoteTurn): void {
     try {
       if (turn.scopeKey !== this.dependencies.ownerScope || !turn.alone) return;
-      const { event, goodnight } = turnEvent(turn);
+      const last = this.lastTouchAt.get(turn.scopeKey);
+      const since = last === undefined ? Number.NaN : Date.parse(turn.at) - last;
+      const { event, goodnight } = turnEvent(turn, { recentTouch: since >= 0 && since <= this.limits.consentTouchMilliseconds });
       if (event) this.enqueue(turn.scopeKey, event, turn.sourceId);
       if (goodnight) void this.schedule(() => this.closeDay(turn.scopeKey, 'goodnight'));
     } catch (error) { this.log('turn', error); }
@@ -129,17 +134,16 @@ export class InnerNoteService implements InnerNotePort {
       const entry = { event: { kind: 'touch' as const, at: touch.at, touch: { phrase: touch.phrase, ...(touch.stance ? { stance: touch.stance } : {}),
         ...(touch.reflex ? { reflex: touch.reflex } : {}), ...(touch.said ? { said: touch.said } : {}) } },
         ...(touch.sourceId ? { source: touch.sourceId } : {}) };
-      this.rememberBodyDay(touch);
+      this.lastTouchAt.set(touch.scopeKey, Date.parse(touch.at));
+      if (touch.lines) this.bodyLines.set(touch.scopeKey, { dayKey: innerNoteDay(touch.at, this.timeZone).dayKey, lines: touch.lines });
       // Another kind, another part or another stance than the session's is reflected on at once (owner decision 2026-10-14).
       const now = this.touches.arrive(touch.scopeKey, entry, `${touch.kind ?? ''}|${touch.part ?? ''}|${touch.stance ?? ''}`, Date.parse(touch.at));
       for (const next of now) this.enqueue(touch.scopeKey, next.event, next.source);
     } catch (error) { this.log('touch', error); }
   }
 
-  /** The newest touch's facts of her body this day (counts by part, her recent lines), kept for the next reflection. */
-  private rememberBodyDay(touch: InnerNoteTouch): void {
-    if (!touch.today && !touch.lines) return;
-    this.bodyDay.set(touch.scopeKey, { dayKey: innerNoteDay(touch.at, this.timeZone).dayKey, today: touch.today ?? [], lines: touch.lines ?? [] });
+  useBody(reader: InnerNoteBodyReader): void {
+    this.body = reader;
   }
 
   /** A source known later by its stored id (a voice turn's utterance, `utterance:<id>`, once stored as `experience:<id>`). */
@@ -346,17 +350,23 @@ export class InnerNoteService implements InnerNotePort {
   }
 
   /**
-   * Her body this day (owner decision 2026-10-14): the counts by part and her recent lines the newest touch handed on, only for the day
-   * they were counted in and her lines only while their words may still be read; and the day's turns about touching her.
+   * Her body this day (owner decision 2026-10-14): how often each part was touched since her day began, read from the body now (so what
+   * he had her forget since is left out), her recent lines of that day while their words may still be read, and the day's turns about
+   * touching her.
    */
   private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
     : Pick<InnerNoteReflectionFacts, 'touches' | 'consents'> {
     const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
-    const body = this.bodyDay.get(scopeKey);
-    const today = body?.dayKey === innerNoteDay(at, this.timeZone).dayKey ? body : null;
-    const lines = today?.lines.filter(said => eventVisible(snapshot, { kind: 'touch', at, touch: { phrase: '', said } })) ?? [];
-    const touches = today && (today.today.length || lines.length) ? { today: today.today, lines } : null;
+    const day = innerNoteDay(at, this.timeZone);
+    const today = this.partCounts(scopeKey, new Date(Date.parse(day.endsAt) - 86_400_000).toISOString(), at);
+    const kept = this.bodyLines.get(scopeKey);
+    const lines = kept?.dayKey === day.dayKey ? kept.lines.filter(said => eventVisible(snapshot, { kind: 'touch', at, touch: { phrase: '', said } })) : [];
+    const touches = today.length || lines.length ? { today, lines } : null;
     return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}) };
+  }
+
+  private partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[] {
+    try { return (this.body?.partCounts(scopeKey, since, at) ?? []).filter(item => item.count > 0); } catch { return []; }
   }
 
   private recent(scopeKey: string, at: string) {

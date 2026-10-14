@@ -49,10 +49,13 @@ export interface InnerNoteTouch {
   stance?: string;
   reflex?: string;
   said?: string;
-  /** Since her day began: how often each part was touched (owner alone), as the body counted it, without what he had her forget. */
-  today?: readonly { part: string; count: number }[];
   /** What she said lately because of touches, oldest first (owner alone). */
   lines?: readonly string[];
+}
+
+/** What her body tells her note when it reflects: how often each part was touched by the owner alone since an instant, in her words. */
+export interface InnerNoteBodyReader {
+  partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[];
 }
 
 export interface InnerNotePort {
@@ -67,6 +70,8 @@ export interface InnerNotePort {
   touched(touch: InnerNoteTouch): void;
   /** A source known later by its stored id (a voice turn's utterance once the app stored the turn). */
   bind(scopeKey: string, from: string, to: string): void;
+  /** Her body, handed once at composition (`BodyReactions.useInnerNote`); its counts are read at reflection, after any forgetting. */
+  useBody?(reader: InnerNoteBodyReader): void;
 }
 
 const safely = <T>(work: () => T, fallback: T): T => { try { return work(); } catch { return fallback; } };
