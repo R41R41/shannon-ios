@@ -12,6 +12,11 @@ export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   maximumToolDefinitionCharacters: 160_000,
   // Both together stay below about 100k tokens, Haiku's next price step (review P3-1).
   maximumReplayCharacters: 200_000,
+  // Characters alone did not: Minebot lane runs 1 and 3 (2026-10-14) sent second decisions of 102,796 and 109,442 tokens, every
+  // token of them at the long-prompt price (five times), from replays well inside 200,000 characters (Japanese and JSON run at
+  // about 1.8 characters a token there). The codec's estimate (`FcaHistoryCodec.tokens`) of the whole replay stays within this,
+  // leaving about 25,000 tokens for the instructions, the current decision and new definitions under the 100,000 step.
+  maximumReplayTokens: 75_000,
 });
 function policyOf(overrides: Partial<FcaHistoryPolicy>): FcaHistoryPolicy {
   const policy = { ...FCA_HISTORY_POLICY, ...overrides };
@@ -85,7 +90,8 @@ function retainedRounds(projected: readonly ProjectedRound[], previous: FcaHisto
 
 /**
  * Whether the replay fits its bounds. It is replayed byte for byte either way; only what each part is measured against differs:
- * inline tool definitions (`reproducible`) apart from the rest, and both together (review P3-1). The native budget measures each
+ * inline tool definitions (`reproducible`) apart from the rest, both together (review P3-1), and the codec's token estimate of the
+ * whole (`maximumReplayTokens`). The native budget measures each
  * entry as the codec measures it (`FcaHistoryCodec.measured`: a decision message without the parts each decision restates, which
  * the whole replay's bound still counts).
  */
@@ -94,7 +100,8 @@ function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy:
   const conversational = history.filter(entry => !definitional(entry));
   const native = size(conversational.map(entry => codec.measured?.(entry) ?? entry)), definitions = size(history.filter(definitional));
   return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
-    && size(conversational) + definitions <= policy.maximumReplayCharacters;
+    && size(conversational) + definitions <= policy.maximumReplayCharacters
+    && (codec.tokens?.(history) ?? 0) <= policy.maximumReplayTokens;
 }
 
 function projectedRounds(window: TaskHistoryWindow, codec: FcaHistoryCodec): ProjectedRound[] {

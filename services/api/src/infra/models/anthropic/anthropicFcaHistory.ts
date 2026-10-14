@@ -18,6 +18,7 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
     const message = object(entry);
     return message?.role === 'user' && typeof message.content === 'string' ? { ...message, content: publicDecision(message.content) } : entry;
   },
+  tokens: entries => estimatedAnthropicTokens(entries),
   project(round) {
     const result: CompactionMessage[] = [];
     const calls = new Set<string>(), pending = new Set<string>();
@@ -186,3 +187,16 @@ function decisionRow(text: string): Record<string, unknown> | null {
   } catch { return null; }
 }
 const unchanged = (value: unknown) => object(value)?.unchanged === true && Object.keys(value as object).length === 1;
+
+/**
+ * A conservative estimate of Claude's input tokens for a request or part of one, from its JSON: 1.1 tokens a non-ASCII character
+ * and one per 2.2 others (quotes, keys, escapes and English). Minebot lane task 788da00a (2026-10-14): a first decision of 66,072
+ * tokens held about 24,000 non-ASCII and 90,000 other characters, which this puts at about 68,000 before its JSON escapes, and
+ * higher with them. It bounds the replay below the 100k-token price step (`maximumReplayTokens`); provider usage stays the record.
+ */
+export function estimatedAnthropicTokens(value: unknown): number {
+  const text = JSON.stringify(value) ?? '';
+  const wide = text.match(/[^\u0000-\u007f]/gu)?.length ?? 0;
+  const narrow = text.length - wide;
+  return Math.ceil(wide * 1.1 + narrow / 2.2);
+}

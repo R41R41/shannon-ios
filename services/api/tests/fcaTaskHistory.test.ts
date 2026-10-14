@@ -329,6 +329,17 @@ describe('exact complete-round FCA history compaction', () => {
       .toMatchObject({ kind: 'ready', replay: { clippedMessages: expect.any(Number) } });
   });
 
+  it('compacts a replay whose estimated tokens pass the bound below the price step, though its characters fit', async () => {
+    const f = fixture();
+    for (let index = 1; index <= 3; index++) { const step = await f.begin(); await f.finish(step, index, decisionRound(index)); }
+    const tokens = anthropicFcaHistoryCodec.tokens!(f.window().rounds.flatMap(round => round.entries));
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...hysteresis, maximumReplayTokens: tokens })).toMatchObject({ kind: 'ready' });
+    const over = planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...hysteresis, maximumReplayTokens: tokens - 1 });
+    expect(over.kind).toBe('compact');
+    // Without an estimate from the codec, characters alone decide, as before.
+    expect(planFcaHistory(f.window(), { ...anthropicFcaHistoryCodec, tokens: undefined }, { ...hysteresis, maximumReplayTokens: 1 })).toMatchObject({ kind: 'ready' });
+  });
+
   it('keeps a post-summary bootstrap within a third of the budget, so a summary leaves room for several native rounds', async () => {
     const f = fixture(); const inputs: FcaHistorySummaryInput[] = []; const summarySteps: number[] = [];
     for (let index = 1; index <= 24; index++) {

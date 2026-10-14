@@ -145,6 +145,26 @@ describe('native one-step FCA model', () => {
   });
 });
 
+describe('the estimated size of an FCA request (the 100k-token price step)', () => {
+  it('logs every request\'s estimated input tokens, and warns, still sending it, when it passes the step', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer(), answer()]);
+    await fixture.model.decide(input(), signal());
+    const long = { ...input(), messages: [{ id: 'long', text: '原木'.repeat(50_000), sourceTaskId: 'parent-1' }] };
+    await fixture.model.decide(long, signal());
+    const sizes = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size')).map(line => JSON.parse(line));
+    expect(sizes.map(size => size.estimatedInputTokens)).toEqual([expect.any(Number), expect.any(Number)]);
+    expect(sizes[0].estimatedInputTokens).toBeLessThan(10_000);
+    expect(sizes[1].estimatedInputTokens).toBeGreaterThan(100_000);
+    expect(fixture.bodies).toHaveLength(2);
+    const warnings = warn.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_price_step'));
+    expect(warnings).toHaveLength(1);
+    expect(JSON.parse(warnings[0]!)).toEqual({ event: 'fca_request_price_step', model: 'claude-haiku-5-5', estimatedInputTokens: sizes[1].estimatedInputTokens });
+    expect(warnings[0]).not.toContain('原木');
+  });
+});
+
 describe('FCA usage evidence and invalid decisions', () => {
   it.each([
     [nativeUsage(0, 0), 'HAIKU_CACHE_UNCONFIRMED'],

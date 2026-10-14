@@ -18,6 +18,8 @@ export interface FcaHistoryCodec {
    * unchanged. Absent: the entry as it is.
    */
   measured?(entry: unknown): unknown;
+  /** A conservative estimate of the provider's input tokens for these replayed entries (`maximumReplayTokens`). Absent: not bounded. */
+  tokens?(entries: readonly unknown[]): number;
 }
 export interface FcaHistorySummaryInput {
   previous: CompactionTemplate | null;
@@ -33,6 +35,8 @@ export interface FcaHistoryPolicy {
   maximumToolDefinitionCharacters: number;
   /** The replayed history and its tool definitions together: past it the history is compacted like any other. */
   maximumReplayCharacters: number;
+  /** The codec's token estimate of the whole replay (`FcaHistoryCodec.tokens`), below the provider's long-prompt price step. */
+  maximumReplayTokens: number;
 }
 export interface FcaHistoryReplay {
   history: readonly unknown[]; summary: CompactionTemplate | null; summaryText: string;

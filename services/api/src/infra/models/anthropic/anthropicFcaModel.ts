@@ -14,7 +14,7 @@ import { observedAnthropicResponse, observedToolName } from './observerProjectio
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
-import { elidedDecision, FCA_RESTATED_RULE, restatedKnowledge } from './anthropicFcaHistory.js';
+import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge } from './anthropicFcaHistory.js';
 import { providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
@@ -257,10 +257,15 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
   const definitions = history.filter(definitional);
   // `historyCharacters` is the whole replay, its inline definitions included; `nativeHistoryCharacters` is the part the 64k
   // history budget measures (`FCA_HISTORY_POLICY`), the definitions having their own bound (Minebot lane run 1, 2026-10-14).
+  const estimatedInputTokens = estimatedAnthropicTokens(body);
   console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
     nativeHistoryCharacters: JSON.stringify(history.filter(message => !definitional(message))).length,
-    toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length }));
+    toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length, estimatedInputTokens }));
+  // The replay is bounded below the step (`maximumReplayTokens`); a request that still passes it is sent and priced as it is.
+  if (estimatedInputTokens > PRICE_STEP_TOKENS) console.warn(JSON.stringify({ event: 'fca_request_price_step', model, estimatedInputTokens }));
 }
+/** Haiku 5.5 prices a prompt above 100,000 input tokens at five times the rate (`claudeUsage.ts`, `HAIKU_LONG_PRICES`). */
+const PRICE_STEP_TOKENS = 100_000;
 
 /** The decision message's fields, before the parts this epoch already showed are left out (`elidedDecision`). */
 function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown> | undefined): Record<string, unknown> {
