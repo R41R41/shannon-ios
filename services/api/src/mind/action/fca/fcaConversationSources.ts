@@ -8,6 +8,7 @@ import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRunti
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
+import { FcaProvenanceFoldCache, foldFcaProvenance } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
 export function conversationFcaProvenance(state: CompanionStateSnapshot, conversations: ConversationStore,
@@ -51,6 +52,11 @@ export const FCA_MEMORY_EPOCH_MS = 2_000;
  * never capped (never hidden, never stopped by this): their provenance accumulates by design, a conversation's check walks its
  * current step and at most `FCA_CONTEXT_ITEMS` inbox reports, and a turn's own budget bounds its time.
  * Production on 2026-10-12 carried at most 14 sources and ~500 ids.
+ *
+ * `sources` bounds the walk's sources after `foldFcaProvenance`: a task's memory observations (one recall and one skill index
+ * per step) are folded to at most this many, so only conversation turns can reach it. `recalledIds` bounds its distinct ids,
+ * which nothing folds. 2026-10-14 (task 788da00a, Minecraft): 23 steps left 65 memory rows over 64 distinct ids, and the row
+ * count alone stopped the task as `fca_provenance_capped`, its step closing unknown.
  */
 export const FCA_PROVENANCE_LIMITS = Object.freeze({ sources: 64, recalledIds: 2_000 });
 /** What the parent of a capped task is told: fixed words, carrying nothing of what the task read. */
@@ -65,7 +71,10 @@ export function createFcaSourceGuard(parts: {
   readSourceVisible?(scopeKey: string, id: string, observedAt: string, shared?: TaskMemoryReadSnapshot): boolean;
   /** Milliseconds for the verdict reuse above; `Date.now` unless a test moves it. */
   clock?(): number;
+  /** The folds of recent checks (`FcaProvenanceFoldCache`); one of its own unless a test reads it. */
+  provenance?: FcaProvenanceFoldCache;
 }): FcaSourceGuard {
+  const folds = parts.provenance ?? new FcaProvenanceFoldCache();
   /** A verdict, and every read receipt's availability it consulted: those can change without a new state version. */
   type Verdict = { version: number; at: number; visible: boolean; reads: ReadonlyArray<readonly [string, string, boolean]> };
   const verdicts = new Map<string, Verdict>();
@@ -126,18 +135,21 @@ export function createFcaSourceGuard(parts: {
       } catch { console.warn('Shannon FCA capped task not reported code=fca_capped_report_failed'); }
     }).unref?.();
   };
-  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, sources, pendingStepId) => {
+  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, rows, pendingStepId) => {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
       if (!parts.ownerAlone()) return false;
       if (task.scopeKey !== scopeKey) return false;
-      if (!sources.length) return true; // Direct owner API tasks have no inherited conversation source.
+      if (!rows.length) return true; // Direct owner API tasks have no inherited conversation source.
+      // The same verdict over fewer sources: every memory id once, at the earliest time it was observed (`foldFcaProvenance`).
+      // Only a task the cap applies to is folded to the limit; the root, a conversation and the sleep task are never hidden by it.
+      const sources = fcaProvenanceForCheck(rows, cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity, folds);
       const recalledIds = new Set(sources.flatMap(source => source.recalledMemoryIds)).size;
       if (cappable(task) && (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds)) {
         if (clock() - cappedLoggedAt >= 60_000) {
           cappedLoggedAt = clock();
-          console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} ids=${recalledIds}`);
+          console.warn(`Shannon FCA provenance capped code=fca_provenance_capped sources=${sources.length} rows=${rows.length} ids=${recalledIds}`);
         }
         stopCapped(scopeKey, task);
         return false;
@@ -208,6 +220,15 @@ export function createFcaSourceGuard(parts: {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
   }, { sources: sourcesVisible, progress, content });
+}
+
+/**
+ * The provenance one check of a task the cap applies to walks (`foldFcaProvenance`): memory rows at most `limit` sources. A
+ * task the cap does not apply to is folded with no limit (each id at its earliest time, never moved earlier).
+ */
+export function fcaProvenanceForCheck(rows: readonly TaskSource[], limit: number = FCA_PROVENANCE_LIMITS.sources,
+  cache?: FcaProvenanceFoldCache): TaskSource[] {
+  return foldFcaProvenance(rows, limit, cache);
 }
 
 /**

@@ -8,7 +8,7 @@ import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTask
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
 import { createFcaConversationBridge, createFcaSourceGuard, type FcaConversationPort } from '../src/mind/action/fca/fcaConversationPorts.js';
-import { FCA_CAPPED_REPORT, FCA_PROVENANCE_LIMITS } from '../src/mind/action/fca/fcaConversationSources.js';
+import { FCA_CAPPED_REPORT, FCA_PROVENANCE_LIMITS, fcaProvenanceForCheck } from '../src/mind/action/fca/fcaConversationSources.js';
 import { createFcaVoiceBridge } from '../src/mind/action/fca/fcaVoicePorts.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
@@ -109,8 +109,13 @@ describe('the provenance cap', () => {
     expect(f.runtime.get('owner', conversation)!.phase).not.toBe('stopped');
   }, 60_000);
 
+  // Each row at a time of its own, so that no two fold into one (`foldFcaProvenance`): more distinct times than the cap.
   const spread = (ids: readonly string[], sources: number, observedAt: string): TaskSource[] => Array.from({ length: sources }, (_, index) => ({
-    kind: 'memory' as const, stepId: `memory:spread-${index}`, experienceId: null, threadId: null, observedAt, recalledMemoryIds: [ids[100 + index]!] }));
+    kind: 'memory' as const, stepId: `memory:spread-${index}`, experienceId: null, threadId: null,
+    observedAt: new Date(Date.parse(observedAt) - (sources - index) * 1000).toISOString(), recalledMemoryIds: [ids[100 + index]!] }));
+  /** More conversation turns than the cap: they are never folded, so these still stop a capped task. */
+  const turns = (ids: readonly string[], count: number, observedAt: string): TaskSource[] => Array.from({ length: count }, (_, index) => ({
+    kind: 'conversation' as const, stepId: `turn-${index}`, experienceId: ids[100 + index]!, threadId: 'thread-0', observedAt, recalledMemoryIds: [] }));
 
   it('never hides or stops the root or the sleep task, however much provenance they carry', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -118,6 +123,7 @@ describe('the provenance cap', () => {
     await f.build();
     const root = f.runtime.ensureRoot('owner');
     const over = spread(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now());
+    expect(fcaProvenanceForCheck(over, Infinity)).toHaveLength(FCA_PROVENANCE_LIMITS.sources + 1); // not folded below the cap
     expect(f.visible.sources('owner', root, over)).toBe(true);
     expect(f.visible.sources('owner', { ...root, kind: 'sleep', origin: 'maintenance' }, over)).toBe(true);
     await new Promise(resolve => setImmediate(resolve));
@@ -132,10 +138,23 @@ describe('the provenance cap', () => {
     await f.build();
     const child = f.runtime.get('owner', f.children[0]!)!;
     vi.spyOn(f.runtime, 'send').mockImplementation(() => { throw new Error('FCA_MAINTENANCE_INPUT'); }); // As a maintenance parent answers.
-    expect(f.visible.sources('owner', child, spread(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now()))).toBe(false);
+    // Memory rows alone no longer reach the source cap (they are folded, `fcaProvenanceForCheck`); the id cap still stops.
+    expect(f.visible.sources('owner', child, many(FCA_PROVENANCE_LIMITS.recalledIds + 1, f.world.now()))).toBe(false);
     await new Promise(resolve => setImmediate(resolve));
     expect(['stopped', 'stopping']).toContain(f.runtime.get('owner', child.id)!.phase);
     expect(warn.mock.calls.some(([line]) => String(line).includes('code=fca_capped_report_failed'))).toBe(true);
+  }, 60_000);
+
+  it('stops a capped research task carrying more conversation turns than the cap (turns are never folded)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = fcaProductionShape({ experiences: 300, turns: 2, children: 1, messages: 0 }); cleanup.push(() => f.close());
+    await f.build();
+    const child = f.runtime.get('owner', f.children[0]!)!;
+    const over = turns(f.ids, FCA_PROVENANCE_LIMITS.sources + 1, f.world.now());
+    expect(fcaProvenanceForCheck(over)).toHaveLength(FCA_PROVENANCE_LIMITS.sources + 1);
+    expect(f.visible.sources('owner', child, over)).toBe(false);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(['stopped', 'stopping']).toContain(f.runtime.get('owner', child.id)!.phase); // the cap's log line is once a minute
   }, 60_000);
 
   it('stops a capped research task once and tells its parent in fixed words', async () => {
