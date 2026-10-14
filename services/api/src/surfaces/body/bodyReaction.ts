@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
+  OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, UNKNOWN_GUEST_PRESENCE, holdsFeelingThroughTouch, innerNoteDay, presentShannonFeeling,
+  presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience,
 } from '@shannon/cognition';
 import { bodyPerception, type MindPerceiver } from '../../mind/perception/perceptionPorts.js';
@@ -11,10 +12,14 @@ import {
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
 } from '../../contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
-import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, bodyTouchLine, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import {
+  BODY_TOUCH_PHRASES, BODY_TOUCH_STANCE_WORDS, asksStance, bodyReactionPrompt, bodyTouchLine, boundedReactionText, type BodyReactionDecision,
+} from './bodyReactionPrompt.js';
 import { reflexPartWord } from './bodyTouchReflex.js';
-import { bodyTouchPartWord, bodyTouchRegionWord, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
-import type { ReactionLine, SQLiteBodyReactionStore } from './store/bodyReactionStore.js';
+import {
+  bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchRegion, touchDetailPhrase, touchPartPhrase, type BodySurface,
+} from './bodyTouchWords.js';
+import type { ReactionLine, SQLiteBodyReactionStore, TouchFact } from './store/bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from '../../mind/emotion/bodyTouch.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../../mind/memory/memoryVisibility.js';
@@ -191,7 +196,7 @@ export class BodyReactions {
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);
-      if (felt) this.noteTouch(scopeKey, request, decision, at, felt.burst.id);
+      if (felt) this.noteTouch(scopeKey, request, decision, at, felt);
       // Syzygy ADR-0006 stage 2: her stance is the outcome of the touch, and its prediction error moves her.
       const prediction = felt?.prediction;
       const settled = felt && prediction ? this.settle(scopeKey, felt, decision) : null;
@@ -332,14 +337,54 @@ export class BodyReactions {
     } catch { /* the answer stands without its row */ }
   }
 
-  /** Syzygy ADR-0012: her inner note is told of the touch (it decides whether to reflect; others present: nothing). Never throws. */
-  private noteTouch(scopeKey: string, request: BodyReactionRequest, decision: BodyReactionDecision | null, at: string, burstId: string): void {
-    if (!this.innerNote) return;
+  /**
+   * Syzygy ADR-0012: her inner note is told of the touch (it decides whether to reflect; others present: nothing). With the owner alone
+   * it is also told the part, how often each part was touched since her day began, and her recent lines about touches (facts for her
+   * to read whether it was on purpose; owner decision 2026-10-14). Never throws.
+   */
+  private noteTouch(scopeKey: string, request: BodyReactionRequest, decision: BodyReactionDecision | null, at: string, felt: FeltTouch): void {
+    const port = this.innerNote;
+    if (!port) return;
+    const part = request.touch.part ? bodyTouchPartWord(request.touch.part) : request.touch.region ? bodyTouchRegionWord(request.touch.region) : undefined;
+    const day = request.audience === 'owner' ? this.bodyDay(scopeKey, felt, at, port.timeZone, decision?.say ? decision.text : null) : null;
     // The touch as she remembers it (the burst is its experience): its forgetting and its retention take the notes it prompted.
-    this.innerNote.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${burstId}`,
-      phrase: bodyTouchLine(request.touch, request.audience), kind: request.touch.type,
+    port.touched({ scopeKey, audience: request.audience, at, touchId: request.id, sourceId: `experience:${felt.burst.id}`,
+      phrase: bodyTouchLine(request.touch, request.audience), kind: request.touch.type, ...(part ? { part } : {}),
       ...(decision?.stance ? { stance: decision.stance } : {}), ...(request.touch.reflex ? { reflex: request.touch.reflex } : {}),
-      ...(decision?.say ? { said: decision.text } : {}) });
+      ...(decision?.say ? { said: decision.text } : {}), ...(day ?? {}) });
+  }
+
+  /** Her body this day for her note: counts by part since her day began, and her recent touch lines (this one last). Never throws. */
+  private bodyDay(scopeKey: string, felt: FeltTouch, at: string, timeZone: string, line: string | null) {
+    try {
+      const since = new Date(Date.parse(innerNoteDay(at, timeZone).endsAt) - 86_400_000).toISOString();
+      const counts = this.dependencies.touches.partCounts(scopeKey, felt.snapshot, since, at);
+      const today = [...counts].map(([part, count]) => ({ part: partWordOf(part), count })).sort((a, b) => b.count - a.count);
+      const earlier = this.dependencies.touches.sitting(scopeKey, felt.snapshot, at).said;
+      const lines = [...earlier, ...(line ? [line] : [])].slice(-BODY_REACTION_LIMITS.innerSaidLines);
+      return { today, lines };
+    } catch { return null; }
+  }
+
+  /**
+   * What a voice turn is told of her body (2026-10-14: she apologized for 「急に大きな声を出して」 and heard 「そんなにびっくりする?」 as
+   * about a sound): with the owner alone, his touches of the last `voiceFactMilliseconds` whatever their salience (the part, her
+   * reception, her line), and which of her lines the turn answers. With anyone else present nothing of a part or of her reception: only
+   * that the line the turn answers was said because she was touched. Never throws; '' when there is nothing.
+   */
+  voiceTouchContext(scopeKey: string, at: string, answering: string | null, alone: boolean): string {
+    if (!alone) return answering ? `[直前の${SHANNON_FIRST_PERSON}の言葉]（事実）直前の「${answering}」は、体に触れられて言ったひとこと。` : '';
+    if (!this.enabled) return '';
+    try {
+      const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
+      const since = new Date(Date.parse(at) - BODY_REACTION_LIMITS.voiceFactMilliseconds).toISOString();
+      const facts = this.dependencies.touches.recentFacts(scopeKey, snapshot, since, at, BODY_REACTION_LIMITS.voiceFacts);
+      const lines = [...facts].reverse().map(fact => voiceTouchLine(fact, at, answering));
+      if (!lines.length) return answering ? `[直前の${SHANNON_FIRST_PERSON}の言葉]（事実）直前の「${answering}」は、体に触れられて言ったひとこと。` : '';
+      // With her note on (ADR-0012: 本音と建て前), that what she says of it is her choice, made knowing what she really felt.
+      return [`[さっきの体のこと]（事実。触れられたのは${SHANNON_FIRST_PERSON}の体。古い順）`, ...lines,
+        ...(this.innerNote ? [VOICE_HONNE_LINE] : [])].join('\n');
+    } catch { return ''; }
   }
 
   /** The last lines of the Talk, only while a conversation with the owner alone is in progress. */
@@ -350,7 +395,7 @@ export class BodyReactions {
       if (!thread || Date.parse(at) - Date.parse(thread.updatedAt) > BODY_REACTION_LIMITS.conversationFreshMilliseconds) return [];
       // Through the same filter as any replay: what the owner had her forget is not re-fed.
       return visibleReplayMessages(snapshot, this.dependencies.conversationStore as ConversationStore, scopeKey, thread.threadId, BODY_PRESENT[request.audience],
-        BODY_REACTION_LIMITS.contextMessages).messages.map(entry => entry.item);
+        this.innerNote ? BODY_REACTION_LIMITS.sceneMessages : BODY_REACTION_LIMITS.contextMessages).messages.map(entry => entry.item);
     } catch { return []; }
   }
 
@@ -390,4 +435,28 @@ export class BodyReactions {
     this.pruned.set(scopeKey, time);
     try { this.dependencies.store.prune(scopeKey, at); } catch { /* the request is still answered */ }
   }
+}
+
+/** The voice's line beside her reception, with her note on: her words about it are her choice, made knowing what she felt. */
+export const VOICE_HONNE_LINE = `受け取りは${SHANNON_FIRST_PERSON}の本音。口で何と言うかは${SHANNON_FIRST_PERSON}が選ぶ（本音のままでも、建て前でもいい）。`;
+
+/** A part as her note counts it: the finer part's word, else the region's, else 「体のどこか」. */
+function partWordOf(part: string | null): string {
+  if (isBodyTouchPart(part)) return bodyTouchPartWord(part);
+  if (isBodyTouchRegion(part)) return bodyTouchRegionWord(part);
+  return '体のどこか';
+}
+
+function minutesAgo(at: string, now: string): string {
+  const minutes = Math.round((Date.parse(now) - Date.parse(at)) / 60_000);
+  return minutes < 1 ? 'さっき' : `${minutes}分前`;
+}
+
+/** 「- 2分前: ライ氏に胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ」（直前のボクの言葉）」 */
+function voiceTouchLine(fact: TouchFact, now: string, answering: string | null): string {
+  const phrase = touchDetailPhrase(fact.type, fact, 'done') ?? touchPartPhrase(fact.type, fact.region, 'done') ?? BODY_TOUCH_PHRASES[fact.type].done;
+  const stance = fact.stance ? `。${SHANNON_FIRST_PERSON}の受け取り（本音）: ${BODY_TOUCH_STANCE_WORDS[fact.stance]}` : '';
+  const answered = answering !== null && fact.line === answering ? `（${SHANNON_OWNER_NAME}がいま答えている、直前の${SHANNON_FIRST_PERSON}の言葉）` : '';
+  const line = fact.line ? `。${SHANNON_FIRST_PERSON}の一言「${fact.line}」${answered}` : '';
+  return `- ${minutesAgo(fact.occurredAt, now)}: ${SHANNON_OWNER_NAME}に${phrase}${stance}${line}`;
 }

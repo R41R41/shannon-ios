@@ -74,6 +74,8 @@ export class InnerNoteService implements InnerNotePort {
   private chain: Promise<void> = Promise.resolve();
   private sweeper: ReturnType<typeof setInterval> | null = null;
   private readonly touches: InnerNoteTouchSessions;
+  /** The newest touch's facts of her body this day (counts by part, her recent lines), for the next reflection. */
+  private readonly bodyDay = new Map<string, { dayKey: string; today: readonly { part: string; count: number }[]; lines: readonly string[] }>();
 
   constructor(private readonly dependencies: InnerNoteServiceDependencies) {
     this.timeZone = dependencies.timeZone;
@@ -127,9 +129,17 @@ export class InnerNoteService implements InnerNotePort {
       const entry = { event: { kind: 'touch' as const, at: touch.at, touch: { phrase: touch.phrase, ...(touch.stance ? { stance: touch.stance } : {}),
         ...(touch.reflex ? { reflex: touch.reflex } : {}), ...(touch.said ? { said: touch.said } : {}) } },
         ...(touch.sourceId ? { source: touch.sourceId } : {}) };
-      const now = this.touches.arrive(touch.scopeKey, entry, `${touch.kind ?? ''}|${touch.stance ?? ''}`, Date.parse(touch.at));
+      this.rememberBodyDay(touch);
+      // Another kind, another part or another stance than the session's is reflected on at once (owner decision 2026-10-14).
+      const now = this.touches.arrive(touch.scopeKey, entry, `${touch.kind ?? ''}|${touch.part ?? ''}|${touch.stance ?? ''}`, Date.parse(touch.at));
       for (const next of now) this.enqueue(touch.scopeKey, next.event, next.source);
     } catch (error) { this.log('touch', error); }
+  }
+
+  /** The newest touch's facts of her body this day (counts by part, her recent lines), kept for the next reflection. */
+  private rememberBodyDay(touch: InnerNoteTouch): void {
+    if (!touch.today && !touch.lines) return;
+    this.bodyDay.set(touch.scopeKey, { dayKey: innerNoteDay(touch.at, this.timeZone).dayKey, today: touch.today ?? [], lines: touch.lines ?? [] });
   }
 
   /** A source known later by its stored id (a voice turn's utterance, `utterance:<id>`, once stored as `experience:<id>`). */
@@ -326,13 +336,27 @@ export class InnerNoteService implements InnerNotePort {
     const timing = emotionTiming();
     const present = presentShannonFeeling(snapshot, at, timing);
     return {
-      at, timeZone: this.timeZone, events, previous, dayEndsAt, closing, yesterday,
+      at, timeZone: this.timeZone, events, previous, dayEndsAt, closing, yesterday, ...this.bodyFacts(scopeKey, at, all, snapshot),
       apologies: all.filter(event => event.kind === 'apology').map(event => event.at),
       kindnesses: all.filter(event => event.kind === 'kindness').map(event => event.at),
       feeling: { present: present.primary === 'neutral' ? null : { kind: present.primary, intensity: present.intensity },
         lingering: livingLingering(snapshot, at, timing).slice(0, 3).map(item => ({ kind: item.feeling.kind, strength: item.strength })) },
       recent: recent.map(line => ({ role: line.role, content: line.content })),
     };
+  }
+
+  /**
+   * Her body this day (owner decision 2026-10-14): the counts by part and her recent lines the newest touch handed on, only for the day
+   * they were counted in and her lines only while their words may still be read; and the day's turns about touching her.
+   */
+  private bodyFacts(scopeKey: string, at: string, all: readonly InnerNoteEvent[], snapshot: CompanionStateSnapshot)
+    : Pick<InnerNoteReflectionFacts, 'touches' | 'consents'> {
+    const consents = all.filter(event => event.consent !== undefined && eventVisible(snapshot, event));
+    const body = this.bodyDay.get(scopeKey);
+    const today = body?.dayKey === innerNoteDay(at, this.timeZone).dayKey ? body : null;
+    const lines = today?.lines.filter(said => eventVisible(snapshot, { kind: 'touch', at, touch: { phrase: '', said } })) ?? [];
+    const touches = today && (today.today.length || lines.length) ? { today: today.today, lines } : null;
+    return { ...(touches ? { touches } : {}), ...(consents.length ? { consents } : {}) };
   }
 
   private recent(scopeKey: string, at: string) {

@@ -50,8 +50,26 @@ export const BODY_REACTION_LIMITS = Object.freeze({
   conversationFreshMilliseconds: 10 * 60_000,
   contextMessages: 3,
   contextCharacters: 120,
+  /**
+   * With her inner note on (`SHANNON_INNER_NOTE`; 2026-10-14, the owner's Windows call: nine of ten touch lines said 「びっくり」, and
+   * 「えっ、また！？」 came twelve seconds after 「もちろんいいですよ」): her own recent touch lines she is shown, and the scene, the
+   * conversation in progress, put first. Off, the three bounds above, as before.
+   */
+  innerSaidLines: 5,
+  sceneMessages: 6,
+  sceneCharacters: 200,
+  /** A voice turn is told of the owner's touches of these last minutes (part, her stance, her line), whatever their salience. */
+  voiceFactMilliseconds: 5 * 60_000,
+  voiceFacts: 3,
   touchRetentionDays: BODY_LIMITS.retentionDays,
 });
+
+/**
+ * What a voice turn is told of her body (`BodyReactions.voiceTouchContext`): with the owner alone (`alone`) the touches of the last
+ * `voiceFactMilliseconds`, their part and her reception, and which line the turn answers; otherwise no part and no reception. ''
+ * when there is nothing.
+ */
+export type VoiceTouchContext = (scopeKey: string, at: string, answering: string | null, alone: boolean) => string;
 
 export interface BodyReactionTouch extends BodyTouchDetail {
   type: ShannonTouchKind;

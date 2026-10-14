@@ -1,5 +1,5 @@
 import {
-  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, visibleMemoryText,
+  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, touchConsentIn, visibleMemoryText,
   type CompanionStateSnapshot, type InnerNoteEvent,
 } from '@shannon/cognition';
 import type { InnerNoteTurn } from './innerNotePorts.js';
@@ -112,15 +112,19 @@ export function lineage(own: readonly (string | undefined)[], previous: Pick<Sto
 }
 
 /**
- * The one event a finished turn is, if any: his apology, his kind word, a tease, or a reply she felt strongly; and whether it is
- * his goodnight to her. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her, not a word in passing.
+ * The one event a finished turn is, if any: his apology, his kind word, a tease, touching her asked, allowed or refused, or a reply she
+ * felt strongly; and whether it is his goodnight to her. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her, not a
+ * word in passing. A turn about touching her rides on an apology or a tease of the same turn as `consent`, and is its own event
+ * otherwise (owner decision 2026-10-14: such a turn, her own yes or no included, makes her reflect at once).
  */
 export function turnEvent(turn: InnerNoteTurn): { event: InnerNoteEvent | null; goodnight: boolean } {
-  const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200) };
+  const consent = touchConsentIn(turn.userMessage, turn.reply);
+  const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200), ...(consent ? { consent } : {}) };
   const goodnight = goodnightIn(turn.userMessage);
   const soothing = soothingIn(turn.userMessage) ?? (apologyIn(turn.userMessage) ? 'apology' : null);
   if (soothing) return { event: { kind: soothing, ...base }, goodnight };
   if (teasingIn(turn.userMessage)) return { event: { kind: 'teasing', ...base }, goodnight };
+  if (consent) return { event: { kind: 'consent', ...base }, goodnight };
   const feeling = turn.feeling;
   if (feeling && feeling.kind !== 'neutral' && feeling.intensity >= 0.6) return { event: { kind: 'strong_reply', ...base, feeling }, goodnight };
   return { event: null, goodnight };

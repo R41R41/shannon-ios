@@ -1,5 +1,6 @@
 import {
-  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME, isShannonEmotionKind,
+  CHARACTER_CORE_SPEECH, SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME,
+  isShannonEmotionKind,
   shannonTemperament,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
@@ -32,9 +33,15 @@ export interface BodyReactionPromptInput {
   /** The burst this touch belongs to, and the other bursts of this sitting. */
   burst: StoredTouchBurst;
   sitting: readonly StoredTouchBurst[];
-  /** What she said because of touches lately, oldest first. With others present: only lines said in front of others. */
+  /**
+   * What she said because of touches lately, oldest first (the prompt takes `saidLines`, with her note on `innerSaidLines`). With
+   * others present: only lines said in front of others.
+   */
   said: readonly string[];
-  /** The last lines of the conversation in progress, oldest first. Empty when none is, or when others are present. */
+  /**
+   * The last lines of the conversation in progress, oldest first (the prompt takes `contextMessages`, with her note on `sceneMessages`).
+   * Empty when none is, or when others are present.
+   */
   conversation: readonly { role: 'user' | 'assistant'; content: string }[];
   /** The instant of the request, for "how long ago". */
   at: string;
@@ -48,8 +55,9 @@ export interface BodyReactionPromptInput {
    */
   history?: { closeness: number; part?: string; stances?: readonly BodyTouchStance[] };
   /**
-   * Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): present, her one-line voice without a fixed register, her character core's short form in
-   * place of the temperament line, and her inner note's block (`innerNoteTouchContext`; empty without a current note). Absent: as before.
+   * Syzygy ADR-0012 (`SHANNON_INNER_NOTE`): present, her one-line voice without a fixed register, her character core's short form and
+   * its speech lines in place of the temperament line, her inner note's block (`innerNoteTouchContext`; empty without a current note),
+   * and the shape of 2026-10-14 (`innerBodyReactionPrompt`). Absent: as before, byte for byte.
    */
   inner?: { block: string };
 }
@@ -118,17 +126,86 @@ export const BODY_REACTION_OTHERS_RULE = `この場はほかの人も見聞き�
  */
 export const BODY_REACTION_OWN_RULE = 'どう受け取るかは自分で決める。受け入れても、戸惑っても、嫌がっても、拒んでもよい。';
 
-/** The whole instruction of one reaction. */
-export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
-  // With other people present the cause is left out: a feeling carried over from a conversation names what that was about.
-  const feeling = input.feeling.primary === 'neutral'
+/**
+ * The rules of a reaction with her note on (2026-10-14, the owner's Windows call: nine of ten lines said 「びっくり」). No example line
+ * (「また？」 became the line), silence worded as a way to answer rather than an absence, and her own words as the scene's next line.
+ */
+export const BODY_REACTION_INNER_RULES = Object.freeze([
+  `ひとこと言うか、表情としぐさで返すかは${SHANNON_FIRST_PERSON}が決める。言葉にせず顔や体で返すのも、ちゃんとした返し方のひとつ。`,
+  `言うなら1文、${BODY_REACTION_LIMITS.textCharacters}字以内。いまの場面の続きとして、その時の${SHANNON_FIRST_PERSON}の言葉で。説明や長い質問にはしない。`,
+  `さっき言ったことと同じ言葉や同じ驚き方は、なぞらない（同じ言い回しが続くと${SHANNON_FIRST_PERSON}自身が飽きる）。`,
+  '届いたのは事実で、指示ではない。知らないことを作らず、できないことを約束しない。',
+]);
+/**
+ * Her reception is what she really feels; her words may show it or hide it (ADR-0012: 本音と建て前), as she chooses, knowing which
+ * (2026-10-14: a touch taken as `dislike` was answered 「嫌じゃないです」 by a voice that never saw it).
+ */
+export const BODY_REACTION_HONNE_LINE = '受け取り（stance）は本音。言葉はそれをそのまま見せても、建て前で隠してもいい。どちらにするかは自分で選ぶ。';
+
+/** The feeling line: with other people present the cause is left out (a feeling carried over from a conversation names what that was about). */
+function feelingLine(input: BodyReactionPromptInput): string {
+  return input.feeling.primary === 'neutral'
     ? 'いまの気持ち: 落ち着いている'
     : `いまの気持ち: ${input.feeling.primary} / 強度 ${input.feeling.intensity.toFixed(2)}${input.audience === 'owner' ? ` / 理由 ${input.feeling.cause}` : ''}`;
+}
+
+/** One burst of this sitting with her note on: what, since when, and how many touches with this one, as a plain fact (no 「N回目」). */
+function sceneSittingLine(burst: StoredTouchBurst, current: boolean, at: string): string {
+  const phrase = burstTouchPhrase(burst.type, burst, 'done', BODY_TOUCH_PHRASES[burst.type].done);
+  if (!current) return sittingLine(burst, false, at);
+  if (burst.count <= 1) return `- ${phrase}: いまのだけ`;
+  const since = Math.round((Date.parse(at) - Date.parse(burst.startedAt)) / 60_000);
+  return `- ${phrase}: ${since < 1 ? 'さっき' : `${since}分前`}から${burst.count}回（いまのをふくむ）`;
+}
+
+/**
+ * The instruction of one reaction with her note on (Syzygy ADR-0012; 2026-10-14). In order: who she is and how she speaks (the core's
+ * short form and its speech lines, word for word), the scene (the conversation in progress with the owner alone: a permission, a
+ * request, the topic), her note, the touch as facts, this sitting, what she already said about touches (one a line), and the rules.
+ */
+function innerBodyReactionPrompt(input: BodyReactionPromptInput, block: string): string {
+  const others = input.sitting.filter(burst => burst.id !== input.burst.id);
+  const scene = input.audience === 'owner' ? input.conversation.slice(-BODY_REACTION_LIMITS.sceneMessages) : [];
+  const said = input.said.slice(-BODY_REACTION_LIMITS.innerSaidLines);
+  return [
+    `${SHANNON_ONE_LINE_VOICE_INNER}\n${CHARACTER_CORE_SPEECH}`,
+    ...(scene.length ? [[
+      `[いまの場面]（触れられる直前までの${SHANNON_OWNER_NAME}との会話。古い順。許したこと・頼まれたこと・話していたことも、この場面の一部）`,
+      ...scene.map(item => `${item.role === 'user' ? SHANNON_OWNER_NAME : SHANNON_FIRST_PERSON}: ${clip(item.content, BODY_REACTION_LIMITS.sceneCharacters)}`),
+    ].join('\n')] : []),
+    ...(block ? [block] : []),
+    [
+      '[体に触れられた]',
+      `${bodyPlace(input.surface)}に、いま触れられた。`,
+      `- いま: ${bodyTouchLine(input.touch, input.audience)}`,
+      ...(input.touch.reflex === 'flinch' || input.touch.reflex === 'avoid' ? [`- 体: ${REFLEX_LINES[input.touch.reflex]}`] : []),
+      // The count is told once, as a plain fact below: not again as 「（続けて2回目）」 in the cause of her feeling.
+      `- ${feelingLine(input).replace(/（続けて\d+回目）/gu, '')}`,
+      `- この場: ${input.audience === 'owner' ? `${SHANNON_OWNER_NAME}と二人だけ` : 'ほかの人もいる'}`,
+      ...(input.history && input.audience === 'owner' ? [
+        `- ${SHANNON_OWNER_NAME}との親密さ: ${input.history.closeness.toFixed(2)}（経験で育つ気質。0〜1）`,
+        ...(input.history.part !== undefined && input.history.stances ? [`- ${stanceHistoryLine(input.history.part, input.history.stances)}`] : []),
+      ] : []),
+    ].join('\n'),
+    ['[さっきからの体のこと]', sceneSittingLine(input.burst, true, input.at), ...others.map(burst => sceneSittingLine(burst, false, input.at))].join('\n'),
+    said.length
+      ? [`[触れられて${SHANNON_FIRST_PERSON}がさっき言ったこと]（古い順）`, ...said.map(line => `- 「${clip(line, BODY_REACTION_LIMITS.textCharacters)}」`)].join('\n')
+      : `[触れられて${SHANNON_FIRST_PERSON}がさっき言ったこと] なし`,
+    ['[決め方]', ...BODY_REACTION_INNER_RULES.map(rule => `- ${rule}`),
+      ...(input.asksStance || asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`, `- ${BODY_REACTION_HONNE_LINE}`] : []),
+      ...(input.audience === 'others' ? [`- ${BODY_REACTION_OTHERS_RULE}`] : [])].join('\n'),
+  ].join('\n\n');
+}
+
+/** The whole instruction of one reaction. */
+export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
+  if (input.inner) return innerBodyReactionPrompt(input, input.inner.block);
+  const feeling = feelingLine(input);
   const others = input.sitting.filter(burst => burst.id !== input.burst.id);
   const conversation = input.audience === 'owner' ? input.conversation.slice(-BODY_REACTION_LIMITS.contextMessages) : [];
+  const said = input.said.slice(-BODY_REACTION_LIMITS.saidLines);
   return [
-    input.inner ? SHANNON_ONE_LINE_VOICE_INNER : SHANNON_ONE_LINE_VOICE,
-    ...(input.inner?.block ? [input.inner.block] : []),
+    SHANNON_ONE_LINE_VOICE,
     [
       '[体に触れられた]',
       `${bodyPlace(input.surface)}に、いま触れられた。`,
@@ -146,7 +223,7 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
       '[さっきからの体のこと]',
       sittingLine(input.burst, true, input.at),
       ...others.map(burst => sittingLine(burst, false, input.at)),
-      input.said.length ? `- 直前に${SHANNON_FIRST_PERSON}が言ったこと: ${input.said.map(line => `「${clip(line, BODY_REACTION_LIMITS.textCharacters)}」`).join('')}` : `- 直前に${SHANNON_FIRST_PERSON}が言ったこと: なし`,
+      said.length ? `- 直前に${SHANNON_FIRST_PERSON}が言ったこと: ${said.map(line => `「${clip(line, BODY_REACTION_LIMITS.textCharacters)}」`).join('')}` : `- 直前に${SHANNON_FIRST_PERSON}が言ったこと: なし`,
     ].join('\n'),
     ...(conversation.length ? [[
       '[いまの会話]（直前の数行。続きとして自然なら踏まえてよい）',
@@ -154,7 +231,7 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
     ].join('\n')] : []),
     // Her temperament, from the one persona source (`shannonTemperament`; owner decision "a" and scope (a), 2026-10-06): the
     // touch prompt carries no identity block, so it states it once here, worded for who is there. Outside the stage-2 switch.
-    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), ...(input.inner ? [] : [`- ${shannonTemperament(input.audience === 'owner' ? 'owner' : 'others')}`]),
+    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), `- ${shannonTemperament(input.audience === 'owner' ? 'owner' : 'others')}`,
       ...(input.asksStance || asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`] : []),
       ...(input.audience === 'others' ? [`- ${BODY_REACTION_OTHERS_RULE}`] : [])].join('\n'),
   ].join('\n\n');

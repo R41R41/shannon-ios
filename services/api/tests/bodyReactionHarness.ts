@@ -10,6 +10,7 @@ import type { BodyTouchDependencies } from '../src/mind/emotion/bodyTouch.js';
 import type { TouchExperienceWriter } from '../src/mind/memory/store/bodyTouchMemory.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import type { InnerNotePort } from '../src/mind/emotion/innerNotePorts.js';
 
 export const scope = 'owner';
 export const START = '2026-10-02T06:00:00.000Z';
@@ -74,6 +75,8 @@ export interface ReactionHarnessOptions {
   stage2?: boolean;
   /** The prediction record (stage 2 learns her stances in it); absent: none, every touch meets the empty prior. */
   prediction?: BodyTouchDependencies['prediction'];
+  /** Syzygy ADR-0012 (`SHANNON_INNER_NOTE` on): her inner note's port, handed to the kernel; absent: every prompt as before. */
+  innerNote?: InnerNotePort;
 }
 
 export async function reactionHarness(options: ReactionHarnessOptions = {}) {
@@ -87,7 +90,7 @@ export async function reactionHarness(options: ReactionHarnessOptions = {}) {
   const reactionStore = new SQLiteBodyReactionStore(options.path ?? ':memory:');
   const bodyStore = new SQLiteBodyStore(options.path ?? ':memory:');
   const api = createLocalApiKernel(now, {
-    stateStore, conversationStore, chatModel, autonomy,
+    stateStore, conversationStore, chatModel, autonomy, ...(options.innerNote ? { innerNote: options.innerNote } : {}),
     body: {
       store: bodyStore, ingestEnabled: options.ingestEnabled ?? true,
       reactions: { store: reactionStore, speaker, config: options.config ?? {}, experiences: options.experiences ?? null,

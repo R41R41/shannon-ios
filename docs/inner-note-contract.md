@@ -13,7 +13,8 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 - **One writer.** Only the reflection writes a note (`mind/emotion/innerNoteService.ts`, `innerNoteReflection.ts`). A reply reads
   it and never rewrites it.
 - **When she reflects.** After a touch of the owner alone (her stance, her reflex, her line), his apology or kind word
-  (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a reply she felt at moderate or stronger; when her sulk's time runs out
+  (`soothingIn`, or `apologyIn`), a tease (`teasingIn`), a turn about touching her that asked, allowed or refused it (`touchConsentIn`,
+  trigger `consent`, her own yes or no included; owner decision 2026-10-14), a reply she felt at moderate or stronger; when her sulk's time runs out
   (its `until`, or an ordinary sulk's hour); when an ordinary sulk without `until` finds the numbers back in their usual band (D2.4,
   once per episode); when her day ends. The cues are narrow (`innerNoteWords.ts`): a sentence addressed to her — 「ごめん、ちょっと
   待って」, 「バカみたいに暑い」, 「お休みの日って何してる？」 are not an apology, a tease or a goodnight. Events within 1.2 s (at most 5 s)
@@ -21,8 +22,9 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   failures and timeouts counted, kept in the database (`shannon_inner_note_attempts`, step `emotion/003`) so a restart keeps the count.
 - **Touches are sessions** (`innerNoteTouchSessions.ts`). The iPhone asks for a reaction after every short touch (up to once per
   45 s); one reflection a touch would spend the day's cap on an hour of petting. A run of touches is one session: she reflects on its
-  first touch, again when the kind of touch or the stance she took changes, at most every 20 minutes while it goes on, and once on what
-  it held when it ends (5 minutes without a touch). The touches held in between (the last 8) ride along with any reflection on his
+  first touch, again at once when the kind of touch, the part touched or the stance she took changes (owner decision 2026-10-14:
+  「大事な変化の時だけすぐ」), at most every 20 minutes while it goes on, and once on what it held when it ends (5 minutes without a
+  touch). The touches held in between (the last 8) ride along with any reflection on his
   words or her day's end. Reflections on touches alone take at most 24 of the day's 96 (`<day>/touch` in the same table); past that,
   touches wait for the next reflection on his words. His apology, kind word, tease, her `until` and her day's end are never held back
   by touches. An hour of petting at 45 s costs four or five reflections.
@@ -41,6 +43,10 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
   **closed** (intent `none`, with a one-sentence summary of the day); events after the day's end stay queued for the next day. A
   failed closing reflection still closes the newest note. A closed note is never read as her present attitude; the next day's first
   reflection is told the summary as something that happened.
+- **What a reflection is told of her body** (owner alone; 2026-10-14). Facts, so that she reads for herself whether it was on
+  purpose (わざと): how often each part was touched since her day began (the body's own count, without what he had her forget), her
+  recent lines about touches (at most five), and the day's turns about touching (asked, allowed, refused). Its questions ask whether a
+  touch was on purpose, and that つもり is a stance, not a line to say; the touch prompt labels つもり so.
 - **No rules of behavior in her prompt** (owner, 2026-10-14). The character core and the note describe who she is and how she
   feels. What must hold whatever her mood is held by code: his alarms, reminders and timers are device actions that fire
   regardless; no tool is withheld because of a note; with anyone else present only `shown` is given, never the reason; an override
@@ -52,7 +58,7 @@ writer in the same answer: `shown` (one emotion kind), `tell` (`none`/`blush`), 
 | --- | --- | --- | --- |
 | Text turn (end of the turn context, `apiKernel.ts`) | the whole note and what happened since | `shown` only | nothing |
 | Voice turn (`apiLiveVoice.ts`) | the same | `shown` only | nothing |
-| Touch reaction (`bodyReactionPrompt.ts`) | 本音・建て前・つもり, the core's short form, the one-line voice without a fixed register | `shown` only | — |
+| Touch reaction (`bodyReactionPrompt.ts`) | 本音・建て前・つもり (a stance, not a line), the core's short form and its speech lines, the one-line voice without a fixed register, the scene first (below) | `shown` only | — |
 | Jev `voice_route.v3` (`jevVoiceDecision.ts`) | `shannon_inner` (the English line) and an affect question that reads it | nothing (v1/v2) | nothing |
 | Body presence and the reaction's `mood` | face of `shown`, `tell`, `until` while the note is active | the same (no text) | the same |
 | Her identity (cached prefix) | the character core in place of the persona's identity, address, character and temperament lines (an AGI, not a maid; he made her, he is not her 持ち主) | the same | the same |
@@ -69,7 +75,17 @@ feelings are hers; no lies about facts he relies on: a task done, a tool's resul
 voice route's "Prioritize emotional presence…" replaced so she does not take his feeling as hers; the voice instructions without
 their fixed tone ("Sound bright and self-assured…", "lively maid personality"); her one-line voice (touch, the day's focus, a look's
 note, the self-description) is the core's; 「持ち主」 becomes ライ氏 (the pursuits header, the guest's capability line); Jev's affect
-question reads her state rather than prescribing an outcome.
+question reads her state rather than prescribing an outcome; the expressive-emotion block's address line names him only when it
+means something, never as an opener (it asked for ライ氏 「when natural」 against the voice's own line: seven of seven replies of
+2026-10-14 opened 「ライ氏、」).
+
+The touch prompt with the switch on (2026-10-14, the owner's Windows call: nine of ten lines said 「びっくり」, and 「えっ、また！？」 came
+twelve seconds after 「もちろんいいですよ」): who she is and how she speaks (the core's short form and its speech lines word for word:
+「ひゃっ」「ふふん」「じゃん」 and 「同じ言い回しが続くと、自分でも飽きる」), then **the scene** (the last six lines of a conversation in
+progress, 200 characters each, owner alone only), her note, the touch, this sitting as plain counts (no 「N回目」, and no 「続けてN回目」
+in her feeling's cause), her own last five touch lines one a line, and the rules: no example line, silence worded as a way to answer,
+and, when her stance is asked, that her stance is 本音 and her words may show it or hide it as she chooses. Switched off, the touch
+prompt is byte for byte what it was (the afb38c28 stage-3 proof).
 
 ## Storage
 

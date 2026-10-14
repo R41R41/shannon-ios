@@ -1,5 +1,6 @@
 import { SHANNON_EMOTION_KINDS, type ShannonEmotionKind, type ShannonExpressiveEmotion } from './types.js';
 import { isShannonEmotionKind } from './emotionState.js';
+import type { TouchConsent } from './innerNoteWords.js';
 
 /**
  * Her inner note (Syzygy ADR-0012 D1–D4), the pure part: its vocabulary, the gates that hold what one reflection may change,
@@ -24,7 +25,7 @@ export type InnerNoteDayReason = typeof INNER_NOTE_DAY_REASONS[number];
 export const INNER_NOTE_TELLS = ['none', 'blush'] as const;
 export type InnerNoteTell = typeof INNER_NOTE_TELLS[number];
 /** What made her reflect (D2.3), closed. */
-export const INNER_NOTE_TRIGGERS = ['touch', 'apology', 'kindness', 'teasing', 'strong_reply', 'until', 'day_end'] as const;
+export const INNER_NOTE_TRIGGERS = ['touch', 'apology', 'kindness', 'teasing', 'strong_reply', 'until', 'day_end', 'consent'] as const;
 export type InnerNoteTrigger = typeof INNER_NOTE_TRIGGERS[number];
 /** How a day ended (D4): the nightly sleep ran, the owner said goodnight, or 3:00 in his time zone. */
 export type InnerNoteDayEnd = 'sleep' | 'goodnight' | 'three';
@@ -135,6 +136,11 @@ export interface InnerNoteEvent {
   /** The owner's words (an apology, a kind word, a tease) and her reply, clipped. */
   words?: string;
   reply?: string;
+  /**
+   * A turn about touching her that asked, allowed or refused it (`touchConsentIn`; the event `consent`, or riding on an apology or a
+   * tease of the same turn). Owner decision 2026-10-14: such a turn makes her reflect at once.
+   */
+  consent?: TouchConsent;
   /** The feeling of her reply (strong_reply). */
   feeling?: { kind: ShannonEmotionKind; intensity: number };
   /** day_end: why the day ended. */
@@ -143,7 +149,7 @@ export interface InnerNoteEvent {
 
 const RANK: Readonly<Record<InnerNoteIntent, number>> = Object.freeze({ keep: 0, soften: 1, forgive: 2, none: 3 });
 /** Triggers that are something someone did: one of them moves `intent` at most one step toward letting go (D2.2). */
-const EVENT_TRIGGERS: ReadonlySet<InnerNoteTrigger> = new Set(['touch', 'apology', 'kindness', 'teasing', 'strong_reply']);
+const EVENT_TRIGGERS: ReadonlySet<InnerNoteTrigger> = new Set(['touch', 'apology', 'kindness', 'teasing', 'strong_reply', 'consent']);
 
 export const isInnerNoteIntent = (value: unknown): value is InnerNoteIntent => (INNER_NOTE_INTENTS as readonly unknown[]).includes(value);
 export const isInnerNoteScale = (value: unknown): value is InnerNoteScale => (INNER_NOTE_SCALES as readonly unknown[]).includes(value);
@@ -386,6 +392,11 @@ function ago(at: string, now: string): string {
 
 const quoted = (text: string | undefined, label: string) => text ? `${label}「${clippedNoteText(text, 80)}」` : '';
 const exchange = (event: InnerNoteEvent) => `${quoted(event.words, ': ')}${quoted(event.reply, ' → ボク')}`;
+/** What a turn about touching her said, as a fact. */
+export const TOUCH_CONSENT_WORDS: Readonly<Record<TouchConsent, string>> = Object.freeze({
+  asked: 'ライ氏が触れていいか尋ねた', permitted: 'ボクが触れるのを許した', refused: '触れることを断った（または、ライ氏がもう触れないと言った）',
+});
+const consentNote = (event: InnerNoteEvent) => (event.consent ? `〔触れることの話: ${TOUCH_CONSENT_WORDS[event.consent]}〕` : '');
 const DAY_END_WORDS: Readonly<Record<InnerNoteDayEnd, string>> = Object.freeze({ sleep: '夜の眠りの処理が走った', goodnight: 'ライ氏がおやすみと言った', three: '3:00' });
 
 function touchLine(event: InnerNoteEvent): string {
@@ -397,12 +408,13 @@ function touchLine(event: InnerNoteEvent): string {
 
 const EVENT_WORDS: Readonly<Record<InnerNoteTrigger, (event: InnerNoteEvent) => string>> = Object.freeze({
   touch: touchLine,
-  apology: event => `ライ氏が謝った${exchange(event)}`,
-  kindness: event => `ライ氏のやさしい言葉${exchange(event)}`,
-  teasing: event => `ライ氏にからかわれた${exchange(event)}`,
+  apology: event => `ライ氏が謝った${exchange(event)}${consentNote(event)}`,
+  kindness: event => `ライ氏のやさしい言葉${exchange(event)}${consentNote(event)}`,
+  teasing: event => `ライ氏にからかわれた${exchange(event)}${consentNote(event)}`,
   strong_reply: event => `気持ちが動いた（${event.feeling ? `${event.feeling.kind} ${event.feeling.intensity.toFixed(2)}` : '?'}）${exchange(event)}`,
   until: () => '前のメモで決めた時刻が来た',
   day_end: event => `今日が終わる（${DAY_END_WORDS[event.dayEnd ?? 'three']}）`,
+  consent: event => `触れることの話（${TOUCH_CONSENT_WORDS[event.consent ?? 'asked']}）${exchange(event)}`,
 });
 
 /** One event as a line: the time, what happened, and how she took it. */
@@ -447,8 +459,9 @@ export function innerNoteTouchBlock(note: InnerNote | null, audience: 'owner' | 
   if (audience === 'others') return innerNoteActive(note, at) ? `[いまの見せ方]（ほかの人もいる場）見せる気持ち: ${note.hooks.shown}` : '';
   if (innerNoteExpired(note, at) || note.flags.endedByCode) return pastNoteBlock(note, timeZone);
   const span = horizon(note, timeZone);
+  // つもり is a stance, never a line to say (2026-10-14: 「次も素直にびっくりと言う」 was read back as a script by every touch).
   return ['[心のメモ]（さっき自分で書いた独白。いまの自分の気持ち）', `- 本音: ${note.text.honne}`, `- 建て前: ${note.text.tatemae}`,
-    `- つもり: ${note.text.plan}${span ? `（${span}）` : ''}`].join('\n');
+    `- つもり（構え。言うせりふではない）: ${note.text.plan}${span ? `（${span}）` : ''}`].join('\n');
 }
 
 /**

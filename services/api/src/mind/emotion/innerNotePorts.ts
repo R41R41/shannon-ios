@@ -42,11 +42,17 @@ export interface InnerNoteTouch {
   /** The touch as she remembers it (`experience:<burst id>`): forgetting it, or its retention, takes the notes it prompted. */
   sourceId?: string;
   phrase: string;
-  /** The kind of touch (`poke`, `pet`, ...): a session of the same kind and stance is one reflection. */
+  /** The kind of touch (`poke`, `pet`, ...): a session of the same kind, part and stance is one reflection. */
   kind?: string;
+  /** The part touched, in her words (胸); another part than the session's makes her reflect at once (owner decision 2026-10-14). */
+  part?: string;
   stance?: string;
   reflex?: string;
   said?: string;
+  /** Since her day began: how often each part was touched (owner alone), as the body counted it, without what he had her forget. */
+  today?: readonly { part: string; count: number }[];
+  /** What she said lately because of touches, oldest first (owner alone). */
+  lines?: readonly string[];
 }
 
 export interface InnerNotePort {
