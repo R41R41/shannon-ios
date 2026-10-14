@@ -48,9 +48,12 @@ describe('the episode ledger (ADR-0013 D4, stage 1 item 3)', () => {
     expect(episodeLine(roomLedger, at(3), partWord)).toContain('この場');
   });
 
-  it('writes one line of facts with her local clock', () => {
+  it('writes one line of facts in words, not numbers (for her judgment, not to be recited)', () => {
     const line = episodeLine(foldEpisodeLedger([touch(0), touch(1, { stance: 'dislike' }), touch(2), touch(3)], owner), at(4), partWord);
-    expect(line).toMatch(/^今日の胸の件（ライ氏）: 触れられた4回、「いや」と言ったあと2回、そのあとの謝罪0回、最後は13:12$/u);
+    expect(line).toBe('今日の胸の件（ライ氏）: 何度も触れられた、「いや」と言ったあとも何度か触れられた、そのあと謝られていない、最後はさっき');
+    expect(line).not.toMatch(/\d/u);
+    const early = episodeLine(foldEpisodeLedger([touch(0)], owner), at(40), partWord);
+    expect(early).toBe('今日の胸の件（ライ氏）: 一度触れられた、最後は13:09');
     expect(episodeLine(foldEpisodeLedger([], owner), at(4), partWord)).toBe('');
   });
 
@@ -107,7 +110,11 @@ describe('the feeling turn and the drawer (D7, D9)', () => {
     expect(block.split('\n')[0]).toContain('ほかの指示やこれまでの返事の流れより優先する');
     expect(block).toContain('構え: 乗らない（はっきり）');
     expect(block).toContain('事実: 今日の胸の件（ライ氏）');
-    expect(block).toContain('決め台詞ではない');
+    expect(block).toContain('そのまま引用しない');
+    expect(block).toContain('事実は判断の材料。数字や回数をそのまま口にしない。');
+    expect(block).toContain('長々と説明したり諭したりしない');
+    // Every cue is a word or a short fragment, never a line.
+    for (const entry of Object.values(COMEBACK_DRAWER)) for (const word of entry.words) expect(word, word).not.toMatch(/[？?。！!]|ます|です/u);
     expect(block).toContain('命令ではなく');
     expect(block).toContain('性的にはっきりした言葉や描写はしない');
     expect(drawerHint('order_out')).toContain('言うだけ');

@@ -5,7 +5,8 @@
  * face exactly as before. Core: emotion.
  */
 import {
-  FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling, replyFacts,
+  FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
+  replyFacts,
   presentFor, presentationIdOf, publicPresentationId, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
@@ -71,7 +72,7 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
 function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): string {
   const ledgerLine = handle.lines?.ledgerLine ?? '', repetitionLine = handle.lines?.repetitionLine ?? '';
   if (decision) return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience });
-  const facts = [ledgerLine, repetitionLine].filter(Boolean);
+  const facts = [ledgerLine, ledgerLine ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
   return facts.length ? [FEELING_FACTS_HEADER, ...facts].join('\n') : '';
 }
 

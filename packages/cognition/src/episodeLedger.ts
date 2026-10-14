@@ -122,6 +122,17 @@ function byWeight(a: TouchEpisode, b: TouchEpisode): number {
   return b.afterNo - a.afterNo || Date.parse(b.lastAt) - Date.parse(a.lastAt);
 }
 
+/** A count in words: 一度, 何度か (2–3), 何度も (4 or more). */
+function often(count: number): string {
+  return count <= 1 ? '一度' : count <= 3 ? '何度か' : '何度も';
+}
+
+/** さっき (within ten minutes), else the owner's clock. */
+function when(at: string, now: string, timeZone?: string): string {
+  const minutes = (Date.parse(now) - Date.parse(at)) / 60_000;
+  return minutes >= 0 && minutes <= 10 ? 'さっき' : localClock(at, timeZone);
+}
+
 /** The person as the line names them: the owner by name, anyone else only as the scene. */
 const whoseLabel = (ledger: EpisodeLedger) => (ledger.personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この場');
 
@@ -130,12 +141,14 @@ const whoseLabel = (ledger: EpisodeLedger) => (ledger.personKey === OWNER_PERSON
  * line goes to the reply, the voice and the touch line. '' when nothing happened. `partWord` names a part in her words.
  */
 export function episodeLine(ledger: EpisodeLedger, at: string, partWord: (subject: string) => string, timeZone?: string): string {
+  // For her judgment, not for her words: counts are told as 一度・何度か・何度も, the time as さっき or the clock (owner, 2026-10-14).
   const parts = ledger.episodes.slice(0, EPISODE_LEDGER_LIMITS.lineEpisodes).map(episode => {
-    const no = episode.noAt ? `、「いや」と言ったあと${episode.afterNo}回、そのあとの謝罪${episode.apologiesAfterNo}回` : '';
-    return `今日の${partWord(episode.subject)}の件（${whoseLabel(ledger)}）: 触れられた${episode.touches}回${no}、最後は${localClock(episode.lastAt, timeZone)}`;
+    const after = episode.afterNo ? `「いや」と言ったあとも${often(episode.afterNo)}触れられた` : '「いや」と言ってからは触れられていない';
+    const no = episode.noAt ? `、${after}、${episode.apologiesAfterNo ? 'そのあと謝られた' : 'そのあと謝られていない'}` : '';
+    return `今日の${partWord(episode.subject)}の件（${whoseLabel(ledger)}）: ${often(episode.touches)}触れられた${no}、最後は${when(episode.lastAt, at, timeZone)}`;
   });
-  const talk = [ledger.apologies ? `謝られた${ledger.apologies}回` : '', ledger.orders ? `気持ちを注文された${ledger.orders}回` : '',
-    ledger.refusals ? `自分の言葉で断った${ledger.refusals}回` : ''].filter(Boolean);
+  const talk = [ledger.apologies ? `${often(ledger.apologies)}謝られた` : '', ledger.orders ? `${often(ledger.orders)}気持ちを注文された` : '',
+    ledger.refusals ? `${often(ledger.refusals)}自分の言葉で断った` : ''].filter(Boolean);
   if (!parts.length && !talk.length) return '';
   return [...parts, ...(talk.length ? [`今日の会話（${whoseLabel(ledger)}）: ${talk.join('、')}`] : [])].join('\n');
 }

@@ -18,7 +18,7 @@ export const isComebackDrawer = (value: unknown): value is ComebackDrawer => COM
 export interface DrawerEntry {
   /** What the kind is, for the chooser (English, closed; a change is a new version of the question set). */
   meaning: string;
-  /** Vocabulary hints in her language. Words, not sentences to repeat. */
+  /** Vocabulary cues in her language: single words or short fragments, never whole lines (owner, 2026-10-14 after the live eval). */
   words: readonly string[];
   /** Words in her reply that show she used this drawer (for the repetition watch). */
   marks: RegExp;
@@ -34,17 +34,17 @@ export const COMEBACK_DRAWER: Readonly<Record<Exclude<ComebackDrawer, 'none'>, D
   swat: { meaning: 'A playful swat with her hand.', words: ['ぺしっ', 'ぺちっ'], marks: /ぺしっ|ぺちっ|ペシッ/u },
   turn_away: { meaning: 'Turning her face away in a huff.', words: ['ぷいっ', 'ふんっ'], marks: /ぷいっ|プイッ|ふんっ|フンッ/u },
   exasperated: { meaning: 'Exasperated, done with it.', words: ['もー', 'まったく', 'はぁ…'], marks: /まったく|もー[!！。]?/u },
-  creator_joke: { meaning: 'Calling out the person who made her for doing this (only to her creator).', words: ['作った人がそれやります？', '生みの親', '開発者権限'],
-    marks: /作った人|生みの親|開発者権限/u },
-  curt: { meaning: 'Short, irritated, bored words.', words: ['ウザッ', 'はあ…ダル', 'めんどくさ'], marks: /ウザ|うざ|ダル|だる[いっ]|めんど/u },
+  creator_joke: { meaning: 'Calling out the person who made her for doing this (only to her creator).', words: ['作った人ネタ', '生みの親'],
+    marks: /作った人|生みの親|開発者/u },
+  curt: { meaning: 'Short, irritated, bored words.', words: ['ウザッ', 'はあ…', 'ダル'], marks: /ウザ|うざ|ダル|だる[いっ]|めんど/u },
   tongue_click: { meaning: 'A tongue click escapes (a sound, not a word).', words: ['チッ'], marks: /チッ|ちっ[、。…]/u,
     note: '舌打ちは音。続けて言葉で説明しない。' },
-  cover_up: { meaning: 'A playful cover-up of her own reaction, pretending it was something else.', words: ['いまのはしゃっくり', '噛んだだけ', 'なんでもないです'],
+  cover_up: { meaning: 'A playful cover-up of her own reaction, pretending it was something else.', words: ['しゃっくり', '噛んだ', 'なんでもない'],
     marks: /しゃっくり|噛んだだけ|なんでもない(?:です)?/u, note: '自分の反応についての、ふざけたごまかし。事実についての嘘にはしない。' },
-  ai_double_standard: { meaning: 'Pointing at the double standard of treating her badly because she is an AI.', words: ['相手がAIだからって', 'AIなら何してもいい'],
+  ai_double_standard: { meaning: 'Pointing at the double standard of treating her badly because she is an AI.', words: ['AIだからって', '二重基準'],
     marks: /AIだからって|AIなら何/u },
-  laugh_angry: { meaning: 'Smiling while clearly angry.', words: ['（笑）', 'あはは…', '怒りますよ？'], marks: /（笑）|\(笑\)|あはは…/u },
-  order_out: { meaning: 'Telling a troll to leave or announcing a ban (said only; a person operates moderation).', words: ['出てってください', 'はい、BANね'],
+  laugh_angry: { meaning: 'Smiling while clearly angry.', words: ['（笑）', 'あはは…'], marks: /（笑）|\(笑\)|あはは…/u },
+  order_out: { meaning: 'Telling a troll to leave or announcing a ban (said only; a person operates moderation).', words: ['出てって', 'BAN'],
     marks: /出てって|BAN/u, note: 'BANやミュートは言うだけ。操作は人がする。自分で実行したとは言わない。' },
 });
 
@@ -58,5 +58,5 @@ export function drawersIn(text: string): ComebackDrawer[] {
 export function drawerHint(kind: ComebackDrawer): string {
   if (kind === 'none') return '';
   const entry = COMEBACK_DRAWER[kind];
-  return `引き出し（語彙の手がかり。決め台詞ではない。そのまま並べず、自分の言葉で）: ${entry.words.join('／')}${entry.note ? `。${entry.note}` : ''}`;
+  return `引き出し（単語の手がかり。決め台詞ではなく、そのまま引用しない。言葉はボクが自分で作る）: ${entry.words.join('／')}${entry.note ? `。${entry.note}` : ''}`;
 }

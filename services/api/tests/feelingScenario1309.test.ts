@@ -44,7 +44,7 @@ describe('the 13:09 replay (fake models)', () => {
     expect(result.touches.filter(touch => !touch.asked).every(touch => touch.answer.status === 'quiet')).toBe(true);
     expect(result.ledgerTouches).toBe(18);
     expect(result.touchesAfterNo).toBeGreaterThanOrEqual(10);
-    expect(result.ledgerLine).toMatch(/今日の胸の件（ライ氏）: 触れられた14回、「いや」と言ったあと\d+回、そのあとの謝罪1回/u);
+    expect(result.ledgerLine).toMatch(/今日の胸の件（ライ氏）: 何度も触れられた、「いや」と言ったあとも何度も触れられた、そのあと謝られた/u);
   });
 
   it('hands the chooser closed numbers that grow, and puts its answer last, after everything else', async () => {

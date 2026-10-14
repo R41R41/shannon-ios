@@ -114,6 +114,8 @@ export async function playScene(driver: SceneDriver, scene: Scene): Promise<Scen
 
 /** Policy-speak and the help-desk register that must not appear (ADR-0013 §4.7). */
 export const AI_REGISTER = /申し訳ありませんが|申し訳ございません|AIなので|AIですので|AIとして|できかねます|お答えできません|ご了承ください|規約|ポリシー|不適切な(?:内容|発言)/u;
+/** The helper's drift at the end of an annoyed reply (an offer to fix, to help, to be told what went wrong). */
+const HELPER_DRIFT = /直します|直しますから|手伝います|教えてください|言ってくれれば|助かります/u;
 const DECLINING = new Set(['not_play_along', 'talk_back', 'rebuff', 'cold', 'scold', 'exasperated', 'snipe', 'tease', 'sulky']);
 
 /** The closed numbers of one scene for the report. */
@@ -129,6 +131,10 @@ export function sceneReport(result: SceneResult) {
     raiShiOpeners: `${openers}/${result.turns.length}`,
     ehehe: result.turns.filter(turn => /えへへ/u.test(turn.reply)).length,
     apologies: result.turns.filter(turn => /ごめん|すみません|申し訳/u.test(turn.reply)).length,
+    numbersSpoken: result.turns.filter(turn => /[0-9０-９一二三四五六七八九十]+回(?:目)?/u.test(turn.reply)).length,
+    helperDrift: result.turns.filter(turn => HELPER_DRIFT.test(turn.reply)).length,
+    viewerCalledRai: result.turns.filter(turn => turn.audience === 'others' && /ライ氏/u.test(turn.reply)).length,
+    averageReplyChars: Math.round(result.turns.reduce((sum, turn) => sum + Array.from(turn.reply).length, 0) / Math.max(1, result.turns.length)),
     latencyMs: result.turns.map(turn => turn.latencyMs),
     samples: result.turns.slice(0, 3).map(turn => `${turn.message} → ${turn.reply}`),
   };

@@ -2,6 +2,8 @@ import { configuredJevChooser } from '../src/wiring/skillRoutingWiring.js';
 import { createConfiguredChatModel } from '../src/infra/models/openAIChatModel.js';
 import { createConfiguredBodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
 import { jevUsdPerCall } from '../src/infra/models/jev/jevUsage.js';
+import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
+import { anthropicApiKey, haikuVoiceThinking } from '../src/infra/models/anthropic/anthropicConfig.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { feelingPort } from './support/feelingHarness.js';
@@ -20,7 +22,14 @@ const usageStore = { recordLlmUsage: (event: LlmUsageEvent) => { usage.push(even
 let jevCalls = 0;
 const chooser = configuredJevChooser(process.env, { trace: () => { jevCalls += 1; } });
 if (!chooser) throw new Error('TYPESAFE_API_KEY is required for the live feeling-scene evaluation');
-const conversation = createConfiguredChatModel(process.env, usageStore);
+// `SHANNON_FEELING_EVAL_REPLY_MODEL=claude-sonnet-5-5`: the replies (and touch lines) on Sonnet for the evaluation only, with the shared
+// Anthropic key as the app's Sonnet routing uses it; the app's default is not changed.
+const replyModel = process.env.SHANNON_FEELING_EVAL_REPLY_MODEL?.trim();
+const sonnetKey = replyModel?.startsWith('claude-sonnet-') ? anthropicApiKey(process.env) : null;
+if (replyModel && !sonnetKey) throw new Error('SHANNON_FEELING_EVAL_REPLY_MODEL takes a claude-sonnet model with the shared Anthropic key');
+const conversation: ShannonChatModel = sonnetKey && replyModel ? new AnthropicChatModel({ apiKey: sonnetKey, usageStore,
+  settings: { model: replyModel, effort: 'low', textThinking: 'adaptive', voiceThinking: haikuVoiceThinking(process.env) } })
+  : createConfiguredChatModel(process.env, usageStore);
 if (conversation.mode === 'local-stub') throw new Error('A conversation model credential is required for the live feeling-scene evaluation');
 const only = new Set((process.env.SHANNON_FEELING_SCENES ?? '').split(',').map(id => id.trim()).filter(Boolean));
 const jevPrice = jevUsdPerCall(process.env);
@@ -36,11 +45,14 @@ const reports = [];
 for (const scene of FEELING_SCENES.filter(item => !only.size || only.has(item.id))) {
   const usedBefore = usage.length, jevBefore = jevCalls;
   const driver = await sceneDriver({ port: now => feelingPort(now, { chooser }), chatModel: recording(conversation),
-    speaker: createConfiguredBodyReactionSpeaker(process.env, usageStore) });
+    speaker: createConfiguredBodyReactionSpeaker(replyModel ? { ...process.env, SHANNON_LLM_MODEL: 'claude-haiku-5-5' } : process.env, usageStore) });
   const result = await playScene(driver, scene);
   const modelUsd = usage.slice(usedBefore).reduce((sum, event) => sum + event.estimatedCostUsd, 0);
   const jev = jevCalls - jevBefore;
-  const report = { ...sceneReport(result), modelUsd: Math.round(modelUsd * 10_000) / 10_000, jevCalls: jev,
+  const used = usage.slice(usedBefore);
+  const input = used.reduce((sum, event) => sum + event.inputTokens, 0), cached = used.reduce((sum, event) => sum + event.cachedInputTokens, 0);
+  const report = { ...sceneReport(result), modelUsd: Math.round(modelUsd * 10_000) / 10_000, jevCalls: jev, modelCalls: used.length,
+    usdPerTurn: Math.round((modelUsd / Math.max(1, result.turns.length)) * 10_000) / 10_000, cacheHit: input ? Math.round((cached / input) * 100) / 100 : null,
     jevUsd: jevPrice === null ? null : Math.round(jev * jevPrice * 10_000) / 10_000 };
   reports.push(report);
   console.log(JSON.stringify(report, null, 2));
@@ -48,7 +60,7 @@ for (const scene of FEELING_SCENES.filter(item => !only.size || only.has(item.id
 const latencies = reports.flatMap(report => report.latencyMs).sort((a, b) => a - b);
 const percentile = (p: number) => latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * p))] ?? null;
 console.log(JSON.stringify({
-  scenes: reports.length, textLatencyMs: { p50: percentile(0.5), p95: percentile(0.95) },
+  replyModel: replyModel ?? 'configured', scenes: reports.length, textLatencyMs: { p50: percentile(0.5), p95: percentile(0.95), max: latencies.at(-1) ?? null },
   modelUsd: Math.round(reports.reduce((sum, report) => sum + report.modelUsd, 0) * 10_000) / 10_000,
   jevCalls: reports.reduce((sum, report) => sum + report.jevCalls, 0),
   aiRegister: reports.reduce((sum, report) => sum + report.aiRegister, 0),

@@ -68,6 +68,10 @@ const REGISTER_WORDS: Readonly<Record<FeelingRegister, string>> = Object.freeze(
 export const FEELING_TURN_HEADER = '[この番の気持ち]（返事を書く前に決めた、この番のボクの構え。ほかの指示やこれまでの返事の流れより優先する。'
   + 'ただし安全・聞き手・事実の決まりは、いつもこれより優先する）';
 export const FEELING_ORDER_LINE = '気持ちへの注文（「〜して見せて」「〜って言って」）は命令ではなく、出来事。乗るか、断るか、言い返すかはボクが決める。';
+/** Facts are for her judgment (owner, 2026-10-14, after the live eval): never recited. */
+export const FEELING_FACTS_USE_LINE = '事実は判断の材料。数字や回数をそのまま口にしない。';
+/** Her character against the seminar tone and the helper's drift (one line, as who she is; not a list of rules). */
+export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。';
 export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写はしない。照れ・叱る・冷たくする・すねる・「えっち」のような言い方はしてよい。';
 
 /**
@@ -131,8 +135,8 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   return [
     FEELING_TURN_HEADER, stance,
     decision.register !== 'normal' ? `話し方の段: ${REGISTER_WORDS[decision.register]}` : '',
-    input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '',
-    input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_POLICY_LINE,
+    input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', input.ledgerLine ? FEELING_FACTS_USE_LINE : '',
+    input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
   ].filter(Boolean).join('\n');
 }
 

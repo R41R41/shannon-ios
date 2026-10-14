@@ -1,5 +1,8 @@
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
-import { FeelingEvents } from '../mind/emotion/feelingEvents.js';
+import { OWNER_AUDIENCE } from '@shannon/cognition';
+import { FeelingEvents, type RepetitionSeed } from '../mind/emotion/feelingEvents.js';
+import type { ConversationStore } from '../mind/memory/memoryPorts.js';
+import { visibleReplayMessages } from '../mind/memory/memoryVisibility.js';
 import { feelingEventsEnabled, feelingTurnEnabled, singleFaceEnabled, type FeelingPort } from '../mind/emotion/feelingPorts.js';
 import { SQLiteFeelingEventStore } from '../mind/emotion/store/feelingEventStore.js';
 import { bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
@@ -31,6 +34,8 @@ export function feelingPartWord(subject: string): string {
  */
 export function configuredFeeling(environment: Readonly<Record<string, string | undefined>>, parts: {
   databasePath: string; timeZone: string; now: () => string; trace: DecisionTraceWriter | null; salt?: string; jevFetch?: typeof fetch;
+  /** The conversation, for seeding the repetition watch with today's replies of the owner's Talk. */
+  conversation?: ConversationStore;
 }): ConfiguredFeeling | null {
   if (!feelingEventsEnabled(environment)) return null;
   const turn = feelingTurnEnabled(environment);
@@ -38,8 +43,26 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
     ...(parts.jevFetch ? { jevFetch: parts.jevFetch } : {}) }) : null;
   const singleFace = singleFaceEnabled(environment);
   const jevInput = feelingTurnJevInput(environment);
-  return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput });
+  const seed = parts.conversation ? talkSeed(parts.conversation) : undefined;
+  return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
+    ...(seed ? { seed } : {}) });
 }
+
+/**
+ * Today's replies of hers in the owner's newest Talk, through the replay's own forgetting filter (what the owner alone may be shown), for
+ * the repetition watch's first turns of the day.
+ */
+export function talkSeed(conversation: ConversationStore): RepetitionSeed {
+  return (scopeKey, since, at, snapshot) => {
+    const thread = conversation.listThreads(scopeKey)[0];
+    if (!thread) return [];
+    return visibleReplayMessages(snapshot, conversation, scopeKey, thread.threadId, OWNER_AUDIENCE, TALK_SEED_MESSAGES).messages
+      .filter(entry => entry.item.role === 'assistant' && entry.message.observedAt >= since && entry.message.observedAt <= at)
+      .map(entry => ({ text: entry.item.content, at: entry.message.observedAt,
+        ...(entry.message.sourceExperienceId ? { sourceId: entry.message.sourceExperienceId } : {}) }));
+  };
+}
+const TALK_SEED_MESSAGES = 24;
 
 /**
  * `SHANNON_FEELING_TURN_JEV_INPUT` (`utterance` | `summary`; unset or anything else: `FEELING_TURN_JEV_INPUT`, `utterance` by the owner's
@@ -52,9 +75,10 @@ export function feelingTurnJevInput(environment: Readonly<Record<string, string 
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
-  singleFace: boolean; jevInput?: FeelingTurnJevInput }): ConfiguredFeeling {
+  singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
-  const events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord });
+  const seed = parts.seed ? { seed: parts.seed } : {};
+  const events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed });
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput: parts.jevInput ?? FEELING_TURN_JEV_INPUT };
   return { port, close: () => store.close() };
 }
