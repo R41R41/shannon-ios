@@ -148,8 +148,9 @@ $N --import tsx services/api/src/opsCli.ts minecraft cancel --operator ryo --lat
 $N --import tsx services/api/src/opsCli.ts minecraft login --operator ryo --server shannon-home
 ```
 
-`status` opens the database read-only (socket present or not, step 012 applied / missing / changed, open operator requests, the
-last ten audit rows) and writes nothing. Every other command is one request on the socket; the CLI never writes the database.
+`status` opens the database read-only (socket present or not, step 012 applied / missing / changed, open operator requests (an accepted request
+not stopped, not timed out, and whose task has not ended by any path: completed, failed, retired, cancelled or stopped, read from
+`agent_tasks`, fix 2026-10-14), the last ten audit rows) and writes nothing. Every other command is one request on the socket; the CLI never writes the database.
 Exit codes: `0` accepted, `1` refused or failed (also when the socket is absent), `2` usage. `SHANNON_OPERATOR` may stand in for
 `--operator`.
 

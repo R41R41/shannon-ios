@@ -113,6 +113,29 @@ describe('the operator audit', () => {
     expect(again?.enabled).toBe(false);
     again?.close();
   });
+
+  it('closes a request in the CLI status once its task ended by any path, read from the task, not the audit (2026-10-14)', () => {
+    const path = join(temporary(), 'shannon.sqlite');
+    const db = new DatabaseSync(path);
+    // The task authority's columns the status reads (`agent_tasks`), as the API's database holds them.
+    db.exec('CREATE TABLE agent_tasks (task_id TEXT PRIMARY KEY, status TEXT NOT NULL, pause_reason TEXT)');
+    db.close();
+    const opened = configuredOperatorAudit({ SHANNON_OPERATOR_MINECRAFT: 'on' }, path)!;
+    const tasks: Array<[string, string, string | null]> = [['running', 'running', null], ['unknown', 'paused', 'fca_unknown'],
+      ['failed', 'failed', null], ['completed', 'completed', null], ['cancelled', 'cancelled', null], ['stopped', 'paused', 'fca_stopped']];
+    const write = new DatabaseSync(path);
+    for (const [id, status, reason] of tasks) {
+      write.prepare('INSERT INTO agent_tasks VALUES (?,?,?)').run(`task-${id}`, status, reason);
+      opened.store.append({ operationId: `operator:${id}`, scopeKey: 'owner', at, operator: 'ops', command: 'request', event: 'accepted',
+        code: 'accepted', argsJson: '{}', taskId: `task-${id}` });
+    }
+    write.close(); opened.close();
+    const before = statSync(path).mtimeMs;
+    const open = inspectOperatorAudit(path, at).open.map(row => row.taskId).sort();
+    // a5ad9996 failed on its own and was still listed; still running or unknown work stays open.
+    expect(open).toEqual(['task-running', 'task-unknown']);
+    expect(statSync(path).mtimeMs).toBe(before); // derived on a read-only connection: no audit row is written
+  });
 });
 
 function task(id: string, phase: TaskView['phase'], goal = '石を集めて'): TaskView {
