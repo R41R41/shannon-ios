@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMPOSURE_COEFFICIENTS, appraise, coreAffectSettled, createComposure, createCoreAffect, feelingActor, foldFeelingDynamics, stepComposure, stepCoreAffect,
+  COMPOSURE_COEFFICIENTS, appraise, levelFor, coreAffectSettled, createComposure, createCoreAffect, feelingActor, foldFeelingDynamics, stepComposure, stepCoreAffect,
   utteranceTags, EMPTY_APPRAISAL_CONTEXT, type FeelingEvent,
 } from '../src/index.js';
 
@@ -126,5 +126,18 @@ describe('composure: the front wears down under provocation and comes back slowl
     const alone = foldFeelingDynamics(insults, owner).series.at(-1)!;
     expect(alone.level).toBeLessThanOrEqual(2);
     expect(alone.composure).toBeGreaterThan(0.6);
+  });
+});
+
+describe('the register\'s gap coming back', () => {
+  it('never steps back down while composure only rises, and leaves a step only past its threshold by the gap', () => {
+    let level = 4;
+    const levels: number[] = [];
+    for (const composure of [0.3, 0.35, 0.39, 0.42, 0.47, 0.49, 0.55, 0.69, 0.7, 0.9]) {
+      level = levelFor(composure, level, 1);
+      levels.push(level);
+    }
+    for (let index = 1; index < levels.length; index += 1) expect(levels[index]!).toBeLessThanOrEqual(levels[index - 1]!);
+    expect(levels).toEqual([4, 4, 4, 4, 4, 3, 3, 2, 2, 1]);
   });
 });

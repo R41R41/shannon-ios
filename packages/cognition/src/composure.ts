@@ -68,7 +68,9 @@ export function levelFor(composure: number, current: number, floor: number): num
   // In front of others the front starts at 1 (demure); alone her ordinary register is 0 and a worn reserve goes straight to 2.
   const step = (below: number) => (below === 0 ? floor : below + 1);
   const down = step(C.downAt.filter(threshold => composure < threshold).length);
-  const up = step(C.downAt.filter(threshold => composure < threshold - C.hysteresis).length);
+  // Coming back, a step is left only once composure is past its threshold by the gap (the gap was applied the wrong way: the level
+  // could leave a step early and then fall back into it while composure rose).
+  const up = step(C.downAt.filter(threshold => composure < threshold + C.hysteresis).length);
   const asked = down > current ? down : Math.min(current, up);
   return Math.max(floor, Math.min(5, asked));
 }
