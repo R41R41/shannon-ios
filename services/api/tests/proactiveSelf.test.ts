@@ -29,7 +29,7 @@ import {
   COMMITMENT_LINE_INSTRUCTIONS, COMMITMENT_TIME_RULE, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, namesPromise,
   type CommitmentFacts, type CommitmentLineWriter,
 } from '../src/mind/action/respond/commitmentLine.js';
-import { canonicalTimePhrases } from '../src/mind/action/respond/commitmentLineTime.js';
+import { allowedTimePhrases, canonicalTimePhrases } from '../src/mind/action/respond/commitmentLineTime.js';
 import { commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { apiSourceFile } from './support/sources.js';
@@ -502,6 +502,9 @@ describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c a
       ['9時20分前だよ、起こして', morning], ['20分後に起こすね', { ...morning, overdueMinutes: 20 }],
       // the bare 12-hour form of an evening time is no longer allowed
       ['9時20分ですよ、起こしての時間', evening],
+      // ab5df22b: words before an allowed phrase that no list knew, and part-of-day words in kana
+      ['明け方の夜9時20分、起こして', evening], ['あさ9時20分、起こして', morning], ['ライ氏9時20分、起こして', morning], ['よるの9時20分、起こして', morning],
+      ['ゆうべの起こして', morning], ['ナイト9時20分、起こして', evening], ['9時20分、起こして。ランチのあとね', morning],
       // other days, durations, parts of the day, kanji numbers, English
       ['昨日の起こして', morning], ['今朝の起こして', morning], ['夕方の起こして', morning], ['十時間後に起こして', morning], ['九時二十五分、起こして', morning],
       ['十九時二十分、起こして', morning], ['19:20、起こして', morning], ['11時20分、起こして', { ...morning, when: '01:20' }], ['2時間たった、起こして', morning],
@@ -540,6 +543,42 @@ describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c a
       }
     }
     expect(tried).toBeGreaterThan(4_500);
+  });
+
+  it('refuses the right time with any word glued before it or any part-of-day or day word anywhere, and keeps the good forms (fuzz)', () => {
+    const vocabulary = ['あさ', 'アサ', 'よる', 'ゆうがた', 'ひる', 'ごぜん', 'ごご', 'あけがた', '明け方', 'まよなか', 'よなか', 'こんや', 'けさ', 'あした', 'あす',
+      'あさって', 'きのう', 'おととい', 'しんや', 'ゆうべ', '昨晩', '今晩', '晩', '宵', '未明', '早朝', '深夜', '夜明け', '朝方', '夕方', '日中', '午前中', 'ランチ',
+      'モーニング', 'イブニング', 'ナイト', 'morning', 'evening', 'night', 'noon', 'midnight', 'tonight'];
+    let seed = 1014;
+    const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const hiragana = 'あいうえおかきくけこさしすせそたちつてなにぬねまみむめやゆよらりるれろわ';
+    const kanjiChars = '夜朝昼晩今昨明翌深真早未宵前後毎週春夏秋冬東西南北上下中外内大小山川田人火水木金土曜時分年';
+    const PARTICLES = new Set(['は', 'が', 'に', 'を', 'で', 'も', 'の', 'へ', 'と']);
+    const grams = Array.from({ length: 400 }, (_, index) => {
+      const pool = index % 2 ? hiragana : kanjiChars;
+      return `${pool[random(pool.length)]}${pool[random(pool.length)]}`;
+    }).filter(gram => !PARTICLES.has(gram.at(-1)!));
+    let tried = 0;
+    for (const facts of [morning, evening, { ...morning, when: '12:20' }, { ...morning, when: '09:30' }]) {
+      const phrases = allowedTimePhrases(facts);
+      for (const phrase of phrases) {
+        // Glued: anything but a boundary or a particle right before the phrase.
+        for (const prefix of [...vocabulary, ...grams.slice(0, 40)]) {
+          tried += 1;
+          expect(said(`${prefix}${phrase}、起こしての時間ですよ`, facts), `${prefix}${phrase} for ${facts.when}`).toBe(false);
+        }
+        // Anywhere: a part-of-day or day word elsewhere in the line.
+        for (const word of vocabulary) {
+          tried += 1;
+          expect(said(`${phrase}、起こしての時間ですよ。${word}だね`, facts), `${phrase} … ${word} for ${facts.when}`).toBe(false);
+        }
+        // The good forms still pass: at the start, after punctuation, a quote mark or a particle.
+        for (const line of [`${phrase}、起こしての時間ですよ`, `ライ氏、${phrase}ですよ。起こしての時間`, `「${phrase}」の起こしてですよ`, `約束は${phrase}、起こしてですよ`]) {
+          expect(said(line, facts), `${line} for ${facts.when}`).toBe(true);
+        }
+      }
+    }
+    expect(tried).toBeGreaterThan(5_000);
   });
 });
 

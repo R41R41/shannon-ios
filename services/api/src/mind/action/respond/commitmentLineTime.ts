@@ -91,35 +91,61 @@ function dayPhrases(due: CommitmentClockFacts['dueOn']): string[] {
   ].sort((left, right) => right.length - left.length);
 }
 
-const shape = (text: string) => text.normalize('NFKC').replace(/[\s「」『』、。！？!?・,]/gu, '').toLowerCase();
+/** NFKC and lower case; spaces, punctuation and quote marks become one space each (a boundary). */
+const shape = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s「」『』、。！？!?・,.()（）【】"'“”‘’…~〜]+/gu, ' ');
 const KANJI_NUMBER = '[〇零一二三四五六七八九十百]';
-const MARK = '⟨t⟩';
+/** What stands where an allowed time was taken out; what stands for the promise, its lateness or its day. */
+const MARK = '◆';
+const TAKEN = '◇';
 
-/** Any sign of a time or a date left in a line once what may be said was taken out. */
+/**
+ * Left boundary of an allowed phrase (review of ab5df22b): the start, a space, punctuation or a quote mark (all spaces after
+ * `shape`), the place of the promise or the due day already taken out, or one particle. Any other letter or kanji before it may
+ * change what it says (深夜, 今朝, a compound no list knows), so the phrase is left in place and the line is not trusted.
+ */
+const LEFT_BOUNDARY = new Set([' ', TAKEN, 'は', 'が', 'に', 'を', 'で', 'も', 'の', 'へ', 'と']);
+
+/** Takes out each occurrence of `phrase` whose left neighbour is a boundary; the others stay. */
+function takeOut(text: string, phrase: string, mark: string): string {
+  if (!phrase) return text;
+  let out = '';
+  let from = 0;
+  for (let at = text.indexOf(phrase); at >= 0; at = text.indexOf(phrase, from)) {
+    const before = at === 0 ? ' ' : text[at - 1]!;
+    out += text.slice(from, at) + (LEFT_BOUNDARY.has(before) ? mark : phrase);
+    from = at + phrase.length;
+  }
+  return out + text.slice(from);
+}
+
+/** Any sign of a time or a date left anywhere in a line once what may be said was taken out. */
 const SIGNS: readonly RegExp[] = Object.freeze([
   /[0-9]/u,
   new RegExp(`${KANJI_NUMBER}+(?:時|分|日|月|曜|秒|週)`, 'u'),
   new RegExp(`${KANJI_NUMBER}${MARK}|${MARK}${KANJI_NUMBER}`, 'u'),
-  // A word glued to the front of an allowed phrase changes it (深夜9時 is not 夜9時; 昨夜, 今朝, 翌朝 …): unsure, so not trusted.
-  new RegExp(`[深今昨明翌真夜朝午昼晩宵前後毎日月曜a-z]${MARK}`, 'u'),
-  /午前|午後|朝|夜|晩|深夜|真夜中|夜中|明け方|夜明け|夕方|夕暮れ|昼|正午|今夜|今朝|今晩|未明|宵/u,
-  /\b(?:a\.?m|p\.?m)\b|am|pm|morning|evening|night|tonight|noon|midnight|o'?clock/u,
-  /今日|きょう|明日|あした|あす|明後日|あさって|明々後日|明明後日|しあさって|翌|前日|昨日|きのう|一昨日|おととい|昨夜|昨晩|来週|先週|今週|再来週|来月|先月|今月|週末|平日/u,
-  /tomorrow|yesterday|today|tonite|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday/u,
+  // Parts of the day, in kanji, hiragana, katakana and English, anywhere in what is left.
+  /午前|午後|朝|夜|晩|宵|昼|夕|明け方|夜明け|未明|早朝|深夜|日中|正午|今夜|今朝|今晩|昨晩|昨夜|真夜中|夜中/u,
+  /あさ|よる|ゆうがた|ゆうべ|ひる|ごぜん|ごご|あけがた|まよなか|よなか|こんや|けさ|しんや|こんばん/u,
+  /アサ|ヨル|ヒル|ランチ|モーニング|イブニング|ナイト|ミッドナイト|ヌーン/u,
+  /a\.?m|p\.?m|morning|evening|night|tonight|tonite|noon|midnight|o'?clock/u,
+  // Days other than the due day (its own 今日, weekday and date were taken out), weekdays and dates.
+  /今日|きょう|明日|あした|あす|明後日|あさって|明々後日|明明後日|しあさって|翌|前日|昨日|きのう|一昨日|おととい|来週|先週|今週|再来週|来月|先月|今月|週末|平日/u,
+  /tomorrow|yesterday|today|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday/u,
   /[月火水木金土日]曜|曜日/u,
+  // A duration or a relative time right after a time, or anywhere with a count (数時間, 分後 …). 「約束の時間」 is not one.
   new RegExp(`${MARK}(?:前|後|間|過ぎ|すぎ|頃|ごろ|くらい|ぐらい|ほど|弱|強)`, 'u'),
-  // A duration or a relative time (with digits or kanji numbers they are caught above; 数 is a count too). 「約束の時間」 is not one.
   /数(?:時間|分|秒|日|週)|分後|分前|時間後|時間前|日後|日前|秒/u,
 ]);
 
 /** Whether a line says nothing of a time, a day or a date but what the promise's facts allow. */
 export function commitmentTimesGrounded(line: string, facts: CommitmentClockFacts): boolean {
-  const title = shape(facts.title);
-  let rest = title ? shape(line).split(title).join(' ⟨q⟩ ') : shape(line);
-  for (const phrase of allowedTimePhrases(facts)) rest = rest.split(shape(phrase)).join(MARK);
+  const title = shape(facts.title).trim();
+  let rest = ` ${shape(line)} `;
+  if (title) rest = rest.split(title).join(TAKEN);
+  for (const phrase of allowedTimePhrases(facts)) rest = takeOut(rest, shape(phrase), MARK);
   if (facts.overdueMinutes !== null && facts.overdueMinutes > 0) {
-    for (const late of [`${facts.overdueMinutes}分過ぎ`, `${facts.overdueMinutes}分すぎ`, `${facts.overdueMinutes}分遅れ`]) rest = rest.split(late).join(' ⟨l⟩ ');
+    for (const late of [`${facts.overdueMinutes}分過ぎ`, `${facts.overdueMinutes}分すぎ`, `${facts.overdueMinutes}分遅れ`]) rest = takeOut(rest, late, TAKEN);
   }
-  for (const phrase of dayPhrases(facts.dueOn)) rest = rest.split(shape(phrase)).join(' ⟨d⟩ ');
+  for (const phrase of dayPhrases(facts.dueOn)) rest = takeOut(rest, shape(phrase), TAKEN);
   return !SIGNS.some(sign => sign.test(rest));
 }
