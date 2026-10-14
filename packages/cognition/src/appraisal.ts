@@ -74,7 +74,7 @@ const TAG_GOODNESS: Readonly<Record<string, number>> = Object.freeze({ insult: -
   // Stage 5 (`SHANNON_FEELING_STREAM`): comments only (`commentTags`): a threat or a doxx, and prying into the owner's private life.
   threat: -0.8, pry_owner: -0.35 });
 
-/** How much a crowd's comment weighs against one viewer's (§4.3: a crowd is one source; stage 5 proposal for the owner). */
+/** How much a crowd's comment weighs against one viewer's (§4.3: a crowd is one source; approved by the owner, 2026-10-15). */
 export const CROWD_COMMENT_WEIGHT = 0.5;
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));

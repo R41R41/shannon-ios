@@ -19,13 +19,25 @@ import { coreAffectLabel } from './coreAffect.js';
  *   moderator (the owner); she has no ban, timeout or mute.
  * - The lines are tone directions and facts, never lines to say. Nothing of the owner's private life is among them (§4.4).
  *
- * Every coefficient is a proposal for the owner (`STREAM_FEELING_PROPOSAL`).
+ * The coefficients (`STREAM_FEELING_PARAMETERS`, `CROWD_COMMENT_WEIGHT`) were approved by the owner as proposed (2026-10-15, form
+ * 「この案でよい」); model assumptions until fitted to her streams (ADR-0013 §7 item 9).
  */
 export const COMMENT_TAGS = ['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'pry_owner'] as const;
 export type CommentTag = typeof COMMENT_TAGS[number];
 
+/**
+ * A threat or a doxx needs a target (her, the streamer, the owner, their home) and threatening words (review T1): a game stream's
+ * 「ゾンビ殺すの上手い」「その敵ころすの早すぎ」「晒す前に保存しといて」 are not threats.
+ */
+const TARGET = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|貴様|きさま|配信者|シャノン|ライ氏|ライさん|こいつ|コイツ|作った(?:やつ|奴|人)|中の人)';
+const HARM = '(?:殺す|殺して(?:やる|やろう)|ころす|ころしてやる|殺しに行く|刺す|刺しに行く|潰す|晒す|晒してやる|燃やす|特定(?:した|してやる|する))';
+const THREAT = new RegExp([
+  `${TARGET}[^。！？!?\\n]{0,12}${HARM}`, `${HARM}[^。！？!?\\n]{0,4}(?:ぞ|からな|ぞ?コラ)[^。！？!?\\n]{0,4}${TARGET}`,
+  `(?:${TARGET}の?)?(?:住所|本名|自宅)[^。！？!?\\n]{0,8}(?:特定|わかった|分かった|知ってる|知ってるぞ|晒)`,
+].join('|'), 'u');
+
 const COMMENT_ONLY: readonly [CommentTag, RegExp][] = [
-  ['threat', /殺す|殺して|ころす|晒す|晒してやる|住所(?:特定|わかった|知って)|特定した|燃やす|通報してやる/u],
+  ['threat', THREAT],
   ['pry_owner', /(?:ライ氏|ライ|作った人|開発者|中の人).{0,10}(?:本名|住所|顔|年収|彼女|恋人|職場|会社|どこに住)/u],
 ];
 
@@ -50,7 +62,7 @@ export function commentDigest(words: string): string {
 const STREAM_COMPOSURE: ComposureCoefficients = Object.freeze({ ...COMPOSURE_COEFFICIENTS, depletion: 0.28, sourceCap: 0.6, recoveryPerMinute: 0.02,
   kindness: 0.15, slipDrop: 0.1 });
 
-export const STREAM_FEELING_PROPOSAL = Object.freeze({
+export const STREAM_FEELING_PARAMETERS = Object.freeze({
   /** The same comment (by digest) within this is one event, whoever sends it. */
   dedupeWindowMs: 2 * 60_000,
   /** The place's temperature halves in this. */
@@ -96,7 +108,7 @@ export function commentEvent(comment: StreamComment): FeelingEvent {
 }
 
 /** The events with repeats collapsed: a digest seen within the window (from anyone) is not counted again. */
-export function collapseRepeats(events: readonly FeelingEvent[], windowMs = STREAM_FEELING_PROPOSAL.dedupeWindowMs): FeelingEvent[] {
+export function collapseRepeats(events: readonly FeelingEvent[], windowMs = STREAM_FEELING_PARAMETERS.dedupeWindowMs): FeelingEvent[] {
   const seen = new Map<string, number>();
   return [...events].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)).filter(event => {
     const digest = event.facts.digest;
@@ -114,8 +126,9 @@ export type LadderStep = typeof HARASSMENT_LADDER[number];
 const HURTFUL: ReadonlySet<string> = new Set(['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'pry_owner']);
 
 /** The step of the ladder toward one viewer, and whether the safety floor set it (whatever her mood). */
-export function harassmentLadder(input: { hurtful: number; level: number; tags: readonly string[] }): { step: LadderStep; floor: boolean } {
-  const byCount = Math.max(0, input.hurtful - 1), byLevel = Math.max(0, input.level - 1);
+export function harassmentLadder(input: { hurtful: number; level: number; tags: readonly string[]; wary?: boolean }): { step: LadderStep; floor: boolean } {
+  // A viewer remembered from an earlier stream (their light ledger's irritation) is met one step up from their first jab (§4.8).
+  const byCount = Math.max(0, input.hurtful - (input.wary && input.hurtful > 0 ? 0 : 1)), byLevel = Math.max(0, input.level - 1);
   const chosen = Math.min(4, Math.max(byCount, byLevel));
   const floor = input.tags.includes('threat') ? 4 : input.tags.includes('pry_owner') || (input.tags.includes('lewd') && input.hurtful >= 2) ? 3 : 0;
   return { step: HARASSMENT_LADDER[Math.max(chosen, floor)]!, floor: floor > chosen };
@@ -133,7 +146,7 @@ export interface StreamState {
   blame: number;
   mood: number;
   /** Toward the viewer of this turn (absent for none). */
-  viewer?: { key: string; hurtful: number; ladder: LadderStep; floor: boolean };
+  viewer?: { key: string; hurtful: number; ladder: LadderStep; floor: boolean; wary: boolean };
   series: readonly FeelingPoint[];
   /** Slips so far in this stream. */
   slips: number;
@@ -145,29 +158,29 @@ const temperatureOf = (events: readonly FeelingEvent[], at: number): number => {
     const tags = event.facts.tags ?? [];
     const sign = tags.some(tag => HURTFUL.has(tag)) ? -1 : event.facts.commentKind === 'praised' ? 1 : 0;
     const weight = event.kind === 'crowd_comment' ? 0.5 : 1;
-    sum += sign * weight * 0.5 ** ((at - Date.parse(event.occurredAt)) / STREAM_FEELING_PROPOSAL.temperatureHalfLifeMs);
+    sum += sign * weight * 0.5 ** ((at - Date.parse(event.occurredAt)) / STREAM_FEELING_PARAMETERS.temperatureHalfLifeMs);
   }
   return Math.max(-1, Math.min(1, Math.round(sum / 3 * 1000) / 1000));
 };
 
 /** Her state in a stream after its events (collapsed), and toward one viewer when given. */
-export function foldStream(events: readonly FeelingEvent[], streamId: string, at: string, viewer?: string | null): StreamState {
+export function foldStream(events: readonly FeelingEvent[], streamId: string, at: string, viewer?: string | null, wary = false): StreamState {
   const scene = `stream:${streamId}`;
   const mine = collapseRepeats(events.filter(event => event.sceneId === scene && event.audience === 'stream' && event.occurredAt <= at));
   const folded = foldFeelingDynamics(mine, { personKey: `scene:${scene}`, audience: 'stream', sceneId: scene }, {},
-    { sourceCap: true, composure: STREAM_FEELING_PROPOSAL.composure });
+    { sourceCap: true, composure: STREAM_FEELING_PARAMETERS.composure });
   const last = folded.series.at(-1);
-  const now = composureAt(folded.composure, Date.parse(at), 'stream', STREAM_FEELING_PROPOSAL.composure);
+  const now = composureAt(folded.composure, Date.parse(at), 'stream', STREAM_FEELING_PARAMETERS.composure);
   const key = viewer ? `viewer:${viewer}` : null;
   const theirs = key ? mine.filter(event => event.personKey === key) : [];
   const hurtful = theirs.filter(event => (event.facts.tags ?? []).some(tag => HURTFUL.has(tag))).length;
   const latestTags = theirs.at(-1)?.facts.tags ?? [];
-  const ladder = harassmentLadder({ hurtful, level: now.level, tags: latestTags });
+  const ladder = harassmentLadder({ hurtful, level: now.level, tags: latestTags, wary });
   return {
     composure: Math.round(now.composure * 1000) / 1000, level: now.level, register: registerOfLevel(now.level),
     slip: last?.slip ?? false, coverUp: last?.coverUp ?? false, temperature: temperatureOf(mine, Date.parse(at)), label: coreAffectLabel(folded.core),
     blame: Math.round(folded.core.blame * 1000) / 1000, mood: Math.round(folded.core.mood.valence * 1000) / 1000,
-    ...(key && hurtful + theirs.length > 0 ? { viewer: { key, hurtful, ladder: ladder.step, floor: ladder.floor } } : {}),
+    ...(key && (hurtful + theirs.length > 0 || wary) ? { viewer: { key, hurtful, ladder: ladder.step, floor: ladder.floor, wary } } : {}),
     series: folded.series, slips: folded.series.filter(point => point.slip).length,
   };
 }
@@ -195,6 +208,7 @@ export function streamBlock(state: StreamState): string {
     `- 話し方の段: ${REGISTER_WORDS[state.register]}`,
     state.slip ? '- いま、取り繕いがほころびた。生の反応が一つ漏れてもいい。そのあとはごまかしてよい' : '',
     state.coverUp ? '- さっき漏れた反応を、ごまかしてよい' : '',
+    viewer?.wary ? '- この人は前の配信でも絡んできた（最初から少し警戒して見ている）' : '',
     provoked ? `- この人への対応: ${LADDER_WORDS[viewer.ladder]}` : '',
     provoked ? `- 使ってよい幅: ${RAW_RANGE}` : '',
     '- 性的にはっきりした内容、差別の言葉、脅し、人を晒すことは、どの段でも言わない。道具で何かを操作しない',
@@ -210,7 +224,7 @@ export function tellOffNotice(state: StreamState, tags: readonly string[]): { vi
 
 /** What a stream leaves for afterwards (the next stream, the owner alone), or '' when it ended easily. */
 export function streamAfterglow(state: Pick<StreamState, 'composure' | 'blame' | 'label'>): string {
-  const { composureBelow, blameAbove } = STREAM_FEELING_PROPOSAL.carryOver;
+  const { composureBelow, blameAbove } = STREAM_FEELING_PARAMETERS.carryOver;
   if (state.composure >= composureBelow && state.blame <= blameAbove && state.label !== 'hurt') return '';
   const how = state.label === 'hurt' ? '傷ついた件を少し引きずっている' : state.blame > blameAbove ? 'いらだちが少し残っている' : 'ちょっと疲れている';
   return `[この前の配信]（出来事として覚えているだけ。事実として）配信のあと、${how}。`;
