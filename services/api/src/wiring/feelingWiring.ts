@@ -21,6 +21,7 @@ import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
 import { configuredFeelingSentenceWriter, type FeelingSentenceWriter } from '../infra/models/feelingSentenceModel.js';
 import { FeelingDays, type FeelingDayFeatures } from '../mind/emotion/feelingDays.js';
+import { StreamFeeling } from '../mind/emotion/streamFeeling.js';
 import { SQLiteFeelingDayStore } from '../mind/emotion/store/feelingDayStore.js';
 
 export interface ConfiguredFeeling {
@@ -107,7 +108,8 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
     ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
-    days: feelingDayFeatures(environment), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE') });
+    days: feelingDayFeatures(environment), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
+    stream: switchOn(environment, 'SHANNON_FEELING_STREAM') });
 }
 
 /**
@@ -179,7 +181,9 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   /** Stage 3: what is carried across days (the closed-day table opens only when one of them is on). */
   days?: FeelingDayFeatures;
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): keys by who wrote, light ledgers, audience layers, the source cap and the audience checks. */
-  audience?: boolean }): ConfiguredFeeling {
+  audience?: boolean;
+  /** Stage 5 (`SHANNON_FEELING_STREAM`, with the audience layers): her feeling on a stream. */
+  stream?: boolean }): ConfiguredFeeling {
   // Review R1: the audience layers only with the reply check and the turn they rely on (a switch's `requires` only warns at start);
   // without the check, no marked line of the owner's reaches a turn with others present.
   const audience = parts.audience === true && parts.check === true && parts.turn;
@@ -196,7 +200,9 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = portFlags({ ...parts, audience });
-  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags, ...closed.days };
+  const stream = parts.stream && audience ? { stream: new StreamFeeling({ events }) } : {};
+  const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags, ...closed.days,
+    ...stream };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);
   const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
