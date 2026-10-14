@@ -1,36 +1,25 @@
 /**
- * The times, days and dates a promise's line may say, as an allowlist (owner rule: a fact is never wrong; reviews of b867e66c and
- * 508b6288, which found that a parser of times accepts what it does not understand: 「今夜は9時20分」, 「9:20pm」, 「0時20分」 for
- * 12:20, 「翌日」, 「9時20分前」, 「20分後」).
+ * A promise's line never carries a time she wrote (owner rule: a fact is never wrong; reviews of b867e66c, 508b6288, ab5df22b and
+ * aac5b7be found that every parser or denylist of written times leaks: 「9時半」 for 09:00, 「九時廿分」, 「次の水曜日の」, 「今、9時20分」
+ * while late, 「ちょっと前」, 「around 9:20」, 「くじはん」, 「at ten」, 「Ⅹ時」, 丑三つ時, 「明​日」 …).
  *
- * The server computes, from the promise's facts alone, the phrases that state its time correctly: the canonical ones her line is
- * told to use (`canonicalTimePhrases`: 「9時20分」 for 09:20, 「夜の9時20分」 or 「21時20分」 for 21:20) and their exact equivalents
- * (`allowedTimePhrases`: 9:20, 09:20, 九時二十分, 9時半 for :30, and only the half-of-day words that are true of it: 午前/朝 before
- * noon, 午後/昼/夕方/夜 after). A bare 12-hour form of an afternoon or evening time is not one of them.
- *
- * A line is checked by removal, never by reading: the verbatim promise, then the allowed phrases (longest first), then its own
- * lateness (「47分過ぎ」), the due day's own 今日, weekday and date, are taken out. If any sign of a time or a date is left (a digit,
- * a kanji number beside 時/分/日/月/曜 or beside what was taken out, a half-of-day word in Japanese or English, a day other than the
- * due day, a weekday or a date, a duration or a relative time such as 〜前/〜後/〜間/〜過ぎ right after a time), the line is not
- * trusted and the caller uses the neutral factual line. Unsure is untrusted.
+ * Layers, each failing closed to the neutral factual line:
+ * 1. **She never writes the time.** Her line has the placeholder `{時刻}` where she would say the time and `{約束}` where she would
+ *    name the promise; the server puts in the canonical phrase (`canonicalTimePhrases(...)[0]`) and the promise's exact words.
+ * 2. **Her raw text is checked strictly** (`commitmentRawTextClean`), the placeholders excepted, after NFKC, without zero-width and
+ *    format characters and with whitespace collapsed: no number in any script, no numeral character, no kana number word with a
+ *    counter, no word of a time, a day, a part of the day or a duration in kanji, kana or English. Anything found: neutral.
+ * 3. **A second judge** reads the sentence with `{時刻}` put in (`commitmentLineJudge.ts`): another time, date, day or duration
+ *    stated or implied, or unsure: neutral.
  */
-export interface CommitmentClockFacts {
-  /** The promise's own words (a verbatim quote of them is its name, not a claim of the line). */
-  title: string;
-  /** Owner-local 「HH:MM」 when the promise has a clock time; anything else (「今日」) means it has none. */
-  when: string | null;
-  overdueMinutes: number | null;
-  /** The owner-local day it is due (weekday: one character, 水), and whether that day is today where the line is said. */
-  dueOn?: { month: number; day: number; weekday: string; today: boolean };
-}
+export const TIME_PLACEHOLDER = '{時刻}';
+export const PROMISE_PLACEHOLDER = '{約束}';
 
 const KANJI = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
 
-/** 0..59 in kanji (九, 十, 二十, 二十五). */
-function kanji(value: number): string {
-  if (value < 10) return KANJI[value]!;
-  const tens = Math.floor(value / 10);
-  return `${tens === 1 ? '' : KANJI[tens]}十${value % 10 ? KANJI[value % 10] : ''}`;
+export interface CommitmentClockFacts {
+  /** Owner-local 「HH:MM」 when the promise has a clock time; anything else (「今日」) means it has none. */
+  when: string | null;
 }
 
 function clockOf(when: string | null): { hour: number; minute: number } | null {
@@ -41,111 +30,79 @@ function clockOf(when: string | null): { hour: number; minute: number } | null {
   return hour <= 23 && minute <= 59 ? { hour, minute } : null;
 }
 
-/** One hour (as written) and the minute in every exact form: 9時20分, 九時二十分, 9:20 (and 09:20 when two digits are asked). */
-function clockForms(hour: number, minute: number, padded: boolean): string[] {
-  const minuteWords = minute === 0 ? ['時', '時ちょうど'] : minute === 30 ? ['時半', '時30分'] : [`時${minute}分`];
-  const kanjiMinute = minute === 0 ? ['時'] : minute === 30 ? ['時半', `時${kanji(30)}分`] : [`時${kanji(minute)}分`];
-  const mm = String(minute).padStart(2, '0');
-  return [
-    ...minuteWords.map(word => `${hour}${word}`), ...kanjiMinute.map(word => `${kanji(hour)}${word}`),
-    `${hour}:${mm}`, ...(padded ? [`${String(hour).padStart(2, '0')}:${mm}`] : []),
-  ];
-}
-
-/** The half-of-day words true of an hour (24h), and the 12-hour hour they go with. */
-function halves(hour: number): { words: string[]; twelve: number } {
-  if (hour < 12) return { words: ['午前', ...(hour >= 5 && hour <= 10 ? ['朝'] : [])], twelve: hour };
-  // Noon: 午後12時 is read both ways, so only 昼 goes with 12.
-  if (hour === 12) return { words: ['昼'], twelve: 12 };
-  const words = ['午後', ...(hour <= 14 ? ['昼'] : []), ...(hour >= 15 && hour <= 18 ? ['夕方'] : []), ...(hour >= 18 ? ['夜'] : [])];
-  return { words, twelve: hour === 12 ? 12 : hour - 12 };
-}
-
-/** The phrases her line is told to use for the promise's time (none without a clock time). */
-export function canonicalTimePhrases(facts: Pick<CommitmentClockFacts, 'when'>): string[] {
+/**
+ * The phrases for the promise's time, the first being what `{時刻}` becomes: 「9時20分」 for 09:20; 「夜の9時20分」 (or 「21時20分」) for
+ * 21:20; 「昼の12時20分」 at noon. None without a clock time.
+ */
+export function canonicalTimePhrases(facts: CommitmentClockFacts): string[] {
   const clock = clockOf(facts.when);
   if (!clock) return [];
   const minute = clock.minute === 0 ? '時' : `時${clock.minute}分`;
   if (clock.hour < 12) return [`${clock.hour}${minute}`];
-  const { words, twelve } = halves(clock.hour);
-  return [`${words.at(-1)}の${twelve}${minute}`, `${clock.hour}${minute}`];
+  if (clock.hour === 12) return [`昼の12${minute}`, `12${minute}`];
+  const half = clock.hour >= 18 ? '夜' : clock.hour >= 15 ? '夕方' : '昼';
+  return [`${half}の${clock.hour - 12}${minute}`, `${clock.hour}${minute}`];
 }
 
-/** Every phrase that states the promise's time exactly: the 24-hour forms, and the 12-hour forms with a true half-of-day word. */
-export function allowedTimePhrases(facts: Pick<CommitmentClockFacts, 'when'>): string[] {
-  const clock = clockOf(facts.when);
-  if (!clock) return [];
-  const { words, twelve } = halves(clock.hour);
-  // Bare 24-hour forms: unambiguous for an afternoon hour (13..23) and for the morning (0..11, as said in the morning).
-  const bare = clock.hour === 12 ? clockForms(12, clock.minute, true) : clockForms(clock.hour, clock.minute, true);
-  const withHalf = words.flatMap(word => clockForms(twelve, clock.minute, false).flatMap(form => [`${word}${form}`, `${word}の${form}`]));
-  return [...new Set([...withHalf, ...bare])].sort((left, right) => right.length - left.length);
+/** Zero-width and format characters out, whitespace collapsed; NFKC alongside (both are checked). */
+export function rawShapes(text: string): { raw: string; folded: string } {
+  const raw = text.replace(/\p{Cf}/gu, '').replace(/\s+/gu, ' ').trim();
+  return { raw, folded: raw.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/\s+/gu, ' ').toLowerCase() };
 }
 
-/** The due day's own words: 今日 (only when it is today), its weekday and its date. */
-function dayPhrases(due: CommitmentClockFacts['dueOn']): string[] {
-  if (!due) return [];
-  return [
-    ...(due.today ? ['今日'] : []), `${due.weekday}曜日`, `${due.weekday}曜`,
-    `${due.month}月${due.day}日`, `${kanji(due.month)}月${due.day}日`,
-  ].sort((left, right) => right.length - left.length);
-}
+const PLACEHOLDER = /[{｛]\s*(時刻|約束)\s*[}｝]/gu;
 
-/** NFKC and lower case; spaces, punctuation and quote marks become one space each (a boundary). */
-const shape = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s「」『』、。！？!?・,.()（）【】"'“”‘’…~〜]+/gu, ' ');
-const KANJI_NUMBER = '[〇零一二三四五六七八九十百]';
-/** What stands where an allowed time was taken out; what stands for the promise, its lateness or its day. */
-const MARK = '◆';
-const TAKEN = '◇';
+/** Katakana as hiragana, for the kana number words only (「クジハン」). */
+const hiragana = (text: string) => text.replace(/[ァ-ヶ]/gu, char => String.fromCharCode(char.charCodeAt(0) - 0x60));
 
-/**
- * Left boundary of an allowed phrase (review of ab5df22b): the start, a space, punctuation or a quote mark (all spaces after
- * `shape`), the place of the promise or the due day already taken out, or one particle. Any other letter or kanji before it may
- * change what it says (深夜, 今朝, a compound no list knows), so the phrase is left in place and the line is not trusted.
- */
-const LEFT_BOUNDARY = new Set([' ', TAKEN, 'は', 'が', 'に', 'を', 'で', 'も', 'の', 'へ', 'と']);
+const KANA_NUMBER = '(?:いち|に|さん|よん|し|ご|ろく|なな|しち|はち|く|きゅう|じゅう|はん)';
+const COUNTER = '(?:じ|ふん|ぷん|にち|がつ|ようび|時|分|秒|日|週|月|年|曜)';
+const ENGLISH = [
+  'now', 'around', 'about', 'before', 'after', 'until', 'till', 'past', 'today', 'tonight', 'tonite', 'tomorrow', 'yesterday', 'morning', 'evening',
+  'night', 'noon', 'midnight', 'am', 'pm', 'a\\.m', 'p\\.m', "o'?clock", 'half', 'quarter', 'hour', 'hours', 'minute', 'minutes', 'day', 'days',
+  'week', 'weekend', 'month', 'year', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'zero', 'one', 'two', 'three',
+  'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+  'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'later', 'soon', 'early', 'late',
+];
 
-/** Takes out each occurrence of `phrase` whose left neighbour is a boundary; the others stay. */
-function takeOut(text: string, phrase: string, mark: string): string {
-  if (!phrase) return text;
-  let out = '';
-  let from = 0;
-  for (let at = text.indexOf(phrase); at >= 0; at = text.indexOf(phrase, from)) {
-    const before = at === 0 ? ' ' : text[at - 1]!;
-    out += text.slice(from, at) + (LEFT_BOUNDARY.has(before) ? mark : phrase);
-    from = at + phrase.length;
-  }
-  return out + text.slice(from);
-}
-
-/** Any sign of a time or a date left anywhere in a line once what may be said was taken out. */
-const SIGNS: readonly RegExp[] = Object.freeze([
-  /[0-9]/u,
-  new RegExp(`${KANJI_NUMBER}+(?:時|分|日|月|曜|秒|週)`, 'u'),
-  new RegExp(`${KANJI_NUMBER}${MARK}|${MARK}${KANJI_NUMBER}`, 'u'),
-  // Parts of the day, in kanji, hiragana, katakana and English, anywhere in what is left.
-  /午前|午後|朝|夜|晩|宵|昼|夕|明け方|夜明け|未明|早朝|深夜|日中|正午|今夜|今朝|今晩|昨晩|昨夜|真夜中|夜中/u,
-  /あさ|よる|ゆうがた|ゆうべ|ひる|ごぜん|ごご|あけがた|まよなか|よなか|こんや|けさ|しんや|こんばん/u,
-  /アサ|ヨル|ヒル|ランチ|モーニング|イブニング|ナイト|ミッドナイト|ヌーン/u,
-  /a\.?m|p\.?m|morning|evening|night|tonight|tonite|noon|midnight|o'?clock/u,
-  // Days other than the due day (its own 今日, weekday and date were taken out), weekdays and dates.
-  /今日|きょう|明日|あした|あす|明後日|あさって|明々後日|明明後日|しあさって|翌|前日|昨日|きのう|一昨日|おととい|来週|先週|今週|再来週|来月|先月|今月|週末|平日/u,
-  /tomorrow|yesterday|today|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday/u,
-  /[月火水木金土日]曜|曜日/u,
-  // A duration or a relative time right after a time, or anywhere with a count (数時間, 分後 …). 「約束の時間」 is not one.
-  new RegExp(`${MARK}(?:前|後|間|過ぎ|すぎ|頃|ごろ|くらい|ぐらい|ほど|弱|強)`, 'u'),
-  /数(?:時間|分|秒|日|週)|分後|分前|時間後|時間前|日後|日前|秒/u,
+/** What must not be in her raw text (the placeholders taken out), each read on the raw and on the NFKC text. */
+const DENIED: readonly RegExp[] = Object.freeze([
+  // Numbers in any script (digits, Roman numerals, circled and other numbers), and numeral characters.
+  /\p{N}/u,
+  /[〇零一二三四五六七八九十百千万億兆廿卅半両壱弐参拾伍]/u,
+  // Kana number words with a counter, in hiragana or katakana (くじ, くじはん, ニジ, いちにち …).
+  new RegExp(`${KANA_NUMBER}${COUNTER}`, 'u'),
+  // Times, days, parts of the day, relative times and durations in kanji.
+  /今|現在|次|前|後|先|来|去|翌|明|昨|毎|週|月末|年明|頃|以前|以降|過ぎ|朝|夜|晩|宵|昼|夕|午|暁|丑|寅|子の刻|刻|深夜|未明|早朝|日中|正午|曜|暦|元旦|休日|祝日|平日/u,
+  /時刻|時半|時間後|時間前|日後|日前|分後|分前|数時間|数分|数日|半日|一日中/u,
+  // The same in hiragana (whole words only where a common ending would read as one: います is not いま).
+  /いま(?![すせし])|ただいま|あさ|よる|ゆうがた|ゆうべ|ひる|ごぜん|ごご|あけがた|よあけ|まよなか|よなか|こんや|けさ|しんや|こんばん/u,
+  /あした|あす|あさって|きのう|おととい|のち|ごろ|くらい|ぐらい|すぎ|まえ|あとで|つぎ|らいしゅう|せんしゅう|しゅう|ようび/u,
+  // Katakana and loan words.
+  /アサ|ヨル|ヒル|イマ|ゴゴ|ゴゼン|ランチ|モーニング|イブニング|ナイト|ミッドナイト|ヌーン|ブランチ|ディナー|ウィーク/u,
+  new RegExp(`\\b(?:${ENGLISH.join('|')})\\b`, 'u'),
+  // A counter right beside a placeholder (「{時刻}時」, 「前{時刻}」), and any other brace left.
+  /[{}｛｝]/u,
 ]);
 
-/** Whether a line says nothing of a time, a day or a date but what the promise's facts allow. */
-export function commitmentTimesGrounded(line: string, facts: CommitmentClockFacts): boolean {
-  const title = shape(facts.title).trim();
-  let rest = ` ${shape(line)} `;
-  if (title) rest = rest.split(title).join(TAKEN);
-  for (const phrase of allowedTimePhrases(facts)) rest = takeOut(rest, shape(phrase), MARK);
-  if (facts.overdueMinutes !== null && facts.overdueMinutes > 0) {
-    for (const late of [`${facts.overdueMinutes}分過ぎ`, `${facts.overdueMinutes}分すぎ`, `${facts.overdueMinutes}分遅れ`]) rest = takeOut(rest, late, TAKEN);
-  }
-  for (const phrase of dayPhrases(facts.dueOn)) rest = takeOut(rest, shape(phrase), TAKEN);
-  return !SIGNS.some(sign => sign.test(rest));
+/** Whether her raw line (with its placeholders) holds nothing of a time, a day, a date or a duration but `{時刻}`. */
+export function commitmentRawTextClean(text: string, facts: CommitmentClockFacts): boolean {
+  const { raw, folded } = rawShapes(text);
+  // `{時刻}` only for a promise with a clock time; a counter glued to a placeholder is a time of hers.
+  const usesTime = [...raw.matchAll(PLACEHOLDER)].some(match => match[1] === '時刻');
+  if (usesTime && canonicalTimePhrases(facts).length === 0) return false;
+  if (/[時分秒日週月年曜]\s*[{｛]\s*時刻|時刻\s*[}｝]\s*[時分秒日週月年曜]/u.test(raw.normalize('NFKC'))) return false;
+  const rest = [raw.replace(PLACEHOLDER, ' '), folded.replace(PLACEHOLDER, ' ')];
+  return !rest.some(text => DENIED.some(denied => denied.test(text) || denied.test(hiragana(text))));
+}
+
+/** The sentence as said: `{時刻}` becomes the canonical phrase and `{約束}` the promise's own words. */
+export function filledCommitmentLine(text: string, facts: CommitmentClockFacts & { title: string }, keepPromise = false): string {
+  const time = canonicalTimePhrases(facts)[0] ?? '';
+  return rawShapes(text).raw.replace(PLACEHOLDER, (_match, name: string) => (name === '時刻' ? time : keepPromise ? PROMISE_PLACEHOLDER : facts.title));
+}
+
+/** Kanji digits of a number below ten (kept for the fixtures that build kanji time phrases). */
+export function kanjiDigit(value: number): string {
+  return KANJI[value] ?? '';
 }

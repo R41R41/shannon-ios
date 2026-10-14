@@ -26,11 +26,14 @@ import { ownerPrivateRule } from '../src/mind/action/ownTime/autonomyLoopOwnerCo
 import { REACH_OUT_HELD_TOOL } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { autonomyModelCostUsd } from '../src/mind/action/ownTime/autonomyModels.js';
 import {
-  COMMITMENT_LINE_INSTRUCTIONS, COMMITMENT_TIME_RULE, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, namesPromise,
-  type CommitmentFacts, type CommitmentLineWriter,
+  COMMITMENT_LINE_INSTRUCTIONS, COMMITMENT_TIME_RULE, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, judgedCommitmentText,
+  namesPromise, type CommitmentFacts, type CommitmentLineWriter,
 } from '../src/mind/action/respond/commitmentLine.js';
-import { allowedTimePhrases, canonicalTimePhrases } from '../src/mind/action/respond/commitmentLineTime.js';
+import { canonicalTimePhrases } from '../src/mind/action/respond/commitmentLineTime.js';
 import { commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
+import { configuredPromiseJudge, judgedPromiseLine } from '../src/mind/action/respond/commitmentLineModel.js';
+import { promiseJudgeVerdict } from '../src/mind/action/respond/commitmentLineJudge.js';
+import { JEV_QUESTION_SETS } from '../src/infra/models/jev/jevChoice.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { apiSourceFile } from './support/sources.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
@@ -412,14 +415,14 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
       async write(_scopeKey: string, facts: CommitmentFacts) { this.asked.push(facts); return this.line === null ? null : groundedCommitmentLine(this.line, facts); }
     }
     const f = fixture({ onTime: true });
-    const writer = new Writer('ライ氏、9時20分ですよ！起こしてって言ってたの、ちゃんと覚えてますからね。');
+    const writer = new Writer('ライ氏、{時刻}ですよ！{約束}って言ってたの、ちゃんと覚えてますからね。');
     const logs: string[] = [];
     const lines = commitmentLinePreparer({ writer, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => f.state.snapshot(key),
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false, log: line => logs.push(line) });
     const prepared = await lines(DUE);
     expect(writer.asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水', today: true } }]);
     f.initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', prepared);
-    expect(f.last()?.content).toBe('ライ氏、9時20分ですよ！起こしてって言ってたの、ちゃんと覚えてますからね。');
+    expect(f.last()?.content).toBe('ライ氏、9時20分ですよ！明日9:20に起こしてって言ってたの、ちゃんと覚えてますからね。');
     expect(logs).toEqual(['Shannon promise line: hers']);
     f.close();
 
@@ -447,9 +450,10 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     f.close();
   });
 
-  it('accepts her own wording of the promise and of its time, and still refuses a number or a promise that is not there', () => {
+  it('accepts her own wording of the promise around the placeholders, and still refuses a time she wrote or a promise that is not there', () => {
     const facts: CommitmentFacts = { title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false };
-    expect(groundedCommitmentLine('9時20分！起こしてって言ってたやつですよ、ライ氏。', facts)).not.toBeNull();
+    expect(groundedCommitmentLine('{時刻}！{約束}って言ってたやつですよ、ライ氏。', facts)).not.toBeNull();
+    expect(groundedCommitmentLine('9時20分！起こしてって言ってたやつですよ、ライ氏。', facts)).toBeNull();
     expect(namesPromise('ライ氏、明日プレゼンの練習、今日やりますよ', '明日プレゼンの練習しよう')).toBe(true);
     expect(groundedCommitmentLine('ライ氏、10時の約束ですよ。', facts)).toBeNull();
     expect(groundedCommitmentLine('ライ氏、そろそろ時間ですよ。', facts)).toBeNull();
@@ -462,30 +466,100 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     expect(commitmentLineInstructionsWithCore(false).startsWith(characterCoreBlock(CHARACTER_CORE))).toBe(true);
     expect(commitmentLineInstructionsWithCore(false).endsWith(`${COMMITMENT_LINE_INSTRUCTIONS}\n${COMMITMENT_TIME_RULE}`)).toBe(true);
     const model = readFileSync(apiSourceFile('commitmentLineModel.ts'), 'utf8');
-    expect(model).toMatch(/switchOn\(environment, 'SHANNON_PROMISE_ON_TIME'\) \? \{ \.\.\.COMMITMENT, instructions: \(\) => commitmentLineInstructionsWithCore\(\) \} : COMMITMENT/u);
+    expect(model).toContain("if (!switchOn(environment, 'SHANNON_PROMISE_ON_TIME')) return configuredFactLineWriter(environment, usageStore, COMMITMENT, fetcher);");
+    expect(model).toContain('instructions: () => commitmentLineInstructionsWithCore()');
   });
 });
 
-describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c and 508b6288)', () => {
+describe('a promise\'s time: she never writes it (reviews of b867e66c, 508b6288, ab5df22b and aac5b7be)', () => {
   const morning: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水', today: true } };
   const evening: CommitmentFacts = { ...morning, when: '21:20' };
   const said = (line: string, facts: CommitmentFacts = morning) => groundedCommitmentLine(line, facts) !== null;
 
-  it('tells her the canonical words for the time, and accepts them and their exact equivalents', () => {
+  it('gives her {時刻} and {約束}, and puts in the canonical phrase and the promise\'s exact words', () => {
     expect(canonicalTimePhrases(morning)).toEqual(['9時20分']);
     expect(canonicalTimePhrases(evening)).toEqual(['夜の9時20分', '21時20分']);
+    expect(canonicalTimePhrases({ when: '12:00' })).toEqual(['昼の12時', '12時']);
     expect(canonicalTimePhrases({ when: '今日' })).toEqual([]);
     expect(JSON.parse(commitmentRequest(morning))).toMatchObject({ say_time_as: ['9時20分'] });
-    for (const line of ['9時20分ですよ、起こしての時間！', '9:20、起こしてって言ってたやつ', '09:20になりました。起こしてですよ', '九時二十分！起こしてって言ったでしょ',
-      '今日の9時20分、起こしての約束ですよ', '水曜の朝9時20分、起こしてですよ', '10月14日の9時20分、起こしての時間', '午前9時20分、起こしての時間です', '起こしての時間ですよ']) {
-      expect(said(line), line).toBe(true);
+    expect(COMMITMENT_TIME_RULE).toContain('{時刻}');
+    expect(COMMITMENT_TIME_RULE).toContain('{約束}');
+    expect(groundedCommitmentLine('ライ氏、{時刻}ですよ！{約束}の時間です', morning)).toBe('ライ氏、9時20分ですよ！起こしての時間です');
+    expect(groundedCommitmentLine('ライ氏、｛時刻｝ですよ！｛約束｝！', evening)).toBe('ライ氏、夜の9時20分ですよ！起こして！');
+    expect(groundedCommitmentLine('{約束}の時間ですよ、ライ氏', { ...morning, title: '明日9:20に起こして' })).toBe('明日9:20に起こしての時間ですよ、ライ氏');
+    // The judge reads the sentence with the time put in and the promise kept as a placeholder (his words are not sent).
+    expect(judgedCommitmentText('{時刻}です。{約束}ですよ', morning)).toBe('9時20分です。{約束}ですよ');
+    // {時刻} for a promise without a clock time, another placeholder, or a counter glued to it: neutral.
+    for (const line of ['{時刻}です、{約束}', '{日付}の{約束}', '{時刻}時の{約束}', '前{時刻}の{約束}', '{{時刻}}の{約束}']) {
+      expect(said(line, line.startsWith('{時刻}です') ? { ...morning, when: '今日' } : morning), line).toBe(false);
     }
-    expect(said('ライ氏、「明日9:20に起こして」の時間ですよ', { ...morning, title: '明日9:20に起こして' })).toBe(true);
-    expect(said('9時半！起こしての時間ですよ', { ...morning, when: '09:30' })).toBe(true);
-    for (const line of ['夜の9時20分、起こしての時間', '夜9時20分、起こしての時間', '21:20、起こしての時間', '21時20分、起こしての時間', '午後9時20分、起こしての時間']) {
-      expect(said(line, evening), line).toBe(true);
+    // With anyone else there: the time, and never the promise.
+    expect(said('約束の{時刻}になりましたよ', { ...morning, others: true })).toBe(true);
+    expect(said('{約束}の時間ですよ', { ...morning, others: true })).toBe(false);
+  });
+
+  it('refuses every case of the review of aac5b7be, written in any script', () => {
+    const wrong: Array<[string, CommitmentFacts]> = [
+      ['9時半だよ、{約束}', { ...morning, when: '09:00' }], ['九時廿分、{約束}', { ...morning, when: '09:00' }], ['夜の9時半、{約束}', { ...morning, when: '21:00' }],
+      ['次の水曜日の{約束}', morning], ['週明けの{約束}', morning], ['一ヶ月後の{約束}', morning], ['半日遅れの{約束}', morning],
+      ['今、{時刻}だよ、{約束}', { ...morning, overdueMinutes: 47 }], ['{時刻}のちょっと前、{約束}', morning], ['{時刻}ちょっと過ぎ、{約束}', morning],
+      ['以前の{約束}', morning], ['around {時刻}、{約束}', morning], ['9時20分ジョギング', { ...morning, title: '20分ジョギング' }], ['9時{約束}', { ...morning, title: '20分ジョギング' }],
+      ['くじはん、{約束}', morning], ['クジハン、{約束}', morning], ['at ten、{約束}', morning], ['Ⅹ時、{約束}', morning], ['丑三つ時の{約束}', morning],
+      ['明​日の{約束}', morning], ['あした の{約束}', morning], ['いま{約束}だよ', morning], ['ただいま{時刻}、{約束}', morning], ['now {約束}', morning],
+      ['後ほど{約束}', morning], ['のちほど{約束}', morning], ['月末の{約束}', morning], ['年明けの{約束}', morning], ['後日の{約束}', morning],
+      ['{時刻}以降の{約束}', morning], ['{約束}、{時刻}頃', morning], ['{約束}、{時刻}ごろ', morning], ['{約束}、{時刻}くらい', morning],
+      ['before {時刻}、{約束}', morning], ['after {時刻}、{約束}', morning], ['until {時刻}、{約束}', morning], ['{約束} at half past', morning],
+      ['quarter to {時刻}、{約束}', morning], ["{約束}、nine o'clock", morning], ['{約束}、twenty past', morning], ['暁の{約束}', morning], ['寅の刻の{約束}', morning],
+      ['明けの{約束}', morning], ['②の{約束}', morning], ['９の{約束}', morning], ['٩の{約束}', morning], ['壱の{約束}', morning], ['拾の{約束}', morning],
+      ['ひとまず{約束}、いちにち中', morning], ['{約束}、にじかん', morning], ['{約束}、ごふんまえ', morning], ['{約束}、しちがつ', morning],
+    ];
+    for (const [line, facts] of wrong) expect(said(line, facts), `${line} (${facts.when})`).toBe(false);
+  });
+
+  it('rejects any numeral or period word injected anywhere into a good line (fuzz)', () => {
+    let seed = 1015;
+    const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const kanjiNumerals = '〇零一二三四五六七八九十百千万億兆廿卅半両壱弐参拾';
+    const kanaNumbers = ['いち', 'に', 'さん', 'よん', 'し', 'ご', 'ろく', 'なな', 'しち', 'はち', 'く', 'きゅう', 'じゅう', 'はん'];
+    const counters = ['じ', 'ふん', 'ぷん', 'にち', 'がつ', 'ようび', '時', '分', '秒', '日', '週', '月', '年', '曜'];
+    const periods = ['あさ', 'アサ', 'よる', 'ゆうがた', 'ひる', 'ごぜん', 'ごご', 'あけがた', '明け方', 'まよなか', 'よなか', 'こんや', 'けさ', 'あした', 'あす', 'あさって',
+      'きのう', 'おととい', 'しんや', 'ゆうべ', '昨晩', '今晩', '晩', '宵', '未明', '早朝', '深夜', '夜明け', '朝方', '夕方', '日中', '午前中', 'ランチ', 'モーニング',
+      'イブニング', 'ナイト', 'morning', 'evening', 'night', 'noon', 'midnight', 'tonight', '今', 'いま', 'ただいま', '現在', 'now', '次', '前', '後', '先', '来', '去',
+      '翌', '明', '昨', '週明け', '月末', '年明け', '後日', '後ほど', 'のち', 'ちょっと前', '過ぎ', '以前', '以降', '頃', 'ごろ', 'くらい', 'around', 'before', 'after',
+      'until', 'twenty', 'thirty', 'forty', 'fifty', "o'clock", 'half', 'quarter', '丑', '寅', '暁', '明け', 'Ⅻ', '①', '٣', '３'];
+    const template = 'ライ氏、{時刻}ですよ！{約束}の時間です。忘れてないですよね？';
+    let tried = 0;
+    for (let index = 0; index < 3_000; index += 1) {
+      const kind = random(3);
+      const token = kind === 0 ? kanjiNumerals[random(kanjiNumerals.length)]!
+        : kind === 1 ? `${kanaNumbers[random(kanaNumbers.length)]}${counters[random(counters.length)]}` : periods[random(periods.length)]!;
+      const at = random(template.length + 1);
+      const line = `${template.slice(0, at)}${token}${template.slice(at)}`;
+      // Splitting a placeholder breaks it, which is refused too.
+      tried += 1;
+      expect(said(line), line).toBe(false);
     }
-    expect(said('9時20分の起こして、47分過ぎちゃった', { ...morning, overdueMinutes: 47 })).toBe(true);
+    expect(tried).toBe(3_000);
+    expect(said(template)).toBe(true);
+  });
+
+  it('falls back to the neutral line for few plausible lines of hers (measured on a corpus) and for every review case', () => {
+    const plausible = [
+      'ライ氏、{時刻}ですよ！{約束}の時間です', '{時刻}になりました。{約束}、忘れてないですよね？', 'ふふん、ちゃんと覚えてましたよ。{約束}の時間です！',
+      'ライ氏、{約束}ですよ。起きてくださいよ！', '{時刻}！ボクとの{約束}、守ってもらいますからね', 'ねえねえ、{約束}の時間だよ', 'ライ氏、{時刻}です。{約束}、そろそろですよ',
+      '{約束}の時間になりましたよ、ライ氏', 'はい、{時刻}！{約束}ですよ。ボク、ちゃんと覚えてたでしょ？', 'ライ氏、{約束}！忘れたとは言わせませんからね',
+      'ちょっと遅れちゃいましたけど、{約束}の時間ですよ', '{時刻}をちょっと過ぎちゃいましたけど、{約束}ですよ', 'ライ氏、{約束}の時間です。準備はいいですか？',
+      'ボクが言うのもなんですけど、{約束}の時間ですよ', 'ほらほら、{時刻}ですよ！{約束}！', '{約束}、今やりましょう！', '{約束}の時間です。一緒にがんばりましょう',
+      'ライ氏、{約束}の時間ですよ。まずは深呼吸から', '{約束}、もう時間ですよ。起きてますか？', 'お待ちかねの{約束}の時間です！', '{時刻}になったので、お知らせしますね。{約束}です',
+      'ライ氏、約束の時間です。{約束}、いけそうですか？', '{約束}の時間ですよ！先に言っておきますけど、忘れてたら怒りますからね', '{約束}ですよ、ライ氏。説明はいらないですよね？',
+      '{約束}の時間です。ボクの出番ですね', '{時刻}です。{約束}の時間ですよ、名前を呼んでも起きないんだから', 'べつに待ってたわけじゃないですけど、{約束}の時間ですよ',
+      '{約束}！ほら、起きて起きて！', 'ライ氏、{時刻}になりましたよ。{約束}、覚えてますよね？', '{約束}の時間です。ボクはちゃんと覚えてましたからね、ふふん',
+    ];
+    const passed = plausible.filter(line => said(line)).length;
+    const rate = 1 - passed / plausible.length;
+    // Measured 2026-10-14: 6 of 30 (20%) fall back (今, 一, 先, 明, 前, 過ぎ in her own words); the strict check is meant to err there.
+    expect(rate).toBeLessThanOrEqual(0.25);
+    expect(passed).toBeGreaterThanOrEqual(22);
   });
 
   it('refuses every false accept the reviews found, and anything else that names a time, a day or a date', () => {
@@ -545,7 +619,7 @@ describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c a
     expect(tried).toBeGreaterThan(4_500);
   });
 
-  it('refuses the right time with any word glued before it or any part-of-day or day word anywhere, and keeps the good forms (fuzz)', () => {
+  it('refuses any written time with any word before it or any part-of-day or day word anywhere (fuzz)', () => {
     const vocabulary = ['あさ', 'アサ', 'よる', 'ゆうがた', 'ひる', 'ごぜん', 'ごご', 'あけがた', '明け方', 'まよなか', 'よなか', 'こんや', 'けさ', 'あした', 'あす',
       'あさって', 'きのう', 'おととい', 'しんや', 'ゆうべ', '昨晩', '今晩', '晩', '宵', '未明', '早朝', '深夜', '夜明け', '朝方', '夕方', '日中', '午前中', 'ランチ',
       'モーニング', 'イブニング', 'ナイト', 'morning', 'evening', 'night', 'noon', 'midnight', 'tonight'];
@@ -553,32 +627,29 @@ describe('a promise\'s time: an allowlist, never a parser (reviews of b867e66c a
     const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
     const hiragana = 'あいうえおかきくけこさしすせそたちつてなにぬねまみむめやゆよらりるれろわ';
     const kanjiChars = '夜朝昼晩今昨明翌深真早未宵前後毎週春夏秋冬東西南北上下中外内大小山川田人火水木金土曜時分年';
-    const PARTICLES = new Set(['は', 'が', 'に', 'を', 'で', 'も', 'の', 'へ', 'と']);
-    const grams = Array.from({ length: 400 }, (_, index) => {
+    const grams = Array.from({ length: 40 }, (_, index) => {
       const pool = index % 2 ? hiragana : kanjiChars;
       return `${pool[random(pool.length)]}${pool[random(pool.length)]}`;
-    }).filter(gram => !PARTICLES.has(gram.at(-1)!));
+    });
     let tried = 0;
     for (const facts of [morning, evening, { ...morning, when: '12:20' }, { ...morning, when: '09:30' }]) {
-      const phrases = allowedTimePhrases(facts);
-      for (const phrase of phrases) {
-        // Glued: anything but a boundary or a particle right before the phrase.
-        for (const prefix of [...vocabulary, ...grams.slice(0, 40)]) {
+      for (const phrase of [...canonicalTimePhrases(facts), facts.when!, '九時二十分']) {
+        for (const prefix of ['', ...vocabulary, ...grams]) {
           tried += 1;
           expect(said(`${prefix}${phrase}、起こしての時間ですよ`, facts), `${prefix}${phrase} for ${facts.when}`).toBe(false);
         }
-        // Anywhere: a part-of-day or day word elsewhere in the line.
-        for (const word of vocabulary) {
-          tried += 1;
-          expect(said(`${phrase}、起こしての時間ですよ。${word}だね`, facts), `${phrase} … ${word} for ${facts.when}`).toBe(false);
-        }
-        // The good forms still pass: at the start, after punctuation, a quote mark or a particle.
-        for (const line of [`${phrase}、起こしての時間ですよ`, `ライ氏、${phrase}ですよ。起こしての時間`, `「${phrase}」の起こしてですよ`, `約束は${phrase}、起こしてですよ`]) {
-          expect(said(line, facts), `${line} for ${facts.when}`).toBe(true);
-        }
+      }
+      // A period or day word anywhere beside the placeholders.
+      for (const word of vocabulary) {
+        tried += 1;
+        expect(said(`{時刻}、{約束}の時間ですよ。${word}だね`, facts), `… ${word} for ${facts.when}`).toBe(false);
+      }
+      // The good forms still pass.
+      for (const line of ['{時刻}、{約束}の時間ですよ', 'ライ氏、{時刻}ですよ。{約束}の時間', '「{時刻}」の{約束}ですよ', '約束は{時刻}、{約束}ですよ']) {
+        expect(said(line, facts), `${line} for ${facts.when}`).toBe(true);
       }
     }
-    expect(tried).toBeGreaterThan(5_000);
+    expect(tried).toBeGreaterThan(1_000);
   });
 });
 
@@ -621,6 +692,56 @@ describe('her own time reads the note without its writer (review of b867e66c)', 
     expect(wiring).not.toContain('innerNoteStore.js');
     const rows = readFileSync(apiSourceFile('innerNoteRows.ts'), 'utf8');
     expect(rows.match(/^import[^;]+;$/gmu)?.join('\n')).not.toMatch(/migrations|sqliteOpen|innerNoteStore|INSERT|UPDATE|DELETE/u);
+  });
+});
+
+describe('the second judge of a promise\'s line (review of aac5b7be)', () => {
+  const facts: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false, dueOn: { month: 10, day: 14, weekday: '水', today: true } };
+  const judge = (verdict: 'no' | 'yes' | 'unsure' | Error) => {
+    const asked: Array<{ sentence: string; time: string | null }> = [];
+    return { asked, judge: { name: 'jev' as const, async otherTime(_scopeKey: string, sentence: string, time: string | null) {
+      asked.push({ sentence, time });
+      if (verdict instanceof Error) throw verdict;
+      return verdict;
+    } } };
+  };
+
+  it('uses her line only on a clear no; yes, unsure, a failure or no judge give the neutral line; logged content-free', async () => {
+    const logs: string[] = [];
+    const yes = judge('no');
+    expect(await judgedPromiseLine('ライ氏、{時刻}ですよ！{約束}の時間です', facts, yes.judge, { scopeKey: 'owner', log: line => logs.push(line) }))
+      .toBe('ライ氏、9時20分ですよ！起こしての時間です');
+    expect(yes.asked).toEqual([{ sentence: 'ライ氏、9時20分ですよ！{約束}の時間です', time: '9時20分' }]);
+    for (const verdict of ['yes', 'unsure', new Error('JEV_TIMEOUT')] as const) {
+      expect(await judgedPromiseLine('ライ氏、{時刻}ですよ！{約束}の時間です', facts, judge(verdict).judge, { scopeKey: 'owner', log: line => logs.push(line) })).toBeNull();
+    }
+    expect(await judgedPromiseLine('ライ氏、{時刻}ですよ！{約束}の時間です', facts, null, { scopeKey: 'owner', log: line => logs.push(line) })).toBeNull();
+    expect(logs).toEqual(['Shannon promise judge: jev:no', 'Shannon promise judge: jev:yes', 'Shannon promise judge: jev:unsure',
+      'Shannon promise judge: jev:unsure', 'Shannon promise judge: none:unsure']);
+    // A line the strict check refuses never reaches the judge.
+    const never = judge('no');
+    expect(await judgedPromiseLine('9時20分ですよ、{約束}', facts, never.judge, { scopeKey: 'owner' })).toBeNull();
+    expect(never.asked).toEqual([]);
+  });
+
+  it('asks Jev one fixed question (promise_time.v1) with the sentence and the given time, and reads only a clear no', async () => {
+    let body: Record<string, unknown> | null = null;
+    let probability = 0.05;
+    const fetcher = (async (_url: unknown, init?: { body?: unknown }) => {
+      body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return new Response(JSON.stringify({ answers: { other_time: { noul: probability } } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const jev = configuredPromiseJudge({ TYPESAFE_API_KEY: 'test-only' }, { recordLlmUsage: () => {}, backgroundLlmCostUsd: () => 0 } as never, fetcher)!;
+    expect(jev.name).toBe('jev');
+    expect(await jev.otherTime('owner', '9時20分です。{約束}ですよ', '9時20分')).toBe('no');
+    expect(JSON.stringify(body)).toContain('9時20分です。{約束}ですよ');
+    expect(JSON.stringify(body)).not.toContain('起こして');
+    probability = 0.3;
+    expect(await jev.otherTime('owner', 'x', '9時20分')).toBe('unsure');
+    probability = 0.9;
+    expect(await jev.otherTime('owner', 'x', '9時20分')).toBe('yes');
+    expect(JEV_QUESTION_SETS.promiseTime).toBe('promise_time.v1');
+    expect(promiseJudgeVerdict('x')).toBe('unsure');
   });
 });
 

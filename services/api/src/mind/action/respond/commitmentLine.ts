@@ -1,7 +1,7 @@
 import { CHARACTER_CORE, SHANNON_OWNER_NAME, characterCoreBlock, shannonOneLineVoice } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
-import { canonicalTimePhrases, commitmentTimesGrounded } from './commitmentLineTime.js';
+import { PROMISE_PLACEHOLDER, TIME_PLACEHOLDER, canonicalTimePhrases, commitmentRawTextClean, filledCommitmentLine, rawShapes } from './commitmentLineTime.js';
 
 /**
  * A promise's notice in her own words (owner decision 2026-10-14): when a promise of theirs is due, she writes the line at that
@@ -9,9 +9,11 @@ import { canonicalTimePhrases, commitmentTimesGrounded } from './commitmentLineT
  * for, so it lives here in code, not in her persona: it is not a moment, it takes none of the moments' caps, and nothing of her
  * mood or her inner note is given to it (a sulk never holds it back). It stays voiced on her body.
  *
- * The line must state the promise correctly: a line is used only when it names the promise (while he is alone) and carries no
- * number that the facts do not. Otherwise, and when the write fails or times out, the neutral factual line is used, so a promise
- * is never lost: `neutralCommitmentLine` is the one fixed text that remains for promises.
+ * The line must state the promise correctly: she writes `{時刻}` and `{約束}` where she would say its time and name it, the server
+ * fills them in, and her own words hold no time, day, date, number or duration at all (`commitmentLineTime.ts`; with
+ * `SHANNON_PROMISE_ON_TIME` a second judge reads the sentence too, `commitmentLineJudge.ts`). While he is alone it names the
+ * promise; with anyone else there it does not. Otherwise, and when the write fails or times out, the neutral factual line is used,
+ * so a promise is never lost: `neutralCommitmentLine` is the one fixed text that remains for promises.
  */
 export interface CommitmentFacts {
   /** What was promised, as remembered (visible, not forgotten). */
@@ -66,16 +68,27 @@ export function namesPromise(line: string, title: string): boolean {
   return sharedRun(withoutTime(said), what) >= Math.min(what.length, Math.max(4, Math.ceil(what.length / 2)));
 }
 
-/** Her line when it states the promise correctly, else null. */
-export function groundedCommitmentLine(line: unknown, facts: CommitmentFacts): string | null {
+/** Her raw line (with its placeholders), shaped, when it is clean and names the promise as the audience allows; else null. */
+function placedCommitmentLine(line: unknown, facts: CommitmentFacts): string | null {
   if (typeof line !== 'string') return null;
-  const text = line.replace(/\s+/gu, ' ').trim();
-  if (!text || text.length > 200) return null;
-  // While he is alone it names the promise; with anyone else there it does not.
-  const named = namesPromise(text, facts.title);
-  if (facts.others ? named : !named) return null;
-  // No time, day, date or count that the facts do not hold: each time read as a time, by its hour and its minute.
-  return commitmentTimesGrounded(text, facts) ? text : null;
+  const { raw } = rawShapes(line);
+  if (!raw || raw.length > 200 || !commitmentRawTextClean(raw, facts)) return null;
+  // While he is alone it names the promise ({約束}, or its words of her own); with anyone else there it does not.
+  const placed = /[{｛]\s*約束\s*[}｝]/u.test(raw);
+  const named = placed || namesPromise(raw.replace(/[{｛]\s*(?:時刻|約束)\s*[}｝]/gu, ' '), facts.title);
+  return (facts.others ? named : !named) ? null : raw;
+}
+
+/** Her line as said ({時刻} and {約束} filled in) when it states the promise correctly, else null. */
+export function groundedCommitmentLine(line: unknown, facts: CommitmentFacts): string | null {
+  const raw = placedCommitmentLine(line, facts);
+  return raw === null ? null : filledCommitmentLine(raw, facts);
+}
+
+/** What the second judge reads: her line with {時刻} filled in and {約束} kept (the promise's words are not sent); null if untrusted. */
+export function judgedCommitmentText(line: unknown, facts: CommitmentFacts): string | null {
+  const raw = placedCommitmentLine(line, facts);
+  return raw === null ? null : filledCommitmentLine(raw, facts, true);
 }
 
 /** Her one-line voice is her character core's while `SHANNON_INNER_NOTE` is on (Syzygy ADR-0012 D5.1); off, the words of before. */
@@ -100,9 +113,12 @@ export const COMMITMENT_LINE_INSTRUCTIONS = commitmentLineInstructions(false);
 export const commitmentLineInstructionsWithCore = (innerNote = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE')): string =>
   `${characterCoreBlock(CHARACTER_CORE)}\n\n${commitmentLineInstructions(innerNote)}\n${COMMITMENT_TIME_RULE}`;
 
-/** The allowlist's rule (review of 508b6288): a line that says any other time, day, date or duration is replaced by the neutral one. */
-export const COMMITMENT_TIME_RULE = 'If you say the time, say it exactly as one of say_time_as (empty: say no time). Say no other time, '
-  + 'day, date, weekday, part of the day or duration, not even about the same moment.';
+/** The placeholders' rule (review of aac5b7be): she never writes a time; a line that does is replaced by the neutral one. */
+export const COMMITMENT_TIME_RULE = [
+  `Never write a time, a day, a date, a weekday, a part of the day, a duration or any number yourself, in any form or script.`,
+  `Where you would say the time, write ${TIME_PLACEHOLDER} (only when say_time_as is not empty; it becomes say_time_as[0]).`,
+  `Where you would name the promise, write ${PROMISE_PLACEHOLDER} (only when promise is given; it becomes its exact words). Nothing else in braces.`,
+].join('\n');
 
 export interface CommitmentLineWriter {
   /** Her line, or null when it could not be written or trusted. Never throws. */

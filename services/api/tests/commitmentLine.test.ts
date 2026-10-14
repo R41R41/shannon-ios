@@ -26,11 +26,14 @@ const ALONE: CommitmentFacts = { title: '明日プレゼンの練習しよう', 
 
 describe('the line', () => {
   it('is used only when it states the promise: named while he is alone, and no number the facts do not hold', () => {
-    expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しよう、の約束の時間です。準備できてますか？', ALONE)).toContain('プレゼンの練習');
+    expect(groundedCommitmentLine('ライ氏、{約束}、の約束の時間です。準備できてますか？', ALONE)).toContain('プレゼンの練習');
+    // She never writes the time or the promise's own date words: those come from the placeholders (review of aac5b7be).
+    expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しよう、の約束の時間です。', ALONE)).toBeNull();
     expect(groundedCommitmentLine('ライ氏、そろそろあの約束の時間ですよ。', ALONE)).toBeNull();
     expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しよう、の約束です。15時からですね。', ALONE)).toBeNull();
     const timed: CommitmentFacts = { title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false };
-    expect(groundedCommitmentLine('ライ氏、14:00の歯医者に電話する約束、20分過ぎてますよ。', timed)).not.toBeNull();
+    expect(groundedCommitmentLine('ライ氏、{時刻}の{約束}約束、少し遅れちゃいましたよ。', timed)).toBe('ライ氏、昼の2時の歯医者に電話する約束、少し遅れちゃいましたよ。');
+    expect(groundedCommitmentLine('ライ氏、14:00の歯医者に電話する約束、20分過ぎてますよ。', timed)).toBeNull();
     expect(groundedCommitmentLine('', ALONE)).toBeNull();
     expect(groundedCommitmentLine({ line: 1 }, ALONE)).toBeNull();
   });
@@ -93,7 +96,7 @@ describe('at the moment it is due', () => {
   it('delivers her own line, written once, on the voiced path (it takes no moment cap)', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter('ライ氏、明日プレゼンの練習しよう、の約束ですよ。いっしょに始めましょうか。');
+    const writer = new FakeWriter('ライ氏、{約束}、の約束ですよ。いっしょに始めましょうか。');
     const lines = prepare(f, writer);
     const prepared = await lines(NINE);
     expect(writer.asked).toEqual([expect.objectContaining({ title: '明日プレゼンの練習しよう', others: false })]);

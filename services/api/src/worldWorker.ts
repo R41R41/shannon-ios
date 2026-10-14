@@ -62,7 +62,8 @@ const dailyMindModel:typeof dailyMindDelegate={generate:input=>withObserverRun({
 const initiativeSources = new SQLiteInitiativeSources(databasePath);
 const bodyStore = new SQLiteBodyStore(databasePath);
 const commitmentLines = commitmentLinePreparer({
-  writer: configuredCommitmentLineWriter(process.env, stateStore), scopeKey: configuredOwnerScope(process.env), timeZone: 'Asia/Tokyo',
+  writer: configuredCommitmentLineWriter(process.env, stateStore, undefined, line => console.log(line)),
+  scopeKey: configuredOwnerScope(process.env), timeZone: 'Asia/Tokyo',
   snapshot: scopeKey => stateStore.snapshot(scopeKey), delivered: (scopeKey, itemId) => initiativeSources.delivered(scopeKey, itemId),
   others: (scopeKey, at) => bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds),
   log: line => console.log(line),

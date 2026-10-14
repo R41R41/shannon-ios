@@ -4,8 +4,15 @@ import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, u
 import { parseJson } from './store/dailyMindStore.js';
 import { switchOn } from '@shannon/switches';
 import {
-  commitmentLineInstructions, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, type CommitmentFacts, type CommitmentLineWriter,
+  commitmentLineInstructions, commitmentLineInstructionsWithCore, commitmentRequest, groundedCommitmentLine, judgedCommitmentText, type CommitmentFacts,
+  type CommitmentLineWriter,
 } from './commitmentLine.js';
+import { canonicalTimePhrases } from './commitmentLineTime.js';
+import {
+  PROMISE_TIME_HAIKU_INSTRUCTIONS, PROMISE_TIME_QUESTION, PROMISE_TIME_SCHEMA, promiseJudgeState, promiseJudgeVerdict, type CommitmentJudgeVerdict,
+  type CommitmentTimeJudge,
+} from './commitmentLineJudge.js';
+import { JevChoiceClient, jevAnswers, jevNoul } from '../../../infra/models/jev/jevChoice.js';
 import {
   lifecycleOutcomeLineInstructions, lifecycleOutcomeMessage, lifecycleOutcomeRequest, lifecyclePhraseSchema, type LifecycleOutcomeFacts,
   type LifecycleOutcomeLineWriter,
@@ -46,11 +53,86 @@ const LIFECYCLE_OUTCOME: FactLine<LifecycleOutcomeFacts> = {
 
 /** The background model (`SHANNON_BACKGROUND_LLM_MODEL`, as the daily mind), within the background budget; null when none is set. */
 export function configuredCommitmentLineWriter(
-  environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore, fetcher?: typeof fetch,
+  environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore, fetcher?: typeof fetch, log: (line: string) => void = () => {},
 ): CommitmentLineWriter | null {
-  // SHANNON_PROMISE_ON_TIME: her whole core leads the instructions (the prefix of her moment speech); off, the bytes of before.
-  const kind = switchOn(environment, 'SHANNON_PROMISE_ON_TIME') ? { ...COMMITMENT, instructions: () => commitmentLineInstructionsWithCore() } : COMMITMENT;
-  return configuredFactLineWriter(environment, usageStore, kind, fetcher);
+  if (!switchOn(environment, 'SHANNON_PROMISE_ON_TIME')) return configuredFactLineWriter(environment, usageStore, COMMITMENT, fetcher);
+  // SHANNON_PROMISE_ON_TIME: her whole core leads the instructions (the prefix of her moment speech), she writes {時刻} and {約束}
+  // (the raw line is kept here, checked strictly), and a second judge must say no other time is stated before her line is used.
+  const kind: FactLine<CommitmentFacts> = {
+    ...COMMITMENT, instructions: () => commitmentLineInstructionsWithCore(),
+    read: (answer, facts) => {
+      const line = (answer as { line?: unknown } | null)?.line;
+      return typeof line === 'string' && judgedCommitmentText(line, facts) !== null ? line : null;
+    },
+  };
+  const base = configuredFactLineWriter(environment, usageStore, kind, fetcher);
+  if (!base) return null;
+  const judge = configuredPromiseJudge(environment, usageStore, fetcher);
+  return {
+    async write(scopeKey, facts, signal) {
+      return judgedPromiseLine(await base.write(scopeKey, facts, signal), facts, judge, { scopeKey, log, ...(signal ? { signal } : {}) });
+    },
+  };
+}
+
+/**
+ * Her raw line (placeholders and all) as said, only when it passes the strict check and the second judge answers a clear no;
+ * otherwise null (the neutral line). No judge at all is unsure. The verdict is logged as closed codes only.
+ */
+export async function judgedPromiseLine(raw: string | null, facts: CommitmentFacts, judge: CommitmentTimeJudge | null,
+  context: { scopeKey: string; log?: (line: string) => void; signal?: AbortSignal }): Promise<string | null> {
+  const judged = raw === null ? null : judgedCommitmentText(raw, facts);
+  const said = raw === null ? null : groundedCommitmentLine(raw, facts);
+  if (!judged || !said) return null;
+  let verdict: CommitmentJudgeVerdict = 'unsure';
+  const time = canonicalTimePhrases(facts)[0] ?? null;
+  try { verdict = judge ? await judge.otherTime(context.scopeKey, judged, time, context.signal) : 'unsure'; } catch { verdict = 'unsure'; }
+  try { context.log?.(`Shannon promise judge: ${judge?.name ?? 'none'}:${verdict}`); } catch { /* optional */ }
+  return verdict === 'no' ? said : null;
+}
+
+/** The second judge of a promise's line: Jev (`TYPESAFE_API_KEY`), else the background Haiku; null when neither is set. */
+export function configuredPromiseJudge(
+  environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore, fetcher?: typeof fetch,
+): CommitmentTimeJudge | null {
+  const jevKey = environment.TYPESAFE_API_KEY?.trim();
+  if (jevKey) {
+    const client = new JevChoiceClient({
+      apiKey: jevKey, model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-latest',
+      ...(environment.SHANNON_JEV_ENDPOINT?.trim() ? { endpoint: environment.SHANNON_JEV_ENDPOINT.trim() } : {}),
+      timeoutMilliseconds: 5_000, ...(fetcher ? { fetcher } : {}),
+    });
+    return {
+      name: 'jev',
+      async otherTime(_scopeKey, sentence, time, signal) {
+        try {
+          const answers = jevAnswers(await client.ask(promiseJudgeState(sentence, time), { other_time: PROMISE_TIME_QUESTION }, signal));
+          return promiseJudgeVerdict(jevNoul(answers, 'other_time'));
+        } catch { return 'unsure'; }
+      },
+    };
+  }
+  const selected = configuredResponseModel(environment, 'SHANNON_BACKGROUND_LLM_MODEL', environment.SHANNON_LLM_MODEL);
+  if (!selected?.apiKey.trim()) return null;
+  const model = /^[A-Za-z0-9._:-]{1,100}$/u.test(selected.model ?? '') ? selected.model! : DEFAULT_HAIKU_MODEL;
+  const claude = claudeBackground(model, { apiKey: selected.apiKey, ...(fetcher ? { fetcher } : {}), usageStore });
+  if (!claude) return null;
+  return {
+    name: 'haiku',
+    async otherTime(scopeKey, sentence, time, signal) {
+      try {
+        const at = new Date().toISOString();
+        const timeout = AbortSignal.timeout(CUTOFF_MILLISECONDS);
+        const answer = await completeStructured<string>('commitment_line', PROMISE_TIME_HAIKU_INSTRUCTIONS, JSON.stringify(promiseJudgeState(sentence, time)),
+          PROMISE_TIME_SCHEMA as unknown as Record<string, unknown>, {
+            claude, scopeKey, maximumOutputTokens: 60, effort: 'none', read: text => text, at: () => at,
+            signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+          });
+        const value = answer.ok ? (parseJson(answer.value) as { other_time?: unknown } | null)?.other_time : null;
+        return value === 'no' || value === 'yes' ? value : 'unsure';
+      } catch { return 'unsure'; }
+    },
+  };
 }
 
 /** The writer of a lifecycle operation's end (`lifecycleOutcomeLine.ts`), on the same model and budget; null when none is set. */
