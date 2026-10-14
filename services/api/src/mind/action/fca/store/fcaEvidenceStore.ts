@@ -6,6 +6,7 @@ import type { TaskSource, TaskStep } from '../../taskRuntime/taskRuntimePorts.js
 import type { ToolResult } from '../../../tools/toolRegistryPorts.js';
 import type { FcaModelOutput, FcaToolCall } from '../fcaPorts.js';
 import type { FcaAffectAppraisal, FcaDurableOutcome, FcaEvidence, FcaOutcomeContext, FcaSharedContext } from '../fcaEvidencePorts.js';
+import { heldRows, heldSegmentsOfEndedTasks, HELD_FOR_SEGMENT, isBodyAction, segmentActions, segmentDisposition, segmentSources } from './fcaEvidenceSegments.js';
 import { FcaPrepareTrace, visibleEvidenceRows, type FcaEvidenceJudge, type FcaVisibleRows } from './fcaEvidenceRows.js';
 
 export interface FcaEvidenceOptions {
@@ -27,6 +28,8 @@ export interface FcaEvidenceOptions {
   onOutcome?(outcome: FcaDurableOutcome): void;
 }
 interface EvidenceRow {
+  /** The row's rowid, where a query selects it (`deliverOutcomes`). */
+  seq: number;
   scope_key: string; event_id: string; task_id: string; step_id: string; call_id: string; name: string;
   expectation_json: string | null; comparison_json: string | null; observation: 'pending' | 'observed' | 'unknown';
   result_json: string | null; sources_json: string; observed_at: string | null; deadline_at: string | null;
@@ -191,24 +194,76 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       .run(step.scopeKey, appraisal.eventId, appraisal.revision, step.id, step.taskId, JSON.stringify(evidence));
   }
   private deliverOutcomes() {
-    const rows = this.options.db.prepare(`SELECT e.* FROM fca_action_evidence e WHERE e.outcome_delivered=0 AND e.observation!='pending'
+    const rows = this.options.db.prepare(`SELECT e.rowid AS seq,e.* FROM fca_action_evidence e WHERE e.outcome_delivered=0 AND e.observation!='pending'
       AND EXISTS (SELECT 1 FROM fca_task_history h JOIN agent_tasks t ON t.task_id=h.task_id
       WHERE h.step_id=e.step_id AND h.task_id=e.task_id AND t.scope_key=e.scope_key) ORDER BY e.rowid`).all() as unknown as EvidenceRow[];
     for (const row of rows) {
       if (!this.rowVisible(row)) continue;
-      const result = parse<{ ok: boolean; text: string }>(row.result_json);
-      const lifecycle = row.name === 'fca.complete' || row.name === 'fca.wait';
-      const actualTaskStatus = lifecycle && result ? String((JSON.parse(result.text) as { actualStatus: string }).actualStatus) : undefined;
-      const routine = ['tool.open', 'task.list', 'task.get'].includes(row.name) || row.name === 'fca.wait' && !this.options.db.prepare(
-        `SELECT 1 FROM fca_action_evidence e WHERE e.scope_key=? AND e.task_id=? AND e.observation='observed'
-        AND e.name NOT IN ('tool.open','task.list','task.get','fca.wait','fca.complete') AND e.observed_at<=?
-        AND e.rowid>COALESCE((SELECT MAX(p.rowid) FROM fca_action_evidence p WHERE p.scope_key=e.scope_key AND p.task_id=e.task_id
-          AND p.name IN ('fca.wait','fca.complete') AND p.outcome_delivered=1),0) LIMIT 1`).get(row.scope_key, row.task_id, row.observed_at!);
-      if (!routine) this.options.onOutcome!({ scopeKey: row.scope_key, taskId: row.task_id, stepId: row.step_id, outcomeId: row.event_id, goal: row.goal,
-        action: JSON.parse(row.action_json) as FcaToolCall, expectation: parse<FcaActionExpectation>(row.expectation_json),
-        comparison: parse<FcaExpectationComparison>(row.comparison_json), observation: row.observation as 'observed' | 'unknown',
-        result, observedAt: row.observed_at!, sources: JSON.parse(row.sources_json) as TaskSource[], ...(actualTaskStatus ? { actualTaskStatus } : {}) });
-      this.options.db.prepare('UPDATE fca_action_evidence SET outcome_delivered=1 WHERE scope_key=? AND event_id=?').run(row.scope_key, row.event_id);
+      // A routine body action waits for its segment's episode (owner decision 2026-10-14, `fcaEvidenceSegments.ts`).
+      const disposition = segmentDisposition(this.options.db, row);
+      if (disposition === 'hold') {
+        this.markDelivered([row], HELD_FOR_SEGMENT);
+        continue;
+      }
+      const held = disposition === 'close' ? this.visibleHeld(heldRows<EvidenceRow>(this.options.db, row.scope_key, row.task_id, row.seq), row) : [];
+      const outcome = this.durableOutcome(row, held);
+      if (outcome.segment || !this.routineOutcome(row)) this.options.onOutcome!(outcome);
+      this.markDelivered([...held, row], 1);
+    }
+    this.closeEndedSegments();
+  }
+  private durableOutcome(row: EvidenceRow, held: readonly EvidenceRow[]): FcaDurableOutcome {
+    const result = parse<{ ok: boolean; text: string }>(row.result_json);
+    const lifecycle = row.name === 'fca.complete' || row.name === 'fca.wait';
+    const actualTaskStatus = lifecycle && result ? String((JSON.parse(result.text) as { actualStatus: string }).actualStatus) : undefined;
+    const segment = held.length || isBodyAction(row.name) ? { actions: segmentActions(this.options.db, [...held, ...isBodyAction(row.name) ? [row] : []]), closedBy: row.name } : null;
+    return { scopeKey: row.scope_key, taskId: row.task_id, stepId: row.step_id, outcomeId: row.event_id, goal: row.goal,
+      action: JSON.parse(row.action_json) as FcaToolCall, expectation: parse<FcaActionExpectation>(row.expectation_json),
+      comparison: parse<FcaExpectationComparison>(row.comparison_json), observation: row.observation as 'observed' | 'unknown',
+      result, observedAt: row.observed_at!, sources: segment ? segmentSources([...held, row]) : JSON.parse(row.sources_json) as TaskSource[],
+      ...(actualTaskStatus ? { actualTaskStatus } : {}), ...(segment ? { segment } : {}) };
+  }
+  /** A lookup, or a wait with nothing observed since the last delivered wait or completion: not an episode of its own. */
+  private routineOutcome(row: EvidenceRow): boolean {
+    return ['tool.open', 'task.list', 'task.get'].includes(row.name) || row.name === 'fca.wait' && !this.options.db.prepare(
+      `SELECT 1 FROM fca_action_evidence e WHERE e.scope_key=? AND e.task_id=? AND e.observation='observed'
+      AND e.name NOT IN ('tool.open','task.list','task.get','fca.wait','fca.complete') AND e.observed_at<=?
+      AND e.rowid>COALESCE((SELECT MAX(p.rowid) FROM fca_action_evidence p WHERE p.scope_key=e.scope_key AND p.task_id=e.task_id
+        AND p.name IN ('fca.wait','fca.complete') AND p.outcome_delivered=1),0) LIMIT 1`).get(row.scope_key, row.task_id, row.observed_at!);
+  }
+  /**
+   * The held rows still visible now, each stored source set judged once (covered by `anchor`'s just-verified sources where it can be,
+   * as in `prepare`). A held row no longer visible is not remembered: it is marked delivered and left out of the episode.
+   */
+  private visibleHeld(rows: readonly EvidenceRow[], anchor: EvidenceRow | null): EvidenceRow[] {
+    const verdicts = new Map<string, boolean>(), anchorSources = anchor ? JSON.parse(anchor.sources_json) as TaskSource[] : null;
+    const visible = rows.filter(row => {
+      const key = `${row.task_id}\u0000${row.sources_json}`;
+      if (!verdicts.has(key)) {
+        const sources = JSON.parse(row.sources_json) as TaskSource[];
+        const covered = anchorSources && anchor!.task_id === row.task_id
+          && this.options.sourcesCovered?.(row.scope_key, row.task_id, anchorSources, sources) === true;
+        verdicts.set(key, covered || this.options.sourcesVisible(row.scope_key, row.task_id, sources));
+      }
+      return verdicts.get(key)!;
+    });
+    this.markDelivered(rows.filter(row => !visible.includes(row)), 1);
+    return visible;
+  }
+  /** A task paused, stopped, failed or completed with body actions still held: their segment closes with the task's status. */
+  private closeEndedSegments() {
+    for (const ended of heldSegmentsOfEndedTasks(this.options.db)) {
+      const held = this.visibleHeld(heldRows<EvidenceRow>(this.options.db, ended.scopeKey, ended.taskId), null), last = held.at(-1);
+      if (!last) continue;
+      const actions = segmentActions(this.options.db, held), closedBy = `task_${ended.status}`;
+      this.options.onOutcome!({ ...this.durableOutcome(last, held.slice(0, -1)), outcomeId: `${last.event_id}:segment`,
+        segment: { actions, closedBy }, sources: segmentSources(held) });
+      this.markDelivered(held, 1);
+    }
+  }
+  private markDelivered(rows: readonly EvidenceRow[], value: number) {
+    for (const row of rows) {
+      this.options.db.prepare('UPDATE fca_action_evidence SET outcome_delivered=? WHERE scope_key=? AND event_id=?').run(value, row.scope_key, row.event_id);
     }
   }
   private settleLifecycle() {

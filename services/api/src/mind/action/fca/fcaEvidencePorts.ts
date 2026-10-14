@@ -20,7 +20,14 @@ export interface FcaDurableOutcome {
   observedAt: string; sources: readonly TaskSource[];
   /** Lifecycle outcomes use this committed status, never the requested completion or transport ok flag. */
   actualTaskStatus?: string;
+  /** The body actions this outcome closes a segment of (`fcaEvidenceSegments.ts`): one episode for all of them. */
+  segment?: FcaSegment;
 }
+export type FcaSegmentNotable = 'failure' | 'unknown' | 'mismatch' | 'danger' | 'first_time';
+/** One body action of a segment, as closed values: its name, whether it worked, and why it was notable. */
+export interface FcaSegmentAction { name: string; ok: boolean | null; notable?: FcaSegmentNotable }
+/** The body actions a segment's episode covers, oldest first, and what closed it (an outcome's name, or `task_<status>`). */
+export interface FcaSegment { actions: readonly FcaSegmentAction[]; closedBy: string }
 export interface FcaEvidence {
   /** Asynchronous only between its row checks (`fcaEvidenceRows.ts`). */
   prepare(step: TaskStep): Promise<FcaSharedContext>;
