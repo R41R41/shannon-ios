@@ -334,6 +334,7 @@
     "mind/action/respond/store/conversationOrchestrationPersistence.ts",
     "mind/action/respond/store/dailyMindStore.ts",
     "mind/action/respond/store/surfaceTurnStore.ts",
+    "mind/action/respond/textTurnThinking.ts",
     "mind/action/respond/turnDeadline.ts",
     "mind/action/respond/turnFeedback.ts",
     "mind/action/respond/turnRouting.ts",
