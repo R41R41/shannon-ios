@@ -7,7 +7,7 @@
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
   continuedAfterRefusal, replyFacts, strongReplyReason,
-  presentFor, presentationIdOf, publicPresentationId, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
+  presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
 } from '@shannon/cognition';
@@ -239,14 +239,13 @@ export const feelingVoice = Object.freeze({
     }, {});
   },
   /**
-   * D17 on the stored voice turn: the id its answer was presented with (review P2-3: stance included), else its face's; the public layer's
-   * with anyone else there.
+   * D17 on the stored voice turn: the id its answer was presented with (review P2-3: stance included), else its face's. The same in front
+   * of anyone (owner, 2026-10-14: 「嫉妬も甘えも出す」).
    */
-  stored: (port: FeelingPort | null, emotion: ShannonMessageEmotion, others: boolean, turn: { scopeKey: string; utteranceId?: string; at: string })
-    : ShannonMessageEmotion => {
+  stored: (port: FeelingPort | null, emotion: ShannonMessageEmotion, turn: { scopeKey: string; utteranceId?: string; at: string }): ShannonMessageEmotion => {
     if (!port?.singleFace) return emotion;
     const id = safely(() => port.events.takePresented(turn.scopeKey, turn.utteranceId ?? null, turn.at), null) ?? presentationIdOf(emotion);
-    return Object.freeze({ ...emotion, presentationId: others ? publicPresentationId(id) : id });
+    return Object.freeze({ ...emotion, presentationId: id });
   },
   ended: (handle: FeelingTurnHandle | null, input: { at: string; transcript: string; reply: string; utteranceId?: string }) => {
     if (handle) safely(() => turnEnded(handle, { at: input.at, words: input.transcript, reply: input.reply, turnId: input.utteranceId ?? input.at,

@@ -117,7 +117,6 @@ export {
   faceForMood,
   messageEmotionForOthers,
   messageEmotionKind,
-  publicPresentationId,
   SINGLE_FACE_FEELINGS,
   isSingleFaceFeeling,
   singleFace,

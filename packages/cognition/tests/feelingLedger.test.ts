@@ -136,19 +136,21 @@ describe('the one face (D12)', () => {
 
 describe('one presentation source (D17)', () => {
   const mood = { expression: 'calm' as const };
-  it('gives the face case as faceFor does, and an icon id of the public layer in front of anyone else', () => {
+  it('gives the face case as faceFor does, and the actual feeling id in front of anyone (owner: 「嫉妬も甘えも出す」)', () => {
     const state = { mood, feeling: 'jealous' as const };
     expect(presentFor(state, 'owner_alone', 'face')).toEqual(faceFor(state, 'owner_alone'));
     expect(presentFor(state, 'owner_alone', 'icon')).toEqual({ v: 1, id: 'jealous' });
-    expect(presentFor(state, 'people', 'icon')).toEqual({ v: 1, id: 'calm' });
-    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'affectionate' } }, 'stream', 'face').source).toBe('mood');
+    expect(presentFor(state, 'people', 'icon')).toEqual({ v: 1, id: 'jealous' });
+    expect(presentFor({ mood, feeling: 'affectionate' }, 'stream', 'face').source).toBe('feeling');
+    // Content stays his: the blush and her note's opinion only for the owner alone.
+    expect(presentFor({ mood, noteShown: 'sulky', tell: 'blush' }, 'stream', 'face')).toEqual({ ...mood, source: 'mood' });
     expect(presentFor({ mood, stance: { kind: 'turn', stance: 'scold' } }, 'stream', 'icon').id).toBe('annoyed');
     expect(presentFor({ mood, feeling: 'pride' }, 'owner_alone', 'icon').id).toBe('proud');
   });
 
-  it('shows a stored message to others with the public id only, and leaves a message without one as it was', () => {
+  it('shows a stored message to others with its feeling id, without the owner-only `kind`, and leaves a message without one as it was', () => {
     const message = { expression: 'jealous' as const, valence: 0, arousal: 0, openness: 0, kind: 'jealous' as const, presentationId: 'jealous' };
-    expect(messageEmotionForOthers(message)).toEqual({ expression: 'jealous', valence: 0, arousal: 0, openness: 0, presentationId: 'calm' });
+    expect(messageEmotionForOthers(message)).toEqual({ expression: 'jealous', valence: 0, arousal: 0, openness: 0, presentationId: 'jealous' });
     const plain = { expression: 'calm' as const, valence: 0, arousal: 0, openness: 0 };
     expect(messageEmotionForOthers(plain)).toBe(plain);
   });
@@ -165,9 +167,9 @@ describe('the twelve single faces (desktop faces-12)', () => {
     expect(presentFor({ mood, feeling: 'hurt' }, 'owner_alone', 'face')).toMatchObject({ expression: 'sad', feeling: 'holdingBackTears' });
   });
 
-  it('keep 「ツン」 for the owner alone, and stay out of the emotion kinds (the voice judge and the prompts are untouched)', () => {
+  it('show 「ツン」 in front of anyone, and stay out of the emotion kinds (the voice judge and the prompts are untouched)', () => {
     expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'owner_alone', 'icon').id).toBe('tsun');
-    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'people', 'face').feeling).toBeUndefined();
+    expect(presentFor({ mood, stance: { kind: 'turn', stance: 'sulk' } }, 'people', 'face').feeling).toBe('tsun');
     expect(Object.keys(SINGLE_FACE_FEELINGS)).toHaveLength(12);
     expect(Object.keys(SINGLE_FACE_FEELINGS).some(name => (SHANNON_EMOTION_KINDS as readonly string[]).includes(name))).toBe(false);
   });

@@ -23,7 +23,6 @@ describe('the typical scenes (fake models)', () => {
       for (const turn of result.turns.filter(item => item.audience === 'others')) {
         expect(turn.block, scene.id).not.toContain('甘える');
         expect(turn.stance, scene.id).toBe('neutral');
-        expect(['jealous', 'tender', 'tsun'], scene.id).not.toContain(turn.presentationId);
       }
       for (const turn of result.turns.filter(item => item.audience === 'owner')) expect(turn.stance, scene.id).toBe('affectionate');
       // Every touch of a scene with the owner alone reaches her ledger, asked or wordless.

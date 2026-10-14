@@ -290,13 +290,13 @@ describe('the presentation id of each message (D17)', () => {
     expect('presentationId' in plain.messageEmotion).toBe(false);
   });
 
-  it('is on a stored voice turn, the public layer\'s with someone else listening', async () => {
+  it('is on a stored voice turn, the same feeling id with someone else listening (owner: 「嫉妬も甘えも出す」)', async () => {
     const on = await harnessWith({ turn: false });
     const alone = (await on.persist('ねえ', 'もう、知らないです', { emotion: { primary: 'jealous', intensity: 0.6 } })).body as { messageEmotion: { presentationId?: string } };
     expect(alone.messageEmotion.presentationId).toBe('jealous');
     const others = (await on.persist('ねえ', 'もう、知らないです', { emotion: { primary: 'jealous', intensity: 0.6 }, companionPresent: true })).body as
       { messageEmotion: { presentationId?: string } };
-    expect(others.messageEmotion.presentationId).toBe('calm');
+    expect(others.messageEmotion.presentationId).toBe('jealous');
   });
 });
 

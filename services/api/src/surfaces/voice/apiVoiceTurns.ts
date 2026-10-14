@@ -64,7 +64,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
   const companion = request.body.companionPresent === true || ownerSaysCompanionPresent(userMessage)
     ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
-  const storedEmotion = feelingVoice.stored(dependencies.feeling ?? null, messageEmotion, 'audience' in companion, // ADR-0013 D17
+  const storedEmotion = feelingVoice.stored(dependencies.feeling ?? null, messageEmotion, // ADR-0013 D17
     { scopeKey, at: completedAt, ...(utteranceId ? { utteranceId } : {}) });
   // He answered her line aloud, so it becomes conversation: her line, his words, her reply. It is display history
   // (no user side, no experience). With someone else able to hear, the turn follows the companion rules and her

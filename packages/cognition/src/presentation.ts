@@ -1,4 +1,4 @@
-import { faceForEmotionKind, publicPresentationId, singleFace, type ShannonFace, type SingleFaceFeeling } from './expression.js';
+import { faceForEmotionKind, singleFace, type ShannonFace, type SingleFaceFeeling } from './expression.js';
 import type { ComebackDrawer } from './comebackDrawer.js';
 import type { FeelingRegister } from './feelingEvent.js';
 import type { FeelingAudience } from './feelingEvent.js';
@@ -9,11 +9,6 @@ import type { ShannonEmotionKind } from './types.js';
  * The one presentation source (Syzygy ADR-0013 D12, D17, stage 1). Pure. The face, the per-message icon id and later the register of
  * her text all come from one state and one audience; the face case is `faceFor`.
  */
-/** Feelings of the owner-only layer (甘え, 嫉妬, and their kin): shown to the owner alone (ADR-0013 §4.4, D17). */
-const OWNER_ONLY_KINDS: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
-  'affectionate', 'jealous', 'lightPossessive', 'attentionSeeking', 'lonely', 'leftOut', 'reassurance', 'tender', 'hidingHappiness',
-]);
-
 const STANCE_FACE: Readonly<Record<Exclude<FeelingStance, 'neutral'>, ShannonEmotionKind>> = Object.freeze({
   accept: 'gentle', shy: 'flustered', sulky: 'annoyed', exasperated: 'deadpan', snipe: 'selfDeprecating', scold: 'annoyed', rebuff: 'annoyed',
   refuse_body: 'annoyed', tease: 'teasing', cover_up: 'hidingHappiness', worry: 'caring', not_play_along: 'deadpan', talk_back: 'indignant',
@@ -74,21 +69,21 @@ function stanceKind(stance: NonNullable<FeelingFaceState['stance']>): ShannonEmo
 
 /**
  * The one face (D12): one function from the state and the audience. Her words' cue (her own 「ごめん」), the touch table and the note's
- * `shown` do not override it; a stance does. The blush (her true feeling showing through) is for the owner alone, and so are the
- * feelings of the owner-only layer (甘え, 嫉妬…): in front of anyone else they are not shown (D17, §4.4).
+ * `shown` do not override it; a stance does. Every face may show in front of anyone, jealousy and fondness included (owner decision
+ * 2026-10-14, form: 「嫉妬も甘えも出す」); what stays the owner's is content: the blush (her true feeling showing through) and her inner
+ * note's opinion are his alone.
  */
 function face(state: FeelingFaceState, audience: FeelingAudience): FeelingFace {
   const owner = audience === 'owner_alone';
   const tell = owner && state.tell === 'blush' ? { tell: 'blush' as const } : {};
-  const shown = (kind: ShannonEmotionKind | undefined): kind is ShannonEmotionKind => kind !== undefined && kind !== 'neutral'
-    && (owner || !OWNER_ONLY_KINDS.has(kind));
+  const shown = (kind: ShannonEmotionKind | undefined): kind is ShannonEmotionKind => kind !== undefined && kind !== 'neutral';
   const of = (kind: ShannonEmotionKind, source: FeelingFace['source'], twelve?: SingleFaceFeeling): FeelingFace =>
     ({ ...(twelve ? singleFace(twelve) : faceForEmotionKind(kind)), ...tell, kind, source });
   if (state.overridden) {
     return shown(state.feeling) ? { ...faceForEmotionKind(state.feeling), kind: state.feeling, source: 'override' } : { ...state.mood, source: 'override' };
   }
   const stance = state.stance ? stanceKind(state.stance) : undefined;
-  if (shown(stance)) return of(stance, 'stance', twelveOf(state, owner));
+  if (shown(stance)) return of(stance, 'stance', twelveOf(state));
   const kept = state.register ? REGISTER_SINGLE_FACE[state.register] : undefined;
   if (kept && !shown(state.feeling)) return { ...singleFace(kept), ...tell, source: 'stance' };
   if (shown(state.feeling) && !OWN_APOLOGY.has(state.feeling)) return of(state.feeling, 'feeling', KIND_SINGLE_FACE[state.feeling]);
@@ -96,11 +91,10 @@ function face(state: FeelingFaceState, audience: FeelingAudience): FeelingFace {
   return { ...state.mood, ...tell, source: 'mood' };
 }
 
-/** The single face of a stance (or of the drawer it reaches into); 「ツン」 is for the owner alone. */
-function twelveOf(state: FeelingFaceState, owner: boolean): SingleFaceFeeling | undefined {
+/** The single face of a stance (or of the drawer it reaches into). */
+function twelveOf(state: FeelingFaceState): SingleFaceFeeling | undefined {
   const turn = state.stance?.kind === 'turn' ? state.stance.stance : undefined;
-  const twelve = (turn ? STANCE_SINGLE_FACE[turn] : undefined) ?? (state.drawer ? DRAWER_SINGLE_FACE[state.drawer] : undefined);
-  return twelve === 'tsun' && !owner ? undefined : twelve;
+  return (turn ? STANCE_SINGLE_FACE[turn] : undefined) ?? (state.drawer ? DRAWER_SINGLE_FACE[state.drawer] : undefined);
 }
 
 /** The face case of `presentFor`. */
@@ -138,6 +132,5 @@ export function presentFor(state: FeelingFaceState, audience: FeelingAudience, s
 export function presentFor(state: FeelingFaceState, audience: FeelingAudience, surface: 'face' | 'icon'): FeelingFace | Presentation {
   const shown = face(state, audience);
   if (surface === 'face') return shown;
-  const id = presentationIdOf(shown);
-  return { v: PRESENTATION_VERSION, id: audience === 'owner_alone' ? id : publicPresentationId(id) };
+  return { v: PRESENTATION_VERSION, id: presentationIdOf(shown) };
 }

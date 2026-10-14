@@ -46,9 +46,9 @@ describe('review of stage 1', () => {
     handle.decision = { stance: 'snipe', intensity: 'strong', drawer: 'none', register: 'normal', source: 'jev' };
     const answered = feelingVoice.presented(handle, { primary: 'happy', intensity: 0.4 } as never, snapshot, at, 'u1');
     expect(answered.presentationId).toBe('irked');
-    const stored = feelingVoice.stored(port, { expression: 'joyful', valence: 0, arousal: 0, openness: 0 }, false, { scopeKey: 'owner', utteranceId: 'u1', at });
+    const stored = feelingVoice.stored(port, { expression: 'joyful', valence: 0, arousal: 0, openness: 0 }, { scopeKey: 'owner', utteranceId: 'u1', at });
     expect(stored.presentationId).toBe('irked');
-    const later = feelingVoice.stored(port, { expression: 'joyful', valence: 0, arousal: 0, openness: 0 }, false, { scopeKey: 'owner', utteranceId: 'u1', at });
+    const later = feelingVoice.stored(port, { expression: 'joyful', valence: 0, arousal: 0, openness: 0 }, { scopeKey: 'owner', utteranceId: 'u1', at });
     expect(later.presentationId).toBe('joyful');
   });
 

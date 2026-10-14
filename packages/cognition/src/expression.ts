@@ -72,12 +72,6 @@ export interface ShannonMessageEmotion extends ShannonFace {
   presentationId?: string;
 }
 
-/** Presentation ids of the owner-only layer (嫉妬, 甘え): never on a message anyone else sees (ADR-0013 D17, §4.4). */
-const OWNER_ONLY_PRESENTATION_IDS: ReadonlySet<string> = new Set(['jealous', 'tender', 'tsun']);
-
-/** A presentation id as anyone but the owner may see it: an owner-only one becomes 「calm」. */
-export const publicPresentationId = (id: string): string => (OWNER_ONLY_PRESENTATION_IDS.has(id) ? 'calm' : id);
-
 const face = (expression: ShannonExpression, feeling?: ShannonFeeling): ShannonFace =>
   Object.freeze(feeling ? { expression, feeling } : { expression });
 
@@ -162,10 +156,9 @@ export function messageEmotionKind(feeling?: ShannonExpressiveEmotion): ShannonE
  * 2026-10-05): the face as before, without `kind`. `kind` is sent only to the owner alone; it may still be stored.
  */
 export function messageEmotionForOthers(emotion: ShannonMessageEmotion): ShannonMessageEmotion {
-  if (emotion.kind === undefined && emotion.presentationId === undefined) return emotion;
-  const { kind: _kind, presentationId, ...face } = emotion;
-  // ADR-0013 D17: the public layer's id only (absent while the switch is off, so this is as before).
-  return Object.freeze(presentationId === undefined ? face : { ...face, presentationId: publicPresentationId(presentationId) });
+  if (emotion.kind === undefined) return emotion;
+  const { kind: _kind, ...face } = emotion;
+  return Object.freeze(face);
 }
 
 export function createShannonMessageEmotion(
