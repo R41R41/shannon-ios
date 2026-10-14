@@ -57,10 +57,10 @@ export class SQLiteFeelingShadowStore {
     return Number(this.database.prepare('DELETE FROM shannon_feeling_shadow WHERE scope_key = ? AND occurred_at < ?').run(scopeKey, before).changes);
   }
 
-  /** The rows that name a source (what forgetting can reach), oldest first. */
+  /** The rows that name a source (what forgetting can reach): the newest `limit` (review L-a), oldest first. */
   sourced(scopeKey: string, limit = 5_000): { personKey: string; audience: string; sceneId: string | null; sourceId: string; at: string }[] {
     return (this.database.prepare(`SELECT person_key, audience, scene_id, source_id, occurred_at FROM shannon_feeling_shadow
-      WHERE scope_key = ? AND source_id IS NOT NULL ORDER BY occurred_at ASC LIMIT ?`).all(scopeKey, limit) as Row[]).map(row => ({
+      WHERE scope_key = ? AND source_id IS NOT NULL ORDER BY occurred_at DESC LIMIT ?`).all(scopeKey, limit) as Row[]).reverse().map(row => ({
       personKey: String(row.person_key), audience: String(row.audience), sceneId: typeof row.scene_id === 'string' ? row.scene_id : null,
       sourceId: String(row.source_id), at: String(row.occurred_at) }));
   }

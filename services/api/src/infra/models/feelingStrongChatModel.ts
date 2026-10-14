@@ -101,7 +101,9 @@ export class FeelingReplyChatModel implements ShannonChatModel {
       return first;
     }
     const { tools: _tools, ...words } = request;
-    const rewrite = this.answer({ ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') });
+    const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
+    // Review L-b: the rewrite is the same model's, but outside the strong turn's release, so a failed rewrite never frees the cap twice.
+    const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
     const second = await within(rewrite, this.options.rewriteDeadlineMilliseconds ?? REWRITE_DEADLINE_MILLISECONDS);
     if (!second || second.outOfTime) {
       this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out');
