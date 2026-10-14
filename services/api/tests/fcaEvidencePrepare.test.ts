@@ -83,7 +83,7 @@ describe('the evidence store\'s choice of rows (P1)', () => {
     // step's verified sources and the eight admitted sets again at its end.
     expect(f.calls.visible).toBe(2 + 8 + 1 + 8);
     expect(lines()).toHaveLength(1);
-    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms select=\d+ms affect=\d+ms rows=8 rowChecks=16 covered=0 reduced=0 deduped=0 walks=0 reused=0 parsedBytes=\d+ yields=8$/u);
+    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms select=\d+ms affect=\d+ms rows=8 rowChecks=16 covered=0 reduced=0 deduped=0 walks=0 partial=0 reused=0 parsedBytes=\d+ yields=8$/u);
   });
 
   it('judges an identical stored set once, and goes on past hidden rows', async () => {
@@ -171,8 +171,10 @@ describe('a row of the step\'s own task covered by its verified sources (P1 b): 
     const walks = w.visible.walks!();
     const context = await w.evidence.prepare(stepOf(w.task, verified));
     expect(context.recentOutcomes.map(item => item.eventId)).toEqual([ids[0]]);
-    // The step's verified sources and the three hidden rows were walked; the covered one was not.
-    expect(w.visible.walks!().walked - walks.walked).toBe(1 + 3);
+    // The step's verified sources were walked whole, the three hidden rows over what the step's walk left (each still hidden), and
+    // the covered one not at all.
+    expect(w.visible.walks!().walked - walks.walked).toBe(1);
+    expect(w.visible.walks!().partial! - walks.partial!).toBe(3);
     // Each verdict as the guard gives it on its own, and coverage only where the row is visible.
     expect(w.visible.sources('owner', w.task, verified)).toBe(true);
     for (const [label, sources, shown] of cases) {

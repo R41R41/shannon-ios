@@ -24,7 +24,7 @@ export interface FcaEvidenceOptions {
   /** What a walk of `candidate` still checks once `verified` was found visible (`FcaSourceGuard.residual`); null: walk it whole. */
   sourcesResidual?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): readonly TaskSource[] | null;
   /** The source guard's walk counts (`FcaSourceGuard.walks`), for the prepare line only. */
-  walkCounts?(): { walked: number; reused: number };
+  walkCounts?(): { walked: number; reused: number; partial?: number };
   taskVisible(scopeKey: string, taskId: string): boolean;
   /** Persist lineage for other tasks whose public outcomes/causes enter this task's native history. */
   observeContext?(step: TaskStep, taskIds: readonly string[]): boolean;
