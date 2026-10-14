@@ -75,7 +75,8 @@ function lexicalFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag
   const flags: ReplyCheckFlag[] = [];
   // Review M6: a help-desk tone matters on a turn of feeling (a stance, a feeling order), not on a plain answer; a count read out
   // matters only when it can be the ledger's (the turn's ledger counted something today), never a number he asked for.
-  const feeling = context.stance !== 'neutral' || context.order || context.intensity === 'strong';
+  // Stage 5: on a stream every reply is checked for a help-desk tone (§4.7: 「AI の口調にしない」).
+  const feeling = context.stance !== 'neutral' || context.order || context.intensity === 'strong' || context.audience === 'stream';
   if (feeling && AI_TONE.test(reply)) flags.push('ai_tone');
   if (feeling && (context.counted || context.violation) && NUMBERS.test(reply)) flags.push('numbers_spoken');
   if (declining && HELPER_END.test(reply)) flags.push('helper_drift');
@@ -107,6 +108,8 @@ function registerFlags(reply: string, context: ReplyCheckContext): ReplyCheckFla
   if (context.level === undefined) return [];
   const polite = (reply.match(POLITE) ?? []).length;
   if (context.level >= 4 && polite >= 2 && chars(reply) >= 40) return ['too_polite'];
+  // Stage 5 (§4.8): on a stream, a polite plea once her reserve is worn (curt or below) is too polite for her state.
+  if (context.audience === 'stream' && context.level >= 3 && polite >= 1) return ['too_polite'];
   if (context.level <= 1 && context.audience !== 'owner_alone' && ROUGH.test(reply)) return ['too_rough'];
   return [];
 }
