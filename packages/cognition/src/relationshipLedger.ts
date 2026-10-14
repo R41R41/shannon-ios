@@ -109,7 +109,9 @@ const round = (value: number) => Math.round(value * 1000) / 1000;
 
 /** A day's signals for one person: every audience the person's events were in, folded per key. */
 export function daySignals(events: readonly FeelingEvent[], personKey: string): DaySignals {
-  const mine = events.filter(event => event.personKey === personKey);
+  // A stream comment counts as the words of its kind (an apology, a kindness, talk), as the appraisal reads it.
+  const mine = events.filter(event => event.personKey === personKey)
+    .map(event => (event.kind === 'comment' && event.facts.commentKind ? { ...event, kind: event.facts.commentKind } : event));
   const keys = [...new Set(mine.map(event => `${event.audience}\u0000${event.sceneId ?? ''}`))];
   let violation = 0, provocation = 0, kindness = 0, apology = 0, blame = 0;
   for (const joined of keys) {
