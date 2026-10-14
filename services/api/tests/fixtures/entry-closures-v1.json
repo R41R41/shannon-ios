@@ -310,6 +310,7 @@
     "mind/action/reflex/jevTouchSelector.ts",
     "mind/action/reflex/reflexCandidates.ts",
     "mind/action/reflex/reflexController.ts",
+    "mind/action/reflex/reflexGovernor.ts",
     "mind/action/reflex/reflexHandoff.ts",
     "mind/action/reflex/reflexPorts.ts",
     "mind/action/respond/apiPromptProjection.ts",
