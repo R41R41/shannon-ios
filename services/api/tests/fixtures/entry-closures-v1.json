@@ -662,6 +662,7 @@
     "surfaces/body/store/bodyLookStore.ts",
     "surfaces/body/store/bodyReactionStore.ts",
     "surfaces/body/store/bodyStore.ts",
+    "surfaces/body/store/bodyTouchFacts.ts",
     "surfaces/device/deviceActionRoutes.ts",
     "surfaces/device/deviceActions.ts",
     "surfaces/device/store/deviceActionStore.ts",
