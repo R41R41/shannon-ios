@@ -255,7 +255,7 @@ export class MemoryWithholding {
     const started = lineage.chainStartedAt;
     const relevant = new Set(this.rules.filter(rule => !started || rule.boundary >= started).map(rule => rule.memoryId));
     const scoped = relevant.size === this.rules.length ? this : relevant.size === 0 ? null : new MemoryWithholding(
-      { ...this.state, memoryControls: this.state.memoryControls.filter(control => relevant.has(control.memoryId)) },
+      scopedState(this.state, relevant),
       this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
     const tainted = Boolean(scoped && scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message))));
     this.summaryDecisions.set(threadId, tainted);
@@ -279,7 +279,7 @@ export class MemoryWithholding {
     const relevant = new Set(this.rules.filter(rule => rule.boundary >= summary.chainStartedAt).map(rule => rule.memoryId));
     if (!relevant.size) return false;
     const scoped = relevant.size === this.rules.length ? this : new MemoryWithholding(
-      { ...this.state, memoryControls: this.state.memoryControls.filter(control => relevant.has(control.memoryId)) },
+      scopedState(this.state, relevant),
       this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
     return scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message)));
   }
@@ -300,6 +300,11 @@ export class MemoryWithholding {
       return experience ? this.withholdsExperience(experience) || !isMemoryEvidenceVisible(this.state, experience.userMessage) : false;
     });
   }
+}
+
+/** The state with only these items' controls; frozen like a stored state, so its withheld evidence is gathered once (`memoryEvidence.ts`). */
+function scopedState(state: CompanionStateSnapshot, relevant: ReadonlySet<string>): CompanionStateSnapshot {
+  return Object.freeze({ ...state, memoryControls: Object.freeze(state.memoryControls.filter(control => relevant.has(control.memoryId))) });
 }
 
 /** The stores used in production implement the conversation store as well; a bare index does not. */
