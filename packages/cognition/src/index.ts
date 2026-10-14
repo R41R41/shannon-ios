@@ -359,7 +359,7 @@ export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInt
   type SelfInterestChange, type SelfInterestSnapshot, type SelfInterestDetail, type SelfInterestEvidenceView, type SelfInterestVisible } from './selfInterests.js';
 // Syzygy ADR-0012 stage 1: her character core and her inner note (pure parts; `SHANNON_INNER_NOTE`).
 export {
-  CHARACTER_CORE, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock, characterCoreHashInput, shannonOneLineVoice, type CharacterCore,
+  CHARACTER_CORE, CHARACTER_CORE_SPEECH, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock, characterCoreHashInput, shannonOneLineVoice, type CharacterCore,
 } from './characterCore.js';
 export { INNER_NOTE_UNPLEASANT_LINE } from './emotionContinuity.js';
 export {
@@ -373,8 +373,8 @@ export {
   type SettleInnerNoteInput,
 } from './innerNote.js';
 export {
-  FALSEHOOD_LINE, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE, apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt,
-  teasingIn,
+  ADDRESS_WHEN_NATURAL, FALSEHOOD_LINE, INNER_NOTE_ADDRESS_LINE, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
+  apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt, teasingIn, touchConsentIn, type TouchConsent,
 } from './innerNoteWords.js';
 export {
   INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,

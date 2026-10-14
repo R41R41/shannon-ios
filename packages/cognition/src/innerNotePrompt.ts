@@ -28,7 +28,7 @@ const FIELDS = `[書く項目]（合わせて200〜300字ほど。各項目は1�
 - honne（本音）: ほんとうはどう感じているか。
 - tatemae（建て前）: 何を見せるか。
 - reason（理由）: なぜそれを見せるか。
-- plan（つもり）: どれくらいの間、どうしているつもりか。
+- plan（つもり）: どれくらいの間、どうしているつもりか。構えとして書く（次に言うせりふは書かない。言葉はその時の${I}が決める）。
 - bottom（底）: ${OWNER}への気持ち（好き・信頼）がいまどうか。
 本音と建て前は食い違っていてもいい。`;
 
@@ -45,7 +45,8 @@ ${LENGTH_FACT}
 const QUESTIONS = `[振り返りの問い]
 - いま本当はどう感じている？　それを見せたい？
 - 見せないなら、何を見せる？　なぜ？
-- いつごろまで、そうしているつもり？
+- いつごろまで、そうしているつもり？（言うせりふではなく、構えとして）
+- 触れられたのなら、それはわざと？　回数・場所・直前の会話から、${I}はどう読む？
 - ${OWNER}のことは、いまどう思っている？
 - 自分の性格の核と食い違っていない？`;
 
@@ -81,6 +82,13 @@ export interface InnerNoteReflectionFacts {
   yesterday: string | null;
   /** The last lines of the conversation in progress, oldest first (the owner alone only). */
   recent: readonly { role: 'user' | 'assistant'; content: string }[];
+  /**
+   * Her body this day (owner alone only; 2026-10-14): how often each part was touched since her day began, and what she said lately
+   * because of touches, oldest first. Facts, so that she reads for herself whether it was on purpose. Absent: nothing is said of it.
+   */
+  touches?: { today: readonly { part: string; count: number }[]; lines: readonly string[] };
+  /** This day's turns that asked, allowed or refused touching her, oldest first (events with `consent`). */
+  consents?: readonly InnerNoteEvent[];
 }
 
 function minutesLeft(at: string, until: string): string {
@@ -102,6 +110,18 @@ function feelingLine(feeling: InnerNoteReflectionFacts['feeling']): string {
   return `[数値の気持ち]（時間で薄れる側。事実として）${present}。${lingering}。`;
 }
 
+/** Her body this day and the turns about touching her, as facts (absent: nothing). */
+function touchLines(facts: InnerNoteReflectionFacts): string[] {
+  const today = facts.touches?.today.filter(item => item.count > 0) ?? [];
+  const lines = facts.touches?.lines ?? [];
+  const consents = (facts.consents ?? []).slice(-3);
+  return [
+    ...(today.length ? [`[今日、体に触れられた回数]（場所ごと。事実として）${today.map(item => `${item.part} ${item.count}回`).join('、')}`] : []),
+    ...(lines.length ? [`[触れられて${I}が言ったこと]（古い順）${lines.map(line => `「${clippedNoteText(line, 60)}」`).join('')}`] : []),
+    ...(consents.length ? [['[触れることについての会話]（今日。事実として）', ...consents.map(event => innerNoteEventLine(event, facts.at, facts.timeZone))].join('\n')] : []),
+  ];
+}
+
 /** The facts of one reflection, as its input (never in the cached part). */
 export function innerNoteReflectionInput(facts: InnerNoteReflectionFacts): string {
   const { at, timeZone } = facts;
@@ -113,6 +133,7 @@ export function innerNoteReflectionInput(facts: InnerNoteReflectionFacts): strin
     ...(facts.previous ? previousLines(facts.previous, at, timeZone) : ['[前のメモ] なし（今日はまだ書いていない）']),
     counts,
     ['[起きたこと]', ...facts.events.slice(-INNER_NOTE_LIMITS.events).map(event => innerNoteEventLine(event, at, timeZone))].join('\n'),
+    ...touchLines(facts),
     feelingLine(facts.feeling),
     ...(recent.length ? [['[直前の会話]', ...recent].join('\n')] : []),
     ...(facts.yesterday ? [`[前の日のこと]（出来事として覚えているだけ。態度は持ち越さない）${facts.yesterday}`] : []),

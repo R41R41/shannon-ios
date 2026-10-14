@@ -26,6 +26,8 @@ export const INNER_NOTE_SERVICE_LIMITS = Object.freeze({
   touchRefreshMilliseconds: 20 * 60_000,
   touchHeld: 8,
   touchReflectionsPerDay: 24,
+  /** A turn that says 「触っていい？」 without naming her or a part counts as about her body only this soon after a touch of his. */
+  consentTouchMilliseconds: 5 * 60_000,
   /** The provider call's own bound. */
   timeoutMilliseconds: 30_000,
   maximumOutputTokens: 2_400, // adaptive thinking shares it: the JSON must not be cut (a cut answer is logged by its stop code).

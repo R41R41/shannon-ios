@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from '../../../contracts/bodyContract.js';
+import { partCounts, recentTouchFacts, type PartCount, type TouchFact } from './bodyTouchFacts.js';
+export type { PartCount, TouchFact } from './bodyTouchFacts.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from '../../../contracts/bodyReactionContract.js';
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchPart, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from '../bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
@@ -326,6 +328,16 @@ export class SQLiteBodyReactionStore {
       ORDER BY o.decided_at DESC LIMIT 200
     `).all(scopeKey, part, audience, before) as unknown as Array<{ burst_id: string; stance: string }>;
     return rows.flatMap(row => isBodyTouchStance(row.stance) ? [{ burstId: row.burst_id, stance: row.stance }] : []);
+  }
+
+  /** The touches of one audience since an instant, with her stance and line (`bodyTouchFacts.ts`). */
+  recentTouchFacts(scopeKey: string, audience: BodyAudience, since: string, until: string, limit: number): TouchFact[] {
+    return recentTouchFacts(this.database, scopeKey, audience, since, until, limit);
+  }
+
+  /** How often each part was touched with this audience since an instant, by burst (`bodyTouchFacts.ts`). */
+  partCounts(scopeKey: string, audience: BodyAudience, since: string, until: string): PartCount[] {
+    return partCounts(this.database, scopeKey, audience, since, until);
   }
 
   /** Stage 2: the stances she gave on the touches of one burst. */

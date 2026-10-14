@@ -42,11 +42,20 @@ export interface InnerNoteTouch {
   /** The touch as she remembers it (`experience:<burst id>`): forgetting it, or its retention, takes the notes it prompted. */
   sourceId?: string;
   phrase: string;
-  /** The kind of touch (`poke`, `pet`, ...): a session of the same kind and stance is one reflection. */
+  /** The kind of touch (`poke`, `pet`, ...): a session of the same kind, part and stance is one reflection. */
   kind?: string;
+  /** The part touched, in her words (胸); another part than the session's makes her reflect at once (owner decision 2026-10-14). */
+  part?: string;
   stance?: string;
   reflex?: string;
   said?: string;
+  /** What she said lately because of touches, oldest first (owner alone). */
+  lines?: readonly string[];
+}
+
+/** What her body tells her note when it reflects: how often each part was touched by the owner alone since an instant, in her words. */
+export interface InnerNoteBodyReader {
+  partCounts(scopeKey: string, since: string, at: string): readonly { part: string; count: number }[];
 }
 
 export interface InnerNotePort {
@@ -61,6 +70,8 @@ export interface InnerNotePort {
   touched(touch: InnerNoteTouch): void;
   /** A source known later by its stored id (a voice turn's utterance once the app stored the turn). */
   bind(scopeKey: string, from: string, to: string): void;
+  /** Her body, handed once at composition (`BodyReactions.useInnerNote`); its counts are read at reflection, after any forgetting. */
+  useBody?(reader: InnerNoteBodyReader): void;
 }
 
 const safely = <T>(work: () => T, fallback: T): T => { try { return work(); } catch { return fallback; } };

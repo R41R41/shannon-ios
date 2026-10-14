@@ -1,7 +1,7 @@
 import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore, type ShannonTouchOutcome } from '@shannon/cognition';
 import { BODY_LIMITS } from '../../contracts/bodyContract.js';
 import { BODY_REACTION_LIMITS } from '../../contracts/bodyReactionContract.js';
-import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
+import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchFact, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from '../memory/touchMemoryPorts.js';
 import { reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/predictionPorts.js';
@@ -64,11 +64,14 @@ export interface ObserveOptions {
 /** One line of what happened to her body in this sitting, for the reaction prompt. */
 export interface SittingTouches {
   bursts: readonly StoredTouchBurst[];
-  /** What she said because of touches lately, oldest first. */
+  /** What she said because of touches lately, oldest first (at most `innerSaidLines`). */
   said: readonly string[];
   /** Of those, the lines she said while other people could hear: the only ones repeated to the model in front of others. */
   saidOpen: readonly string[];
 }
+
+/** Her recent lines the reaction may be told: the touch prompt takes `saidLines` of them, or `innerSaidLines` with her note on. */
+const SAID_LINES = Math.max(BODY_REACTION_LIMITS.saidLines, BODY_REACTION_LIMITS.innerSaidLines);
 
 export class BodyTouches {
   private readonly reportError: (error: unknown) => void;
@@ -200,9 +203,23 @@ export class BodyTouches {
     const bursts = this.dependencies.store.recentBursts(scopeKey, since, at, 12).filter(burst => this.remembered(snapshot, burst.id));
     return {
       bursts: bursts.slice(0, BODY_REACTION_LIMITS.sittingKinds),
-      said: [...bursts].reverse().flatMap(burst => burst.said).slice(-BODY_REACTION_LIMITS.saidLines),
-      saidOpen: [...bursts].reverse().flatMap(burst => burst.saidOpen).slice(-BODY_REACTION_LIMITS.saidLines),
+      said: [...bursts].reverse().flatMap(burst => burst.said).slice(-SAID_LINES),
+      saidOpen: [...bursts].reverse().flatMap(burst => burst.saidOpen).slice(-SAID_LINES),
     };
+  }
+
+  /** The owner's touches since an instant, newest first, with her stance and her line; without what he had her forget. */
+  recentFacts(scopeKey: string, snapshot: CompanionStateSnapshot, since: string, at: string, limit: number): TouchFact[] {
+    return this.dependencies.store.recentTouchFacts(scopeKey, 'owner', since, at, limit).filter(fact => this.remembered(snapshot, fact.burstId));
+  }
+
+  /** How often each part (the finer part, else the region; null for neither) was touched by the owner alone since an instant. */
+  partCounts(scopeKey: string, snapshot: CompanionStateSnapshot, since: string, at: string): Map<string | null, number> {
+    const counts = new Map<string | null, number>();
+    for (const row of this.dependencies.store.partCounts(scopeKey, 'owner', since, at)) {
+      if (this.remembered(snapshot, row.burstId)) counts.set(row.part, (counts.get(row.part) ?? 0) + row.count);
+    }
+    return counts;
   }
 
   /** A memory the owner had her forget is neither continued nor told to the reaction model. */

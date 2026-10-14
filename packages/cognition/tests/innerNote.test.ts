@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHARACTER_CORE, FALSEHOOD_LINE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
+  CHARACTER_CORE, ADDRESS_WHEN_NATURAL, FALSEHOOD_LINE, INNER_NOTE_ADDRESS_LINE, INITIAL_SHANNON_EXPRESSIVE_EMOTION, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
   innerNoteExpired, innerNoteExpressiveEmotionPrompt, INNER_NOTE_REFLECTION_SCHEMA, INNER_NOTE_UNPLEASANT_LINE,
   boundedUntil, buildExpressiveEmotionPrompt, gatedIntent, goodnightIn, innerNoteActive, innerNoteDay, innerNoteFace,
   innerNoteReflectionInput, innerNoteReflectionInstructions, innerNoteRouteSummary, innerNoteTouchBlock, innerNoteTurnBlock,
@@ -207,7 +207,7 @@ describe('prompt cleanup lines only behind the switch (ADR-0012 D5.1)', () => {
     expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain(FALSEHOOD_LINE);
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'owner')).toContain(INNER_NOTE_HONESTY_LINE);
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'others').replace(INNER_NOTE_EXPRESSIVE_LINE, LIGHT_SULKING_LINE)
-      .replace(INNER_NOTE_HONESTY_LINE, FALSEHOOD_LINE)).toBe(buildExpressiveEmotionPrompt(emotion, 'others'));
+      .replace(INNER_NOTE_HONESTY_LINE, FALSEHOOD_LINE).replace(INNER_NOTE_ADDRESS_LINE, ADDRESS_WHEN_NATURAL)).toBe(buildExpressiveEmotionPrompt(emotion, 'others'));
     expect(INNER_NOTE_UNPLEASANT_LINE).toContain('心のメモ');
     expect(INNER_NOTE_UNPLEASANT_LINE).not.toContain('謝罪');
     expect(lingeringFeelingLine({ emotionClock: undefined, lingering: [] } as never, AT, undefined, { innerNote: true })).toBe('');

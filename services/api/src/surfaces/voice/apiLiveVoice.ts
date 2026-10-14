@@ -97,8 +97,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall | null;
   people?: PeopleMemory;
-  /** Her line from a touch (`bodyReaction.ts`), named by the first voice turn that answers it. */
-  reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null };
+  reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null; // Her line from a touch, for the turn
+    voiceTouchContext?: import('../../contracts/bodyReactionContract.js').VoiceTouchContext }; // and what a turn is told of her body.
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
@@ -339,7 +339,7 @@ async function completeLiveVoiceDelegation(
     // only what she saw of the room stays, marked for the speak-time check. A friend's own call gets nothing.
     temporaryGuest ? '' : alone ? dependencies.autonomy?.pursuitPrompt(scopeKey)
       : guardedShannonSeenPrompt(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '', focusGate.unlabelledMarker),
-    taskPrompt,
+    taskPrompt, dependencies.reactions?.voiceTouchContext?.(scopeKey, occurredAt, reactionLine, alone && !temporaryGuest) ?? '', // Her body (2026-10-14).
     capabilityPrompt, innerNoteVoice.context(dependencies.innerNote, scopeKey, alone, temporaryGuest, occurredAt), // ADR-0012: her inner note.
     [
       '[Voice route]',
