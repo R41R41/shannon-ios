@@ -19,6 +19,7 @@ import { FeelingReplyChatModel } from '../infra/models/feelingStrongChatModel.js
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
+import { configuredFeelingSentenceWriter, type FeelingSentenceWriter } from '../infra/models/feelingSentenceModel.js';
 
 export interface ConfiguredFeeling {
   port: FeelingPort;
@@ -39,6 +40,13 @@ function strongReplyModel(environment: Readonly<Record<string, string | undefine
   return new AnthropicChatModel({ apiKey, settings: sonnetSettings(environment), now: parts.now,
     agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac', ...(parts.usageStore ? { usageStore: parts.usageStore } : {}),
     ...(parts.webSearch ? { webSearch: parts.webSearch } : {}) });
+}
+
+/** Her feeling sentence's writer (`SHANNON_FEELING_SENTENCE`), only beside the turn and the shadow it reads; null otherwise. */
+function sentenceWriter(environment: Readonly<Record<string, string | undefined>>, beside: boolean, parts: { usageStore?: LlmUsageStore; now: () => string })
+  : FeelingSentenceWriter | null {
+  if (!beside || !switchOn(environment, 'SHANNON_FEELING_SENTENCE')) return null;
+  return configuredFeelingSentenceWriter(environment, { ...(parts.usageStore ? { usageStore: parts.usageStore } : {}), now: parts.now });
 }
 
 /** The cap, from the environment: a whole number from 0 (none) to 10 000; anything else is the default. */
@@ -84,8 +92,9 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const sonnet = strongReplyModel(environment, parts);
   const strong = sonnet ? { strong: { cap: strongReplyDailyCap(environment), model: sonnet } } : {};
   const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
+  const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow, check });
+    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}) });
 }
 
 /**
@@ -118,6 +127,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
   /** Stage 2 (`SHANNON_REPLY_CHECK`): her replies are checked. */
   check?: boolean;
+  /** Stage 2 (`SHANNON_FEELING_SENTENCE`): her feeling sentence's writer (used only with the shadow and the turn). */
+  sentence?: FeelingSentenceWriter;
   /** Stage 2 (`SHANNON_CORE_AFFECT`): the shadow's table and her state now (for the comparison and the forgetting filter). */
   shadow?: { database: string | DatabaseSync; snapshot: (scopeKey: string) => CompanionStateSnapshot } }): ConfiguredFeeling {
   const store = new SQLiteFeelingEventStore(parts.database);
@@ -130,7 +141,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
-  const flags = { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}) };
+  const flags = { ...(parts.check ? { check: true } : {}), ...(parts.shadow ? { coreAffect: true } : {}),
+    ...(parts.sentence && parts.shadow ? { sentence: parts.sentence } : {}) };
   const port = { events, chooser: parts.chooser, turn: parts.turn, singleFace: parts.singleFace, jevInput, ...strong, ...flags };
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean) => events?.noteCheck(scopeKey, found, rewritten);

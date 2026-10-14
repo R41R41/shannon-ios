@@ -34,6 +34,7 @@ export const BACKGROUND_ROUTES = Object.freeze({
   lifecycle_outcome_line: 'sleep', // A lifecycle operation he asked for, told when it ended (owner decision 2026-10-14).
   inner_note: 'memory_background', // Syzygy ADR-0012: the reflection that writes her inner note, after a turn.
   voice_summary: 'memory_background', // The voice history's summary (owner decision 2026-10-14), after a turn, without thinking.
+  feeling_sentence: 'chat', // Syzygy ADR-0013 D7: her feeling in two or three lines, before a strong text reply, without thinking.
 } as const satisfies Readonly<Record<string, LlmUsageLane>>);
 
 export type BackgroundRoute = keyof typeof BACKGROUND_ROUTES;

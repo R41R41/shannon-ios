@@ -93,6 +93,15 @@ Explicit_on, default off; needs `SHANNON_FEELING_EVENTS`. It changes no reply, p
 - **Record** (`emotion/005_feeling_shadow`): after each event, the day's remembered events of its key are folded again and the point is written with the current state's valence and arousal (the owner's key only). A scene (a call, later a stream) is one key with each person its own source.
 - **Observer**: `emotion`, phase `feeling.core_affect`: the point's numbers and labels (composure and register over time are the graph of item 9).
 
+## Stage 2: her feeling sentence (`SHANNON_FEELING_SENTENCE`)
+
+Explicit_on, default off; needs `SHANNON_CORE_AFFECT` and `SHANNON_FEELING_TURN` (the fast layer is what it reads; the shadow itself still changes nothing). D7: 「Haiku が書くのは、強い場面だけ」.
+
+- **When**: a text turn with the owner alone, when the fast layer folded from the day's events and advanced to the turn's instant has moved past her ordinary fluctuation (pleasure or arousal farther from where she rests than the stationary band σ/√(2θ), ADR-0006 2.1) or blame has built to 0.5 (`coreAffectMoved`). Not on voice (no time), not in front of others (the lines are her own layer).
+- **What**: one native Haiku request on the background route `feeling_sentence` (lane `chat`), no thinking, 240 output tokens, its fixed instructions (rules and her character core) cached. Input: the fast layer in words (no numbers), the day's ledger line, and this turn's kind and closed tags. Never his words. Answer: two or three lines (at most three, 80 characters each).
+- **Where**: after the feeling turn's block, under 「[いまの気持ち]（返事の前にボクが書いた独り言。気持ちとして読む。そのまま返事に書かない）」. Started with the turn, beside the Jev call; the reply waits at most 1.0 s beyond the moment its prompt is otherwise ready; late or failed, the reply goes on without it. The lines are not stored.
+- **Observer**: `feeling.sentence`: reason (`moved` | `blame`), written, line count, latency. Never the lines.
+
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).

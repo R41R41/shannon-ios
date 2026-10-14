@@ -107,3 +107,14 @@ export function coreAffectLabel(state: CoreAffectState): CoreAffectLabel {
 export function coreAffectSettled(state: CoreAffectState): boolean {
   return state.blame < 0.15 && Math.abs(state.pad.valence - resting(state.mood).valence) < stationaryBand();
 }
+
+/**
+ * Moved strongly (ADR-0013 D7: 「いまの気持ちが、ふだんの揺れの大きさ σ/√(2θ) を超えて動いた時」): pleasure or arousal farther from where
+ * she rests than her ordinary fluctuation (ADR-0006 2.1's stationary band), or blame built to half its scale.
+ */
+export function coreAffectMoved(state: CoreAffectState): 'moved' | 'blame' | null {
+  const band = stationaryBand();
+  if (state.blame >= 0.5) return 'blame';
+  const rest = resting(state.mood);
+  return Math.abs(state.pad.valence - rest.valence) > band || Math.abs(state.pad.arousal - rest.arousal) > band ? 'moved' : null;
+}

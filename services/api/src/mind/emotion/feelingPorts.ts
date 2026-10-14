@@ -6,7 +6,7 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  checkBeforeSending, checkReply, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
+  checkBeforeSending, checkReply, feelingSentenceBlock, continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
@@ -20,6 +20,8 @@ import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.j
 import { emotionTiming } from './emotionTiming.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
+import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
+import type { FeelingSentenceWriter } from '../../infra/models/feelingSentenceModel.js';
 
 export type { FeelingKey, FeelingLines } from './feelingEvents.js';
 
@@ -44,6 +46,8 @@ export interface FeelingPort {
   readonly check?: boolean;
   /** `SHANNON_CORE_AFFECT`: the shadow's composure step is known to the check (its register flags); nothing else reads it. */
   readonly coreAffect?: boolean;
+  /** `SHANNON_FEELING_SENTENCE` (with the fast layer and the turn): Haiku writes her feeling in two or three lines in a strong scene. */
+  readonly sentence?: FeelingSentenceWriter;
 }
 
 /** The facts block while the feeling turn is off (events on): the same ledger and watch lines, as facts. */
@@ -69,6 +73,8 @@ export interface FeelingTurnHandle {
   snapshot: CompanionStateSnapshot;
   /** The reply went to the stronger model (counted against the day's cap until it is recorded). */
   strong: boolean;
+  /** Her feeling sentence being written (a strong text scene, for the owner alone), or absent. */
+  sentence?: Promise<readonly string[] | null> | null;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -201,14 +207,21 @@ export const feelingText = Object.freeze({
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
         utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion,
         ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.coreAffect ? { reading: true } : {}) }) : null;
+      handle.sentence = port.sentence && port.coreAffect && port.turn
+        ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
       return handle;
     }, null);
   },
-  /** The last block of the prompt, awaited at most `FEELING_TURN_LIMITS.extraWaitMilliseconds` beyond the moment it is asked for. */
+  /**
+   * The last block of the prompt, awaited at most `FEELING_TURN_LIMITS.extraWaitMilliseconds` beyond the moment it is asked for; her
+   * feeling sentence, when one is being written, at most `FEELING_SENTENCE_LIMITS.waitMilliseconds` (the two waits overlap).
+   */
   block: async (handle: FeelingTurnHandle | null): Promise<string> => {
     if (!handle) return '';
+    const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
     handle.decision = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
-    return safely(() => blockOf(handle, handle.decision), '');
+    const lines = sentence ? await sentence : null;
+    return safely(() => [blockOf(handle, handle.decision), lines ? feelingSentenceBlock(lines) : ''].filter(Boolean).join('\n\n'), '');
   },
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
   route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),

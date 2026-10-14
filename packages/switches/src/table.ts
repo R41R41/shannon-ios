@@ -237,6 +237,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 stage 2: her reply is checked (giving in, lecture, AI tone…); strong, order and public text turns before sending, one rewrite.',
   },
   {
+    name: 'SHANNON_FEELING_SENTENCE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
+    doc: 'ADR-0013 D7: in a strong scene (fast layer past her band, or blame), Haiku writes her feeling in 2-3 lines before a text reply; owner alone.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },
