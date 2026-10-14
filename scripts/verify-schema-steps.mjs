@@ -46,6 +46,8 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'emotion/003_inner_note_attempts': 'da679362296ea082a98c9b58ea1105862782f38e1f131b07162f319eddee1010',
   // Her feeling events (Syzygy ADR-0013 stage 1), applied in production since the stage-1 switches went on (2026-10-14).
   'emotion/004_feeling_events': 'f137c35156c7d3d0e875309beead90cd72bb9115bcd44d8cad54e4baf2fdc462',
+  // The shadow of her fast layer (ADR-0013 stage 2), made when SHANNON_CORE_AFFECT first opens its store.
+  'emotion/005_feeling_shadow': '314d33b616f087a45219f75637ddd480aa15bdcaade1d830ab1130e7996ee5b2',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
@@ -90,6 +92,8 @@ export const S3_ADDITIONS = Object.freeze({
     // 2026-10-14: her feeling events (emotion/004, ADR-0013 stage 1), with their time index and primary-key index, made when
     // SHANNON_FEELING_EVENTS first opens their store.
     'shannon_feeling_events',
+    // ADR-0013 stage 2: the shadow of her fast layer (emotion/005), made when SHANNON_CORE_AFFECT first opens its store.
+    'shannon_feeling_shadow',
   ]),
 });
 

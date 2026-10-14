@@ -21,7 +21,7 @@ import {
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { EMOTION_STEPS, FEELING_STEPS } from '../src/infra/sqlite/migrations/emotionSteps.js';
+import { EMOTION_STEPS, FEELING_SHADOW_STEPS, FEELING_STEPS } from '../src/infra/sqlite/migrations/emotionSteps.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
 
 /**
@@ -404,6 +404,10 @@ describe('the pinned checksums', () => {
     // Syzygy ADR-0013 stage 1: her feeling events, applied only while `SHANNON_FEELING_EVENTS` opens their store.
     expect(FEELING_STEPS.map(step => [step.id, schemaStepChecksum(step)])).toEqual([
       ['emotion/004_feeling_events', 'f137c35156c7d3d0e875309beead90cd72bb9115bcd44d8cad54e4baf2fdc462'],
+    ]);
+    // Stage 2's shadow (`SHANNON_CORE_AFFECT`), only when its switch opens its store.
+    expect(FEELING_SHADOW_STEPS.map(step => [step.id, schemaStepChecksum(step)])).toEqual([
+      ['emotion/005_feeling_shadow', '314d33b616f087a45219f75637ddd480aa15bdcaade1d830ab1130e7996ee5b2'],
     ]);
   });
 
