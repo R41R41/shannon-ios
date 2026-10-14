@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
-import { commitmentAwaitingTodaySlot, dueCommitmentCandidate, neutralCommitmentLine } from '../../../mind/action/respond/commitmentInitiative.js';
+import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mind/action/respond/commitmentInitiative.js';
+import { commitmentFacts, commitmentFactSentence } from '../../../mind/action/respond/commitmentLine.js';
 import { bodyLookIdOfSource } from '../../../contracts/bodyLookContract.js';
 import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
@@ -50,6 +51,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   private readonly database: DatabaseSync;
   /** Her lines for promises due now (owner 2026-10-14, `commitmentLine.ts`), by item id, for this run; else the neutral factual line. */
   private commitmentLines: ReadonlyMap<string, string> = new Map();
+  private timeZone = 'Asia/Tokyo';
 
   // gate: Syzygy ADR-0008 stage 3, the proactive gate every message she starts passes where it is written; absent (switched off), as before.
   // promisesOnTime (`SHANNON_PROMISE_ON_TIME`): due promises are told by `deliverDuePromises`, not by `runOnce` (`promiseNotices.ts`).
@@ -99,6 +101,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     commitmentLines: ReadonlyMap<string, string> = new Map(),
   ): InitiativeLoopResult {
     this.commitmentLines = commitmentLines;
+    this.timeZone = timeZone;
     const local = localDateParts(new Date(at), timeZone);
     if (local.hour >= QUIET_START_HOUR || local.hour < QUIET_END_HOUR) {
       return this.finish({ considered: 0, sent: 0, stopped: 'quiet-hours' }, at);
@@ -202,11 +205,12 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     return this.finish({ considered, sent, stopped: sent > 0 ? null : lastStop }, at, repeatedSuppressed);
   }
 
-  /** Due promises, told at their time (`SHANNON_PROMISE_ON_TIME`, `promiseNotices.ts`): her line when written and trusted, else the neutral one. */
+  /** Due promises, told at their time (`SHANNON_PROMISE_ON_TIME`, `promiseNotices.ts`): the fact sentence, with her phrase when she chose one. */
   deliverDuePromises(
     at = this.now(), timeZone = 'Asia/Tokyo', commitmentLines: ReadonlyMap<string, string> = new Map(), inCall?: (scopeKey: string, at: string) => boolean,
   ): { due: number; sent: number } {
     this.commitmentLines = commitmentLines;
+    this.timeZone = timeZone;
     const told = tellDuePromises(this.database, at, timeZone, (scopeKey, snapshot, candidate, dayKey, textOnly) =>
       this.persistMessage(scopeKey, parseState(snapshot), candidate, null, null, dayKey, at, { textOnly }), inCall);
     if (told.sent > 0) this.secureFiles();
@@ -309,7 +313,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いからです。` : 'ボクが気になったからです。';
     const spoken = dailyFocus?.openingLine ? authoredWorldOpening(dailyFocus.openingLine, candidate.title, interest) : null;
     const content = candidate.source_id === 'commitment'
-      ? this.commitmentLines.get(candidate.item_id) ?? neutralCommitmentLine({ title: candidate.title, when: null, others: false })
+      ? this.commitmentLines.get(candidate.item_id) ?? commitmentFactSentence(commitmentFacts(candidate, createdAt, this.timeZone, false))
       : candidate.source_id === 'morning-brief' ? (candidate.summary ?? candidate.title).slice(0, 2_000)
       : candidate.source_id === 'intent' ? truncate(candidate.summary ?? `「${candidate.title}」`, 500)
       // A topic of the world in her own words or none (owner 2026-10-14): the daily mind's grounded line, else its title and address only.

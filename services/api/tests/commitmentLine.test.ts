@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SHANNON_ONE_LINE_VOICE_INNER } from '@shannon/cognition';
 import {
-  COMMITMENT_LINE_INSTRUCTIONS, commitmentLineInstructions, commitmentRequest, groundedCommitmentLine, neutralCommitmentLine, type CommitmentFacts, type CommitmentLineWriter,
+  COMMITMENT_LINE_INSTRUCTIONS, PROMISE_PHRASES_V1, commitmentFactSentence, commitmentLineInstructions, commitmentMessage, commitmentRequest,
+  neutralCommitmentLine, promisePhraseChoice, promisePhraseChoices, promisePhraseSchema, type CommitmentFacts, type CommitmentLineWriter,
+  type PromisePhraseChoice,
 } from '../src/mind/action/respond/commitmentLine.js';
 import { commitmentFacts, commitmentLinePreparer } from '../src/wiring/commitmentLinesWiring.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
@@ -14,55 +16,109 @@ import { SQLiteInitiativeSources } from '../src/surfaces/outreach/store/initiati
 import { apiSourceFile } from './support/sources.js';
 
 /**
- * A promise's notice in her own words (owner decision 2026-10-14): written at the moment it is due from its facts alone, checked to
- * state the promise correctly, and the neutral factual line when it cannot be written or trusted, so a promise is never lost. It is
- * system delivery of something he asked for: no moment cap, no mood, no inner note; with anyone else present, private-safe.
+ * A promise's notice (owner decision 2026-10-14, by form: 「事実は決まった文＋シャノンの一言」): the server's fixed fact sentence
+ * (its time, its exact words, how late), with one phrase of hers from a fixed list or none. No free text of hers reaches him.
  */
 const directory = mkdtempSync(join(tmpdir(), 'shannon-commitment-line-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const SAID = '2026-09-24T01:00:00.000Z';
 const NINE = '2026-09-25T00:00:00.000Z'; // 09:00 in Tokyo, the day after
 const ALONE: CommitmentFacts = { title: '明日プレゼンの練習しよう', when: '今日', overdueMinutes: null, others: false };
+const TIMED: CommitmentFacts = { title: '起こして', when: '09:20', overdueMinutes: 0, others: false };
 
-describe('the line', () => {
-  it('is used only when it states the promise: named while he is alone, and no number the facts do not hold', () => {
-    expect(groundedCommitmentLine('ライ氏、{約束}、の約束の時間です。準備できてますか？', ALONE)).toContain('プレゼンの練習');
-    // She never writes the time or the promise's own date words: those come from the placeholders (review of aac5b7be).
-    expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しよう、の約束の時間です。', ALONE)).toBeNull();
-    expect(groundedCommitmentLine('ライ氏、そろそろあの約束の時間ですよ。', ALONE)).toBeNull();
-    expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しよう、の約束です。15時からですね。', ALONE)).toBeNull();
-    const timed: CommitmentFacts = { title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false };
-    expect(groundedCommitmentLine('ライ氏、{時刻}の{約束}約束、少し遅れちゃいましたよ。', timed)).toBe('ライ氏、昼の2時の歯医者に電話する約束、少し遅れちゃいましたよ。');
-    expect(groundedCommitmentLine('ライ氏、14:00の歯医者に電話する約束、20分過ぎてますよ。', timed)).toBeNull();
-    expect(groundedCommitmentLine('', ALONE)).toBeNull();
-    expect(groundedCommitmentLine({ line: 1 }, ALONE)).toBeNull();
+describe('the fact sentence: fixed, neutral, always correct', () => {
+  it('states the canonical time, the exact promise and how late, for on time, late, the night, noon, midnight and a date only', () => {
+    expect(commitmentFactSentence(TIMED)).toBe('9時20分の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, overdueMinutes: 1 })).toBe('9時20分の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, overdueMinutes: 47 })).toBe('9時20分の約束：「起こして」（47分遅れのお知らせ）');
+    expect(commitmentFactSentence({ ...TIMED, overdueMinutes: 125 })).toBe('9時20分の約束：「起こして」（2時間5分遅れのお知らせ）');
+    expect(commitmentFactSentence({ ...TIMED, when: '21:20' })).toBe('夜の9時20分の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, when: '12:00' })).toBe('昼の12時の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, when: '14:30' })).toBe('午後2時30分の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, when: '00:20' })).toBe('夜中の0時20分の約束：「起こして」');
+    expect(commitmentFactSentence({ ...TIMED, title: '薬を飲む', when: '23:30', overdueMinutes: 450, quietHeld: true }))
+      .toBe('夜の11時30分の約束：「薬を飲む」（夜のあいだは控えていたため、7時からのお知らせ・7時間30分遅れ）');
+    expect(commitmentFactSentence(ALONE)).toBe('今日の約束：「明日プレゼンの練習しよう」');
+    // With anyone else there: the time, never the promise's words.
+    expect(commitmentFactSentence({ ...TIMED, others: true })).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
+    expect(neutralCommitmentLine({ ...ALONE, others: true })).not.toContain('プレゼン');
   });
 
-  it('does not name the promise with anyone else present, and is not told it', () => {
-    const others = { ...ALONE, others: true };
-    expect(groundedCommitmentLine('ライ氏、約束の時間になりましたよ。', others)).not.toBeNull();
-    expect(groundedCommitmentLine('ライ氏、明日プレゼンの練習しようの時間です。', others)).toBeNull();
-    expect(commitmentRequest(others)).not.toContain('プレゼン');
-    expect(commitmentRequest(ALONE)).toContain('プレゼン');
-    expect(neutralCommitmentLine(others)).not.toContain('プレゼン');
-  });
-
-  it('falls back to one neutral factual line, the only fixed text for a promise, never in her voice', () => {
-    expect(neutralCommitmentLine({ title: '歯医者に電話する', when: '14:00', others: false })).toBe('約束：「歯医者に電話する」（14:00）');
+  it('reads the facts from the promise itself: its time, how late, and whether the night held it', () => {
+    expect(commitmentFacts({ title: '歯医者に電話する', published_at: '2026-09-25T05:00:00.000Z' }, '2026-09-25T05:20:00.000Z', 'Asia/Tokyo', false))
+      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false });
+    expect(commitmentFacts({ title: '薬を飲む', published_at: '2026-09-25T14:30:00.000Z' }, '2026-09-25T22:00:00.000Z', 'Asia/Tokyo', false))
+      .toEqual({ title: '薬を飲む', when: '23:30', overdueMinutes: 450, others: false, quietHeld: true });
+    expect(commitmentFacts({ title: '掃除', published_at: null }, NINE, 'Asia/Tokyo', false)).toEqual({ title: '掃除', when: '今日', overdueMinutes: null, others: false });
     const source = readFileSync(apiSourceFile('initiativeStore.ts'), 'utf8');
     expect(source).not.toContain('という約束が残っています');
     expect(source).not.toContain('今、続けますか');
   });
+});
 
-  it('is written from the promise\'s facts alone: nothing of her mood, her inner note or a moment', () => {
-    const request = JSON.parse(commitmentRequest({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 5, others: false })) as Record<string, unknown>;
-    expect(Object.keys(request).sort()).toEqual(['due', 'others_present', 'promise', 'state']);
+describe('her one phrase: an enum, exact match only', () => {
+  it('holds no digit, numeral, time, day, period or relative-time word in any phrase (a static check of the list)', () => {
+    const words = /\p{N}|[〇零一二三四五六七八九十百千万廿卅半]|時|分|秒|日|週|月|年|曜|今|朝|夜|昼|晩|宵|夕|午|前|後|明|昨|次|先|来|頃|ごろ|すぐ|まだ|さっき|あさ|よる|ひる|いま(?![すせし])|あした|きのう|now|am|pm/iu;
+    for (const entry of PROMISE_PHRASES_V1) {
+      expect(entry.text, entry.text).not.toMatch(words);
+      expect(entry.positions.length).toBeGreaterThan(0);
+      // Only a late phrase admits lateness, and it never says how late.
+      if (/遅/u.test(entry.text)) expect(entry.only, entry.text).toBe('late');
+    }
+    expect(PROMISE_PHRASES_V1.length).toBeGreaterThanOrEqual(20);
+    expect(new Set(PROMISE_PHRASES_V1.map(entry => entry.text)).size).toBe(PROMISE_PHRASES_V1.length);
+  });
+
+  it('offers late phrases only when late and wake phrases only for a promise about waking', () => {
+    const texts = (facts: CommitmentFacts) => promisePhraseChoices(facts).map(entry => entry.text);
+    expect(texts({ ...TIMED, title: '歯医者に電話する' })).not.toContain('…ごめん、遅れちゃった。');
+    expect(texts({ ...TIMED, title: '歯医者に電話する' })).not.toContain('起きてー！');
+    expect(texts({ ...TIMED, title: '歯医者に電話する', overdueMinutes: 47 })).toContain('…ごめん、遅れちゃった。');
+    expect(texts(TIMED)).toContain('起きてー！');
+    expect(promisePhraseChoice({ phrase: '…ごめん、遅れちゃった。', position: 'before' }, TIMED)).toBeNull();
+    expect(promisePhraseChoice({ phrase: '起きてー！', position: 'after' }, { ...TIMED, title: '歯医者に電話する' })).toBeNull();
+    // The schema's enum is this promise's list and nothing else.
+    const schema = promisePhraseSchema({ ...TIMED, title: '歯医者に電話する' }) as { properties: { phrase: { enum: string[] } } };
+    expect(schema.properties.phrase.enum).toEqual(['', ...texts({ ...TIMED, title: '歯医者に電話する' })]);
+  });
+
+  it('uses only an exact phrase of the list, in a place it takes; anything else is the fact alone', () => {
+    expect(commitmentMessage({ phrase: 'ライ氏、', position: 'before' }, TIMED)).toBe('ライ氏、9時20分の約束：「起こして」');
+    expect(commitmentMessage({ phrase: '忘れてませんよね？', position: 'before' }, TIMED)).toBe('9時20分の約束：「起こして」忘れてませんよね？');
+    expect(commitmentMessage({ phrase: '…ごめん、遅れちゃった。', position: 'after' }, { ...TIMED, overdueMinutes: 47 }))
+      .toBe('9時20分の約束：「起こして」（47分遅れのお知らせ）…ごめん、遅れちゃった。');
+    for (const answer of [{ phrase: 'ライ氏', position: 'before' }, { phrase: 'ライ氏、 ', position: 'before' }, { phrase: '', position: 'before' }, null, 'ライ氏、',
+      { phrase: 'ライ氏、9時20分ですよ！', position: 'before' }, { line: '今、9時20分だよ！' }]) {
+      expect(commitmentMessage(answer, TIMED), JSON.stringify(answer)).toBe('9時20分の約束：「起こして」');
+    }
+    // With anyone else there no phrase is used.
+    expect(commitmentMessage({ phrase: 'ライ氏、', position: 'before' }, { ...TIMED, others: true })).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
+  });
+
+  it('never lets the model\'s free text reach him: whatever it answers, the message is the fact sentence and at most one listed phrase', () => {
+    let seed = 7;
+    const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const junk = ['今、9時20分だよ！', '明日の9時半ね', 'ライ氏、', '…ごめん、遅れちゃった。', '起きてー！', '{時刻}ですよ', 'ほらほら！今だよ', 'ok', '', '忘れてませんよね？ 9時'];
+    const allowed = new Set(PROMISE_PHRASES_V1.map(entry => entry.text));
+    for (let index = 0; index < 2_000; index += 1) {
+      const facts = { ...TIMED, title: index % 2 ? '起こして' : '歯医者に電話する', overdueMinutes: index % 3 ? 0 : 47 };
+      const answer = { phrase: junk[random(junk.length)], position: ['before', 'after', 'middle'][random(3)], line: junk[random(junk.length)] };
+      const message = commitmentMessage(answer, facts);
+      const fact = commitmentFactSentence(facts);
+      expect(message.includes(fact), message).toBe(true);
+      const rest = message.replace(fact, '');
+      expect(rest === '' || allowed.has(rest), message).toBe(true);
+    }
+  });
+
+  it('tells the model only late or not, waking or not, and the phrases: not the promise\'s words, nor its time', () => {
+    const request = JSON.parse(commitmentRequest({ ...TIMED, title: '歯医者に電話する', overdueMinutes: 5 })) as Record<string, unknown>;
+    expect(Object.keys(request).sort()).toEqual(['about_waking', 'late', 'phrases']);
+    expect(JSON.stringify(request)).not.toMatch(/歯医者|9:20|09:20/u);
     expect(COMMITMENT_LINE_INSTRUCTIONS).not.toMatch(/sulk|mood|feeling|すね|気分/iu);
-    expect(COMMITMENT_LINE_INSTRUCTIONS).toMatch(/Never add a place, a person, a time, a date/u);
-    // Syzygy ADR-0012 (N7): with SHANNON_INNER_NOTE on, her one-line voice is her core's; off, the bytes of before.
+    expect(COMMITMENT_LINE_INSTRUCTIONS).toMatch(/Only the listed phrases exist/u);
     expect(commitmentLineInstructions(false)).toBe(COMMITMENT_LINE_INSTRUCTIONS);
     expect(commitmentLineInstructions(true)).toContain(SHANNON_ONE_LINE_VOICE_INNER);
-    expect(commitmentLineInstructions(true)).not.toMatch(/sulk|mood|feeling|すね|気分/iu);
   });
 });
 
@@ -80,10 +136,10 @@ function fixture() {
 
 class FakeWriter implements CommitmentLineWriter {
   readonly asked: CommitmentFacts[] = [];
-  constructor(private readonly line: string | null) {}
-  async write(_scopeKey: string, facts: CommitmentFacts): Promise<string | null> {
+  constructor(private readonly answer: unknown) {}
+  async write(_scopeKey: string, facts: CommitmentFacts): Promise<PromisePhraseChoice | null> {
     this.asked.push(facts);
-    return this.line === null ? null : groundedCommitmentLine(this.line, facts);
+    return promisePhraseChoice(this.answer, facts);
   }
 }
 
@@ -93,50 +149,47 @@ describe('at the moment it is due', () => {
     delivered: (scopeKey, itemId) => f.sources.delivered(scopeKey, itemId), others: () => others,
   });
 
-  it('delivers her own line, written once, on the voiced path (it takes no moment cap)', async () => {
+  it('delivers the fact with her phrase, asked once, on the voiced path (it takes no moment cap)', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter('ライ氏、{約束}、の約束ですよ。いっしょに始めましょうか。');
+    const writer = new FakeWriter({ phrase: 'ふふん、ちゃんと覚えてましたよ。', position: 'before' });
     const lines = prepare(f, writer);
     const prepared = await lines(NINE);
     expect(writer.asked).toEqual([expect.objectContaining({ title: '明日プレゼンの練習しよう', others: false })]);
     expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ライ氏、明日プレゼンの練習しよう、の約束ですよ。いっしょに始めましょうか。');
-    // Told once: nothing more is written or paid for.
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ふふん、ちゃんと覚えてましたよ。今日の約束：「明日プレゼンの練習しよう」');
     expect(await lines(NINE)).toEqual(new Map());
     expect(writer.asked).toHaveLength(1);
     f.close();
   });
 
-  it('never loses the promise: a write that fails or cannot be trusted gives the neutral factual line', async () => {
-    for (const writer of [new FakeWriter(null), new FakeWriter('ライ氏、15時の会議の約束です。'), null]) {
+  it('never loses the promise: no phrase, a phrase off the list or no writer give the fact sentence alone', async () => {
+    for (const writer of [new FakeWriter(null), new FakeWriter({ phrase: 'ライ氏、15時の会議の約束です。', position: 'before' }), null]) {
       const f = fixture();
       f.setNow(NINE);
       const prepared = await prepare(f, writer)(NINE);
       expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-      expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('約束：「明日プレゼンの練習しよう」（今日）');
+      expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束：「明日プレゼンの練習しよう」');
       f.close();
     }
   });
 
-  it('uses the private-safe wording with anyone else at her body', async () => {
+  it('uses the private-safe fact sentence with anyone else at her body, and asks the model nothing', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter('ライ氏、約束の時間になりましたよ。');
+    const writer = new FakeWriter({ phrase: 'ライ氏、', position: 'before' });
     const prepared = await prepare(f, writer, true)(NINE);
-    expect(writer.asked[0]).toMatchObject({ others: true });
+    expect(writer.asked).toEqual([]);
     f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared);
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ライ氏、約束の時間になりましたよ。');
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束の時刻です（内容はアプリで確認できます）。');
     f.close();
   });
 
-  it('writes nothing in the quiet hours, and states when and how late from the promise itself', async () => {
+  it('writes nothing in the quiet hours', async () => {
     const f = fixture();
-    const writer = new FakeWriter('x');
+    const writer = new FakeWriter({ phrase: 'ライ氏、', position: 'before' });
     expect(await prepare(f, writer)('2026-09-24T15:00:00.000Z')).toEqual(new Map()); // 00:00 in Tokyo
     expect(writer.asked).toEqual([]);
-    expect(commitmentFacts({ title: '歯医者に電話する', published_at: '2026-09-25T05:00:00.000Z' }, '2026-09-25T05:20:00.000Z', 'Asia/Tokyo', false))
-      .toEqual({ title: '歯医者に電話する', when: '14:00', overdueMinutes: 20, others: false, dueOn: { month: 9, day: 25, weekday: '金', today: true } });
     f.close();
   });
 });

@@ -1,14 +1,15 @@
 import { QUIET_END_HOUR, QUIET_START_HOUR } from '../contracts/initiativeTiming.js';
 import { localDateParts } from '../infra/time/localDate.js';
 import { dueCommitmentCandidate } from '../mind/action/respond/commitmentInitiative.js';
-import { neutralCommitmentLine, type CommitmentFacts, type CommitmentLineWriter } from '../mind/action/respond/commitmentLine.js';
+import { commitmentFacts, commitmentMessage, type CommitmentLineWriter, type PromisePhraseChoice } from '../mind/action/respond/commitmentLine.js';
+export { commitmentFacts } from '../mind/action/respond/commitmentLine.js';
 
 /**
- * A promise's notice in her own words (owner decision 2026-10-14, `commitmentLine.ts`), prepared by the world worker before its
- * initiative run: for each promise of the owner's that is due and not yet told, one line written in her voice from its facts, or
- * the neutral factual line when none could be written or trusted. Each promise is written once per audience in this process, so
- * a run that does not send it (the day's slot, a recent conversation, the gate) never pays for it again. Nothing of her mood or of
- * moments is read: this is system delivery of something he asked for.
+ * A promise's notice (owner decision 2026-10-14, by form: 「事実は決まった文＋シャノンの一言」, `commitmentLine.ts`), prepared by the
+ * world worker on each pass: for each promise of the owner's that is due and not yet told, the fixed fact sentence of this moment
+ * (its time, its words, how late) with one phrase of hers from the list when the model chose one. Her choice is asked once per
+ * promise and audience and kept ten minutes; the message is built again on every pass, so the lateness it states is always that of
+ * the moment it is told. Nothing of her mood or of moments is read: this is system delivery of something he asked for.
  */
 export interface CommitmentLineParts {
   writer: CommitmentLineWriter | null;
@@ -19,19 +20,16 @@ export interface CommitmentLineParts {
   delivered: (scopeKey: string, itemId: string) => boolean;
   /** Someone other than the owner may see or hear her body now (a stream included). */
   others: (scopeKey: string, at: string) => boolean;
-  /** Closed codes only: whether a line is hers or the neutral one, never a word of either. */
+  /** Closed codes only: whether her phrase was chosen, never a word. */
   log?: (line: string) => void;
 }
 
 const MINUTE = 60_000;
-/**
- * A line is written again once it is this old: its facts say how late the promise is (2026-10-14: a line written at 09:22 would
- * have said 「3分過ぎ」 when it was finally told at 10:07). With promises told on time it is written once, when it is due.
- */
-const LINE_FRESH_MILLISECONDS = 10 * MINUTE;
+/** Her choice of phrase is asked again once it is this old (late phrases become possible as a promise waits). */
+const CHOICE_FRESH_MILLISECONDS = 10 * MINUTE;
 
 export function commitmentLinePreparer(parts: CommitmentLineParts): (at: string, signal?: AbortSignal) => Promise<ReadonlyMap<string, string>> {
-  const written = new Map<string, { line: string; at: number }>();
+  const chosen = new Map<string, { choice: PromisePhraseChoice | null; at: number }>();
   return async (at, signal) => {
     const lines = new Map<string, string>();
     const hour = localDateParts(new Date(at), parts.timeZone).hour;
@@ -42,30 +40,21 @@ export function commitmentLinePreparer(parts: CommitmentLineParts): (at: string,
       if (parts.delivered(parts.scopeKey, candidate.item_id)) continue;
       const key = `${candidate.item_id}\u0000${others ? 'others' : 'owner'}`;
       const facts = commitmentFacts(candidate, at, parts.timeZone, others);
-      const before = written.get(key);
-      if (!before || Date.parse(at) - before.at > LINE_FRESH_MILLISECONDS) {
-        const hers = await parts.writer?.write(parts.scopeKey, facts, signal) ?? null;
-        // The neutral factual line is the fallback only: no writer, a failed write, or a line that did not state the promise.
-        const outcome = hers ? 'hers' : parts.writer ? 'neutral:unwritten_or_untrusted' : 'neutral:no_writer';
-        try { parts.log?.(`Shannon promise line: ${outcome}`); } catch { /* optional */ }
-        written.set(key, { line: hers ?? neutralCommitmentLine(facts), at: Date.parse(at) });
-      }
-      lines.set(candidate.item_id, written.get(key)!.line);
+      const before = chosen.get(key);
+      const stale = !before || Date.parse(at) - before.at > CHOICE_FRESH_MILLISECONDS;
+      if (stale) chosen.set(key, { choice: await choose(parts, facts, signal), at: Date.parse(at) });
+      // The fact of this moment, with her phrase checked again against it.
+      lines.set(candidate.item_id, commitmentMessage(chosen.get(key)!.choice, facts));
     }
-    if (written.size > 256) written.clear();
+    if (chosen.size > 256) chosen.clear();
     return lines;
   };
 }
 
-/** The facts of one due promise: what, when (owner-local), and how late. */
-export function commitmentFacts(candidate: { title: string; published_at: string | null }, at: string, timeZone: string, others: boolean): CommitmentFacts {
-  const dueAt = candidate.published_at && Number.isFinite(Date.parse(candidate.published_at)) ? candidate.published_at : null;
-  const when = dueAt ? new Intl.DateTimeFormat('ja-JP', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(dueAt)) : '今日';
-  const overdueMinutes = dueAt ? Math.max(0, Math.round((Date.parse(at) - Date.parse(dueAt)) / MINUTE)) : null;
-  // The day it is due (a promise with only a date is due today): a day or weekday her line names is checked against it.
-  const day = localDateParts(new Date(dueAt ?? at), timeZone);
-  const weekday = new Intl.DateTimeFormat('ja-JP', { timeZone, weekday: 'short' }).format(new Date(dueAt ?? at));
-  const now = localDateParts(new Date(at), timeZone);
-  const today = now.year === day.year && now.month === day.month && now.day === day.day;
-  return { title: candidate.title, when, overdueMinutes, others, dueOn: { month: day.month, day: day.day, weekday, today } };
+/** Her choice of phrase, asked only while he alone may hear it; logged as closed codes. */
+async function choose(parts: CommitmentLineParts, facts: ReturnType<typeof commitmentFacts>, signal?: AbortSignal): Promise<PromisePhraseChoice | null> {
+  const choice = facts.others || !parts.writer ? null : await parts.writer.write(parts.scopeKey, facts, signal).catch(() => null);
+  const outcome = facts.others ? 'fact_only:others' : !parts.writer ? 'fact_only:no_writer' : choice ? 'phrase' : 'fact_only:none';
+  try { parts.log?.(`Shannon promise line: ${outcome}`); } catch { /* optional */ }
+  return choice;
 }
