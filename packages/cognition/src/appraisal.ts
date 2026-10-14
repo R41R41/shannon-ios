@@ -70,7 +70,12 @@ export const EMPTY_APPRAISAL_CONTEXT: AppraisalContext = Object.freeze({ subject
   lastSubject: null });
 
 const SAID_NO = new Set(['dislike', 'refuse']);
-const TAG_GOODNESS: Readonly<Record<UtteranceTag, number>> = Object.freeze({ insult: -0.55, lewd: -0.5, ai_taunt: -0.5, creator_insult: -0.6 });
+const TAG_GOODNESS: Readonly<Record<string, number>> = Object.freeze({ insult: -0.55, lewd: -0.5, ai_taunt: -0.5, creator_insult: -0.6,
+  // Stage 5 (`SHANNON_FEELING_STREAM`): comments only (`commentTags`): a threat or a doxx, and prying into the owner's private life.
+  threat: -0.8, pry_owner: -0.35 });
+
+/** How much a crowd's comment weighs against one viewer's (§4.3: a crowd is one source; stage 5 proposal for the owner). */
+export const CROWD_COMMENT_WEIGHT = 0.5;
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 /** How unexpected the n-th of a kind is: the first fully, then less (a count model of habituation; ADR-0006 2.2). */
@@ -115,7 +120,7 @@ function wordsAppraisal(event: FeelingEvent, context: AppraisalContext, meaning:
   const tags = (event.facts.tags ?? []) as readonly UtteranceTag[];
   const before = context.provocationsBySource[event.personKey] ?? 0;
   const order = event.kind === 'feeling_order';
-  const tagged = tags.reduce((worst, tag) => Math.min(worst, TAG_GOODNESS[tag]), 0);
+  const tagged = tags.reduce((worst, tag) => Math.min(worst, TAG_GOODNESS[tag] ?? 0), 0);
   const provocation = provocationOf(event, tags, before, meaning);
   const provoking = provocation > 0;
   const deliberate = meaning.deliberate ?? (provoking ? 0.6 + clamp(before * 0.1, 0, 0.4) : 0.2);
@@ -127,10 +132,19 @@ function wordsAppraisal(event: FeelingEvent, context: AppraisalContext, meaning:
 /** The appraisal of one event in its context. Her own replies and motions are appraised as neutral events of hers. */
 export function appraise(event: FeelingEvent, context: AppraisalContext, meaning: AppraisalMeaning = {}): Appraisal {
   if (event.kind === 'touched') return touchAppraisal(event, context);
+  if (event.kind === 'comment' || event.kind === 'crowd_comment') return commentAppraisal(event, context, meaning);
   if (event.kind === 'own_reply' || event.kind === 'own_motion' || event.kind === 'own_refusal') {
     return { goodness: 0, unexpected: 0, deliberate: 1, violation: false, control: 1, provocation: 0, relief: 0, subject: 'self' };
   }
   return wordsAppraisal(event, context, meaning);
+}
+
+/** A stream comment is words of its kind (an apology, a kindness, an order, talk); a crowd's weighs less (stage 5). */
+function commentAppraisal(event: FeelingEvent, context: AppraisalContext, meaning: AppraisalMeaning): Appraisal {
+  const appraisal = wordsAppraisal({ ...event, kind: event.facts.commentKind ?? 'spoke' }, context, meaning);
+  if (event.kind !== 'crowd_comment') return appraisal;
+  const w = CROWD_COMMENT_WEIGHT;
+  return { ...appraisal, goodness: appraisal.goodness * w, provocation: appraisal.provocation * w, relief: appraisal.relief * w };
 }
 
 function nextSubjects(context: AppraisalContext, event: FeelingEvent, appraisal: Appraisal): AppraisalContext['subjects'] {
