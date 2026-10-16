@@ -29,7 +29,8 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
       if (!proof?.result_json) return false;
       const evidenceSources = JSON.parse(String(proof.sources_json)) as TaskSource[];
       const historySources = JSON.parse(String(proof.history_sources)) as TaskSource[];
-      if ([...evidenceSources, ...historySources].some(source => privateReadIds(source.readSourceIds).length) || privateReadIds(payload.readSourceIds).length) return false;
+      if ([...evidenceSources, ...historySources].some(source => privateReadIds(source.readSourceIds).length)
+        || privateReadIds(payload.readSourceIds).length) return false;
       const ids = [...new Set(evidenceSources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
       const equal = (a: readonly string[], b: readonly string[]) => JSON.stringify([...new Set(a)].sort()) === JSON.stringify([...new Set(b)].sort());
       if (!Array.isArray(record.sourceIds) || ids.some(source => !record.sourceIds.includes(source)) || !equal(record.sourceIds, payload.recalledMemoryIds ?? [])
