@@ -1,7 +1,7 @@
 import { skillGist } from '../mind/memory/memoryPorts.js';
 import type { SkillTurnPorts, SkillTurnSkill } from '../contracts/skillMemoryContract.js';
 import { neutralMarkers } from '../mind/tools/shannonToolTypes.js';
-import { observeOnlyStep, type SkillGistsPort } from '../surfaces/minecraft/minecraftSkillPointers.js';
+import { gistToolNames, observeOnlyStep, type SkillGistsPort } from '../surfaces/minecraft/minecraftSkillPointers.js';
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaSkillOutcomes } from './fcaSkillOutcomes.js';
@@ -103,11 +103,15 @@ export function bodySkillGists(step: TaskStep, open: SkillTurnPorts['open'] | un
  * `Shannon Minecraft skill gist task=<id> holdsSources=<bool> pointed=<names> offered=<names> pinAttempts=<n> pinFailures=<n>`:
  * skill names only (pointed: the skills the situation matched, offered: those whose gist was given, `-` when none), never a gist.
  * `offered=-` with `holdsSources=true` is a gist that could not be opened, was empty, or could not be pinned (`pinFailures`).
+ * `named` is, for each offered skill, the body tools its gist names that a call can be attributed to (`gistToolNames`: tool names, never
+ * text), `skill=tool,tool;skill=-`, `-` when none: a gist naming none is one a call can never follow (Minebot run 13: `not_named_by_gist`).
+ * The line is written when the outcome changes, not on every decision: the count of decisions that carried gists is `fca_request_size`'s.
  */
 export function gistOfferLine(taskId: string, pointed: readonly string[], shown: ReadonlyMap<string, readonly string[]>, holdsSources: boolean,
   pins: { attempts: number; failures: number }): string {
   const list = (names: readonly string[]) => names.length ? names.join(',') : '-';
   const offered = pointed.filter(name => shown.has(name));
+  const named = offered.map(name => `${name}=${list([...gistToolNames(shown.get(name)!)])}`).join(';') || '-';
   return `Shannon Minecraft skill gist task=${taskId} holdsSources=${holdsSources} pointed=${list(pointed)} offered=${list(offered)} `
-    + `pinAttempts=${pins.attempts} pinFailures=${pins.failures}`;
+    + `pinAttempts=${pins.attempts} pinFailures=${pins.failures} named=${named}`;
 }

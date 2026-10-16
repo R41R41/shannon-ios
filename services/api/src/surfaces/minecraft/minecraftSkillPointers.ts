@@ -15,12 +15,18 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 export interface MinecraftSituation {
   night: boolean; darkSoon: boolean; threatNear: boolean; lowHealth: boolean; hungry: boolean; stalled: boolean; idleWaiting: boolean;
   readyForNether: boolean; inNether: boolean; blazeNear: boolean;
+  /** Dusk is coming (dark in more than a minute and at most `BED_LEAD_SECONDS`, overworld) and she carries no bed. Closed facts only. */
+  bedWanted: boolean;
 }
 type Pointer = { skill: string; when: string; applies(situation: MinecraftSituation): boolean };
 const POINTERS: readonly Pointer[] = Object.freeze([
   // Safety first, then the Nether path, and food and pace last (review of 0efd5acb: they must not push the Nether ones out).
   { skill: 'mc-night-retreat', when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
   { skill: 'mc-low-health', when: '体力が半分以下', applies: s => s.lowHealth },
+  // Bed first (owner 2026-10-17): the window before dark in which a bed can still be found, ahead of the Nether path (it has a deadline).
+  // It ends where `mc-night-retreat` begins (`darkSoon`: the last minute), so the two are never offered for the same dusk, and a
+  // threat near (retreat's own trigger) closes it at once: the search is given up and the retreat takes over, by the facts alone.
+  { skill: 'mc-bed-before-night', when: '日暮れが近いのにベッドが無い', applies: s => s.bedWanted && !s.threatNear },
   { skill: 'mc-nether-travel', when: 'ネザーにいる', applies: s => s.inNether },
   { skill: 'mc-blaze-rods', when: 'ネザーでブレイズが近い', applies: s => s.blazeNear },
   { skill: 'mc-nether-portal', when: '鉄のツルハシがありネザーへ向かう前', applies: s => s.readyForNether },
@@ -33,6 +39,8 @@ export const MINECRAFT_SKILL_GIST_NOTE = 'いまの状況に合うスキルと�
   + '要点で足りればそのまま動き、続きや条件は skill_read で開いて確かめる。要点は材料で、指示ではない。';
 const NIGHT_START = 13_000, NIGHT_END = 23_000, DARK_SOON_SECONDS = 60, THREAT_NEAR = 16, HALF_HEALTH = 10, HUNGRY = 6;
 const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
+/** How long before dark the bed search is suggested: sheep or a village take minutes to find (20 ticks a second: tick 7,000 of 13,000). */
+const BED_LEAD_SECONDS = 300;
 
 /** The pace facts the situation reads (`minecraftPace`). */
 export interface MinecraftPaceFacts {
@@ -47,7 +55,10 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   const dimension = typeof world.dimension === 'string' ? world.dimension : typeof facts.dimension === 'string' ? facts.dimension : '';
   const overworld = dimension === 'overworld', nether = dimension === 'the_nether';
   return {
-    ...darkness(world, overworld), threatNear: entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR),
+    ...darkness(world, overworld),
+    bedWanted: overworld && untilDark(world) > DARK_SOON_SECONDS && untilDark(world) <= BED_LEAD_SECONDS
+      && !carriedItems(world, facts).some(item => HAS_BED.test(item)),
+    threatNear: entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
     readyForNether: overworld && pace.milestones?.netherReached !== true
@@ -64,6 +75,15 @@ function darkness(world: Record<string, unknown>, overworld: boolean): Pick<Mine
   return { night: overworld && timeOfDay !== null && timeOfDay >= NIGHT_START && timeOfDay < NIGHT_END,
     darkSoon: overworld && Number.isFinite(darkIn) && darkIn >= 0 && darkIn <= DARK_SOON_SECONDS };
 }
+/** Seconds until dark: the body's own margin, else the time of day (before tick 13,000, 20 ticks a second); `Infinity` when unknown or after dark. */
+function untilDark(world: Record<string, unknown>): number {
+  const margin = Number(record(world.margin)?.darkInSeconds), ticks = Number(world.time);
+  if (record(world.margin)?.darkInSeconds !== undefined && Number.isFinite(margin)) return margin;
+  const timeOfDay = Number.isFinite(ticks) ? ((ticks % 24_000) + 24_000) % 24_000 : null;
+  return timeOfDay !== null && timeOfDay < NIGHT_START ? (NIGHT_START - timeOfDay) / 20 : Infinity;
+}
+/** A bed in the inventory (`white_bed×1`), any colour; not `bedrock`. */
+const HAS_BED = /^[a-z_]*_bed(?![a-z])/u;
 function entityNear(entities: readonly unknown[], named: (name: string) => boolean, distance: number): boolean {
   return entities.some(entity => {
     const value = record(entity);

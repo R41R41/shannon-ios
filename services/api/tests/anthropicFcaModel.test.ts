@@ -177,13 +177,49 @@ describe('the skill gists a request carries (Minebot run 12: did the gist reach 
     const lines = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size'));
     const sizes = lines.map(line => JSON.parse(line));
     expect(sizes.map(size => size.skillGists)).toEqual([2, 0]);
+    // The earlier fields keep their place; the fields that say why the count is what it is follow (run 13).
     expect(Object.keys(sizes[0])).toEqual(['event', 'model', 'historyCharacters', 'nativeHistoryCharacters', 'toolDefinitionCharacters', 'requestCharacters',
-      'estimatedInputTokens', 'skillGists']);
+      'estimatedInputTokens', 'skillGists', 'taskId', 'bodyAttached', 'skillPointers', 'skillGistsBuilt', 'skillGistsElided', 'elidedParts', 'compactedLevel']);
     // The line stays what existing greps read, and carries no gist text.
     expect(lines[0]).toMatch(/"historyCharacters":\d+,/u);
     expect(lines[0]).toMatch(/"toolDefinitionCharacters":\d+,/u);
     expect(lines.join('\n')).not.toContain('秘密');
     expect(JSON.parse(String((fixture.bodies[0]!.messages as Array<{ content: unknown }>).at(-1)!.content)).body.skillGists).toEqual(gists);
+  });
+});
+
+describe('why a request\'s skillGists is what it is (Minebot run 13: gists offered, skillGists:0), content-free', () => {
+  const sizesOf = (info: ReturnType<typeof vi.spyOn>) => info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size'));
+  const gists = [{ skill: 'mc-bed-before-night', steps: ['2. 秘密の手順 mc.explore-for-structure'] }];
+  const pointed = { report: '短い報告', skillPointers: ['mc-bed-before-night（日暮れが近いのにベッドが無い）'], skillGists: gists, skillPointerNote: '注記' };
+
+  it('names the task, whether a body was attached, and tells "no body" and "no pointer" from "gists sent"', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer(), answer(), answer(), answer()]);
+    await fixture.model.decide(input(), signal());
+    await fixture.model.decide({ ...input(), body: { report: '短い報告' } } as unknown as FcaModelInput, signal());
+    await fixture.model.decide({ ...input(), body: { report: '短い報告', skillPointers: pointed.skillPointers, skillPointerNote: '注記' } } as unknown as FcaModelInput, signal());
+    await fixture.model.decide({ ...input(), body: pointed } as unknown as FcaModelInput, signal());
+    const lines = sizesOf(info), sizes = lines.map(line => JSON.parse(line));
+    expect(sizes.map(size => [size.taskId, size.bodyAttached, size.skillPointers, size.skillGists, size.skillGistsBuilt, size.skillGistsElided])).toEqual([
+      ['task-1', false, 0, 0, 0, false], ['task-1', true, 0, 0, 0, false], ['task-1', true, 1, 0, 0, false], ['task-1', true, 1, 1, 1, false]]);
+    expect(sizes.every(size => size.compactedLevel === null && Array.isArray(size.elidedParts))).toBe(true);
+    expect(lines.join('\n')).not.toMatch(/秘密|ベッド|explore-for-structure/u);
+  });
+
+  it('says which parts were left out as unchanged, and that the body\'s gists are restated every decision, never elided', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer([call('fca_wait', 'wait-1', { summary: 'Wait' })]), answer()]);
+    const first = await fixture.model.decide({ ...input(), skillIndex: '索引', body: pointed } as unknown as FcaModelInput, signal());
+    // The same index and the body's fixed rule again in the same epoch are given as unchanged; the body (and its gists) is restated every decision, never elided.
+    await fixture.model.decide({ ...input(first.history), skillIndex: '索引', body: pointed } as unknown as FcaModelInput, signal());
+    const sizes = sizesOf(info).map(line => JSON.parse(line));
+    expect(sizes[0].elidedParts).toEqual([]);
+    expect(sizes[1].elidedParts).toEqual(['skillIndex', 'bodyInstructions']);
+    expect(sizes.map(size => [size.skillGists, size.skillGistsBuilt, size.skillGistsElided])).toEqual([[1, 1, false], [1, 1, false]]);
+    expect(JSON.parse(String((fixture.bodies[1]!.messages as Array<{ content: unknown }>).at(-1)!.content)).body.skillGists).toEqual(gists);
   });
 });
 
