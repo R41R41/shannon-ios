@@ -5,9 +5,9 @@ import { SkillMemory, fcaSkillTaskKey } from '../src/mind/memory/skillMemory.js'
 import { SkillImporter } from '../src/mind/memory/skillImport.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { createFcaSkillOutcomes } from '../src/wiring/fcaSkillOutcomes.js';
-import { bodySkillGists, fcaSkillGists } from '../src/wiring/fcaSkillGists.js';
+import { bodySkillGists, fcaSkillGists, stepReadObserver } from '../src/wiring/fcaSkillGists.js';
 import {
-  MINECRAFT_SKILL_GIST_NOTE, MINECRAFT_SKILL_POINTER_NOTE, followedGists, gistToolNames, minecraftSituation, minecraftSkillContext, minecraftSkillPointers,
+  GENERIC_BODY_TOOLS, MINECRAFT_SKILL_GIST_NOTE, MINECRAFT_SKILL_POINTER_NOTE, followedGists, gistToolNames, minecraftSituation, minecraftSkillContext, minecraftSkillPointers,
   observeOnlyStep,
 } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
 import { createMinecraftTaskBody } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
@@ -56,10 +56,78 @@ describe('the gist of a skill (skillGist, by code from its stored text)', () => 
   });
   it('names the body tools of its steps: mc.<name> and a bare hyphenated name, never a skill name', () => {
     expect([...gistToolNames(['2. その場で mc.build-around-self（structureName=slit_shelter）', '3. mc.use-item で食べる（mc-food-and-pace）'])])
-      .toEqual(['mc.build-around-self', 'mc.use-item']);
+      .toEqual(['mc.build-around-self']);
+    // A registry name without a hyphen is taken with the `mc.` prefix; a bare name needs a hyphen.
+    expect([...gistToolNames(['1. mc.sleep と mc.dig と sleep'])]).toEqual(['mc.sleep']);
     expect([...gistToolNames(['3. leave-water があれば試す。dig-shelter も'])]).toEqual(['mc.leave-water', 'mc.dig-shelter']);
-    expect(followedGists(new Map([['mc-low-health', new Set(['mc.use-item'])], ['mc-night-retreat', new Set(['mc.dig-shelter'])]]), 'mc.use-item'))
-      .toEqual(['mc-low-health']);
+    expect(followedGists(new Map([['mc-low-health', new Set(['mc.build-around-self'])], ['mc-night-retreat', new Set(['mc.dig-shelter'])]]), 'mc.dig-shelter'))
+      .toEqual(['mc-night-retreat']);
+  });
+  it('leaves generic tools out of the attribution, with the real legacy-minecraft draft-2 skill bodies (M2)', () => {
+    const tools = (name: string) => [...gistToolNames(skillGist(body(name), observeOnlyStep))];
+    // Eating in the shelter (mc.use-item) is not following the gist; building it is.
+    expect(tools('mc-low-health')).toEqual(['mc.build-around-self']);
+    expect(followedGists(new Map([['mc-low-health', gistToolNames(skillGist(body('mc-low-health'), observeOnlyStep))]]), 'mc.use-item')).toEqual([]);
+    expect(followedGists(new Map([['mc-low-health', gistToolNames(skillGist(body('mc-low-health'), observeOnlyStep))]]), 'mc.build-around-self')).toEqual(['mc-low-health']);
+    // The first three steps of the blaze gist name only generic tools: it can never record a gist use.
+    expect(tools('mc-blaze-rods')).toEqual([]);
+    expect(tools('mc-blaze-rods')).not.toContain('mc.accept-threat');
+    expect(tools('mc-blaze-rods')).not.toContain('mc.move-to');
+    expect(tools('mc-blaze-rods')).not.toContain('mc.attack-continuously');
+    expect(tools('mc-blaze-rods')).not.toContain('mc.recall-places');
+    expect(tools('mc-night-retreat')).toEqual(['mc.sleep-in-bed']);
+    expect(tools('mc-nether-portal')).toEqual(['mc.build-structure']);
+    for (const generic of ['mc.use-item', 'mc.move-to', 'mc.attack-continuously', 'mc.recall-places', 'mc.accept-threat', 'mc.list-nearby-entities']) {
+      expect(GENERIC_BODY_TOOLS.has(generic)).toBe(true);
+    }
+    expect(tools('mc-food-and-pace')).toEqual([]);
+  });
+  it('shows the real skill bodies\' gists as they are (snapshot)', () => {
+    const shown = Object.fromEntries([...LEGACY].map(name => [name, skillGist(body(name), observeOnlyStep)]));
+    expect(shown).toMatchInlineSnapshot(`
+      {
+        "mc-blaze-rods": [
+          "1. 持ち物を確かめる: 建築用ブロック（丸石や要塞のネザーレンガ）約80個、ハーフブロック8個、剣。足りなければ先にそろえる（ハーフブロックは同じ石3個で6個）。",
+          "2. スポナーの場所は mc.recall-places（kind=spawner）で思い出す。要塞の通路を歩いてブレイズを探さない。",
+          "3. mc.accept-threat（kinds=blaze,wither_skeleton、seconds=120）を呼んでから、スポナーの東西南北どれかの隣（足がスポナーと…",
+        ],
+        "mc-food-and-pace": [
+          "2. 満腹度に余裕があり、食べられる物も持っているうちは、食料集めを始めず、道具と資源の連鎖を先に進める。準備は当面に要る最小限にする。",
+          "3. 食料を持たずに満腹度が半分を切ったら、道具より先に食料を確保する。昼の地上で陸の動物を狩り、かまどで焼く。水中の魚は追わない。",
+          "4. 鉄のつるはしができて深く潜る前、ポータルに入る前は、焼いた食料を十数個持つ。数個まで減ったら補ってから進む。",
+        ],
+        "mc-low-health": [
+          "2. 逃げ続けない。建築用ブロック約10個とハーフブロック4個があれば、その場で mc.build-around-self（structureName=slit_shelter、…",
+          "3. 囲いの中で食べる（mc.use-item で焼いた食料など）。体力は満腹度18以上の時しか自然に戻らないので、満腹度を高く保って回復させ、その間も囲いの中でできるクラフトを…",
+          "4. 敵がいないのに体力が減る時は、火・溶岩を疑い、溶岩側をブロックで塞ぐ。",
+        ],
+        "mc-nether-portal": [
+          "2. 鉄は先に鉄のつるはし分（3個）を確保し、次に盾（板6＋鉄1）、次にバケツ（鉄3、作業台が要る）に回す。作業台が手元に無ければ先に作って置く。",
+          "3. 水を汲み、溶岩源の隣まで寄ってから、溶岩の縁へ正面から流して黒曜石にする。遠くからバケツを使わない。掘ったら所持数を確かめ、枠に要る数になるまで繰り返す。溶岩の近くでは先に…",
+          "4. mc.build-structure（structureName=nether_portal）があれば材料を確かめて建て、火打石で着火する。着火後は…",
+        ],
+        "mc-nether-travel": [
+          "2. ガストの視線が通る開けた所や、溶岩の上の細い足場に長く立たない。遠くへ行く時は、ネザーラックを掘り進むか、丸石で壁と屋根を付けてから進む。撃たれたら、まず丸石か地形で視線を…",
+          "3. 長い移動は短い区間に分ける。経路の失敗や被弾が続いたら、同じ移動を繰り返さず、先に通路と退避場所を作る。",
+          "4. 敵が見えないのに体力が減る時は、火・溶岩・落下を疑い、その場で待たない。溶岩側をブロックで塞ぎ、足元と周りを固めて離れる。",
+        ],
+        "mc-night-retreat": [
+          "2. 夜の地上をさまよわない。地下へ入り、採掘・精錬・クラフトなど地下でできる用事を進める。地上でしかできない用事（食料・木）は朝に回す。",
+          "3. 夜は地上に出ない。体力が半分以下なら mc-low-health、つるはしが無ければ作る。囲いの中でクラフトや精錬を進め、何もせずに待たない。",
+          "4. ベッドを持っていて敵が近くにいなければ、暗くなってから mc.sleep-in-bed で夜を飛ばし、朝に回収して持ち歩く。羊が近い昼のうちに羊毛3個でベッドを作っておく。",
+        ],
+      }
+    `);
+  });
+  it('cuts a line at a tool-name boundary, never inside a tool name (L1)', () => {
+    const long = encodeSkill({ name: 'cut', description: '時', steps: `1. ${'あ'.repeat(70)} mc.find-blocks で探して mc.build-around-self`, aids: '- なし', references: '- なし' });
+    const line = skillGist(long)[0]!;
+    expect([...line].length).toBeLessThanOrEqual(SKILL_GIST.width);
+    expect(line.endsWith('…')).toBe(true);
+    expect(line).not.toMatch(/mc\.[a-z-]*…/u);
+    for (const name of ['mc-low-health', 'mc-blaze-rods', 'mc-nether-portal', 'mc-night-retreat']) {
+      for (const gist of skillGist(body(name), observeOnlyStep)) expect(gist).not.toMatch(/[a-z]-?…$/u);
+    }
   });
 });
 
@@ -73,12 +141,12 @@ describe('the pointer context of a decision (SHANNON_FCA_SKILL_GIST)', () => {
   });
   it('adds each pointed skill\'s gist and the gist note, and keeps the tools each gist names', () => {
     const asked: string[][] = [];
-    const context = minecraftSkillContext(low, LEGACY, names => { asked.push([...names]); return new Map([['mc-food-and-pace', ['2. mc.eat-food で食べる']]]); });
+    const context = minecraftSkillContext(low, LEGACY, names => { asked.push([...names]); return new Map([['mc-food-and-pace', ['2. mc.dig-shelter で隠れる']]]); });
     expect(asked).toEqual([['mc-food-and-pace']]);
     expect(context.fields).toEqual({ skillPointers: ['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）'],
-      skillGists: [{ skill: 'mc-food-and-pace', steps: ['2. mc.eat-food で食べる'] }], skillPointerNote: MINECRAFT_SKILL_GIST_NOTE });
+      skillGists: [{ skill: 'mc-food-and-pace', steps: ['2. mc.dig-shelter で隠れる'] }], skillPointerNote: MINECRAFT_SKILL_GIST_NOTE });
     expect(Object.keys(context.fields)).toEqual(['skillPointers', 'skillGists', 'skillPointerNote']);
-    expect([...context.gistTools.get('mc-food-and-pace')!]).toEqual(['mc.eat-food']);
+    expect([...context.gistTools.get('mc-food-and-pace')!]).toEqual(['mc.dig-shelter']);
     expect(MINECRAFT_SKILL_GIST_NOTE).toContain('skill_read');
   });
   it('is on by default, and off restores the pointers alone', () => {
@@ -100,6 +168,40 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
     expect(pins).toEqual([['skill-gist:skill_mc-x:2', ['shannon-skill://skill_mc-x/revision/skill_mc-x%3Av2']],
       ['skill-gist:skill_mc-y:2', ['shannon-skill://skill_mc-y/revision/skill_mc-y%3Av2']]]);
   });
+  it('pins a skill revision once however many decisions follow (M1)', () => {
+    const sources: Array<{ readSourceIds: string[] }> = [];
+    const step = { scopeKey: 'owner', taskId: 'task-m1', snapshot: { sources } } as unknown as TaskStep;
+    let pins = 0;
+    const ports = bodySkillGists(step, (_scope, name) => skill(name, text), (_id, receipt) => {
+      pins += 1; sources.push({ readSourceIds: [...(receipt.documents?.sourceIds ?? [])] }); return true;
+    }, null);
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    for (let decision = 0; decision < 50; decision += 1) expect([...ports.skillGists(['mc-x']).keys()]).toEqual(['mc-x']);
+    expect(pins).toBe(1);
+    expect(sources).toHaveLength(1);
+    // Another revision of the same skill is a new source.
+    const next = bodySkillGists(step, (_scope, name) => ({ ...skill(name, text), version: 3, revisionId: 'skill_mc-x:v3' }), () => { pins += 1; return true; }, null);
+    if ('skillGists' in next) next.skillGists(['mc-x']);
+    expect(pins).toBe(2);
+  });
+  it('refuses the pin and gives only the pointer when the owner is not alone (L3)', () => {
+    const step = { id: 's', scopeKey: 'owner', taskId: 'task-l3', messageIds: [], snapshot: { sources: [] } } as unknown as TaskStep;
+    let alone = false;
+    const observeRead = stepReadObserver({ runtime: { observeSources: () => true, taskSources: () => [] } as unknown as TaskRuntime, step,
+      ownerAlone: () => alone, readSourceVisible: () => true, sourcesVisible: () => true });
+    const real = skill('mc-low-health', body('mc-low-health'));
+    const ports = bodySkillGists(step, () => real, observeRead, null);
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    const low = { ...minecraftSituation(null, { failedStepsInARow: 0 }), lowHealth: true };
+    const context = minecraftSkillContext(low, new Set(['mc-low-health']), ports.skillGists);
+    expect(context.fields.skillGists).toBeUndefined();
+    expect(context.fields.skillPointerNote).toBe(MINECRAFT_SKILL_POINTER_NOTE);
+    expect(context.fields.skillPointers?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(context.fields)).not.toContain('mc.build-around-self');
+    expect(context.gistTools.size).toBe(0);
+    alone = true;
+    expect(minecraftSkillContext(low, new Set(['mc-low-health']), ports.skillGists).fields.skillGists).toHaveLength(1);
+  });
   it('hands a body task the gists and its followed gists as uses of its own task', () => {
     const step = { scopeKey: 'owner', taskId: 'task-g' } as TaskStep;
     const followed: string[][] = [];
@@ -116,22 +218,23 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
 describe('a gist followed is a use of kind gist, settled like a read', () => {
   it('is noted only on a call of a body tool the shown gist names, never for the gist shown alone or a read-only tool', () => {
     const followed: string[] = [];
-    const tools = [{ name: 'eat-food', readOnly: false }, { name: 'list-nearby-entities', readOnly: true }, { name: 'move-to', readOnly: false }];
+    const tools = [{ name: 'dig-shelter', readOnly: false }, { name: 'list-nearby-entities', readOnly: true }, { name: 'move-to', readOnly: false }, { name: 'use-item', readOnly: false }];
     const control = { store: { body: () => 'minecraft:home', bind: () => true, safe: () => true }, available: () => ['minecraft:home'],
       frame: () => ({ poll: { skills: tools } }), observe: () => null, imagesUnavailable: () => false, settling: () => false, cancelTask() {} } as unknown as MinecraftControl;
     const step = { id: 'step', scopeKey: 'owner', taskId: 'task-b', revision: 1, lease: { id: 'lease', holder: 'h', generation: 1 },
       snapshot: { task: { createdAt: at, summary: '' }, checkpoint: { consecutiveToolFailures: 3 }, history: [], sources: [] } } as unknown as TaskStep;
     const made = createMinecraftTaskBody({ control, runtime: { get: () => null } as unknown as TaskRuntime, step, entry: null, selector: null,
       ownerAlone: () => true, sourcesVisible: () => true, skillNames: () => LEGACY,
-      skillGists: () => new Map([['mc-food-and-pace', ['2. mc.eat-food で食べる。mc.list-nearby-entities で確かめる']]]), gistFollowed: name => followed.push(name) });
+      skillGists: () => new Map([['mc-food-and-pace', ['2. mc.dig-shelter で隠れる。mc.use-item で食べ、mc.list-nearby-entities で確かめる']]]), gistFollowed: name => followed.push(name) });
     const call = (name: string) => made.body.noteCall!({ id: name, name, input: {} }, `op-${name}`);
     call('mc.move-to');
     expect(followed).toEqual([]);
     expect(made.body.context()).toMatchObject({ skillGists: [{ skill: 'mc-food-and-pace' }], skillPointerNote: MINECRAFT_SKILL_GIST_NOTE });
     call('mc.list-nearby-entities');
     call('mc.move-to');
+    call('mc.use-item');
     expect(followed).toEqual([]);
-    call('mc.eat-food');
+    call('mc.dig-shelter');
     expect(followed).toEqual(['mc-food-and-pace']);
   });
 

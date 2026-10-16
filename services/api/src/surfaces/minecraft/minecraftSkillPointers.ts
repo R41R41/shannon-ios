@@ -115,12 +115,31 @@ export function observeOnlyStep(line: string): boolean {
   return line.includes('minecraft.observe') && !/mc\.[a-z0-9]/u.test(line);
 }
 
-/** The body tools a gist names: `mc.<name>`, and a bare hyphenated name (`leave-water`) as `mc.<name>`; a skill's name (`mc-…`) is none. */
+/**
+ * Body tools any procedure uses, so that calling one says nothing about a gist (M2, owner review 2026-10-16: mc-low-health names
+ * `mc.use-item`, and ordinary eating counted as following it). Movement, combat, consumption, resource gathering and crafting, and
+ * observing/recalling tools. Only a tool specific to a skill (`mc.build-around-self`, `mc.sleep-in-bed`, `mc.build-structure`,
+ * `mc.dig-shelter`, `mc.leave-water`, `mc.enter-portal`) is attributed. The body catalog is the body's own poll, not this repository;
+ * a name not listed here counts as specific.
+ */
+export const GENERIC_BODY_TOOLS: ReadonlySet<string> = new Set([
+  'mc.use-item', 'mc.eat-food', 'mc.move-to', 'mc.move', 'mc.attack-continuously', 'mc.recall-places', 'mc.accept-threat',
+  'mc.wait-time', 'mc.dig', 'mc.dig-block-at', 'mc.mine-block', 'mc.collect', 'mc.craft-one', 'mc.pickup-nearest-item',
+  // Read-only: observing and checking.
+  'mc.observe', 'mc.goal-evidence', 'mc.find-blocks', 'mc.find-structure', 'mc.list-nearby-entities', 'mc.check-path-to',
+]);
+
+/**
+ * The body tools a gist names that are specific to it: `mc.<name>` (a hyphen is not required), and a bare hyphenated name
+ * (`leave-water`) as `mc.<name>`; a skill's name (`mc-…`) is none; generic tools (`GENERIC_BODY_TOOLS`) are left out. A gist naming
+ * no specific tool never records a use.
+ */
 export function gistToolNames(steps: readonly string[]): Set<string> {
   const names = new Set<string>();
   for (const step of steps) {
-    for (const match of step.matchAll(/(?<![a-z0-9.-])(mc\.)?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)/gu)) {
-      if (match[1] || !match[2]!.startsWith('mc-')) names.add(`mc.${match[2]}`);
+    for (const match of step.matchAll(/(?<![a-z0-9.-])(?:mc\.([a-z][a-z0-9]*(?:-[a-z0-9]+)*)|([a-z][a-z0-9]*(?:-[a-z0-9]+)+))/gu)) {
+      const name = match[1] ?? match[2]!;
+      if (!(match[2] && name.startsWith('mc-')) && !GENERIC_BODY_TOOLS.has(`mc.${name}`)) names.add(`mc.${name}`);
     }
   }
   return names;

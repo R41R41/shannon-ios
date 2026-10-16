@@ -16,6 +16,8 @@ import type { FcaSkillOutcomes } from './fcaSkillOutcomes.js';
 export function fcaSkillGists(names: readonly string[], parts: {
   open(name: string): SkillTurnSkill | null;
   pin(operationId: string, sourceIds: readonly string[]): boolean;
+  /** The task's current sources already hold this exact revision: no new pin (one source per skill revision, not per decision). */
+  pinned?(sourceId: string): boolean;
 }): Map<string, readonly string[]> {
   const gists = new Map<string, readonly string[]>();
   for (const name of names) {
@@ -23,7 +25,7 @@ export function fcaSkillGists(names: readonly string[], parts: {
     const steps = skill ? skillGist(skill.body, observeOnlyStep).map(neutralMarkers) : [];
     if (!skill || !steps.length) continue;
     const source = `shannon-skill://${encodeURIComponent(skill.skillId)}${skill.revisionId ? `/revision/${encodeURIComponent(skill.revisionId)}` : ''}`;
-    if (!parts.pin(`skill-gist:${skill.skillId}:${skill.version}`, [source])) continue;
+    if (!parts.pinned?.(source) && !parts.pin(`skill-gist:${skill.skillId}:${skill.version}`, [source])) continue;
     gists.set(name, steps);
   }
   return gists;
@@ -59,7 +61,8 @@ export function bodySkillGists(step: TaskStep, open: SkillTurnPorts['open'] | un
   const opened = (name: string) => { try { return open(step.scopeKey, name); } catch { return null; } };
   return {
     skillGists: names => fcaSkillGists(names, { open: opened,
-      pin: (id, sourceIds) => observeRead(id, { name: 'skill.read', ok: true, documents: { sourceIds } }) }),
+      pin: (id, sourceIds) => observeRead(id, { name: 'skill.read', ok: true, documents: { sourceIds } }),
+      pinned: source => step.snapshot?.sources?.some(item => item.readSourceIds?.includes(source)) ?? false }),
     gistFollowed: name => outcomes?.gistFollowed(step.scopeKey, step.taskId, name),
   };
 }

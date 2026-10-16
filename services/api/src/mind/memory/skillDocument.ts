@@ -113,7 +113,12 @@ export function skillGist(body: string, skip: (line: string) => boolean = () => 
   const numbered = lines.filter(line => /^\d{1,2}[.)．）]/u.test(line));
   return (numbered.length ? numbered : lines).filter(line => !skip(line)).slice(0, SKILL_GIST.lines).map(line => {
     const characters = [...line];
-    return characters.length > SKILL_GIST.width ? `${characters.slice(0, SKILL_GIST.width - 1).join('')}…` : line;
+    if (characters.length <= SKILL_GIST.width) return line;
+    const kept = characters.slice(0, SKILL_GIST.width - 1).join('');
+    // A cut never leaves part of a tool name (`mc.find-blo…`): when it falls inside an ASCII token, the whole token goes.
+    const cutInside = /[A-Za-z0-9._=-]$/u.test(kept) && /^[A-Za-z0-9._=-]/u.test(characters.slice(SKILL_GIST.width - 1).join(''));
+    const whole = cutInside ? kept.replace(/[A-Za-z0-9._=-]+$/u, '').trimEnd() : kept;
+    return `${whole.length > 3 ? whole : kept}…`;
   });
 }
 
