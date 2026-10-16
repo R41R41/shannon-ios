@@ -365,4 +365,19 @@ describe('what a gist leaves in the log (Minebot run 12), content-free', () => {
     expect(followed).toEqual(['mc-food-and-pace']);
     expect(lines.join('\n')).not.toContain('秘密');
   });
+
+  it('records the followed gist just the same when the log throws', () => {
+    const followed: string[] = [];
+    const tools = [{ name: 'dig-shelter', readOnly: false }];
+    const control = { store: { body: () => 'minecraft:home', bind: () => true, safe: () => true }, available: () => ['minecraft:home'],
+      frame: () => ({ poll: { skills: tools } }), observe: () => null, imagesUnavailable: () => false, settling: () => false, cancelTask() {} } as unknown as MinecraftControl;
+    const step = { id: 'step', scopeKey: 'owner', taskId: 'task-throw', revision: 1, lease: { id: 'lease', holder: 'h', generation: 1 },
+      snapshot: { task: { createdAt: at, summary: '' }, checkpoint: { consecutiveToolFailures: 3 }, history: [], sources: [] } } as unknown as TaskStep;
+    const made = createMinecraftTaskBody({ control, runtime: { get: () => null } as unknown as TaskRuntime, step, entry: null, selector: null,
+      ownerAlone: () => true, sourcesVisible: () => true, skillNames: () => LEGACY, log: () => { throw new Error('log down'); },
+      skillGists: () => new Map([['mc-food-and-pace', ['2. mc.dig-shelter で隠れる']]]), gistFollowed: name => followed.push(name) });
+    made.body.context();
+    expect(() => made.body.noteCall!({ id: 'c', name: 'mc.dig-shelter', input: {} }, 'op-c')).not.toThrow();
+    expect(followed).toEqual(['mc-food-and-pace']);
+  });
 });

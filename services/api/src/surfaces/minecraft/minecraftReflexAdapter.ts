@@ -346,7 +346,9 @@ export function createMinecraftTaskBody(parts: {
     if (gistTools.size) {
       const branch = !parts.gistFollowed ? 'no_port' : !skill ? 'not_legacy_pack' : skill.readOnly ? 'read_only' : followed.length ? 'recorded'
         : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
-      log(`Shannon Minecraft gist follow task=${step.taskId} tool=${name} branch=${branch} skills=${followed.length ? followed.join(',') : '-'}`);
+      const skills = followed.length ? followed.join(',') : '-';
+      const line = `Shannon Minecraft gist follow task=${step.taskId} tool=${name} branch=${branch} skills=${skills}`;
+      try { log(line); } catch { /* logging never fails a step */ }
     }
     for (const gist of followed) {
       try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
