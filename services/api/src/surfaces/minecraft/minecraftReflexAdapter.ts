@@ -1,4 +1,4 @@
-import { MINECRAFT_SKILL_POINTER_NOTE, minecraftSituation, minecraftSkillPointers } from './minecraftSkillPointers.js';
+import { followedGists, minecraftSituation, minecraftSkillContext, type SkillGistsPort } from './minecraftSkillPointers.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -93,6 +93,10 @@ export function createMinecraftTaskBody(parts: {
   spawnGraceMilliseconds?: number;
   /** The skills she can open with `skill.read` now (`minecraftSkillPointers`); none when absent. */
   skillNames?(): ReadonlySet<string>;
+  /** With `SHANNON_FCA_SKILL_GIST`: the gists of pointed skills (`fcaSkillGists.ts`); pointers alone when absent. */
+  skillGists?: SkillGistsPort;
+  /** A pointed skill whose shown gist this decision followed (a body tool it names, not read-only): a use of kind `gist`. */
+  gistFollowed?(name: string): void;
   /** The task's automatic reflex entries across its steps (`reflexGovernor.ts`); one for this step alone when absent. */
   governor?: ReflexGovernor;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
@@ -115,6 +119,8 @@ export function createMinecraftTaskBody(parts: {
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
   let lastSignature = '', lastSequence = -1;
+  // The body tools named by the gists the latest decision was shown (`minecraftSkillContext`), by skill.
+  let gistTools: ReadonlyMap<string, ReadonlySet<string>> = new Map();
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
@@ -300,6 +306,15 @@ export function createMinecraftTaskBody(parts: {
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
   };
   const safe = () => !unknown && control.store.safe(step.taskId);
+  // A body tool that changes something (not read-only), named by a gist the deciding step was shown; learning never fails a step.
+  const noteGistFollowed = (name: string) => {
+    const id = availableBody();
+    const skill = id ? control.frame(id)?.poll.skills?.find(item => `mc.${item.name}` === name) : undefined;
+    if (!parts.gistFollowed || !skill || skill.readOnly) return;
+    for (const followed of followedGists(gistTools, name)) {
+      try { parts.gistFollowed(followed); } catch { /* learning never fails a step */ }
+    }
+  };
   const body: FcaBodyLifecycle = {
     start(signal) {
       if (started) return; started = true; execution = currentActionExecution();
@@ -315,9 +330,10 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const pointers = minecraftSkillPointers(minecraftSituation(observation, { ...pace, recentIdleWaits }), parts.skillNames?.() ?? new Set());
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace,
-        ...(pointers.length ? { skillPointers: pointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE } : {}) };
+      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits });
+      const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
+      gistTools = skills.gistTools;
+      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace, ...skills.fields };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
@@ -335,6 +351,7 @@ export function createMinecraftTaskBody(parts: {
       decided = true;
       governor.decided(step.taskId, now());
       if (!call.name.startsWith('mc.')) return;
+      noteGistFollowed(call.name);
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };

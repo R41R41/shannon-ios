@@ -12,7 +12,8 @@ interface Milestones { netherReached: boolean | null; blazeRods: number | null }
 /**
  * Her skills read by a Minecraft task, judged by what that task then does (Syzygy TI-REQ: trial skills from the old Minebot
  * knowledge must stay when right and retire when wrong). A `skill.read` in the task's loop is one pending use
- * (`SkillMemory.usedInTask`). A new milestone (the Nether reached; blaze rods held where there were fewer) is 1 for the uses of the
+ * (`SkillMemory.usedInTask`); so is a pointer's gist the task followed without a read (kind `gist`, `SHANNON_FCA_SKILL_GIST`).
+ * A new milestone (the Nether reached; blaze rods held where there were fewer) is 1 for the uses of the
  * skills that name it as their aim (`targetMilestone`); the task completed is 1, the task failed or the body's death 0, for every use
  * still pending. A stopped task's pending uses are dropped; a read with nothing after it stays pending and judges nothing. The
  * trial itself is judged at night by the existing rule (`SKILL_LIFECYCLE`: three uses, two successes). Process-local: after a
@@ -21,6 +22,11 @@ interface Milestones { netherReached: boolean | null; blazeRods: number | null }
 export interface FcaSkillOutcomes {
   /** Noted only for a task its loop offers a Minecraft body (bound, or the one body there is). */
   read(scopeKey: string, taskId: string, name: string): void;
+  /**
+   * A pointed skill's gist followed without a read (`SHANNON_FCA_SKILL_GIST`: the decision shown it called a body tool it names):
+   * a pending use of kind `gist`, on the same terms as a read and settled the same way. A gist shown alone is never noted.
+   */
+  gistFollowed(scopeKey: string, taskId: string, name: string): void;
   /** The text of a completed `mc.goal-evidence` result for the task. */
   evidence(scopeKey: string, taskId: string, result: string | undefined): void;
   died(bodyId: string): void;
@@ -54,13 +60,15 @@ export function createFcaSkillOutcomes(parts: {
       if (settled) parts.log?.(`fca skill uses settled: ${settled} ${why} ${outcome}`);
     } catch { /* learning never fails a task */ }
   };
+  const used = (scopeKey: string, taskId: string, name: string, kind?: 'gist') => {
+    try {
+      if (parts.bodyOf(taskId) === null) return;
+      if (parts.skills.usedInTask(scopeKey, fcaSkillTaskKey(taskId), name, parts.now(), kind)) entry(scopeKey, taskId).reads = true;
+    } catch { /* learning never fails a read */ }
+  };
   return {
-    read(scopeKey, taskId, name) {
-      try {
-        if (parts.bodyOf(taskId) === null) return;
-        if (parts.skills.usedInTask(scopeKey, fcaSkillTaskKey(taskId), name, parts.now())) entry(scopeKey, taskId).reads = true;
-      } catch { /* learning never fails a read */ }
-    },
+    read: (scopeKey, taskId, name) => used(scopeKey, taskId, name),
+    gistFollowed: (scopeKey, taskId, name) => used(scopeKey, taskId, name, 'gist'),
     evidence(scopeKey, taskId, result) {
       const next = milestonesOf(result);
       if (!next) return;

@@ -35,7 +35,9 @@ import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js'
 import { configuredJevChooser } from './skillRoutingWiring.js';
 import { fcaResearchTools } from './fcaResearchWiring.js';
 import { withSkillOutcomes } from './fcaSkillOutcomes.js';
+import { bodySkillGists, stepReadObserver } from './fcaSkillGists.js';
 import type { SkillMemory } from '../mind/memory/memoryPorts.js';
+import type { SkillTurnPorts } from '../contracts/skillMemoryContract.js';
 import { ownTimeBudgetPort, ownTimeStepPorts, ownTimeTaskAllowed, type OwnTimeFcaParts } from './fcaOwnTimeWiring.js';
 import { fcaBudget } from './fcaBudgetWiring.js';
 import { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudgetStore.js';
@@ -78,6 +80,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   operator?: OperatorHostParts;
   /** Her skill memory while `SHANNON_SKILLS` is on: a Minecraft task's `skill.read` becomes a use its outcome settles. */
   skills?: Pick<SkillMemory, 'usedInTask' | 'settleTask'> | null;
+  /** `skill.read`'s own port (`SkillTurnPorts.open`): a body task's pointed skills, for their gists (`SHANNON_FCA_SKILL_GIST`). */
+  skillOpen?: SkillTurnPorts['open'];
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
@@ -131,6 +135,10 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         const skillNames = () => parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
         const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
+          // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
+          ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') ? bodySkillGists(step, parts.skillOpen,
+            fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
+            minecraft.skillOutcomes) : {}),
           sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;
@@ -161,15 +169,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
           task: { id: step.taskId, origin: step.snapshot.task.origin, leaseId: step.lease.id },
           checkpoint: step.snapshot.checkpoint, placeSearch: _runtime.placeContext?.(step.scopeKey, step.taskId),
-          observeRead: (operationId, receipt) => {
-            const ids = fcaReadReceiptSources(receipt).readSourceIds ?? [];
-            if (!ids.length) return true;
-            const at = new Date().toISOString();
-            if (!parts.ownerAlone() || ids.some(id => !readSourceVisible?.(step.scopeKey, id, at))) return false;
-            if (!_runtime.observeSources(step, { observationId: `read:${operationId}`, recalledMemoryIds: [], readSourceIds: ids })) return false;
-            step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
-            return visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false;
-          }, scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
+          observeRead: fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
+          scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
           sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) }),
           ...(minecraft ? [fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
@@ -258,4 +259,12 @@ export async function serveFcaTaskRoute(service: ReturnType<typeof configuredSer
 function fcaKeyNames(model: string): string {
   if (model === 'claude-sonnet-5-5') return 'SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY';
   return isHaikuModel(model) ? 'SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
+}
+
+/** A step's read receipts (`skill.read`, the skill index, a skill gist), against the task's source guard (`stepReadObserver`). */
+type StepReadParts = Omit<Parameters<typeof stepReadObserver>[0], 'sourcesVisible'>;
+function fcaStepReads(parts: StepReadParts & { visible(): ReturnType<typeof createFcaSourceGuard> | undefined }) {
+  const { step } = parts;
+  const sourcesVisible = () => parts.visible()?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false;
+  return stepReadObserver({ ...parts, sourcesVisible });
 }

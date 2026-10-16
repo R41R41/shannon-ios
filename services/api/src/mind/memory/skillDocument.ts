@@ -98,6 +98,25 @@ export function skillSections(text: string): Array<{ title: string; text: string
   }));
 }
 
+/** The bounds of a skill's gist (`skillGist`): at most this many lines, each at most this many characters. */
+export const SKILL_GIST = Object.freeze({ lines: 3, width: 90 });
+
+/**
+ * The gist of a skill's procedure (owner 2026-10-15, `SHANNON_FCA_SKILL_GIST`): its first numbered steps of `## 手順` (or, without
+ * numbered steps, the first lines of that section), at most `SKILL_GIST.lines` of at most `SKILL_GIST.width` characters, each on
+ * one line. Built by code from the skill's own stored text, no model call; `skip` leaves out lines a caller already covers.
+ * Empty when the skill has no procedure.
+ */
+export function skillGist(body: string, skip: (line: string) => boolean = () => false): string[] {
+  const steps = skillSections(body).find(section => section.title === '手順')?.text ?? '';
+  const lines = steps.split('\n').map(line => line.replace(/\s+/gu, ' ').trim()).filter(Boolean);
+  const numbered = lines.filter(line => /^\d{1,2}[.)．）]/u.test(line));
+  return (numbered.length ? numbered : lines).filter(line => !skip(line)).slice(0, SKILL_GIST.lines).map(line => {
+    const characters = [...line];
+    return characters.length > SKILL_GIST.width ? `${characters.slice(0, SKILL_GIST.width - 1).join('')}…` : line;
+  });
+}
+
 /** The digest a body is compared by (export, an owner's edit): its text with line ends and trailing space normalized. */
 export function skillHash(text: string): string {
   const normalized = text.replace(/\r\n?/gu, '\n').split('\n').map(line => line.replace(/\s+$/u, '')).join('\n').trim();
