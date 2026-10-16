@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { SKILL_LIFECYCLE } from './skillDocument.js';
-import type { SQLiteSkills, SkillActor, SkillUse, StoredSkill } from './store/sqliteSkills.js';
+import type { SQLiteSkills, SkillActor, SkillUse, SkillUseKind, StoredSkill } from './store/sqliteSkills.js';
 import type { SkillMilestone } from './skillImportContract.js';
 
 /** How many uses a skill keeps: every pending one and the last resolved window, at most this many in all. */
@@ -12,6 +12,11 @@ interface TaskUseMemory { write(at: string, operation: () => void): void; store:
  * Uses of a skill read by a common FCA task (`skill.read` in the task's loop; `wiring/fcaSkillOutcomes.ts`). Their `talk` is the
  * task's key, `fca:` and a digest of the task's id. One pending use per task and version; only the task's later outcome settles
  * it (`SkillMemory.settleTask`), never G at night: a read with no later outcome stays pending and judges nothing.
+ *
+ * With `SHANNON_FCA_SKILL_GIST` a pointer shows the gist of the skill's first steps, so she may act on it without a read. Such a
+ * use is kind `gist` (`k`): noted only when the decision that was shown the gist then called a body tool the gist names, never
+ * for the gist shown alone. It is settled like a read, so a trial still sees what the task then did; a later read of the same
+ * version in the same task turns it into a read (one use per task and version either way).
  */
 export const FCA_TASK_USE_PREFIX = 'fca:';
 export function fcaSkillTaskKey(taskId: string): string {
@@ -33,7 +38,7 @@ export function writeSkillUses(store: UseStore, skill: StoredSkill, uses: readon
 }
 
 /** `SkillMemory.usedInTask`: the read's skill id (also when the task already read this version), or null (not a legacy-minecraft skill). */
-export function taskRead(memory: TaskUseMemory, scopeKey: string, taskKey: string, name: string, at: string): string | null {
+export function taskRead(memory: TaskUseMemory, scopeKey: string, taskKey: string, name: string, at: string, kind?: SkillUseKind): string | null {
   let skillId: string | null = null;
   if (!isTaskUse(taskKey)) return null;
   memory.write(at, () => {
@@ -41,7 +46,7 @@ export function taskRead(memory: TaskUseMemory, scopeKey: string, taskKey: strin
     // Only the owner-approved Minecraft trials (Syzygy, 2026-10-14) are judged by a task's body outcomes, never her other skills.
     if (!skill || skill.status === 'retired' || skill.provenance?.packId !== MINECRAFT_TASK_PACK) return;
     skillId = skill.skillId;
-    const uses = withTaskUse(skill, taskKey, at);
+    const uses = withTaskUse(skill, taskKey, at, kind);
     if (uses) writeSkillUses(memory.store, skill, uses);
   });
   return skillId;
@@ -67,11 +72,19 @@ export function taskSettle(memory: TaskUseMemory, scopeKey: string, taskKey: str
   return settled;
 }
 
-/** The skill's uses with this task's read of its current version added, or null when the task already read that version. */
-export function withTaskUse(skill: StoredSkill, taskKey: string, at: string): SkillUse[] | null {
-  if (skill.uses.some(use => use.talk === taskKey && use.v === skill.version)) return null;
+/**
+ * The skill's uses with this task's use of its current version added, or null when the task already used that version. A read
+ * after a pending gist use of the same version turns that use into a read (`k` left out); nothing else changes an existing use.
+ */
+export function withTaskUse(skill: StoredSkill, taskKey: string, at: string, kind?: SkillUseKind): SkillUse[] | null {
+  const existing = skill.uses.find(use => use.talk === taskKey && use.v === skill.version);
+  if (existing) return !kind && existing.k === 'gist' && existing.o === null ? skill.uses.map(use => use === existing ? asRead(use) : use) : null;
   const id = `use_${randomUUID().replace(/-/gu, '').slice(0, 20)}`;
-  return [...skill.uses, { id, at: new Date(at).toISOString(), talk: taskKey, v: skill.version, g: 0, o: null }];
+  return [...skill.uses, { id, at: new Date(at).toISOString(), talk: taskKey, v: skill.version, g: 0, o: null, ...(kind ? { k: kind } : {}) }];
+}
+function asRead(use: SkillUse): SkillUse {
+  const { k: _gist, ...read } = use;
+  return read;
 }
 
 /** The task's pending uses settled with its outcome (1 a success, 0 a failure) or dropped (null), or null when none was pending. */

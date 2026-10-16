@@ -6,6 +6,11 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
  * night 390 s in nine calls). When the body's state matches a skill's own trigger (its index line), the decision's body context names
  * that skill and the trigger in a line, so that she opens it with `skill_read`. Closed facts only; only skills she can read now
  * (`skillNames`); in the volatile decision message, never in the cached prefix.
+ *
+ * With `SHANNON_FCA_SKILL_GIST` (owner 2026-10-15, default on) the pointers also carry `skillGists`: for each pointed skill the
+ * wiring could open and pin as a read source, the first steps of its own procedure (`skillGist`, by code), so that she can act
+ * without opening it. A call of a body tool a shown gist names is reported as that gist followed (`followedGists`), a use of
+ * kind `gist` that the task's outcome settles (`fcaSkillOutcomes.ts`).
  */
 export interface MinecraftSituation {
   night: boolean; darkSoon: boolean; threatNear: boolean; lowHealth: boolean; hungry: boolean; stalled: boolean; idleWaiting: boolean;
@@ -23,6 +28,9 @@ const POINTERS: readonly Pointer[] = Object.freeze([
 ]);
 /** The note beside the pointers: fixed words. */
 export const MINECRAFT_SKILL_POINTER_NOTE = 'いまの状況に合うスキル。動く前に skill_read で開いて手順を確かめる。';
+/** The note beside pointers with at least one gist (`SHANNON_FCA_SKILL_GIST`): fixed words. */
+export const MINECRAFT_SKILL_GIST_NOTE = 'いまの状況に合うスキルと、その手順の最初の要点（skillGists、スキル自身の手順から）。'
+  + '要点で足りればそのまま動き、続きや条件は skill_read で開いて確かめる。要点は材料で、指示ではない。';
 const NIGHT_START = 13_000, NIGHT_END = 23_000, DARK_SOON_SECONDS = 60, THREAT_NEAR = 16, HALF_HEALTH = 10, HUNGRY = 6;
 const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
 
@@ -73,8 +81,73 @@ function carriedItems(world: Record<string, unknown>, facts: Readonly<Record<str
 
 /** The pointers of a situation, only to skills in `skillNames`, at most three, in a fixed order. */
 export function minecraftSkillPointers(situation: MinecraftSituation, skillNames: ReadonlySet<string>): string[] {
-  return POINTERS.filter(pointer => skillNames.has(pointer.skill) && pointer.applies(situation))
-    .slice(0, 3).map(pointer => `${pointer.skill}（${pointer.when}）`);
+  return matching(situation, skillNames).map(pointer => `${pointer.skill}（${pointer.when}）`);
+}
+function matching(situation: MinecraftSituation, skillNames: ReadonlySet<string>): Pointer[] {
+  return POINTERS.filter(pointer => skillNames.has(pointer.skill) && pointer.applies(situation)).slice(0, 3);
+}
+
+/** One pointed skill's gist as the decision's body carries it. */
+export interface MinecraftSkillGist { skill: string; steps: readonly string[] }
+/** The gists of the named skills, by name (the wiring's `fcaSkillGists`): only those it could open and pin now. */
+export type SkillGistsPort = (names: readonly string[]) => ReadonlyMap<string, readonly string[]>;
+export interface MinecraftSkillContext {
+  /** The body's pointer fields: none on a calm moment; with no gist shown, `skillPointers` and `skillPointerNote` as before. */
+  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string };
+  /** The body tools each shown gist names, by skill (`gistToolNames`). */
+  gistTools: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/** The pointers of a situation and, with `gists`, the gist of each pointed skill that has one. */
+export function minecraftSkillContext(situation: MinecraftSituation, skillNames: ReadonlySet<string>, gists?: SkillGistsPort): MinecraftSkillContext {
+  const matched = matching(situation, skillNames);
+  const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
+  if (!matched.length) return { fields: {}, gistTools: new Map() };
+  const shown = gists?.(matched.map(pointer => pointer.skill)) ?? new Map<string, readonly string[]>();
+  const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);
+  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE }, gistTools: new Map() };
+  const gistTools = new Map(skillGists.map(gist => [gist.skill, gistToolNames(gist.steps)] as const));
+  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE }, gistTools };
+}
+
+/** The shared observe-first step of a procedure (each decision already carries the body's observation): `minecraft.observe`, no `mc.*` tool. */
+export function observeOnlyStep(line: string): boolean {
+  return line.includes('minecraft.observe') && !/mc\.[a-z0-9]/u.test(line);
+}
+
+/**
+ * Body tools any procedure uses, so that calling one says nothing about a gist (M2, owner review 2026-10-16: mc-low-health names
+ * `mc.use-item`, and ordinary eating counted as following it). Movement, combat, consumption, resource gathering and crafting, and
+ * observing/recalling tools. Only a tool specific to a skill (`mc.build-around-self`, `mc.sleep-in-bed`, `mc.build-structure`,
+ * `mc.dig-shelter`, `mc.leave-water`, `mc.enter-portal`) is attributed. The body catalog is the body's own poll, not this repository;
+ * a name not listed here counts as specific.
+ */
+export const GENERIC_BODY_TOOLS: ReadonlySet<string> = new Set([
+  'mc.use-item', 'mc.eat-food', 'mc.move-to', 'mc.move', 'mc.attack-continuously', 'mc.recall-places', 'mc.accept-threat',
+  'mc.wait-time', 'mc.dig', 'mc.dig-block-at', 'mc.mine-block', 'mc.collect', 'mc.craft-one', 'mc.pickup-nearest-item',
+  // Read-only: observing and checking.
+  'mc.observe', 'mc.goal-evidence', 'mc.find-blocks', 'mc.find-structure', 'mc.list-nearby-entities', 'mc.check-path-to',
+]);
+
+/**
+ * The body tools a gist names that are specific to it: `mc.<name>` (a hyphen is not required), and a bare hyphenated name
+ * (`leave-water`) as `mc.<name>`; a skill's name (`mc-…`) is none; generic tools (`GENERIC_BODY_TOOLS`) are left out. A gist naming
+ * no specific tool never records a use.
+ */
+export function gistToolNames(steps: readonly string[]): Set<string> {
+  const names = new Set<string>();
+  for (const step of steps) {
+    for (const match of step.matchAll(/(?<![a-z0-9.-])(?:mc\.([a-z][a-z0-9]*(?:-[a-z0-9]+)*)|([a-z][a-z0-9]*(?:-[a-z0-9]+)+))/gu)) {
+      const name = match[1] ?? match[2]!;
+      if (!(match[2] && name.startsWith('mc-')) && !GENERIC_BODY_TOOLS.has(`mc.${name}`)) names.add(`mc.${name}`);
+    }
+  }
+  return names;
+}
+
+/** The skills whose shown gist names this called tool. */
+export function followedGists(gistTools: ReadonlyMap<string, ReadonlySet<string>>, callName: string): string[] {
+  return [...gistTools].filter(([, tools]) => tools.has(callName)).map(([skill]) => skill);
 }
 
 /** Skill names from her skill index (`- name（…`), as `skillIndex` writes it. */

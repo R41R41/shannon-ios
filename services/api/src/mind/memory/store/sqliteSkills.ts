@@ -29,7 +29,12 @@ import { versionRevisionId } from '../skillLineage.js';
 export const SKILLS_TABLE = 'shannon_skills';
 
 /** One use of a skill: when, in which Talk, of which version, G at the turn's end, and its outcome once settled (`tierOutcome`). */
-export interface SkillUse { id: string; at: string; talk: string; v: number; g: number; o: 0 | 1 | null }
+/**
+ * One use of a skill. `k` is how a common FCA task used it (`skillTaskUses.ts`): absent, she opened it with `skill.read` (and every
+ * use of a conversation turn); `gist`, she acted on the gist its pointer showed (`SHANNON_FCA_SKILL_GIST`) without opening it.
+ */
+export type SkillUseKind = 'gist';
+export interface SkillUse { id: string; at: string; talk: string; v: number; g: number; o: 0 | 1 | null; k?: SkillUseKind }
 
 export interface StoredSkill {
   skillId: string;
@@ -211,6 +216,7 @@ export class SQLiteSkills {
       identifier(use.id);
       identifier(use.talk);
       if (!Number.isFinite(Date.parse(use.at)) || !(use.g >= 0 && use.g <= 1) || ![0, 1, null].includes(use.o) || !Number.isSafeInteger(use.v)) throw new Error('SKILL_USE');
+      if (use.k !== undefined && use.k !== 'gist') throw new Error('SKILL_USE');
     }
     this.database.prepare('UPDATE shannon_skills SET uses_json = ?, successes = ? WHERE scope_key = ? AND skill_id = ?')
       .run(JSON.stringify(uses), Math.max(0, Math.trunc(successes)), scopeKey, skillId);

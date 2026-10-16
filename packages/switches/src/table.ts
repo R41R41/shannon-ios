@@ -169,6 +169,10 @@ export const SWITCHES = [
     doc: 'Touch reflexes run under the FCA runtime.',
   },
   {
+    name: 'SHANNON_FCA_SKILL_GIST', default: 'on', kind: 'default_on', owner: 'minecraft', requires: ['SHANNON_SKILLS'],
+    doc: 'Owner 2026-10-15: a body task\'s skill pointer carries a gist of that skill\'s first steps (no skill.read needed); off, the pointer alone.',
+  },
+  {
     name: 'SHANNON_MINECRAFT_LIFECYCLE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [STAGE4],
     doc: 'Registered Minecraft start and stop tools under the action gate.',
   },

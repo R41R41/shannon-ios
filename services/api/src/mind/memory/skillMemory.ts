@@ -9,7 +9,7 @@ import {
 } from './skillDocument.js';
 import { SQLiteSkillCopyWrites } from './store/sqliteSkillCopyWrites.js';
 import { SQLiteSkillSleepUsage } from './store/sqliteSkillSleepUsage.js';
-import { SKILLS_TABLE, SQLiteSkills, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
+import { SKILLS_TABLE, SQLiteSkills, type SkillActor, type SkillUse, type SkillUseKind, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
 import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso, skillSourcesVisible } from './skillMemoryParts.js';
 import { parentBaseline, versionRevisionId, type LineageNode } from './skillLineage.js';
 
@@ -115,8 +115,8 @@ export class SkillMemory {
     return skillId;
   }
 
-  /** A common FCA task's read of a skill, and its outcome (`skillTaskUses.ts`: 1 success, 0 death or failure, null stopped). */
-  usedInTask(scopeKey: string, taskKey: string, name: string, at: string): string | null { return taskRead(this, scopeKey, taskKey, name, at); }
+  /** A common FCA task's read of a skill (`gist`: its gist acted on), and its outcome (`skillTaskUses.ts`: 1 success, 0 failure, null stopped). */
+  usedInTask(scopeKey: string, taskKey: string, name: string, at: string, kind?: SkillUseKind): string | null { return taskRead(this, scopeKey, taskKey, name, at, kind); }
   settleTask(scopeKey: string, taskKey: string, outcome: 0 | 1 | null, at: string, milestone?: SkillMilestone): number {
     return taskSettle(this, scopeKey, taskKey, outcome, at, milestone); }
 
