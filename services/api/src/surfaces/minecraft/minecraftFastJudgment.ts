@@ -42,7 +42,10 @@ export function createMinecraftFastJudgment(parts: {
     const at = now(), arrived = control.arrivedAt(bodyId);
     const earlier = healths.filter(entry => entry.at < at && at - entry.at <= FAST_JUDGMENT_LIMITS.healthWindowMs).map(entry => entry.health);
     // A failed shelter belongs to one danger episode of one life: a new arrival ends it (`consider` ends it when the danger passes).
-    if (episodeArrival !== arrived) { shelterFailed = false; episodeArrival = arrived; }
+    if (episodeArrival !== arrived) {
+      shelterFailed = false;
+      episodeArrival = arrived;
+    }
     return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
       shelterFailed });
   };
@@ -100,7 +103,10 @@ export function createMinecraftFastJudgment(parts: {
         if (!await settle(bodyId, id, signal)) return discard('busy', 'fast_skill_busy', { skill: decision.skill });
       }
       if (stale(bodyId, decision, judged.arrived)) return discard('stale', 'fast_stale', { kind: decision.kind });
-      if (signal.aborted || !await parts.permit(signal).catch(() => false)) { discards.not_permitted += 1; return; }
+      if (signal.aborted || !await parts.permit(signal).catch(() => false)) {
+        discards.not_permitted += 1;
+        return;
+      }
       parts.touched();
       parts.stepOutcome('unknown');
       let outcome: string;

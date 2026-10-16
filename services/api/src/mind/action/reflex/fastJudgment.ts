@@ -46,7 +46,8 @@ export interface FastDecision {
     | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee';
   ambiguous: boolean;
 }
-export type FastVerdict = { entry: FastEntry; decision: FastDecision } | { entry: FastEntry | null; hold: 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper' };
+export type FastHold = 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper';
+export type FastVerdict = { entry: FastEntry; decision: FastDecision } | { entry: FastEntry | null; hold: FastHold };
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
