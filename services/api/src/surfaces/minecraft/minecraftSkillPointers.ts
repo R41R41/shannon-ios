@@ -69,7 +69,8 @@ export function bedSearchMemory(kept: unknown) {
     note(call: { name: string; input: unknown }, result: { ok: boolean; text: string }, observe: () => BodyObservation | null): void {
       if (noSheepNearby(call, result)) mark = bedSearchGivenUp(observe()) ?? mark;
     },
-    checkpoint(): { minecraftNoSheepDarkIn?: number } { return mark === undefined ? {} : { minecraftNoSheepDarkIn: mark }; },
+    /** Always carries the key: the runner merges a step's checkpoint over the prior one, so a cleared mark must overwrite it with `null` (read as no mark). */
+    checkpoint(): { minecraftNoSheepDarkIn: number | null } { return { minecraftNoSheepDarkIn: mark ?? null }; },
   };
 }
 /** Seconds to dark in the observation (the body's margin, else the time of day); `Infinity` when unknown, at night or not the overworld. */
@@ -84,14 +85,19 @@ export function darkInSeconds(observation: BodyObservation | null): number {
  * the pointer behaves as before.
  */
 const NONE_FOUND = /エンティティは見つかりませんでした/u;
+/** A search of the default range (64) or at least `MIN_SHEEP_RANGE`: a short look (`maxDistance` 8) that found none says nothing about the day. */
+const MIN_SHEEP_RANGE = 32;
+const searchedFar = (range: unknown): boolean => range === undefined || range === null || (typeof range === 'number' && range >= MIN_SHEEP_RANGE);
 /** Whether a finished call is a search for sheep that found none. A fact of the call and its result, not a judgment of her content. */
 export function noSheepNearby(call: { name: string; input: unknown }, result: { ok: boolean; text: string }): boolean {
-  const type = record(call.input)?.entityType;
-  return call.name === 'mc.find-nearest-entity' && result.ok && typeof type === 'string' && type.toLowerCase() === 'sheep' && NONE_FOUND.test(result.text);
+  const type = record(call.input)?.entityType, range = record(call.input)?.maxDistance;
+  return call.name === 'mc.find-nearest-entity' && result.ok && typeof type === 'string' && type.toLowerCase() === 'sheep'
+    && searchedFar(range) && NONE_FOUND.test(result.text);
 }
 /**
  * The mark of "no sheep near" for the rest of the day: kept while the countdown to dark only falls; a rise (a new day, or after
- * dark) clears it. Marked only inside the bed window, so that the next morning's 650 s is always above it.
+ * dark) clears it. Marked only inside the bed window, so that the next morning's 650 s is always above it. Outside the overworld the
+ * countdown is `Infinity`, which also clears it (accepted: she is elsewhere, and the next search marks again).
  */
 export function bedSearchMark(mark: number | undefined, observation: BodyObservation | null): number | undefined {
   if (!observation) return mark;

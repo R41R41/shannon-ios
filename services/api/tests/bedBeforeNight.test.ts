@@ -163,6 +163,12 @@ describe('after her sheep search found none, the bed is not offered again that d
   it('marks only a finished search for sheep whose result says nothing was found', () => {
     expect(noSheepNearby(sheep, none)).toBe(true);
     expect(noSheepNearby({ name: 'mc.find-nearest-entity', input: { entityType: 'Sheep' } }, none)).toBe(true);
+    // A short look says nothing about the day: only the default range (unspecified) or at least 32 marks it.
+    expect(noSheepNearby({ ...sheep, input: { entityType: 'sheep', maxDistance: 64 } }, none)).toBe(true);
+    expect(noSheepNearby({ ...sheep, input: { entityType: 'sheep', maxDistance: 32 } }, none)).toBe(true);
+    expect(noSheepNearby({ ...sheep, input: { entityType: 'sheep', maxDistance: 31 } }, none)).toBe(false);
+    expect(noSheepNearby({ ...sheep, input: { entityType: 'sheep', maxDistance: 8 } }, none)).toBe(false);
+    expect(noSheepNearby({ ...sheep, input: { entityType: 'sheep', maxDistance: '64' } }, none)).toBe(false);
     expect(noSheepNearby(sheep, found)).toBe(false);
     expect(noSheepNearby(sheep, { ok: false, text: '検索エラー: timeout' })).toBe(false);
     expect(noSheepNearby({ name: 'mc.find-nearest-entity', input: { entityType: 'cow' } }, none)).toBe(false);
