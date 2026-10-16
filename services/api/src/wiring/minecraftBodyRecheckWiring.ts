@@ -39,9 +39,13 @@ export function createMinecraftBodyRecheck(parts: {
   };
   async function recheck(step: ReturnType<typeof held>[number], attempt: number): Promise<BodyRecheckCode> {
     if (await reconcile(step.lease)) return 'released'; // Proven earlier (a reconcile lost in transit): no new command.
-    const last = parts.control.store.lastOfLease(step.lease);
-    if (!last) return 'proof_refused';
-    const context: BodyTaskContext = last.context;
+    const own = parts.control.store.lastOfLease(step.lease);
+    // A step that sent nothing itself (run 12: a judgment that timed out) has no body command under its lease: ask about the
+    // session its holder last used, as this lease. The proof below still needs the body's own `stopped` receipt.
+    const borrowed = own ? null : parts.control.store.lastOfHolder(step.lease);
+    if (!own && !borrowed) return 'proof_refused';
+    const context: BodyTaskContext = own ? own.context : { ...borrowed!.context, generation: step.lease.generation };
+    if (borrowed && context.scopeKey !== parts.ownerScope) return 'proof_refused';
     if (!parts.control.frame(context.bodyId)) return 'body_unavailable';
     const id = `${FCA_RECHECK_PREFIX}${createHash('sha256').update(JSON.stringify([step.lease, context.sessionId, attempt, Date.now()])).digest('hex')}`;
     try {

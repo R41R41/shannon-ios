@@ -85,6 +85,12 @@ export class MinecraftControlStore {
       .get(lease.id, lease.holder, lease.generation);
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
+  /** The latest command of whoever held the lease, under any of its leases: for a step that sent nothing to the body itself (a judgment that stayed unknown). */
+  lastOfHolder(lease: ActionLease): MinecraftControlCommand | null {
+    const row = this.db.prepare(`SELECT command_json FROM fca_body_operations WHERE json_extract(command_json,'$.lease.holder')=?
+      ORDER BY rowid DESC LIMIT 1`).get(lease.holder);
+    return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
+  }
   safe(taskId: string): boolean {
     return this.db.prepare("SELECT 1 FROM fca_body_operations WHERE task_id=? AND (phase!='settled' OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1").get(taskId) === undefined;
   }

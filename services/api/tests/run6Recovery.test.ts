@@ -43,7 +43,7 @@ const body = actionResource('minebot', 'minecraft-body');
 const BODY_ID = 'minecraft:shannon-home';
 
 /** The production shape of action e6e2083d after run 6: unknown, slot released, the body retained, one stop delivered and never received. */
-function stuck() {
+function stuck(shape: 'stop-sent' | 'judgment-only' = 'stop-sent') {
   let time = Date.parse('2026-10-14T05:00:00.000Z');
   const now = () => new Date(time).toISOString();
   const db = new DatabaseSync(':memory:'); cleanups.push(() => db.close());
@@ -62,7 +62,10 @@ function stuck() {
   const stop: MinecraftControlCommand = { schemaVersion: 1, id: 'stop:4380c0f09e7e71750c99b3dc2acbced8a606014638effb9be6bd494b4c82e033', serverId: 'shannon-home',
     connectionId: 'b94c3b2a-1492-49cf-9830-312c09feb3c9', kind: 'stop', context, lease, deadlineAt: new Date(time + 5000).toISOString(),
     stop: { context, requestId: 'handoff-1', reason: 'handoff' } };
-  controlStore.insert(stop, now()); controlStore.deliver(stop.id); controlStore.cancel(stop.id);
+  // Run 12 (2026-10-16): the step whose model call timed out sent nothing; the body was last used under an earlier step's lease of the same holder.
+  const sentBy = shape === 'stop-sent' ? lease : { ...lease, id: 'earlier-step-of-the-same-holder' };
+  const sentStop: MinecraftControlCommand = { ...stop, lease: sentBy, ...(shape === 'stop-sent' ? {} : { id: 'stop:earlier-step' }) };
+  controlStore.insert(sentStop, now()); controlStore.deliver(sentStop.id); controlStore.cancel(sentStop.id);
   time += ACTION_LIMITS.leaseMs + 1; store.transaction(() => store.sweep(now()));
   time += ACTION_LIMITS.unknownReleaseMs; store.transaction(() => store.sweep(now()));
   const configuration = configuredMinecraftBody(values)!;
@@ -131,6 +134,28 @@ describe('the run 6 stuck lease, after the fix is deployed', () => {
     const next = f.store.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'fca:next:1', resources: [body] }, f.now());
     expect(f.store.claim(next.id, 'runner', f.now())).not.toBeNull();
     expect(await f.recheck.request('start')).toMatchObject({ code: 'not_retained' });
+  });
+
+  it('releases the body of a step that sent nothing itself, by asking about the session its holder last used (run 12)', async () => {
+    const f = stuck('judgment-only');
+    expect(f.controlStore.lastOfLease(f.lease)).toBeNull();
+    f.poll();
+    const sent: MinecraftControlCommand[] = [];
+    const result = await f.answered(f.recheck.request('operator'), command => { sent.push(command); return f.stopped(command); });
+    expect(result).toMatchObject({ code: 'released', actionIds: [f.lease.id] });
+    // The release is asked as the retained step's own lease, in the session the holder last used.
+    expect(sent).toMatchObject([{ kind: 'release', lease: f.lease, context: { sessionId: f.context.sessionId, generation: f.lease.generation } }]);
+    expect([...retainedOf(f.db, f.lease.id)]).toEqual([]);
+  });
+
+  it('still refuses when the holder never used the body, and when the body does not confirm', async () => {
+    const f = stuck('judgment-only');
+    f.db.prepare('DELETE FROM fca_body_operations').run();
+    expect(await f.recheck.request('operator')).toMatchObject({ code: 'proof_refused' });
+    const g = stuck('judgment-only');
+    g.poll();
+    expect(await g.answered(g.recheck.request('operator'), command => g.stopped(command, 'unknown'))).toMatchObject({ code: 'not_confirmed' });
+    expect([...retainedOf(g.db, g.lease.id)]).toEqual([body]);
   });
 
   it('keeps the body retained when the body cannot confirm, and stops asking on its own after a few attempts', async () => {
