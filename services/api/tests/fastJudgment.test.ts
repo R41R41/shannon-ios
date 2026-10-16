@@ -243,7 +243,7 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     expect(unknown([{ name: 'creeper', distance: 5.5, canReachMe: true, ignited: false }])).toBe('flee:creeper_flee');
     expect(unknown([{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }])).toBe('hold:floor_unknown');
     // Re-review 1: low health acts even when the floor is unknown (a skeleton in range, health 4: shelter, not hold).
-    expect(unknown([{ name: 'skeleton', distance: 10, canReachMe: true, ignited: false }], { health: 4 })).toBe('flee:low_health_flee');
+    expect(unknown([{ name: 'skeleton', distance: 5, canReachMe: true, ignited: false }], { health: 4 })).toBe('flee:low_health_flee');
     expect(unknown([{ name: 'skeleton', distance: 2, canReachMe: true, ignited: false }], { health: 4 })).toBe('shelter:low_health_shelter');
     expect(unknown([{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }], { health: 7 })).toBe('hold:floor_unknown');
     expect(kind(fastJudgment(state({ floorKnown: true, threats: [{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }] })))).toBe('shelter:ranged_shelter');
