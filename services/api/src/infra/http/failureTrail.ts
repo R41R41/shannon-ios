@@ -5,8 +5,10 @@
  */
 export function failureTrail(error: unknown, frames = 6): string {
   if (!(error instanceof Error)) return 'UnknownError';
-  const where = (error.stack ?? '').split('\n').filter(line => /^\s+at /u.test(line))
-    .map(line => line.trim().replace(/^at\s+/u, '').replace(/(?:file:\/\/)?[^()\s]*?[\\/](src|packages)[\\/]/u, '$1/'))
+  // The message can span lines (and may itself quote a stack), so frames are read only after the message's own lines.
+  const stack = (error.stack ?? '').split('\n').slice(error.message.split('\n').length);
+  const where = stack.filter(line => /^\s+at /u.test(line))
+    .map(line => line.trim().replace(/^at\s+/u, '').replace(/(?:file:\/\/)?[^()\s]*?[\\/](src|packages)[\\/]/u, '$1/').slice(0, 200))
     .slice(0, frames);
   return where.length ? `${error.name} ${where.join(' < ')}` : error.name;
 }

@@ -58,6 +58,7 @@
     "infra/http/apiValidation.ts",
     "infra/http/calendarRoutes.ts",
     "infra/http/executiveRoutes.ts",
+    "infra/http/failureTrail.ts",
     "infra/http/fcaNowProjection.ts",
     "infra/http/fcaTaskRoutes.ts",
     "infra/http/feedbackRoutes.ts",
