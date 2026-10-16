@@ -324,7 +324,7 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     const f = fixture(async () => {
       if (f.modelInputs.length === 1) { await fail.promise; throw new FcaNoResponseError(); }
       return f.modelInputs.length === 2 ? move() : wait();
-    }, { fast: true, retryDelay: 800, logs });
+    }, { fast: true, retryDelay: 2_500, logs });
     await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision pending');
     fail.resolve();
     // The request got no answer; the runner waits before it asks again. The body is still guarded and may act inside that wait.
@@ -337,7 +337,8 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     f.threats([]); f.danger(false);
     // The same step, the same body monitor, the same judgment asked again: its tool call is refused as stale, like any decision made
     // before a body action.
-    await f.until(() => f.modelInputs.length === 2, 'retried decision sent');
+    for (let i = 0; i < 1_500 && f.modelInputs.length < 2; i++) { f.pump(); await delay(5); }
+    expect(f.modelInputs).toHaveLength(2);
     expect(f.bodies).toHaveLength(1);
     await f.until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing', 'step committed'); await f.driver.drain();
     expect(f.driver.runtime.get('owner', f.task.id)?.phase).not.toBe('unknown');
