@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { TaskSource, TaskStep, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { SQLiteFcaEvidenceStore, type FcaEvidenceOptions } from '../src/mind/action/fca/store/fcaEvidenceStore.js';
 import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
@@ -27,8 +31,8 @@ function world(): Run6RecallShape {
 }
 
 /** The real source guard, runtime and evidence store, wired as `fcaSharedWiring.ts` wires them, with the switch as given. */
-function wired(f: Run6RecallShape, provenanceRefs: boolean) {
-  const h = actionHarness(f.world.now); migrateAgentTasks(h.db); cleanups.push(() => h.close());
+function wired(f: Run6RecallShape, provenanceRefs: boolean, path = ':memory:') {
+  const h = actionHarness(f.world.now, path); migrateAgentTasks(h.db); cleanups.push(() => h.close());
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: f.ownerAlone, now: f.world.now,
     canRunTask: () => false, provenanceRefs,
     model: { async decide() { throw new Error('unused'); }, toolResults: results => ({ role: 'user', results }) } });
@@ -125,7 +129,10 @@ describe('a step record keeps its sources by reference', () => {
     // Another scope cannot read it; an unknown set is not visible and throws nowhere.
     expect(readStoredSources(w.h.db, 'other', stored)).toBeNull();
     w.h.db.prepare('UPDATE fca_action_evidence SET sources_json=? WHERE event_id=?').run(JSON.stringify({ set: `sha256:${'0'.repeat(64)}` }), eventId);
+    // The prepare's outcome line counts it (`unresolved=`: the post-deploy watch item; absent when 0).
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     expect(await shown(w, parent)).toEqual([]);
+    expect(info.mock.calls.map(call => String(call[0])).filter(line => line.startsWith('Shannon FCA evidence prepare ')).at(-1)).toMatch(/ unresolved=1$/u);
     // A row written before the change (its copy) is read as before.
     w.h.db.prepare('UPDATE fca_action_evidence SET sources_json=? WHERE event_id=?').run(JSON.stringify(step.snapshot.sources), eventId);
     expect(await shown(w, parent)).toEqual([eventId]);
@@ -212,5 +219,83 @@ describe('reading through the reference applies the checks of today (forgetting,
     expect(verdicts()).toEqual([[false, false], [false, false], [true, true]]);
     f.setAlone(false);
     expect(verdicts()).toEqual([[false, false], [false, false], [false, false]]);
+  });
+});
+
+describe('scripts/fca-provenance-expand.ts: the rollback aid turns every reference back into its copy', () => {
+  const script = resolve(import.meta.dirname, '../../../scripts/fca-provenance-expand.ts');
+  const run = (path: string, ...flag: string[]) => spawnSync(process.execPath, ['--import', 'tsx', script, path, ...flag], { encoding: 'utf8' });
+  type Stored = { table: string; rowid: number; sources_json: string };
+  /** Evidence rows of two tasks and a committed history round, all by reference, in a database file; each row's list as read now. */
+  async function database() {
+    quiet();
+    const directory = mkdtempSync(join(tmpdir(), 'fca-expand-')); cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
+    const path = join(directory, 'tasks.sqlite'), f = world(), w = wired(f, true, path), pool = f.turns.slice(10, 200);
+    const parent = w.runtime.createChild('owner', w.root.id, { title: '親', goal: '親の作業', completionCriteria: '確かめる' }, 'parent');
+    const a = w.runtime.createChild('owner', parent.id, { title: '一', goal: '一つ目', completionCriteria: '確かめる' }, 'a');
+    const b = w.runtime.createChild('owner', parent.id, { title: '二', goal: '二つ目', completionCriteria: '確かめる' }, 'b');
+    const c = w.runtime.createChild('owner', parent.id, { title: '三', goal: '三つ目', completionCriteria: '確かめる' }, 'c');
+    await recordAction(w, a, pool.slice(0, 6), 'a');
+    await recordAction(w, b, pool.slice(6, 12), 'b');
+    const step = await stepOf(w, c);
+    expect(w.runtime.observeSources(step, { observationId: 'recall-h', recalledMemoryIds: pool.slice(12, 16) })).toBe(true);
+    step.snapshot.sources = w.runtime.taskSources('owner', c.id, step.messageIds);
+    expect(w.runtime.commitStep(step, { history: [{ role: 'assistant', content: 'x' }], disposition: 'continue' })).not.toBeNull();
+    w.h.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const rows = (): Stored[] => [
+      ...w.h.db.prepare('SELECT rowid AS rowid, sources_json FROM fca_action_evidence ORDER BY rowid').all().map(row => ({ table: 'fca_action_evidence', rowid: Number(row.rowid), sources_json: String(row.sources_json) })),
+      ...w.h.db.prepare('SELECT rowid AS rowid, sources_json FROM fca_task_history ORDER BY rowid').all().map(row => ({ table: 'fca_task_history', rowid: Number(row.rowid), sources_json: String(row.sources_json) })),
+    ];
+    const before = rows();
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    expect(before.every(row => isProvenanceReference(row.sources_json))).toBe(true);
+    // What each row's list is now, as the build reads it (a reference resolved): the copy the script must write.
+    const lists = before.map(row => JSON.stringify(readStoredSources(w.h.db, 'owner', row.sources_json)));
+    return { w, path, rows, before, lists, step };
+  }
+
+  it('dry run writes nothing; --apply writes exactly the lists the references read as; a second --apply changes nothing', async () => {
+    const { w, path, rows, before, lists, step } = await database();
+    const dry = run(path);
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain(`fca_action_evidence: references=${before.filter(row => row.table === 'fca_action_evidence').length}`);
+    expect(dry.stdout).toContain('unresolved=0');
+    expect(dry.stdout).toContain('malformed=0');
+    expect(rows()).toEqual(before);
+    const applied = run(path, '--apply');
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(applied.stdout).toContain(`expanded=${before.length}`);
+    expect(applied.stdout).toContain('integrity=ok');
+    const after = rows();
+    expect(after.map(row => row.sources_json)).toEqual(lists);
+    expect(after.some(row => isProvenanceReference(row.sources_json))).toBe(false);
+    // The history round holds the very list its step committed with.
+    expect(JSON.parse(after.find(row => row.table === 'fca_task_history')!.sources_json)).toEqual(step.snapshot.sources);
+    // An older build parses them as lists of sources; this build still reads a copy as written.
+    for (const row of after) expect(readStoredSources(w.h.db, 'owner', row.sources_json)).toEqual(JSON.parse(row.sources_json));
+    const again = run(path, '--apply');
+    expect(again.status, again.stderr).toBe(0);
+    expect(again.stdout).toContain('expanded=0');
+    expect(rows()).toEqual(after);
+  });
+
+  it.each([
+    ['an unresolved reference', JSON.stringify({ set: `sha256:${'0'.repeat(64)}` }), 'unresolved=1', 'malformed=0'],
+    ['a reference this build cannot read', '{"set":"not-a-set-id"}', 'unresolved=0', 'malformed=1'],
+  ])('refuses --apply and writes nothing for %s (and the dry run reports it)', async (_label, bad, unresolved, malformed) => {
+    const { path, rows, before } = await database();
+    const target = before[0]!;
+    const w = new (await import('node:sqlite')).DatabaseSync(path);
+    w.prepare(`UPDATE ${target.table} SET sources_json=? WHERE rowid=?`).run(bad, target.rowid);
+    w.close();
+    const expected = rows().map(row => row.sources_json);
+    expect(expected[0]).toBe(bad);
+    const dry = run(path);
+    expect(dry.stdout).toContain(unresolved);
+    expect(dry.stdout).toContain(malformed);
+    const refused = run(path, '--apply');
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain('FCA_PROVENANCE_EXPAND_REFUSED');
+    expect(rows().map(row => row.sources_json)).toEqual(expected);
   });
 });

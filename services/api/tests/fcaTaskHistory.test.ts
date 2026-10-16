@@ -10,6 +10,7 @@ import { planFcaHistory, prepareFcaHistory } from '../src/mind/action/fca/fcaHis
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummaryInput } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
+import { isProvenanceReference } from '../src/infra/sqlite/fcaProvenanceSets.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { installObserverSink, observeAsync, withObserverRun, withObserverTask } from '../src/infra/observer/observerContext.js';
@@ -31,13 +32,14 @@ const codec: FcaHistoryCodec = {
 };
 const policy: Partial<FcaHistoryPolicy> = { maximumRounds: 8, recentRounds: 3, maximumSummaryCharacters: 5_000, maximumBatches: 32 };
 const summary = { '目的': ['Finish the supplied task'], '途中': ['Keep observed results'], coversFromId: 'forged', coversToId: 'forged' };
-function fixture(path = ':memory:', legacy = false) {
+function fixture(path = ':memory:', legacy = false, provenanceRefs = false) {
   const h = actionHarness(() => at, path); migrateAgentTasks(h.db); let leaseAllowed = true;
   if (legacy) h.db.exec(`CREATE TABLE fca_task_history (sequence INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT NOT NULL REFERENCES agent_tasks(task_id),step_id TEXT NOT NULL UNIQUE,entries_json TEXT NOT NULL,committed_at TEXT NOT NULL)`);
   const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now: () => at,
     leaseValid(scope, taskId, lease, time) { const action = h.store.check(lease, time); return leaseAllowed && !!action
-      && action.scopeKey === scope && action.kind === 'agentTask' && action.sourceId.startsWith(`fca:${taskId}:`); } });
+      && action.scopeKey === scope && action.kind === 'agentTask' && action.sourceId.startsWith(`fca:${taskId}:`); },
+    ...(provenanceRefs ? { provenanceRefs: true } : {}) });
   const root = runtime.ensureRoot('owner'), task = runtime.createChild('owner', root.id, { title: 'history', goal: 'history' }, 'history');
   async function begin() {
     const current = runtime.get('owner', task.id)!;
@@ -369,5 +371,29 @@ describe('exact complete-round FCA history compaction', () => {
     expect(f.runtime.commitStep(step, { disposition: 'complete', history: entries(3) })?.task.status).toBe('queued');
     expect(f.window().rounds.at(-1)?.status).toBe('queued');
     expect(f.db.prepare('SELECT count(*) AS count FROM fca_task_history').get()?.count).toBe(3);
+  });
+});
+
+// `SHANNON_FCA_PROVENANCE_REFS`: a round keeps its sources by reference, and the compaction's lineage (`TaskHistoryStore.commit`)
+// is the union of the rounds' resolved sources, exactly as over copies.
+describe.each([[true], [false]])('history rounds with provenance by reference %s', byReference => {
+  it('commits a compaction whose lineage is every compacted round\'s sources and the current ones', async () => {
+    const f = fixture(':memory:', false, byReference);
+    const observe = (step: TaskStep, id: string) => {
+      expect(f.runtime.observeSources(step, { observationId: id, recalledMemoryIds: [`recalled-${id}`] })).toBe(true);
+      step.snapshot.sources = f.runtime.taskSources('owner', f.task.id, step.messageIds);
+    };
+    for (let index = 1; index <= 10; index++) { const step = await f.begin(); observe(step, `o${index}`); await f.finish(step, index); }
+    const stored = f.db.prepare('SELECT sources_json FROM fca_task_history ORDER BY sequence').all() as Array<{ sources_json: string }>;
+    expect(stored.every(row => isProvenanceReference(row.sources_json) === byReference)).toBe(true);
+    const step = await f.begin(); observe(step, 'current');
+    const planned = planFcaHistory(f.window(), codec, policy); expect(planned.kind).toBe('compact'); if (planned.kind !== 'compact') return;
+    expect(f.runtime.commitCompaction(step, { ...planned.request, template: summary }, () => true)).toBe(true);
+    const lineage = f.window().summary!.sources.flatMap(source => source.recalledMemoryIds);
+    const compacted = planned.request.sequences.length;
+    expect(lineage).toEqual(expect.arrayContaining([...Array.from({ length: compacted }, (_, index) => `recalled-o${index + 1}`), 'recalled-current']));
+    // A retained round reads back its own (cumulative) list, through its reference or its copy.
+    const retained = f.window().rounds.at(-1)!.sources.flatMap(source => source.recalledMemoryIds);
+    expect(retained).toEqual(expect.arrayContaining(Array.from({ length: 10 }, (_, index) => `recalled-o${index + 1}`)));
   });
 });
