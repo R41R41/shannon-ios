@@ -314,8 +314,10 @@ describe('what a gist leaves in the log (Minebot run 12), content-free', () => {
     const names = new Set(['mc-low-health']);
     for (let decision = 0; decision < 3; decision += 1) expect(minecraftSkillContext(low, names, ports.skillGists).fields.skillGists).toHaveLength(1);
     // The first decision pinned; the later two are the same outcome again in the step: one line for the step, none for each decision.
-    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-log holdsSources=true pointed=mc-low-health offered=mc-low-health pinAttempts=1 pinFailures=0']);
-    expect(lines.join('\n')).not.toMatch(/秘密|build-around/u);
+    // `named`: the tool names a call can follow (names only; never a gist's text).
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-log holdsSources=true pointed=mc-low-health offered=mc-low-health pinAttempts=1 pinFailures=0 '
+      + 'named=mc-low-health=mc.build-around-self']);
+    expect(lines.join('\n')).not.toMatch(/秘密/u);
   });
   it('logs the gist withheld because the task holds no source of its own, with holdsSources=false and nothing pinned', () => {
     const lines: string[] = []; let pins = 0;
@@ -324,7 +326,7 @@ describe('what a gist leaves in the log (Minebot run 12), content-free', () => {
     if (!('skillGists' in ports)) throw new Error('no ports');
     expect(minecraftSkillContext(low, new Set(['mc-low-health']), ports.skillGists).fields.skillGists).toBeUndefined();
     expect(pins).toBe(0);
-    expect(lines).toEqual(['Shannon Minecraft skill gist task=operator holdsSources=false pointed=mc-low-health offered=- pinAttempts=0 pinFailures=0']);
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=operator holdsSources=false pointed=mc-low-health offered=- pinAttempts=0 pinFailures=0 named=-']);
   });
   it('logs a failed pin, an unreadable skill, and a log that throws never fails the step', () => {
     const lines: string[] = [];
@@ -332,7 +334,7 @@ describe('what a gist leaves in the log (Minebot run 12), content-free', () => {
     const refused = bodySkillGists(step, () => real, () => false, null, line => lines.push(line));
     if (!('skillGists' in refused)) throw new Error('no ports');
     expect(refused.skillGists(['mc-low-health']).size).toBe(0);
-    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-pin holdsSources=true pointed=mc-low-health offered=- pinAttempts=1 pinFailures=1']);
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-pin holdsSources=true pointed=mc-low-health offered=- pinAttempts=1 pinFailures=1 named=-']);
     const broken = bodySkillGists(step, () => { throw new Error('locked'); }, () => true, null, () => { throw new Error('log down'); });
     if (!('skillGists' in broken)) throw new Error('no ports');
     expect(broken.skillGists(['mc-low-health']).size).toBe(0);

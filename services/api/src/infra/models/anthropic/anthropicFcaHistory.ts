@@ -168,6 +168,11 @@ export function elidedDecision(fields: Record<string, unknown>, knowledge: Resta
   return result;
 }
 
+/** The names of the parts an elided decision message gives as unchanged (content-free; fixed names from `ELIDED`). */
+export function unchangedParts(fields: Record<string, unknown>): string[] {
+  return ELIDED.filter(key => key in fields && fields[key] === UNCHANGED);
+}
+
 /** A recall packet as a decision message gives it (`modelRecall` in `anthropicFcaModel.ts`). */
 type RecallFields = Record<string, unknown> & { items: readonly ({ id: string } & Record<string, unknown>)[] };
 function elidedRecall(packet: RecallFields, knowledge: RestatedKnowledge): Record<string, unknown> {

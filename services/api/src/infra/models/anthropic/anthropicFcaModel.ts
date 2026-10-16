@@ -15,7 +15,7 @@ import { observedAnthropicResponse, observedToolName } from './observerProjectio
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
-import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge } from './anthropicFcaHistory.js';
+import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
 import { connectionFailedBeforeResponse, providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
 import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
@@ -141,14 +141,15 @@ export class AnthropicFcaModel implements FcaModel {
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
     if (input.sharedContext && !input.catalog) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
-    const { turn, body, menu } = observeSync('native', {
+    const { turn, body, menu, built } = observeSync('native', {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
       const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       // A part this epoch's replay already showed in full is not restated (`anthropicFcaHistory.ts`, `elidedDecision`); the message is stored as sent.
-      const fields = elidedDecision(decisionFields(input, ownerClock), restatedKnowledge(history));
+      const supplied = decisionFields(input, ownerClock);
+      const fields = elidedDecision(supplied, restatedKnowledge(history));
       // A system message holding tool changes must immediately follow a user turn and be either the last message or
       // immediately followed by an assistant turn: it may not open the conversation (a live 400, 2026-10-12), nor sit between
       // two user messages (a live 400, 2026-10-14, Minebot lane run 3: tasks a5ad9996 and the root fd99df55 sent a public
@@ -174,9 +175,12 @@ export class AnthropicFcaModel implements FcaModel {
         console.info(JSON.stringify({ event: 'fca_request_compacted', model: this.model, level: compacted.level, maximumTokens: this.compactAboveTokens }));
       }
       const turn = turnOf(compacted.fields);
-      return { turn, menu, body: bodyOf(turn) };
+      // What the caller handed over, counted before elision and shortening, so that the log can tell "none was built" from "none was sent".
+      const built = { taskId: input.task.id, bodyAttached: supplied.body !== undefined, level: compacted.level, ...skillCounts(supplied.body),
+        elidedParts: unchangedParts(fields) };
+      return { turn, menu, body: bodyOf(turn), built };
     }, value => observedFcaRequest(value.body), { model: this.model });
-    logRequestSize(this.model, history, body, turn);
+    logRequestSize(this.model, history, body, turn, built);
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     // Once sent, a stop lets the request finish within its grace (`stopGraceMilliseconds`); the timeout still applies.
@@ -308,7 +312,7 @@ function observedFcaResponse(message: Anthropic.Message) {
  * unnoticed (review P3-1): characters of the replayed history, of its inline tool definitions, and of the whole request.
  */
 function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming,
-  turn: readonly Anthropic.MessageParam[]): void {
+  turn: readonly Anthropic.MessageParam[], built: RequestBuilt): void {
   const definitional = (message: Anthropic.MessageParam) => isFcaToolChangeMessage(message as unknown as Record<string, unknown>);
   const definitions = history.filter(definitional);
   // `historyCharacters` is the whole replay, its inline definitions included; `nativeHistoryCharacters` is the part the 64k
@@ -317,21 +321,37 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
   console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
     nativeHistoryCharacters: JSON.stringify(history.filter(message => !definitional(message))).length,
     toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length, estimatedInputTokens,
-    skillGists: skillGistCount(turn) }));
+    skillGists: sentCounts(turn).gists, ...sentGistFields(turn, built) }));
   // The replay is bounded below the step (`maximumReplayTokens`); a request that still passes it is sent and priced as it is.
   if (estimatedInputTokens > PRICE_STEP_TOKENS) console.warn(JSON.stringify({ event: 'fca_request_price_step', model, estimatedInputTokens }));
 }
+/** What the caller handed this decision before the message was elided and shortened (content-free): see `sentGistFields`. */
+interface RequestBuilt { taskId: string; bodyAttached: boolean; level: number | null; pointers: number; gists: number; elidedParts: readonly string[] }
+/** The skill pointers and gists of a body context, as counts (0 when none or not a list). */
+function skillCounts(body: unknown): { pointers: number; gists: number } {
+  const fields = body && typeof body === 'object' ? body as { skillPointers?: unknown; skillGists?: unknown } : {};
+  const count = (value: unknown) => Array.isArray(value) ? value.length : 0;
+  return { pointers: count(fields.skillPointers), gists: count(fields.skillGists) };
+}
 /**
- * The skill gists the decision message carries in its `body.skillGists` (0 when none): a count only, never a gist. The message is the
- * first of the turn, as sent (after any shortening); a message that cannot be read counts none.
+ * The pointers and gists the decision message carries in its `body`, as counts only, never a gist. The message is the first of the
+ * turn, as sent (after any shortening); a message that cannot be read counts none.
  */
-function skillGistCount(turn: readonly Anthropic.MessageParam[]): number {
+function sentCounts(turn: readonly Anthropic.MessageParam[]): { pointers: number; gists: number } {
   const content = turn[0]?.content;
-  if (typeof content !== 'string' || !content.includes('"skillGists"')) return 0;
-  try {
-    const gists = (JSON.parse(content) as { body?: { skillGists?: unknown } }).body?.skillGists;
-    return Array.isArray(gists) ? gists.length : 0;
-  } catch { return 0; }
+  if (typeof content !== 'string' || !content.includes('"skillGists"') && !content.includes('"skillPointers"')) return { pointers: 0, gists: 0 };
+  try { return skillCounts((JSON.parse(content) as { body?: unknown }).body); } catch { return { pointers: 0, gists: 0 }; }
+}
+/**
+ * Why a request's `skillGists` is what it is (Minecraft run 13: gists offered, yet `skillGists:0`): the task (the line is otherwise
+ * anonymous, and a research or chat task has no body), whether a body context was attached, the pointers and gists as sent and as
+ * built, and `skillGistsElided` (built but not sent, by elision or shortening: today only a part of `ELIDED` is ever left out, and
+ * `body` is not one, so it stays false), the parts named as unchanged, and the shortening level. Content-free.
+ */
+function sentGistFields(turn: readonly Anthropic.MessageParam[], built: RequestBuilt): Record<string, unknown> {
+  const sent = sentCounts(turn);
+  return { taskId: built.taskId, bodyAttached: built.bodyAttached, skillPointers: sent.pointers, skillGistsBuilt: built.gists,
+    skillGistsElided: built.gists > sent.gists, elidedParts: built.elidedParts, compactedLevel: built.level };
 }
 /** Haiku 5.5 prices a prompt above 100,000 input tokens at five times the rate (`claudeUsage.ts`, `HAIKU_LONG_PRICES`). */
 const PRICE_STEP_TOKENS = 100_000;

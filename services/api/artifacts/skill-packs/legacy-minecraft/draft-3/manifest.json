@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-3",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=0e838a78fa1681acc6d418646f57e28301ec96c4006021febe10893b4dd5165d",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-bed-before-night",
+      "path": "mc-bed-before-night/SKILL.md",
+      "sha256": "54eb66a3287e816440f1ba85f758eb3c46c48eafbf3d961af741e8f92536cf5c",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    }
+  ]
+}

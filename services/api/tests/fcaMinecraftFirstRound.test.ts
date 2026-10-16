@@ -122,7 +122,8 @@ describe('a Minecraft task whose first round alone exceeds the history budget ta
     expect(sizes).toHaveLength(2);
     expect(sizes[1]).toEqual({ event: 'fca_request_size', model: expect.any(String), historyCharacters: expect.any(Number),
       nativeHistoryCharacters: expect.any(Number), toolDefinitionCharacters: expect.any(Number), requestCharacters: expect.any(Number),
-      estimatedInputTokens: expect.any(Number), skillGists: 0 });
+      estimatedInputTokens: expect.any(Number), skillGists: 0, taskId: run.task.id, bodyAttached: expect.any(Boolean), skillPointers: 0, skillGistsBuilt: 0,
+      skillGistsElided: false, elidedParts: expect.any(Array), compactedLevel: null });
     expect(sizes[1].toolDefinitionCharacters).toBeGreaterThan(43_000);
     // Minebot lane run 1 (2026-10-14): `historyCharacters` includes the inline definitions; the 64k budget measures the rest.
     expect(sizes[1].nativeHistoryCharacters).toBe(sizes[1].historyCharacters - sizes[1].toolDefinitionCharacters + 1);
