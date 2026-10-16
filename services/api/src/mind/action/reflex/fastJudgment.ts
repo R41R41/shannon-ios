@@ -17,6 +17,8 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
   floorCreeperDistance: 4.5,
   /** A frame older than this is never acted on: the answer would be stale. */
   maxStateAgeMs: 1_000,
+  /** At or below this health the rules shelter or flee before anything else (an unknown health counts as 0). */
+  lowHealth: 6,
 });
 
 const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'blaze', 'ghast', 'drowned_trident']);
@@ -97,7 +99,8 @@ export function fastJudgment(state: FastBodyState): FastVerdict {
   const entry = fastEntry(state);
   if (state.floorActive) return { entry, hold: 'floor_active' };
   // An older body does not say whether its floor runs: hold only while its `retreat` could be running (`floorMayRun`).
-  if (!state.floorKnown && entry && floorMayRun(state)) return { entry, hold: 'floor_unknown' };
+  // Low health never waits for a floor that may not exist: shelter or flee below.
+  if (!state.floorKnown && entry && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth && floorMayRun(state)) return { entry, hold: 'floor_unknown' };
   if (state.threats.some(threat => threat.ignited && threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.floorCreeperDistance)) {
     return { entry, hold: 'floor_creeper' };
   }
@@ -125,7 +128,7 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   const within = (distance: number) => reachable.filter(threat => threat.distance <= distance);
   const health = state.health ?? 0;
   if (entry === 'respawn') return decision('shelter', 'respawn_shelter');
-  if (health <= 6) return within(3).length ? decision('shelter', 'low_health_shelter') : decision('flee', 'low_health_flee');
+  if (health <= FAST_JUDGMENT_LIMITS.lowHealth) return within(3).length ? decision('shelter', 'low_health_shelter') : decision('flee', 'low_health_flee');
   if (within(6).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');
   if (within(8).length >= 3) return decision('shelter', 'outnumbered_shelter');
   const melee = within(6).filter(threat => !RANGED.has(threat.name));

@@ -35,7 +35,7 @@ export function createMinecraftFastJudgment(parts: {
 }) {
   const { control, step, governor, now } = parts;
   const healths: Array<{ at: number; health: number }> = [];
-  let frames = 0, count = 0, shelterFailed = false, episodeArrival: number | null = null;
+  let frames = 0, lastKind: FastDecision['kind'] | null = null, count = 0, shelterFailed = false, episodeArrival: number | null = null;
   /** Dropped answers by reason (`stale`, `busy`, `not_sent`, `not_permitted`); also named in every hold's detail. */
   const discards = { stale: 0, busy: 0, not_sent: 0, not_permitted: 0 };
   const stateOf = (bodyId: string, observation: BodyObservation) => {
@@ -88,6 +88,7 @@ export function createMinecraftFastJudgment(parts: {
     const sessionId = `${step.id}:fast:${count}`, id = `fast:${hash(sessionId)}`;
     governor.began(step.taskId, now(), entry);
     let effective = false;
+    const sentAt = now();
     /** A dropped answer did not do what a cooldown would be for in the success case: it waits `dangerCooldownMs` like any ineffective session. */
     const discard = (reason: keyof typeof discards, hold: string, detail: Record<string, string | number | boolean | null>) => {
       discards[reason] += 1;
@@ -123,7 +124,10 @@ export function createMinecraftFastJudgment(parts: {
         throw error;
       }
       effective = outcome === 'completed';
-      if (decision.kind === 'shelter') shelterFailed = !effective;
+      // A shelter cut off before its time was up (the FCA's own interrupt cancels the command) did not fail: only a refusal, a failure
+      // or a run to its deadline does. The design only says "if hiding failed, flee next" and does not cover interrupts.
+      const cutOff = outcome === 'cancelled' && now() - sentAt < fastSkillMilliseconds(decision.skill);
+      if (decision.kind === 'shelter') shelterFailed = !effective && !cutOff;
       parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
         + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}`);
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
@@ -144,11 +148,14 @@ export function createMinecraftFastJudgment(parts: {
       const verdict = fastJudgment(state);
       if (!('decision' in verdict)) {
         frames = 0;
+        lastKind = null;
         if (verdict.entry) parts.hold(verdict.hold);
         else shelterFailed = false; // The danger passed: the next one is a new episode.
         return null;
       }
-      frames += 1;
+      // Consecutive frames of the same choice: a kind that changes (shelter, then fight) is a flicker and starts the count again.
+      frames = lastKind === verdict.decision.kind ? frames + 1 : 1;
+      lastKind = verdict.decision.kind;
       // Two frames in a row, as for any automatic entry before her first decision: a single frame can be a flicker.
       if (frames < 2) return null;
       const { decision } = verdict, running = defending(state.health, decision);
@@ -163,6 +170,7 @@ export function createMinecraftFastJudgment(parts: {
       if (!admission.admit) return parts.hold(admission.reason, { mode: 'danger' }), null;
       if (!live()) return null;
       frames = 0;
+      lastKind = null;
       return run(bodyId, decision, entry, { arrived: control.arrivedAt(bodyId), at: now() }, signal);
     },
   };

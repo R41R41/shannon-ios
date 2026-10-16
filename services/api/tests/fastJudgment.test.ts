@@ -200,6 +200,29 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'dig-shelter']);
   });
 
+  it('re-review 2: a choice that flickers between kinds never reaches an interrupt; two frames of the same kind do', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    const frameOf = (health: number) => ({ health, nearbyThreats: [zombie(3)] });
+    body.see(frameOf(10)); // shelter (ambiguous), frame 1
+    body.see(frameOf(20)); // fight, frame 1 of a new kind
+    body.see(frameOf(10)); // shelter again, frame 1
+    expect(body.commands).toEqual([]);
+    body.see(frameOf(20)); await body.see(frameOf(20));
+    expect(body.commands.map(command => command.skill)).toEqual(['attack-continuously']);
+  });
+
+  it('re-review 3: a shelter cut off by an interrupt (cancelled) does not count as failed, so the next choice is shelter again', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.outcomes.push('cancelled');
+    const hurt = { health: 10, nearbyThreats: [zombie(3)] };
+    body.see(hurt); await body.see(hurt);
+    body.advance(6_000);
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'dig-shelter']);
+  });
+
   it('F4: a new life starts a new episode', async () => {
     const body = fakeBody();
     body.advance(60_000);
@@ -219,6 +242,10 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     expect(unknown([{ name: 'creeper', distance: 4, canReachMe: true, ignited: false }])).toBe('hold:floor_unknown');
     expect(unknown([{ name: 'creeper', distance: 5.5, canReachMe: true, ignited: false }])).toBe('flee:creeper_flee');
     expect(unknown([{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }])).toBe('hold:floor_unknown');
+    // Re-review 1: low health acts even when the floor is unknown (a skeleton in range, health 4: shelter, not hold).
+    expect(unknown([{ name: 'skeleton', distance: 10, canReachMe: true, ignited: false }], { health: 4 })).toBe('flee:low_health_flee');
+    expect(unknown([{ name: 'skeleton', distance: 2, canReachMe: true, ignited: false }], { health: 4 })).toBe('shelter:low_health_shelter');
+    expect(unknown([{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }], { health: 7 })).toBe('hold:floor_unknown');
     expect(kind(fastJudgment(state({ floorKnown: true, threats: [{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }] })))).toBe('shelter:ranged_shelter');
     expect(fastBodyState(frame(1, 0, { health: 20 }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: false, floorActive: false });
     expect(fastBodyState(frame(1, 0, { health: 20 }, { floorActive: false }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: true });
