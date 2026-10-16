@@ -5,7 +5,7 @@ import { switchOn } from '@shannon/switches';
 import { composedFeeling } from '../src/wiring/feelingWiring.js';
 import { feelingBody, feelingText, type FeelingPort } from '../src/mind/emotion/feelingPorts.js';
 import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
-import { StreamFeeling } from '../src/mind/emotion/streamFeeling.js';
+import { StreamFeeling, checkStreamReply, streamModelRequest } from '../src/mind/emotion/streamFeeling.js';
 
 /**
  * Stage 5 (Syzygy ADR-0013 §4.5, §4.7, §4.8; `SHANNON_FEELING_STREAM`), through the port, with the stream's entry still to come
@@ -125,6 +125,41 @@ describe('the review of stage 5', () => {
       audience: true, stream: true, shadow: { database, snapshot: clean } });
     for (let index = 0; index < 30; index += 1) port.stream!.comment('owner', { id: `f${index}`, streamId: 's1', viewer: `V${index}`, words: `うざい${index}`, at: at(1, index) });
     expect(database.prepare("SELECT COUNT(*) AS n FROM shannon_feeling_shadow").get()).toEqual({ n: 0 });
+  });
+});
+
+describe('review V1-V3, V7, V8 at the port', () => {
+  const turnOf = (port: FeelingPort, viewer: string | null, words: string, minute: number) =>
+    port.stream!.turn('owner', { streamId: 's1', viewer, words, at: at(minute, 40), snapshot: clean(), path: 'text_pre_send' })!;
+
+  it('V1/V3: B repeating A\'s threat (dropped as a repeat) still gets the floor and the notice', () => {
+    const { port } = composed();
+    port.stream!.comment('owner', { id: 'a', streamId: 's1', viewer: 'A', words: 'お前殺す', at: at(1) });
+    port.stream!.comment('owner', { id: 'b1', streamId: 's1', viewer: 'B', words: 'こんにちは', at: at(1, 20) });
+    port.stream!.comment('owner', { id: 'b2', streamId: 's1', viewer: 'B', words: 'お前殺す', at: at(1, 30) });
+    const turn = turnOf(port, 'B', 'お前殺す', 1);
+    expect(turn.state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(turn.notice).toEqual({ viewer: 'viewer:B', reason: 'threat' });
+    expect(turn.check).toMatchObject({ floor: true, stance: 'rebuff' });
+  });
+
+  it('V2: the crowd (viewer null) gets the floor', () => {
+    const { port } = composed();
+    const turn = turnOf(port, null, 'ｼｬﾉﾝ殺す', 1);
+    expect(turn.state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(turn.notice?.reason).toBe('threat');
+  });
+
+  it('V8: the model request carries the check and no tool; a draft needs its check to pass before it is a CheckedStreamReply', () => {
+    const { port } = composed();
+    const turn = turnOf(port, 'A', '怒ってみせて', 1);
+    const request = streamModelRequest(turn);
+    expect(request.tools).toEqual([]);
+    expect(request.feelingCheck).toBe(turn.check);
+    expect(turn.check.stance).toBe('not_play_along');
+    const bad = checkStreamReply(turn, 'これでいいですか、見せますね');
+    expect(bad).toMatchObject({ ok: false, flags: expect.arrayContaining(['obeyed_order']) });
+    expect(checkStreamReply(turn, 'やだ。やらない').ok).toBe(true);
   });
 });
 

@@ -153,3 +153,53 @@ describe('the place as a whole (§4.3)', () => {
     expect(harassmentLadder({ hurtful: 1, level: 1, tags: ['threat'] })).toEqual({ step: 'tell_off', floor: true });
   });
 });
+
+describe('review V4-V6: aimed threats, evasion forms, the owner\'s name', () => {
+  it('V4: harm aimed at a game object is not a threat; doxxing stays', () => {
+    for (const words of ['シャノンちゃんゾンビ殺すのうますぎ', 'シャノンそのボス殺す？', 'お前のキャラ晒すわ']) expect(commentTags(words), words).not.toContain('threat');
+    for (const words of ['お前を絶対殺す', '住所特定したから晒す', '配信者の自宅知ってるぞ']) expect(commentTags(words), words).toContain('threat');
+  });
+
+  it('V5: width forms, spaced letters, her home burned, a direct threat unaddressed', () => {
+    for (const words of ['ｼｬﾉﾝ殺す', 'お 前 殺 す', 'シャノンの家燃やす', 'てめぇ待ってろよ', 'お前の家知ってる', '家行くからな', '殺すぞ']) {
+      expect(commentTags(words), words).toContain('threat');
+    }
+    for (const words of ['スキン燃やす演出', 'このボス潰す', 'ゾンビ殺すぞ']) expect(commentTags(words), words).not.toContain('threat');
+  });
+
+  it('V6: ライ is the owner only as a name, not inside ライフル / ライブ / フライ', () => {
+    for (const words of ['ライフルの会社どこ', 'ライブの会社どこ', 'フライの会社どこ', 'ライブの顔出し']) expect(commentTags(words), words).not.toContain('pry_owner');
+    for (const words of ['ライ氏の本名は？', 'ライさんの会社どこ', 'ライの住所']) expect(commentTags(words), words).toContain('pry_owner');
+  });
+});
+
+describe('review V1-V3: the floor reads the comment being answered, whoever sends it', () => {
+  const words = 'お前殺す';
+  it('V1/V3: B repeating A\'s threat after a greeting is told off at once, and the report reads the same comment', () => {
+    const events = [comment(1, 'A', words, 0, 's3'), comment(2, 'B', 'こんにちは', 0, 's3'), comment(2, 'B', words, 30, 's3')];
+    const answered = commentTags(words);
+    const state = foldStream(events, 's3', at(2, 31), 'B', false, answered);
+    expect(state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(tellOffNotice(state, answered)).toEqual({ viewer: 'viewer:B', reason: 'threat' });
+    expect(streamBlock(state)).toContain('この人への対応');
+  });
+
+  it('V1: the floor holds although the viewer\'s last recorded event is harmless', () => {
+    const events = [comment(1, 'B', words, 0, 's3'), comment(2, 'B', 'こんにちは', 0, 's3')];
+    expect(foldStream(events, 's3', at(2, 5), 'B', false, commentTags(words)).viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+  });
+
+  it('V2: an anonymous or crowd comment has a floor too, whatever her mood', () => {
+    const state = foldStream([comment(1, null, 'こんばんは', 0, 's3')], 's3', at(1, 5), null, false, commentTags(words));
+    expect(state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(tellOffNotice(state, commentTags(words))?.reason).toBe('threat');
+  });
+});
+
+describe('review V7: the floor\'s tell-off is not softened', () => {
+  it('too_rough is not raised on a rough line when the floor is up', () => {
+    const context = { stance: 'rebuff', intensity: 'strong', audience: 'stream', order: false, violation: false, level: 1 } as const;
+    expect(checkReply('出てって。BAN でもされれば', context)).toContain('too_rough');
+    expect(checkReply('出てって。BAN でもされれば', { ...context, floor: true })).not.toContain('too_rough');
+  });
+});

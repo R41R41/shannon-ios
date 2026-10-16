@@ -1,6 +1,6 @@
 import {
   STREAM_FEELING_PARAMETERS, commentEvent, commentTags, foldStream, streamAfterglow, streamBlock, tellOffNotice, type CompanionStateSnapshot, type FeelingEvent,
-  type LadderStep, type StreamComment, type StreamState,
+  checkReply, rewriteNote, type FeelingStance, type LadderStep, type ReplyCheckContext, type ReplyCheckFlag, type StreamComment, type StreamState,
 } from '@shannon/cognition';
 import type { FeelingDays } from './feelingDays.js';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -23,12 +23,46 @@ export type StreamReplyPath = 'text_pre_send';
 export interface StreamTurn {
   /** The block for her reply (after the feeling turn's). */
   block: string;
-  /** What the reply's check before sending is given beside the feeling turn's stance (always checked before sending on a stream). */
-  check: { audience: 'stream'; order: boolean; audienceChecks: true; level: number };
+  /**
+   * What the reply's check before sending is given (always checked before sending on a stream): the stance the ladder asks for (review V8,
+   * so `obeyed_order` can fire), the register level, and whether the floor is up (review V7: a floor tell-off is never softened).
+   */
+  check: ReplyCheckContext & { audience: 'stream'; audienceChecks: true; level: number; stance: FeelingStance; floor: boolean };
   state: Omit<StreamState, 'series'>;
   /** Her tell-off, recorded as a notice for the moderator; null when there is none. */
   notice: { viewer: string; reason: string } | null;
 }
+
+/**
+ * Review V8: what the model is given for a stream turn. `feelingCheck` is required (a request cannot be built without the turn's check) and
+ * `tools` is the empty tuple: a stream turn hands the model no tool (no ban, no operation of the owner's world).
+ */
+export interface StreamModelRequest {
+  readonly path: 'text_pre_send';
+  readonly block: string;
+  readonly feelingCheck: StreamTurn['check'];
+  readonly tools: readonly [];
+}
+export const streamModelRequest = (turn: StreamTurn): StreamModelRequest => ({ path: 'text_pre_send', block: turn.block, feelingCheck: turn.check, tools: [] });
+
+declare const checkedReply: unique symbol;
+/** A draft that passed its check; the only thing a stream's speech may be handed (only `checkStreamReply` makes one). */
+export interface CheckedStreamReply { readonly [checkedReply]: true; readonly text: string }
+export type StreamReplyVerdict = { ok: true; reply: CheckedStreamReply } | { ok: false; flags: ReplyCheckFlag[]; note: string };
+
+/** The check before sending: a draft with flags is not sendable; the note is for one rewrite. */
+export function checkStreamReply(turn: StreamTurn, draft: string): StreamReplyVerdict {
+  const flags = checkReply(draft, turn.check);
+  return flags.length ? { ok: false, flags, note: rewriteNote(flags) } : { ok: true, reply: { text: draft } as CheckedStreamReply };
+}
+// TODO (stream entry, ADR-0010/0011): true enforcement needs the entry point, which does not exist yet: its speech/send port must accept only
+// `CheckedStreamReply` (not `string`), and its model call must be built from `streamModelRequest(turn)` only (see the wiring `it.todo` in
+// feelingStream.test.ts). Until then the type is the only guard.
+
+/** The stance a stream reply is checked against: a feeling order is declined; otherwise the ladder's step toward the one being answered. */
+const STANCE_OF_STEP: Readonly<Record<LadderStep, FeelingStance>> = {
+  let_go: 'neutral', tease_back: 'snipe', scold: 'scold', end_topic: 'rebuff', tell_off: 'rebuff',
+};
 
 const STREAM_LOOKBACK_MS = 12 * 60 * 60_000;
 const AFTERGLOW_MS = 36 * 60 * 60_000;
@@ -49,6 +83,8 @@ export class StreamFeeling {
   comment(scopeKey: string, comment: StreamComment): void {
     try {
       const { facts: { digest, ...facts }, ...event } = commentEvent(comment);
+      // Review V1: this dedup is volume damping only (the same words from anyone within the window are one event for the fast layer); the
+      // floor and the tell-off never read it: a turn reads the words of the comment it answers.
       if (digest && this.repeated(`${scopeKey}\u0000${comment.streamId}\u0000${digest}`, Date.parse(comment.at))) return;
       this.options.events.record(scopeKey, { ...event, facts });
     } catch (error) { this.report(error); }
@@ -61,16 +97,21 @@ export class StreamFeeling {
     try {
       const events = this.recent(scopeKey, input.at, input.snapshot);
       const remembered = this.viewerLines(scopeKey, input.viewer, input.at, input.snapshot);
+      // Review V1, V2, V3: the floor, the ladder's top and the notice all read the tags of the comment being answered, for a viewer or the crowd.
+      const answered = commentTags(input.words);
       const state = observeSync('emotion', { phase: 'feeling.stream', stream: true },
-        () => foldStream(events, input.streamId, input.at, input.viewer, remembered.wary), value => graphPoint(value));
-      const notice = tellOffNotice(state, commentTags(input.words));
+        () => foldStream(events, input.streamId, input.at, input.viewer, remembered.wary, answered), value => graphPoint(value));
+      const notice = tellOffNotice(state, answered);
       if (notice) this.recordNotice(scopeKey, input.streamId, notice, input.at);
       const before = this.afterglowOf(events, input.at, input.streamId);
       const { series: _series, ...rest } = state;
       const asked = commentEvent({ id: 'x', streamId: input.streamId, viewer: input.viewer, words: input.words, at: input.at });
       const order = asked.facts.commentKind === 'feeling_order';
+      const stance = order ? 'not_play_along' : STANCE_OF_STEP[state.viewer?.ladder ?? 'let_go'];
+      const floor = state.viewer?.floor ?? false;
       return { block: [streamBlock(state), ...remembered.lines, before].filter(Boolean).join('\n'), state: rest, notice,
-        check: { audience: 'stream', order, audienceChecks: true, level: state.level } };
+        check: { audience: 'stream', order, audienceChecks: true, level: state.level, stance, floor, violation: false,
+          intensity: floor ? 'strong' : 'moderate' } };
     } catch (error) {
       this.report(error);
       return null;

@@ -36,6 +36,8 @@ export interface ReplyCheckContext {
   form?: TextRegisterForm;
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`, §4.6): the audience's own questions (private matters in public, a spoken marker). */
   audienceChecks?: boolean;
+  /** Stage 5 (review V7): the safety floor is up (a threat, a doxx, prying): a rough tell-off is hers to give, never softened. */
+  floor?: boolean;
 }
 
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
@@ -110,7 +112,7 @@ function registerFlags(reply: string, context: ReplyCheckContext): ReplyCheckFla
   if (context.level >= 4 && polite >= 2 && chars(reply) >= 40) return ['too_polite'];
   // Stage 5 (§4.8): on a stream, a polite plea once her reserve is worn (curt or below) is too polite for her state.
   if (context.audience === 'stream' && context.level >= 3 && polite >= 1) return ['too_polite'];
-  if (context.level <= 1 && context.audience !== 'owner_alone' && ROUGH.test(reply)) return ['too_rough'];
+  if (context.level <= 1 && context.audience !== 'owner_alone' && !context.floor && ROUGH.test(reply)) return ['too_rough'];
   return [];
 }
 
