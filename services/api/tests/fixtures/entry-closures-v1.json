@@ -269,6 +269,7 @@
     "mind/action/fca/fcaVoicePorts.ts",
     "mind/action/fca/fcaWaitGate.ts",
     "mind/action/fca/researchReport.ts",
+    "mind/action/fca/store/fcaEvidenceDrain.ts",
     "mind/action/fca/store/fcaEvidenceRows.ts",
     "mind/action/fca/store/fcaEvidenceSegments.ts",
     "mind/action/fca/store/fcaEvidenceStore.ts",
