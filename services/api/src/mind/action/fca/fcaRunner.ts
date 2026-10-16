@@ -9,7 +9,8 @@ import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
 import type { TaskRecall } from '../../recall/taskRecallPorts.js';
 import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
-import type { FcaBodyLifecycle, FcaExternalTools, FcaModel } from './fcaPorts.js';
+import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
+import { decideWithOneRetry } from './fcaNoResponse.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
@@ -49,6 +50,8 @@ export interface FcaStepPorts {
    * (an operator's hand-over); absent means a wait is never questioned.
    */
   waitCounterpart?(): boolean;
+  /** The wait before the one retry of a decision that got no answer (`fcaNoResponse.ts`); 2-5 s when absent (tests: 0). */
+  decisionRetryDelayMs?(): number;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -147,7 +150,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const execution = currentActionExecution();
   if (execution) execution.decisionRequested = true;
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
-  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal).catch(error => { progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' }); throw error; });
+  const request: FcaModelInput = { ...input,
+    ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
+    ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
+    ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
+    ...(sharedContext ? { sharedContext } : {}),
+    ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) };
+  const output = await decideWithOneRetry(() => ports.model.decide(request, signal), { signal, recheck: checked, delay: ports.decisionRetryDelayMs,
+    log: line => console.warn(`${line} task=${step.taskId}`) }).catch(error => {
+    progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
+    throw error;
+  });
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'received' });
   await checked();
   let bodyStale = (ports.body ? !await ports.body.guard(bodyRevision) : false) || !await observationFresh();

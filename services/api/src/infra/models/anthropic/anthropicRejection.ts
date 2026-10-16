@@ -106,6 +106,23 @@ export function providerServerError(error: unknown): error is ApiError & { statu
   return error instanceof Anthropic.APIError && typeof error.status === 'number' && error.status >= 500 && error.status < 600;
 }
 
+/** Network causes that mean no byte of an answer arrived: the connection was refused, lost, unresolved or timed out at the OS. */
+const NO_RESPONSE_CAUSES: ReadonlySet<string> = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN',
+  'ENETUNREACH', 'EHOSTUNREACH', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET']);
+
+/**
+ * Whether a dispatched request failed on the wire with no answer at all: an SDK connection error (never an HTTP status, our own or the
+ * SDK's deadline, or an abort) whose network cause is a known connect/transport code. Such a request produced no decision, so a second
+ * one cannot apply anything twice; whether the first was processed (and billed) stays unknown. An unclassified failure is not this.
+ */
+export function connectionFailedBeforeResponse(error: unknown): boolean {
+  // The SDK turns an error whose text says "timed out" into APIConnectionTimeoutError and drops its cause: that class is not
+  // identified (a deadline of ours or the SDK's looks the same) and is not retried. Node's ETIMEDOUT arrives as a code on the cause.
+  if (!(error instanceof Anthropic.APIConnectionError)) return false;
+  const { status, cause } = providerFailureFacts(error);
+  return status === null && cause !== null && NO_RESPONSE_CAUSES.has(cause);
+}
+
 /** Logs one failed dispatched request by its closed facts; never provider text or request content. */
 export function reportDispatchFailure(lane: string, error: unknown): void {
   console.warn(JSON.stringify({ event: 'anthropic_request_failed', lane, ...providerFailureFacts(error) }));

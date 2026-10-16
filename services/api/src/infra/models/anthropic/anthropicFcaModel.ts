@@ -16,7 +16,8 @@ import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from '.
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge } from './anthropicFcaHistory.js';
-import { providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
+import { connectionFailedBeforeResponse, providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
+import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
@@ -199,7 +200,8 @@ export class AnthropicFcaModel implements FcaModel {
       });
       message = (await claudeToolLoop(body, { session: undefined, send, isAnswer: () => true, refusal: 'final', maxRounds: 1 })).final!;
     } catch (error) {
-      // No hidden resend, including after an abort. Never expose provider error text containing request material.
+      // No hidden resend, including after an abort: this adapter never sends twice. The one visible, logged retry of a request that got
+      // no answer at all belongs to the runner (`decideWithOneRetry`). Never expose provider error text containing request material.
       if (!dispatched) throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_NOT_DISPATCHED');
       if (error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500) {
         // Content-free: status, provider error type and a closed message class (`anthropicRejection.ts`).
@@ -216,7 +218,9 @@ export class AnthropicFcaModel implements FcaModel {
         if (execution) execution.modelOutcome = 'acknowledged';
         throw new Error(`FCA_MODEL_HTTP_${error.status}`);
       }
-      throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
+      if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
+      // No answer reached us, so no decision exists to apply: the runner may ask once more (`decideWithOneRetry`); its outcome stays unknown.
+      throw connectionFailedBeforeResponse(error) ? new FcaNoResponseError() : new Error('FCA_MODEL_RESPONSE_UNKNOWN');
     } finally { grace?.dispose(); }
     const usage = this.usage(message.usage);
     await this.options.recordUsage(usage);
