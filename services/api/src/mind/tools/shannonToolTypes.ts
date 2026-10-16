@@ -105,6 +105,18 @@ export interface ToolExecutionContext extends ToolCallContext {
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;
 
+/**
+ * The caller's check after a call ran, before its result is used (`afterExecution`). A result it withholds (its sources, who
+ * is present) is not used: the call is still recorded, never what it touched (a path, a title), and the hold is thrown on.
+ */
+export function checkAfterExecution(context: Pick<ToolExecutionContext, 'afterExecution'>, tool: string, run: ToolRun,
+  record: (summary: string, outcome: 'failed', reasonCode: string) => void): void {
+  try { context.afterExecution?.({ name: tool, documents: run.documents, ok: run.result.ok, text: run.result.text }); } catch (error) {
+    if (!run.apply && !run.recordedElsewhere) record(`会話の中で道具「${tool}」を使いましたが、その結果は使いませんでした。`, 'failed', 'result_withheld');
+    throw error;
+  }
+}
+
 export function clip(value: string, maximum: number): string {
   const line = value.replace(/\s+/gu, ' ').trim();
   return line.length > maximum ? `${line.slice(0, maximum - 1)}…` : line;

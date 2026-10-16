@@ -242,6 +242,7 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 - The server's stop switch (pause) stops the steps of **her own time** (they are not handed out; queued ones wait) but not the steps of a **conversation** with the owner: those are his own requests, made while he is talking to her.
 - Presence is stored per host (table `autonomy_host_presence`), so the activity-loop process sees the same presence as the API process.
 - An own-time step that closes after her loop stopped waiting for it (a late report, a lease that ran out) is still written to the activity record, as ADR-0002 requires of every action.
+- A conversation's `list`, `read` or `search` that closes while its tool still waits is written to the activity record by that tool, after the caller's check of the result (`afterExecution`; for a common task, its sources and who is present), with the same words as below. When that check withholds the result, the entry names the tool only (「会話の中で道具「folder.read」を使いましたが、その結果は使いませんでした。」, reason `result_withheld`): no path, count or content. Every other conversation operation, and one that closes after its tool stopped waiting, is recorded when it closes.
 
 ### Deadlines
 

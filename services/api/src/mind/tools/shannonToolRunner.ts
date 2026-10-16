@@ -14,7 +14,7 @@ import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/toolGatePorts.js';
 import type { StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { validToolInput, type ToolInput, type ToolInputProblem } from './shannonToolInput.js';
-import type { PreparedToolCall, ToolExecutionContext, ToolExecutor, ToolDocuments } from './shannonToolTypes.js';
+import { checkAfterExecution, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolDocuments } from './shannonToolTypes.js';
 import {
   isReadToolDomain, offeredTools, providerToolName, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
   type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
@@ -426,7 +426,7 @@ export class ShannonToolRunner {
     }
     if (context.acknowledgementOwner === 'fca' && (run.acknowledged === false || (ready.tool.effect === 'write' && !run.result.ok
       && run.acknowledged !== true && ['failed', 'unavailable', 'timeout'].includes(run.result.failure ?? '')))) throw new Error('FCA_TOOL_OUTCOME_UNKNOWN');
-    context.afterExecution?.({ name: ready.tool.name, documents: run.documents, ok: run.result.ok, text: run.result.text });
+    checkAfterExecution(context, ready.tool.name, run, record);
     if (ready.tool.effect === 'read' && ready.tool.domain !== 'memory_read') this.taskRuntime?.observeRead?.(context.scopeKey,
       { name: ready.tool.name, documents: run.documents, ok: run.result.ok });
     if (!run.apply) {

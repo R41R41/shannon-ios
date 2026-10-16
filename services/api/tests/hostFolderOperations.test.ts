@@ -161,7 +161,9 @@ describe('her folder through her tools (contract v2)', () => {
     const step = (await claim({ waitSeconds: 1 })).body as { step: { id: string } };
     expect(step.step).toBeTruthy();
     await report(step.step.id, { outcome: 'done', result: { entries: [], truncated: false } });
-    expect(await asked).toEqual({ kind: 'done', result: { entries: [], truncated: false } });
+    // A conversation's list closed while its tool waits: the line comes back for the tool to record once the result may be used.
+    expect(await asked).toEqual({ kind: 'done', result: { entries: [], truncated: false },
+      record: { tool: 'folder.list', outcome: 'done', summary: '自分のフォルダ（owner-windows）の「いちばん上」の一覧を見ました（0件）。' } });
   });
 
   it('checks the v2 claim and every result field, and leaves the v1 claim as it was', async () => {
@@ -193,7 +195,7 @@ describe('her folder through her tools (contract v2)', () => {
     response.emit('close');
     expect(await held).toEqual({ step: null });
     const asked = service.folderOperations.run(scope, { host: HOST, origin: 'conversation', operation: 'list', tool: 'folder.list', args: { relativePath: '' }, relativePath: '', waitMilliseconds: 300 });
-    expect(await asked).toEqual({ kind: 'timeout', handedOut: false });
+    expect(await asked).toEqual({ kind: 'timeout', handedOut: false, record: expect.objectContaining({ tool: 'folder.list', outcome: 'failed', reasonCode: 'dropped' }) });
     expect(store.hostOperations.leased(scope, HOST)).toBeNull();
   });
 
@@ -263,7 +265,7 @@ describe('her folder through her tools (contract v2)', () => {
     expect(((await claim()).body as { step: unknown }).step).toBeNull();
     await report(next.id, { outcome: 'refused', code: 'not_found' });
     await report(held.id, { outcome: 'done', result: { entries: [], truncated: false } });
-    expect(await asked).toEqual({ kind: 'refused', code: 'not_found' });
+    expect(await asked).toEqual({ kind: 'refused', code: 'not_found', record: expect.objectContaining({ tool: 'folder.read', reasonCode: 'not_found' }) });
     expect(await own).toMatchObject({ kind: 'done' });
     await third;
   });
