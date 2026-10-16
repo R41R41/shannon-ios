@@ -37,16 +37,21 @@ export function createMinecraftBodyRecheck(parts: {
     const evidence = fcaReleaseEvidence(parts.db, lease, parts.ownerScope);
     return !!evidence && await parts.actions.reconcileResource(lease, resource, fcaReleaseAcknowledgement(evidence));
   };
+  /**
+   * The task, body and session to ask about. A step that sent nothing itself (run 12: a judgment that timed out) has no body command
+   * under its lease: take the session its holder last used for this task, as this lease. The session only names the command: the
+   * body's cleanup releases the whole body (`actuator.release`), and the proof still needs the body's own `stopped` receipt.
+   */
+  function contextOf(lease: ActionLease): BodyTaskContext | null {
+    const own = parts.control.store.lastOfLease(lease);
+    if (own) return own.context;
+    const taskId = fcaTaskIdOf(leases.get(lease.id)?.sourceId ?? '');
+    return taskId ? parts.control.store.lastOfHolder(lease, taskId, parts.ownerScope)?.context ?? null : null;
+  }
   async function recheck(step: ReturnType<typeof held>[number], attempt: number): Promise<BodyRecheckCode> {
     if (await reconcile(step.lease)) return 'released'; // Proven earlier (a reconcile lost in transit): no new command.
-    const own = parts.control.store.lastOfLease(step.lease);
-    // A step that sent nothing itself (run 12: a judgment that timed out) has no body command under its lease: ask about the
-    // session its holder last used for this task, as this lease. The session only names the command: the body's cleanup releases
-    // the whole body (`actuator.release`), and the proof below still needs its own `stopped` receipt.
-    const taskId = own ? undefined : fcaTaskIdOf(leases.get(step.lease.id)?.sourceId ?? '');
-    const borrowed = own || !taskId ? null : parts.control.store.lastOfHolder(step.lease, taskId, parts.ownerScope);
-    if (!own && !borrowed) return 'proof_refused';
-    const context: BodyTaskContext = own ? own.context : borrowed!.context;
+    const context = contextOf(step.lease);
+    if (!context) return 'proof_refused';
     if (!parts.control.frame(context.bodyId)) return 'body_unavailable';
     const id = `${FCA_RECHECK_PREFIX}${createHash('sha256').update(JSON.stringify([step.lease, context.sessionId, attempt, Date.now()])).digest('hex')}`;
     try {
