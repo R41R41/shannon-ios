@@ -802,6 +802,7 @@
     "wiring/fcaReportWiring.ts",
     "wiring/fcaResearchWiring.ts",
     "wiring/fcaSharedWiring.ts",
+    "wiring/fcaSkillGistSource.ts",
     "wiring/fcaSkillGists.ts",
     "wiring/fcaSkillOutcomes.ts",
     "wiring/fcaSleepJobs.ts",

@@ -5,6 +5,7 @@ import { observeOnlyStep, type SkillGistsPort } from '../surfaces/minecraft/mine
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaSkillOutcomes } from './fcaSkillOutcomes.js';
+import { isSkillGistPin, skillGistSource } from './fcaSkillGistSource.js';
 
 /**
  * The gists of a body task's pointed skills (`SHANNON_FCA_SKILL_GIST`, owner 2026-10-15; `minecraftSkillPointers.ts`). Each skill is
@@ -24,7 +25,7 @@ export function fcaSkillGists(names: readonly string[], parts: {
     const skill = parts.open(name);
     const steps = skill ? skillGist(skill.body, observeOnlyStep).map(neutralMarkers) : [];
     if (!skill || !steps.length) continue;
-    const source = `shannon-skill://${encodeURIComponent(skill.skillId)}${skill.revisionId ? `/revision/${encodeURIComponent(skill.revisionId)}` : ''}`;
+    const source = skillGistSource(skill.skillId, skill.revisionId);
     if (!parts.pinned?.(source) && !parts.pin(`skill-gist:${skill.skillId}:${skill.version}`, [source])) continue;
     gists.set(name, steps);
   }
@@ -59,10 +60,14 @@ export function bodySkillGists(step: TaskStep, open: SkillTurnPorts['open'] | un
   if (!open) return {};
   // Throws when the skill cannot be read now: then it has no gist.
   const opened = (name: string) => { try { return open(step.scopeKey, name); } catch { return null; } };
+  // A task that holds no source of its own (an operator's request, an own-time task) runs without a visibility check, and a source
+  // would add one (`canRunTask`): showing a gist must never change whether a task can run, so such a task gets the pointer alone.
+  // A pin of a gist does not make a task one that holds sources.
+  const holdsSources = () => step.snapshot?.sources?.some(item => !item.readSourceIds?.length || !item.readSourceIds.every(isSkillGistPin)) ?? false;
   return {
-    skillGists: names => fcaSkillGists(names, { open: opened,
+    skillGists: names => holdsSources() ? fcaSkillGists(names, { open: opened,
       pin: (id, sourceIds) => observeRead(id, { name: 'skill.read', ok: true, documents: { sourceIds } }),
-      pinned: source => step.snapshot?.sources?.some(item => item.readSourceIds?.includes(source)) ?? false }),
+      pinned: source => step.snapshot?.sources?.some(item => item.readSourceIds?.includes(source)) ?? false }) : new Map(),
     gistFollowed: name => outcomes?.gistFollowed(step.scopeKey, step.taskId, name),
   };
 }
