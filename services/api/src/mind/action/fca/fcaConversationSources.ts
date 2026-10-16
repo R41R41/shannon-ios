@@ -150,7 +150,10 @@ export function createFcaSourceGuard(parts: {
       } catch { console.warn('Shannon FCA capped task not reported code=fca_capped_report_failed'); }
     }).unref?.();
   };
-  /** With `peek`, undefined where the answer would need a walk (nothing is walked, remembered or counted); else as `sources`. */
+  /**
+   * With `peek`, undefined where the answer would need a walk: no walk is made and no verdict remembered or counted (a task over the
+   * provenance cap is still stopped first, as `sources` does); else as `sources`.
+   */
   const decide = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: boolean): boolean | undefined => {
     if (scopeKey !== parts.ownerScope) return false;
     try {

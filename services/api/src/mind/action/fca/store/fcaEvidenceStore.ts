@@ -211,17 +211,18 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
    * (`drain`), sliced, unless something else flushes first. Nothing is lost by the wait: a segment closes whenever it is asked.
    */
   committed(_step: TaskStep): void {
-    this.flush({ segments: false });
+    // Only this step's own outcomes and appraisals: judging every other unseen row here is a walk per row on every commit.
+    this.flush({ segments: false, stepId: _step.id });
     this.drainLater();
   }
   /**
    * Every pending item at once, synchronously, in its order (the tests', and anything that needs the answer now). Content-free: logs a
    * flush slower than slowFlushMilliseconds (default 500) with the segments it closed.
    */
-  flush(options: { segments?: boolean } = {}): void {
+  flush(options: { segments?: boolean; stepId?: string } = {}): void {
     const at = performance.now();
     this.closedSegments = 0;
-    try { for (const _unit of this.flushUnits(options.segments !== false, null)) { /* to the end, without a turn of the loop */ } } finally {
+    try { for (const _unit of this.flushUnits(options.segments !== false, null, options.stepId)) { /* to the end, without a turn of the loop */ } } finally {
       const spent = performance.now() - at;
       if (spent >= (this.options.slowFlushMilliseconds ?? SLOW_FLUSH_MILLISECONDS)) {
         console.info(`Shannon FCA evidence flush slow ms=${Math.round(spent)} segmentsClosed=${this.closedSegments}`);
@@ -255,13 +256,13 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   }
   private closedSegments = 0;
   /** The flush as units: each `yield` is a place where a sliced pass may let the event loop through, a plain one runs on. */
-  private *flushUnits(segments: boolean, unseen: FcaUnseenBackoff | null): Generator<void> {
+  private *flushUnits(segments: boolean, unseen: FcaUnseenBackoff | null, onlyStep?: string): Generator<void> {
     this.settleLifecycle();
     this.expirePending();
     yield;
-    yield* this.applyQueuedAppraisals();
+    yield* this.applyQueuedAppraisals(onlyStep);
     if (!this.options.onOutcome) return;
-    yield* this.deliverOutcomes(unseen);
+    yield* this.deliverOutcomes(unseen, onlyStep);
     if (segments) yield* this.closeEndedSegments(unseen);
   }
   private expirePending(): void {
@@ -272,10 +273,10 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       WHERE scope_key=? AND event_id=? AND comparison_json=?`)
       .run(JSON.stringify({ status: 'unobserved', actual: null, mismatch: null }), row.scope_key, row.event_id, row.comparison_json);
   }
-  private *applyQueuedAppraisals(): Generator<void> {
+  private *applyQueuedAppraisals(onlyStep?: string): Generator<void> {
     const queued = this.options.db.prepare(`SELECT o.* FROM fca_affect_outbox o WHERE o.done=0 AND EXISTS (
       SELECT 1 FROM fca_task_history h JOIN agent_tasks t ON t.task_id=h.task_id
-      WHERE h.step_id=o.step_id AND h.task_id=o.task_id AND t.scope_key=o.scope_key) ORDER BY o.revision,o.rowid`).all();
+      WHERE h.step_id=o.step_id AND h.task_id=o.task_id AND t.scope_key=o.scope_key) ORDER BY o.revision,o.rowid`).all().filter(row => onlyStep === undefined || row.step_id === onlyStep);
     for (const row of queued) {
       const evidence = JSON.parse(String(row.evidence_json)) as FcaAffectEvidence;
       const result = withScopedObserverTask(String(row.scope_key), { taskId: String(row.task_id), stepId: String(row.step_id) }, () =>
@@ -316,21 +317,23 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     this.options.db.prepare(`INSERT OR IGNORE INTO fca_affect_outbox(scope_key,event_id,revision,step_id,task_id,evidence_json) VALUES(?,?,?,?,?,?)`)
       .run(step.scopeKey, appraisal.eventId, appraisal.revision, step.id, step.taskId, JSON.stringify(evidence));
   }
-  private *deliverOutcomes(unseen: FcaUnseenBackoff | null): Generator<void> {
+  private *deliverOutcomes(unseen: FcaUnseenBackoff | null, onlyStep?: string): Generator<void> {
     const rows = this.options.db.prepare(`SELECT e.rowid AS seq,e.* FROM fca_action_evidence e WHERE e.outcome_delivered=0 AND e.observation!='pending'
       AND EXISTS (SELECT 1 FROM fca_task_history h JOIN agent_tasks t ON t.task_id=h.task_id
       WHERE h.step_id=e.step_id AND h.task_id=e.task_id AND t.scope_key=e.scope_key) ORDER BY e.rowid`).all() as unknown as EvidenceRow[];
-    for (const row of rows) {
-      const key = `row\u0000${row.scope_key}\u0000${row.event_id}`;
-      if (unseen?.skips(key) || !this.undelivered(row)) continue;
+    for (const listed of onlyStep === undefined ? rows : rows.filter(row => row.step_id === onlyStep)) {
+      const key = `row\u0000${listed.scope_key}\u0000${listed.event_id}`;
+      const row = unseen?.skips(key) ? null : this.undelivered(listed);
+      if (!row) continue;
       if (this.deliverOutcome(row)) unseen?.shown(key); else unseen?.unseen(key);
       yield;
     }
   }
-  /** Still undelivered: a flush between the units of a sliced pass may have delivered it. */
-  private undelivered(row: EvidenceRow): boolean {
-    const now = this.row(row.scope_key, row.event_id);
-    return now?.outcome_delivered === 0 && now.observation !== 'pending';
+  /** The row as it is now, when still undelivered: a flush or a settle between the units of a sliced pass may have changed it. */
+  private undelivered(row: EvidenceRow): EvidenceRow | null {
+    const now = this.options.db.prepare('SELECT rowid AS seq,* FROM fca_action_evidence WHERE scope_key=? AND event_id=?')
+      .get(row.scope_key, row.event_id) as unknown as EvidenceRow | undefined;
+    return now?.outcome_delivered === 0 && now.observation !== 'pending' ? now : null;
   }
   /** One undelivered outcome: false when it (or a held action of its segment) cannot be shown now and stays undelivered. */
   private deliverOutcome(row: EvidenceRow): boolean {

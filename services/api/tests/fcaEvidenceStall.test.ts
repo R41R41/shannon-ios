@@ -165,8 +165,8 @@ function segments(parts: { tasks: number; rows: number; walkMilliseconds?: numbe
   cleanups.push(() => runtime.close());
   const root = runtime.runtime.ensureRoot('owner');
   const deliveries: FcaDurableOutcome[] = [], calls = { visible: 0, covered: 0 };
-  const state = { visible: true };
-  const hides = (sources: readonly TaskSource[]) => parts.hiddenId !== undefined && sources.some(source => source.recalledMemoryIds.includes(parts.hiddenId!));
+  const state: { visible: boolean; hidden: string | undefined } = { visible: true, hidden: parts.hiddenId };
+  const hides = (sources: readonly TaskSource[]) => state.hidden !== undefined && sources.some(source => source.recalledMemoryIds.includes(state.hidden!));
   const options: FcaEvidenceOptions = { db: h.db, state: world.store, now: world.now, validStep: () => true, taskVisible: () => true, observeContext: () => true,
     sourcesVisible: (_scope, _id, sources) => { calls.visible += 1; spin(parts.walkMilliseconds ?? 0); return state.visible && !hides(sources); },
     // A task's provenance only grows: an earlier step's sources are covered by a later step's that name each of its steps.
@@ -187,7 +187,16 @@ function segments(parts: { tasks: number; rows: number; walkMilliseconds?: numbe
     return task;
   });
   const held = () => Number((h.db.prepare('SELECT COUNT(*) AS n FROM fca_action_evidence WHERE outcome_delivered=2').get() as { n: number }).n);
-  return { world, h, evidence, deliveries, calls, state, tasks, held };
+  /** An observed, not yet delivered outcome of the first task, with the history row that lets it be delivered. */
+  const undelivered = (stepId: string, ids: readonly string[], text = '{"done":true}') => {
+    const at = world.now();
+    const eventId = `${stepId}:call`;
+    insertRow(h.db, tasks[0]!.id, eventId, [memoryRow(`memory:${stepId}`, at, ids)], at, 0, 'web.search');
+    h.db.prepare('UPDATE fca_action_evidence SET result_json=? WHERE event_id=?').run(JSON.stringify({ ok: true, text }), eventId);
+    h.db.prepare("INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at) VALUES(?,?,'[]',?)").run(tasks[0]!.id, stepId, at);
+    return eventId;
+  };
+  return { world, h, evidence, deliveries, calls, state, tasks, held, undelivered };
 }
 
 /** A delivered segment without the task's id (each fixture makes its own), to compare two runs. */
@@ -290,6 +299,47 @@ describe('closing the held segments of ended tasks', () => {
     expect(sliced).toBeLessThan(250); // one segment (3 walks, ~30 ms) a slice, with room for a slow machine
     expect(sliced).toBeLessThan(synchronous / 3);
   }, 60_000);
+});
+
+describe('a commit and the rows it did not write', () => {
+  it('delivers its own outcome without a walk for the other unseen rows, which the drain delivers once they can be shown', async () => {
+    quiet();
+    const f = segments({ tasks: 1, rows: 0, hiddenId: 'hide' });
+    const unseen = Array.from({ length: 8 }, (_, index) => f.undelivered(`unseen-${index}`, ['hide']));
+    const own = f.undelivered('own-step', ['shown']);
+    f.evidence.committed({ id: 'own-step' } as TaskStep);
+    expect(f.calls.visible).toBe(1); // its own row only: no walk for the eight unseen ones
+    expect(f.deliveries.map(item => item.outcomeId)).toEqual([own]);
+    f.state.hidden = undefined;
+    await nextTurn(); // the commit's drain, on a later turn: it delivers the others
+    await f.evidence.drain({ segments: false });
+    expect(f.deliveries.map(item => item.outcomeId).sort()).toEqual([own, ...unseen].sort());
+    expect(f.deliveries).toHaveLength(9);
+  });
+
+  it('does not ask an unseen row again at every tick, and a flush still does', async () => {
+    quiet();
+    const f = segments({ tasks: 1, rows: 0, hiddenId: 'hide' });
+    f.undelivered('unseen-a', ['hide']);
+    await f.evidence.drain({ segments: false });
+    const asked = f.calls.visible;
+    await f.evidence.drain({ segments: false });
+    expect(f.calls.visible).toBe(asked);
+    f.evidence.flush();
+    expect(f.calls.visible).toBeGreaterThan(asked);
+  });
+
+  it('delivers a row changed between the pass\'s selection and its delivery with its latest content', async () => {
+    quiet();
+    const f = segments({ tasks: 1, rows: 0, walkMilliseconds: 25 });
+    f.undelivered('first', ['a']);
+    const second = f.undelivered('second', ['b'], '{"before":true}');
+    // The first row's walk outlasts a slice, so the loop turns before the second is reached: a settle changes it meanwhile.
+    setImmediate(() => { f.h.db.prepare('UPDATE fca_action_evidence SET result_json=? WHERE event_id=?').run(JSON.stringify({ ok: true, text: '{"after":true}' }), second); });
+    await f.evidence.drain({ segments: false });
+    expect(f.deliveries).toHaveLength(2);
+    expect(f.deliveries.find(item => item.outcomeId === second)!.result).toEqual({ ok: true, text: '{"after":true}' });
+  });
 });
 
 describe('the sliced pass\'s parts', () => {
