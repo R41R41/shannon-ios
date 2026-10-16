@@ -26,6 +26,7 @@ import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring
 import { configuredSonnet } from './wiring/sonnetWiring.js';
 import { createModelModeWiring } from './wiring/modelModeWiring.js';
 import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
+import { failureTrail } from './infra/http/failureTrail.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { noteCopyWrite } from './mind/memory/memoryPorts.js';
 import { installSalt } from './wiring/installSalt.js';
@@ -443,7 +444,7 @@ const server = createServer(async (request, response) => {
       sendJson(response, 400, { error: 'INVALID_REQUEST', message: error.message });
       return;
     }
-    console.error('Shannon request failed', error instanceof Error ? error.name : 'UnknownError');
+    console.error('Shannon request failed', failureTrail(error));
     sendJson(response, 502, {
       error: 'MODEL_UNAVAILABLE',
       message: 'Shannonの言語モデルに接続できませんでした。',

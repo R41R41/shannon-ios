@@ -7,6 +7,7 @@ import {
 } from './chatSentenceStream.js';
 import type { ApiRequest, ApiResponse, ChatStreamLine } from '../../contracts/contracts.js';
 import { startStream, writeEvent } from '../../infra/http/ndjsonStream.js';
+import { failureTrail } from '../../infra/http/failureTrail.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
@@ -61,7 +62,7 @@ export async function dispatchWithChatSentences(
     await queue;
     if (!response.headersSent) throw error;
     // Sentences of this turn were shown and the turn was rejected: nothing of it is stored.
-    console.error('Shannon request failed', error instanceof Error ? error.name : 'UnknownError');
+    console.error('Shannon request failed', failureTrail(error));
     return finish({ status: 502, error: 'MODEL_UNAVAILABLE' });
   }
   await queue;
