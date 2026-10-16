@@ -15,8 +15,12 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
   respawnDistance: 16, respawnWindowMs: 30_000,
   /** An ignited creeper this close belongs to the body's floor (`retreat`, priority 350), never to this judgment. */
   floorCreeperDistance: 4.5,
-  /** A frame older than this is never acted on: the answer would be stale. */
-  maxStateAgeMs: 1_000,
+  /**
+   * A frame older than this is never acted on: the answer would be stale. As the adapter's own `maxStateAgeMs` (3 s): this is the
+   * only place this limit is read, and 1 s dropped a `fight` against zombies at the body's door in run 12 (a skill's 2 s settle
+   * alone can outlast it).
+   */
+  maxStateAgeMs: 3_000,
   /** At or below this health the rules shelter or flee before anything else (an unknown health counts as 0). */
   lowHealth: 6,
 });
