@@ -47,12 +47,8 @@ import { SQLitePushNotificationStore, type APNsEnvironment } from './surfaces/ou
 import { configuredServerStage5 } from './wiring/serverStage5Wiring.js';
 import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/testflightDeliveryStore.js';
 import { SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
-import {
-  SQLiteOrganizeStore,
-  createConfiguredOrganizeExtractor,
-  createConfiguredVoyagerCatalog,
-  createConfiguredVoyagerDestination,
-} from './integrations/voyager/organize.js';
+import { SQLiteOrganizeStore, createConfiguredOrganizeExtractor, createConfiguredVoyagerCatalog,
+  createConfiguredVoyagerDestination } from './integrations/voyager/organize.js';
 import { createConfiguredVoiceTranscriber } from './infra/models/voiceTranscription.js';
 import { createVoiceTranscriptionRoute } from './surfaces/voice/transcriptionRoute.js';
 import { handlePlatformBridgeRequest, isPlatformBridgePath } from './surfaces/platform/serverPlatformBridgeRoute.js';
