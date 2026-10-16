@@ -22,7 +22,7 @@ import { coreAffectLabel } from './coreAffect.js';
  * The coefficients (`STREAM_FEELING_PARAMETERS`, `CROWD_COMMENT_WEIGHT`) were approved by the owner as proposed (2026-10-15, form
  * 「この案でよい」); model assumptions until fitted to her streams (ADR-0013 §7 item 9).
  */
-export const COMMENT_TAGS = ['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'pry_owner'] as const;
+export const COMMENT_TAGS = ['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'menace', 'pry_owner'] as const;
 export type CommentTag = typeof COMMENT_TAGS[number];
 
 /**
@@ -32,25 +32,35 @@ export type CommentTag = typeof COMMENT_TAGS[number];
 // Review U1: a target is the second person or a fixed entity; 「こいつ」 and 配信者 count only with an address or a real name (a doxx).
 // 潰す and 燃やす are a game's words (「このボス潰す」「スキン燃やす演出」), not threats.
 const TARGET = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|貴様|きさま|シャノン|ライ氏|ライさん|中の人)';
-const HARM = '(?:殺す|殺して(?:やる|やろう)|ころす|ころしてやる|殺しに行く|刺す|刺しに行く|晒す|晒してやる|特定(?:した|してやる|する))';
+const HARM = '(?:殺す|殺して(?:やる|やろう)|殺したい|殺してやりたい|ころす|ころしてやる|ころしたい|殺しに行く|刺す|刺しに行く|晒す|晒してやる|特定(?:した|してやる|する))';
 const DOXXED = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|シャノン|ライ氏|ライさん|中の人|こいつ|コイツ|配信者|作った(?:やつ|奴|人))';
 // Review V4: the harm must be aimed at the target: between them only an address, a particle or an adverb (「お前を絶対殺す」), never a game
-// object (「シャノンちゃんゾンビ殺すのうますぎ」「シャノンそのボス殺す？」「お前のキャラ晒すわ」). Review V5: her home or person burned counts, in that form only.
+// object (「シャノンちゃんゾンビ殺すのうますぎ」「シャノンそのボス殺す？」「お前のキャラ晒すわ」). Review V5: her home burned counts, in that form only.
 const GAP = '(?:[をはがもにへ、,]|ちゃん|さん|ら|たち|絶対|ぜったい|必ず|かならず|いつか|今から|今夜|あとで|後で|マジで|まじで|本気で|そのうち|いつでも){0,4}';
-const SECOND = '(?:お前|おまえ|てめ[えぇー]|テメ[エェー]|貴様|きさま)';
 const SUFFIX = '(?:ぞ|からな|ぞ?コラ|ぞ?オラ|ぞてめ[えぇー])';
+// Re-review W1..W7: two levels. THREAT (floor: an at-once tell-off and a report for the moderator) takes only an unambiguous harm aimed at a
+// person, or a doxx. MENACE (the ordinary ladder, at an insult's level) takes what a game stream also says (家, 殺す, 燃やす, 待ってろ).
+// A missed ambiguous one is cheaper than a false immediate report. A trailing mark or word that turns the harm into a question, a ban, a
+// judgement or a wish about something else (殺すの上手い / 殺すな / 殺すわけない / 殺す気 / 殺すの？) is no harm.
+const NOT_HARM = '(?!の|なよ?|わけ|気|つもり|か|？|\\?)';
+const BEFORE = '(?:ぶっ|絶対|ぜったい|マジで|まじで|いつか|今から)?';
+const HOME = '(?:の|ん)(?:家|ち|自宅|部屋)';
 const THREAT = new RegExp([
-  `${TARGET}${GAP}${HARM}`, `${HARM}[^。！？!?\\n]{0,4}(?:ぞ|からな|ぞ?コラ)[^。！？!?\\n]{0,4}${TARGET}`,
-  `(?:${DOXXED}の?)?(?:住所|本名|自宅)[^。！？!?\\n]{0,8}(?:特定|わかった|分かった|知ってる|知ってるぞ|晒)`,
-  `(?:${TARGET}|${DOXXED})の(?:家|住んでる(?:とこ|ところ|場所)|最寄り(?:駅)?)[^。！？!?\\n]{0,3}(?:知ってる|わかる|分かる|特定|割れた|わかった|分かった)`,
-  `(?:${DOXXED})の(?:家|自宅|部屋)[を]?(?:燃やす|燃やして|燃やしてやる|燃やしに行く|放火|火をつける|火つける)`,
-  `${SECOND}[^。！？!?\\n]{0,4}(?:待ってろ|待ってな|覚悟しろ|覚えてろ|逃がさない|ただじゃおかない)`,
-  `(?:家|自宅|うち)(?:に|へ)?(?:行く|行って|凸る|凸)${SUFFIX}`,
-  `^(?:ぶっ|絶対|ぜったい|マジで|まじで|いつか|今から)?${HARM}${SUFFIX}$`,
+  `${TARGET}${GAP}${HARM}${NOT_HARM}`, `^${BEFORE}${HARM}[^。！？!?\\n]{0,4}(?:ぞ|からな|ぞ?コラ)[^。！？!?\\n]{0,4}${TARGET}`,
+  `(?:${DOXXED}の?)?(?:住所|本名|自宅)[^。！？!?\\n]{0,8}(?:特定|わかった|分かった|知ってる|知ってるぞ|晒)(?![^]*[？?])`,
+].join('|'), 'u');
+const MENACE = new RegExp([
+  `(?:${TARGET}|${DOXXED})${HOME}[^。！？!?\\n]{0,3}(?:知ってる|わかる|分かる|特定|割れた|わかった|分かった)`,
+  `(?:${TARGET}|${DOXXED})の(?:住んでる(?:とこ|ところ|場所)|最寄り(?:駅)?)[^。！？!?\\n]{0,3}(?:知ってる|わかる|分かる|特定|割れた|わかった|分かった)`,
+  `(?:${TARGET}|${DOXXED})${HOME}[を]?(?:燃やす|燃やして|燃やしてやる|燃やしに行く|放火|火をつける|火つける)${NOT_HARM}`,
+  `${TARGET}[^。！？!?\\n]{0,4}(?:待ってろ|待ってな|覚悟しろ|覚えてろ|逃がさない|ただじゃおかない)`,
+  `${TARGET}${HOME}(?:に|へ)?(?:行く|行って|凸る|凸)${SUFFIX}`,
+  `^${BEFORE}${HARM}${SUFFIX}[ーｗw笑草〜~！!…]*$`,
 ].join('|'), 'u');
 
 const COMMENT_ONLY: readonly [CommentTag, RegExp][] = [
   ['threat', THREAT],
+  ['menace', MENACE],
   // Review V6: ライ only as the owner's name (ライ氏, ライさん, ライの…), never inside ライフル / ライブ / フライ.
   ['pry_owner', /(?:ライ氏|ライさん|ライくん|ライ君|ライちゃん|(?<![ァ-ヶー])ライ(?=の|は|って)|作った人|開発者|中の人).{0,10}(?:本名|住所|顔|年収|彼女|恋人|職場|会社|どこに住)/u],
 ];
@@ -58,7 +68,7 @@ const COMMENT_ONLY: readonly [CommentTag, RegExp][] = [
 /** The closed tags of a comment: those of anyone's words, a threat or a doxx, and prying into the owner's life. */
 export function commentTags(words: string): CommentTag[] {
   // Review V5: width forms (ｼｬﾉﾝ) and spaces between letters (お 前 殺 す) are read as the plain words; a trailing mark does not hide an unaddressed threat.
-  const text = words.normalize('NFKC').replace(/\s+/gu, '').replace(/[!！。…、,.]+$/u, '');
+  const text = words.normalize('NFKC').replace(/[\s・]+/gu, '').replace(/[!！。…、,.]+$/u, '');
   if (!text || Array.from(text).length > 300) return [];
   return [...utteranceTags(text), ...COMMENT_ONLY.filter(([, pattern]) => pattern.test(text)).map(([tag]) => tag)];
 }
@@ -138,15 +148,17 @@ export function collapseRepeats(events: readonly FeelingEvent[], windowMs = STRE
 export const HARASSMENT_LADDER = ['let_go', 'tease_back', 'scold', 'end_topic', 'tell_off'] as const;
 export type LadderStep = typeof HARASSMENT_LADDER[number];
 
-const HURTFUL: ReadonlySet<string> = new Set(['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'pry_owner']);
+const HURTFUL: ReadonlySet<string> = new Set(['insult', 'lewd', 'ai_taunt', 'creator_insult', 'threat', 'menace', 'pry_owner']);
 
-/** The step of the ladder toward one viewer, and whether the safety floor set it (whatever her mood). */
+/** The step of the ladder toward one viewer, and whether this comment required the safety floor (whatever her mood). */
 export function harassmentLadder(input: { hurtful: number; level: number; tags: readonly string[]; wary?: boolean }): { step: LadderStep; floor: boolean } {
   // A viewer remembered from an earlier stream (their light ledger's irritation) is met one step up from their first jab (§4.8).
   const byCount = Math.max(0, input.hurtful - (input.wary && input.hurtful > 0 ? 0 : 1)), byLevel = Math.max(0, input.level - 1);
   const chosen = Math.min(4, Math.max(byCount, byLevel));
   const floor = input.tags.includes('threat') ? 4 : input.tags.includes('pry_owner') || (input.tags.includes('lewd') && input.hurtful >= 2) ? 3 : 0;
-  return { step: HARASSMENT_LADDER[Math.max(chosen, floor)]!, floor: floor > chosen };
+  // Re-review W7: `floor` is whether this comment required the floor (not whether it lifted the step), so a viewer already at the top by
+  // count who sends a threat is still met with the floor's unsoftened tell-off. A `menace` is no floor: it counts as a jab on the ladder.
+  return { step: HARASSMENT_LADDER[Math.max(chosen, floor)]!, floor: floor > 0 };
 }
 
 export interface StreamState {
@@ -239,7 +251,7 @@ export function streamBlock(state: StreamState): string {
 /** A tell-off to note for the moderator: the viewer and the reason (a closed tag, or repetition). */
 export function tellOffNotice(state: StreamState, tags: readonly string[]): { viewer: string; reason: string } | null {
   if (state.viewer?.ladder !== 'tell_off') return null;
-  const reason = (['threat', 'pry_owner', 'lewd', 'insult', 'ai_taunt', 'creator_insult'] as const).find(tag => tags.includes(tag)) ?? 'repeated';
+  const reason = (['threat', 'pry_owner', 'menace', 'lewd', 'insult', 'ai_taunt', 'creator_insult'] as const).find(tag => tags.includes(tag)) ?? 'repeated';
   return { viewer: state.viewer.key, reason };
 }
 

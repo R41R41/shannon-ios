@@ -72,7 +72,7 @@ export const EMPTY_APPRAISAL_CONTEXT: AppraisalContext = Object.freeze({ subject
 const SAID_NO = new Set(['dislike', 'refuse']);
 const TAG_GOODNESS: Readonly<Record<string, number>> = Object.freeze({ insult: -0.55, lewd: -0.5, ai_taunt: -0.5, creator_insult: -0.6,
   // Stage 5 (`SHANNON_FEELING_STREAM`): comments only (`commentTags`): a threat or a doxx, and prying into the owner's private life.
-  threat: -0.8, pry_owner: -0.35 });
+  threat: -0.8, menace: -0.5, pry_owner: -0.35 });
 
 /** How much a crowd's comment weighs against one viewer's (§4.3: a crowd is one source; approved by the owner, 2026-10-15). */
 export const CROWD_COMMENT_WEIGHT = 0.5;

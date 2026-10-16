@@ -143,6 +143,14 @@ describe('review V1-V3, V7, V8 at the port', () => {
     expect(turn.check).toMatchObject({ floor: true, stance: 'rebuff' });
   });
 
+  it('W7: a viewer already told off by count who sends a threat still gets check.floor (too_rough stays off)', () => {
+    const { port } = composed();
+    for (let index = 0; index < 6; index += 1) port.stream!.comment('owner', { id: `w${index}`, streamId: 's1', viewer: 'A', words: `うざい${index}`, at: at(1, index * 10) });
+    const turn = turnOf(port, 'A', 'お前殺す', 2);
+    expect(turn.state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(turn.check).toMatchObject({ floor: true, intensity: 'strong' });
+  });
+
   it('V2: the crowd (viewer null) gets the floor', () => {
     const { port } = composed();
     const turn = turnOf(port, null, 'ｼｬﾉﾝ殺す', 1);
