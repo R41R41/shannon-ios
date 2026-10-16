@@ -165,6 +165,24 @@ describe('the run 6 stuck lease, after the fix is deployed', () => {
     expect(sent).toMatchObject([{ lease: f.lease, context: { taskId: TASK, sessionId: f.context.sessionId } }]);
   });
 
+  it('borrows the latest session of the same holder, generation, task and scope, and none of a newer one that differs in any of them', async () => {
+    const f = stuck('judgment-only');
+    const insert = (id: string, patch: { lease?: Partial<MinecraftControlCommand['lease']>; scopeKey?: string }) => {
+      const context = { ...f.context, sessionId: `${id}:reflex:1`, ...(patch.scopeKey ? { scopeKey: patch.scopeKey } : {}) };
+      const command: MinecraftControlCommand = { ...f.stop, id, context, lease: { ...f.lease, id: `step-of-${id}`, ...patch.lease }, stop: { context, requestId: id, reason: 'handoff' } };
+      f.controlStore.insert(command, new Date().toISOString()); f.controlStore.cancel(command.id);
+    };
+    insert('stop:second-earlier-step', {}); // The latest of the same holder, generation, task and scope: the one to borrow.
+    insert('stop:other-holder', { lease: { holder: 'runner-another-process' } });
+    insert('stop:other-generation', { lease: { generation: f.lease.generation + 1 } });
+    insert('stop:other-scope', { scopeKey: 'another-owner' });
+    f.poll();
+    const sent: MinecraftControlCommand[] = [];
+    const result = await f.answered(f.recheck.request('operator'), command => { sent.push(command); return f.stopped(command); });
+    expect(result).toMatchObject({ code: 'released' });
+    expect(sent).toMatchObject([{ lease: f.lease, context: { sessionId: 'stop:second-earlier-step:reflex:1' } }]);
+  });
+
   it('refuses without asking the body when the holder\'s only commands are of another task or are re-checks', async () => {
     const f = stuck('judgment-only');
     f.db.prepare('DELETE FROM fca_body_operations').run();

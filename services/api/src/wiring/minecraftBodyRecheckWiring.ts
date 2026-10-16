@@ -41,7 +41,8 @@ export function createMinecraftBodyRecheck(parts: {
     if (await reconcile(step.lease)) return 'released'; // Proven earlier (a reconcile lost in transit): no new command.
     const own = parts.control.store.lastOfLease(step.lease);
     // A step that sent nothing itself (run 12: a judgment that timed out) has no body command under its lease: ask about the
-    // session its holder last used, as this lease. The proof below still needs the body's own `stopped` receipt.
+    // session its holder last used for this task, as this lease. The session only names the command: the body's cleanup releases
+    // the whole body (`actuator.release`), and the proof below still needs its own `stopped` receipt.
     const taskId = own ? undefined : fcaTaskIdOf(leases.get(step.lease.id)?.sourceId ?? '');
     const borrowed = own || !taskId ? null : parts.control.store.lastOfHolder(step.lease, taskId, parts.ownerScope);
     if (!own && !borrowed) return 'proof_refused';
