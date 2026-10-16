@@ -16,6 +16,7 @@ import type { ConversationStore, ShannonExperience, StoredConversationMessage } 
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
+import { deepWalk, settleDeepChains } from './recallChainDepth.js';
 
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
@@ -150,7 +151,18 @@ export class MemoryWithholding {
   }
 
   /** A recalled ID that is itself withheld: the reply was generated from the withheld content. */
-  private recalledWithheld(id: string, observedAt: string, seen = new Set<string>()): boolean {
+  private recalledWithheld(id: string, observedAt: string, seen?: Set<string>): boolean {
+    if (seen) return this.recalledWithheldWithin(id, observedAt, seen);
+    // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
+    return deepWalk(() => this.recalledWithheldWithin(id, observedAt, new Set()), () => settleDeepChains([JSON.stringify([id, observedAt])], key => {
+      const [at, time] = JSON.parse(key) as [string, string];
+      if (at.startsWith('thread:')) return [];
+      if (at.startsWith('knowledge:')) return (this.knowledge().get(at.slice('knowledge:'.length))?.sourceExperienceIds ?? []).map(source => JSON.stringify([source, time]));
+      const experience = this.experience(at);
+      return (experience?.recalledMemoryIds ?? []).map(source => JSON.stringify([source, experience!.observedAt]));
+    }, key => { const [at, time] = JSON.parse(key) as [string, string]; this.recalledWithheldWithin(at, time, new Set()); }), true);
+  }
+  private recalledWithheldWithin(id: string, observedAt: string, seen: Set<string>): boolean {
     if (seen.has(id) || seen.size >= 5000) return true;
     const key = JSON.stringify([id, observedAt]), known = this.recalledDecisions.get(key);
     if (known !== undefined) return known;
@@ -200,7 +212,12 @@ export class MemoryWithholding {
   }
 
   /** Source availability is independent of memory-control rules and must survive derived summaries. */
-  private unavailableRead(id: string, seen = new Set<string>()): boolean {
+  private unavailableRead(id: string, seen?: Set<string>): boolean {
+    if (seen) return this.unavailableReadWithin(id, seen);
+    return deepWalk(() => this.unavailableReadWithin(id, new Set()), () => settleDeepChains([id], at => at.startsWith('knowledge:')
+      ? this.knowledge().get(at.slice(10))?.sourceExperienceIds ?? [] : this.experience(at)?.recalledMemoryIds ?? [], at => { this.unavailableReadWithin(at, new Set()); }), true);
+  }
+  private unavailableReadWithin(id: string, seen: Set<string>): boolean {
     if (!this.externalReadsPossible) return false;
     if (seen.has(id) || seen.size >= 5000) return true;
     const known = this.readDecisions.get(id); if (known !== undefined) return known;

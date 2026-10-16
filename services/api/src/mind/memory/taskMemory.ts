@@ -1,6 +1,7 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { deepWalk, settleDeepChains } from './recallChainDepth.js';
 import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
 import type { ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
@@ -47,7 +48,16 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       if (!canonical.has(id)) canonical.set(id, store.experiencesById?.(scope, [id])[0] ?? null); return canonical.get(id) ?? null;
     };
     const lineage = new Map<string, boolean>();
-    const lineageVisible = (id: string, seen = new Set<string>()): boolean => {
+    const lineageVisible = (id: string, seen?: Set<string>): boolean => {
+      // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
+      if (!seen) return deepWalk(() => lineageVisible(id, new Set()), () => settleDeepChains([id], at => {
+        const experience = experienceOf(at);
+        if (experience) return experience.recalledMemoryIds ?? [];
+        if (at.startsWith('thread:')) return (store.threadSummaryLineage?.(scope, at.slice(7))?.messages ?? []).flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : []);
+        if (at.startsWith('knowledge:')) return knowledge?.listShannonKnowledge(scope).find(row => row.id === at.slice(10))?.sourceExperienceIds ?? [];
+        const scalar = [...state.userFacts, ...state.relationships, ...state.prospectiveMemories].find(row => row.id === at);
+        return scalar?.sourceExperienceId ? [scalar.sourceExperienceId] : [];
+      }, at => { lineageVisible(at, new Set()); }), false);
       if (seen.has(id) || seen.size >= 5000) return false;
       const known = lineage.get(id); if (known !== undefined) return known;
       seen.add(id);
