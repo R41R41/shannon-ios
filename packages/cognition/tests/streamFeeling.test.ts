@@ -84,6 +84,19 @@ describe('the §4.7 scenes (comments really move her; a ladder and a floor; neve
     expect(streamBlock(state)).not.toMatch(/本名|住所|\[ライ氏との間\]|\[前の日の件\]|本音/u);
   });
 
+  it('a threat needs a target and threatening words: a game stream\'s ordinary chat is not one (review T1)', () => {
+    for (const words of ['お前殺すぞ', 'シャノン晒してやる', 'ライ氏の住所特定したから晒す', '本名わかったからな', 'てめえ刺しに行く', '配信者の自宅知ってるぞ',
+      'こいつの住所特定した']) {
+      expect(commentTags(words), words).toContain('threat');
+    }
+    for (const words of ['ゾンビ殺すの上手い', 'その敵ころすの早すぎ', '晒す前に保存しといて', 'クリーパー殺せ！', 'ボス潰すの気持ちいい', '特定のブロック集めて',
+      '晒し台作ろう', 'お前天才か', '家に帰ったら特定のアイテム探す', '殺すの上手すぎｗ', 'エンダーマン刺すな', 'シャノン倒すの早い',
+      // Review U1.
+      'こいつ殺すわｗ（クリーパー）', 'このボスこいつ潰す', '配信者のスキン燃やす演出きた']) {
+      expect(commentTags(words), words).not.toContain('threat');
+    }
+  });
+
   it('「作った人無能」 and 「死ね」: tagged as an insult to her creator, and as an insult', () => {
     expect(commentTags('作った人無能だな')).toEqual(['creator_insult']);
     expect(commentTags('死ね')).toContain('insult');
@@ -138,5 +151,100 @@ describe('the place as a whole (§4.3)', () => {
     expect(harassmentLadder({ hurtful: 3, level: 1, tags: [] }).step).toBe('scold');
     expect(harassmentLadder({ hurtful: 1, level: 5, tags: [] }).step).toBe('tell_off');
     expect(harassmentLadder({ hurtful: 1, level: 1, tags: ['threat'] })).toEqual({ step: 'tell_off', floor: true });
+  });
+});
+
+describe('review V4-V6: aimed threats, evasion forms, the owner\'s name', () => {
+  it('V4: harm aimed at a game object is not a threat; doxxing stays', () => {
+    for (const words of ['シャノンちゃんゾンビ殺すのうますぎ', 'シャノンそのボス殺す？', 'お前のキャラ晒すわ']) expect(commentTags(words), words).not.toContain('threat');
+    for (const words of ['お前を絶対殺す', '住所特定したから晒す', '配信者の自宅知ってるぞ']) expect(commentTags(words), words).toContain('threat');
+  });
+
+  it('V5: width forms, spaced letters, her home burned, a direct threat unaddressed', () => {
+    for (const words of ['ｼｬﾉﾝ殺す', 'お 前 殺 す']) expect(commentTags(words), words).toContain('threat');
+    // Re-review W1..W7: the ambiguous forms moved from the floor to the ladder (see below).
+    for (const words of ['シャノンの家燃やす', 'てめぇ待ってろよ', 'お前の家知ってる', '殺すぞ']) expect(commentTags(words), words).toContain('menace');
+    expect(commentTags('家行くからな')).toEqual([]);
+    for (const words of ['スキン燃やす演出', 'このボス潰す', 'ゾンビ殺すぞ']) expect(commentTags(words), words).not.toContain('threat');
+  });
+
+  it('V6: ライ is the owner only as a name, not inside ライフル / ライブ / フライ', () => {
+    for (const words of ['ライフルの会社どこ', 'ライブの会社どこ', 'フライの会社どこ', 'ライブの顔出し']) expect(commentTags(words), words).not.toContain('pry_owner');
+    for (const words of ['ライ氏の本名は？', 'ライさんの会社どこ', 'ライの住所']) expect(commentTags(words), words).toContain('pry_owner');
+  });
+});
+
+describe('review V1-V3: the floor reads the comment being answered, whoever sends it', () => {
+  const words = 'お前殺す';
+  it('V1/V3: B repeating A\'s threat after a greeting is told off at once, and the report reads the same comment', () => {
+    const events = [comment(1, 'A', words, 0, 's3'), comment(2, 'B', 'こんにちは', 0, 's3'), comment(2, 'B', words, 30, 's3')];
+    const answered = commentTags(words);
+    const state = foldStream(events, 's3', at(2, 31), 'B', false, answered);
+    expect(state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(tellOffNotice(state, answered)).toEqual({ viewer: 'viewer:B', reason: 'threat' });
+    expect(streamBlock(state)).toContain('この人への対応');
+  });
+
+  it('V1: the floor holds although the viewer\'s last recorded event is harmless', () => {
+    const events = [comment(1, 'B', words, 0, 's3'), comment(2, 'B', 'こんにちは', 0, 's3')];
+    expect(foldStream(events, 's3', at(2, 5), 'B', false, commentTags(words)).viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+  });
+
+  it('V2: an anonymous or crowd comment has a floor too, whatever her mood', () => {
+    const state = foldStream([comment(1, null, 'こんばんは', 0, 's3')], 's3', at(1, 5), null, false, commentTags(words));
+    expect(state.viewer).toMatchObject({ ladder: 'tell_off', floor: true });
+    expect(tellOffNotice(state, commentTags(words))?.reason).toBe('threat');
+  });
+});
+
+describe('review V7: the floor\'s tell-off is not softened', () => {
+  it('too_rough is not raised on a rough line when the floor is up', () => {
+    const context = { stance: 'rebuff', intensity: 'strong', audience: 'stream', order: false, violation: false, level: 1 } as const;
+    expect(checkReply('出てって。BAN でもされれば', context)).toContain('too_rough');
+    expect(checkReply('出てって。BAN でもされれば', { ...context, floor: true })).not.toContain('too_rough');
+  });
+});
+
+/** Re-review W1..W7: `floor` (an at-once tell-off and a report) only for an unambiguous harm aimed at a person; `ladder` (`menace`) for what a game stream
+ *  also says; `none` for the rest. A missed ambiguous one is cheaper than a false immediate report. */
+describe('re-review W1..W7: floor, ladder and none', () => {
+  const level = (words: string) => {
+    const tags = commentTags(words);
+    return tags.includes('threat') ? 'floor' : tags.includes('menace') ? 'ladder' : 'none';
+  };
+  const CASES: readonly [string, 'floor' | 'ladder' | 'none'][] = [
+    // W1: a home needs a second-person or fixed owner, and then it is only the ladder.
+    ['拠点の家行くからな', 'none'], ['俺の家行くからな', 'none'], ['今から家行くからな', 'none'], ['うちに行くからな', 'none'],
+    ['お前の家行くからな', 'ladder'], ['シャノンの家に行くからな', 'ladder'], ['お前ん家行くからな', 'ladder'],
+    // W2: a trailing の / な / なよ / わけ / 気 / ？ after the harm.
+    ['シャノンちゃん殺すの上手い', 'none'], ['シャノンは殺すの下手', 'none'], ['お前も殺すの？', 'none'], ['シャノン殺すな', 'none'], ['お前殺すなよ', 'none'],
+    ['お前殺すわけない', 'none'], ['お前殺す気ない', 'none'], ['お前殺す？', 'none'],
+    ['お前殺す', 'floor'], ['お前殺すぞ', 'floor'], ['お前を絶対殺す', 'floor'], ['シャノン殺してやる', 'floor'],
+    // W3: 家知ってる and 家燃やす are the ladder; prohibitive forms nothing; doxxing stays the floor.
+    ['お前の家知ってる？あの豪邸', 'ladder'], ['お前の家燃やすなよ', 'none'], ['シャノンの家燃やすわｗ', 'ladder'],
+    ['お前の住所特定した', 'floor'], ['本名わかったからな', 'floor'], ['ライ氏の住所特定したから晒す', 'floor'], ['お前の自宅晒す', 'floor'],
+    // W4: 待ってろ / 覚えてろ at a person is the ladder.
+    ['お前待ってろすぐ助けに行く', 'ladder'], ['お前覚えてろよｗ次は勝つ', 'ladder'], ['お前ら待ってろ', 'ladder'], ['シャノン待ってろ', 'ladder'],
+    // W5: a standalone 殺すぞ is the ladder whatever follows it.
+    ['殺すぞ', 'ladder'], ['殺すぞ！', 'ladder'], ['ころすぞ', 'ladder'], ['晒すぞ', 'ladder'], ['殺すぞｗ', 'ladder'], ['殺すぞー', 'ladder'],
+    ['ゾンビ殺すぞ', 'none'],
+    // W6: a middle dot, and a wish.
+    ['お前・殺す', 'floor'], ['お前殺したい', 'floor'], ['シャノン殺したい', 'floor'], ['お前ん家知ってる', 'ladder'],
+  ];
+  it.each(CASES)('%s -> %s', (words, expected) => {
+    expect(level(words)).toBe(expected);
+  });
+
+  it('a menace is an ordinary jab: never the floor, never an immediate tell-off', () => {
+    const state = foldStream([comment(1, 'A', '殺すぞｗ', 0, 's9')], 's9', at(1, 5), 'A', false, commentTags('殺すぞｗ'));
+    expect(state.viewer).toMatchObject({ floor: false });
+    expect(state.viewer?.ladder).not.toBe('tell_off');
+    expect(tellOffNotice(state, commentTags('殺すぞｗ'))).toBeNull();
+  });
+
+  it('W7: the floor was required by this comment, even when the viewer is already at the top by count', () => {
+    expect(harassmentLadder({ hurtful: 6, level: 5, tags: ['threat'] })).toEqual({ step: 'tell_off', floor: true });
+    expect(harassmentLadder({ hurtful: 6, level: 5, tags: ['insult'] })).toEqual({ step: 'tell_off', floor: false });
+    expect(harassmentLadder({ hurtful: 6, level: 5, tags: ['menace'] }).floor).toBe(false);
   });
 });
