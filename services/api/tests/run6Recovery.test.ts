@@ -148,6 +148,37 @@ describe('the run 6 stuck lease, after the fix is deployed', () => {
     expect([...retainedOf(f.db, f.lease.id)]).toEqual([]);
   });
 
+  /** A later command of the same runner for another task (a holder is one runner process for every task it runs). */
+  function otherTask(f: ReturnType<typeof stuck>, id: string) {
+    const context = { ...f.context, taskId: 'another-task', sessionId: 'another-session:reflex:1' };
+    const command: MinecraftControlCommand = { ...f.stop, id, context, lease: { ...f.lease, id: 'another-task-step' }, stop: { context, requestId: id, reason: 'handoff' } };
+    f.controlStore.insert(command, new Date().toISOString()); f.controlStore.cancel(command.id);
+  }
+
+  it('borrows only a session of the retained step\'s own task, however recent another task\'s command is', async () => {
+    const f = stuck('judgment-only');
+    otherTask(f, 'stop:another-task');
+    f.poll();
+    const sent: MinecraftControlCommand[] = [];
+    const result = await f.answered(f.recheck.request('operator'), command => { sent.push(command); return f.stopped(command); });
+    expect(result).toMatchObject({ code: 'released' });
+    expect(sent).toMatchObject([{ lease: f.lease, context: { taskId: TASK, sessionId: f.context.sessionId } }]);
+  });
+
+  it('refuses without asking the body when the holder\'s only commands are of another task or are re-checks', async () => {
+    const f = stuck('judgment-only');
+    f.db.prepare('DELETE FROM fca_body_operations').run();
+    otherTask(f, 'stop:another-task');
+    f.poll();
+    const asked: string[] = [];
+    expect(await f.answered(f.recheck.request('operator'), command => { asked.push(command.id); return f.stopped(command); })).toMatchObject({ code: 'proof_refused' });
+    // Its own earlier re-check of another lease is no step's session either.
+    const earlier: MinecraftControlCommand = { ...f.stop, id: `recheck:${'0'.repeat(64)}`, lease: { ...f.lease, id: 'earlier-step' } };
+    f.controlStore.insert(earlier, new Date().toISOString()); f.controlStore.cancel(earlier.id);
+    expect(await f.answered(f.recheck.request('operator'), command => { asked.push(command.id); return f.stopped(command); })).toMatchObject({ code: 'proof_refused' });
+    expect(asked).toEqual([]);
+  });
+
   it('still refuses when the holder never used the body, and when the body does not confirm', async () => {
     const f = stuck('judgment-only');
     f.db.prepare('DELETE FROM fca_body_operations').run();

@@ -85,10 +85,16 @@ export class MinecraftControlStore {
       .get(lease.id, lease.holder, lease.generation);
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
-  /** The latest command of whoever held the lease, under any of its leases: for a step that sent nothing to the body itself (a judgment that stayed unknown). */
-  lastOfHolder(lease: ActionLease): MinecraftControlCommand | null {
+  /**
+   * The latest step command of the lease's holder and generation for the same task, under any of its leases: for a step that sent
+   * nothing to the body itself (a judgment that stayed unknown). A holder is one runner process for every task it runs, and a
+   * re-check's own command is not a step's, so both are left out.
+   */
+  lastOfHolder(lease: ActionLease, taskId: string, scopeKey: string): MinecraftControlCommand | null {
     const row = this.db.prepare(`SELECT command_json FROM fca_body_operations WHERE json_extract(command_json,'$.lease.holder')=?
-      ORDER BY rowid DESC LIMIT 1`).get(lease.holder);
+      AND json_extract(command_json,'$.lease.generation')=? AND json_extract(command_json,'$.context.taskId')=?
+      AND json_extract(command_json,'$.context.scopeKey')=? AND id NOT LIKE 'recheck:%' ORDER BY rowid DESC LIMIT 1`)
+      .get(lease.holder, lease.generation, taskId, scopeKey);
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
   safe(taskId: string): boolean {
