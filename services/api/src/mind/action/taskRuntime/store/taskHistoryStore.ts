@@ -3,16 +3,20 @@ import type { DatabaseSync } from 'node:sqlite';
 import { checkedTemplate, COMPACTION_SECTIONS } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from '../taskHistoryPorts.js';
 import type { TaskSource, TaskStatus } from '../taskRuntimePorts.js';
+import { enableFcaProvenanceSets, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 
 /** Derived summaries never replace the append-only native history. Caller owns the task transaction and lease fence. */
 export class TaskHistoryStore {
-  constructor(private readonly db: DatabaseSync) {
+  /** `byReference`: a round's sources are stored as a provenance set when they can be (`fcaProvenanceSets.ts`), else copied. */
+  constructor(private readonly db: DatabaseSync, private readonly byReference = false) {
+    if (byReference) enableFcaProvenanceSets(db);
   }
-  append(taskId: string, stepId: string, entries: string, at: string, status: TaskStatus, sources: readonly TaskSource[]): void {
+  append(scopeKey: string, taskId: string, stepId: string, entries: string, at: string, status: TaskStatus, sources: readonly TaskSource[]): void {
     this.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json)
-      VALUES(?,?,?,?,?,?)`).run(taskId, stepId, entries, at, status, JSON.stringify(sources));
+      VALUES(?,?,?,?,?,?)`).run(taskId, stepId, entries, at, status, storedSourcesJson(this.db, scopeKey, sources, this.byReference));
   }
-  window(taskId: string, sources: readonly TaskSource[]): TaskHistoryWindow {
+  /** A round's stored sources (a copy, or a reference read now); an unresolved reference stops the read (`FCA_PROVENANCE_UNRESOLVED`). */
+  window(scopeKey: string, taskId: string, sources: readonly TaskSource[]): TaskHistoryWindow {
     const row = this.db.prepare('SELECT * FROM fca_task_history_summaries WHERE task_id=?').get(taskId);
     const summary: TaskHistorySummary | null = row ? {
       revision: Number(row.revision), fromSequence: Number(row.from_sequence), throughSequence: Number(row.through_sequence),
@@ -22,12 +26,13 @@ export class TaskHistoryStore {
     const rounds = this.db.prepare('SELECT * FROM fca_task_history WHERE task_id=? AND sequence>? ORDER BY sequence')
       .all(taskId, summary?.throughSequence ?? 0).map(entry => ({ sequence: Number(entry.sequence), stepId: String(entry.step_id),
         committedAt: String(entry.committed_at), entries: JSON.parse(String(entry.entries_json)) as unknown[],
-        status: String(entry.committed_status) as TaskHistoryRound['status'], sources: JSON.parse(String(entry.sources_json)) as TaskSource[] }));
+        status: String(entry.committed_status) as TaskHistoryRound['status'],
+        sources: [...requireStoredSources(this.db, scopeKey, String(entry.sources_json))] }));
     return { revision: summary?.revision ?? 0, sourceRevision: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),
       tailSequence: rounds.at(-1)?.sequence ?? summary?.throughSequence ?? 0, summary, rounds };
   }
-  commit(taskId: string, request: TaskHistoryCommit, sources: readonly TaskSource[], at: string): boolean {
-    const current = this.window(taskId, sources), count = request.sequences.length;
+  commit(scopeKey: string, taskId: string, request: TaskHistoryCommit, sources: readonly TaskSource[], at: string): boolean {
+    const current = this.window(scopeKey, taskId, sources), count = request.sequences.length;
     if (request.baseRevision !== current.revision || request.sourceRevision !== current.sourceRevision
       || request.tailSequence !== current.tailSequence || !count || count >= current.rounds.length
       || request.sequences.some((sequence, index) => sequence !== current.rounds[index]?.sequence)

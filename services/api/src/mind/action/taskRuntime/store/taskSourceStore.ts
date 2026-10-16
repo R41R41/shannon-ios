@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { taskSourceOfRow } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 import type { TaskConversationSource, TaskRecord, TaskSource, TaskSourceObservation, TaskStep } from '../taskRuntimePorts.js';
 
 /** Conversation lineage only; canonical memory content is never copied here. */
@@ -35,11 +36,7 @@ export class TaskSourceStore {
           OR m.message_id IN (SELECT value FROM json_each(?))))))) ORDER BY s.observed_at,s.step_id`)
       .all(task.scopeKey, task.id, task.kind, activeStepId, task.kind, messageIds === undefined ? 0 : 1, task.kind, JSON.stringify(messageIds ?? []));
     const pendingRuns = rows.some(row => row.state === 'pending') && this.runsOnPendingOrigin(task.id);
-    return rows.map(row => ({ ...(row.source_kind === 'memory' ? { kind: 'memory' as const, threadId: null, experienceId: null }
-      : { threadId: String(row.thread_id), experienceId: row.experience_id as string | null,
-        ...(pendingRuns && row.state === 'pending' ? { pending: true as const } : {}) }), stepId: String(row.step_id),
-      observedAt: String(row.observed_at), recalledMemoryIds: JSON.parse(String(row.recalled_ids_json)) as string[],
-      ...(row.read_ids_json !== '[]' ? { readSourceIds: JSON.parse(String(row.read_ids_json)) as string[] } : {}) }));
+    return rows.map(row => taskSourceOfRow(row, pendingRuns && row.state === 'pending'));
   }
   inherit(task: TaskRecord, activeStepId: string | null, targetId: string, messageId = '', messageIds?: readonly string[]): void {
     for (const source of this.refs(task, activeStepId, messageIds)) this.db.prepare(

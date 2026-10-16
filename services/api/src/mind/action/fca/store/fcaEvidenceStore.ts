@@ -7,6 +7,7 @@ import type { ToolResult } from '../../../tools/toolRegistryPorts.js';
 import type { FcaModelOutput, FcaToolCall } from '../fcaPorts.js';
 import type { FcaAffectAppraisal, FcaDurableOutcome, FcaEvidence, FcaOutcomeContext, FcaSharedContext } from '../fcaEvidencePorts.js';
 import { durableOutcomeOf, FCA_SEGMENT_STALE_MINUTES, heldRows, heldSegmentsToClose, HELD_FOR_SEGMENT, segmentDisposition } from './fcaEvidenceSegments.js';
+import { enableFcaProvenanceSets, readStoredSources, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 import { FcaPrepareTrace, visibleEvidenceRows, type FcaEvidenceJudge, type FcaVisibleRows } from './fcaEvidenceRows.js';
 
 export interface FcaEvidenceOptions {
@@ -30,6 +31,11 @@ export interface FcaEvidenceOptions {
   observeContext?(step: TaskStep, taskIds: readonly string[]): boolean;
   /** Idempotent existing memory outbox admission. Receipt is retried after a crash, never the original action. */
   onOutcome?(outcome: FcaDurableOutcome): void;
+  /**
+   * `SHANNON_FCA_PROVENANCE_REFS`: a row stores its sources as a provenance set when it can (`fcaProvenanceSets.ts`), not a copy.
+   * Rows by reference are read whatever this says, through the same checks as a copy.
+   */
+  provenanceRefs?: boolean;
 }
 interface EvidenceRow {
   /** The row's rowid, where a query selects it (`deliverOutcomes`). */
@@ -51,6 +57,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       CREATE TABLE IF NOT EXISTS fca_affect_outbox (
       scope_key TEXT NOT NULL,event_id TEXT NOT NULL,revision INTEGER NOT NULL,step_id TEXT NOT NULL,task_id TEXT NOT NULL,
       evidence_json TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(scope_key,event_id,revision,step_id));`);
+    if (options.provenanceRefs) enableFcaProvenanceSets(options.db);
     this.affect = new AffectCoordinator(options.state, options.sourcesVisible);
   }
   /**
@@ -99,6 +106,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   private judge(step: TaskStep, verified: readonly TaskSource[]): FcaEvidenceJudge {
     const covered = this.options.sourcesCovered, residual = this.options.sourcesResidual;
     return { taskId: step.taskId, walk: (row, sources) => this.options.sourcesVisible(row.scope_key, row.task_id, sources),
+      sources: row => readStoredSources(this.options.db, row.scope_key, row.sources_json),
       ...(covered ? { covered: (sources: readonly TaskSource[]) => covered(step.scopeKey, step.taskId, verified, sources) } : {}),
       ...(residual ? { residual: (sources: readonly TaskSource[]) => residual(step.scopeKey, step.taskId, verified, sources) } : {}) };
   }
@@ -140,7 +148,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
         this.options.db.prepare(`INSERT INTO fca_action_evidence(scope_key,event_id,task_id,step_id,call_id,name,expectation_json,comparison_json,
           sources_json,registered_at,deadline_at,goal,action_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(step.scopeKey, eventId, step.taskId, step.id, call.id, call.name,
           expectation ? JSON.stringify(expectation) : null, expectation ? JSON.stringify({ status: 'pending', actual: null, mismatch: null }) : null,
-          JSON.stringify(step.snapshot.sources), this.options.now(), expectation ? new Date(Date.parse(this.options.now()) + expectation.withinMs).toISOString() : null,
+          this.storedSources(step), this.options.now(), expectation ? new Date(Date.parse(this.options.now()) + expectation.withinMs).toISOString() : null,
           step.snapshot.task.goal, JSON.stringify(call));
       }
       if ((output.appraisals?.length ?? 0) > 8 || new Set(output.appraisals?.map(item => item.eventId)).size !== (output.appraisals?.length ?? 0)) throw new Error('FCA_APPRAISAL_INVALID');
@@ -188,7 +196,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       const comparison = expectation ? compareFcaOutcome(expectation, result, !!row.deadline_at && row.deadline_at <= this.options.now()) : null;
       this.options.db.prepare(`UPDATE fca_action_evidence SET observation=?,result_json=?,comparison_json=?,sources_json=?,observed_at=?
         WHERE scope_key=? AND event_id=?`).run(result ? 'observed' : 'unknown', recorded, comparison ? JSON.stringify(comparison) : null,
-          JSON.stringify(step.snapshot.sources), this.options.now(), step.scopeKey, row.event_id);
+          this.storedSources(step), this.options.now(), step.scopeKey, row.event_id);
     });
   }
   private queueAppraisal(step: TaskStep, appraisal: FcaAffectAppraisal) {
@@ -198,7 +206,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     const probability = expected?.probability;
     const unexpected = probability !== null && probability !== undefined && comparison?.mismatch !== null && comparison?.mismatch !== undefined
       ? comparison.mismatch ? probability : 1 - probability : null;
-    const sources = [...JSON.parse(row.sources_json) as TaskSource[], ...step.snapshot.sources];
+    const sources = [...requireStoredSources(this.options.db, row.scope_key, row.sources_json), ...step.snapshot.sources];
     const evidence: FcaAffectEvidence = { ...appraisal, taskId: row.task_id, appraisalTaskId: step.taskId, observedAt: row.observed_at!,
       expectedValue: expected?.expectedValue ?? null, unexpected, sources: [...new Map(sources.map(source => [JSON.stringify(source), source])).values()] };
     if (!validFcaAffectEvidence(evidence)) throw new Error('FCA_APPRAISAL_INVALID');
@@ -240,14 +248,14 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
    * 5d492ae8, F1). Nothing held is marked remembered unseen.
    */
   private visibleHeld(rows: readonly EvidenceRow[], anchor: EvidenceRow | null): EvidenceRow[] | null {
-    const verdicts = new Map<string, boolean>(), anchorSources = anchor ? JSON.parse(anchor.sources_json) as TaskSource[] : null;
+    const verdicts = new Map<string, boolean>(), anchorSources = anchor ? this.sourcesOf(anchor) : null;
     const visible = rows.filter(row => {
       const key = `${row.task_id}\u0000${row.sources_json}`;
       if (!verdicts.has(key)) {
-        const sources = JSON.parse(row.sources_json) as TaskSource[];
-        const covered = anchorSources && anchor!.task_id === row.task_id
+        const sources = this.sourcesOf(row);
+        const covered = sources && anchorSources && anchor!.task_id === row.task_id
           && this.options.sourcesCovered?.(row.scope_key, row.task_id, anchorSources, sources) === true;
-        verdicts.set(key, covered || this.options.sourcesVisible(row.scope_key, row.task_id, sources));
+        verdicts.set(key, Boolean(sources) && (covered || this.options.sourcesVisible(row.scope_key, row.task_id, sources!)));
       }
       return verdicts.get(key)!;
     });
@@ -283,7 +291,16 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     return this.options.db.prepare('SELECT * FROM fca_action_evidence WHERE scope_key=? AND event_id=?').get(scope, eventId) as unknown as EvidenceRow ?? null;
   }
   private visible(step: TaskStep) { return this.options.sourcesVisible(step.scopeKey, step.taskId, step.snapshot.sources); }
-  private rowVisible(row: EvidenceRow) { return this.options.sourcesVisible(row.scope_key, row.task_id, JSON.parse(row.sources_json) as TaskSource[]); }
+  private rowVisible(row: EvidenceRow) {
+    const sources = this.sourcesOf(row);
+    return sources !== null && this.options.sourcesVisible(row.scope_key, row.task_id, sources);
+  }
+  /** A row's stored sources, its copy or its provenance set read now; null (not visible) when a reference cannot be resolved. */
+  private sourcesOf(row: EvidenceRow) { return readStoredSources(this.options.db, row.scope_key, row.sources_json); }
+  /** What a row stores of the step's sources: a reference when the switch is on and the list can be read back exactly, else a copy. */
+  private storedSources(step: TaskStep) {
+    return storedSourcesJson(this.options.db, step.scopeKey, step.snapshot.sources, this.options.provenanceRefs === true);
+  }
   private transaction<T>(work: () => T): T {
     const db = this.options.db;
     if (db.isTransaction) return work();

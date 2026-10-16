@@ -160,6 +160,11 @@ export const SWITCHES = [
     doc: 'ADR-0008 stage 5 ports: self interests, task trees, reply-bound feedback, gated self revision.',
   },
   {
+    name: 'SHANNON_FCA_PROVENANCE_REFS', default: 'on', kind: 'default_on', owner: 'fca', requires: [],
+    doc: 'A Minecraft task inherits only the asking conversation\'s sources, and FCA step records keep sources by reference '
+      + '(execution/013_fca_provenance_sets). off: whole parent set and copies; rows by reference stay readable.',
+  },
+  {
     name: 'SHANNON_FCA_TOUCH', default: 'off', kind: 'on_only', owner: 'fca', requires: [STAGE4],
     doc: 'Touch reflexes run under the FCA runtime.',
   },

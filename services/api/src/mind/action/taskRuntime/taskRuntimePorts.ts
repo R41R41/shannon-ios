@@ -74,7 +74,20 @@ export interface TaskRuntimeOptions {
   /** Trusted read-only schedule authority; absent means maintenance admission is disabled. */
   sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   now?: () => string;
+  /**
+   * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }` inherits only the
+   * asking conversation's sources, and step records store their sources by reference (`infra/sqlite/fcaProvenanceSets.ts`).
+   * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are read either way.
+   */
+  provenanceRefs?: boolean;
 }
+/**
+ * What a child inherits at creation. `parent` (the default): the parent's whole source set. `asking` (a Minecraft request, with
+ * `provenanceRefs` on): only the conversation that asked; from a conversation task, its current turn and the reports that turn
+ * read (its `refs`, as before); from the root, nothing (an in-game request brings its own turn, `observeExternal`; an operator
+ * request has none). Sources the task reads later are added as before.
+ */
+export interface TaskChildOptions { sources?: 'parent' | 'asking' }
 export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   admitPlaceContext?(step: TaskStep, childId: string, context: import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext): boolean;
   placeContext?(scopeKey: string, taskId: string): import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext | undefined;
@@ -87,7 +100,7 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   admitSleep(scopeKey: string, jobId: string): TaskView | null;
   sleepTicketForTask(scopeKey: string, taskId: string): TaskSleepTicket | null;
   ensureRoot(scopeKey: string): TaskView;
-  createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string): TaskView;
+  createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string, options?: TaskChildOptions): TaskView;
   get(scopeKey: string, taskId: string): TaskView | null;
   list(scopeKey: string, query?: TaskQuery): TaskView[];
   /** Fair admission candidates, oldest successful admission first; canonical task status still determines readiness. */

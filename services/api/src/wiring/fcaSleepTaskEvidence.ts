@@ -4,6 +4,7 @@ import { taskExperienceId, taskExperienceSummary, type TaskExperienceRecord } fr
 import { createFcaSleepTaskLineage } from './fcaSleepTaskLineage.js';
 import { segmentClosingId, verifiedSegmentSources } from './fcaSleepSegmentEvidence.js';
 import { committedEvidenceHistorySources } from '../mind/action/fca/store/fcaEvidenceSegments.js';
+import { requireStoredSources } from '../infra/sqlite/fcaProvenanceSets.js';
 
 /** A task outcome is an observation by Shannon, never a statement attributed to the owner. */
 export function createFcaSleepTaskEvidence(db: DatabaseSync) {
@@ -26,8 +27,9 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
         WHERE e.scope_key=? AND e.event_id=? AND e.task_id=? AND e.observation='observed'
         AND t.fca_origin='owner_request' AND t.task_kind NOT IN ('codex','sleep')`).get(scope, record.outcomeId, record.taskId);
       if (!proof?.result_json) return false;
-      const evidenceSources = JSON.parse(String(proof.sources_json)) as TaskSource[];
-      const historySources = JSON.parse(String(proof.history_sources)) as TaskSource[];
+      // A copy or a provenance set read now (`fcaProvenanceSets.ts`); an unresolved reference fails the proof (the catch below).
+      const evidenceSources = requireStoredSources(db, scope, String(proof.sources_json));
+      const historySources = requireStoredSources(db, scope, String(proof.history_sources));
       if ([...evidenceSources, ...historySources].some(source => source.readSourceIds?.length) || payload.readSourceIds?.length) return false;
       const ids = [...new Set(evidenceSources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
       const equal = (a: readonly string[], b: readonly string[]) => JSON.stringify([...new Set(a)].sort()) === JSON.stringify([...new Set(b)].sort());

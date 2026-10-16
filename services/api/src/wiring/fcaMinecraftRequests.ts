@@ -94,7 +94,9 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       if (!parts.control.frame(bodyId)) return { kind: 'none', goal: '', rejected: 'queue_unavailable' };
       const sourceId = input.experienceId;
       return parts.atomic(() => {
-        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `mc:${input.request.requestId}`);
+        // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
+        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `mc:${input.request.requestId}`,
+          { sources: 'asking' });
         parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${intent.goal}` });
         if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
         return { ...intent, request: { id: task.id } };
