@@ -24,7 +24,8 @@ import { configuredOperatorAudit, operatorRequester } from '../src/wiring/operat
 import { lifecycleOutcomeNotices } from '../src/mind/perception/noticeProducers.js';
 import { noticeLine } from '../src/mind/workspace/promptLayout.js';
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
-import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
+import { bodySkillGists } from '../src/wiring/fcaSkillGists.js';
+import type { TaskStep, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 
 const at = '2026-10-14T00:00:00.000Z';
@@ -346,7 +347,8 @@ describe('the operator request in the common task tree', () => {
     const authority = new SQLiteFcaTaskAuthority(h.db);
     const runtime = new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => true, conversationLeaseValid: () => true });
     const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
-    const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => true });
+    const alone = { value: true };
+    const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => alone.value });
     const conversation = createFcaConversationBridge({ runtime, ownerScope: 'owner', visible });
     const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{
       serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
@@ -358,7 +360,7 @@ describe('the operator request in the common task tree', () => {
     const api = fcaMinecraftRequests({ runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
       sourceVisible: () => true, stop: async (id, reason) => runtime.stop('owner', id, reason),
       atomic: work => underWriteLock(h.db, null, '', work, 'operator_test') });
-    return { runtime, bodyStore, operator: api.operator };
+    return { runtime, bodyStore, operator: api.operator, visible, alone };
   }
 
   it('is the owner\'s kind of Minecraft request, under the root, bound to the body, and marked as handed over by the operator', () => {
@@ -375,6 +377,35 @@ describe('the operator request in the common task tree', () => {
     expect(inbox).toContain('この依頼は運用者（ops.ryo）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。');
     expect(f.runtime.readyTasks('owner').map(item => item.id)).toContain(created.id);
     expect(f.operator.admit({ operationId: OTHER, goal: 'もう一つ', operator: 'ops.ryo' })).toEqual({ ok: false, code: 'minecraft_busy' });
+  });
+});
+
+describe('a skill gist and an operator request (review of release/16a, M2)', () => {
+  it('runs the same with the gist on and off while the owner is not alone: no source is pinned, the pointer stays', () => {
+    const h = actionHarness(() => at);
+    cleanups.push(h.close);
+    migrateAgentTasks(h.db);
+    const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now: () => at, leaseValid: () => true, conversationLeaseValid: () => true });
+    const alone = { value: false };
+    const visible = createFcaSourceGuard({ runtime, state: new InMemoryCompanionStateStore(() => at), conversations: new InMemoryConversationStore(), ownerScope: 'owner', ownerAlone: () => alone.value });
+    const root = runtime.ensureRoot('owner');
+    const task = runtime.createChild('owner', root.id, { title: `${OPERATOR_TITLE_PREFIX}石`, goal: '石', origin: 'owner_request' }, `operator:${TASK}`);
+    // The runnable test of `serverFcaWiring`'s canRunTask for a task that is not own-time and not sleep.
+    const canRun = () => visible?.('owner', task.id) ?? runtime.taskSources('owner', task.id).length === 0;
+    const before = canRun();
+    expect(runtime.taskSources('owner', task.id)).toHaveLength(0);
+    const step = { id: 'step', scopeKey: 'owner', taskId: task.id, snapshot: { sources: runtime.taskSources('owner', task.id) } } as unknown as TaskStep;
+    const skill = { skillId: 'skill_mc-x', name: 'mc-x', version: 1, status: 'draft' as const, revisionId: 'skill_mc-x:v1',
+      body: '# mc-x\n\n## 手順\n1. mc.dig-shelter\n' };
+    const pinned: string[] = [];
+    const ports = bodySkillGists(step, () => skill, id => { pinned.push(id); return true; }, null);
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    expect(ports.skillGists(['mc-x']).size).toBe(0);
+    expect(pinned).toEqual([]);
+    expect(runtime.taskSources('owner', task.id)).toHaveLength(0);
+    expect(canRun()).toBe(before);
+    alone.value = true;
+    expect(canRun()).toBe(true);
   });
 });
 

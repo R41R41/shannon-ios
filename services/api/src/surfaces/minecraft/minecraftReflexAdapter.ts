@@ -351,7 +351,8 @@ export function createMinecraftTaskBody(parts: {
       decided = true;
       governor.decided(step.taskId, now());
       if (!call.name.startsWith('mc.')) return;
-      noteGistFollowed(call.name);
+      // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
+      if (!active && !closed) noteGistFollowed(call.name);
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };

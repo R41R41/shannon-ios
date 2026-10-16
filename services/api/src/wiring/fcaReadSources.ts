@@ -113,8 +113,9 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
           text = withholding.inactive ? '' : [piece.title, piece.body, ...parts.study!.versions(scopeKey, id).flatMap(version => [version.title, version.body])].join('\n'); break;
         }
         case 'shannon-skill': {
-          const revision = /^([^/]+)\/revision\/([^/]+)$/u.exec(match[2]!);
-          const skillId = revision ? decodeURIComponent(revision[1]!) : id;
+          // `/revision/` is a skill.read pin, `/gist-revision/` and `/gist` a gist pin (`fcaSkillGistSource.ts`): the same checks.
+          const revision = /^([^/]+)\/(?:gist-)?revision\/([^/]+)$/u.exec(match[2]!), bare = /^([^/]+)\/gist$/u.exec(match[2]!);
+          const skillId = revision ? decodeURIComponent(revision[1]!) : bare ? decodeURIComponent(bare[1]!) : id;
           const revisionId = revision ? decodeURIComponent(revision[2]!) : undefined;
           if (!skillId || (revisionId !== undefined && (!revisionId || /[\u0000-\u001f\u007f]/u.test(revisionId)))) return false;
           if ([skillId, `shannon-skill://${encodeURIComponent(skillId)}`, ...(revisionId ? [revisionId] : [])].some(key => {
@@ -167,9 +168,10 @@ export function fcaReadSourceRetained(state: Pick<CompanionStateStore, 'snapshot
     const id = decodeURIComponent(match[2]!);
     if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
     const snapshot = state.snapshot(scopeKey);
-    const skillRevision = match[1] === 'shannon-skill' ? /^([^/]+)\/revision\/([^/]+)$/u.exec(match[2]!) : null;
+    const skillRevision = match[1] === 'shannon-skill' ? /^([^/]+)\/(?:gist-)?revision\/([^/]+)$/u.exec(match[2]!) : null;
+    const skillBare = match[1] === 'shannon-skill' ? /^([^/]+)\/gist$/u.exec(match[2]!) : null;
     const keys = [sourceId, id, ...(skillRevision ? [decodeURIComponent(skillRevision[1]!), decodeURIComponent(skillRevision[2]!),
-      `shannon-skill://${skillRevision[1]!}`] : [])];
+      `shannon-skill://${skillRevision[1]!}`] : skillBare ? [decodeURIComponent(skillBare[1]!), `shannon-skill://${skillBare[1]!}`] : [])];
     if (keys.some(key => {
       const control = memoryControlFor(snapshot, key);
       return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));

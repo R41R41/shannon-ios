@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { privateReadIds } from './fcaSkillGistSource.js';
 import { memoryIdentifier } from '@shannon/cognition';
 
 type Boundary = { at: string; before: number };
@@ -75,7 +76,7 @@ export function createFcaSleepTaskLineage(db: DatabaseSync): (scope: string, sou
           const sources = new Set<string>();
           for (const record of records) {
             const reads = ids(record.readSourceIds), recalled = ids(record.recalledMemoryIds), inherited = ids(record.sourceIds);
-            if (!reads || reads.length || !recalled || !inherited) return null;
+            if (!reads || privateReadIds(reads).length || !recalled || !inherited) return null;
             for (const ref of [...recalled, ...inherited]) sources.add(ref);
           }
           const before = Number(row.sequence), at = new Date(String(row.observed_at)).toISOString();

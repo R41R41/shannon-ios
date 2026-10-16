@@ -6,6 +6,7 @@ import { SkillImporter } from '../src/mind/memory/skillImport.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { createFcaSkillOutcomes } from '../src/wiring/fcaSkillOutcomes.js';
 import { bodySkillGists, fcaSkillGists, stepReadObserver } from '../src/wiring/fcaSkillGists.js';
+import { isSkillGistPin, privateReadIds, skillGistSource } from '../src/wiring/fcaSkillGistSource.js';
 import {
   GENERIC_BODY_TOOLS, MINECRAFT_SKILL_GIST_NOTE, MINECRAFT_SKILL_POINTER_NOTE, followedGists, gistToolNames, minecraftSituation, minecraftSkillContext, minecraftSkillPointers,
   observeOnlyStep,
@@ -165,11 +166,11 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
       pin: (id, ids) => { pins.push([id, ids]); return id.includes('mc-x'); } });
     expect([...gists.keys()]).toEqual(['mc-x']);
     expect(gists.get('mc-x')![0]).toContain('－－－ここまで');
-    expect(pins).toEqual([['skill-gist:skill_mc-x:2', ['shannon-skill://skill_mc-x/revision/skill_mc-x%3Av2']],
-      ['skill-gist:skill_mc-y:2', ['shannon-skill://skill_mc-y/revision/skill_mc-y%3Av2']]]);
+    expect(pins).toEqual([['skill-gist:skill_mc-x:2', ['shannon-skill://skill_mc-x/gist-revision/skill_mc-x%3Av2']],
+      ['skill-gist:skill_mc-y:2', ['shannon-skill://skill_mc-y/gist-revision/skill_mc-y%3Av2']]]);
   });
   it('pins a skill revision once however many decisions follow (M1)', () => {
-    const sources: Array<{ readSourceIds: string[] }> = [];
+    const sources: Array<{ readSourceIds?: string[]; recalledMemoryIds?: string[] }> = [{ recalledMemoryIds: ['turn-1'] }];
     const step = { scopeKey: 'owner', taskId: 'task-m1', snapshot: { sources } } as unknown as TaskStep;
     let pins = 0;
     const ports = bodySkillGists(step, (_scope, name) => skill(name, text), (_id, receipt) => {
@@ -178,14 +179,14 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
     if (!('skillGists' in ports)) throw new Error('no ports');
     for (let decision = 0; decision < 50; decision += 1) expect([...ports.skillGists(['mc-x']).keys()]).toEqual(['mc-x']);
     expect(pins).toBe(1);
-    expect(sources).toHaveLength(1);
+    expect(sources).toHaveLength(2);
     // Another revision of the same skill is a new source.
     const next = bodySkillGists(step, (_scope, name) => ({ ...skill(name, text), version: 3, revisionId: 'skill_mc-x:v3' }), () => { pins += 1; return true; }, null);
     if ('skillGists' in next) next.skillGists(['mc-x']);
     expect(pins).toBe(2);
   });
   it('refuses the pin and gives only the pointer when the owner is not alone (L3)', () => {
-    const step = { id: 's', scopeKey: 'owner', taskId: 'task-l3', messageIds: [], snapshot: { sources: [] } } as unknown as TaskStep;
+    const step = { id: 's', scopeKey: 'owner', taskId: 'task-l3', messageIds: [], snapshot: { sources: [{ kind: 'conversation', recalledMemoryIds: ['turn-1'] }] } } as unknown as TaskStep;
     let alone = false;
     const observeRead = stepReadObserver({ runtime: { observeSources: () => true, taskSources: () => [] } as unknown as TaskRuntime, step,
       ownerAlone: () => alone, readSourceVisible: () => true, sourcesVisible: () => true });
@@ -203,7 +204,7 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
     expect(minecraftSkillContext(low, new Set(['mc-low-health']), ports.skillGists).fields.skillGists).toHaveLength(1);
   });
   it('hands a body task the gists and its followed gists as uses of its own task', () => {
-    const step = { scopeKey: 'owner', taskId: 'task-g' } as TaskStep;
+    const step = { scopeKey: 'owner', taskId: 'task-g', snapshot: { sources: [{ recalledMemoryIds: ['turn-1'] }] } } as unknown as TaskStep;
     const followed: string[][] = [];
     const ports = bodySkillGists(step, (_scope, name) => { if (name === 'locked') throw new Error('x'); return skill(name, text); }, () => true,
       { gistFollowed: (...args) => { followed.push(args); } });
@@ -212,6 +213,28 @@ describe('the wiring of a gist: opened through skill.read\'s port and pinned as 
     ports.gistFollowed('mc-x');
     expect(followed).toEqual([['owner', 'task-g', 'mc-x']]);
     expect(bodySkillGists(step, undefined, () => true, null)).toEqual({});
+  });
+});
+
+describe('a gist never changes whether a task can run or be consolidated (review of release/16a, M2)', () => {
+  const skill = (name: string): SkillTurnSkill => ({ skillId: `skill_${name}`, name, version: 2, status: 'draft', revisionId: `skill_${name}:v2`, body: encodeSkill({ name, description: '時', steps: '1. mc.dig-shelter', aids: '- なし', references: '- なし' }) });
+  it('gives a task that holds no source of its own (an operator\'s request) the pointer alone and pins nothing', () => {
+    const sources: unknown[] = []; let pins = 0;
+    const step = { scopeKey: 'owner', taskId: 'operator', snapshot: { sources } } as unknown as TaskStep;
+    const ports = bodySkillGists(step, (_scope, name) => skill(name), () => { pins += 1; return true; }, null);
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    expect(ports.skillGists(['mc-x']).size).toBe(0);
+    expect(pins).toBe(0);
+    // A pin that was made does not turn such a task into one that holds sources.
+    sources.push({ readSourceIds: ['shannon-skill://skill_mc-x/gist-revision/r'] });
+    expect(ports.skillGists(['mc-x']).size).toBe(0);
+  });
+  it('a gist pin is a skill read source for visibility but is not a private read for sleep evidence', () => {
+    expect(isSkillGistPin(skillGistSource('skill_mc-x', 'skill_mc-x:v2'))).toBe(true);
+    expect(isSkillGistPin(skillGistSource('skill_mc-x'))).toBe(true);
+    expect(isSkillGistPin('shannon-skill://skill_mc-x/revision/skill_mc-x%3Av2')).toBe(false);
+    expect(isSkillGistPin('aether-document://private')).toBe(false);
+    expect(privateReadIds([skillGistSource('skill_mc-x', 'r'), 'shannon-skill://skill_mc-x/revision/r', 'aether-document://a'])).toEqual(['shannon-skill://skill_mc-x/revision/r', 'aether-document://a']);
   });
 });
 

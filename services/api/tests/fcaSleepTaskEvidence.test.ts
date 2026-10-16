@@ -14,6 +14,7 @@ import { ShannonKnowledgeConsolidator } from '../src/mind/sleep/knowledgeConsoli
 import { createFcaSleepTaskEvidence, fcaSleepTaskEvidenceFor } from '../src/wiring/fcaSleepTaskEvidence.js';
 import { skillSeedSources, skillSourcesPass } from '../src/wiring/skillMemoryWiring.js';
 import { sleepSourcesVisible } from '../src/wiring/fcaSleepSources.js';
+import { skillGistSource } from '../src/wiring/fcaSkillGistSource.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
@@ -102,6 +103,22 @@ it.each(['private_payload', 'private_proof', 'private_history', 'stripped_source
   if (kind === 'forged_action') f.patch(value => { value.task.action = '所有者の個人文書を読んだ'; });
   if (kind === 'forged_summary') f.patch(value => { value.summary = '捏造された別の手順と個人情報'; });
   expect(f.proof('owner', f.id)).toBe(false);
+});
+
+it('treats a skill gist pin as the pointer-only case for sleep evidence, and a skill read pin as a private read (review of release/16a, M1)', async () => {
+  const gist = skillGistSource('skill_mc-x', 'skill_mc-x:v2'), read = 'shannon-skill://skill_mc-x/revision/skill_mc-x%3Av2';
+  const pin = async (ids: string[]) => {
+    const f = await fixture();
+    const sources = f.step.snapshot.sources.map(source => ({ ...source, readSourceIds: ids }));
+    f.db.prepare('UPDATE fca_action_evidence SET sources_json=? WHERE event_id=?').run(JSON.stringify(sources), f.record.outcomeId);
+    f.db.prepare('UPDATE fca_task_history SET sources_json=? WHERE step_id=?').run(JSON.stringify(sources), f.step.id);
+    f.patch(value => { value.task.readSourceIds = ids; value.readSourceIds = ids; });
+    return f.proof('owner', f.id);
+  };
+  expect(await pin([])).toBe(true);
+  expect(await pin([gist])).toBe(true);
+  expect(await pin([gist, 'aether-document://private'])).toBe(false);
+  expect(await pin([read])).toBe(false);
 });
 
 it('forgetting any inherited source stops knowledge, skill seeds/export and the sleep task source guard', async () => {

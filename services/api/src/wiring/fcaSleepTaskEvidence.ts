@@ -3,6 +3,7 @@ import type { TaskSource } from '../mind/action/taskRuntime/taskRuntimePorts.js'
 import { taskExperienceId, taskExperienceSummary, type TaskExperienceRecord } from '../mind/memory/taskExperience.js';
 import { createFcaSleepTaskLineage } from './fcaSleepTaskLineage.js';
 import { segmentClosingId, verifiedSegmentSources } from './fcaSleepSegmentEvidence.js';
+import { privateReadIds } from './fcaSkillGistSource.js';
 import { committedEvidenceHistorySources } from '../mind/action/fca/store/fcaEvidenceSegments.js';
 
 /** A task outcome is an observation by Shannon, never a statement attributed to the owner. */
@@ -16,7 +17,7 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
       const payload = JSON.parse(String(row.payload_json)) as { source?: string; summary?: string; userMessage?: string; shannonReply?: string; task?: TaskExperienceRecord; recalledMemoryIds?: string[]; readSourceIds?: string[] };
       const record = payload.task;
       if (payload.source !== 'fca.task' || !record || record.scopeKey !== scope || !['success', 'failure'].includes(record.status)
-        || record.readSourceIds?.length || id !== taskExperienceId(scope, record.taskId, record.outcomeId)
+        || privateReadIds(record.readSourceIds).length || id !== taskExperienceId(scope, record.taskId, record.outcomeId)
         || payload.summary !== taskExperienceSummary(record) || payload.userMessage !== `task-evidence-${id}`
         || payload.shannonReply !== '' || row.observed_at !== record.observedAt) return false;
       if (record.segment) return segmentEvidence(db, scope, record, transferable);
@@ -28,7 +29,7 @@ export function createFcaSleepTaskEvidence(db: DatabaseSync) {
       if (!proof?.result_json) return false;
       const evidenceSources = JSON.parse(String(proof.sources_json)) as TaskSource[];
       const historySources = JSON.parse(String(proof.history_sources)) as TaskSource[];
-      if ([...evidenceSources, ...historySources].some(source => source.readSourceIds?.length) || payload.readSourceIds?.length) return false;
+      if ([...evidenceSources, ...historySources].some(source => privateReadIds(source.readSourceIds).length) || privateReadIds(payload.readSourceIds).length) return false;
       const ids = [...new Set(evidenceSources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
       const equal = (a: readonly string[], b: readonly string[]) => JSON.stringify([...new Set(a)].sort()) === JSON.stringify([...new Set(b)].sort());
       if (!Array.isArray(record.sourceIds) || ids.some(source => !record.sourceIds.includes(source)) || !equal(record.sourceIds, payload.recalledMemoryIds ?? [])
@@ -56,7 +57,7 @@ function segmentEvidence(db: DatabaseSync, scope: string, record: TaskExperience
   transferable: ReturnType<typeof createFcaSleepTaskLineage>): boolean {
   const historySources = committedEvidenceHistorySources(db, scope, segmentClosingId(record), record.taskId);
   const sources = historySources ? verifiedSegmentSources(db, scope, record) : null;
-  if (!historySources || !sources || [...sources, ...historySources].some(source => source.readSourceIds?.length)) return false;
+  if (!historySources || !sources || [...sources, ...historySources].some(source => privateReadIds(source.readSourceIds).length)) return false;
   const ids = (rows: readonly TaskSource[]) => rows.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]);
   return transferable(scope, [...record.sourceIds, ...ids(sources), ...ids(historySources)], record.observedAt);
 }
