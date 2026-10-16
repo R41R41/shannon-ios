@@ -227,10 +227,13 @@ export function createFcaSourceGuard(parts: {
         // Content-free: counts, the kind of walk and the caller's name only. Measured on the VM to tell which caller blocks the loop.
         try { log(walkLine(spent, walked, base ? 'partial' : 'full', via)); } catch { /* never throws */ }
       }
-      // A verdict resting on a base is as old as the base and asks again every read the base consulted.
-      const verdict = { version: state.version, at: base?.at ?? at, visible, reads: [...base?.reads ?? [], ...reads.list()] };
-      remember(verdicts, key, verdict, at, FCA_SOURCE_VERDICT_MS);
-      if (visible) remember(bases, baseKey, { ...verdict, folded: sources }, at, baseWindow);
+      // A base keeps the time of its own full walk, so it is never extended past `baseWindow`; it asks again every read it consulted.
+      const baseAt = base?.at ?? at, allReads = [...base?.reads ?? [], ...reads.list()];
+      // The verdict of this check is reused for `FCA_SOURCE_VERDICT_MS` from now (the same rules as any verdict), but not past the base's
+      // window: a base nearly at its end gives a verdict that ends with it.
+      const verdictAt = Math.max(baseAt, Math.min(at, baseAt + baseWindow - FCA_SOURCE_VERDICT_MS));
+      remember(verdicts, key, { version: state.version, at: verdictAt, visible, reads: allReads }, at, FCA_SOURCE_VERDICT_MS);
+      if (visible) remember(bases, baseKey, { version: state.version, at: baseAt, visible, reads: allReads, folded: sources }, at, baseWindow);
       return visible;
     } catch { return false; }
   };

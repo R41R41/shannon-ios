@@ -127,6 +127,21 @@ describe('the incremental source check', () => {
     expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 1]);
   });
 
+  it('keeps the verdict of a check on a base for 5 s from now, but never past the end of the base', () => {
+    const w = world(), sources = w.next(1, [w.pool[200]!]);
+    const peek = () => w.visible.peek!('owner', w.task, sources);
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    w.advance(20_000);
+    expect(peek()).toBeUndefined();
+    expect(w.visible.sources('owner', w.task, sources)).toBe(true);
+    w.advance(4_999); expect(peek()).toBe(true);
+    w.advance(2); expect(peek()).toBeUndefined();
+    // At the end of the base's window (30 s from its walk) the verdict ends with it, not 5 s after the check.
+    w.advance(3_000); expect(w.visible.sources('owner', w.task, sources)).toBe(true); // 28 s: still the base's partial walk
+    w.advance(1_900); expect(peek()).toBe(true);
+    w.advance(200); expect(peek()).toBeUndefined();
+  });
+
   it('hides at once on a 20 s old base after a forget (a new state version), and walks whole', () => {
     const w = world();
     expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
