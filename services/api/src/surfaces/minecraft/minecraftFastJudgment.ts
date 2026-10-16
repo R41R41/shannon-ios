@@ -64,6 +64,7 @@ export function createMinecraftFastJudgment(parts: {
     return !pendingSkill(bodyId, own);
   };
 
+  const hasSkill = (bodyId: string, skill: string) => !!control.frame(bodyId)?.poll.skills?.some(entry => entry.name === skill);
   /**
    * Never a stale answer: the latest frame is judged again, must be from the same arrival and fresh, and still call for an action.
    * That answer is the one to send (run 12: a `fight` judged while zombies attacked was dropped because the latest frame said
@@ -76,8 +77,10 @@ export function createMinecraftFastJudgment(parts: {
     if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.receivedAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return null;
     const state = stateOf(bodyId, latest), again = fastJudgment(state);
     if (!('decision' in again)) return null;
-    // A new kind must not cut off a defensive skill of hers either, which `consider` only checked for the first kind.
-    return again.decision.kind !== decision.kind && defending(state.health, again.decision) ? null : again.decision;
+    if (again.decision.kind === decision.kind) return again.decision;
+    // A new kind skips what `consider` checked for the first kind: its skill must exist on the body (else nothing is sent), and it
+    // must not cut off a defensive skill of hers either.
+    return hasSkill(bodyId, again.decision.skill) && !defending(state.health, again.decision) ? again.decision : null;
   };
   /**
    * A defensive skill of hers keeps running (run 11: a reflex stopped her fight and she died standing), unless her health is at the
@@ -176,7 +179,7 @@ export function createMinecraftFastJudgment(parts: {
       if (frames < 2) return null;
       const { decision } = verdict, running = defending(state.health, decision);
       if (running) return parts.hold('fca_defending', { skill: running }), null;
-      if (!control.frame(bodyId)?.poll.skills?.some(skill => skill.name === decision.skill)) {
+      if (!hasSkill(bodyId, decision.skill)) {
         return parts.hold('fast_skill_missing', { skill: decision.skill }), null;
       }
       const nearest = Math.min(...state.threats.map(threat => threat.distance));

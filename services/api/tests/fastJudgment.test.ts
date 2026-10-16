@@ -47,12 +47,12 @@ describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
 
 /** A body as the fast judgment sees it: frames, arrivals, pending skill rows and the commands it was sent. */
 function fakeBody() {
-  let clock = 1_000_000, current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0;
+  let clock = 1_000_000, skills = ['attack-continuously', 'dig-shelter', 'flee-from'], current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0;
   const outcomes: string[] = [];
   const commands: Array<{ skill?: string; arguments?: unknown }> = [], lines: string[] = [], holds: string[] = [];
   const control = {
     arrivedAt: () => arrived, observe: () => current,
-    frame: () => ({ poll: { skills: [{ name: 'attack-continuously' }, { name: 'dig-shelter' }, { name: 'flee-from' }] } }),
+    frame: () => ({ poll: { skills: skills.map(name => ({ name })) } }),
     store: { pending: () => (pendingChecks++ < busyFor ? [{ command: { id: 'fca-skill', kind: 'skill', context: { taskId: 'task' } } }] : []),
       command: (id: string) => commands.some(command => (command as { id?: string }).id === id) },
     async command(input: { id: string; skill?: string; arguments?: unknown }) { commands.push(input); return { id: input.id, outcome: outcomes.shift() ?? 'completed', inputsReleased: true }; },
@@ -76,7 +76,14 @@ function fakeBody() {
     arrive(world: Record<string, unknown>, facts: Record<string, unknown> = {}) { current = frame(++sequence, clock, world, facts); },
     judge, outcomes,
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
-    respawn() { arrived = clock; }, lose() { current = null; }, advance(ms: number) { clock += ms; },
+    respawn() { arrived = clock; }, lose() { current = null; }, without(name: string) { skills = skills.filter(skill => skill !== name); },
+    /** A frame the judgment is asked about while the latest one already differs (a newer frame arrived meanwhile). */
+    seeWhileNewer(shown: Record<string, unknown>, latest: Record<string, unknown>) {
+      clock += 250;
+      const seen = frame(++sequence, clock, shown);
+      current = frame(++sequence, clock, latest);
+      return judge.consider('minecraft:world', seen, () => true, signal);
+    }, advance(ms: number) { clock += ms; },
     onBusy(change: () => void) { const original = control.store.pending; (control.store as { pending: unknown }).pending = (...args: unknown[]) => { change(); return (original as (...a: unknown[]) => unknown)(...args); }; } };
 }
 
@@ -229,6 +236,46 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     await quiet.see({ health: 20, nearbyThreats: [zombie(3)] });
     expect(quiet.commands).toEqual([]);
     expect(quiet.judge.discarded().stale).toBe(1);
+  });
+
+  it('a changed kind is sent only when its skill exists on the body, and not from another life', async () => {
+    const settleThen = (body: ReturnType<typeof fakeBody>, change: () => void) => {
+      body.advance(60_000);
+      body.running('mc.move-to');
+      body.busy(2);
+      let done = false;
+      body.onBusy(() => { if (!done) { done = true; change(); } });
+    };
+    const shelter = { health: 10, nearbyThreats: [zombie(3)] }, fight = { health: 20, nearbyThreats: [zombie(3)] };
+    // (1) At the second check (after her tool settled) the kind turned to shelter, but the body has no dig-shelter: nothing is sent.
+    const lacking = fakeBody();
+    settleThen(lacking, () => { lacking.without('dig-shelter'); lacking.arrive(shelter); });
+    lacking.see(fight);
+    await lacking.see(fight);
+    expect(lacking.commands).toEqual([]);
+    expect(lacking.judge.discarded().stale).toBe(1);
+    // (2) The same change with the skill present is sent.
+    const having = fakeBody();
+    settleThen(having, () => having.arrive(shelter));
+    having.see(fight);
+    await having.see(fight);
+    expect(having.commands.map(command => command.skill)).toEqual(['dig-shelter']);
+    // (3) At the first check (nothing cut off yet) a newer frame of another kind is acted on as well, her tool cut off for it.
+    const first = fakeBody();
+    first.advance(60_000);
+    first.running('mc.move-to');
+    first.see(fight);
+    await first.seeWhileNewer(fight, shelter);
+    expect(first.commands.map(command => command.skill)).toEqual(['dig-shelter']);
+    expect(first.interrupted).toBe(1);
+    expect(first.judge.discarded().stale).toBe(0);
+    // (4) A new kind from another life (died and respawned while her tool settled) is still dropped at the second check.
+    const died = fakeBody();
+    settleThen(died, () => { died.arrive(shelter); died.respawn(); });
+    died.see(fight);
+    await died.see(fight);
+    expect(died.commands).toEqual([]);
+    expect(died.judge.discarded().stale).toBe(1);
   });
 
   it('run 12: a drop before anything is cut off or sent arms no cooldown; a drop after a cut-off and a real action still do', async () => {
