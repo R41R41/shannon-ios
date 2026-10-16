@@ -120,7 +120,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       parts.skills, parts.now);
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
-    const runtime = createTaskRuntimeWiring({ db, actions, model,
+    // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
+    const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'),
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
       canRunTask: (_runtime, id) => { const task = _runtime.get(parts.ownerScope, id); return task?.origin === 'own_time' ? _runtime.taskSources(parts.ownerScope, id).length === 0 : task?.kind === 'sleep' ? Boolean(sleep?.visible(_runtime, task)) : visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0; }, stepPorts: (_runtime, step) => {
@@ -190,7 +191,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
     if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible,
-      segmentStaleMinutes: fcaSegmentStaleMinutes(values.SHANNON_FCA_SEGMENT_STALE_MINUTES) });
+      segmentStaleMinutes: fcaSegmentStaleMinutes(values.SHANNON_FCA_SEGMENT_STALE_MINUTES),
+      provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS') });
     if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
     const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, ...(parts.now ? { now: parts.now } : {}) }) : null;
     if (conversation && parts.tools) parts.tools.useTaskRuntime({ available: scope => conversation.taskToolsAvailable(scope),

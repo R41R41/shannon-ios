@@ -12,6 +12,8 @@ import { createFcaSleepTaskEvidence } from '../src/wiring/fcaSleepTaskEvidence.j
 import { verifiedSegmentSources } from '../src/wiring/fcaSleepSegmentEvidence.js';
 import { taskExperienceDraft, taskExperienceId, type TaskExperienceRecord } from '../src/mind/memory/taskMemoryPorts.js';
 import { taskExperienceSummary } from '../src/mind/memory/taskExperience.js';
+import { isProvenanceReference } from '../src/infra/sqlite/fcaProvenanceSets.js';
+import { committedEvidenceHistorySources } from '../src/mind/action/fca/store/fcaEvidenceSegments.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
@@ -28,18 +30,18 @@ const failed = (text = '{"error":"path blocked"}') => ({ ok: false, retryable: f
 const memorySource = (id: string, ids: readonly string[]): TaskSource => ({ kind: 'memory', stepId: `memory:${id}`, experienceId: null, threadId: null,
   observedAt: '2026-10-07T03:00:00.000Z', recalledMemoryIds: ids });
 
-function fixture() {
+function fixture(provenanceRefs = false) {
   const world = memoryWorld(); cleanup.push(world.close);
   const h = actionHarness(world.now, world.path); cleanup.push(h.close); migrateAgentTasks(h.db);
   const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now: world.now,
-    leaseValid: (_scope, _task, lease, at) => !!h.store.check(lease, at) });
+    leaseValid: (_scope, _task, lease, at) => !!h.store.check(lease, at), ...(provenanceRefs ? { provenanceRefs: true } : {}) });
   const root = runtime.ensureRoot('owner');
   const task = runtime.createChild('owner', root.id, { title: '木のツルハシ', goal: '木を切ってツルハシを作る' }, 'mc-segments');
   const deliveries: FcaDurableOutcome[] = [];
   let visible = true;
   const evidence = new SQLiteFcaEvidenceStore({ db: h.db, state: world.store, now: world.now,
     validStep: (step: TaskStep) => !!h.store.check(step.lease, world.now()), sourcesVisible: () => visible, taskVisible: () => true,
-    observeContext: () => true, onOutcome: outcome => { deliveries.push(outcome); } });
+    observeContext: () => true, ...(provenanceRefs ? { provenanceRefs: true } : {}), onOutcome: outcome => { deliveries.push(outcome); } });
   let sourceIndex = 0;
   /** One committed step of the task with these calls and results, under fresh provenance (one more memory row each step). */
   async function step(calls: Array<[string, ReturnType<typeof ok> | null]>, taskId = task.id, recalled?: readonly string[]) {
@@ -66,9 +68,10 @@ function fixture() {
   return { world, h, runtime, root, task, evidence, deliveries, step, held, setVisible: (value: boolean) => { visible = value; } };
 }
 
-describe('Minecraft body actions remembered per segment (owner decision 2026-10-14)', () => {
+// Every case runs with the rows storing their sources as copies and by reference (`SHANNON_FCA_PROVENANCE_REFS`).
+describe.each([[false], [true]])('Minecraft body actions remembered per segment (owner decision 2026-10-14), by reference %s', byReference => {
   it('holds routine body actions and proposes one episode when a subgoal is verified, its provenance each id once', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     // The first success of each action in this scope is notable: it is remembered (and closes its segment) at once.
     await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]]);
     expect(f.deliveries.map(item => item.segment?.actions.map(action => [action.name, action.notable ?? null]))).toEqual([
@@ -96,7 +99,7 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
   });
 
   it('closes the segment at once on a failure, an unknown outcome, danger or a missed prediction: nothing safety-relevant waits', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     await f.step([['mc.move-to', ok()]]);
     f.deliveries.length = 0;
     await f.step([['mc.move-to', ok()], ['mc.move-to', failed()]]);
@@ -112,7 +115,7 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
   });
 
   it('closes a segment when the task waits, replans, or is stopped without either', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     await f.step([['mc.move-to', ok()]]);
     f.deliveries.length = 0;
     await f.step([['mc.move-to', ok()], ['mc.move-to', ok()]]);
@@ -130,14 +133,14 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
   });
 
   it('remembers other outcomes one by one, as before', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     await f.step([['web.search', ok('{"hits":1}')], ['web.search', ok('{"hits":2}')]]);
     expect(f.deliveries.map(item => [item.action.name, item.segment ?? null])).toEqual([['web.search', null], ['web.search', null]]);
     expect(f.held()).toBe(0);
   });
 
   it('keeps held actions held while the owner is not alone when the task is cancelled, and remembers them once he is (review F1)', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     await f.step([['mc.move-to', ok()]]);
     await f.step([['mc.move-to', ok()], ['mc.move-to', ok()]]);
     f.deliveries.length = 0;
@@ -155,7 +158,7 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
   });
 
   it('closes a segment left open longer than the quiet time, of a task still running (review F4)', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     await f.step([['mc.move-to', ok()]]);
     await f.step([['mc.move-to', ok()]]);
     f.deliveries.length = 0;
@@ -169,7 +172,7 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
   });
 
   it('lets the nightly learning use a segment episode matched to its rows, and refuses a forged or mismatched one (review F2)', async () => {
-    const f = fixture();
+    const f = fixture(byReference);
     const turns = Array.from({ length: 4 }, (_, index) => f.world.store.appendTurn('owner', 'thread-mc', `木を集めて${index}`, `集めます${index}`, f.world.now()).id);
     f.world.advance(60_000);
     await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]], f.task.id, turns.slice(0, 2));
@@ -202,5 +205,29 @@ describe('Minecraft body actions remembered per segment (owner decision 2026-10-
     const fake = { ...stored.task, segment: { ...record.segment!, eventIds: record.segment!.eventIds.slice(1) } };
     f.h.db.prepare('UPDATE experience_events SET payload_json=? WHERE event_id=?').run(JSON.stringify({ ...payload, task: fake, summary: taskExperienceSummary(fake) }), id);
     expect(evidence('owner', id)).toBe(false);
+  });
+
+  it('stores the held segment\'s rows by reference and closes it with the same provenance as copies', async () => {
+    const f = fixture(byReference);
+    await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]]); // each action's first success is notable: delivered at once
+    f.deliveries.length = 0;
+    await f.step([['mc.dig-block-at', ok()], ['mc.move-to', ok()]]);
+    expect(f.held()).toBe(2);
+    const stored = f.h.db.prepare('SELECT sources_json FROM fca_action_evidence').all() as Array<{ sources_json: string }>;
+    expect(stored.length).toBeGreaterThan(0);
+    expect(stored.every(row => isProvenanceReference(row.sources_json) === byReference)).toBe(true);
+    await f.step([['goal.verify', ok('{"verified":true}')]]);
+    expect(f.held()).toBe(0);
+    expect(f.deliveries).toHaveLength(1);
+    const record = fcaOutcomeEpisode(f.deliveries[0]!)!;
+    expect(record.sourceIds).toEqual(expect.arrayContaining(['memory-shared', 'memory-2', 'memory-3']));
+    expect(new Set(record.sourceIds).size).toBe(record.sourceIds.length);
+    // The segment's committed history rows and the nightly proof's reader see the same list through either form.
+    const history = f.h.db.prepare('SELECT step_id,sources_json FROM fca_task_history').all() as Array<{ step_id: string; sources_json: string }>;
+    expect(history.every(row => isProvenanceReference(row.sources_json) === byReference)).toBe(true);
+    const last = f.deliveries[0]!;
+    const committed = committedEvidenceHistorySources(f.h.db, 'owner', last.outcomeId, f.task.id);
+    expect(committed).toEqual(f.runtime.history('owner', f.task.id)!.rounds.at(-1)!.sources);
+    expect(committed!.flatMap(source => source.recalledMemoryIds)).toEqual(expect.arrayContaining(['memory-shared', 'memory-3']));
   });
 });

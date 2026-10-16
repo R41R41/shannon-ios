@@ -339,12 +339,13 @@ describe('the operator service', () => {
 });
 
 describe('the operator request in the common task tree', () => {
-  function fixture() {
+  function fixture(provenanceRefs = false) {
     const h = actionHarness(() => at);
     cleanups.push(h.close);
     migrateAgentTasks(h.db);
     const authority = new SQLiteFcaTaskAuthority(h.db);
-    const runtime = new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => true, conversationLeaseValid: () => true });
+    const runtime = new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => true, conversationLeaseValid: () => true,
+      ...(provenanceRefs ? { provenanceRefs: true } : {}) });
     const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
     const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => true });
     const conversation = createFcaConversationBridge({ runtime, ownerScope: 'owner', visible });
@@ -358,7 +359,7 @@ describe('the operator request in the common task tree', () => {
     const api = fcaMinecraftRequests({ runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
       sourceVisible: () => true, stop: async (id, reason) => runtime.stop('owner', id, reason),
       atomic: work => underWriteLock(h.db, null, '', work, 'operator_test') });
-    return { runtime, bodyStore, operator: api.operator };
+    return { runtime, bodyStore, operator: api.operator, db: h.db };
   }
 
   it('is the owner\'s kind of Minecraft request, under the root, bound to the body, and marked as handed over by the operator', () => {
@@ -375,6 +376,19 @@ describe('the operator request in the common task tree', () => {
     expect(inbox).toContain('この依頼は運用者（ops.ryo）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。');
     expect(f.runtime.readyTasks('owner').map(item => item.id)).toContain(created.id);
     expect(f.operator.admit({ operationId: OTHER, goal: 'もう一つ', operator: 'ops.ryo' })).toEqual({ ok: false, code: 'minecraft_busy' });
+  });
+
+  // The real wiring (`sources: 'asking'`): no conversation asked, so with the switch on the task inherits nothing of the root's
+  // accumulated sources; off, the whole set as before.
+  it.each([[true], [false]])('inherits nothing of the root\'s accumulated sources when the switch is %s', on => {
+    const f = fixture(on), root = f.runtime.ensureRoot('owner');
+    f.db.prepare("INSERT INTO fca_task_sources(step_id,scope_key,thread_id,observed_at,recalled_ids_json,state,source_kind) VALUES('memory:earlier','owner','',?,?,'bound','memory')")
+      .run(at, JSON.stringify(['accumulated']));
+    f.db.prepare('INSERT INTO fca_task_source_links(task_id,step_id) VALUES(?,?)').run(root.id, 'memory:earlier');
+    const admitted = f.operator.admit({ operationId: TASK, goal: '石を集めて', operator: 'ops.ryo' });
+    expect(admitted.ok).toBe(true);
+    if (!admitted.ok) return;
+    expect(f.runtime.taskSources('owner', admitted.task.id).flatMap(source => source.recalledMemoryIds)).toEqual(on ? [] : ['accumulated']);
   });
 });
 

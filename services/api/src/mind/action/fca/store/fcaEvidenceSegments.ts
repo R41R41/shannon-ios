@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { requireStoredSources } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 import type { TaskSource } from '../../taskRuntime/taskRuntimePorts.js';
 import type { FcaDurableOutcome, FcaSegmentAction, FcaSegmentNotable } from '../fcaEvidencePorts.js';
 import type { FcaToolCall } from '../fcaPorts.js';
@@ -54,7 +55,8 @@ export function durableOutcomeOf(db: DatabaseSync, row: FcaSegmentRow, held: rea
   return { scopeKey: row.scope_key, taskId: row.task_id, stepId: row.step_id, outcomeId: closure?.outcomeId ?? row.event_id, goal: row.goal,
     action: JSON.parse(row.action_json) as FcaToolCall, expectation: parsed<FcaActionExpectation>(row.expectation_json),
     comparison: parsed<FcaExpectationComparison>(row.comparison_json), observation: row.observation as 'observed' | 'unknown',
-    result, observedAt: row.observed_at!, sources: segment ? segmentSources([...held, row]) : JSON.parse(row.sources_json) as TaskSource[],
+    result, observedAt: row.observed_at!,
+    sources: segment ? segmentSources(db, [...held, row]) : [...requireStoredSources(db, row.scope_key, row.sources_json)],
     ...(actualTaskStatus ? { actualTaskStatus } : {}), ...(segment ? { segment } : {}) };
 }
 
@@ -115,7 +117,7 @@ export function committedEvidenceHistorySources(db: DatabaseSync, scopeKey: stri
     JOIN agent_tasks t ON t.task_id=e.task_id AND t.scope_key=e.scope_key
     WHERE e.scope_key=? AND e.event_id=? AND e.task_id=? AND e.observation='observed'
     AND t.fca_origin='owner_request' AND t.task_kind NOT IN ('codex','sleep')`).get(scopeKey, eventId, taskId);
-  return proof ? JSON.parse(String(proof.history_sources)) as TaskSource[] : null;
+  return proof ? [...requireStoredSources(db, scopeKey, String(proof.history_sources))] : null;
 }
 
 /** A segment's actions, closed values only. */
@@ -127,11 +129,14 @@ export function segmentActions(db: DatabaseSync, rows: readonly FcaSegmentRow[])
   });
 }
 
-/** The sources of every row of a segment, each source once (the episode's provenance: unique ids follow from them). */
-export function segmentSources(rows: ReadonlyArray<{ sources_json: string }>): TaskSource[] {
+/**
+ * The sources of every row of a segment, each source once (the episode's provenance: unique ids follow from them). A row's sources
+ * are its copy or its reference read now (`fcaProvenanceSets.ts`); an unresolved reference stops it (`FCA_PROVENANCE_UNRESOLVED`).
+ */
+export function segmentSources(db: DatabaseSync, rows: ReadonlyArray<{ scope_key: string; sources_json: string }>): TaskSource[] {
   const unique = new Map<string, TaskSource>();
   for (const json of new Set(rows.map(row => row.sources_json))) {
-    for (const source of JSON.parse(json) as TaskSource[]) unique.set(JSON.stringify(source, Object.keys(source).sort()), source);
+    for (const source of requireStoredSources(db, rows[0]!.scope_key, json)) unique.set(JSON.stringify(source, Object.keys(source).sort()), source);
   }
   return [...unique.values()];
 }

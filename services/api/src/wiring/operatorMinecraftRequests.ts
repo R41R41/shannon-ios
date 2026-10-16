@@ -37,7 +37,7 @@ export function operatorMinecraftRequests(parts: {
         const root = parts.runtime.ensureRoot(parts.ownerScope);
         const task = parts.runtime.createChild(parts.ownerScope, root.id, { ...base, origin: 'owner_request',
           title: `${OPERATOR_TITLE_PREFIX}${input.goal}`.slice(0, 120), context: `${operatorRequestContext(input.operator)}\n${base.context}` },
-        `operator:${input.operationId}`);
+        `operator:${input.operationId}`, { sources: 'asking' }); // no conversation asked: nothing of the root's (2026-10-15)
         if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
         return { ok: true, task: parts.runtime.get(parts.ownerScope, task.id) ?? task, bodyId };
       });

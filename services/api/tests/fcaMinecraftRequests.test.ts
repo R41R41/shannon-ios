@@ -16,9 +16,10 @@ import { actionHarness } from './support/actionThreadHarness.js';
 
 const at = '2026-10-09T00:00:00.000Z', stops: Array<() => void> = [];
 afterEach(() => { for (const stop of stops.splice(0)) stop(); });
-function fixture() {
+function fixture(provenanceRefs = false) {
   const h = actionHarness(() => at); stops.push(h.close); migrateAgentTasks(h.db);
-  const authority = new SQLiteFcaTaskAuthority(h.db), runtime = new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => true, conversationLeaseValid: () => true });
+  const authority = new SQLiteFcaTaskAuthority(h.db), runtime = new SQLiteTaskRuntimeStore(h.db, { authority, now: () => at, leaseValid: () => true, conversationLeaseValid: () => true,
+    ...(provenanceRefs ? { provenanceRefs: true } : {}) });
   const root = runtime.ensureRoot('owner'), state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
   let owner = true, source = true;
   const visible = createFcaSourceGuard({ runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => owner });
@@ -122,5 +123,17 @@ describe('Minecraft requests enter the canonical common task tree', () => {
       expect(f.runtime.get('owner', first.id)?.phase).not.toBe('stopped');
       turn.abort();
     });
+  });
+
+  // The real wiring (`sources: 'asking'`) under the switch as the server wires it (`serverFcaWiring.ts`): on, the in-game request
+  // inherits only its own asking turn; off, the root's whole accumulated set as before.
+  it.each([[true], [false]])('a game-chat task inherits only its asking turn when the switch is %s, not the root\'s accumulated sources', async on => {
+    const f = fixture(on);
+    f.db.prepare("INSERT INTO fca_task_sources(step_id,scope_key,thread_id,observed_at,recalled_ids_json,state,source_kind) VALUES('memory:earlier','owner','',?,?,'bound','memory')")
+      .run(at, JSON.stringify(['accumulated']));
+    f.db.prepare('INSERT INTO fca_task_source_links(task_id,step_id) VALUES(?,?)').run(f.root.id, 'memory:earlier');
+    const made = (await f.api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'task', goal: 'Find stone' } }))!;
+    const ids = f.runtime.taskSources('owner', made.request!.id).flatMap(source => source.recalledMemoryIds);
+    expect(ids).toEqual(on ? ['asking-turn'] : expect.arrayContaining(['accumulated', 'asking-turn']));
   });
 });

@@ -16,6 +16,11 @@ export interface FcaEvidenceJudge {
   covered?(sources: readonly TaskSource[]): boolean;
   /** What a walk of these still checks after the step's verified sources (`FcaEvidenceOptions.sourcesResidual`); null: walk them whole. */
   residual?(sources: readonly TaskSource[]): readonly TaskSource[] | null;
+  /**
+   * A row's stored sources: its copy, or its provenance set read now (`fcaProvenanceSets.ts`); null when a reference cannot be
+   * resolved, and the row is not shown. Absent: the copy is parsed.
+   */
+  sources?(row: FcaEvidenceCandidate): readonly TaskSource[] | null;
 }
 
 /** The rows chosen, and those a walk admitted (each source set once), which a prepare that yielded checks again at its end. */
@@ -42,10 +47,9 @@ export async function visibleEvidenceRows<R extends FcaEvidenceCandidate>(rows: 
     const key = `${row.task_id}\u0000${row.sources_json}`;
     let visible = verdicts.get(key);
     if (visible === undefined) {
-      const sources = JSON.parse(row.sources_json) as TaskSource[];
-      trace.parsedBytes += row.sources_json.length;
-      const walked = row.task_id === judge.taskId ? ownTaskRest(sources, judge) : sources;
-      if (walked === null) {
+      const { sources, walked } = storedRest(row, judge, trace);
+      if (!sources) visible = false;
+      else if (walked === null) {
         trace.covered += 1;
         visible = true;
       } else {
@@ -63,6 +67,18 @@ export async function visibleEvidenceRows<R extends FcaEvidenceCandidate>(rows: 
     walkedByKey.get(key)?.rows.push(row);
   }
   return { rows: chosen, walked: [...walkedByKey.values()], yielded };
+}
+
+/** A row's stored sources (null: an unresolved reference, counted) and what a walk of them checks (null: covered, no walk). */
+function storedRest(row: FcaEvidenceCandidate, judge: FcaEvidenceJudge, trace: FcaPrepareTrace):
+  { sources: readonly TaskSource[] | null; walked: readonly TaskSource[] | null } {
+  const sources = judge.sources ? judge.sources(row) : JSON.parse(row.sources_json) as TaskSource[];
+  trace.parsedBytes += row.sources_json.length;
+  if (!sources) {
+    trace.unresolved += 1;
+    return { sources, walked: null };
+  }
+  return { sources, walked: row.task_id === judge.taskId ? ownTaskRest(sources, judge) : sources };
 }
 
 /** A row of the step's own task: null when the verified sources cover it, else what a walk still checks (all of it without a residual). */
@@ -86,6 +102,8 @@ export class FcaPrepareTrace {
   reduced = 0;
   deduped = 0;
   parsedBytes = 0;
+  /** Rows whose provenance reference could not be resolved (not shown). */
+  unresolved = 0;
   yields = 0;
   walked = 0;
   partial = 0;
@@ -117,6 +135,6 @@ export class FcaPrepareTrace {
     console.info(`Shannon FCA evidence prepare outcome=${outcome} total=${Math.round(total)}ms ${parts} rows=${this.rows} `
       + `rowChecks=${this.rowChecks} covered=${this.covered} reduced=${this.reduced} deduped=${this.deduped} `
       + `walks=${this.walked} partial=${this.partial} reused=${this.reused} `
-      + `parsedBytes=${this.parsedBytes} yields=${this.yields}`);
+      + `parsedBytes=${this.parsedBytes} yields=${this.yields}${this.unresolved ? ` unresolved=${this.unresolved}` : ''}`);
   }
 }

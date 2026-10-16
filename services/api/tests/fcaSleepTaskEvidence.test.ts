@@ -14,6 +14,7 @@ import { ShannonKnowledgeConsolidator } from '../src/mind/sleep/knowledgeConsoli
 import { createFcaSleepTaskEvidence, fcaSleepTaskEvidenceFor } from '../src/wiring/fcaSleepTaskEvidence.js';
 import { skillSeedSources, skillSourcesPass } from '../src/wiring/skillMemoryWiring.js';
 import { sleepSourcesVisible } from '../src/wiring/fcaSleepSources.js';
+import { isProvenanceReference } from '../src/infra/sqlite/fcaProvenanceSets.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
@@ -21,11 +22,11 @@ const cleanup: Array<() => void> = [];
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close(); });
 
 /** The real Task Hub and evidence store commit a failed body operation; the existing memory writer indexes it. */
-async function fixture() {
+async function fixture(provenanceRefs = false) {
   const world = memoryWorld(); cleanup.push(world.close);
   const h = actionHarness(world.now, world.path); cleanup.push(h.close); migrateAgentTasks(h.db);
   const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now: world.now,
-    leaseValid: (_scope, _task, lease, at) => !!h.store.check(lease, at) });
+    leaseValid: (_scope, _task, lease, at) => !!h.store.check(lease, at), ...(provenanceRefs ? { provenanceRefs: true } : {}) });
   const root = runtime.ensureRoot('owner');
   const task = runtime.createChild('owner', root.id, { title: '採掘', goal: '石を一つ集める' }, 'body-request');
   const source = world.store.appendTurn('owner', 'request-thread', '石を採ってきてください', '承知しました', world.now());
@@ -36,7 +37,7 @@ async function fixture() {
   step.snapshot.sources = runtime.taskSources('owner', task.id, step.messageIds);
   let record!: TaskExperienceRecord;
   const evidence = new SQLiteFcaEvidenceStore({ db: h.db, state: world.store, now: world.now,
-    validStep: () => true, sourcesVisible: () => true, taskVisible: () => true,
+    validStep: () => true, sourcesVisible: () => true, taskVisible: () => true, ...(provenanceRefs ? { provenanceRefs: true } : {}),
     onOutcome: outcome => {
       record = { scopeKey: outcome.scopeKey, taskId: outcome.taskId, outcomeId: outcome.outcomeId, observedAt: outcome.observedAt,
         status: outcome.result?.ok ? 'success' : 'failure', goal: outcome.goal.slice(0, 1000), context: `task:${outcome.taskId}`,
@@ -154,4 +155,22 @@ it('retains a task-derived retired knowledge source with skills disabled, until 
   for (const source of sources) expect(sleepSourcesVisible(f.store, 'owner', source, null, people)).toBe(true);
   f.advance(1000); new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: f.source.id, action: 'forget' });
   for (const source of sources) expect(sleepSourcesVisible(f.store, 'owner', source, null, people)).toBe(false);
+});
+
+// The nightly proof reads the evidence row's and the history row's sources through their provenance sets (`fcaProvenanceSets.ts`).
+it('admits a committed outcome whose evidence and history sources are stored by reference, and refuses one whose reference cannot be resolved', async () => {
+  const f = await fixture(true);
+  const stored = (table: string, key: string, value: string) => String((f.db.prepare(`SELECT sources_json FROM ${table} WHERE ${key}=?`).get(value) as { sources_json: string }).sources_json);
+  const evidenceJson = stored('fca_action_evidence', 'event_id', f.record.outcomeId), historyJson = stored('fca_task_history', 'step_id', f.step.id);
+  expect(isProvenanceReference(evidenceJson)).toBe(true);
+  expect(isProvenanceReference(historyJson)).toBe(true);
+  expect(f.proof('owner', f.id)).toBe(true);
+  expect(f.proof('other', f.id)).toBe(false);
+  for (const [label, table, key, value] of [['evidence', 'fca_action_evidence', 'event_id', f.record.outcomeId], ['history', 'fca_task_history', 'step_id', f.step.id]] as const) {
+    const original = stored(table, key, value);
+    f.db.prepare(`UPDATE ${table} SET sources_json=? WHERE ${key}=?`).run(JSON.stringify({ set: `sha256:${'0'.repeat(64)}` }), value);
+    expect(f.proof('owner', f.id), `${label}: unknown set`).toBe(false);
+    f.db.prepare(`UPDATE ${table} SET sources_json=? WHERE ${key}=?`).run(original, value);
+    expect(f.proof('owner', f.id), `${label}: restored`).toBe(true);
+  }
 });

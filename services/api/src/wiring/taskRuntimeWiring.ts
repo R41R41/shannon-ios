@@ -28,6 +28,8 @@ export interface TaskRuntimeWiringOptions {
   ownTimeAllowed?(task: TaskView): boolean;
   /** E3: per-task caps and own-time reservations around each step. */
   budget?: FcaBudget;
+  /** `SHANNON_FCA_PROVENANCE_REFS` (`TaskRuntimeOptions.provenanceRefs`). */
+  provenanceRefs?: boolean;
   /** The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`); tests give 0. */
   providerRetryDelayMs?(): number;
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
@@ -48,6 +50,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     return originMatches && fcaTaskLeaseValid(action, scope, taskId, lease, at);
   };
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
+    ...(options.provenanceRefs ? { provenanceRefs: true } : {}),
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
     if (task.origin === 'owner_request') return options.ownerAlone();
