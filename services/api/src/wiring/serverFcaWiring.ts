@@ -140,6 +140,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') ? bodySkillGists(step, parts.skillOpen,
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
+          fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
           sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;
