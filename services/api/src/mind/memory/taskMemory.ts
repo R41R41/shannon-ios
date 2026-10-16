@@ -1,6 +1,7 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { deepWalk, settleDeepChains } from './recallChainDepth.js';
 import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
 import type { ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
@@ -47,7 +48,24 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       if (!canonical.has(id)) canonical.set(id, store.experiencesById?.(scope, [id])[0] ?? null); return canonical.get(id) ?? null;
     };
     const lineage = new Map<string, boolean>();
-    const lineageVisible = (id: string, seen = new Set<string>()): boolean => {
+    // What `computeLineage` goes on to ask about, for the walk that settles a long chain (`recallChainDepth.ts`).
+    const lineageEdges = (id: string): readonly string[] => {
+      const experience = experienceOf(id);
+      if (experience) return experience.recalledMemoryIds ?? [];
+      if (id.startsWith('thread:')) {
+        const messages = store.threadSummaryLineage?.(scope, id.slice(7))?.messages ?? [];
+        return messages.flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : []);
+      }
+      if (id.startsWith('knowledge:')) return knowledge?.listShannonKnowledge(scope).find(row => row.id === id.slice(10))?.sourceExperienceIds ?? [];
+      const scalar = [...state.userFacts, ...state.relationships, ...state.prospectiveMemories].find(row => row.id === id);
+      return scalar?.sourceExperienceId ? [scalar.sourceExperienceId] : [];
+    };
+    const lineageVisible = (id: string, seen?: Set<string>): boolean => {
+      // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
+      if (!seen) {
+        const settle = () => settleDeepChains([id], lineageEdges, settled => lineageVisible(settled, new Set()));
+        return deepWalk(() => lineageVisible(id, new Set()), settle, false);
+      }
       if (seen.has(id) || seen.size >= 5000) return false;
       const known = lineage.get(id); if (known !== undefined) return known;
       seen.add(id);
