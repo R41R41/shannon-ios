@@ -12,6 +12,7 @@ import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers 
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
+import { FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
 
 const tools: ShannonToolDefinition[] = ['task.create', 'task.list', 'task.get', 'task.send'].map(name => ({
   name, description: `Synthetic definition of ${name}`, domain: 'meta', effect: 'write', cost: 'none',
@@ -366,6 +367,59 @@ describe('FCA native transport boundary', () => {
     expect(fixture.bodies).toHaveLength(1);
     expect(receipts).toHaveLength(status === 400 ? 0 : 1);
     if (status === 500) expect(receipts[0]).toMatchObject({ usageComplete: false });
+  });
+
+  describe('a request that got no answer at all (Minebot runs 12 and 13: APIConnectionError, ETIMEDOUT)', () => {
+    // The cause as undici gives it: a code on a cause whose text does not say "timed out" (the SDK would call that its timeout class).
+    const wire = (code?: string) => (async () => { throw new TypeError('fetch failed', code ? { cause: Object.assign(new Error('connection failed'), { code }) } : undefined); }) as unknown as typeof fetch;
+    const executionOf = () => ({ lease: { id: 'a', holder: 'api', generation: 1 }, signal: signal(), permit: async () => ({}) }) as unknown as ActionExecution;
+
+    it.each(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'UND_ERR_CONNECT_TIMEOUT'])('%s is marked as no response: still unknown for a caller that does not retry, never sent twice by the adapter', async code => {
+      let sent = 0;
+      const counting = (async () => { sent += 1; return wire(code)(''); }) as unknown as typeof fetch;
+      const receipts: AnthropicFcaUsage[] = [];
+      const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: counting, recordUsage: usage => { receipts.push(usage); } });
+      const execution = executionOf();
+      const failure = await inActionExecution(execution, () => model.decide(input(), signal())).catch(error => error as Error);
+      expect(failure).toBeInstanceOf(FcaNoResponseError);
+      expect((failure as Error).message).toBe('FCA_MODEL_RESPONSE_UNKNOWN');
+      expect(sent).toBe(1);
+      expect(execution.modelOutcome).toBe('unknown');
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]).toMatchObject({ usageComplete: false });
+      expect(receipts[0]!.estimatedCostUsd).toBeGreaterThan(0);
+    });
+
+    it('books both calls when the runner asks again: the first as an unknown upper bound, the second by its actual usage', async () => {
+      const fixture = scriptedAnthropic([answer()]);
+      let calls = 0;
+      const fetcher = (async (url, init) => { calls += 1; return calls === 1 ? wire('ETIMEDOUT')('') : fixture.fetcher(url, init); }) as typeof fetch;
+      const receipts: AnthropicFcaUsage[] = [];
+      const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher, recordUsage: usage => { receipts.push(usage); } });
+      const execution = executionOf();
+      await expect(inActionExecution(execution, () => model.decide(input(), signal()))).rejects.toBeInstanceOf(FcaNoResponseError);
+      const second = await inActionExecution(execution, () => model.decide(input(), signal()));
+      expect(second.decision.kind).toBe('tools');
+      expect(receipts.map(receipt => receipt.usageComplete)).toEqual([false, true]);
+      expect(execution.modelOutcome).toBe('acknowledged');
+      expect(fixture.bodies).toHaveLength(1);
+    });
+
+    it('is not marked for a cause that is unknown or absent, an HTTP answer, an abort, or a response whose body broke after it began', async () => {
+      const run = async (fetcher: typeof fetch, controller = new AbortController()) => {
+        const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher, recordUsage() {} });
+        return inActionExecution(executionOf(), () => model.decide(input(), controller.signal)).catch(error => error as Error);
+      };
+      for (const failure of [await run(wire()), await run(wire('EWHATEVER')),
+        await run((async () => { throw new DOMException('The operation was aborted', 'AbortError'); }) as unknown as typeof fetch),
+        await run((async () => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'x' } }), { status: 500, headers: { 'content-type': 'application/json' } })) as typeof fetch),
+        await run((async () => new Response('{"id":"msg_1","type":"mess', { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch)]) {
+        expect(failure).toBeInstanceOf(Error);
+        expect(failure).not.toBeInstanceOf(FcaNoResponseError);
+      }
+      const controller = new AbortController();
+      expect(await run((async () => { controller.abort(); return wire('ETIMEDOUT')(''); }) as typeof fetch, controller)).not.toBeInstanceOf(FcaNoResponseError);
+    });
   });
 
   it('supports client injection, forwards cancellation and records an interrupted request as unknown once', async () => {

@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
+import { FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
 import type { FcaBodyLifecycle, FcaModel, FcaModelInput, FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import type { ReflexChoiceInput } from '../src/mind/action/reflex/reflexPorts.js';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
@@ -23,7 +24,7 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
-function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean; logs?: string[] } = {}) {
+function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean; logs?: string[]; retryDelay?: number } = {}) {
   let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true, sourceChecks = 0;
   let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   let threatList: unknown[] = [];
@@ -104,7 +105,7 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
             candidateId: input.candidates.find(candidate => candidate.kind === (options.choose === 'return' ? 'return' : 'action'))!.id };
         } } });
       bodies.push(body.body);
-      return { body: body.body, evidence, safeToAcknowledgeStop: body.safeToAcknowledgeStop,
+      return { body: body.body, evidence, safeToAcknowledgeStop: body.safeToAcknowledgeStop, decisionRetryDelayMs: () => options.retryDelay ?? 0,
         tools: combineFcaTools(fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }), body.tools) };
     } });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id,
@@ -316,6 +317,34 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     const snapshot = f.driver.runtime.snapshot('owner', f.task.id)!;
     expect(snapshot.history.find(entry => (entry as { role?: string }).role === 'tool_results')).toMatchObject({ results: [{ id: 'move', ok: false }] });
     expect(snapshot.messages.map(m => JSON.parse(m.text))).toContainEqual(expect.objectContaining({ kind: 'body.fast', decision: 'shelter', rule: 'respawn_shelter', outcome: 'completed' }));
+  });
+
+  it('a decision that got no answer is asked once more while the fast judgment keeps guarding the body: the shelter taken in the wait makes the retried decision stale (Minebot runs 12 and 13)', async () => {
+    const fail = deferred<void>(), logs: string[] = [];
+    const f = fixture(async () => {
+      if (f.modelInputs.length === 1) { await fail.promise; throw new FcaNoResponseError(); }
+      return f.modelInputs.length === 2 ? move() : wait();
+    }, { fast: true, retryDelay: 2_500, logs });
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision pending');
+    fail.resolve();
+    // The request got no answer; the runner waits before it asks again. The body is still guarded and may act inside that wait.
+    f.danger(true); f.threats([{ name: 'zombie', distance: 2, canReachMe: true }]); f.pump();
+    await f.until(() => f.commands.some(c => c.kind === 'skill'), 'fast skill sent during the retry window');
+    expect(f.modelInputs).toHaveLength(1);
+    expect(f.commands.map(c => [c.kind, c.skill])).toEqual([['skill', 'dig-shelter']]);
+    expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('executing');
+    expect(f.entryCalls()).toBe(0);
+    f.threats([]); f.danger(false);
+    // The same step, the same body monitor, the same judgment asked again: its tool call is refused as stale, like any decision made
+    // before a body action.
+    for (let i = 0; i < 1_500 && f.modelInputs.length < 2; i++) { f.pump(); await delay(5); }
+    expect(f.modelInputs).toHaveLength(2);
+    expect(f.bodies).toHaveLength(1);
+    await f.until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing', 'step committed'); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', f.task.id)?.phase).not.toBe('unknown');
+    const snapshot = f.driver.runtime.snapshot('owner', f.task.id)!;
+    expect(snapshot.history.find(entry => (entry as { role?: string }).role === 'tool_results')).toMatchObject({ results: [{ id: 'move', ok: false }] });
+    expect(f.commands.filter(c => c.kind === 'skill' || c.kind === 'reflex')).toHaveLength(1);
   });
 
   it('with the fast judgment off, writes nothing new to the journal for a held entry; on, tells it once (the gated "entry held" line)', async () => {
