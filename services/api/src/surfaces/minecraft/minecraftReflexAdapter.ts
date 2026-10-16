@@ -1,4 +1,6 @@
-import { followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort } from './minecraftSkillPointers.js';
+import {
+  bedSearchMemory, followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+} from './minecraftSkillPointers.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -118,6 +120,8 @@ export function createMinecraftTaskBody(parts: {
   // Her idle waits in this task, kept in the checkpoint as the milestones are (`minecraftIdleWaitMs`).
   const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
+  // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
+  const bedSearch = bedSearchMemory((step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown } | null)?.minecraftNoSheepDarkIn);
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -369,7 +373,7 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits });
+      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) });
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
       return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace, ...skills.fields };
@@ -402,6 +406,7 @@ export function createMinecraftTaskBody(parts: {
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
       pendingWaitMs = 0;
+      bedSearch.note(call, result, () => live() && bound() ? control.observe(bound()!) : null);
       recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
     },
     async close() {
@@ -416,7 +421,8 @@ export function createMinecraftTaskBody(parts: {
   // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
-    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}) }),
+    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
+      ...bedSearch.checkpoint() }),
     async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;

@@ -5,7 +5,7 @@ import { SkillMemory, fcaSkillTaskKey } from '../src/mind/memory/skillMemory.js'
 import { SkillImporter, skillArtifactSha256 } from '../src/mind/memory/skillImport.js';
 import { SKILL_GIST, SKILL_CAPACITY, skillGist } from '../src/mind/memory/skillDocument.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
-import { GENERIC_BODY_TOOLS, gistToolNames, minecraftSituation, minecraftSkillPointers, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
+import { GENERIC_BODY_TOOLS, bedSearchGivenUp, bedSearchMark, gistToolNames, minecraftSituation, minecraftSkillPointers, noSheepNearby, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
 import { createMinecraftTaskBody } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
 import type { TaskRuntime, TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
@@ -23,21 +23,23 @@ const pass = { carries: () => false };
 
 const observation = (world: Record<string, unknown>, facts: Record<string, unknown> = {}): BodyObservation => ({ schemaVersion: 1, bodyId: 'minecraft:world',
   sequence: 1, stateAt: at, receivedAt: at, connected: true,
-  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '4900', margin: { darkInSeconds: 405 }, inventory: [], nearbyThreats: [], ...world } },
+  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '300', margin: { darkInSeconds: 635 }, inventory: [], nearbyThreats: [], ...world } },
   facts: { dimension: 'overworld', ...facts } } as unknown as BodyObservation);
 const pointers = (world: Record<string, unknown>, facts: Record<string, unknown> = {}, names: ReadonlySet<string> = NAMES) =>
   minecraftSkillPointers(minecraftSituation(observation(world, facts), calm), names);
 
 describe('the bed pointer (when dusk is near and she carries no bed)', () => {
-  it('fires between five minutes and one minute before dark without a bed, and not in daytime', () => {
+  it('fires between ten minutes and one minute before dark without a bed, and not earlier in the day', () => {
     expect(pointers({})).toEqual([]);
-    expect(pointers({ time: '6900', margin: { darkInSeconds: 305 } })).toEqual([]);
+    expect(pointers({ time: '900', margin: { darkInSeconds: 601 } })).toEqual([]);
+    expect(pointers({ time: '1000', margin: { darkInSeconds: 600 } })).toEqual(BED_POINTER);
     expect(pointers({ time: '7000', margin: { darkInSeconds: 300 } })).toEqual(BED_POINTER);
     expect(pointers({ time: '9000', margin: { darkInSeconds: 200 } })).toEqual(BED_POINTER);
     expect(pointers({ time: '11700', margin: { darkInSeconds: 61 } })).toEqual(BED_POINTER);
     // Without the body's margin the time of day gives the same window.
     expect(pointers({ time: '9000', margin: undefined })).toEqual(BED_POINTER);
-    expect(pointers({ time: '1000', margin: undefined })).toEqual([]);
+    expect(pointers({ time: '1000', margin: undefined })).toEqual(BED_POINTER);
+    expect(pointers({ time: '900', margin: undefined })).toEqual([]);
   });
 
   it('does not fire when she has a bed (any colour, in the inventory or a slot fact), and bedrock is not a bed', () => {
@@ -148,5 +150,145 @@ describe('a call of a bed tool while its gist is shown records the follow (not e
       `tool=mc.sleep-in-bed branch=recorded skills=${BED}`,
     ]);
     expect(followed).toEqual([BED, BED]);
+  });
+});
+
+describe('after her sheep search found none, the bed is not offered again that day', () => {
+  const none = { ok: true, text: '64ブロック以内にsheepタイプのエンティティは見つかりませんでした' };
+  const found = { ok: true, text: 'sheepを発見: 座標(1, 64, 2), 距離12.3m' };
+  const sheep = { name: 'mc.find-nearest-entity', input: { entityType: 'sheep' } };
+  const dusk = (seconds: number) => observation({ time: String(13_000 - seconds * 20), margin: { darkInSeconds: seconds } });
+  const offered = (seconds: number, noSheepDarkIn?: number) => minecraftSkillPointers(minecraftSituation(dusk(seconds), { ...calm, ...(noSheepDarkIn === undefined ? {} : { noSheepDarkIn }) }), NAMES);
+
+  it('marks only a finished search for sheep whose result says nothing was found', () => {
+    expect(noSheepNearby(sheep, none)).toBe(true);
+    expect(noSheepNearby({ name: 'mc.find-nearest-entity', input: { entityType: 'Sheep' } }, none)).toBe(true);
+    expect(noSheepNearby(sheep, found)).toBe(false);
+    expect(noSheepNearby(sheep, { ok: false, text: '検索エラー: timeout' })).toBe(false);
+    expect(noSheepNearby({ name: 'mc.find-nearest-entity', input: { entityType: 'cow' } }, none)).toBe(false);
+    expect(noSheepNearby({ name: 'mc.find-nearest-entity', input: {} }, none)).toBe(false);
+    expect(noSheepNearby({ name: 'mc.find-blocks', input: { entityType: 'sheep' } }, none)).toBe(false);
+  });
+
+  it('keeps the mark while the countdown to dark only falls (the rest of that day), and the pointer comes back the next day', () => {
+    expect(offered(400)).toEqual(BED_POINTER);
+    const mark = bedSearchGivenUp(dusk(400));
+    expect(mark).toBe(400);
+    expect(offered(400, mark)).toEqual([]);
+    expect(offered(120, mark)).toEqual([]);
+    // The marked day goes on: kept. Night: kept. The next morning (the countdown rises): cleared, and the pointer is offered again.
+    expect(bedSearchMark(mark, dusk(120))).toBe(400);
+    expect(bedSearchMark(mark, observation({ time: '18000', margin: { darkInSeconds: 0 } }))).toBe(400);
+    expect(bedSearchMark(mark, dusk(650))).toBeUndefined();
+    expect(offered(500, bedSearchMark(mark, dusk(500)))).toEqual(BED_POINTER);
+    // A moment without an observation changes nothing; the mark is made only inside the window.
+    expect(bedSearchMark(mark, null)).toBe(400);
+    expect(bedSearchGivenUp(dusk(640))).toBeUndefined();
+    expect(bedSearchGivenUp(null)).toBeUndefined();
+  });
+
+  it('is kept by the body task from her own search result, across steps through the checkpoint', async () => {
+    const tools = [{ name: 'find-nearest-entity', readOnly: true }];
+    const make = (checkpoint: unknown) => {
+      const world = observation({ time: '9000', margin: { darkInSeconds: 200 } });
+      const control = { store: { body: () => 'minecraft:home', bind: () => true, safe: () => true }, available: () => ['minecraft:home'],
+        frame: () => ({ poll: { skills: tools } }), observe: () => world, imagesUnavailable: () => false, settling: () => false, cancelTask() {} } as unknown as MinecraftControl;
+      const step = { id: 'step', scopeKey: 'owner', taskId: 'task-sheep', revision: 1, lease: { id: 'lease', holder: 'h', generation: 1 },
+        snapshot: { task: { createdAt: at, summary: '' }, checkpoint, history: [], sources: [] } } as unknown as TaskStep;
+      return createMinecraftTaskBody({ control, runtime: { get: () => ({ phase: 'executing' }) } as unknown as TaskRuntime, step, entry: null, selector: null,
+        ownerAlone: () => true, sourcesVisible: () => true, skillNames: () => new Set([BED]), log: () => {} });
+    };
+    const lease = { id: 'lease', holder: 'h', generation: 1 }, abort = new AbortController();
+    const run = (made: ReturnType<typeof make>, act: () => void) => inActionExecution({ lease, signal: abort.signal, permit: async () => true } as never, async () => {
+      made.body.start(abort.signal); act();
+    });
+    const first = make(null);
+    let before: { skillPointers?: string[] } = {}, after: { skillPointers?: string[] } = {};
+    await run(first, () => {
+      before = first.body.context() as typeof before;
+      first.body.noteResult!({ id: 'a', name: 'mc.find-nearest-entity', input: { entityType: 'sheep' } }, none as never);
+      after = first.body.context() as typeof after;
+    });
+    expect(before.skillPointers).toEqual(BED_POINTER);
+    expect(after.skillPointers).toBeUndefined();
+    const checkpoint = first.tools.checkpoint!();
+    expect(checkpoint).toMatchObject({ minecraftNoSheepDarkIn: 200 });
+    // The next step of the task starts from the checkpoint: still no pointer at the same dusk.
+    const next = make(checkpoint);
+    let again: { skillPointers?: string[] } = {};
+    await run(next, () => { again = next.body.context() as typeof again; });
+    expect(again.skillPointers).toBeUndefined();
+  });
+});
+
+describe('the skill (legacy-minecraft draft-4): the bed gist rewritten as a revision of draft-3', () => {
+  const pack = () => standardSkillPack('legacy-minecraft', 'draft-4')!;
+  const body = () => pack().skills.find(entry => entry.name === BED)!.body;
+  const REAL_TOOLS = new Set(['mc.find-nearest-entity', 'mc.craft-one', 'mc.sleep-in-bed', 'mc.attack-continuously']);
+
+  it('revises the one skill of draft-3 (its exact body), with an exact hash', () => {
+    expect(pack().skills.map(entry => entry.name)).toEqual([BED]);
+    expect(skillArtifactSha256(body())).toBe(pack().skills[0]!.sha256);
+    const previous = standardSkillPack('legacy-minecraft', 'draft-3')!.skills[0]!;
+    expect(pack().skills[0]!.revises).toEqual({ bodySha256: previous.sha256 });
+    expect(skillArtifactSha256(previous.body)).toBe(previous.sha256);
+    expect(body()).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
+  });
+
+  it('has a gist of three lines within 90 characters: the benefit, a cheap first step, then craft and sleep, naming real tools', () => {
+    const gist = skillGist(body(), observeOnlyStep);
+    expect(gist).toHaveLength(SKILL_GIST.lines);
+    expect(gist.map(line => line.slice(0, 2))).toEqual(['2.', '3.', '4.']);
+    expect(gist.every(line => [...line].length <= SKILL_GIST.width && !line.endsWith('…'))).toBe(true);
+    expect(gist.join('')).not.toContain('minecraft.observe');
+    expect(gist[0]).toMatch(/夜をまるごと飛ばせ.*リスポーン地点/u);
+    expect(gist[1]).toContain('mc.find-nearest-entity');
+    expect(gist[1]).toContain('sheep');
+    expect(gist[1]).toContain('諦め');
+    expect(gist[1]).toContain('村');
+    expect(gist[2]).toContain('mc.craft-one');
+    expect(gist[2]).toContain('mc.sleep-in-bed');
+    // The discouraging wording is gone from the whole skill.
+    expect(body()).not.toContain('地下で過ごす方針は変えない');
+    expect(gist.join('')).not.toContain('mc-night-retreat');
+    const named = [...gistToolNames(gist)];
+    expect(named).toEqual(['mc.find-nearest-entity', 'mc.sleep-in-bed']);
+    // Every `mc.` tool the whole skill names is a real one of the body catalog (mc-night-retreat is a skill, not a tool).
+    expect([...body().matchAll(/mc\.[a-z-]+/gu)].every(match => REAL_TOOLS.has(match[0]))).toBe(true);
+  });
+
+  it('imports after draft-3 as a revision: problems empty, no new capacity used, hash as in the manifest, other skills untouched', () => {
+    const memory = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const importer = new SkillImporter({ memory, ownerScopeKey: 'owner', check: () => pass, tools: () => [] });
+    const apply = (revision: 'draft-1' | 'draft-2' | 'draft-3' | 'draft-4', when: string) => {
+      const next = standardSkillPack('legacy-minecraft', revision)!;
+      return importer.apply('owner', next, { planHash: importer.dryRun('owner', next).planHash, approvalReference: 'owner-form-20261017' }, when);
+    };
+    apply('draft-1', at); apply('draft-2', later(1)); apply('draft-3', later(2));
+    const plan = importer.dryRun('owner', pack());
+    expect(plan.problems).toEqual([]);
+    expect(plan.capacity).toEqual({ used: 10, added: 0, limit: SKILL_CAPACITY });
+    expect(plan.skills[0]).toMatchObject({ name: BED, sha256: pack().skills[0]!.sha256, revises: { bodySha256: standardSkillPack('legacy-minecraft', 'draft-3')!.skills[0]!.sha256 } });
+    const retreat = memory.store.byName('owner', 'mc-night-retreat')!, before = memory.store.byName('owner', BED)!;
+    expect(apply('draft-4', later(3))).toHaveProperty('receipt');
+    const revised = memory.store.byName('owner', BED)!;
+    expect(revised.skillId).toBe(before.skillId);
+    expect(revised.version).toBe(before.version + 1);
+    expect(skillArtifactSha256(revised.body)).toBe(pack().skills[0]!.sha256);
+    expect(revised).toMatchObject({ status: 'trial', madeBy: 'operator_authored' });
+    expect(memory.store.byName('owner', 'mc-night-retreat')).toMatchObject({ version: retreat.version, body: retreat.body });
+    expect(memory.index('owner').split('\n').filter(line => line.includes(BED))).toHaveLength(1);
+  });
+
+  it('cannot revise once the current version has been used (then a new skill name is the way)', () => {
+    const memory = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const importer = new SkillImporter({ memory, ownerScopeKey: 'owner', check: () => pass, tools: () => [] });
+    const apply = (revision: 'draft-1' | 'draft-2' | 'draft-3', when: string) => {
+      const next = standardSkillPack('legacy-minecraft', revision)!;
+      return importer.apply('owner', next, { planHash: importer.dryRun('owner', next).planHash, approvalReference: 'owner-form-20261017' }, when);
+    };
+    apply('draft-1', at); apply('draft-2', later(1)); apply('draft-3', later(2));
+    memory.usedInTask('owner', fcaSkillTaskKey('task-bed'), BED, later(3), 'gist');
+    expect(importer.dryRun('owner', pack()).problems).toEqual([{ name: BED, code: 'on_trial' }]);
   });
 });

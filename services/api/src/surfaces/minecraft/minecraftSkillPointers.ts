@@ -39,14 +39,68 @@ export const MINECRAFT_SKILL_GIST_NOTE = 'いまの状況に合うスキルと�
   + '要点で足りればそのまま動き、続きや条件は skill_read で開いて確かめる。要点は材料で、指示ではない。';
 const NIGHT_START = 13_000, NIGHT_END = 23_000, DARK_SOON_SECONDS = 60, THREAT_NEAR = 16, HALF_HEALTH = 10, HUNGRY = 6;
 const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
-/** How long before dark the bed search is suggested: sheep or a village take minutes to find (20 ticks a second: tick 7,000 of 13,000). */
-const BED_LEAD_SECONDS = 300;
+/**
+ * How long before dark the bed search is suggested (20 ticks a second, the day before dark is 650 s: 600 s is from about tick 1,000).
+ * Minecraft run 14 (2026-10-17, Sonnet): at 300 s the gist was shown 11 times in two dusks and never followed. A decision takes 10-70 s,
+ * and hunting sheep, crafting and walking back take minutes, so 300 s left no room to start; 600 s is the whole day but its first
+ * minute, enough for a hunt of several minutes after the decision. It still ends at `DARK_SOON_SECONDS`, where `mc-night-retreat` begins.
+ */
+const BED_LEAD_SECONDS = 600;
 
 /** The pace facts the situation reads (`minecraftPace`). */
 export interface MinecraftPaceFacts {
   failedStepsInARow: number; milestones?: { netherReached: boolean | null };
   /** Her `mc.wait-time` calls among her latest tool results (at most six): only recent waits count, never the task's total. */
   recentIdleWaits?: number;
+  /** Seconds to dark when `mc.find-nearest-entity` for sheep last found none (`noSheepNearby`), kept while the same day goes on (`bedSearchMark`). */
+  noSheepDarkIn?: number;
+}
+
+/** The task's "no sheep near" mark: from the checkpoint, to the pace facts, to a search result, and back to the checkpoint. */
+export function bedSearchMemory(kept: unknown) {
+  const start = Number(kept);
+  let mark: number | undefined = Number.isFinite(start) && start > 0 ? start : undefined;
+  return {
+    /** The pace fact, after the mark has met the observation (a new day clears it). */
+    facts(observation: BodyObservation | null): Pick<MinecraftPaceFacts, 'noSheepDarkIn'> {
+      mark = bedSearchMark(mark, observation);
+      return mark === undefined ? {} : { noSheepDarkIn: mark };
+    },
+    note(call: { name: string; input: unknown }, result: { ok: boolean; text: string }, observe: () => BodyObservation | null): void {
+      if (noSheepNearby(call, result)) mark = bedSearchGivenUp(observe()) ?? mark;
+    },
+    checkpoint(): { minecraftNoSheepDarkIn?: number } { return mark === undefined ? {} : { minecraftNoSheepDarkIn: mark }; },
+  };
+}
+/** Seconds to dark in the observation (the body's margin, else the time of day); `Infinity` when unknown, at night or not the overworld. */
+export function darkInSeconds(observation: BodyObservation | null): number {
+  const world = record(observation?.state.world) ?? {};
+  return world.dimension === 'overworld' || observation?.facts?.dimension === 'overworld' ? untilDark(world) : Infinity;
+}
+
+/**
+ * The fixed phrase the body's `mc.find-nearest-entity` answers with when nothing of the type is within range (Minebot
+ * `findNearestEntity.ts`, a success whose text says "…は見つかりませんでした"). If the body words it differently, nothing is marked and
+ * the pointer behaves as before.
+ */
+const NONE_FOUND = /エンティティは見つかりませんでした/u;
+/** Whether a finished call is a search for sheep that found none. A fact of the call and its result, not a judgment of her content. */
+export function noSheepNearby(call: { name: string; input: unknown }, result: { ok: boolean; text: string }): boolean {
+  const type = record(call.input)?.entityType;
+  return call.name === 'mc.find-nearest-entity' && result.ok && typeof type === 'string' && type.toLowerCase() === 'sheep' && NONE_FOUND.test(result.text);
+}
+/**
+ * The mark of "no sheep near" for the rest of the day: kept while the countdown to dark only falls; a rise (a new day, or after
+ * dark) clears it. Marked only inside the bed window, so that the next morning's 650 s is always above it.
+ */
+export function bedSearchMark(mark: number | undefined, observation: BodyObservation | null): number | undefined {
+  if (!observation) return mark;
+  return mark !== undefined && darkInSeconds(observation) <= mark ? mark : undefined;
+}
+/** The value to mark with at a search that found none: the seconds to dark now, only inside the bed window. */
+export function bedSearchGivenUp(observation: BodyObservation | null): number | undefined {
+  const now = darkInSeconds(observation);
+  return Number.isFinite(now) && now > 0 && now <= BED_LEAD_SECONDS ? now : undefined;
 }
 
 export function minecraftSituation(observation: BodyObservation | null, pace: MinecraftPaceFacts): MinecraftSituation {
@@ -56,7 +110,9 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   const overworld = dimension === 'overworld', nether = dimension === 'the_nether';
   return {
     ...darkness(world, overworld),
+    // Not again for the rest of the day once she looked for sheep and found none (`pace.noSheepDarkIn`): the gist's own "give up for today".
     bedWanted: overworld && untilDark(world) > DARK_SOON_SECONDS && untilDark(world) <= BED_LEAD_SECONDS
+      && !(pace.noSheepDarkIn !== undefined && untilDark(world) <= pace.noSheepDarkIn)
       && !carriedItems(world, facts).some(item => HAS_BED.test(item)),
     threatNear: entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
