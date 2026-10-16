@@ -22,6 +22,8 @@ export interface FcaEvidenceOptions {
   sourcesCovered?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): boolean;
   /** Minutes a segment of held body actions may stay open after its newest (`SHANNON_FCA_SEGMENT_STALE_MINUTES`, default 30). */
   segmentStaleMinutes?: number;
+  /** A flush at least this slow (ms) is logged, content-free (default 500). */
+  slowFlushMilliseconds?: number;
   /** What a walk of `candidate` still checks once `verified` was found visible (`FcaSourceGuard.residual`); null: walk it whole. */
   sourcesResidual?(scopeKey: string, taskId: string, verified: readonly TaskSource[], candidate: readonly TaskSource[]): readonly TaskSource[] | null;
   /** The source guard's walk counts (`FcaSourceGuard.walks`), for the prepare line only. */
@@ -81,14 +83,16 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   private async prepared(step: TaskStep, trace: FcaPrepareTrace): Promise<FcaSharedContext> {
     // Receipt/delivery failures are retried by maintenance; they must never poison a fresh native step.
     trace.time('flush', () => { try { this.flush(); } catch { /* Both outboxes retain their original idempotency keys. */ } });
-    if (!this.options.validStep(step) || !trace.check(() => this.visible(step))) throw new Error('FCA_EVIDENCE_HELD');
+    if (!this.options.validStep(step) || !trace.time('precheck', () => trace.check(() => this.visible(step)))) throw new Error('FCA_EVIDENCE_HELD');
     // The sources just found visible; `observeContext` below may replace the step's list, never this one.
     const verified = step.snapshot.sources;
     const ids = [step.taskId, ...step.snapshot.task.childIds].filter(id => this.options.taskVisible(step.scopeKey, id));
     const rows = trace.time('select', () => this.options.db.prepare(`SELECT * FROM fca_action_evidence WHERE scope_key=? AND observation!='pending'
       AND task_id IN (SELECT value FROM json_each(?)) ORDER BY rowid DESC LIMIT 24`).all(step.scopeKey, JSON.stringify(ids)) as unknown as EvidenceRow[]);
-    const chosen = await visibleEvidenceRows(rows, this.judge(step, verified), trace);
-    const visibleRows = chosen.yielded ? this.stillVisible(step, verified, chosen, trace) : chosen.rows;
+    // walk includes the event loop's waits between walks (yieldWait); stillVisible is the re-check after a yield (0 without one).
+    const walkStarted = performance.now();
+    const chosen = await visibleEvidenceRows(rows, this.judge(step, verified), trace).finally(() => trace.add('walk', performance.now() - walkStarted));
+    const visibleRows = trace.time('stillVisible', () => chosen.yielded ? this.stillVisible(step, verified, chosen, trace) : chosen.rows);
     const { affect, affectReceipts } = trace.time('affect', () => {
       const affect = this.affect.snapshot(step.scopeKey);
       const eventIds = [...visibleRows.map(row => row.event_id), ...affect.causes.map(cause => cause.eventId)];
@@ -98,8 +102,8 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     const recentOutcomes: FcaOutcomeContext[] = visibleRows.map(row => outcomeContext(row, receipts.get(row.event_id) ?? 0));
     const consumed = [...new Set([...recentOutcomes.map(item => item.taskId), ...affectReceipts
       .filter(item => affect.causes.some(cause => cause.eventId === item.eventId)).flatMap(item => [item.taskId, ...item.appraisalTaskId ? [item.appraisalTaskId] : []])])].filter(id => id !== step.taskId);
-    if (consumed.length && !this.options.observeContext?.(step, consumed)) throw new Error('FCA_CONTEXT_SOURCE_UNPINNED');
-    if (!trace.check(() => this.visible(step))) throw new Error('FCA_EVIDENCE_HELD');
+    if (consumed.length && !trace.time('observe', () => this.options.observeContext?.(step, consumed))) throw new Error('FCA_CONTEXT_SOURCE_UNPINNED');
+    if (!trace.time('finalCheck', () => trace.check(() => this.visible(step)))) throw new Error('FCA_EVIDENCE_HELD');
     return { affect, recentOutcomes };
   }
   /** How this prepare judges a stored row: the guard's walk, and for the step's own task its coverage by the verified sources. */
@@ -162,7 +166,19 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     if (this.options.validStep(step)) this.settle(step, call, null);
   }
   committed(_step: TaskStep): void { this.flush(); }
+  /** Content-free: logs a flush slower than slowFlushMilliseconds (default 500) with the segments it closed. */
   flush(): void {
+    const at = performance.now();
+    this.closedSegments = 0;
+    try { this.flushed(); } finally {
+      const spent = performance.now() - at;
+      if (spent >= (this.options.slowFlushMilliseconds ?? SLOW_FLUSH_MILLISECONDS)) {
+        console.info(`Shannon FCA evidence flush slow ms=${Math.round(spent)} segmentsClosed=${this.closedSegments}`);
+      }
+    }
+  }
+  private closedSegments = 0;
+  private flushed(): void {
     this.settleLifecycle();
     const pending = this.options.db.prepare("SELECT * FROM fca_action_evidence WHERE deadline_at<=? AND json_extract(comparison_json,'$.status')='pending'")
       .all(this.options.now()) as unknown as EvidenceRow[];
@@ -269,6 +285,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       if (!held || !last) continue;
       this.options.onOutcome!(durableOutcomeOf(this.options.db, last, held.slice(0, -1), { closedBy: ended.closedBy, outcomeId: `${last.event_id}:segment` }));
       this.markDelivered(held, 1);
+      this.closedSegments += 1;
     }
   }
   private markDelivered(rows: readonly EvidenceRow[], value: number) {
@@ -308,6 +325,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     try { const result = work(); db.exec('COMMIT'); return result; } catch (error) { db.exec('ROLLBACK'); throw error; }
   }
 }
+const SLOW_FLUSH_MILLISECONDS = 500;
 function outcomeContext(row: EvidenceRow, appraisalRevision: number): FcaOutcomeContext {
   const result = parse<{ ok: boolean; text: string }>(row.result_json);
   return { eventId: row.event_id, taskId: row.task_id, operationId: row.event_id, name: row.name,

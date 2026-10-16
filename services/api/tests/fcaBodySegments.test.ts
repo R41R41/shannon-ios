@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
@@ -30,7 +30,7 @@ const failed = (text = '{"error":"path blocked"}') => ({ ok: false, retryable: f
 const memorySource = (id: string, ids: readonly string[]): TaskSource => ({ kind: 'memory', stepId: `memory:${id}`, experienceId: null, threadId: null,
   observedAt: '2026-10-07T03:00:00.000Z', recalledMemoryIds: ids });
 
-function fixture(provenanceRefs = false) {
+function fixture(provenanceRefs = false, slowFlushMilliseconds?: number) {
   const world = memoryWorld(); cleanup.push(world.close);
   const h = actionHarness(world.now, world.path); cleanup.push(h.close); migrateAgentTasks(h.db);
   const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now: world.now,
@@ -41,7 +41,8 @@ function fixture(provenanceRefs = false) {
   let visible = true;
   const evidence = new SQLiteFcaEvidenceStore({ db: h.db, state: world.store, now: world.now,
     validStep: (step: TaskStep) => !!h.store.check(step.lease, world.now()), sourcesVisible: () => visible, taskVisible: () => true,
-    observeContext: () => true, ...(provenanceRefs ? { provenanceRefs: true } : {}), onOutcome: outcome => { deliveries.push(outcome); } });
+    observeContext: () => true, ...(provenanceRefs ? { provenanceRefs: true } : {}),
+    ...(slowFlushMilliseconds === undefined ? {} : { slowFlushMilliseconds }), onOutcome: outcome => { deliveries.push(outcome); } });
   let sourceIndex = 0;
   /** One committed step of the task with these calls and results, under fresh provenance (one more memory row each step). */
   async function step(calls: Array<[string, ReturnType<typeof ok> | null]>, taskId = task.id, recalled?: readonly string[]) {
@@ -229,5 +230,34 @@ describe.each([[false], [true]])('Minecraft body actions remembered per segment 
     const committed = committedEvidenceHistorySources(f.h.db, 'owner', last.outcomeId, f.task.id);
     expect(committed).toEqual(f.runtime.history('owner', f.task.id)!.rounds.at(-1)!.sources);
     expect(committed!.flatMap(source => source.recalledMemoryIds)).toEqual(expect.arrayContaining(['memory-shared', 'memory-3']));
+  });
+});
+
+describe('the slow-flush line (Minebot run 12: where the API\'s event-loop blocks came from)', () => {
+  const flushLines = (info: ReturnType<typeof vi.spyOn>) => info.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA evidence flush slow'));
+
+  it('says nothing for a flush under the threshold, and reports the segments a slow one closed', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const quick = fixture();
+      await quick.step([['mc.move-to', ok()]]);
+      await quick.step([['mc.move-to', ok()]]);
+      quick.world.advance(31 * 60_000);
+      quick.evidence.flush();
+      expect(quick.held()).toBe(0);
+      expect(flushLines(info)).toEqual([]);
+      // Threshold 0: every flush is slow enough to report; only the one that closes the stale segment says so.
+      const slow = fixture(false, 0);
+      await slow.step([['mc.move-to', ok()]]);
+      await slow.step([['mc.move-to', ok()]]);
+      info.mockClear();
+      slow.evidence.flush();
+      expect(flushLines(info)).toEqual([expect.stringMatching(/^Shannon FCA evidence flush slow ms=\d+ segmentsClosed=0$/u)]);
+      info.mockClear();
+      slow.world.advance(31 * 60_000);
+      slow.evidence.flush();
+      expect(slow.held()).toBe(0);
+      expect(flushLines(info)).toEqual([expect.stringMatching(/^Shannon FCA evidence flush slow ms=\d+ segmentsClosed=1$/u)]);
+    } finally { info.mockRestore(); }
   });
 });

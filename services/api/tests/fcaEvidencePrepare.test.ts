@@ -83,7 +83,25 @@ describe('the evidence store\'s choice of rows (P1)', () => {
     // step's verified sources and the eight admitted sets again at its end.
     expect(f.calls.visible).toBe(2 + 8 + 1 + 8);
     expect(lines()).toHaveLength(1);
-    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms select=\d+ms affect=\d+ms rows=8 rowChecks=16 covered=0 reduced=0 deduped=0 walks=0 partial=0 reused=0 parsedBytes=\d+ yields=8$/u);
+    expect(lines()[0]).toMatch(/outcome=ok total=\d+ms flush=\d+ms precheck=\d+ms select=\d+ms walk=\d+ms stillVisible=\d+ms affect=\d+ms finalCheck=\d+ms yieldWait=\d+ms rows=8 rowChecks=16 covered=0 reduced=0 deduped=0 walks=0 partial=0 reused=0 parsedBytes=\d+ yields=8$/u);
+  });
+
+  it('reports each phase\'s milliseconds as non-negative numbers, the walk holding the event loop\'s waits, and nothing of any content', async () => {
+    const lines = quiet();
+    const f = stubbed(12);
+    await f.evidence.prepare(stepOf(f.task, []));
+    expect(lines()).toHaveLength(1);
+    const line = lines()[0]!;
+    const ms = (name: string) => Number(new RegExp(String.raw`[ ]${name}=(\d+)ms`, 'u').exec(line)?.[1]);
+    for (const phase of ['total', 'flush', 'precheck', 'select', 'walk', 'stillVisible', 'affect', 'finalCheck', 'yieldWait']) {
+      expect(Number.isFinite(ms(phase)), phase).toBe(true);
+      expect(ms(phase), phase).toBeGreaterThanOrEqual(0);
+    }
+    // Rounded to whole milliseconds, a phase can add up to a little over the total, never far past it.
+    expect(ms('walk')).toBeGreaterThanOrEqual(ms('yieldWait'));
+    expect(ms('total')).toBeGreaterThanOrEqual(ms('walk') - 1);
+    expect(line).not.toContain('result');
+    expect(line).not.toContain('memory:');
   });
 
   it('judges an identical stored set once, and goes on past hidden rows', async () => {

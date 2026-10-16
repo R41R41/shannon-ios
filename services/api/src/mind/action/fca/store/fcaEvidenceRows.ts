@@ -53,7 +53,9 @@ export async function visibleEvidenceRows<R extends FcaEvidenceCandidate>(rows: 
         trace.covered += 1;
         visible = true;
       } else {
+        const yieldedAt = performance.now();
         await new Promise<void>(resolve => setImmediate(resolve));
+        trace.yieldWaitMilliseconds += performance.now() - yieldedAt;
         yielded = true;
         trace.yields += 1;
         if (walked !== sources) trace.reduced += 1;
@@ -105,14 +107,18 @@ export class FcaPrepareTrace {
   /** Rows whose provenance reference could not be resolved (not shown). */
   unresolved = 0;
   yields = 0;
+  /** The time spent waiting for the event loop between walks (setImmediate), inside walk: long when other work holds the thread. */
+  yieldWaitMilliseconds = 0;
   walked = 0;
   partial = 0;
   reused = 0;
   constructor(private readonly walks?: () => { walked: number; reused: number; partial?: number }) {}
   time<T>(name: string, work: () => T): T {
     const at = performance.now();
-    try { return work(); } finally { this.spent.push([name, performance.now() - at]); }
+    try { return work(); } finally { this.add(name, performance.now() - at); }
   }
+  /** A phase's milliseconds, from a monotonic clock (performance.now); one small entry per phase, nothing per row. */
+  add(name: string, milliseconds: number): void { this.spent.push([name, milliseconds]); }
   /** One synchronous question to the source guard, with the walks and reuses it made (nothing else runs meanwhile). */
   check(work: () => boolean): boolean {
     const before = this.walks?.();
@@ -132,7 +138,8 @@ export class FcaPrepareTrace {
   report(outcome: string): void {
     const total = performance.now() - this.started;
     const parts = this.spent.map(([name, ms]) => `${name}=${Math.round(ms)}ms`).join(' ');
-    console.info(`Shannon FCA evidence prepare outcome=${outcome} total=${Math.round(total)}ms ${parts} rows=${this.rows} `
+    console.info(`Shannon FCA evidence prepare outcome=${outcome} total=${Math.round(total)}ms ${parts} `
+      + `yieldWait=${Math.round(this.yieldWaitMilliseconds)}ms rows=${this.rows} `
       + `rowChecks=${this.rowChecks} covered=${this.covered} reduced=${this.reduced} deduped=${this.deduped} `
       + `walks=${this.walked} partial=${this.partial} reused=${this.reused} `
       + `parsedBytes=${this.parsedBytes} yields=${this.yields}${this.unresolved ? ` unresolved=${this.unresolved}` : ''}`);
