@@ -171,8 +171,12 @@ describe('stream: sentences while the model writes', () => {
     expect(rest.at(-1)).toEqual({ type: 'error', status: 502, error: 'MODEL_UNAVAILABLE' });
     expect(rest.some(line => line.type === 'done')).toBe(false);
     expect(await conversation()).toEqual([]);
-    // The log names the error class only.
-    expect(failed.mock.calls).toEqual([['Shannon request failed', 'Error']]);
+    // The log names the error class and where it was thrown (`failureTrail`), never its message.
+    expect(failed.mock.calls).toHaveLength(1);
+    const [label, trail] = failed.mock.calls[0]! as [string, string];
+    expect(label).toBe('Shannon request failed');
+    expect(trail).toMatch(/^Error( |$)/u);
+    expect(trail).not.toContain('OPENAI_RESPONSE_SCHEMA_INVALID');
     failed.mockRestore();
   });
 
