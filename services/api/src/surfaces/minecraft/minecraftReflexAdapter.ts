@@ -124,12 +124,12 @@ export function createMinecraftTaskBody(parts: {
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
   const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
   const log = parts.log ?? ((line: string) => console.info(line));
-  // To the Observer (its sidecar, kept 15 minutes) and, content-free, to the journal: the Minebot lane looked for the governor's
-  // holds there after run 11 and found none.
+  // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
+  // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
     if (held !== reason) {
       observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
-      log(`Shannon reflex entry held task=${step.taskId} reason=${reason}`);
+      if (parts.fastJudgment) log(`Shannon reflex entry held task=${step.taskId} reason=${reason}`);
     }
     held = reason;
   };

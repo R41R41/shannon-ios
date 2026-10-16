@@ -35,11 +35,16 @@ export function createMinecraftFastJudgment(parts: {
 }) {
   const { control, step, governor, now } = parts;
   const healths: Array<{ at: number; health: number }> = [];
-  let frames = 0, count = 0;
+  let frames = 0, count = 0, shelterFailed = false, episodeArrival: number | null = null;
+  /** Dropped answers by reason (`stale`, `busy`, `not_sent`, `not_permitted`); also named in every hold's detail. */
+  const discards = { stale: 0, busy: 0, not_sent: 0, not_permitted: 0 };
   const stateOf = (bodyId: string, observation: BodyObservation) => {
     const at = now(), arrived = control.arrivedAt(bodyId);
     const earlier = healths.filter(entry => entry.at < at && at - entry.at <= FAST_JUDGMENT_LIMITS.healthWindowMs).map(entry => entry.health);
-    return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived });
+    // A failed shelter belongs to one danger episode of one life: a new arrival ends it (`consider` ends it when the danger passes).
+    if (episodeArrival !== arrived) { shelterFailed = false; episodeArrival = arrived; }
+    return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
+      shelterFailed });
   };
   const remember = (observation: BodyObservation) => {
     const health = (observation.state.world as { health?: unknown } | undefined)?.health;
@@ -55,10 +60,13 @@ export function createMinecraftFastJudgment(parts: {
     return !pendingSkill(bodyId, own);
   };
 
-  /** Never a stale answer: the latest frame, judged again, must give the same kind, from the same arrival, and be fresh. */
+  /**
+   * Never a stale answer: the latest frame, judged again, must give the same kind, from the same arrival, and be fresh. Freshness is
+   * the API's own receive time (`receivedAt`): the body's `stateAt` runs on its clock, which the validation lets differ by 30 s.
+   */
   const stale = (bodyId: string, decision: FastDecision, arrived: number | null) => {
     const latest = control.observe(bodyId);
-    if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.stateAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return true;
+    if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.receivedAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return true;
     const again = fastJudgment(stateOf(bodyId, latest));
     return !('decision' in again) || again.decision.kind !== decision.kind;
   };
@@ -77,17 +85,22 @@ export function createMinecraftFastJudgment(parts: {
     const sessionId = `${step.id}:fast:${count}`, id = `fast:${hash(sessionId)}`;
     governor.began(step.taskId, now(), entry);
     let effective = false;
+    /** A dropped answer did not do what a cooldown would be for in the success case: it waits `dangerCooldownMs` like any ineffective session. */
+    const discard = (reason: keyof typeof discards, hold: string, detail: Record<string, string | number | boolean | null>) => {
+      discards[reason] += 1;
+      parts.log?.(`Shannon Minecraft fast judgment dropped task=${step.taskId} kind=${decision.kind} reason=${reason} discards=${discards[reason]}`);
+      return parts.hold(hold, { ...detail, discards: discards[reason] });
+    };
     try {
+      // Before cutting anything off: an answer already stale interrupts nothing (an enemy at the edge of a threshold flipping the
+      // judgment every other frame once cut off her move-to each time and sent nothing).
+      if (stale(bodyId, decision, judged.arrived)) return discard('stale', 'fast_stale', { kind: decision.kind });
       if (parts.activeAction()) {
         parts.interrupt();
-        if (!await settle(bodyId, id, signal)) return parts.hold('fast_skill_busy', { skill: decision.skill });
+        if (!await settle(bodyId, id, signal)) return discard('busy', 'fast_skill_busy', { skill: decision.skill });
       }
-      if (stale(bodyId, decision, judged.arrived)) {
-        effective = true; // A dropped answer did nothing to cool down from.
-        parts.log?.(`Shannon Minecraft fast judgment dropped task=${step.taskId} kind=${decision.kind} reason=stale`);
-        return parts.hold('fast_stale', { kind: decision.kind });
-      }
-      if (signal.aborted || !await parts.permit(signal).catch(() => false)) return;
+      if (stale(bodyId, decision, judged.arrived)) return discard('stale', 'fast_stale', { kind: decision.kind });
+      if (signal.aborted || !await parts.permit(signal).catch(() => false)) { discards.not_permitted += 1; return; }
       parts.touched();
       parts.stepOutcome('unknown');
       let outcome: string;
@@ -98,11 +111,13 @@ export function createMinecraftFastJudgment(parts: {
         parts.stepOutcome('acknowledged');
       } catch (error) {
         // Never sent (the body went away, the lease moved): nothing happened. Sent and lost: unknown, as any body command.
-        if (!control.store.command(id)) return parts.hold('fast_not_sent', { skill: decision.skill });
+        if (!control.store.command(id)) return discard('not_sent', 'fast_not_sent', { skill: decision.skill });
+        if (decision.kind === 'shelter') shelterFailed = true;
         parts.unknown();
         throw error;
       }
       effective = outcome === 'completed';
+      if (decision.kind === 'shelter') shelterFailed = !effective;
       parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
         + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}`);
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
@@ -111,6 +126,8 @@ export function createMinecraftFastJudgment(parts: {
   };
 
   return {
+    /** How many answers were dropped, by reason. */
+    discarded: () => ({ ...discards }),
     /**
      * Judges a new frame; returns the job when it starts one. `live` is asked last, once a skill could start (it can walk sources).
      * Danger is never left to the image reflex while this is on: a frame the judgment holds starts nothing.
@@ -122,6 +139,7 @@ export function createMinecraftFastJudgment(parts: {
       if (!('decision' in verdict)) {
         frames = 0;
         if (verdict.entry) parts.hold(verdict.hold);
+        else shelterFailed = false; // The danger passed: the next one is a new episode.
         return null;
       }
       frames += 1;

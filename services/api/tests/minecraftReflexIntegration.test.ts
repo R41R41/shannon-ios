@@ -23,7 +23,7 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
-function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean } = {}) {
+function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean; logs?: string[] } = {}) {
   let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true, sourceChecks = 0;
   let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   let threatList: unknown[] = [];
@@ -92,7 +92,7 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
     stepPorts(runtime, step) {
       // The mechanics below start right after login; the spawn grace has tests of its own (`spawnGraceMilliseconds`).
       const body = createMinecraftTaskBody({ control, runtime, step, evidence, now: () => clock, pollMilliseconds: 1, spawnGraceMilliseconds: options.spawnGraceMilliseconds ?? 0,
-        limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 }, fastJudgment: options.fast === true, log: () => {},
+        limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 }, fastJudgment: options.fast === true, log: line => { options.logs?.push(line); },
         ownerAlone: () => true, sourcesVisible: () => { sourceChecks += 1; return sourcesVisible; },
         entry: { async evaluate(input) { entryCalls += 1; return { sessionId: input.context.sessionId, generation: input.context.generation,
           decision: options.denyEntry ? 'continue' : 'enter', reason: 'danger' }; } },
@@ -316,6 +316,23 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     const snapshot = f.driver.runtime.snapshot('owner', f.task.id)!;
     expect(snapshot.history.find(entry => (entry as { role?: string }).role === 'tool_results')).toMatchObject({ results: [{ id: 'move', ok: false }] });
     expect(snapshot.messages.map(m => JSON.parse(m.text))).toContainEqual(expect.objectContaining({ kind: 'body.fast', decision: 'shelter', rule: 'respawn_shelter', outcome: 'completed' }));
+  });
+
+  it('with the fast judgment off, writes nothing new to the journal for a held entry; on, tells it once (the gated "entry held" line)', async () => {
+    for (const fast of [false, true]) {
+      const logs: string[] = [], answer = deferred<FcaModelOutput>();
+      // Off: the held entries of the existing spawn-grace test (they reach the Observer, never the journal). On: the floor holds it.
+      const f = fixture(() => answer.promise, fast ? { fast, logs } : { spawnGraceMilliseconds: 5_000, evidence: false, logs });
+      cleanups.push(async () => answer.resolve(wait()));
+      await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'first decision pending');
+      f.danger(true);
+      if (fast) { f.threats([{ name: 'zombie', distance: 2, canReachMe: true }]); f.facts({ floorActive: true }); }
+      for (let i = 0; i < 20; i++) { f.pump(); await delay(1); }
+      if (fast) expect(logs).toEqual([expect.stringMatching(/^Shannon reflex entry held task=\S+ reason=floor_active$/u)]);
+      else expect(logs).toEqual([]);
+      expect(f.commands.filter(command => command.kind !== 'capture')).toEqual([]);
+      answer.resolve(wait()); await f.driver.drain();
+    }
   });
 
   it('does not invoke entry selection for every unrelated heartbeat or unchanged danger signal', async () => {

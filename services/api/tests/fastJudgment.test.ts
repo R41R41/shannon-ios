@@ -8,12 +8,15 @@ import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.j
 
 const NIGHT = 18_000;
 const zombie = (distance: number) => ({ name: 'zombie', distance, canReachMe: true });
-const frame = (sequence: number, at: number, world: Record<string, unknown>, facts: Record<string, unknown> = {}): BodyObservation => ({
-  schemaVersion: 1, bodyId: 'minecraft:world', sequence, stateAt: new Date(at).toISOString(), receivedAt: new Date(at).toISOString(), connected: true,
+const calm = { ignited: false };
+const frame = (sequence: number, at: number, world: Record<string, unknown>, facts: Record<string, unknown> = {},
+  clocks: { skew?: number; receivedAgo?: number } = {}): BodyObservation => ({
+  schemaVersion: 1, bodyId: 'minecraft:world', sequence, stateAt: new Date(at + (clocks.skew ?? 0)).toISOString(),
+  receivedAt: new Date(at - (clocks.receivedAgo ?? 0)).toISOString(), connected: true,
   state: { world: { time: NIGHT, inventory: [{ name: 'stone_pickaxe', count: 1 }], ...world } }, facts: { alive: true, ...facts },
 } as unknown as BodyObservation);
 const state = (overrides: Partial<FastBodyState>): FastBodyState => ({ health: 20, threats: [], night: true, respawnedRecently: false,
-  healthDropped: false, hasWeapon: false, floorActive: false, ...overrides });
+  healthDropped: false, hasWeapon: false, floorActive: false, floorKnown: true, shelterFailed: false, ...overrides });
 const kind = (verdict: ReturnType<typeof fastJudgment>) => 'decision' in verdict ? `${verdict.decision.kind}:${verdict.decision.rule}` : `hold:${verdict.hold}`;
 
 describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
@@ -44,14 +47,15 @@ describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
 
 /** A body as the fast judgment sees it: frames, arrivals, pending skill rows and the commands it was sent. */
 function fakeBody() {
-  let clock = 1_000_000, current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0;
+  let clock = 1_000_000, current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0;
+  const outcomes: string[] = [];
   const commands: Array<{ skill?: string; arguments?: unknown }> = [], lines: string[] = [], holds: string[] = [];
   const control = {
     arrivedAt: () => arrived, observe: () => current,
     frame: () => ({ poll: { skills: [{ name: 'attack-continuously' }, { name: 'dig-shelter' }, { name: 'flee-from' }] } }),
     store: { pending: () => (pendingChecks++ < busyFor ? [{ command: { id: 'fca-skill', kind: 'skill', context: { taskId: 'task' } } }] : []),
       command: (id: string) => commands.some(command => (command as { id?: string }).id === id) },
-    async command(input: { id: string; skill?: string; arguments?: unknown }) { commands.push(input); return { id: input.id, outcome: 'completed', inputsReleased: true }; },
+    async command(input: { id: string; skill?: string; arguments?: unknown }) { commands.push(input); return { id: input.id, outcome: outcomes.shift() ?? 'completed', inputsReleased: true }; },
   } as unknown as MinecraftControl;
   let active: string | undefined, interrupted = 0, touched = 0;
   const governor = createReflexGovernor();
@@ -63,11 +67,14 @@ function fakeBody() {
     log: line => { lines.push(line); } });
   const signal = new AbortController().signal;
   return { commands, lines, holds, get interrupted() { return interrupted; }, get touched() { return touched; },
-    see(world: Record<string, unknown>, facts: Record<string, unknown> = {}) {
+    see(world: Record<string, unknown>, facts: Record<string, unknown> = {}, clocks: { skew?: number; receivedAgo?: number } = {}) {
       clock += 250;
-      current = frame(Math.floor(clock / 250), clock, world, facts);
+      current = frame(++sequence, clock, world, facts, clocks);
       return judge.consider('minecraft:world', current, () => true, signal);
     },
+    /** A newer frame that arrives while a job is in flight (nobody considers it yet). */
+    arrive(world: Record<string, unknown>, facts: Record<string, unknown> = {}) { current = frame(++sequence, clock, world, facts); },
+    judge, outcomes,
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
     respawn() { arrived = clock; }, advance(ms: number) { clock += ms; },
     onBusy(change: () => void) { const original = control.store.pending; (control.store as { pending: unknown }).pending = (...args: unknown[]) => { change(); return (original as (...a: unknown[]) => unknown)(...args); }; } };
@@ -117,5 +124,103 @@ describe('a deterministic replay of Minecraft run 11\'s death loop (task 7e4c437
     expect(body.commands).toEqual([]);
     expect(body.holds).toContain('fast_stale');
     expect(body.lines.some(line => line.includes('reason=stale'))).toBe(true);
+  });
+});
+
+describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () => {
+  it('F2: judges a frame\'s age by the API\'s receive time, whatever the body\'s clock says', async () => {
+    const lateBody = fakeBody();
+    lateBody.running(undefined);
+    // The body's clock runs 20 s behind (validation allows 30): its stateAt looks 20 s old, the frame is fresh.
+    lateBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: -20_000 });
+    await lateBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: -20_000 });
+    expect(lateBody.commands.map(command => command.skill)).toEqual(['attack-continuously']);
+    const aheadBody = fakeBody();
+    // The body's clock runs 20 s ahead: stateAt looks fresh, but the API received the frame 2 s ago.
+    aheadBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: 20_000 });
+    await aheadBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: 20_000, receivedAgo: 2_000 });
+    expect(aheadBody.commands).toEqual([]);
+    expect(aheadBody.judge.discarded().stale).toBe(1);
+  });
+
+  it('F3: an enemy flickering around the threshold cuts off her tool once per cooldown and sends nothing; every drop is counted', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    const flicker = async (round: number) => {
+      body.running('mc.move-to');
+      body.busy(2);
+      let moved = false;
+      // While her tool settles, the zombie steps back out of range: the answer judged before is stale.
+      body.onBusy(() => { if (!moved) { moved = true; body.arrive({ health: 20, nearbyThreats: [zombie(9.5)] }); } });
+      body.see({ health: 20, nearbyThreats: [zombie(5.5)] });
+      await body.see({ health: 20, nearbyThreats: [zombie(5.5)] });
+      expect(round).toBeGreaterThan(0);
+    };
+    await flicker(1);
+    expect(body.interrupted).toBe(1);
+    expect(body.commands).toEqual([]);
+    expect(body.judge.discarded().stale).toBe(1);
+    // The next four seconds of the same flicker: held by the governor's danger cooldown, nothing interrupted.
+    for (let i = 0; i < 4; i++) { body.running('mc.move-to'); for (const distance of [5.5, 5.5, 9.5, 9.5]) body.see({ health: 20, nearbyThreats: [zombie(distance)] }); }
+    expect(body.interrupted).toBe(1);
+    expect(body.holds).toContain('reflex_cooldown');
+    // After the cooldown it may try again, and is counted again.
+    body.advance(6_000);
+    await flicker(2);
+    expect(body.interrupted).toBe(2);
+    expect(body.judge.discarded().stale).toBe(2);
+  });
+
+  it('F3: an answer that is already stale cuts nothing off', async () => {
+    const body = fakeBody();
+    body.running('mc.move-to');
+    body.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await body.see({ health: 20, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 2_000 });
+    expect(body.interrupted).toBe(0);
+    expect(body.commands).toEqual([]);
+    expect(body.judge.discarded().stale).toBe(1);
+  });
+
+  it('F4: after her shelter failed, the next choice of the same danger episode is to flee, and a new episode starts fresh', async () => {
+    expect(kind(fastJudgment(state({ shelterFailed: true, respawnedRecently: true, threats: [{ ...zombie(8), ...calm }] })))).toBe('flee:shelter_failed_flee');
+    expect(kind(fastJudgment(state({ shelterFailed: true, threats: [0, 1, 2].map(i => ({ ...zombie(3 + i), ...calm })) })))).toBe('flee:shelter_failed_flee');
+    expect(kind(fastJudgment(state({ shelterFailed: true, threats: [{ ...zombie(3), ...calm }] })))).toBe('fight:melee_fight');
+    const body = fakeBody();
+    body.advance(60_000);
+    body.outcomes.push('failed');
+    const hurt = { health: 10, nearbyThreats: [zombie(3)] };
+    body.see(hurt); await body.see(hurt);
+    body.advance(6_000); // past the danger cooldown; the zombie is still there
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from']);
+    // The danger passes, then comes back: a new episode, shelter again.
+    body.see({ health: 10, nearbyThreats: [] });
+    body.advance(6_000);
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'dig-shelter']);
+  });
+
+  it('F4: a new life starts a new episode', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.outcomes.push('failed');
+    const hurt = { health: 10, nearbyThreats: [zombie(3)] };
+    body.see(hurt); await body.see(hurt);
+    body.advance(6_000);
+    body.respawn();
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'dig-shelter']);
+  });
+
+  it('unknown floor: a body that does not say holds only while its retreat could run; a known floor is unchanged', () => {
+    const unknown = (threats: FastBodyState['threats'], overrides: Partial<FastBodyState> = {}) => kind(fastJudgment(state({ floorKnown: false, threats, ...overrides })));
+    expect(unknown([{ ...zombie(3), ...calm }])).toBe('fight:melee_fight');
+    expect(unknown([{ ...zombie(3), ...calm }], { respawnedRecently: true })).toBe('shelter:respawn_shelter');
+    expect(unknown([{ name: 'creeper', distance: 4, canReachMe: true, ignited: false }])).toBe('hold:floor_unknown');
+    expect(unknown([{ name: 'creeper', distance: 5.5, canReachMe: true, ignited: false }])).toBe('flee:creeper_flee');
+    expect(unknown([{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }])).toBe('hold:floor_unknown');
+    expect(kind(fastJudgment(state({ floorKnown: true, threats: [{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }] })))).toBe('shelter:ranged_shelter');
+    expect(fastBodyState(frame(1, 0, { health: 20 }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: false, floorActive: false });
+    expect(fastBodyState(frame(1, 0, { health: 20 }, { floorActive: false }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: true });
   });
 });

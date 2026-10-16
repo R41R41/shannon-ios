@@ -28,7 +28,14 @@ export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set(['attack-continuous
 export interface FastThreat { name: string; distance: number; canReachMe: boolean; ignited: boolean }
 export interface FastBodyState {
   health: number | null; threats: readonly FastThreat[]; night: boolean; respawnedRecently: boolean; healthDropped: boolean;
-  hasWeapon: boolean; floorActive: boolean;
+  hasWeapon: boolean;
+  /**
+   * Whether the body's floor holds its safety lease; `floorKnown` is false when the body does not report `floorActive` at all
+   * (see `floorMayRun`).
+   */
+  floorActive: boolean; floorKnown: boolean;
+  /** Her `dig-shelter` already failed in this danger episode: the next move is to flee, not to dig again. */
+  shelterFailed: boolean;
 }
 export type FastKind = 'fight' | 'flee' | 'shelter';
 export type FastEntry = 'close' | 'damage' | 'respawn';
@@ -36,10 +43,10 @@ export interface FastDecision {
   kind: FastKind; skill: string; arguments: Record<string, string | number | boolean>;
   /** The closed rule that chose it; `ambiguous` when only the default decided (an image-free arbiter may later choose). */
   rule: 'respawn_shelter' | 'low_health_shelter' | 'low_health_flee' | 'creeper_flee' | 'outnumbered_shelter' | 'ranged_shelter'
-    | 'melee_fight' | 'ambiguous_shelter';
+    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee';
   ambiguous: boolean;
 }
-export type FastVerdict = { entry: FastEntry; decision: FastDecision } | { entry: FastEntry | null; hold: 'no_threat' | 'floor_active' | 'floor_creeper' };
+export type FastVerdict = { entry: FastEntry; decision: FastDecision } | { entry: FastEntry | null; hold: 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper' };
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -49,7 +56,7 @@ const record = (value: unknown) => value && typeof value === 'object' && !Array.
  * ago and the time since the body last arrived. Unknown values read as the safer side (no weapon, health unknown).
  */
 export function fastBodyState(observation: { facts: Readonly<Record<string, unknown>>; state: unknown },
-  memory: { earlierHealth: number | null; sinceArrivalMs: number | null }): FastBodyState {
+  memory: { earlierHealth: number | null; sinceArrivalMs: number | null; shelterFailed?: boolean }): FastBodyState {
   const world = record(record(observation.state)?.world) ?? {};
   const health = finite(world.health) && world.health > 0 ? world.health : null;
   const threats = (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(item => {
@@ -64,7 +71,8 @@ export function fastBodyState(observation: { facts: Readonly<Record<string, unkn
     respawnedRecently: memory.sinceArrivalMs !== null && memory.sinceArrivalMs < FAST_JUDGMENT_LIMITS.respawnWindowMs,
     healthDropped: health !== null && memory.earlierHealth !== null && health < memory.earlierHealth,
     hasWeapon: inventory.some(item => typeof record(item)?.name === 'string' && WEAPON.test(String(record(item)!.name))),
-    floorActive: observation.facts.floorActive === true };
+    floorActive: observation.facts.floorActive === true, floorKnown: typeof observation.facts.floorActive === 'boolean',
+    shelterFailed: memory.shelterFailed === true };
 }
 
 /** Why the judgment opens for this state, or null. */
@@ -87,11 +95,27 @@ const decision = (kind: FastKind, rule: FastDecision['rule'], target = 'hostile'
 export function fastJudgment(state: FastBodyState): FastVerdict {
   const entry = fastEntry(state);
   if (state.floorActive) return { entry, hold: 'floor_active' };
+  // An older body does not say whether its floor runs: hold only while its `retreat` could be running (`floorMayRun`).
+  if (!state.floorKnown && entry && floorMayRun(state)) return { entry, hold: 'floor_unknown' };
   if (state.threats.some(threat => threat.ignited && threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.floorCreeperDistance)) {
     return { entry, hold: 'floor_creeper' };
   }
   if (!entry) return { entry, hold: 'no_threat' };
-  return { entry, decision: ruled(state, entry) };
+  return { entry, decision: afterFailedShelter(state, ruled(state, entry)) };
+}
+
+/**
+ * Unknown floor (the body sends no `floorActive`; Minebot's TI-REQ is not yet delivered). The choice: hold only when the floor could
+ * hold its lease, i.e. when its priority-350 `retreat` could be running: an ignited creeper (unknown too on such a body, so any
+ * creeper within `floorCreeperDistance` counts) or a ranged attacker within `rangedDistance` (arrows). Otherwise act, so stage 2 is
+ * not useless on the bodies in production today: the floor's `eat` does not run with an enemy within 5 m (unless health is at most 6)
+ * and its other reflexes (lava, breathing, armour) are not about the enemies this judgment answers. Cost: on such a body a ranged
+ * attacker's shelter and a creeper's close flee wait for the field; the melee fights and shelters of run 11 do not.
+ */
+export const FLOOR_UNKNOWN_HOLDS = Object.freeze({ rangedDistance: 16 });
+function floorMayRun(state: FastBodyState): boolean {
+  return state.threats.some(threat => (threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.floorCreeperDistance)
+    || (RANGED.has(threat.name) && threat.distance <= FLOOR_UNKNOWN_HOLDS.rangedDistance));
 }
 
 /** The rules after the entry, in the design's order. */
@@ -107,6 +131,13 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) return decision('shelter', 'ranged_shelter');
   if (melee.length >= 1 && melee.length <= 2 && health >= (state.hasWeapon ? 9 : 12)) return decision('fight', 'melee_fight');
   return decision('shelter', 'ambiguous_shelter');
+}
+
+/** Hiding failed in this danger episode: flee instead (the design's "if hiding failed, flee next"). */
+function afterFailedShelter(state: FastBodyState, chosen: FastDecision): FastDecision {
+  if (!state.shelterFailed || chosen.kind !== 'shelter') return chosen;
+  const creeper = state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= 6);
+  return decision('flee', 'shelter_failed_flee', creeper ? 'creeper' : 'hostile');
 }
 
 /** How long each skill may run before its command expires. */
