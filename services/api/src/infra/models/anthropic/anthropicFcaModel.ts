@@ -175,7 +175,7 @@ export class AnthropicFcaModel implements FcaModel {
       const turn = turnOf(compacted.fields);
       return { turn, menu, body: bodyOf(turn) };
     }, value => observedFcaRequest(value.body), { model: this.model });
-    logRequestSize(this.model, history, body);
+    logRequestSize(this.model, history, body, turn);
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     // Once sent, a stop lets the request finish within its grace (`stopGraceMilliseconds`); the timeout still applies.
@@ -303,7 +303,8 @@ function observedFcaResponse(message: Anthropic.Message) {
  * The sizes of each FCA request, content-free, so that history plus tool definitions cannot pass the provider's next price step
  * unnoticed (review P3-1): characters of the replayed history, of its inline tool definitions, and of the whole request.
  */
-function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming): void {
+function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming,
+  turn: readonly Anthropic.MessageParam[]): void {
   const definitional = (message: Anthropic.MessageParam) => isFcaToolChangeMessage(message as unknown as Record<string, unknown>);
   const definitions = history.filter(definitional);
   // `historyCharacters` is the whole replay, its inline definitions included; `nativeHistoryCharacters` is the part the 64k
@@ -311,9 +312,22 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
   const estimatedInputTokens = estimatedAnthropicTokens(body);
   console.info(JSON.stringify({ event: 'fca_request_size', model, historyCharacters: JSON.stringify(history).length,
     nativeHistoryCharacters: JSON.stringify(history.filter(message => !definitional(message))).length,
-    toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length, estimatedInputTokens }));
+    toolDefinitionCharacters: JSON.stringify(definitions).length, requestCharacters: JSON.stringify(body).length, estimatedInputTokens,
+    skillGists: skillGistCount(turn) }));
   // The replay is bounded below the step (`maximumReplayTokens`); a request that still passes it is sent and priced as it is.
   if (estimatedInputTokens > PRICE_STEP_TOKENS) console.warn(JSON.stringify({ event: 'fca_request_price_step', model, estimatedInputTokens }));
+}
+/**
+ * The skill gists the decision message carries in its `body.skillGists` (0 when none): a count only, never a gist. The message is the
+ * first of the turn, as sent (after any shortening); a message that cannot be read counts none.
+ */
+function skillGistCount(turn: readonly Anthropic.MessageParam[]): number {
+  const content = turn[0]?.content;
+  if (typeof content !== 'string' || !content.includes('"skillGists"')) return 0;
+  try {
+    const gists = (JSON.parse(content) as { body?: { skillGists?: unknown } }).body?.skillGists;
+    return Array.isArray(gists) ? gists.length : 0;
+  } catch { return 0; }
 }
 /** Haiku 5.5 prices a prompt above 100,000 input tokens at five times the rate (`claudeUsage.ts`, `HAIKU_LONG_PRICES`). */
 const PRICE_STEP_TOKENS = 100_000;

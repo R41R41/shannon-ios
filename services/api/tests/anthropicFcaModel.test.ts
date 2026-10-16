@@ -166,6 +166,27 @@ describe('the estimated size of an FCA request (the 100k-token price step)', () 
   });
 });
 
+describe('the skill gists a request carries (Minebot run 12: did the gist reach the model?)', () => {
+  it('logs how many gists the decision message holds, 0 when none, keeping every earlier field and no gist text', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fixture = harness([answer(), answer()]);
+    const gists = [{ skill: 'mc-low-health', steps: ['2. 秘密の手順 mc.build-around-self'] }, { skill: 'mc-food-and-pace', steps: ['3. 別の秘密の手順'] }];
+    await fixture.model.decide({ ...input(), body: { report: '短い報告', skillGists: gists } } as unknown as FcaModelInput, signal());
+    await fixture.model.decide({ ...input(), body: { report: '短い報告' } } as unknown as FcaModelInput, signal());
+    const lines = info.mock.calls.map(args => String(args[0])).filter(line => line.includes('fca_request_size'));
+    const sizes = lines.map(line => JSON.parse(line));
+    expect(sizes.map(size => size.skillGists)).toEqual([2, 0]);
+    expect(Object.keys(sizes[0])).toEqual(['event', 'model', 'historyCharacters', 'nativeHistoryCharacters', 'toolDefinitionCharacters', 'requestCharacters',
+      'estimatedInputTokens', 'skillGists']);
+    // The line stays what existing greps read, and carries no gist text.
+    expect(lines[0]).toMatch(/"historyCharacters":\d+,/u);
+    expect(lines[0]).toMatch(/"toolDefinitionCharacters":\d+,/u);
+    expect(lines.join('\n')).not.toContain('秘密');
+    expect(JSON.parse(String((fixture.bodies[0]!.messages as Array<{ content: unknown }>).at(-1)!.content)).body.skillGists).toEqual(gists);
+  });
+});
+
 describe('compaction before the price step (C4)', () => {
   const children = [{ id: 'child-1', title: '材料集め', phase: 'executing', summary: '木を集める途中、'.repeat(300) }];
   const bulky = (): FcaModelInput => ({ ...input(), children, body: { report: 'インベントリ'.repeat(40_000), position: { x: 1, y: 64, z: -3 } },
