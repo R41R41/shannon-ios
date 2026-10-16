@@ -29,7 +29,7 @@ import { createFcaReadSources, type FcaReadSourcesOptions } from './fcaReadSourc
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import type { ShannonToolRunner } from '../mind/tools/toolRunnerPorts.js';
-import { createFcaConversationBridge, createFcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
+import { createFcaConversationBridge, createFcaSourceGuard, type FcaWalkCaller } from '../mind/action/fca/fcaConversationPorts.js';
 import { JevFcaToolSelector, type FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
 import { configuredJevChooser } from './skillRoutingWiring.js';
@@ -57,7 +57,7 @@ import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.j
 import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
-import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
+import { stepVisibility, taskGates } from './fcaPeekGates.js';import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
@@ -128,21 +128,24 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'),
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
-      canRunTask: (_runtime, id) => { const task = _runtime.get(parts.ownerScope, id); return task?.origin === 'own_time' ? _runtime.taskSources(parts.ownerScope, id).length === 0 : task?.kind === 'sleep' ? Boolean(sleep?.visible(_runtime, task)) : visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0; }, stepPorts: (_runtime, step) => {
+      ...taskGates({ ownerScope: parts.ownerScope, guard: () => visible, sleepVisible: (rt, task) => Boolean(sleep?.visible(rt, task)) }),
+      stepPorts: (_runtime, step) => {
         if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
         const history = { codec: anthropicFcaHistoryCodec, summarizer };
         if (step.snapshot.task.origin === 'own_time') return ownTimeStepPorts(step, { ...parts, runtime: _runtime, selector, history });
         // Her readable skills for the body's situational pointers (`minecraftSkillPointers.ts`): only while `skill.read` is offered.
         const skillNames = () => parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
+        // `check.whole` names its caller for the slow-walk line; `check.peek` is the observation monitor's, which walks nothing (`fcaPeekGates.ts`).
+        const check = stepVisibility(() => visible, step);
         const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
           // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
           ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') ? bodySkillGists(step, parts.skillOpen,
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
-          sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
-        const sourcesVisible = () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0;
+          sourcesVisible: () => check.whole('body') ?? false }) : null;
+        const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
         const permitProgress = async () => {
@@ -156,15 +159,15 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ?? (minecraft?.control.available().length === 1 ? minecraft.control.available()[0] : null)
           ?? (parts.minecraftConfiguration?.servers.size === 1 ? `minecraft:${[...parts.minecraftConfiguration.servers.keys()][0]}` : 'minecraft:unbound');
         const binding = minecraftGoalBinding(step.snapshot.task, goalBodyId);
-        const observations = [createFcaTaskObservationMonitor({ runtime: _runtime, step, allowed: parts.ownerAlone, sourcesVisible, taskVisible, observeTasks })];
+        const observations = [createFcaTaskObservationMonitor({ runtime: _runtime, step, allowed: parts.ownerAlone, sourcesVisible: check.peek, taskVisible, observeTasks })];
         // The operator's CLI can only start and stop a request: nobody can answer a task it handed over (Minebot lane run 1).
         const waitCounterpart = () => operatorRequester(operatorAudit, parts.ownerScope)(step.snapshot.task) !== 'operator';
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
         return ({ selector, observations, waitCounterpart, keepBodyTools, ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
-        sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0,
-        taskVisible: id => id === step.taskId ? visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0 : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0,
+        sourcesVisible,
+        taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
         history: { codec: anthropicFcaHistoryCodec, summarizer },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(fcaResearchTools({ tools: parts.tools,
@@ -173,10 +176,10 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           checkpoint: step.snapshot.checkpoint, placeSearch: _runtime.placeContext?.(step.scopeKey, step.taskId),
           observeRead: fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
           scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
-          sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? step.snapshot.sources.length === 0,
+          sourcesVisible: () => check.whole('tool') ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) }),
           ...(minecraft ? [fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
-            sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false,
+            sourcesVisible: () => check.whole('tool') ?? false,
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }), ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
@@ -184,10 +187,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       readSourceVisible }) : undefined;
     if (visible && sleep) {
       const foregroundVisible = visible;
-      visible = Object.assign((scope: string, id: string, pending?: string) => {
+      visible = Object.assign((scope: string, id: string, pending?: string, via?: FcaWalkCaller) => {
         const task = runtime.runtime.get(scope, id);
-        return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending);
+        return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending, via);
       }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content,
+        // `peek` too: without it the evidence store and the monitor below never saw the foreground guard's verdicts while sleep was on.
+        peek: foregroundVisible.peek,
         // The evidence store's coverage and walk counts are the foreground guard's, as its `sources` (review of 5d492ae8).
         covers: foregroundVisible.covers, residual: foregroundVisible.residual, walks: foregroundVisible.walks });
     }

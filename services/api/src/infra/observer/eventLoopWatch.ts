@@ -1,8 +1,10 @@
 /**
  * A content-free line when this process's event loop was blocked: no timer could fire, so no lease was renewed and no request
  * was answered (2026-10-12: ~100 s inside a voice turn, seen only as unrenewed leases and other services' timeouts).
+ * The threshold was 2 s until 2026-10-17; it is lower so that blocks shorter than 2 s are named too and can be compared with the
+ * `Shannon FCA source walk` and `Shannon slow tick` lines (production run 14: 204 blocks in 30 min).
  */
-export const EVENT_LOOP_WATCH = Object.freeze({ intervalMilliseconds: 1_000, thresholdMilliseconds: 2_000 });
+export const EVENT_LOOP_WATCH = Object.freeze({ intervalMilliseconds: 1_000, thresholdMilliseconds: 500 });
 
 export function startEventLoopWatch(process: string, options: { now?: () => number; log?: (line: string) => void;
   intervalMilliseconds?: number; thresholdMilliseconds?: number } = {}): () => void {

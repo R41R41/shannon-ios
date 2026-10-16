@@ -18,12 +18,20 @@ import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReade
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 import type { FcaBudget } from './fcaBudgetWiring.js';
 
+/** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
+const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
+
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
   ownerAlone(): boolean; now?: () => string;
   sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   maintenanceAllowed?(runtime: TaskRuntime, task: TaskView): boolean;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
+  /**
+   * The once-a-second scheduler's gate only: false skips a ready task for now; it must never walk provenance (a task about to run is
+   * judged in full by `canRunTask` in `execute`, before it is admitted). `canRunTask` when absent.
+   */
+  canScheduleTask?(runtime: TaskRuntime, taskId: string): boolean;
   /** Own-time tasks (ADR-0009 stage 2, E4): whether one may run now (the Executive on, her own time enabled and not paused). */
   ownTimeAllowed?(task: TaskView): boolean;
   /** E3: per-task caps and own-time reservations around each step. */
@@ -290,7 +298,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const slots = leases.slots(scopeKey, now());
       const starting = [...running.values()].filter(job => !job.claimed).map(job => job.slotClass);
       for (const task of runtime.readyTasks(scopeKey, 256)) {
-        if (pending.has(task.id) || running.has(task.id) || !executionAllowed(task) || options.canRunTask?.(runtime, task.id) === false) continue;
+        if (pending.has(task.id) || running.has(task.id) || !executionAllowed(task)
+          || schedulingGate(options)?.(runtime, task.id) === false) continue;
         const slotClass = slotClassOf({ kind: 'agentTask', sourceId: `fca:${task.id}:${task.revision}` }, deriveTaskKind(task.kind));
         if (!slotAdmissible(slotClass, [...slots.live, ...starting], slots.limits).ok) continue;
         starting.push(slotClass);

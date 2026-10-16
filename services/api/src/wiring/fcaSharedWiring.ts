@@ -33,7 +33,7 @@ export function createFcaSharedWiring(parts: {
     validStep: step => fcaStepIsLive(leases, step, now()),
     ...(parts.segmentStaleMinutes ? { segmentStaleMinutes: parts.segmentStaleMinutes } : {}),
     ...(parts.provenanceRefs ? { provenanceRefs: true } : {}),
-    sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
+    sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources, undefined, 'evidence')); },
     ...(parts.visible.peek ? { sourcesPeek: (scope: string, id: string, sources: readonly TaskSource[]) => {
       const task = parts.runtime.get(scope, id);
       return task ? parts.visible.peek!(scope, task, sources) : false;
@@ -50,7 +50,7 @@ export function createFcaSharedWiring(parts: {
     observeContext: (step, ids) => {
       if (!parts.runtime.inheritTaskSources(step, ids)) return false;
       step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
-      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources);
+      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'memory');
     },
     taskVisible: (scope, id) => parts.visible(scope, id),
     ...(parts.memory ? { onOutcome: (outcome: import('../mind/action/fca/fcaEvidencePorts.js').FcaDurableOutcome) => {
@@ -71,7 +71,7 @@ export function createFcaSharedWiring(parts: {
       const observationId = createHash('sha256').update(JSON.stringify([...new Set(ids)].sort())).digest('hex');
       if (!parts.runtime.observeSources(step, { observationId, recalledMemoryIds: ids })) return false;
       step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
-      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources);
+      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'memory');
     },
   };
 }

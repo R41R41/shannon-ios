@@ -105,7 +105,7 @@ export function createFcaConversationBridge(parts: {
     try {
       const task = parts.runtime.get(scopeKey, turn.step.taskId);
       return turn.ownerAlone() && task?.phase === 'executing' && budgeted(turn, false, () => parts.visible.sources(scopeKey, task,
-        parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id)) ? turn : null;
+        parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id, 'conversation')) ? turn : null;
     } catch { return null; }
   };
   /**
@@ -164,7 +164,7 @@ export function createFcaConversationBridge(parts: {
           const task = parts.runtime.get(input.scopeKey, step.taskId)!;
           // At most eight reports and eight children are checked (and shown); one not visible is left out, never replaced.
           const messages = step.snapshot.messages.slice(0, FCA_CONTEXT_ITEMS).filter(message => budgeted(turn, false,
-            () => parts.visible.sources(input.scopeKey, task, parts.runtime.taskSources(input.scopeKey, task.id, [message.id]), step.id)
+            () => parts.visible.sources(input.scopeKey, task, parts.runtime.taskSources(input.scopeKey, task.id, [message.id]), step.id, 'conversation')
             && (parts.visible.content?.(input.scopeKey, message.sourceTaskId, message.text, message.receivedAt) ?? true)));
           const children = parts.runtime.list(input.scopeKey, { parentId: step.taskId, limit: 50, order: 'recent' })
             .sort((left, right) => Number(ACTIVE_PHASES.includes(right.phase)) - Number(ACTIVE_PHASES.includes(left.phase))).slice(0, FCA_CONTEXT_ITEMS)

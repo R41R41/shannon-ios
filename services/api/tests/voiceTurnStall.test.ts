@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boundedStage, TurnTiming, turnOutcome, turnTimingId } from '../src/infra/observer/turnTiming.js';
-import { startEventLoopWatch, timedTick } from '../src/infra/observer/eventLoopWatch.js';
+import { EVENT_LOOP_WATCH, startEventLoopWatch, timedTick } from '../src/infra/observer/eventLoopWatch.js';
 import { foregroundRunner } from '../src/wiring/actionExecutionWiring.js';
 import { currentActionExecution } from '../src/infra/context/actionExecution.js';
 import { SQLiteObserverStore } from '../src/infra/observer/store/observerStore.js';
-import { createFcaSourceGuard, FCA_SOURCE_VERDICT_MS } from '../src/mind/action/fca/fcaConversationSources.js';
+import { createFcaSourceGuard, FCA_SOURCE_BASE_MS, FCA_SOURCE_VERDICT_MS } from '../src/mind/action/fca/fcaConversationSources.js';
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { memoryWorld } from './support/memoryWorld.js';
@@ -127,6 +127,18 @@ describe('event loop watch', () => {
     expect(lines).toEqual(['Shannon event loop blocked process=api ms=94000']);
   });
 
+  it('names a block of half a second or more (it was two seconds), in the same format, and nothing shorter', async () => {
+    vi.useFakeTimers();
+    expect(EVENT_LOOP_WATCH.thresholdMilliseconds).toBe(500);
+    let now = 0; const lines: string[] = [];
+    const stop = startEventLoopWatch('api', { now: () => now, log: line => lines.push(line) }); cleanups.push(stop);
+    now = 1_000 + 499; await vi.advanceTimersByTimeAsync(1_000); // 499 ms late: an ordinary pause.
+    expect(lines).toEqual([]);
+    now = 2_499 + 500; await vi.advanceTimersByTimeAsync(1_000); // 500 ms late.
+    now = 3_999 + 1_300; await vi.advanceTimersByTimeAsync(1_000); // 1.3 s late: below the old threshold.
+    expect(lines).toEqual(['Shannon event loop blocked process=api ms=500', 'Shannon event loop blocked process=api ms=1300']);
+  });
+
   it('names the periodic job that held the thread, and nothing for a quick one', () => {
     let now = 0; const lines: string[] = [];
     const options = { now: () => now, log: (line: string) => lines.push(line) };
@@ -199,7 +211,11 @@ describe('FCA provenance verdicts', () => {
     const walked = w.reads.mock.calls.length; expect(walked).toBeGreaterThan(0);
     for (let i = 0; i < 30; i++) expect(w.guard.sources('owner', w.task, w.sources)).toBe(true); // Every tool of every offer.
     expect(w.reads.mock.calls.length).toBe(walked);
+    // Past the verdict's window the same provenance under the same state version rests on the walked base: nothing is read again.
     w.tick(FCA_SOURCE_VERDICT_MS);
+    expect(w.guard.sources('owner', w.task, w.sources)).toBe(true);
+    expect(w.reads.mock.calls.length).toBe(walked);
+    w.tick(FCA_SOURCE_BASE_MS);
     expect(w.guard.sources('owner', w.task, w.sources)).toBe(true);
     expect(w.reads.mock.calls.length).toBeGreaterThan(walked);
   });

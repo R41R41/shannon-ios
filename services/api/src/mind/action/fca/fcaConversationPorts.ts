@@ -3,6 +3,7 @@ import type { TaskSource, TaskSpec, TaskView } from '../taskRuntime/taskRuntimeP
 import type { ShannonModelToolSession } from '../../../infra/models/chatModelTools.js';
 import type { TaskConversationDeliveryInput } from '../taskRuntime/taskConversationDeliveryPorts.js';
 import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
+import type { FcaWalkCaller } from './fcaConversationSources.js';
 
 /** Only canonical identifiers emitted by trusted readers; never source text or model-supplied metadata. */
 export interface FcaReadReceipt { name: string; ok: boolean; documents?: { read?: readonly string[]; sourceIds?: readonly string[]; informs?: true } }
@@ -48,8 +49,9 @@ export interface FcaConversationTurn {
 
 /** Pending references may be shown only inside the exact foreground segment that just created them. */
 export interface FcaSourceGuard {
-  (scopeKey: string, taskId: string, pendingStepId?: string): boolean;
-  sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean;
+  (scopeKey: string, taskId: string, pendingStepId?: string, via?: FcaWalkCaller): boolean;
+  /** `via` only names the caller in the guard's slow-walk line (`Shannon FCA source walk`); it never changes the answer. */
+  sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string, via?: FcaWalkCaller): boolean;
   /** The verdict `sources` would reuse now, or undefined where it would walk (nothing is walked or remembered). */
   peek?(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean | undefined;
   content?(scopeKey: string, taskId: string, text: string, observedAt: string): boolean;
@@ -67,6 +69,7 @@ export interface FcaSourceGuard {
 
 export { createFcaConversationBridge } from './fcaConversation.js';
 export { createFcaSourceGuard, conversationFcaProvenance } from './fcaConversationSources.js';
+export type { FcaWalkCaller } from './fcaConversationSources.js';
 
 /** Observation is optional and preserves the original model promise when the bridge is absent. */
 export function observeFcaConversation<T>(turn: FcaConversationTurn | null | undefined, work: () => Promise<T>): Promise<T> {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TaskSource, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
+import { FCA_SOURCE_BASE_MS, FCA_SOURCE_WALK_LOG_MS } from '../src/mind/action/fca/fcaConversationSources.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -106,12 +107,123 @@ describe('the incremental source check', () => {
     const w = world();
     expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
     const before = w.visible.walks!();
-    w.advance(5_000);
+    w.advance(FCA_SOURCE_BASE_MS);
     expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(true);
     expect(w.visible.sources('owner', { ...w.task, summary: '別の要約' }, w.next(2, [w.pool[201]!]))).toBe(true);
     const after = w.visible.walks!();
     expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([2, 0]);
   });
+
+  it('walks only the new rows on a base 20 s old while the state version and the reads are unchanged', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    const before = w.visible.walks!();
+    w.advance(20_000); // Past the verdict's 5 s, within the base's window.
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(true);
+    // The base keeps the time of its own walk: a second extension 15 s later is past the window and walks whole.
+    w.advance(15_000);
+    expect(w.visible.sources('owner', w.task, w.next(2, [w.pool[201]!]))).toBe(true);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 1]);
+  });
+
+  it('hides at once on a 20 s old base after a forget (a new state version), and walks whole', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    w.advance(20_000);
+    w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'forget' });
+    const before = w.visible.walks!();
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(false);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 0]);
+    // The same provenance, asked again as the same unchanged rows: still hidden, as the whole walk answers.
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(false);
+  });
+
+  it('walks whole on a 20 s old base whose read receipt was lost (the reads changed)', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    w.advance(20_000);
+    w.lose(w.f.skillSources[0]!);
+    const before = w.visible.walks!();
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(false);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 0]);
+  });
+
+  it('keeps a forgotten source out at decision time (a tool is not offered) whatever base it rested on', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows, undefined, 'tool')).toBe(true);
+    w.advance(20_000);
+    w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'forget' });
+    expect(w.visible.sources('owner', w.task, w.rows, undefined, 'step')).toBe(false);
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.f.turns.at(-1)!]), undefined, 'tool')).toBe(false);
+  });
+});
+
+describe('the slow-walk line', () => {
+  function logged(thresholdMs: number) {
+    const w = world();
+    let tick = 0; const lines: string[] = [];
+    const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
+      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, readSourceVisible: w.f.readSourceVisible, clock: () => 0,
+      monotonic: () => { const value = tick; tick += thresholdMs; return value; }, log: line => lines.push(line) });
+    return { w, guard, lines };
+  }
+
+  it('names a walk of 100 ms or more, once, with counts, the kind of walk and the caller only', () => {
+    const { w, guard, lines } = logged(FCA_SOURCE_WALK_LOG_MS);
+    expect(guard.sources('owner', w.task, w.rows, undefined, 'tool')).toBe(true);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^Shannon FCA source walk ms=100 sources=\d+ ids=\d+ mode=full via=tool$/);
+    // A reuse is no walk: nothing more is said.
+    expect(guard.sources('owner', w.task, w.rows, undefined, 'tool')).toBe(true);
+    expect(lines).toHaveLength(1);
+  });
+
+  it('says nothing for a quick walk, and nothing of what was read', () => {
+    const { w, guard, lines } = logged(FCA_SOURCE_WALK_LOG_MS - 1);
+    expect(guard.sources('owner', w.task, w.rows)).toBe(true);
+    expect(lines).toEqual([]);
+    const loud = logged(500);
+    expect(loud.guard.sources('owner', loud.w.task, loud.w.rows)).toBe(true);
+    const text = JSON.stringify(loud.w.rows.flatMap(row => [...row.recalledMemoryIds, ...row.readSourceIds ?? []]));
+    expect(loud.lines).toHaveLength(1);
+    for (const id of JSON.parse(text) as string[]) expect(loud.lines[0]).not.toContain(id);
+    expect(loud.lines[0]).toMatch(/via=other$/);
+  });
+
+  it('calls a walk that rests on a base partial', () => {
+    const { w, guard, lines } = logged(200);
+    expect(guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(true);
+    expect(guard.sources('owner', w.task, w.next(1, [w.pool[5]!, w.pool[150]!]), undefined, 'evidence')).toBe(true);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(/^Shannon FCA source walk ms=200 sources=\d+ ids=\d+ mode=partial via=evidence$/);
+  });
+});
+
+describe('a minute of a task whose provenance grows each step (run 14 shaped)', () => {
+  /** Same minute twice: the old 5 s base window against the new one. Each step adds a row; the monitor and gates ask in between. */
+  function minute(baseMilliseconds: number) {
+    const w = world();
+    const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
+      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, readSourceVisible: w.f.readSourceVisible, clock: () => clock, baseMilliseconds });
+    let clock = 0, rows = [...w.rows];
+    for (let second = 0; second < 60; second++) {
+      if (second % 3 === 0) rows = [...rows, memoryRow(`m:step:${second}`, new Date(Date.parse(w.rows.at(-1)!.observedAt) + second * 1_000 + 1_000).toISOString(), [w.pool[second]!, w.pool[100 + second]!])];
+      for (let ask = 0; ask < 3; ask++) expect(guard.sources('owner', w.task, rows, undefined, 'step')).toBe(true);
+      clock += 1_000;
+    }
+    return guard.walks!();
+  }
+
+  it('walks the whole provenance far less often than with the 5 s base, and never hides what a whole walk shows', () => {
+    const before = minute(5_000), after = minute(FCA_SOURCE_BASE_MS);
+    console.log(`run14 minute walks before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+    expect(before.walked).toBeGreaterThanOrEqual(10);
+    expect(after.walked).toBeLessThanOrEqual(3);
+    expect(after.walked).toBeLessThan(before.walked / 3);
+  }, 120_000);
 });
 
 describe('a run 10 shaped task: 300 memory rows, a recall and a skill-index row added each step', () => {

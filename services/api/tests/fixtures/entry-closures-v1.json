@@ -801,6 +801,7 @@
     "wiring/fcaMinecraftRequests.ts",
     "wiring/fcaMinecraftTools.ts",
     "wiring/fcaOwnTimeWiring.ts",
+    "wiring/fcaPeekGates.ts",
     "wiring/fcaReadSources.ts",
     "wiring/fcaReportWiring.ts",
     "wiring/fcaResearchWiring.ts",
