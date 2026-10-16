@@ -4,7 +4,7 @@ import type { ConversationStore } from '../../memory/memoryPorts.js';
 import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import { plainSpokenReport, type RequestedBy, type RequesterOf } from './fcaSpokenReport.js';
-import type { ReportGateVerdict } from './fcaReportGate.js';
+import { siblingMark, type ReportGateVerdict } from './fcaReportGate.js';
 
 /** How long a card waits for the report's spoken form before it uses a plain cut of the report instead. */
 export const REPORT_CARD_SPOKEN_WAIT_MS = 25_000;
@@ -107,8 +107,9 @@ function scanOf(parts: CardParts, at: number) {
     const last = parts.conversations.recentThreadMessages?.(parts.ownerScope, threadId, 1).at(-1);
     return last ? `${last.id}\u0000${last.observedAt}` : '';
   });
+  // Only what the sibling rule reads (`siblingMark`): a sibling's progress alone, step by step, never asks the gate again.
   const siblingsMark = (parentId: string) => safely(() => parts.runtime.list(parts.ownerScope, { parentId, order: 'recent', limit: SIBLINGS_LISTED })
-    .map(task => [task.id, task.phase, task.updatedAt].join('\u0000')).join('\n'));
+    .map(task => siblingMark(task, parts.runtime.progress?.(parts.ownerScope, task.id))).join('\n'));
   return {
     at,
     quiet(): boolean {

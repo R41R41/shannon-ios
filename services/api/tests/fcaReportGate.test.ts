@@ -307,18 +307,48 @@ describe('the card scan asks the gate first (2026-10-13: 160–1,300 ms a scan f
     const w = gateFirst(noon, entries);
     w.scan(12 * 10);
     expect(w.counts).toEqual({ shown: 0, verdicts: 2 });
-    // The stale failure's progress changes (a new report): asked again at once, dropped again.
+    // The stale failure's progress changes (a new report): asked again at once, dropped again. A new report of any child is a change
+    // of the siblings (`siblingMark`), so the sibling's drop is asked about again too, and stays dropped.
     entries[0]![1] = progress('まだ止まっています。', w.clock.at, 'failed');
     w.scan(1);
-    expect(w.counts).toEqual({ shown: 0, verdicts: 3 });
+    expect(w.counts).toEqual({ shown: 0, verdicts: 4 });
     // The sibling stops without an answer: the failure is no longer superseded and is delivered, as the gate would have before.
     entries[1]![0] = { ...entries[1]![0], phase: 'failed', updatedAt: iso(w.clock.at) } as TaskView;
     w.scan(1);
-    expect(w.counts).toEqual({ shown: 1, verdicts: 4 });
+    expect(w.counts).toEqual({ shown: 1, verdicts: 5 });
     // Its spoken form is asked for only now (it was dropped until now): the card waits for it as for a new report.
     expect(w.written).toEqual([]);
     w.scan(REPORT_CARD_SPOKEN_WAIT_MS / 5_000);
     expect(w.written).toEqual(['failure']);
+  });
+
+  it('does not ask again about a sibling\'s drop while the sibling only works on, step by step (Minecraft run 11 redo, 2026-10-15)', () => {
+    // Nine earlier failures of the same request, dropped while it still runs: every step of the running one changed the scan's mark,
+    // and the gate was asked about all nine on every scan (~0.9 s of the API's thread every 5 s).
+    const asked = noon - minutes(10);
+    const running: [TaskView, TaskProgress | null] = [task('running', 'マイクラで遊んで', asked, 'executing'), null];
+    const entries: Array<[TaskView, TaskProgress | null]> = [running];
+    for (let index = 0; index < 9; index++) {
+      entries.push([task(`failure-${index}`, 'マイクラで遊んで', asked - minutes(60 - index), 'failed'),
+        progress('止まりました。', asked - minutes(50 - index), 'failed')]);
+    }
+    const w = gateFirst(noon, entries);
+    w.scan(1);
+    expect(w.counts).toEqual({ shown: 0, verdicts: 9 });
+    const phases = ['waiting', 'ready', 'executing'];
+    for (let step = 0; step < 60; step++) {
+      // A step: the row's time and phase move, and so does its progress, with no report yet.
+      running[0] = { ...running[0], phase: phases[step % 3]!, updatedAt: iso(w.clock.at) } as TaskView;
+      running[1] = { currentStep: `step-${step}`, status: 'received', startedAt: iso(asked), updatedAt: iso(w.clock.at), findings: [] } as TaskProgress;
+      w.scan(1);
+    }
+    expect(w.counts).toEqual({ shown: 0, verdicts: 9 });
+    // It answers: the drops are asked about again (still dropped: the request was answered).
+    running[0] = { ...running[0], phase: 'completed', updatedAt: iso(w.clock.at) } as TaskView;
+    running[1] = progress('遊びました。', w.clock.at, 'received', { spoken: '遊びました。' });
+    w.scan(1);
+    expect(w.counts.verdicts).toBe(9 + 9 + 1); // The nine again, and the answer's own.
+    expect(w.written).toEqual(['running']);
   });
 
   it('counts: thirty finished reports at night cost one gate question each, and a walk only for those delivered', () => {

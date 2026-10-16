@@ -90,6 +90,20 @@ function sameRequestSiblings(parts: ReportGateParts, task: TaskView): TaskView[]
   });
 }
 
+/**
+ * What `supersededBySibling` reads of one sibling, as a fingerprint: who it is and what it asked (`sameRequestSiblings`), whether it
+ * still runs, completed or failed, and its stored report. Not its `updatedAt`: Minecraft run 11 redo (2026-10-15), a running
+ * sibling's every step changed the card scan's mark, and the gate was asked again for each of its nine dropped siblings on every
+ * scan (~0.9 s of the API's thread every 5 s, 2–2.7 s in combat). A sibling's sources only grow, which can only add siblings to a
+ * drop, so they are not read here.
+ */
+export function siblingMark(sibling: TaskView, progress: TaskProgress | null | undefined): string {
+  const report = progress?.report;
+  const phase = ACTIVE.includes(sibling.phase) ? 'active' : sibling.phase;
+  return [sibling.id, sibling.origin, sibling.goal, phase, progress?.status === 'failed' ? 1 : 0,
+    report?.id ?? '', report?.updatedAt ?? '', report?.text.trim() ? 1 : 0, report?.heard ? 1 : 0].join('\u0000');
+}
+
 /** One request, at most one notice: true when a sibling already answers it (or, for a failure, still works on it). */
 function supersededBySibling(parts: ReportGateParts, task: TaskView, progress: TaskProgress): boolean {
   const report = progress.report!, isFailure = failed(task, progress);
