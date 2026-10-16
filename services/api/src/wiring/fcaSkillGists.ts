@@ -53,9 +53,14 @@ export function stepReadObserver(parts: {
   };
 }
 
-/** A body task's gist ports (`createMinecraftTaskBody`): the gists, each pinned as a read, and a followed gist as a use. */
+/**
+ * A body task's gist ports (`createMinecraftTaskBody`): the gists, each pinned as a read, and a followed gist as a use. Each decision
+ * that is offered or withheld gists leaves one content-free line (`gistOfferLine`; Minebot run 12: nobody could tell whether a gist
+ * reached the model); the same outcome again within the step is not logged twice.
+ */
 export function bodySkillGists(step: TaskStep, open: SkillTurnPorts['open'] | undefined,
-  observeRead: ReturnType<typeof stepReadObserver>, outcomes: Pick<FcaSkillOutcomes, 'gistFollowed'> | null | undefined)
+  observeRead: ReturnType<typeof stepReadObserver>, outcomes: Pick<FcaSkillOutcomes, 'gistFollowed'> | null | undefined,
+  log: (line: string) => void = line => console.info(line))
   : { skillGists: SkillGistsPort; gistFollowed(name: string): void } | Record<string, never> {
   if (!open) return {};
   // Throws when the skill cannot be read now: then it has no gist.
@@ -64,10 +69,45 @@ export function bodySkillGists(step: TaskStep, open: SkillTurnPorts['open'] | un
   // would add one (`canRunTask`): showing a gist must never change whether a task can run, so such a task gets the pointer alone.
   // A pin of a gist does not make a task one that holds sources.
   const holdsSources = () => step.snapshot?.sources?.some(item => !item.readSourceIds?.length || !item.readSourceIds.every(isSkillGistPin)) ?? false;
+  // Logged again only when the outcome changes (the pins of a later decision are none: the revision is pinned once).
+  let lastOutcome = '';
+  const noted = (outcome: string, line: string) => {
+    if (outcome === lastOutcome) return;
+    lastOutcome = outcome;
+    try { log(line); } catch { /* logging never fails a step */ }
+  };
   return {
-    skillGists: names => holdsSources() ? fcaSkillGists(names, { open: opened,
-      pin: (id, sourceIds) => observeRead(id, { name: 'skill.read', ok: true, documents: { sourceIds } }),
-      pinned: source => step.snapshot?.sources?.some(item => item.readSourceIds?.includes(source)) ?? false }) : new Map(),
+    skillGists: names => {
+      const holds = holdsSources();
+      if (!holds) {
+        noted(`withheld:${names.join(',')}`, gistOfferLine(step.taskId, names, new Map(), holds, { attempts: 0, failures: 0 }));
+        return new Map();
+      }
+      const pins = { attempts: 0, failures: 0 };
+      const shown = fcaSkillGists(names, { open: opened,
+        pin: (id, sourceIds) => {
+          pins.attempts += 1;
+          const pinned = observeRead(id, { name: 'skill.read', ok: true, documents: { sourceIds } });
+          if (!pinned) pins.failures += 1;
+          return pinned;
+        },
+        pinned: source => step.snapshot?.sources?.some(item => item.readSourceIds?.includes(source)) ?? false });
+      noted(`${names.join(',')}:${[...shown.keys()].join(',')}:${pins.failures}`, gistOfferLine(step.taskId, names, shown, holds, pins));
+      return shown;
+    },
     gistFollowed: name => outcomes?.gistFollowed(step.scopeKey, step.taskId, name),
   };
+}
+
+/**
+ * `Shannon Minecraft skill gist task=<id> holdsSources=<bool> pointed=<names> offered=<names> pinAttempts=<n> pinFailures=<n>`:
+ * skill names only (pointed: the skills the situation matched, offered: those whose gist was given, `-` when none), never a gist.
+ * `offered=-` with `holdsSources=true` is a gist that could not be opened, was empty, or could not be pinned (`pinFailures`).
+ */
+export function gistOfferLine(taskId: string, pointed: readonly string[], shown: ReadonlyMap<string, readonly string[]>, holdsSources: boolean,
+  pins: { attempts: number; failures: number }): string {
+  const list = (names: readonly string[]) => names.length ? names.join(',') : '-';
+  const offered = pointed.filter(name => shown.has(name));
+  return `Shannon Minecraft skill gist task=${taskId} holdsSources=${holdsSources} pointed=${list(pointed)} offered=${list(offered)} `
+    + `pinAttempts=${pins.attempts} pinFailures=${pins.failures}`;
 }

@@ -296,3 +296,73 @@ describe('a gist followed is a use of kind gist, settled like a read', () => {
     expect(memory.store.byName('owner', 'mc-low-health')!.uses).toEqual([]);
   });
 });
+
+describe('what a gist leaves in the log (Minebot run 12), content-free', () => {
+  const skill = (name: string, steps: string): SkillTurnSkill => ({ skillId: `skill_${name}`, name, version: 2, status: 'draft', revisionId: `skill_${name}:v2`,
+    body: encodeSkill({ name, description: '時', steps, aids: '- なし', references: '- なし' }) });
+  const real = skill('mc-low-health', '1. 秘密の最初の手順です\n2. 秘密の二番目 mc.build-around-self');
+  const low = { ...minecraftSituation(null, { failedStepsInARow: 0 }), lowHealth: true };
+
+  it('logs one line when gists are offered, with the names and the pins, and the line holds no gist text', () => {
+    const lines: string[] = [];
+    const sources: unknown[] = [{ recalledMemoryIds: ['turn-1'] }];
+    const step = { scopeKey: 'owner', taskId: 'task-log', snapshot: { sources } } as unknown as TaskStep;
+    const ports = bodySkillGists(step, (_scope, name) => name === 'mc-low-health' ? real : null, (_id, receipt) => {
+      sources.push({ readSourceIds: [...(receipt.documents?.sourceIds ?? [])] }); return true;
+    }, null, line => lines.push(line));
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    const names = new Set(['mc-low-health']);
+    for (let decision = 0; decision < 3; decision += 1) expect(minecraftSkillContext(low, names, ports.skillGists).fields.skillGists).toHaveLength(1);
+    // The first decision pinned; the later two are the same outcome again in the step: one line for the step, none for each decision.
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-log holdsSources=true pointed=mc-low-health offered=mc-low-health pinAttempts=1 pinFailures=0']);
+    expect(lines.join('\n')).not.toMatch(/秘密|build-around/u);
+  });
+  it('logs the gist withheld because the task holds no source of its own, with holdsSources=false and nothing pinned', () => {
+    const lines: string[] = []; let pins = 0;
+    const step = { scopeKey: 'owner', taskId: 'operator', snapshot: { sources: [] } } as unknown as TaskStep;
+    const ports = bodySkillGists(step, () => real, () => { pins += 1; return true; }, null, line => lines.push(line));
+    if (!('skillGists' in ports)) throw new Error('no ports');
+    expect(minecraftSkillContext(low, new Set(['mc-low-health']), ports.skillGists).fields.skillGists).toBeUndefined();
+    expect(pins).toBe(0);
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=operator holdsSources=false pointed=mc-low-health offered=- pinAttempts=0 pinFailures=0']);
+  });
+  it('logs a failed pin, an unreadable skill, and a log that throws never fails the step', () => {
+    const lines: string[] = [];
+    const step = { scopeKey: 'owner', taskId: 'task-pin', snapshot: { sources: [{ recalledMemoryIds: ['turn-1'] }] } } as unknown as TaskStep;
+    const refused = bodySkillGists(step, () => real, () => false, null, line => lines.push(line));
+    if (!('skillGists' in refused)) throw new Error('no ports');
+    expect(refused.skillGists(['mc-low-health']).size).toBe(0);
+    expect(lines).toEqual(['Shannon Minecraft skill gist task=task-pin holdsSources=true pointed=mc-low-health offered=- pinAttempts=1 pinFailures=1']);
+    const broken = bodySkillGists(step, () => { throw new Error('locked'); }, () => true, null, () => { throw new Error('log down'); });
+    if (!('skillGists' in broken)) throw new Error('no ports');
+    expect(broken.skillGists(['mc-low-health']).size).toBe(0);
+  });
+  it('logs which branch a call took while a gist was shown, never before one was shown, and never a gist', () => {
+    const followed: string[] = [], lines: string[] = [];
+    const tools = [{ name: 'dig-shelter', readOnly: false }, { name: 'list-nearby-entities', readOnly: true }, { name: 'move-to', readOnly: false },
+      { name: 'other-tool', readOnly: false }];
+    const control = { store: { body: () => 'minecraft:home', bind: () => true, safe: () => true }, available: () => ['minecraft:home'],
+      frame: () => ({ poll: { skills: tools } }), observe: () => null, imagesUnavailable: () => false, settling: () => false, cancelTask() {} } as unknown as MinecraftControl;
+    const step = { id: 'step', scopeKey: 'owner', taskId: 'task-follow', revision: 1, lease: { id: 'lease', holder: 'h', generation: 1 },
+      snapshot: { task: { createdAt: at, summary: '' }, checkpoint: { consecutiveToolFailures: 3 }, history: [], sources: [] } } as unknown as TaskStep;
+    const made = createMinecraftTaskBody({ control, runtime: { get: () => null } as unknown as TaskRuntime, step, entry: null, selector: null,
+      ownerAlone: () => true, sourcesVisible: () => true, skillNames: () => LEGACY, log: line => lines.push(line),
+      skillGists: () => new Map([['mc-food-and-pace', ['2. 秘密 mc.dig-shelter で隠れる。mc.move-to で動く、mc.list-nearby-entities で確かめる']]]),
+      gistFollowed: name => followed.push(name) });
+    const call = (name: string) => made.body.noteCall!({ id: name, name, input: {} }, `op-${name}`);
+    call('mc.dig-shelter');
+    expect(lines).toEqual([]);
+    made.body.context();
+    for (const name of ['mc.dig-shelter', 'mc.move-to', 'mc.list-nearby-entities', 'mc.other-tool', 'mc.unknown-tool']) call(name);
+    expect(lines.map(line => line.replace(/^Shannon Minecraft gist follow task=task-follow /u, ''))).toEqual([
+      'tool=mc.dig-shelter branch=recorded skills=mc-food-and-pace',
+      'tool=mc.move-to branch=generic_tool skills=-',
+      'tool=mc.list-nearby-entities branch=read_only skills=-',
+      'tool=mc.other-tool branch=not_named_by_gist skills=-',
+      'tool=mc.unknown-tool branch=not_legacy_pack skills=-',
+    ]);
+    // The recording itself is as before: only the specific, writing tool the gist names.
+    expect(followed).toEqual(['mc-food-and-pace']);
+    expect(lines.join('\n')).not.toContain('秘密');
+  });
+});

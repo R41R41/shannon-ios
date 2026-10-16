@@ -1,4 +1,4 @@
-import { followedGists, minecraftSituation, minecraftSkillContext, type SkillGistsPort } from './minecraftSkillPointers.js';
+import { followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort } from './minecraftSkillPointers.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -341,9 +341,15 @@ export function createMinecraftTaskBody(parts: {
   const noteGistFollowed = (name: string) => {
     const id = availableBody();
     const skill = id ? control.frame(id)?.poll.skills?.find(item => `mc.${item.name}` === name) : undefined;
-    if (!parts.gistFollowed || !skill || skill.readOnly) return;
-    for (const followed of followedGists(gistTools, name)) {
-      try { parts.gistFollowed(followed); } catch { /* learning never fails a step */ }
+    const followed = parts.gistFollowed && skill && !skill.readOnly ? followedGists(gistTools, name) : [];
+    // Content-free: which branch applied to a call made while a gist was shown (a tool name and skill names, never a gist).
+    if (gistTools.size) {
+      const branch = !parts.gistFollowed ? 'no_port' : !skill ? 'not_legacy_pack' : skill.readOnly ? 'read_only' : followed.length ? 'recorded'
+        : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
+      log(`Shannon Minecraft gist follow task=${step.taskId} tool=${name} branch=${branch} skills=${followed.length ? followed.join(',') : '-'}`);
+    }
+    for (const gist of followed) {
+      try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
     }
   };
   const body: FcaBodyLifecycle = {
