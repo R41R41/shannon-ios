@@ -1,4 +1,5 @@
 import type { TaskSource } from '../../taskRuntime/taskRuntimePorts.js';
+import { nextLoopTurn } from './fcaEvidenceDrain.js';
 
 /** How many recent outcomes one decision is shown (`SQLiteFcaEvidenceStore.prepare`). */
 export const FCA_RECENT_OUTCOMES = 8;
@@ -53,11 +54,8 @@ export async function visibleEvidenceRows<R extends FcaEvidenceCandidate>(rows: 
         trace.covered += 1;
         visible = true;
       } else {
-        const yieldedAt = performance.now();
-        await new Promise<void>(resolve => setImmediate(resolve));
-        trace.yieldWaitMilliseconds += performance.now() - yieldedAt;
+        await trace.yieldToLoop();
         yielded = true;
-        trace.yields += 1;
         if (walked !== sources) trace.reduced += 1;
         visible = trace.rowCheck(() => judge.walk(row, walked));
         if (visible) walkedByKey.set(key, { rows: [], sources: walked });
@@ -130,6 +128,13 @@ export class FcaPrepareTrace {
         this.reused += after.reused - before.reused;
       }
     }
+  }
+  /** One turn of the event loop, its wait counted as the walk's are. */
+  async yieldToLoop(): Promise<void> {
+    const yieldedAt = performance.now();
+    await nextLoopTurn();
+    this.yieldWaitMilliseconds += performance.now() - yieldedAt;
+    this.yields += 1;
   }
   rowCheck(work: () => boolean): boolean {
     this.rowChecks += 1;

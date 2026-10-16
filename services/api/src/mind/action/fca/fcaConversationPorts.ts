@@ -50,6 +50,8 @@ export interface FcaConversationTurn {
 export interface FcaSourceGuard {
   (scopeKey: string, taskId: string, pendingStepId?: string): boolean;
   sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean;
+  /** The verdict `sources` would reuse now, or undefined where it would walk (nothing is walked or remembered). */
+  peek?(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean | undefined;
   content?(scopeKey: string, taskId: string, text: string, observedAt: string): boolean;
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   /**

@@ -7,7 +7,7 @@ import type { ConversationStore, MemoryProposals } from '../mind/memory/memoryPo
 import { createTaskMemory, taskExperienceDraft } from '../mind/memory/taskMemoryPorts.js';
 import { createTaskRecall } from '../mind/recall/taskRecallPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
-import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskRuntime, TaskSource, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
 import { SQLiteFcaEvidenceStore } from '../mind/action/fca/store/fcaEvidenceStore.js';
 import { fcaOutcomeEpisode } from '../mind/action/fca/fcaOutcomeEpisode.js';
@@ -34,6 +34,10 @@ export function createFcaSharedWiring(parts: {
     ...(parts.segmentStaleMinutes ? { segmentStaleMinutes: parts.segmentStaleMinutes } : {}),
     ...(parts.provenanceRefs ? { provenanceRefs: true } : {}),
     sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
+    ...(parts.visible.peek ? { sourcesPeek: (scope: string, id: string, sources: readonly TaskSource[]) => {
+      const task = parts.runtime.get(scope, id);
+      return task ? parts.visible.peek!(scope, task, sources) : false;
+    } } : {}),
     sourcesCovered: (scope, id, verified, candidate) => {
       const task = parts.runtime.get(scope, id);
       return Boolean(task && parts.visible.covers?.(scope, task, verified, candidate));

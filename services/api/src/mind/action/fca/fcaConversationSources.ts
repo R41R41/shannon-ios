@@ -150,7 +150,8 @@ export function createFcaSourceGuard(parts: {
       } catch { console.warn('Shannon FCA capped task not reported code=fca_capped_report_failed'); }
     }).unref?.();
   };
-  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, rows, pendingStepId) => {
+  /** With `peek`, undefined where the answer would need a walk (nothing is walked, remembered or counted); else as `sources`. */
+  const decide = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: boolean): boolean | undefined => {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
@@ -174,9 +175,10 @@ export function createFcaSourceGuard(parts: {
       const known = verdicts.get(key);
       if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS
         && readsUnchanged(epoch, scopeKey, known.reads)) {
-        counts.reused += 1;
+        if (!peek) counts.reused += 1;
         return known.visible;
       }
+      if (peek) return undefined;
       const baseKey = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null]);
       const base = usableBase(bases.get(baseKey), epoch, scopeKey, state.version, at);
       // With a base, only what it did not check (`foldedProvenanceResidual`); without one, all of it.
@@ -195,6 +197,12 @@ export function createFcaSourceGuard(parts: {
       return visible;
     } catch { return false; }
   };
+  const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, rows, pendingStepId) => decide(scopeKey, task, rows, pendingStepId, false) === true;
+  /**
+   * The verdict `sources` would reuse now (same key, state version, window and receipts), or undefined when it would walk: the
+   * evidence store warms the verdicts it is about to ask again between event-loop turns, so the final synchronous check is a reuse.
+   */
+  const peek: NonNullable<FcaSourceGuard['peek']> = (scopeKey, task, rows, pendingStepId) => decide(scopeKey, task, rows, pendingStepId, true);
   const everySourceVisible = (checked: typeof parts, scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId: string | undefined,
     state: CompanionStateSnapshot, withholding: MemoryWithholding): boolean => {
     // One fresh read of each remembered turn for the whole walk: each 40-id read used to fetch every turn of its lineage again, one
@@ -279,7 +287,7 @@ export function createFcaSourceGuard(parts: {
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string) => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
-  }, { sources: sourcesVisible, progress, content, covers, residual, walks: () => ({ ...counts }) });
+  }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts }) });
 }
 
 /** Keeps an entry, dropping those past `FCA_SOURCE_VERDICT_MS` (or from a later clock) and the oldest past `FCA_SOURCE_VERDICTS_KEPT`. */
