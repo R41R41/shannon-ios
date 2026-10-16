@@ -76,7 +76,7 @@ function fakeBody() {
     arrive(world: Record<string, unknown>, facts: Record<string, unknown> = {}) { current = frame(++sequence, clock, world, facts); },
     judge, outcomes,
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
-    respawn() { arrived = clock; }, advance(ms: number) { clock += ms; },
+    respawn() { arrived = clock; }, lose() { current = null; }, advance(ms: number) { clock += ms; },
     onBusy(change: () => void) { const original = control.store.pending; (control.store as { pending: unknown }).pending = (...args: unknown[]) => { change(); return (original as (...a: unknown[]) => unknown)(...args); }; } };
 }
 
@@ -136,9 +136,9 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     await lateBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: -20_000 });
     expect(lateBody.commands.map(command => command.skill)).toEqual(['attack-continuously']);
     const aheadBody = fakeBody();
-    // The body's clock runs 20 s ahead: stateAt looks fresh, but the API received the frame 2 s ago.
+    // The body's clock runs 20 s ahead: stateAt looks fresh, but the API received the frame 4 s ago (limit 3 s).
     aheadBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: 20_000 });
-    await aheadBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: 20_000, receivedAgo: 2_000 });
+    await aheadBody.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { skew: 20_000, receivedAgo: 4_000 });
     expect(aheadBody.commands).toEqual([]);
     expect(aheadBody.judge.discarded().stale).toBe(1);
   });
@@ -175,10 +175,85 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     const body = fakeBody();
     body.running('mc.move-to');
     body.see({ health: 20, nearbyThreats: [zombie(3)] });
-    await body.see({ health: 20, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 2_000 });
+    await body.see({ health: 20, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 4_000 });
     expect(body.interrupted).toBe(0);
     expect(body.commands).toEqual([]);
     expect(body.judge.discarded().stale).toBe(1);
+  });
+
+  it('run 12: a frame just under the 3 s limit is acted on, just over it is dropped', async () => {
+    const under = fakeBody();
+    under.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 2_900 });
+    await under.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 2_900 });
+    expect(under.commands.map(command => command.skill)).toEqual(['attack-continuously']);
+    const over = fakeBody();
+    over.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 3_100 });
+    await over.see({ health: 15, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 3_100 });
+    expect(over.commands).toEqual([]);
+    expect(over.judge.discarded().stale).toBe(1);
+  });
+
+  it('run 12: when the latest frame calls for another kind, that kind is sent instead of dropping the fight', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.running('mc.move-to');
+    body.busy(2);
+    let changed = false;
+    // While her tool settles, her health falls to 10: the latest frame says shelter, not fight.
+    body.onBusy(() => { if (!changed) { changed = true; body.arrive({ health: 10, nearbyThreats: [zombie(3)] }); } });
+    body.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await body.see({ health: 20, nearbyThreats: [zombie(3)] });
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter']);
+    expect(body.judge.discarded().stale).toBe(0);
+    expect(body.lines.some(line => line.includes('kind=shelter rule=ambiguous_shelter skill=dig-shelter'))).toBe(true);
+  });
+
+  it('run 12: still dropped when the body arrived again, when there is no frame, or when the latest frame calls for nothing', async () => {
+    const lost = fakeBody();
+    lost.advance(60_000);
+    lost.running('mc.move-to');
+    lost.busy(2);
+    let gone = false;
+    lost.onBusy(() => { if (!gone) { gone = true; lost.lose(); } });
+    lost.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await lost.see({ health: 20, nearbyThreats: [zombie(3)] });
+    expect(lost.commands).toEqual([]);
+    expect(lost.judge.discarded().stale).toBe(1);
+    const quiet = fakeBody();
+    quiet.advance(60_000);
+    quiet.running('mc.move-to');
+    quiet.busy(2);
+    let left = false;
+    quiet.onBusy(() => { if (!left) { left = true; quiet.arrive({ health: 20, nearbyThreats: [] }); } });
+    quiet.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await quiet.see({ health: 20, nearbyThreats: [zombie(3)] });
+    expect(quiet.commands).toEqual([]);
+    expect(quiet.judge.discarded().stale).toBe(1);
+  });
+
+  it('run 12: a drop before anything is cut off or sent arms no cooldown; a drop after a cut-off and a real action still do', async () => {
+    const early = fakeBody();
+    early.advance(60_000);
+    early.running('mc.move-to');
+    early.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await early.see({ health: 20, nearbyThreats: [zombie(3)] }, {}, { receivedAgo: 4_000 });
+    expect(early.interrupted).toBe(0);
+    expect(early.judge.discarded().stale).toBe(1);
+    // The very next frames judge again, with no `reflex_cooldown` in between.
+    early.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await early.see({ health: 20, nearbyThreats: [zombie(3)] });
+    expect(early.holds).not.toContain('reflex_cooldown');
+    expect(early.commands.map(command => command.skill)).toEqual(['attack-continuously']);
+    // A real action that failed waits the danger cooldown.
+    const failed = fakeBody();
+    failed.advance(60_000);
+    failed.outcomes.push('failed');
+    failed.see({ health: 20, nearbyThreats: [zombie(3)] });
+    await failed.see({ health: 20, nearbyThreats: [zombie(3)] });
+    failed.see({ health: 20, nearbyThreats: [zombie(3)] });
+    expect(failed.see({ health: 20, nearbyThreats: [zombie(3)] })).toBeNull();
+    expect(failed.holds).toContain('reflex_cooldown');
+    expect(failed.commands.length).toBe(1);
   });
 
   it('F4: after her shelter failed, the next choice of the same danger episode is to flee, and a new episode starts fresh', async () => {

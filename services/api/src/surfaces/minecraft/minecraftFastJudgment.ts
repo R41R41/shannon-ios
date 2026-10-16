@@ -15,7 +15,8 @@ const SETTLE_MILLISECONDS = 2_000;
  * One step's image-free fast judgment (Syzygy ADR-0011 stage 2, `fastJudgment.ts`): on each new frame it may start one bounded body
  * skill under the step's own lease. The adapter keeps the job as its active session, so a decision made meanwhile is judged stale
  * (`touched`) and tools started meanwhile are cut off. A stale answer is never sent: just before the command, the latest frame is
- * judged again and the answer is dropped when its kind changed, the body arrived again (died, respawned), or the frame is old.
+ * judged again: the answer sent is that judgment's, and nothing is sent when the body arrived again (died, respawned), the frame is
+ * old, or the latest frame calls for no action.
  */
 export function createMinecraftFastJudgment(parts: {
   control: MinecraftControl; step: TaskStep; governor: ReflexGovernor; now(): number;
@@ -64,14 +65,19 @@ export function createMinecraftFastJudgment(parts: {
   };
 
   /**
-   * Never a stale answer: the latest frame, judged again, must give the same kind, from the same arrival, and be fresh. Freshness is
-   * the API's own receive time (`receivedAt`): the body's `stateAt` runs on its clock, which the validation lets differ by 30 s.
+   * Never a stale answer: the latest frame is judged again, must be from the same arrival and fresh, and still call for an action.
+   * That answer is the one to send (run 12: a `fight` judged while zombies attacked was dropped because the latest frame said
+   * otherwise, nothing reached the body and she died twice; the latest frame is the more current). Null when nothing may be sent.
+   * Freshness is the API's own receive time (`receivedAt`): the body's `stateAt` runs on its clock, which the validation lets differ
+   * by 30 s.
    */
-  const stale = (bodyId: string, decision: FastDecision, arrived: number | null) => {
+  const rejudged = (bodyId: string, decision: FastDecision, arrived: number | null): FastDecision | null => {
     const latest = control.observe(bodyId);
-    if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.receivedAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return true;
-    const again = fastJudgment(stateOf(bodyId, latest));
-    return !('decision' in again) || again.decision.kind !== decision.kind;
+    if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.receivedAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return null;
+    const state = stateOf(bodyId, latest), again = fastJudgment(state);
+    if (!('decision' in again)) return null;
+    // A new kind must not cut off a defensive skill of hers either, which `consider` only checked for the first kind.
+    return again.decision.kind !== decision.kind && defending(state.health, again.decision) ? null : again.decision;
   };
   /**
    * A defensive skill of hers keeps running (run 11: a reflex stopped her fight and she died standing), unless her health is at the
@@ -82,12 +88,12 @@ export function createMinecraftFastJudgment(parts: {
     if (!running || !DEFENSIVE_SKILLS.has(running)) return null;
     return (health ?? 0) <= 6 && decision.kind !== 'fight' && running.startsWith('attack') ? null : running;
   };
-  const run = async (bodyId: string, decision: FastDecision, entry: ReflexEntryFacts, judged: { arrived: number | null; at: number },
+  const run = async (bodyId: string, first: FastDecision, entry: ReflexEntryFacts, judged: { arrived: number | null; at: number },
     signal: AbortSignal) => {
     count += 1;
     const sessionId = `${step.id}:fast:${count}`, id = `fast:${hash(sessionId)}`;
     governor.began(step.taskId, now(), entry);
-    let effective = false;
+    let effective = false, decision = first, cooldown = true;
     const sentAt = now();
     /** A dropped answer did not do what a cooldown would be for in the success case: it waits `dangerCooldownMs` like any ineffective session. */
     const discard = (reason: keyof typeof discards, hold: string, detail: Record<string, string | number | boolean | null>) => {
@@ -98,12 +104,22 @@ export function createMinecraftFastJudgment(parts: {
     try {
       // Before cutting anything off: an answer already stale interrupts nothing (an enemy at the edge of a threshold flipping the
       // judgment every other frame once cut off her move-to each time and sent nothing).
-      if (stale(bodyId, decision, judged.arrived)) return discard('stale', 'fast_stale', { kind: decision.kind });
+      // Nothing was cut off and nothing sent here, so there is no cooldown to wait for: the next frames may judge again at once.
+      const before = rejudged(bodyId, decision, judged.arrived);
+      if (!before) {
+        cooldown = false;
+        return discard('stale', 'fast_stale', { kind: decision.kind });
+      }
+      decision = before;
       if (parts.activeAction()) {
         parts.interrupt();
         if (!await settle(bodyId, id, signal)) return discard('busy', 'fast_skill_busy', { skill: decision.skill });
+        // Her tool was cut off by now: a drop here keeps the full cooldown (the flicker guard above), or the next frames would cut off
+        // another one.
+        const after = rejudged(bodyId, decision, judged.arrived);
+        if (!after) return discard('stale', 'fast_stale', { kind: decision.kind });
+        decision = after;
       }
-      if (stale(bodyId, decision, judged.arrived)) return discard('stale', 'fast_stale', { kind: decision.kind });
       if (signal.aborted || !await parts.permit(signal).catch(() => false)) {
         discards.not_permitted += 1;
         return;
@@ -132,7 +148,7 @@ export function createMinecraftFastJudgment(parts: {
         + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}`);
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
         skill: decision.skill, outcome }), sessionId);
-    } finally { governor.ended(step.taskId, now(), entry, effective); }
+    } finally { governor.ended(step.taskId, now(), entry, effective, cooldown); }
   };
 
   return {

@@ -27,7 +27,8 @@ export type ReflexAdmission = { admit: true; escalated: boolean } | { admit: fal
 export interface ReflexGovernor {
   admit(taskId: string, at: number, entry: ReflexEntryFacts): ReflexAdmission;
   began(taskId: string, at: number, entry: ReflexEntryFacts): void;
-  ended(taskId: string, at: number, entry: ReflexEntryFacts, effective: boolean): void;
+  /** `cooldown` false: an ineffective end that touched nothing (an answer dropped before it cut anything off) arms no cooldown. */
+  ended(taskId: string, at: number, entry: ReflexEntryFacts, effective: boolean, cooldown?: boolean): void;
   /** The FCA decided again for this task (a tool call): a stuck body may be helped once more. */
   decided(taskId: string, at: number): void;
 }
@@ -78,11 +79,11 @@ export function createReflexGovernor(overrides: Partial<ReflexGovernorLimits> = 
       state.sessions.push({ start: at, end: null });
       if (entry.mode === 'danger' && entry.danger) state.lastDanger = { ...entry.danger };
     },
-    ended(taskId, at, entry, effective) {
+    ended(taskId, at, entry, effective, cooldown = true) {
       const state = stateOf(taskId);
       const open = state.sessions.find(session => session.end === null);
       if (open) open.end = Math.max(open.start, at);
-      if (!effective) state.cooldownUntil[entry.mode] = at + (entry.mode === 'danger' ? limits.dangerCooldownMs : limits.idleCooldownMs);
+      if (!effective && cooldown) state.cooldownUntil[entry.mode] = at + (entry.mode === 'danger' ? limits.dangerCooldownMs : limits.idleCooldownMs);
       if (entry.mode === 'stuck') state.stuck = { place: entry.place ?? null, at };
     },
     decided(taskId, at) {
