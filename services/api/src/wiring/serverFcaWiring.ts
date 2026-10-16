@@ -214,7 +214,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
-    const wake = () => { minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope, id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
+    const wake = () => { minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope, id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); void shared?.evidence?.drain({ segments: true }).catch(() => { /* Durable evidence remains for retry. */ }); void runtime.tick().catch(() => {}); };
     const timer = setInterval(() => timedTick('fca_wake', wake), 1000); timer.unref();
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),

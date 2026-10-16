@@ -9,12 +9,18 @@ import type { FcaAffectAppraisal, FcaDurableOutcome, FcaEvidence, FcaOutcomeCont
 import { durableOutcomeOf, FCA_SEGMENT_STALE_MINUTES, heldRows, heldSegmentsToClose, HELD_FOR_SEGMENT, segmentDisposition } from './fcaEvidenceSegments.js';
 import { enableFcaProvenanceSets, readStoredSources, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 import { FcaPrepareTrace, visibleEvidenceRows, type FcaEvidenceJudge, type FcaVisibleRows } from './fcaEvidenceRows.js';
+import { FcaUnseenBackoff, runSliced } from './fcaEvidenceDrain.js';
 
 export interface FcaEvidenceOptions {
   db: DatabaseSync; state: FcaAffectWriter; now(): string;
   /** Runs synchronously inside this connection's write transaction; must check exact step + original live lease. */
   validStep(step: TaskStep): boolean;
   sourcesVisible(scopeKey: string, taskId: string, sources: readonly TaskSource[]): boolean;
+  /**
+   * The verdict `sourcesVisible` would reuse right now, or undefined where it would walk (`FcaSourceGuard.peek`). Absent: a prepare
+   * that yielded asks its walked sets again at its end without warming them first.
+   */
+  sourcesPeek?(scopeKey: string, taskId: string, sources: readonly TaskSource[]): boolean | undefined;
   /**
    * Whether `verified`, the task's sources `sourcesVisible` has just found visible, implies that `candidate` (an earlier step's sources
    * of the same task) is visible too, without a walk (`FcaSourceGuard.covers`). Absent: every row is walked.
@@ -45,7 +51,7 @@ interface EvidenceRow {
   scope_key: string; event_id: string; task_id: string; step_id: string; call_id: string; name: string;
   expectation_json: string | null; comparison_json: string | null; observation: 'pending' | 'observed' | 'unknown';
   result_json: string | null; sources_json: string; observed_at: string | null; deadline_at: string | null;
-  goal: string; action_json: string;
+  goal: string; action_json: string; outcome_delivered: number;
 }
 /** FCA working evidence/outbox only: task status and emotional state retain their existing writers. */
 export class SQLiteFcaEvidenceStore implements FcaEvidence {
@@ -82,7 +88,10 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   }
   private async prepared(step: TaskStep, trace: FcaPrepareTrace): Promise<FcaSharedContext> {
     // Receipt/delivery failures are retried by maintenance; they must never poison a fresh native step.
-    trace.time('flush', () => { try { this.flush(); } catch { /* Both outboxes retain their original idempotency keys. */ } });
+    // Sliced (the event loop is let through between outcomes); the ended tasks' segments are the maintenance tick's, not this step's.
+    const flushStarted = performance.now();
+    try { await this.drain({ segments: false }); } catch { /* Both outboxes retain their original idempotency keys. */ }
+    trace.add('flush', performance.now() - flushStarted);
     if (!this.options.validStep(step) || !trace.time('precheck', () => trace.check(() => this.visible(step)))) throw new Error('FCA_EVIDENCE_HELD');
     // The sources just found visible; `observeContext` below may replace the step's list, never this one.
     const verified = step.snapshot.sources;
@@ -92,7 +101,7 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     // walk includes the event loop's waits between walks (yieldWait); stillVisible is the re-check after a yield (0 without one).
     const walkStarted = performance.now();
     const chosen = await visibleEvidenceRows(rows, this.judge(step, verified), trace).finally(() => trace.add('walk', performance.now() - walkStarted));
-    const visibleRows = trace.time('stillVisible', () => chosen.yielded ? this.stillVisible(step, verified, chosen, trace) : chosen.rows);
+    const visibleRows = chosen.yielded ? await this.recheck(step, verified, chosen, trace) : chosen.rows;
     const { affect, affectReceipts } = trace.time('affect', () => {
       const affect = this.affect.snapshot(step.scopeKey);
       const eventIds = [...visibleRows.map(row => row.event_id), ...affect.causes.map(cause => cause.eventId)];
@@ -113,6 +122,38 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       sources: row => readStoredSources(this.options.db, row.scope_key, row.sources_json),
       ...(covered ? { covered: (sources: readonly TaskSource[]) => covered(step.scopeKey, step.taskId, verified, sources) } : {}),
       ...(residual ? { residual: (sources: readonly TaskSource[]) => residual(step.scopeKey, step.taskId, verified, sources) } : {}) };
+  }
+  /**
+   * `stillVisible` after its verdicts are warm. The walks took turns of the event loop, so a verdict made at the first of them may
+   * have aged past the guard's window (`FCA_SOURCE_VERDICT_MS`) when the last was made, and asking every set again at the end then
+   * walked them all again in one synchronous slice (Minecraft run 13: 16 checks, ~8 s). Each stale one is walked in its own turn
+   * first (a few rounds at most); the final check is still made at the end, synchronously, with the lineage write that follows.
+   */
+  private async recheck(step: TaskStep, verified: readonly TaskSource[], chosen: FcaVisibleRows<EvidenceRow>, trace: FcaPrepareTrace): Promise<EvidenceRow[]> {
+    const started = performance.now();
+    try {
+      await this.warm(step, verified, chosen, trace);
+      return this.stillVisible(step, verified, chosen, trace);
+    } finally { trace.add('stillVisible', performance.now() - started); }
+  }
+  private async warm(step: TaskStep, verified: readonly TaskSource[], chosen: FcaVisibleRows<EvidenceRow>, trace: FcaPrepareTrace): Promise<void> {
+    const peek = this.options.sourcesPeek;
+    if (!peek) return;
+    const asks = [{ taskId: step.taskId, sources: verified }, ...chosen.walked.map(set => ({ taskId: set.rows[0]!.task_id, sources: set.sources }))];
+    // A child task's own visibility is asked again at the end too (`stillVisible`), and is a walk of its sources as well.
+    for (const id of new Set(chosen.rows.map(row => row.task_id).filter(id => id !== step.taskId))) {
+      await trace.yieldToLoop();
+      this.options.taskVisible(step.scopeKey, id);
+    }
+    for (let round = 0; round < WARM_ROUNDS; round++) {
+      const stale = asks.filter(ask => peek(step.scopeKey, ask.taskId, ask.sources) === undefined);
+      if (!stale.length) return;
+      for (const ask of stale) {
+        await trace.yieldToLoop();
+        if (!this.options.validStep(step)) return;
+        trace.check(() => this.options.sourcesVisible(step.scopeKey, ask.taskId, ask.sources));
+      }
+    }
   }
   /** After a yield: the lease and the verified sources again (or the step is held), then each walked set (or its rows are left out). */
   private stillVisible(step: TaskStep, verified: readonly TaskSource[], chosen: FcaVisibleRows<EvidenceRow>, trace: FcaPrepareTrace): EvidenceRow[] {
@@ -165,27 +206,73 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     // An expired original lease cannot be replaced by a new writer. Its pre-action prediction remains pending/unobserved.
     if (this.options.validStep(step)) this.settle(step, call, null);
   }
-  committed(_step: TaskStep): void { this.flush(); }
-  /** Content-free: logs a flush slower than slowFlushMilliseconds (default 500) with the segments it closed. */
-  flush(): void {
+  /**
+   * The step's own outcomes are delivered here, in the step's turn; the segments of tasks that ended wait for the maintenance tick
+   * (`drain`), sliced, unless something else flushes first. Nothing is lost by the wait: a segment closes whenever it is asked.
+   */
+  committed(_step: TaskStep): void {
+    this.flush({ segments: false });
+    this.drainLater();
+  }
+  /**
+   * Every pending item at once, synchronously, in its order (the tests', and anything that needs the answer now). Content-free: logs a
+   * flush slower than slowFlushMilliseconds (default 500) with the segments it closed.
+   */
+  flush(options: { segments?: boolean } = {}): void {
     const at = performance.now();
     this.closedSegments = 0;
-    try { this.flushed(); } finally {
+    try { for (const _unit of this.flushUnits(options.segments !== false, null)) { /* to the end, without a turn of the loop */ } } finally {
       const spent = performance.now() - at;
       if (spent >= (this.options.slowFlushMilliseconds ?? SLOW_FLUSH_MILLISECONDS)) {
         console.info(`Shannon FCA evidence flush slow ms=${Math.round(spent)} segmentsClosed=${this.closedSegments}`);
       }
     }
   }
+  /**
+   * The same pass, in slices: the event loop is let through between units, and a row or segment that could not be shown is not
+   * asked again for `FCA_UNSEEN_RETRY_MS`. One pass at a time; a caller during a pass waits for it. Every unit is idempotent
+   * (the same event ids, `outcome_delivered`, the memory outbox's keys), so a `flush` in between changes nothing but the order.
+   */
+  drain(options: { segments: boolean }): Promise<void> {
+    this.draining ??= this.drained(options.segments).finally(() => { this.draining = null; });
+    return this.draining;
+  }
+  /** A pass on a later turn of the loop, unseen by the caller (its failure is the next pass's to retry). */
+  private drainLater(): void {
+    if (this.draining || this.drainScheduled) return;
+    this.drainScheduled = true;
+    setImmediate(() => { this.drainScheduled = false; this.drain({ segments: true }).catch(() => {}); }).unref();
+  }
+  private draining: Promise<void> | null = null;
+  private drainScheduled = false;
+  private readonly unseen = new FcaUnseenBackoff();
+  private async drained(segments: boolean): Promise<void> {
+    this.closedSegments = 0;
+    const measure = await runSliced(this.flushUnits(segments, this.unseen));
+    if (measure.longestSliceMs >= (this.options.slowFlushMilliseconds ?? SLOW_FLUSH_MILLISECONDS)) {
+      console.info(`Shannon FCA evidence drain slow slice ms=${Math.round(measure.longestSliceMs)} segmentsClosed=${this.closedSegments}`);
+    }
+  }
   private closedSegments = 0;
-  private flushed(): void {
+  /** The flush as units: each `yield` is a place where a sliced pass may let the event loop through, a plain one runs on. */
+  private *flushUnits(segments: boolean, unseen: FcaUnseenBackoff | null): Generator<void> {
     this.settleLifecycle();
+    this.expirePending();
+    yield;
+    yield* this.applyQueuedAppraisals();
+    if (!this.options.onOutcome) return;
+    yield* this.deliverOutcomes(unseen);
+    if (segments) yield* this.closeEndedSegments(unseen);
+  }
+  private expirePending(): void {
     const pending = this.options.db.prepare("SELECT * FROM fca_action_evidence WHERE deadline_at<=? AND json_extract(comparison_json,'$.status')='pending'")
       .all(this.options.now()) as unknown as EvidenceRow[];
     for (const row of pending) this.options.db.prepare(`UPDATE fca_action_evidence SET comparison_json=?,
       observation=CASE WHEN observation='pending' THEN 'unknown' ELSE observation END,observed_at=COALESCE(observed_at,deadline_at)
       WHERE scope_key=? AND event_id=? AND comparison_json=?`)
       .run(JSON.stringify({ status: 'unobserved', actual: null, mismatch: null }), row.scope_key, row.event_id, row.comparison_json);
+  }
+  private *applyQueuedAppraisals(): Generator<void> {
     const queued = this.options.db.prepare(`SELECT o.* FROM fca_affect_outbox o WHERE o.done=0 AND EXISTS (
       SELECT 1 FROM fca_task_history h JOIN agent_tasks t ON t.task_id=h.task_id
       WHERE h.step_id=o.step_id AND h.task_id=o.task_id AND t.scope_key=o.scope_key) ORDER BY o.revision,o.rowid`).all();
@@ -195,8 +282,8 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
         observeSync('emotion', { phase: 'apply_appraisal', revision: Number(row.revision) }, () => this.affect.submit(String(row.scope_key), evidence), status => ({ status })));
       if (result !== 'withheld') this.options.db.prepare('UPDATE fca_affect_outbox SET done=1 WHERE scope_key=? AND event_id=? AND revision=? AND step_id=?')
         .run(String(row.scope_key), String(row.event_id), Number(row.revision), String(row.step_id));
+      yield;
     }
-    if (this.options.onOutcome) this.deliverOutcomes();
   }
   private settle(step: TaskStep, call: FcaToolCall, result: ToolResult | null) {
     this.transaction(() => {
@@ -229,26 +316,38 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     this.options.db.prepare(`INSERT OR IGNORE INTO fca_affect_outbox(scope_key,event_id,revision,step_id,task_id,evidence_json) VALUES(?,?,?,?,?,?)`)
       .run(step.scopeKey, appraisal.eventId, appraisal.revision, step.id, step.taskId, JSON.stringify(evidence));
   }
-  private deliverOutcomes() {
+  private *deliverOutcomes(unseen: FcaUnseenBackoff | null): Generator<void> {
     const rows = this.options.db.prepare(`SELECT e.rowid AS seq,e.* FROM fca_action_evidence e WHERE e.outcome_delivered=0 AND e.observation!='pending'
       AND EXISTS (SELECT 1 FROM fca_task_history h JOIN agent_tasks t ON t.task_id=h.task_id
       WHERE h.step_id=e.step_id AND h.task_id=e.task_id AND t.scope_key=e.scope_key) ORDER BY e.rowid`).all() as unknown as EvidenceRow[];
     for (const row of rows) {
-      if (!this.rowVisible(row)) continue;
-      // A routine body action waits for its segment's episode (owner decision 2026-10-14, `fcaEvidenceSegments.ts`).
-      const disposition = segmentDisposition(this.options.db, row);
-      if (disposition === 'hold') {
-        this.markDelivered([row], HELD_FOR_SEGMENT);
-        continue;
-      }
-      const held = disposition === 'close' ? this.visibleHeld(heldRows<EvidenceRow>(this.options.db, row.scope_key, row.task_id, row.seq), row) : [];
-      // A held action that cannot be shown now keeps its segment open: the closing outcome stays undelivered and is asked again.
-      if (!held) continue;
-      const outcome = durableOutcomeOf(this.options.db, row, held);
-      if (outcome.segment || !this.routineOutcome(row)) this.options.onOutcome!(outcome);
-      this.markDelivered([...held, row], 1);
+      const key = `row\u0000${row.scope_key}\u0000${row.event_id}`;
+      if (unseen?.skips(key) || !this.undelivered(row)) continue;
+      if (this.deliverOutcome(row)) unseen?.shown(key); else unseen?.unseen(key);
+      yield;
     }
-    this.closeEndedSegments();
+  }
+  /** Still undelivered: a flush between the units of a sliced pass may have delivered it. */
+  private undelivered(row: EvidenceRow): boolean {
+    const now = this.row(row.scope_key, row.event_id);
+    return now?.outcome_delivered === 0 && now.observation !== 'pending';
+  }
+  /** One undelivered outcome: false when it (or a held action of its segment) cannot be shown now and stays undelivered. */
+  private deliverOutcome(row: EvidenceRow): boolean {
+    if (!this.rowVisible(row)) return false;
+    // A routine body action waits for its segment's episode (owner decision 2026-10-14, `fcaEvidenceSegments.ts`).
+    const disposition = segmentDisposition(this.options.db, row);
+    if (disposition === 'hold') {
+      this.markDelivered([row], HELD_FOR_SEGMENT);
+      return true;
+    }
+    const held = disposition === 'close' ? this.visibleHeld(heldRows<EvidenceRow>(this.options.db, row.scope_key, row.task_id, row.seq), row) : [];
+    // A held action that cannot be shown now keeps its segment open: the closing outcome stays undelivered and is asked again.
+    if (!held) return false;
+    const outcome = durableOutcomeOf(this.options.db, row, held);
+    if (outcome.segment || !this.routineOutcome(row)) this.options.onOutcome!(outcome);
+    this.markDelivered([...held, row], 1);
+    return true;
   }
   /** A lookup, or a wait with nothing observed since the last delivered wait or completion: not an episode of its own. */
   private routineOutcome(row: EvidenceRow): boolean {
@@ -267,26 +366,44 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     const verdicts = new Map<string, boolean>(), anchorSources = anchor ? this.sourcesOf(anchor) : null;
     const visible = rows.filter(row => {
       const key = `${row.task_id}\u0000${row.sources_json}`;
-      if (!verdicts.has(key)) {
-        const sources = this.sourcesOf(row);
-        const covered = sources && anchorSources && anchor!.task_id === row.task_id
-          && this.options.sourcesCovered?.(row.scope_key, row.task_id, anchorSources, sources) === true;
-        verdicts.set(key, Boolean(sources) && (covered || this.options.sourcesVisible(row.scope_key, row.task_id, sources!)));
-      }
+      if (!verdicts.has(key)) verdicts.set(key, this.heldRowVisible(row, anchor, anchorSources));
       return verdicts.get(key)!;
     });
     return visible.length === rows.length ? visible : null;
   }
+  /**
+   * One held row's verdict: its stored sources, judged by the step's walk over what the anchor's just-verified sources do not cover
+   * (`sourcesCovered`, `sourcesResidual`, as in `prepare`), or whole where the anchor does not apply.
+   */
+  private heldRowVisible(row: EvidenceRow, anchor: EvidenceRow | null, anchorSources: readonly TaskSource[] | null): boolean {
+    const sources = this.sourcesOf(row);
+    if (!sources) return false;
+    if (!anchorSources || anchor!.task_id !== row.task_id) return this.options.sourcesVisible(row.scope_key, row.task_id, sources);
+    if (this.options.sourcesCovered?.(row.scope_key, row.task_id, anchorSources, sources) === true) return true;
+    const rest = this.options.sourcesResidual?.(row.scope_key, row.task_id, anchorSources, sources) ?? sources;
+    return rest.length === 0 || this.options.sourcesVisible(row.scope_key, row.task_id, rest);
+  }
   /** A task paused, stopped, failed or completed, or quiet too long, with body actions still held: their segment closes. */
-  private closeEndedSegments() {
+  private *closeEndedSegments(unseen: FcaUnseenBackoff | null): Generator<void> {
     const staleBefore = new Date(Date.parse(this.options.now()) - (this.options.segmentStaleMinutes ?? FCA_SEGMENT_STALE_MINUTES) * 60_000).toISOString();
     for (const ended of heldSegmentsToClose(this.options.db, staleBefore)) {
-      const held = this.visibleHeld(heldRows<EvidenceRow>(this.options.db, ended.scopeKey, ended.taskId), null), last = held?.at(-1);
-      if (!held || !last) continue;
-      this.options.onOutcome!(durableOutcomeOf(this.options.db, last, held.slice(0, -1), { closedBy: ended.closedBy, outcomeId: `${last.event_id}:segment` }));
-      this.markDelivered(held, 1);
-      this.closedSegments += 1;
+      const key = `segment\u0000${ended.scopeKey}\u0000${ended.taskId}`;
+      if (unseen?.skips(key)) continue;
+      if (this.closeEndedSegment(ended)) unseen?.shown(key); else unseen?.unseen(key);
+      yield;
     }
+  }
+  /** False when the segment cannot be shown now (it stays held, and is asked again). */
+  private closeEndedSegment(ended: { scopeKey: string; taskId: string; closedBy: string }): boolean {
+    const rows = heldRows<EvidenceRow>(this.options.db, ended.scopeKey, ended.taskId), newest = rows.at(-1);
+    if (!newest) return true;
+    // The newest held row's sources are judged whole (a task's provenance only grows), then the older rows' by what they add to it.
+    const held = this.rowVisible(newest) ? this.visibleHeld(rows, newest) : null;
+    if (!held) return false;
+    this.options.onOutcome!(durableOutcomeOf(this.options.db, newest, held.slice(0, -1), { closedBy: ended.closedBy, outcomeId: `${newest.event_id}:segment` }));
+    this.markDelivered(held, 1);
+    this.closedSegments += 1;
+    return true;
   }
   private markDelivered(rows: readonly EvidenceRow[], value: number) {
     for (const row of rows) {
@@ -326,6 +443,8 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
   }
 }
 const SLOW_FLUSH_MILLISECONDS = 500;
+/** How many times a prepare that yielded warms the verdicts it asks again at its end. */
+const WARM_ROUNDS = 3;
 function outcomeContext(row: EvidenceRow, appraisalRevision: number): FcaOutcomeContext {
   const result = parse<{ ok: boolean; text: string }>(row.result_json);
   return { eventId: row.event_id, taskId: row.task_id, operationId: row.event_id, name: row.name,
