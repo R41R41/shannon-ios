@@ -27,7 +27,11 @@ export function isFcaCoreTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>):
  * The core tools one epoch declared. The signatures of thinking blocks bind the set of tools, so these definitions are kept (in the
  * task's checkpoint) and sent unchanged until the epoch ends; `anchor` is the digest of the epoch's first replayed message.
  */
-export interface FcaCorePin { hash: string; anchor: string | null; tools: FcaToolDefinition[] }
+export interface FcaCorePin {
+  hash: string; anchor: string | null; tools: FcaToolDefinition[];
+  /** Steps the epoch has lived (0 at its first). */
+  steps: number;
+}
 
 const digest = (value: unknown) => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 
@@ -35,7 +39,7 @@ const digest = (value: unknown) => createHash('sha256').update(typeof value === 
 export function pinFcaCoreTools(catalog: readonly FcaToolDefinition[]): FcaCorePin {
   const tools = catalog.filter(isFcaCoreTool).map(tool => ({ ...tool }))
     .sort((left, right) => compare(providerToolName(left.name), providerToolName(right.name)));
-  return { hash: digest(tools), anchor: null, tools };
+  return { hash: digest(tools), anchor: null, tools, steps: 0 };
 }
 const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
 
@@ -55,7 +59,8 @@ export function continuesFcaEpoch(pin: FcaCorePin | undefined, history: readonly
 /** This step's pin: the epoch's own while it continues, else the current catalog's core set. */
 export function fcaCoreForStep(previous: FcaCorePin | undefined, catalog: readonly FcaToolDefinition[],
   history: readonly unknown[]): { pin: FcaCorePin; newEpoch: boolean } {
-  return continuesFcaEpoch(previous, history) ? { pin: previous, newEpoch: false } : { pin: pinFcaCoreTools(catalog), newEpoch: true };
+  return continuesFcaEpoch(previous, history) ? { pin: { ...previous, steps: previous.steps + 1 }, newEpoch: false }
+    : { pin: pinFcaCoreTools(catalog), newEpoch: true };
 }
 
 /** The pin with the anchor of the replay this step leaves behind: what the next step's replay starts with. */
@@ -69,7 +74,8 @@ export function readFcaCorePin(value: unknown): FcaCorePin | undefined {
   const item = value as Partial<FcaCorePin>;
   if (typeof item.hash !== 'string' || !(item.anchor === null || typeof item.anchor === 'string') || !Array.isArray(item.tools)) return undefined;
   if (item.tools.some(tool => !tool || typeof tool !== 'object' || typeof tool.name !== 'string')) return undefined;
-  return { hash: item.hash, anchor: item.anchor, tools: item.tools.map(tool => ({ ...tool })) };
+  const steps = typeof item.steps === 'number' && Number.isSafeInteger(item.steps) && item.steps >= 0 ? item.steps : 0;
+  return { hash: item.hash, anchor: item.anchor, tools: item.tools.map(tool => ({ ...tool })), steps };
 }
 
 /** The state with its transient fields read back only whole from a checkpoint's item; otherwise they are dropped (a legacy task). */

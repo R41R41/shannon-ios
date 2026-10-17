@@ -115,7 +115,8 @@ export function scenario(options: ScenarioOptions = {}) {
     }
     return driver.runtime.get('owner', task.id)?.phase;
   }
-  return { get driver() { return driver; }, task, bodies, allBodies: fixture.bodies, violations, settle, get failures() { return failures; } };
+  const summaries = () => fixture.bodies.filter(body => (body.tools as Array<{ name?: string }>).some(tool => tool.name === 'fca_history_summary')).length;
+  return { get driver() { return driver; }, task, bodies, allBodies: fixture.bodies, violations, settle, summaries, get failures() { return failures; } };
 }
 
 /** A request as the golden tests compare it: ids and clock readings of this run replaced, then hashed. */

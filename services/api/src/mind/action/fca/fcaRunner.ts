@@ -14,7 +14,7 @@ import { decideWithOneRetry } from './fcaNoResponse.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
-import { fcaTransientHistory } from './fcaCoreHistory.js';
+import { fcaTransientHistory, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -111,13 +111,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   } else if (recallContext) observerHandoff('fca', 'recall', { phase: 'start_deferred', reason: 'body_settling' });
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
-  // A transient body task: the core definitions come off the replay budget, and a changed core starts a new epoch (caCoreHistory.ts).
+  // A transient body task: the core definitions come off the replay budget, and a stale core may start a new epoch (`fcaCoreHistory.ts`).
   const transient = fcaTransientHistory(prior, catalog, ports);
-  if (transient?.forceEpoch) console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId: step.taskId, reason: transient.reason }));
+  const forceEpoch = transient?.stale && ports.history?.summarizer
+    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId) : undefined;
   const replay = ports.history ? await prepareFcaHistory(step, {
     runtime, codec: ports.history.codec, summarizer: ports.history.summarizer,
     permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, transient?.policy ?? ports.history.policy, transient?.forceEpoch && ports.history.summarizer ? { forceEpoch: true } : undefined) : null;
+  }, signal, transient?.policy ?? ports.history.policy, forceEpoch ? { forceEpoch } : undefined) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {

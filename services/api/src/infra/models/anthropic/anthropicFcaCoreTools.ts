@@ -53,8 +53,19 @@ function claimedNames(input: FcaModelInput, controls: readonly Anthropic.Tool[],
     }
     claim(tool.name);
   }
-  if (skipped.size) console.info(JSON.stringify({ event: 'fca_core_tools_conflict', taskId: input.task.id, skipped: skipped.size }));
+  logConflicts(input.task.id, skipped);
   return { names, skipped };
+}
+
+/** Known behaviour: such a tool is silently left out of the request; the log says so once per task and change (never per request). */
+const loggedConflicts = new Map<string, string>();
+function logConflicts(taskId: string, skipped: ReadonlySet<string>): void {
+  const signature = [...skipped].sort().join('|');
+  if ((loggedConflicts.get(taskId) ?? '') === signature) return;
+  loggedConflicts.delete(taskId);
+  if (loggedConflicts.size >= 200) loggedConflicts.delete(loggedConflicts.keys().next().value as string);
+  loggedConflicts.set(taskId, signature);
+  if (skipped.size) console.info(JSON.stringify({ event: 'fca_core_tools_conflict', taskId, skipped: skipped.size }));
 }
 /**
  * The tools of a transient body task's request. The top level holds `tool_open`, the control tools, the auxiliary `fca_context` (always,

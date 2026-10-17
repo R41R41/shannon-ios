@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { estimatedAnthropicTokens, anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
-import { conflictingProviderNames, fcaTransientHistory, FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS } from '../src/mind/action/fca/fcaCoreHistory.js';
-import { pinFcaCoreTools } from '../src/mind/action/fca/fcaCoreTools.js';
+import { conflictingProviderNames, fcaTransientHistory, FCA_CORE_COOLDOWN_STEPS, FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, shouldForceFcaEpoch } from '../src/mind/action/fca/fcaCoreHistory.js';
+import { pinFcaCoreTools, replayAnchor } from '../src/mind/action/fca/fcaCoreTools.js';
 import { selectFcaTools } from '../src/mind/action/fca/fcaToolState.js';
 import { FCA_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import type { FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
@@ -64,13 +64,56 @@ describe('a core that no longer matches the catalog starts a new epoch', () => {
     expect(infoEvents().filter(event => event.event === 'fca_core_tools_stale')).toEqual([{ event: 'fca_core_tools_stale', taskId: run.task.id, reason: 'definitions_changed' }]);
   }, 120_000);
 
-  it('lets a change before a round can be summarized fail at most one call, then settles', async () => {
+  it('lets a change in the first steps of an epoch fail only the calls of its cooldown (fewer than the five that stop a task), then settles', async () => {
     quiet();
-    const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, strictInput: true, steps: 12,
+    const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, strictInput: true, steps: 14,
       catalogAt: decision => decision >= 2 ? withCount(BASE_CATALOG) : BASE_CATALOG });
     expect(await run.settle()).toBe('completed');
-    expect(run.failures).toBeLessThanOrEqual(1);
+    expect(run.failures).toBeGreaterThan(0);
+    expect(run.failures).toBeLessThan(5);
+    expect(run.summaries()).toBe(1);
     expect(toolsJson(run.bodies.at(-1)!)).toContain('count');
+  }, 120_000);
+
+  it('summarizes a flapping catalog at most once for each cooldown, not at every step', async () => {
+    quiet();
+    const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, steps: 30,
+      catalogAt: decision => decision % 2 === 0 ? withCount(BASE_CATALOG) : BASE_CATALOG });
+    expect(await run.settle()).toBe('completed');
+    expect(run.summaries()).toBeGreaterThan(0);
+    expect(run.summaries()).toBeLessThanOrEqual(Math.ceil(30 / (FCA_CORE_COOLDOWN_STEPS + 1)));
+    expect(infoEvents().filter(event => event.event === 'fca_core_tools_stale')).toHaveLength(run.summaries());
+  }, 120_000);
+
+  it('forces a summary only for a stale core of a replay that still starts the epoch, after the cooldown', () => {
+    const pin = { ...pinFcaCoreTools(BASE_CATALOG), anchor: replayAnchor([{ role: 'user', content: 'head' }]), steps: FCA_CORE_COOLDOWN_STEPS };
+    const ports = { obsMode: 'transient' as const, keepBodyTools: () => true, selector: {}, history: { codec: anthropicFcaHistoryCodec } };
+    const stale = fcaTransientHistory({ fcaToolSelection: { obsMode: 'transient', core: pin } }, withCount(BASE_CATALOG), ports)!;
+    expect(stale.stale).toBe('definitions_changed');
+    const head = [{ role: 'user', content: 'head' }], bootstrap = [{ role: 'user', content: '{"kind":"fca_public_history"}' }];
+    quiet();
+    expect(shouldForceFcaEpoch(stale, head, 't')).toBe(true);
+    expect(shouldForceFcaEpoch(stale, bootstrap, 't')).toBe(false);
+    expect(shouldForceFcaEpoch({ ...stale, pin: { ...pin, steps: FCA_CORE_COOLDOWN_STEPS - 1 } }, head, 't')).toBe(false);
+    expect(shouldForceFcaEpoch({ ...stale, stale: null }, head, 't')).toBe(false);
+  });
+
+  it('does not summarize for a catalog that kept only minecraft.reflex of the body (it would pin a core without the body)', () => {
+    const pin = { ...pinFcaCoreTools(BASE_CATALOG), anchor: 'a', steps: 9 };
+    const ports = { obsMode: 'transient' as const, keepBodyTools: () => true, selector: {}, history: { codec: anthropicFcaHistoryCodec } };
+    const away = [...BASE_CATALOG.filter(tool => tool.domain !== 'minecraft_body'), definition('minecraft.reflex', 'minecraft_body')];
+    expect(fcaTransientHistory({ fcaToolSelection: { obsMode: 'transient', core: pin } }, away, ports)!.stale).toBeNull();
+    const observeOnly = [...away, definition('minecraft.observe', 'minecraft_body')];
+    expect(fcaTransientHistory({ fcaToolSelection: { obsMode: 'transient', core: pin } }, observeOnly, ports)!.stale).toBeNull();
+    expect(fcaTransientHistory({ fcaToolSelection: { obsMode: 'transient', core: pin } }, withCount(BASE_CATALOG), ports)!.stale).toBe('definitions_changed');
+  });
+
+  it('logs a skipped catalog tool once for each change, not for every request', async () => {
+    quiet();
+    const renamed = [...BASE_CATALOG.filter(tool => tool.name !== 'mc.skill-1'), definition('mc_skill-1', 'host_folder', '名前を変えた道具。')];
+    const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, steps: 3, catalogAt: decision => decision >= 2 ? renamed : BASE_CATALOG });
+    await run.settle();
+    expect(infoEvents().filter(event => event.event === 'fca_core_tools_conflict')).toHaveLength(1);
   }, 120_000);
 
   it('does not start an epoch for tools that are not core (minecraft.reflex entering and leaving) and never re-announces them', async () => {

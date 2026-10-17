@@ -1,11 +1,16 @@
 import { providerToolName } from '../../tools/toolRegistryPorts.js';
-import { readFcaCorePin, pinFcaCoreTools, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
+import { continuesFcaEpoch, readFcaCorePin, pinFcaCoreTools, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
 import { FCA_HISTORY_POLICY } from './fcaHistory.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy } from './fcaHistoryPorts.js';
 import type { FcaToolDefinition } from './fcaPorts.js';
 
 /** The least a transient task's replay may be allowed once its core definitions are taken off the budget (tokens). */
 export const FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS = 20_000;
+/**
+ * Steps an epoch must have lived before a stale core may end it by a summary (a flapping catalog would otherwise summarize every
+ * step). It stays below the five consecutive failed steps that stop a task, which is what a stale definition can cost meanwhile.
+ */
+export const FCA_CORE_COOLDOWN_STEPS = 3;
 
 /**
  * What a transient body task's history preparation needs (`SHANNON_FCA_OBS_MODE`, `fcaCoreTools.ts`), decided before the step's
@@ -14,11 +19,14 @@ export const FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS = 20_000;
  * - The core definitions are declared at the top level, so the replay's token budget (`maximumReplayTokens`) no longer holds them
  *   (as an inline definitions message it did); their estimate comes off it, or replay, core, instructions and the decision could pass
  *   the 100,000-token price step together.
- * - `forceEpoch`: the epoch's pinned core is no longer the catalog's (a body tool's schema or description changed, or a catalog tool now
- *   shares a provider name with a pinned one). The model keeps seeing the pinned definitions for the whole epoch, and the executor
- *   checks inputs against the current ones, so the next replay starts a new epoch by a real summary and the core is pinned again.
+ * - `stale`: the epoch's pinned core is no longer the catalog's (a body tool's schema or description changed, or a renamed tool's
+ *   provider name is now another tool's). The model keeps seeing the pinned definitions for the whole epoch and the executor checks
+ *   inputs against the current ones, so the replay may start a new epoch by a real summary and pin the core again
+ *   (`shouldForceFcaEpoch` decides, once the replay is known).
  */
-export interface FcaTransientHistory { policy: Partial<FcaHistoryPolicy>; forceEpoch: boolean; reason: 'definitions_changed' | 'name_conflict' | null }
+export interface FcaTransientHistory {
+  policy: Partial<FcaHistoryPolicy>; stale: 'definitions_changed' | 'name_conflict' | null; pin: FcaCorePin | undefined;
+}
 
 export interface FcaTransientPorts {
   obsMode?: FcaObsMode; keepBodyTools?(): boolean; selector?: unknown; history?: { codec: FcaHistoryCodec; policy?: Partial<FcaHistoryPolicy> };
@@ -31,7 +39,19 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
   const tokens = ports.history.codec.tokens?.(basis.tools) ?? 0;
   const base = ports.history.policy?.maximumReplayTokens ?? FCA_HISTORY_POLICY.maximumReplayTokens;
   const policy = { ...ports.history.policy, maximumReplayTokens: Math.max(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, base - tokens) };
-  return { policy, ...staleness(pin, current, catalog) };
+  return { policy, stale: pin ? staleness(pin, current, catalog) : null, pin };
+}
+
+/**
+ * Whether this replay (the epoch replay before any compaction) is to start a new epoch by a summary now: the core is stale; the replay
+ * still starts with the message the pin was made for (else a summary already began a new epoch, the failed decision after it being
+ * retried: no summary of a summary); and the epoch has lived `FCA_CORE_COOLDOWN_STEPS`. Logs content-free, once for each summary.
+ */
+export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string): boolean {
+  const { pin, stale } = state;
+  if (!stale || !pin || !continuesFcaEpoch(pin, replay) || pin.steps < FCA_CORE_COOLDOWN_STEPS) return false;
+  console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId, reason: stale }));
+  return true;
 }
 
 /**
@@ -48,14 +68,14 @@ function pinOfCheckpoint(selection: unknown, start: boolean): FcaCorePin | null 
   return pin;
 }
 
-type Staleness = Pick<FcaTransientHistory, 'forceEpoch' | 'reason'>;
-function staleness(pin: FcaCorePin | undefined, current: FcaCorePin, catalog: readonly FcaToolDefinition[]): Staleness {
-  if (!pin) return { forceEpoch: false, reason: null };
-  // Without any body tool in the catalog (the body is away) the pinned set stays: a call of it is turned away as not offered.
-  const bodyHere = current.tools.some(tool => tool.domain === 'minecraft_body');
-  if (bodyHere && pin.hash !== current.hash) return { forceEpoch: true, reason: 'definitions_changed' };
-  if (conflictingProviderNames(pin, catalog).length) return { forceEpoch: true, reason: 'name_conflict' };
-  return { forceEpoch: false, reason: null };
+type Stale = FcaTransientHistory['stale'];
+function staleness(pin: FcaCorePin, current: FcaCorePin, catalog: readonly FcaToolDefinition[]): Stale {
+  // The body is away (no skill of it is in the core any more, observe and minecraft.reflex apart): the pinned set stays, and a call of
+  // it is turned away as not offered. Pinning again would pin a core without the body.
+  const bodyHere = current.tools.some(tool => tool.domain === 'minecraft_body' && tool.name !== 'minecraft.observe');
+  if (!bodyHere) return null;
+  if (pin.hash !== current.hash) return 'definitions_changed';
+  return conflictingProviderNames(pin, catalog).length ? 'name_conflict' : null;
 }
 /**
  * The provider names a catalog tool shares with a pinned core tool of another name that the catalog no longer has: pinning again

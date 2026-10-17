@@ -36,7 +36,7 @@ const size = (value: unknown): number => JSON.stringify(value).length;
  * round too long by itself is replayed for its next step as a clipped public epoch (`clippedReplay`).
  */
 export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec,
-  overrides: Partial<FcaHistoryPolicy> = {}, settling = false, forceEpoch = false): FcaHistoryPlan {
+  overrides: Partial<FcaHistoryPolicy> = {}, settling = false, forceEpoch?: (replay: readonly unknown[]) => boolean): FcaHistoryPlan {
   const policy = policyOf(overrides);
   const projected = projectedRounds(window, codec);
   const history = epochReplay(window, codec);
@@ -44,8 +44,8 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
   // While a compaction is settling (a batch was just installed this step), a bootstrap still above its share is compacted again,
   // so that one summary step leaves room for several native rounds (`retainedRounds`).
   const unsettled = settling && unsettledBootstrap(window, projected.length, recent, policy);
-  // A forced epoch (prepareFcaHistory) summarizes the older rounds even when the replay fits; it needs one round to summarize and one to keep.
-  const forced = forceEpoch && window.rounds.length >= 2;
+  // A forced epoch (`prepareFcaHistory`) summarizes the older rounds even when the replay fits; it needs one round to summarize and one to keep.
+  const forced = window.rounds.length >= 2 && forceEpoch?.(history) === true;
   if (!forced && window.rounds.length <= policy.maximumRounds && replayFits(history, codec, policy) && !unsettled) {
     const summary = window.summary?.template ?? null;
     return { kind: 'ready', replay: { history, summary, summaryText: summary ? renderedCompaction(summary, 'text') : '' } };
@@ -269,12 +269,12 @@ function summaryFallback(step: TaskStep, ports: FcaHistoryPorts, policy: FcaHist
 }
 
 /**
- * Uses the current action permit; derived summary writes never enqueue work or retry a model call. orceEpoch makes the first plan
- * summarize (a real summary, never a clipped replay) so that the replay starts a new epoch: the only way the tools a signed prefix
- * binds can change (caCoreTools.ts).
+ * Uses the current action permit; derived summary writes never enqueue work or retry a model call. `forceEpoch` (asked with the epoch replay,
+ * before any compaction) makes the first plan summarize (a real summary, never a clipped replay) so that the replay starts a new epoch: the only
+ * way the tools a signed prefix binds can change (`fcaCoreTools.ts`).
  */
 export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, signal: AbortSignal,
-  overrides: Partial<FcaHistoryPolicy> = {}, options: { forceEpoch?: boolean } = {}): Promise<FcaHistoryReplay> {
+  overrides: Partial<FcaHistoryPolicy> = {}, options: { forceEpoch?: (replay: readonly unknown[]) => boolean } = {}): Promise<FcaHistoryReplay> {
   const policy = policyOf(overrides);
   const checked = async () => {
     signal.throwIfAborted();
@@ -287,7 +287,8 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     const window = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
     if (!window) throw new Error('FCA_TASK_NOT_FOUND');
     // A second batch may follow only to settle the bootstrap, and only while another batch remains (`maximumBatches`).
-    const plan = planFcaHistory(window, ports.codec, policy, batches > 0 && batches + 1 < policy.maximumBatches, batches === 0 && options.forceEpoch === true);
+    const settling = batches > 0 && batches + 1 < policy.maximumBatches;
+    const plan = planFcaHistory(window, ports.codec, policy, settling, batches === 0 ? options.forceEpoch : undefined);
     if (plan.kind === 'ready') {
       if (batches > 0) observerHandoff('compact', 'context', { phase: 'history_replay', compactedBatches: batches });
       const clippedMessages = plan.replay.clippedMessages;
