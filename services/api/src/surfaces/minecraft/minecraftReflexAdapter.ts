@@ -18,6 +18,7 @@ import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
+import { stepMetrics } from './minecraftTaskMetrics.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
@@ -103,6 +104,8 @@ export function createMinecraftTaskBody(parts: {
   /** Syzygy ADR-0011 stage 2 (`SHANNON_MINECRAFT_FAST_JUDGMENT`): danger is judged without an image (`minecraftFastJudgment.ts`). */
   fastJudgment?: boolean;
   log?(line: string): void;
+  /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
+  metricsLog?(line: string): void;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor();
@@ -130,6 +133,9 @@ export function createMinecraftTaskBody(parts: {
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
   const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
   const log = parts.log ?? ((line: string) => console.info(line));
+  // Measurement only (observation redesign P1): it reads this body's frames and writes journal lines; no decision depends on it.
+  const metrics = stepMetrics(step, now, parts.metricsLog);
+  const measured = (work: () => void) => { try { work(); } catch { /* measuring never fails a step */ } };
   // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
   // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
@@ -332,6 +338,7 @@ export function createMinecraftTaskBody(parts: {
       && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal, entryFacts);
   };
   const poll = () => {
+    if (!closed) measured(() => { const id = bound(), frame = id ? control.observe(id) : null; if (frame) metrics.sample(frame); });
     if (monitoring || closed) return;
     const job = tick(); monitoring = job;
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
@@ -372,7 +379,9 @@ export function createMinecraftTaskBody(parts: {
       const situation = minecraftSituation(observation, { ...pace, recentIdleWaits });
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace, ...skills.fields };
+      const summary = observation ? minecraftObservationSummary(observation) : null;
+      measured(() => metrics.context(observation, summary, skills.fields));
+      return { revision, observation: summary, pace, ...skills.fields };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
@@ -389,6 +398,7 @@ export function createMinecraftTaskBody(parts: {
     noteCall(call, operationId) {
       decided = true;
       governor.decided(step.taskId, now());
+      measured(() => metrics.noteCall(call.name, call.input, gistTools));
       if (!call.name.startsWith('mc.')) return;
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
       if (!active && !closed) noteGistFollowed(call.name);
@@ -405,6 +415,7 @@ export function createMinecraftTaskBody(parts: {
       recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
     },
     async close() {
+      measured(() => metrics.flush());
       if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
       if (monitoring) await monitoring.catch(() => {}); if (active) await active;
       if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
@@ -416,7 +427,8 @@ export function createMinecraftTaskBody(parts: {
   // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
-    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}) }),
+    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
+      ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;

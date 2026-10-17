@@ -19,6 +19,7 @@ import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKn
 import { connectionFailedBeforeResponse, providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
 import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
+import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -230,6 +231,7 @@ export class AnthropicFcaModel implements FcaModel {
     await this.options.recordUsage(usage);
     if (!usage.usageComplete) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
     if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }; }
+    if (execution) execution.modelMetrics = decisionRequestMetrics(history, turn, usage, built);
     validateHaikuCacheUsage(message.usage);
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');

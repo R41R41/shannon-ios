@@ -11,6 +11,7 @@ import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
 import { decideWithOneRetry } from './fcaNoResponse.js';
+import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
@@ -96,6 +97,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
+  const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior);
   const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
   // The recall's deterministic part runs on the API's one thread. Minecraft run 6 (2026-10-14): started while a body had just logged
   // in, it blocked the thread while a stop was being handed over. Pending I/O (the body's polls) goes first; while the body is still
@@ -107,10 +109,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   } else if (recallContext) observerHandoff('fca', 'recall', { phase: 'start_deferred', reason: 'body_settling' });
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
-  const replay = ports.history ? await prepareFcaHistory(step, {
-    runtime, codec: ports.history.codec, summarizer: ports.history.summarizer,
+  const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
+    runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, ports.history.policy) : null;
+  }, signal, ports.history!.policy)) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {
@@ -122,14 +124,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       history: replay?.history ?? step.snapshot.history, tools: catalog };
   }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
-  const selection = ports.selector ? await selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector, step.scopeKey, signal,
-    { keepBodyTools: ports.keepBodyTools?.() === true }) : null;
+  const selection = ports.selector ? await metrics.timed('selectorMs', () => selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector!,
+    step.scopeKey, signal, { keepBodyTools: ports.keepBodyTools?.() === true })) : null;
   if (selection) {
     input.tools = selectedFcaTools(catalog, selection);
   }
   await checked();
   const recall = recallContext ? await observeAsync('recall', { phase: 'decision_packet', maximumWaitMs: recallContext.waitMilliseconds },
-    () => ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds }),
+    () => metrics.timed('recallMs', () => ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds })),
     value => ({ status: value.status, itemCount: value.items.length, sourceCount: value.sourceIds.length })) : undefined;
   if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
@@ -156,7 +158,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
     ...(sharedContext ? { sharedContext } : {}),
     ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) };
-  const output = await decideWithOneRetry(() => ports.model.decide(request, signal), { signal, recheck: checked, delay: ports.decisionRetryDelayMs,
+  const output = await decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(request, signal)), { signal, recheck: checked,
+    delay: ports.decisionRetryDelayMs,
     log: line => console.warn(`${line} task=${step.taskId}`) }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
     throw error;
@@ -185,6 +188,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
       progress({ operationId, tool: call.name, status: 'running' });
+      const toolStarted = performance.now();
       const result = await observeAsync('tools', { ...provenance, operationId, tool }, async () => {
         const staleResult = () => toolFailure('failed', '身体の状態が変わりました。最新の観測から判断し直してください。', { retryable: false });
         if (bodyStale) return staleResult();
@@ -209,6 +213,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           ...(ports.observeTasks ? { observed: ports.observeTasks } : {}) });
       },
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { progress({ operationId, tool: call.name, status: 'unknown' }); ports.evidence?.unknown(step, call); throw error; });
+      metrics.tool(call.name, performance.now() - toolStarted);
       progress({ operationId, tool: call.name, status: result.ok ? 'received' : 'failed', ...(result.ok && result.readReceipt ? { read: result.readReceipt } : {}), ...(result.ok && call.name === 'task.send' && call.input && typeof call.input === 'object' && (call.input as Record<string, unknown>).id === step.snapshot.task.parentId && typeof (call.input as Record<string, unknown>).message === 'string' ? { report: { text: String((call.input as Record<string, unknown>).message) } } : {}) });
       if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
       ports.body?.noteResult?.(call, result);
@@ -254,9 +259,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...metrics.checkpoint(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
+  metrics.emit();
   if (saved.task.phase === 'waiting') {
     observerHandoff('store', 'wait', { phase: saved.task.phase });
     observeSync('wait', { phase: 'checkpoint', measured: 'state' }, () => undefined, () => ({ phase: saved.task.phase }));

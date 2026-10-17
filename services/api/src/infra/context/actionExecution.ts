@@ -5,6 +5,9 @@ export interface ActionExecution {
   /** Transient acknowledgement of this step's model request; never persisted or exposed. */
   modelOutcome?:'unknown'|'acknowledged';
   modelUsage?:{inputTokens:number;outputTokens:number};
+  /** Content-free measurement of the decision's request (`fca_decision_metrics`): estimates and the provider's usage counts. Never persisted. */
+  modelMetrics?:{storedTokens:number;tailTokens:number;inputNew:number;inputRead:number;inputWrite:number;outputTokens:number;
+    inputTransformations:number};
   /**
    * An FCA step asked its model for its decision (`fcaRunner.ts`). Before that, a step has run only internal work and model calls
    * whose results it keeps (recall, tool selection, history summaries): a hold there may be retried (`heldBeforeAnyEffect`).
