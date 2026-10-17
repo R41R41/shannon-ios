@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TaskSource, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
-import { FCA_SOURCE_BASE_MS, FCA_SOURCE_WALK_LOG_MS } from '../src/mind/action/fca/fcaConversationSources.js';
+import { FCA_SOURCE_BASE_MS, FCA_SOURCE_WALK_LOG_MS, distinctReads } from '../src/mind/action/fca/fcaConversationSources.js';
 import { noteProvenanceEdit } from '../src/mind/memory/provenanceEdits.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
@@ -246,39 +246,52 @@ describe('what the base does not trust', () => {
     expect(w.visible.walks!().partial! - before.partial!).toBe(1);
   });
 
-  it('asks at least every receipt, and every time of it, once the base is older than a verdict (not one representative)', () => {
+  it('asks every time a receipt was consulted once the base is older than a verdict: a loss at the second time is seen', () => {
     const w = world();
-    let clock = 0; const asked: string[] = [];
+    const skill = w.f.skillSources[0]!;
+    let clock = 0, lost: string | null = null; const asked: Array<[string, string]> = [];
     const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
       ownerScope: 'owner', ownerAlone: w.f.ownerAlone, clock: () => clock,
-      readSourceVisible: (scope, id, at, shared) => { asked.push(JSON.stringify([id, at])); return w.f.readSourceVisible(scope, id, at, shared); } });
-    expect(guard.sources('owner', w.task, w.rows)).toBe(true);
-    const recorded = new Set(asked); asked.length = 0;
-    clock = 2_000; // Younger than a verdict: one time per receipt.
-    expect(guard.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(true);
-    const young = new Set(asked); asked.length = 0;
-    clock = 20_000; // Older: every time the walk consulted (the fold keeps one time per receipt, so this is the safety net, not the usual case).
-    expect(guard.sources('owner', w.task, w.next(2, [w.pool[201]!]))).toBe(true);
-    const old = new Set(asked);
-    for (const key of young) expect(old.has(key)).toBe(true);
-    for (const key of recorded) expect(old.has(key)).toBe(true);
+      readSourceVisible: (scope, id, at, shared) => { asked.push([id, at]); return !(id === skill && at === lost) && w.f.readSourceVisible(scope, id, at, shared); } });
+    // A recalled task experience that read the skill (consulted at its own time) beside a row that read it directly (at the row's time):
+    // the walk consults the skill at two times, and the first asked is the representative.
+    const direct = memoryRow('m:direct', new Date(Date.parse(w.rows.at(-1)!.observedAt) + 5_000).toISOString(), [w.pool[3]!], [skill]);
+    const rows = [...w.rows, memoryRow('m:task', new Date(Date.parse(w.rows.at(-1)!.observedAt) + 1_000).toISOString(), [...w.f.tasks]), direct];
+    expect(guard.sources('owner', w.task, rows)).toBe(true);
+    const times = [...new Set(asked.filter(([id]) => id === skill).map(([, at]) => at))];
+    expect(times.length).toBeGreaterThanOrEqual(2); // The fixture must hold the case.
+    lost = times[1]!;
+    const extra = (index: number) => memoryRow(`m:extra:${index}`, new Date(Date.parse(direct.observedAt) + index * 10_000).toISOString(), [w.pool[200 + index]!]);
+    clock = 2_000; // Younger than a verdict: only the representative (the first time) is asked, as before, so the loss is not seen yet.
+    const young = guard.walks!();
+    expect(guard.sources('owner', w.task, [...rows, extra(1)])).toBe(true);
+    expect(guard.walks!().partial! - young.partial!).toBe(1);
+    clock = 20_000; // Older: every distinct time is asked, so the loss is seen and the whole provenance is walked (and hidden).
+    const old = guard.walks!();
+    expect(guard.sources('owner', w.task, [...rows, extra(1), extra(2)])).toBe(false);
+    expect(guard.walks!().walked - old.walked).toBe(1);
   });
-  it('keeps the base\'s list of receipts to one per source and time over many extensions', () => {
+
+  it('lists each receipt exactly once per source and time, the later answer winning (distinctReads)', () => {
+    const read = (id: string, at: string, visible: boolean) => [id, at, visible] as const;
+    const merged = distinctReads([read('a', 't1', true), read('b', 't1', true), read('a', 't1', false), read('a', 't2', true), read('b', 't1', true)]);
+    expect(merged).toEqual([read('a', 't1', false), read('b', 't1', true), read('a', 't2', true)]);
+  });
+
+  it('keeps the base\'s receipts to exactly one per source and time over many extensions', () => {
     const w = world();
-    let asked = 0, clock = 0;
+    let clock = 0; const asked = new Set<string>();
     const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
       ownerScope: 'owner', ownerAlone: w.f.ownerAlone, clock: () => clock,
-      readSourceVisible: (scope, id, at, shared) => { asked += 1; return w.f.readSourceVisible(scope, id, at, shared); } });
+      readSourceVisible: (scope, id, at, shared) => { asked.add(JSON.stringify([id, at])); return w.f.readSourceVisible(scope, id, at, shared); } });
     expect(guard.sources('owner', w.task, w.rows)).toBe(true);
-    const perCheck: number[] = [];
     for (let step = 1; step <= 8; step++) {
-      clock += 6_000 / 2; // A new row each 3 s: every check is on a base older than a verdict after the second.
-      const at = asked;
-      expect(guard.sources('owner', w.task, w.next(step, [w.pool[200 + step]!]))).toBe(true);
-      perCheck.push(asked - at);
+      clock += 3_000;
+      expect(guard.sources('owner', w.task, w.next(step, [w.pool[200 + step]!], [w.f.skillSources[0]!, w.f.skillSources[1]!]))).toBe(true);
     }
-    // The re-asked receipts of the last checks do not grow with the number of extensions.
-    expect(perCheck.at(-1)!).toBeLessThanOrEqual(perCheck.at(-3)!);
+    // Every receipt the walks asked, once: the list is the distinct set, however often it was extended and re-asked.
+    expect(asked.size).toBeGreaterThan(0);
+    expect(guard.walks!().baseReads).toBe(asked.size);
   });
 });
 

@@ -345,11 +345,11 @@ export function createFcaSourceGuard(parts: {
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string, via: FcaWalkCaller = 'task') => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId, via));
-  }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts }) });
+  }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: [...bases.values()].reduce((sum, base) => sum + base.reads.length, 0) }) });
 }
 
 /** Every receipt once per source and time (the later answer wins), so a base's list does not grow with each extension. */
-function distinctReads(reads: ReadonlyArray<readonly [string, string, boolean]>): ReadonlyArray<readonly [string, string, boolean]> {
+export function distinctReads(reads: ReadonlyArray<readonly [string, string, boolean]>): ReadonlyArray<readonly [string, string, boolean]> {
   return [...new Map(reads.map(read => [JSON.stringify([read[0], read[1]]), read] as const)).values()];
 }
 
