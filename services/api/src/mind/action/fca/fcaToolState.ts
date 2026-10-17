@@ -34,7 +34,8 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
     && new Set(result.names).size === result.names.length && ['jev', 'fallback', 'catalog'].includes(result.source);
   const fallback = !valid || result.source === 'fallback';
   const chosen = fallback ? fallbackFcaTools(catalog, previous, options.keepBodyTools === true) : new Set(result.names);
-  const wanted = options.keepBodyTools && !fallback ? keptBodyTools(chosen, catalog, previous) : chosen;
+  // A fallback menu adds companions inside its own definition bound (`fallbackFcaTools`); a selector's answer gets them whole.
+  const wanted = fallback ? chosen : withToolCompanions(options.keepBodyTools ? keptBodyTools(chosen, catalog, previous) : chosen, catalog);
   observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: fallback ? 'fallback' : result.source, selectedCount: wanted.size });
   // A fallback menu is asked again at the next decision instead of being kept until the input changes.
   return { version: 1, key, inputKey, names: catalog.filter(tool => wanted.has(tool.name)).map(tool => tool.name),
@@ -60,15 +61,35 @@ export function fallbackFcaTools(catalog: readonly ShannonToolDefinition[], prev
   const bodyTools = body ? catalog.filter(tool => tool.domain === 'minecraft_body').map(tool => tool.name) : [];
   const chosen = new Set<string>();
   let used = 0;
-  for (const name of [...core, ...previous?.names ?? [], ...bodyTools]) {
+  const add = (name: string): void => {
     const tool = byName.get(name);
-    if (!tool || chosen.has(name)) continue;
+    if (!tool || chosen.has(name)) return;
     const size = JSON.stringify({ name: tool.name, description: tool.description, input: tool.input }).length;
-    if (used + size > FCA_FALLBACK_DEFINITION_CHARACTERS) continue;
+    if (used + size > FCA_FALLBACK_DEFINITION_CHARACTERS) return;
     chosen.add(name);
     used += size;
-  }
+  };
+  for (const name of [...core, ...previous?.names ?? [], ...bodyTools]) add(name);
+  // Companions of what was chosen come last, and only while they fit the bound.
+  for (const name of toolCompanions(chosen)) add(name);
   return chosen;
+}
+
+/**
+ * Tools that make one procedure and are offered together (Minecraft run 14, 2026-10-17: `mc.start-smelting` and `mc.check-furnace`
+ * were in the selection but `mc.withdraw-from-furnace` was not, so taking the result out cost a `tool_open` step). When any tool of
+ * a group is selected, the whole group is. Names are the body catalog's own; a name the catalog lacks is skipped.
+ */
+export const FCA_TOOL_COMPANIONS: readonly (readonly string[])[] = Object.freeze([
+  Object.freeze(['mc.start-smelting', 'mc.check-furnace', 'mc.withdraw-from-furnace']),
+]);
+function toolCompanions(chosen: ReadonlySet<string>): string[] {
+  return FCA_TOOL_COMPANIONS.filter(group => group.some(name => chosen.has(name))).flat().filter(name => !chosen.has(name));
+}
+function withToolCompanions(wanted: Set<string>, catalog: readonly ShannonToolDefinition[]): Set<string> {
+  const known = new Set(catalog.map(tool => tool.name));
+  for (const name of toolCompanions(wanted)) if (known.has(name)) wanted.add(name);
+  return wanted;
 }
 
 /**

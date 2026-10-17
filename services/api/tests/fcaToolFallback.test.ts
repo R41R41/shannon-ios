@@ -52,3 +52,42 @@ describe('a fallback tool selection is bounded (Minecraft run 10)', () => {
     expect((await selectFcaTools(input, catalog, undefined, whole, 'owner', signal)).names).toHaveLength(catalog.length);
   });
 });
+
+describe('the smelting trio is offered whole (Minecraft run 14: withdraw-from-furnace was missing and cost a tool_open step)', () => {
+  const trio = ['mc.start-smelting', 'mc.check-furnace', 'mc.withdraw-from-furnace'];
+  const withTrio = [...catalog, ...trio.map(name => tool(name, 'minecraft_body'))];
+  const withInput = { ...input, tools: withTrio } as unknown as FcaModelInput;
+  const picked = async (names: string[], keepBodyTools = false) => (await selectFcaTools(withInput, withTrio, undefined, choosing(names), 'owner', signal, { keepBodyTools })).names;
+
+  it('adds the other two when any one of the three is selected, in catalog order, and leaves a selection without them alone', async () => {
+    for (const one of trio) expect(await picked(['task.list', one])).toEqual(['task.list', ...trio]);
+    expect(await picked(['task.list', 'mc.start-smelting', 'mc.check-furnace'])).toEqual(['task.list', ...trio]);
+    expect(await picked(['task.list', 'mc.move-to'], true)).toEqual(['task.list', 'mc.move-to']);
+    expect(await picked(['task.list', 'mc.check-furnace'], true)).toEqual(['task.list', ...trio]);
+  });
+
+  it('skips a companion the catalog does not have', async () => {
+    const partial = [...catalog, tool('mc.start-smelting', 'minecraft_body'), tool('mc.check-furnace', 'minecraft_body')];
+    const chosen = await selectFcaTools({ ...input, tools: partial } as unknown as FcaModelInput, partial, undefined, choosing(['mc.start-smelting']), 'owner', signal);
+    expect(chosen.names).toEqual(['mc.start-smelting', 'mc.check-furnace']);
+  });
+
+  it('in a fallback menu adds the companions of the previous selection only while the definition bound holds', async () => {
+    const previous = await selectFcaTools(withInput, withTrio, undefined, choosing(['task.list', 'mc.start-smelting']), 'owner', signal, { keepBodyTools: true });
+    const fallback = await selectFcaTools({ ...withInput, messages: [{ id: 'm', text: 'new' }] } as unknown as FcaModelInput, withTrio, { ...previous, refresh: true }, timedOut, 'owner', signal, { keepBodyTools: true });
+    expect(fallback.names).toEqual(expect.arrayContaining(trio));
+    const characters = fallback.names.reduce((sum, name) => {
+      const item = withTrio.find(entry => entry.name === name)!;
+      return sum + JSON.stringify({ name: item.name, description: item.description, input: item.input }).length;
+    }, 0);
+    expect(characters).toBeLessThanOrEqual(FCA_FALLBACK_DEFINITION_CHARACTERS);
+    // A catalog whose other body tools fill the bound first: a companion that does not fit stays out.
+    const heavy = [...catalog.slice(0, 4), ...Array.from({ length: 80 }, (_, index) => tool(`mc.heavy-${index}`, 'minecraft_body', long)), ...trio.map(name => tool(name, 'minecraft_body', long))];
+    const stuffed = await selectFcaTools({ ...input, tools: heavy } as unknown as FcaModelInput, heavy, { version: 1, key: 'x', inputKey: '', names: ['mc.start-smelting'], opened: [], refresh: true, recentResults: [] },
+      timedOut, 'owner', signal, { keepBodyTools: true });
+    expect(stuffed.names.reduce((sum, name) => {
+      const item = heavy.find(entry => entry.name === name)!;
+      return sum + JSON.stringify({ name: item.name, description: item.description, input: item.input }).length;
+    }, 0)).toBeLessThanOrEqual(FCA_FALLBACK_DEFINITION_CHARACTERS);
+  });
+});
