@@ -18,7 +18,8 @@ export class TaskHistoryStore {
   /**
    * A committed step's round. A step closed as `continue` with nothing in its history (a retry after a provider 5xx, a held step: nothing
    * ran) adds no round: an empty round is not a native round, `FcaHistoryCodec.project` cannot project it, and every later replay
-   * would stop at FCA_HISTORY_INCOMPLETE_ROUND. Any other disposition keeps its round, so a terminal commit's status is still recorded.
+   * would stop at FCA_HISTORY_INCOMPLETE_ROUND. Any other disposition still writes its row even when empty (a fail row is needed by the
+   * evidence JOINs on step_id and for `committed_status`); `window()` leaves every empty row out, so no reader sees it as a round.
    */
   appendStep(step: TaskStep, entries: string, disposition: string, at: string, status: TaskStatus): void {
     if (disposition === 'continue' && entries === '[]') return;

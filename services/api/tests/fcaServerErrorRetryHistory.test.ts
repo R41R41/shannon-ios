@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { createTaskRuntimeWiring, rejectedTaskReport } from '../src/wiring/taskRuntimeWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
-import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 
 /**
  * A step whose model call got an HTTP 5xx is closed as `continue` and run once more (`retryAfterServerError`). That commit used to
@@ -58,14 +59,15 @@ describe('a provider server error is retried without leaving a broken history ro
     expect(rounds.every(entries => entries.length > 0)).toBe(true);
     // The third request replays the tool round byte for byte (append-only), and nothing before it.
     const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, rounds[0]!.length);
-    expect(JSON.parse(JSON.stringify(replayed))).toMatchObject(JSON.parse(JSON.stringify(rounds[0])));
+    expect(JSON.stringify(withoutCacheMarkers(replayed))).toBe(JSON.stringify(rounds[0]));
   });
 
   it('resumes a task whose history already holds empty rounds written by the old retry (production rows), without editing them', async () => {
     let seed: (stepId: string) => void = () => {};
     const f = fixture([[call('task_list', 'list-1')], [call('task_list', 'list-2')]], index => { if (index === 1) seed('old-retry-2'); });
+    // As the old retry wrote it: the committed task status of a continue step ('queued') and the step's sources as stored ('[]' with none).
     seed = stepId => { f.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json) VALUES(?,?,'[]',?,'queued','[]')`)
-      .run(f.child.id, stepId, '2026-10-17T09:00:00.000Z'); };
+      .run(f.child.id, `${stepId}-${randomUUID()}`, '2026-10-17T09:00:00.000Z'); };
     seed('old-retry-1'); // before the first real round, as a 5xx retry left it; a second one lands between two real rounds
     await f.run();
     expect(f.phase()).toBe('completed');
@@ -74,9 +76,9 @@ describe('a provider server error is retried without leaving a broken history ro
     const stored = f.rounds();
     expect(stored.filter(entries => entries.length === 0)).toHaveLength(2);
     expect(stored.filter(entries => entries.length > 0)).toHaveLength(3);
-    const first = stored.find(entries => entries.length > 0)!;
-    const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, first.length);
-    expect(JSON.parse(JSON.stringify(replayed))).toMatchObject(JSON.parse(JSON.stringify(first)));
+    const [first, second] = stored.filter(entries => entries.length > 0) as [unknown[], unknown[]];
+    const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, first.length + second.length);
+    expect(JSON.stringify(withoutCacheMarkers(replayed))).toBe(JSON.stringify([...first, ...second]));
   });
 
   it('retries a 529 the same way', async () => {

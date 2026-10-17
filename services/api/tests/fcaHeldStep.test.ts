@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { heldBeforeAnyEffect } from '../src/wiring/taskRuntimeWiring.js';
+import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { currentActionExecution } from '../src/infra/context/actionExecution.js';
 import type { FcaBodyLifecycle, FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js';
@@ -16,7 +17,7 @@ const at = '2026-10-14T09:49:17.000Z', closes: Array<() => Promise<void> | void>
 afterEach(async () => { vi.restoreAllMocks(); for (const close of closes.splice(0).reverse()) await close(); });
 
 type Hold = 'selection' | 'decision' | 'none';
-function fixture(options: { holdAt: Hold; bodyActs?: boolean }) {
+function fixture(options: { holdAt: Hold; bodyActs?: boolean; history?: boolean }) {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const h = actionHarness(() => at); migrateAgentTasks(h.db);
@@ -39,7 +40,7 @@ function fixture(options: { holdAt: Hold; bodyActs?: boolean }) {
       decisions += 1; hold('decision');
       return { decision: { kind: 'complete', summary: 'Done' }, history: [{ role: 'assistant', content: 'done' }] };
     }, toolResults: results => ({ role: 'user', results }) },
-    stepPorts: () => ({ selector, executionAllowed: () => !holding, ...(options.bodyActs !== undefined ? { body: body() } : {}) }),
+    stepPorts: () => ({ selector, executionAllowed: () => !holding, ...(options.history ? { history: { codec: anthropicFcaHistoryCodec } } : {}), ...(options.bodyActs !== undefined ? { body: body() } : {}) }),
   });
   closes.push(() => driver.close(), () => h.close());
   const root = driver.runtime.ensureRoot('owner');
@@ -60,6 +61,19 @@ describe('a step held before its decision with nothing sent outside (c)', () => 
     f.release();
     await f.driver.tick(); await f.driver.drain();
     expect(f.driver.runtime.get('owner', f.task.id)).toMatchObject({ phase: 'completed', summary: 'Done' });
+  });
+
+  it('stores no empty history round for the held step, so the next step replays a valid history and completes', async () => {
+    const f = fixture({ holdAt: 'selection', history: true });
+    const stored = () => f.h.db.prepare('SELECT entries_json FROM fca_task_history WHERE task_id=?').all(f.task.id) as Array<{ entries_json: string }>;
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', f.task.id)?.phase).toBe('ready');
+    expect(stored()).toEqual([]); // the retry (`retryHeldStep`) committed `continue` with nothing: no round
+    f.release();
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', f.task.id)).toMatchObject({ phase: 'completed', summary: 'Done' });
+    expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join('\n')).not.toContain('FCA_HISTORY_INCOMPLETE_ROUND');
+    expect(stored().map(row => JSON.parse(row.entries_json) as unknown[]).every(entries => entries.length > 0)).toBe(true);
   });
 
   it('stays unknown when something reached the body before the hold (a reflex)', async () => {
