@@ -8,6 +8,8 @@ import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRunti
 import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
+import { FcaWalkTiming, type FcaWalkCaller } from './fcaWalkTiming.js';
+import { provenanceEdits } from '../../memory/provenanceEdits.js';
 import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers, foldedProvenanceResidual } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
@@ -43,21 +45,22 @@ export const FCA_SOURCE_VERDICT_MS = 5_000;
  * what it did not check. Production run 14 (2026-10-17, Sonnet): `event loop blocked` 204 times in 30 min (median 3.3 s) while a
  * task ran, growing with its provenance; every 5 s the base expired and the whole provenance was walked again.
  *
- * Why longer is as safe as 5 s: a base is used only under the same companion state version, and what a walk judges is a function of
- * that state plus stores that never lose a source by themselves. A forget, a rejection or a correction is a
- * `memory-control-upserted` event, which is a new version (`state.ts`); what it withholds is derived from the controls at each check
- * ("nothing is deleted and nothing is stored", `MemoryWithholding`), so every withheld source follows a version change. The
- * conversation's turns and knowledge documents are never deleted; a voice summary is deleted only after a forget reached it (the
- * version has changed by then) or replaced by a newer one. The one thing that can change without a version, a read receipt's
- * availability (a document or skill that went away), is asked again at every use of a base (`readsUnchanged`), who can hear is
- * asked on every call, and the base keeps the time of its own full walk, so it is never extended past this window.
+ * Why longer is as safe as 5 s: a base is used only while three things are unchanged since its walk, and each is checked in code.
+ * (1) The companion state version. A forget, a rejection or a correction is a memory-control-upserted event, which is a new
+ * version (state.ts); what it withholds is derived from the controls at each check ("nothing is deleted and nothing is stored",
+ * MemoryWithholding), so every withheld source follows a version change. (2) The provenance edit count (provenanceEdits.ts):
+ * the writes that change what a remembered id stands for without a version (a task's or a touch's experience row rewritten in
+ * place with more sources, a knowledge document grown or retired, a voice summary replaced or dropped) each bump it, so a base
+ * never rests on rows edited after its walk. Conversation turns are otherwise only appended, never deleted. (3) The read
+ * receipts the walk consulted (a document or skill that went away): asked again at every use, every distinct receipt once the base
+ * is older than a verdict (eadsUnchanged). Who can hear is asked on every call, and a base keeps the time of its own full walk,
+ * so it is never extended past this window.
  */
 export const FCA_SOURCE_BASE_MS = 30_000;
 /** A walk of at least this long is named, content-free, in the journal (`Shannon FCA source walk`). */
 export const FCA_SOURCE_WALK_LOG_MS = 100;
 const FCA_SOURCE_VERDICTS_KEPT = 256;
-/** Who asked for a check, for the slow-walk line only: a closed set of words, never task or memory content. */
-export type FcaWalkCaller = 'step' | 'tool' | 'body' | 'evidence' | 'memory' | 'conversation' | 'task' | 'progress' | 'skill_read' | 'other';
+export type { FcaWalkCaller } from './fcaWalkTiming.js';
 /**
  * How long the owner's remembered turns, as every check of one moment needs them (what is withheld is derived from them, and
  * what he keeps secret), are loaded once and shared while his companion state keeps the same version. 2026-10-12, after the
@@ -136,12 +139,15 @@ export function createFcaSourceGuard(parts: {
     return { check, list: () => [...seen.values()] };
   };
   /** Still the same answers for every receipt a stored verdict consulted, under the current snapshot. */
-  const readsUnchanged = (epoch: Epoch, scopeKey: string, reads: Verdict['reads']): boolean => {
+  const readsUnchanged = (epoch: Epoch, scopeKey: string, reads: Verdict['reads'], every = false): boolean => {
     if (!reads.length) return true;
     const again = recordedReads(epoch, scopeKey);
     // Under the same state version a receipt's answer differs by its time only through memory controls, which did not change; what
     // can change is whether the source still exists. One time per receipt is asked again: one it was visible at, if any, so that a
     // source that went away is seen at once. (A receipt that was invisible at every time stays so until the verdict expires: closed.)
+    // A base older than a verdict (`every`) asks every distinct receipt at every time it was consulted: the longer window must not
+    // widen the gap of one representative time.
+    if (every) return reads.every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
     const representative = new Map<string, readonly [string, string, boolean]>();
     for (const read of reads) if (!representative.has(read[0]) || (read[2] && !representative.get(read[0])![2])) representative.set(read[0], read);
     return [...representative.values()].every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
@@ -156,11 +162,12 @@ export function createFcaSourceGuard(parts: {
    * it consulted unchanged, who can hear asked again) walks only what the base did not check. Every check of the new provenance is
    * then either made now or was passed by the base's walk, at the same or an earlier time, under the same state.
    */
-  type Base = Verdict & { folded: readonly TaskSource[] };
+  type Base = Verdict & { folded: readonly TaskSource[]; edits: number };
   const bases = new Map<string, Base>();
-  const usableBase = (base: Base | undefined, epoch: Epoch, scopeKey: string, version: number, at: number): Base | null => {
-    if (!base || base.version !== version || at < base.at || at - base.at >= baseWindow) return null;
-    return readsUnchanged(epoch, scopeKey, base.reads) ? base : null;
+  /** The base if still usable: same version, no provenance edit since its walk (`provenanceEdits.ts`), in its window, receipts unchanged. */
+  const usableBase = (base: Base | undefined, unchanged: (reads: Verdict['reads'], every: boolean) => boolean, version: number, at: number): Base | null => {
+    if (!base || base.version !== version || base.edits !== provenanceEdits() || at < base.at || at - base.at >= baseWindow) return null;
+    return unchanged(base.reads, at - base.at >= FCA_SOURCE_VERDICT_MS) ? base : null;
   };
   /** Once per task, after the current check (never inside a caller's transaction): its parent is told, then it is stopped. */
   const stopCapped = (scopeKey: string, task: TaskView) => {
@@ -179,10 +186,19 @@ export function createFcaSourceGuard(parts: {
   };
   /**
    * With `peek`, undefined where the answer would need a walk: no walk is made and no verdict remembered or counted (a task over the
-   * provenance cap is still stopped first, as `sources` does); else as `sources`.
+   * provenance cap is still stopped first, as `sources` does); else as `sources`. Timed as a whole and by part, and named when slow.
    */
   const decide = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: boolean,
     via: FcaWalkCaller = 'other'): boolean | undefined => {
+    const timing = new FcaWalkTiming(monotonic);
+    try {
+      return judge(scopeKey, task, rows, pendingStepId, peek, timing);
+    } finally {
+      timing.report(FCA_SOURCE_WALK_LOG_MS, via, log);
+    }
+  };
+  const judge = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: boolean,
+    timing: FcaWalkTiming): boolean | undefined => {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
@@ -191,7 +207,7 @@ export function createFcaSourceGuard(parts: {
       if (!rows.length) return true; // Direct owner API tasks have no inherited conversation source.
       // The same verdict over fewer sources: every memory id once, at the earliest time it was observed (`foldFcaProvenance`).
       // Only a task the cap applies to is folded to the limit; the root, a conversation and the sleep task are never hidden by it.
-      const sources = fcaProvenanceForCheck(rows, cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity, folds);
+      const sources = timing.time('provenance', () => fcaProvenanceForCheck(rows, cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity, folds));
       const recalledIds = new Set(sources.flatMap(source => source.recalledMemoryIds)).size;
       if (cappable(task) && (sources.length > FCA_PROVENANCE_LIMITS.sources || recalledIds > FCA_PROVENANCE_LIMITS.recalledIds)) {
         if (clock() - cappedLoggedAt >= 60_000) {
@@ -201,39 +217,40 @@ export function createFcaSourceGuard(parts: {
         stopCapped(scopeKey, task);
         return false;
       }
-      const epoch = epochFor(scopeKey), state = epoch.state, at = clock();
+      const epoch = timing.time('epoch', () => epochFor(scopeKey)), state = epoch.state, at = clock();
+      const unchanged = (reads: Verdict['reads'], every = false) => timing.time('reads', () => readsUnchanged(epoch, scopeKey, reads, every));
       const key = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null, sources]);
       const known = verdicts.get(key);
-      if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS
-        && readsUnchanged(epoch, scopeKey, known.reads)) {
+      if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS && unchanged(known.reads)) {
         if (!peek) counts.reused += 1;
+        timing.note(peek ? 'peek' : 'reuse');
         return known.visible;
       }
-      if (peek) return undefined;
+      if (peek) {
+        timing.note('peek');
+        return undefined;
+      }
       const baseKey = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null]);
-      const base = usableBase(bases.get(baseKey), epoch, scopeKey, state.version, at);
+      const base = usableBase(bases.get(baseKey), unchanged, state.version, at);
       // With a base, only what it did not check (`foldedProvenanceResidual`); without one, all of it.
-      const walked = base ? foldedProvenanceResidual(base.folded, sources) : sources;
+      const walked = timing.time('provenance', () => base ? foldedProvenanceResidual(base.folded, sources) : sources);
+      timing.note(base ? 'partial' : 'full', walked);
       if (base) counts.partial += 1; else counts.walked += 1;
+      const edits = provenanceEdits(); // Before the walk: an edit during or after it makes the base stale.
       const reads = recordedReads(epoch, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
       const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, epoch.candidates, reads.check, epoch.withheld);
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
       // memory chunk used to build its own and walk the whole graph again.
-      const started = monotonic();
-      const visible = !walked.length
-        || withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding));
-      const spent = Math.round(monotonic() - started);
-      if (spent >= FCA_SOURCE_WALK_LOG_MS) {
-        // Content-free: counts, the kind of walk and the caller's name only. Measured on the VM to tell which caller blocks the loop.
-        try { log(walkLine(spent, walked, base ? 'partial' : 'full', via)); } catch { /* never throws */ }
-      }
-      // A base keeps the time of its own full walk, so it is never extended past `baseWindow`; it asks again every read it consulted.
-      const baseAt = base?.at ?? at, allReads = [...base?.reads ?? [], ...reads.list()];
+      const visible = timing.time('walk', () => !walked.length
+        || withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding)));
+      // A base keeps the time of its own full walk, so it is never extended past `baseWindow`; it asks again every read it consulted
+      // (each distinct receipt once: the list does not grow over the window).
+      const baseAt = base?.at ?? at, allReads = distinctReads([...base?.reads ?? [], ...reads.list()]);
       // The verdict of this check is reused for `FCA_SOURCE_VERDICT_MS` from now (the same rules as any verdict), but not past the base's
       // window: a base nearly at its end gives a verdict that ends with it.
       const verdictAt = Math.max(baseAt, Math.min(at, baseAt + baseWindow - FCA_SOURCE_VERDICT_MS));
       remember(verdicts, key, { version: state.version, at: verdictAt, visible, reads: allReads }, at, FCA_SOURCE_VERDICT_MS);
-      if (visible) remember(bases, baseKey, { version: state.version, at: baseAt, visible, reads: allReads, folded: sources }, at, baseWindow);
+      if (visible) remember(bases, baseKey, { version: state.version, at: baseAt, visible, reads: allReads, folded: sources, edits }, at, baseWindow);
       return visible;
     } catch { return false; }
   };
@@ -331,10 +348,9 @@ export function createFcaSourceGuard(parts: {
   }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts }) });
 }
 
-/** The slow-walk line: milliseconds, the sources and distinct ids walked, the kind of walk and the caller; nothing of their content. */
-function walkLine(spent: number, walked: readonly TaskSource[], mode: 'full' | 'partial', via: FcaWalkCaller): string {
-  const ids = new Set(walked.flatMap(source => source.recalledMemoryIds)).size;
-  return `Shannon FCA source walk ms=${spent} sources=${walked.length} ids=${ids} mode=${mode} via=${via}`;
+/** Every receipt once per source and time (the later answer wins), so a base's list does not grow with each extension. */
+function distinctReads(reads: ReadonlyArray<readonly [string, string, boolean]>): ReadonlyArray<readonly [string, string, boolean]> {
+  return [...new Map(reads.map(read => [JSON.stringify([read[0], read[1]]), read] as const)).values()];
 }
 
 /** Keeps an entry, dropping those past `window` (or from a later clock) and the oldest past `FCA_SOURCE_VERDICTS_KEPT`. */

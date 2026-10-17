@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { noteProvenanceEdit } from '../provenanceEdits.js';
 import {
   parseKnowledgeHeadingTree,
   type AetherDecisionReference,
@@ -114,6 +115,7 @@ export class SQLiteShannonKnowledgeStore implements ShannonKnowledgeStore {
       if (!current || current.status === 'retired' || current.version !== expectedVersion) return null;
       // Sources accumulate: an update never drops the provenance that justified the earlier version.
       const sources = [...new Set([...JSON.parse(current.source_experience_ids_json) as string[], ...draft.sourceExperienceIds])];
+      noteProvenanceEdit(); // The document's sources grow in place (`provenanceEdits.ts`).
       const status = draft.status === 'confirmed' && sources.length >= 2 ? 'confirmed' : current.status === 'confirmed' && draft.status === 'confirmed' ? 'confirmed' : 'hypothesis';
       this.database.prepare(`
         UPDATE shannon_knowledge_documents
@@ -131,6 +133,7 @@ export class SQLiteShannonKnowledgeStore implements ShannonKnowledgeStore {
       const current = this.row(scopeKey, id);
       if (!current || current.status === 'retired') return null;
       const sources = [...new Set([...JSON.parse(current.source_experience_ids_json) as string[], ...evidenceExperienceIds])];
+      noteProvenanceEdit(); // A retired document leaves the readable ones (`provenanceEdits.ts`).
       this.database.prepare(`
         UPDATE shannon_knowledge_documents
         SET status = 'retired', retired_reason = ?, source_experience_ids_json = ?, updated_at = ?, version = version + 1

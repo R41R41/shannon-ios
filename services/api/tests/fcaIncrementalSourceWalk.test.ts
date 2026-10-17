@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TaskSource, TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { FCA_SOURCE_BASE_MS, FCA_SOURCE_WALK_LOG_MS } from '../src/mind/action/fca/fcaConversationSources.js';
+import { noteProvenanceEdit } from '../src/mind/memory/provenanceEdits.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -177,43 +178,107 @@ describe('the incremental source check', () => {
 });
 
 describe('the slow-walk line', () => {
-  function logged(thresholdMs: number) {
+  const LINE = /^Shannon FCA source walk total=\d+ epoch=\d+ provenance=\d+ reads=\d+ walk=\d+ sources=\d+ ids=\d+ mode=(full|partial|reuse|peek) via=[a-z_]+$/;
+  /** A clock that moves `stepMs` at each reading, so a check that reads it more often than another takes longer. */
+  function logged(stepMs: number, options: { readSourceVisible?: (...args: never[]) => boolean } = {}) {
     const w = world();
     let tick = 0; const lines: string[] = [];
     const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
-      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, readSourceVisible: w.f.readSourceVisible, clock: () => 0,
-      monotonic: () => { const value = tick; tick += thresholdMs; return value; }, log: line => lines.push(line) });
+      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, readSourceVisible: (options.readSourceVisible ?? w.f.readSourceVisible) as never, clock: () => 0,
+      monotonic: () => { const value = tick; tick += stepMs; return value; }, log: line => lines.push(line) });
     return { w, guard, lines };
   }
 
-  it('names a walk of 100 ms or more, once, with counts, the kind of walk and the caller only', () => {
+  it('names a check of 100 ms or more with its whole time and its parts, the kind of check and the caller only', () => {
     const { w, guard, lines } = logged(FCA_SOURCE_WALK_LOG_MS);
     expect(guard.sources('owner', w.task, w.rows, undefined, 'tool')).toBe(true);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^Shannon FCA source walk ms=100 sources=\d+ ids=\d+ mode=full via=tool$/);
-    // A reuse is no walk: nothing more is said.
+    expect(lines[0]).toMatch(LINE);
+    expect(lines[0]).toMatch(/ mode=full via=tool$/);
+    const field = (name: string) => Number(new RegExp(`${name}=(\\d+)`).exec(lines[0]!)![1]);
+    expect(field('total')).toBeGreaterThanOrEqual(field('epoch') + field('provenance') + field('reads') + field('walk'));
+    expect(field('epoch')).toBeGreaterThan(0); expect(field('walk')).toBeGreaterThan(0);
+    // A reused verdict is timed too (a slow epoch or fold shows even when nothing is walked).
     expect(guard.sources('owner', w.task, w.rows, undefined, 'tool')).toBe(true);
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(LINE); expect(lines[1]).toMatch(/ mode=reuse via=tool$/);
+    expect(guard.peek!('owner', w.task, w.rows)).toBe(true);
+    expect(lines[2]).toMatch(/ mode=peek via=other$/);
   });
 
-  it('says nothing for a quick walk, and nothing of what was read', () => {
-    const { w, guard, lines } = logged(FCA_SOURCE_WALK_LOG_MS - 1);
+  it('says nothing for a quick check, and nothing of what was read', () => {
+    const { w, guard, lines } = logged(1);
     expect(guard.sources('owner', w.task, w.rows)).toBe(true);
     expect(lines).toEqual([]);
     const loud = logged(500);
     expect(loud.guard.sources('owner', loud.w.task, loud.w.rows)).toBe(true);
-    const text = JSON.stringify(loud.w.rows.flatMap(row => [...row.recalledMemoryIds, ...row.readSourceIds ?? []]));
+    const ids = loud.w.rows.flatMap(row => [...row.recalledMemoryIds, ...row.readSourceIds ?? []]);
     expect(loud.lines).toHaveLength(1);
-    for (const id of JSON.parse(text) as string[]) expect(loud.lines[0]).not.toContain(id);
-    expect(loud.lines[0]).toMatch(/via=other$/);
+    for (const id of ids) expect(loud.lines[0]).not.toContain(id);
+    expect(loud.lines[0]).toMatch(LINE); expect(loud.lines[0]).toMatch(/via=other$/);
   });
 
-  it('calls a walk that rests on a base partial', () => {
+  it('calls a walk that rests on a base partial, and names the child task check apart', () => {
     const { w, guard, lines } = logged(200);
     expect(guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(true);
     expect(guard.sources('owner', w.task, w.next(1, [w.pool[5]!, w.pool[150]!]), undefined, 'evidence')).toBe(true);
-    expect(lines).toHaveLength(2);
-    expect(lines[1]).toMatch(/^Shannon FCA source walk ms=200 sources=\d+ ids=\d+ mode=partial via=evidence$/);
+    expect(lines.at(-1)).toMatch(LINE); expect(lines.at(-1)).toMatch(/ mode=partial via=evidence$/);
+    const before = lines.length;
+    expect(guard('owner', 'task-1', undefined, 'child_monitor')).toBe(true);
+    expect(lines).toHaveLength(before + 1);
+    expect(lines.at(-1)).toMatch(/ via=child_monitor$/);
+  });
+});
+
+describe('what the base does not trust', () => {
+  it('walks whole once a provenance edit (an in-place rewrite that adds sources) happened since its walk', () => {
+    const w = world();
+    expect(w.visible.sources('owner', w.task, w.rows)).toBe(true);
+    w.advance(20_000);
+    const before = w.visible.walks!();
+    noteProvenanceEdit();
+    expect(w.visible.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(true);
+    const after = w.visible.walks!();
+    expect([after.walked - before.walked, after.partial! - before.partial!]).toEqual([1, 0]);
+    // The new base was walked after the edit: it serves again.
+    w.advance(1_000);
+    expect(w.visible.sources('owner', w.task, w.next(2, [w.pool[201]!]))).toBe(true);
+    expect(w.visible.walks!().partial! - before.partial!).toBe(1);
+  });
+
+  it('asks at least every receipt, and every time of it, once the base is older than a verdict (not one representative)', () => {
+    const w = world();
+    let clock = 0; const asked: string[] = [];
+    const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
+      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, clock: () => clock,
+      readSourceVisible: (scope, id, at, shared) => { asked.push(JSON.stringify([id, at])); return w.f.readSourceVisible(scope, id, at, shared); } });
+    expect(guard.sources('owner', w.task, w.rows)).toBe(true);
+    const recorded = new Set(asked); asked.length = 0;
+    clock = 2_000; // Younger than a verdict: one time per receipt.
+    expect(guard.sources('owner', w.task, w.next(1, [w.pool[200]!]))).toBe(true);
+    const young = new Set(asked); asked.length = 0;
+    clock = 20_000; // Older: every time the walk consulted (the fold keeps one time per receipt, so this is the safety net, not the usual case).
+    expect(guard.sources('owner', w.task, w.next(2, [w.pool[201]!]))).toBe(true);
+    const old = new Set(asked);
+    for (const key of young) expect(old.has(key)).toBe(true);
+    for (const key of recorded) expect(old.has(key)).toBe(true);
+  });
+  it('keeps the base\'s list of receipts to one per source and time over many extensions', () => {
+    const w = world();
+    let asked = 0, clock = 0;
+    const guard = createFcaSourceGuard({ runtime: { get: () => w.task, taskSources: () => w.rows } as never, state: w.f.world.store, conversations: w.f.world.store,
+      ownerScope: 'owner', ownerAlone: w.f.ownerAlone, clock: () => clock,
+      readSourceVisible: (scope, id, at, shared) => { asked += 1; return w.f.readSourceVisible(scope, id, at, shared); } });
+    expect(guard.sources('owner', w.task, w.rows)).toBe(true);
+    const perCheck: number[] = [];
+    for (let step = 1; step <= 8; step++) {
+      clock += 6_000 / 2; // A new row each 3 s: every check is on a base older than a verdict after the second.
+      const at = asked;
+      expect(guard.sources('owner', w.task, w.next(step, [w.pool[200 + step]!]))).toBe(true);
+      perCheck.push(asked - at);
+    }
+    // The re-asked receipts of the last checks do not grow with the number of extensions.
+    expect(perCheck.at(-1)!).toBeLessThanOrEqual(perCheck.at(-3)!);
   });
 });
 

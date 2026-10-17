@@ -57,7 +57,8 @@ import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.j
 import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
-import { stepVisibility, taskGates } from './fcaPeekGates.js';import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
+import { stepVisibility, taskGates } from './fcaPeekGates.js';
+import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
@@ -146,7 +147,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
           sourcesVisible: () => check.whole('body') ?? false }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
-        const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0;
+        const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
         const permitProgress = async () => {
           await actionPermit();
@@ -167,7 +168,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
         return ({ selector, observations, waitCounterpart, keepBodyTools, ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
-        taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0,
+        taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
         history: { codec: anthropicFcaHistoryCodec, summarizer },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(fcaResearchTools({ tools: parts.tools,
@@ -273,6 +274,6 @@ function fcaKeyNames(model: string): string {
 type StepReadParts = Omit<Parameters<typeof stepReadObserver>[0], 'sourcesVisible'>;
 function fcaStepReads(parts: StepReadParts & { visible(): ReturnType<typeof createFcaSourceGuard> | undefined }) {
   const { step } = parts;
-  const sourcesVisible = () => parts.visible()?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false;
+  const sourcesVisible = () => parts.visible()?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'skill_read') ?? false;
   return stepReadObserver({ ...parts, sourcesVisible });
 }

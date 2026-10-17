@@ -9,6 +9,8 @@ import type { TaskRuntime, TaskSource, TaskStep, TaskView } from '../mind/action
  * - the observation monitor only fences a step (a stale revision, or a thrown `FCA_SOURCE_WITHHELD`). What a step shows or does is
  *   gated by the whole check (`guard.sources`): the runner's `checked()` before and after the model and before each tool and before
  *   the commit, each tool's own gate, the progress permit and the body's lease check.
+ *   The monitor's check of each child task is not peeked: "not known" would have to include the child in the observation the model
+ *   is given, and a peek answers only where the whole check would reuse anyway; it keeps the whole check, named `child_monitor`.
  * - the scheduler's gate only skips a ready task already known to be withheld; `execute` asks the whole check (`canRunTask`) before
  *   a task is admitted.
  */

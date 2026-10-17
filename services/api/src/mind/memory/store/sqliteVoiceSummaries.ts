@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { VoiceSummaryRecord } from './conversationStore.js';
 import { switchOn } from '@shannon/switches';
+import { noteProvenanceEdit } from '../provenanceEdits.js';
 
 /**
  * The rows of the voice summary's tables (`voiceSummaryMigration.ts`): a thread's versions, newest first, and when a voice turn
@@ -30,6 +31,7 @@ export function selectVoiceSummaries(database: DatabaseSync, scopeKey: string, t
 /** The new version, and every other version of the thread removed except `keep`. Called inside a transaction. */
 export function insertVoiceSummary(database: DatabaseSync, scopeKey: string, threadId: string, record: VoiceSummaryRecord, keep: readonly number[]): void {
   const kept = [...new Set([record.version, ...keep])];
+  noteProvenanceEdit(); // A summary replaced or dropped changes what a `thread:` id stands for (`provenanceEdits.ts`).
   database.prepare(`
     DELETE FROM conversation_voice_summaries WHERE scope_key = ? AND thread_id = ? AND version NOT IN (${kept.map(() => '?').join(', ')})
   `).run(scopeKey, threadId, ...kept);
@@ -46,6 +48,7 @@ export function insertVoiceSummary(database: DatabaseSync, scopeKey: string, thr
 
 export function removeVoiceSummaries(database: DatabaseSync, scopeKey: string, threadId: string, versions: readonly number[]): void {
   if (!versions.length) return;
+  noteProvenanceEdit();
   database.prepare(`
     DELETE FROM conversation_voice_summaries WHERE scope_key = ? AND thread_id = ? AND version IN (${versions.map(() => '?').join(', ')})
   `).run(scopeKey, threadId, ...versions);

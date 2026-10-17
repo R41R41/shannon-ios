@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { noteProvenanceEdit } from '../provenanceEdits.js';
 import { TASK_EXPERIENCE_DISCLOSURE, taskExperienceId, taskExperienceSummary, type TaskExperienceRecord, type TaskExperienceWriter } from '../taskExperience.js';
 /** Owned by the existing memory writer and its transaction. Search indexing is the existing experience trigger. */
 export class SQLiteTaskExperiences implements TaskExperienceWriter {
@@ -20,6 +21,7 @@ export class SQLiteTaskExperiences implements TaskExperienceWriter {
     }
     const payload = JSON.stringify({ source: 'fca.task', userMessage: `task-evidence-${id}`, shannonReply: '', summary: taskExperienceSummary(record),
       recalledMemoryIds: sources, readSourceIds: reads, disclosure: TASK_EXPERIENCE_DISCLOSURE, task: { ...record, sourceIds: sources, readSourceIds: reads } });
+    if (prior) noteProvenanceEdit(); // An in-place rewrite: a walked base that holds this id is stale (`provenanceEdits.ts`).
     return prior ? this.db.prepare('UPDATE experience_events SET payload_json=?,observed_at=? WHERE event_id=? AND scope_key=?').run(payload, record.observedAt, id, scope).changes > 0
       : this.db.prepare("INSERT INTO experience_events(event_id,scope_key,event_type,observed_at,payload_json) VALUES(?,?,'turn.completed',?,?)")
         .run(id, scope, record.observedAt, payload).changes > 0;

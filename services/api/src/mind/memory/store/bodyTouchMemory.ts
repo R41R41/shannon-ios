@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { BODY_TOUCH_SOURCE } from '../../../contracts/bodyReactionContract.js';
+import { noteProvenanceEdit } from '../provenanceEdits.js';
 import { type TouchExperience, type TouchExperienceWriter, touchEvidence } from '../bodyTouchExperience.js';
 export { type TouchExperience, type TouchExperienceWriter, touchWhen, touchExperienceSummary, touchEvidence, touchExperience } from '../bodyTouchExperience.js';
 
@@ -25,6 +26,7 @@ export class SQLiteTouchExperiences implements TouchExperienceWriter {
         INSERT OR IGNORE INTO experience_events (event_id, scope_key, event_type, observed_at, payload_json) VALUES (?, ?, 'turn.completed', ?, ?)
       `).run(experience.id, scopeKey, experience.observedAt, payload);
       if (!Number(inserted.changes)) {
+        noteProvenanceEdit(); // An in-place rewrite (`provenanceEdits.ts`).
         const updated = this.database.prepare(`
           UPDATE experience_events SET payload_json = ?
           WHERE event_id = ? AND scope_key = ? AND event_type = 'turn.completed' AND json_extract(payload_json, '$.source') = ?
