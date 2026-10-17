@@ -37,6 +37,16 @@ export interface FcaHistoryPolicy {
   maximumReplayCharacters: number;
   /** The codec's token estimate of the whole replay (`FcaHistoryCodec.tokens`), below the provider's long-prompt price step. */
   maximumReplayTokens: number;
+  /**
+   * Only when set (a body task, `FCA_BODY_HISTORY_POLICY`): the token estimate of the replay without its rebuildable tool
+   * definitions, past which the history is compacted. Absent: no such bound.
+   */
+  maximumConversationTokens?: number;
+  /**
+   * With `maximumConversationTokens`: the token estimate a compaction brings the public bootstrap down to (the summary and the
+   * newest rounds kept whole, fewer rounds when they would not fit, down to the newest one).
+   */
+  compactedConversationTokens?: number;
 }
 export interface FcaHistoryReplay {
   history: readonly unknown[]; summary: CompactionTemplate | null; summaryText: string;

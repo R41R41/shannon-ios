@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { checkedTemplate, COMPACTION_SECTIONS } from '@shannon/mind';
+import { checkedTemplate, COMPACTION_BODY_ITEM_CHARACTERS, COMPACTION_SECTIONS } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from '../taskHistoryPorts.js';
 import type { TaskSource, TaskStatus } from '../taskRuntimePorts.js';
 import { enableFcaProvenanceSets, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
@@ -40,7 +40,8 @@ export class TaskHistoryStore {
       || request.retained.some((round, index) => round.sequence !== current.rounds[index + count]?.sequence
         || round.stepId !== current.rounds[index + count]?.stepId)) return false;
     const first = current.summary?.fromSequence ?? request.sequences[0]!, last = request.sequences.at(-1)!;
-    const template = checkedTemplate(request.template, { fromId: `fca-round:${first}`, toId: `fca-round:${last}` });
+    // The ceiling is a body summary's item length; every other summarizer already cut its items to 80 (`checkedTemplate`).
+    const template = checkedTemplate(request.template, { fromId: `fca-round:${first}`, toId: `fca-round:${last}` }, COMPACTION_BODY_ITEM_CHARACTERS);
     if (!template || !COMPACTION_SECTIONS.some(section => template[section].length)) return false;
     const lineage = [...new Map([...current.summary?.sources ?? [], ...current.rounds.slice(0, count).flatMap(round => round.sources),
       ...sources].map(source => [source.stepId, source])).values()];

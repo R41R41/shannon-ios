@@ -32,14 +32,20 @@ const ellipsis = (text: string, limit: number) => {
   return characters.length <= limit ? text : `${characters.slice(0, limit - 1).join('')}…`;
 };
 
-/** One item as kept: one line, trimmed, at most 80 characters. */
-export function compactionItem(text: string): string {
-  return ellipsis(text.replace(/\s+/gu, ' ').trim(), COMPACTION_V1.maximumItemCharacters);
+/**
+ * A body (Minecraft) task's summary items may be this long (coordinates, places and causes do not fit 80): only its summarizer asks
+ * for them, and the task history store accepts them as a ceiling. Every other summary stays at `COMPACTION_V1.maximumItemCharacters`.
+ */
+export const COMPACTION_BODY_ITEM_CHARACTERS = 120;
+
+/** One item as kept: one line, trimmed, at most 80 characters (or the given limit). */
+export function compactionItem(text: string, limit: number = COMPACTION_V1.maximumItemCharacters): string {
+  return ellipsis(text.replace(/\s+/gu, ' ').trim(), limit);
 }
 
 /** The newest five distinct, non-empty items of a list, in order. */
-function keptItems(items: readonly string[]): readonly string[] {
-  const kept = [...new Set(items.map(compactionItem).filter(Boolean))];
+function keptItems(items: readonly string[], limit: number = COMPACTION_V1.maximumItemCharacters): readonly string[] {
+  const kept = [...new Set(items.map(item => compactionItem(item, limit)).filter(Boolean))];
   return Object.freeze(kept.slice(Math.max(0, kept.length - COMPACTION_V1.maximumItems)));
 }
 
@@ -51,7 +57,8 @@ export function emptyTemplate(): CompactionTemplate {
  * Reads the summarizer's answer: an object with the eight sections as arrays of strings (a section may be missing; a string alone
  * is one item). Other keys are dropped, and so is anything that is not text. Answers null when it is not an object at all.
  */
-export function checkedTemplate(value: unknown, covers: { fromId: string | null; toId: string | null } = { fromId: null, toId: null }): CompactionTemplate | null {
+export function checkedTemplate(value: unknown, covers: { fromId: string | null; toId: string | null } = { fromId: null, toId: null },
+  itemCharacters: number = COMPACTION_V1.maximumItemCharacters): CompactionTemplate | null {
   let row = value;
   if (typeof row === 'string') {
     try { row = JSON.parse(row) as unknown; } catch { return null; }
@@ -61,7 +68,7 @@ export function checkedTemplate(value: unknown, covers: { fromId: string | null;
   const sections = Object.fromEntries(COMPACTION_SECTIONS.map(section => {
     const raw = record[section];
     const items = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
-    return [section, keptItems(items)];
+    return [section, keptItems(items, itemCharacters)];
   }));
   return Object.freeze({ ...sections, coversFromId: covers.fromId, coversToId: covers.toId }) as CompactionTemplate;
 }
@@ -70,9 +77,10 @@ export function checkedTemplate(value: unknown, covers: { fromId: string | null;
  * The incremental update: a section the update names replaces the previous one (the summarizer was shown it and rewrote it); a
  * section it leaves out is kept. The covered range grows: from the earlier start to the update's end.
  */
-export function mergedTemplate(previous: CompactionTemplate | null, update: CompactionTemplate, named: readonly CompactionSection[] = COMPACTION_SECTIONS): CompactionTemplate {
+export function mergedTemplate(previous: CompactionTemplate | null, update: CompactionTemplate, named: readonly CompactionSection[] = COMPACTION_SECTIONS,
+  itemCharacters: number = COMPACTION_V1.maximumItemCharacters): CompactionTemplate {
   const base = previous ?? emptyTemplate();
-  const sections = Object.fromEntries(COMPACTION_SECTIONS.map(section => [section, named.includes(section) ? keptItems(update[section]) : base[section]]));
+  const sections = Object.fromEntries(COMPACTION_SECTIONS.map(section => [section, named.includes(section) ? keptItems(update[section], itemCharacters) : base[section]]));
   return Object.freeze({ ...sections, coversFromId: base.coversFromId ?? update.coversFromId, coversToId: update.coversToId ?? base.coversToId }) as CompactionTemplate;
 }
 

@@ -22,10 +22,21 @@ export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   // leaving about 25,000 tokens for the instructions, the current decision and new definitions under the 100,000 step.
   maximumReplayTokens: 75_000,
 });
+/**
+ * A body (Minecraft) task's history while its summaries are rare and by Haiku (`SHANNON_FCA_SUMMARY_MODEL=haiku`, owner decision
+ * 2026-10-17): compacted when the conversation's estimated tokens pass 24,000, down to 8,000 with the newest 6 rounds kept whole
+ * (fewer only while they alone would pass 8,000). The round count no longer decides (the default's 24 is hit by short rounds long
+ * before 24,000 tokens). The characters bounds stay as they are: 24,000 tokens never reach them (at most 2.2 characters a token
+ * by the estimate, 64,000 characters native), and the whole-replay bound of 75,000 tokens below the price step stays.
+ */
+export const FCA_BODY_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({
+  maximumRounds: 120, recentRounds: 6, maximumConversationTokens: 24_000, compactedConversationTokens: 8_000,
+});
 function policyOf(overrides: Partial<FcaHistoryPolicy>): FcaHistoryPolicy {
   const policy = { ...FCA_HISTORY_POLICY, ...overrides };
   if (Object.values(policy).some(value => !Number.isSafeInteger(value) || value < 1)
-    || policy.maximumRounds < policy.recentRounds) throw new Error('FCA_HISTORY_POLICY');
+    || policy.maximumRounds < policy.recentRounds
+    || (policy.compactedConversationTokens ?? 0) > (policy.maximumConversationTokens ?? Infinity)) throw new Error('FCA_HISTORY_POLICY');
   return policy;
 }
 const size = (value: unknown): number => JSON.stringify(value).length;
@@ -40,10 +51,10 @@ export function planFcaHistory(window: TaskHistoryWindow, codec: FcaHistoryCodec
   const policy = policyOf(overrides);
   const projected = projectedRounds(window, codec);
   const history = epochReplay(window, codec);
-  const recent = retainedRounds(projected, window.summary?.template ?? null, policy);
+  const recent = retainedRounds(projected, window.summary?.template ?? null, policy, codec);
   // While a compaction is settling (a batch was just installed this step), a bootstrap still above its share is compacted again,
   // so that one summary step leaves room for several native rounds (`retainedRounds`).
-  const unsettled = settling && unsettledBootstrap(window, projected.length, recent, policy);
+  const unsettled = settling && unsettledBootstrap(window, projected.length, recent, policy, codec);
   if (window.rounds.length <= policy.maximumRounds && replayFits(history, codec, policy) && !unsettled) {
     const summary = window.summary?.template ?? null;
     return { kind: 'ready', replay: { history, summary, summaryText: summary ? renderedCompaction(summary, 'text') : '' } };
@@ -73,9 +84,15 @@ function epochReplay(window: TaskHistoryWindow, codec: FcaHistoryCodec): unknown
   ];
 }
 
+/** Whether a public bootstrap passes its share of the budget: its characters, and its estimated tokens where the policy has a target. */
+function bootstrapTooLong(text: string, policy: FcaHistoryPolicy, codec: FcaHistoryCodec): boolean {
+  const target = policy.compactedConversationTokens;
+  return text.length > bootstrapShare(policy) || (target !== undefined && (codec.tokens?.(codec.bootstrap(text)) ?? 0) > target);
+}
+
 /** A bootstrap above its share with older rounds still to summarize beside the ones it keeps whole. */
-function unsettledBootstrap(window: TaskHistoryWindow, rounds: number, recent: number, policy: FcaHistoryPolicy): boolean {
-  return !!window.summary && recent > 0 && rounds > recent && window.summary.bootstrapText.length > bootstrapShare(policy);
+function unsettledBootstrap(window: TaskHistoryWindow, rounds: number, recent: number, policy: FcaHistoryPolicy, codec: FcaHistoryCodec): boolean {
+  return !!window.summary && recent > 0 && rounds > recent && bootstrapTooLong(window.summary.bootstrapText, policy, codec);
 }
 
 /**
@@ -85,10 +102,11 @@ function unsettledBootstrap(window: TaskHistoryWindow, rounds: number, recent: n
  * FCA_HISTORY_RECENT_LIMIT). The rest is summarized, in as many batches as the summary input needs. Zero when only the newest round
  * exists; a newest round too long by itself is replayed clipped (`clippedReplay`).
  */
-function retainedRounds(projected: readonly ProjectedRound[], previous: FcaHistorySummaryInput['previous'], policy: FcaHistoryPolicy): number {
+function retainedRounds(projected: readonly ProjectedRound[], previous: FcaHistorySummaryInput['previous'], policy: FcaHistoryPolicy,
+  codec: FcaHistoryCodec): number {
   let recent = Math.min(policy.recentRounds, projected.length - 1);
-  const bootstrap = (count: number) => size({ kind: 'fca_public_history', summary: previous, rounds: projected.slice(-count) });
-  while (recent > 1 && bootstrap(recent) > bootstrapShare(policy)) recent -= 1;
+  const bootstrap = (count: number) => JSON.stringify({ kind: 'fca_public_history', summary: previous, rounds: projected.slice(-count) });
+  while (recent > 1 && bootstrapTooLong(bootstrap(recent), policy, codec)) recent -= 1;
   return Math.max(recent, 0);
 }
 
@@ -105,7 +123,8 @@ function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy:
   const native = size(conversational.map(entry => codec.measured?.(entry) ?? entry)), definitions = size(history.filter(definitional));
   return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
     && size(conversational) + definitions <= policy.maximumReplayCharacters
-    && (codec.tokens?.(history) ?? 0) <= policy.maximumReplayTokens;
+    && (codec.tokens?.(history) ?? 0) <= policy.maximumReplayTokens
+    && (policy.maximumConversationTokens === undefined || (codec.tokens?.(conversational) ?? 0) <= policy.maximumConversationTokens);
 }
 
 function projectedRounds(window: TaskHistoryWindow, codec: FcaHistoryCodec): ProjectedRound[] {
