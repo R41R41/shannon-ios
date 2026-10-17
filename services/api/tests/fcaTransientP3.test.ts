@@ -3,6 +3,8 @@ import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropic
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { cacheFcaBodyRequest, breakpointCount } from '../src/infra/models/anthropic/anthropicFcaBodyCache.js';
 import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest, storedState } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
+import { cappedState } from '../src/infra/models/anthropic/anthropicFcaStateCap.js';
+import { FCA_BODY_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { anthropicRejection, anthropicRequestViolation } from './support/anthropicProviderRules.js';
@@ -136,6 +138,70 @@ describe('transient history: summaries, budgets, the codec', () => {
     expect(anthropicFcaHistoryCodec.tokens!([old])).toBe(anthropicFcaHistoryCodec.tokens!([]));
     expect(anthropicFcaHistoryCodec.tokens!([old, round.entries[0]])).toBe(anthropicFcaHistoryCodec.tokens!([round.entries[0]]));
   });
+});
+
+describe('review follow-ups: removed parts, public projection, cap, recall', () => {
+  const task = { id: 't', title: 'x', goal: 'g', completionCriteria: 'c' };
+  const textOf = (message: { content: unknown }) => ((message.content as Array<{ text: string }>)[0]!).text;
+
+  it('states a part that disappeared as removed, once, and states it again if it comes back', () => {
+    const full = storedState({ task, skillIndex: 'index', progress: { conditions: [] } }, []).message!;
+    const gone = storedState({ task }, [full]);
+    expect(gone.parts).toEqual(['removed']);
+    expect(JSON.parse(textOf(gone.message!))).toMatchObject({ stateUpdate: 'changed', removed: ['skillIndex', 'progress'] });
+    expect(storedState({ task }, [full, gone.message!]).message).toBeNull();
+    expect(storedState({ task, skillIndex: 'index' }, [full, gone.message!]).parts).toEqual(['skillIndex']);
+  });
+
+  it('reduces a stored state to its public projection in summaries and in the budget measure', () => {
+    const text = JSON.stringify({ stateUpdate: 'full', task: { id: 't' }, catalog: [{ name: 'a' }], skillIndex: 'S'.repeat(5_000), sharedContext: { affect: {} }, progress: { x: 1 } });
+    const entry = { role: 'user', content: [{ type: 'text', text }] };
+    const measured = JSON.stringify(anthropicFcaHistoryCodec.measured!(entry));
+    expect(measured.length).toBeLessThan(500);
+    expect(measured).toContain('restatedEachEpoch');
+    expect(measured).toContain('progress');
+    const round = { sequence: 1, stepId: 's', committedAt: 'now', status: 'executing', sources: [], entries: [entry,
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'u1', name: 'mc_x', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'u1', content: 'ok', is_error: false }] }] };
+    expect(JSON.stringify(anthropicFcaHistoryCodec.project(round as never))).not.toContain('SSSSS');
+  });
+
+  it('shortens an epoch\'s first full state above the threshold, marked, and never a changed one', () => {
+    const state = storedState({ task, skillIndex: `${'あ'.repeat(40_000)}` }, []);
+    const { state: capped, level } = cappedState(state, () => 200_000, 95_000);
+    expect(level).not.toBeNull();
+    expect(textOf(capped.message!).length).toBeLessThan(textOf(state.message!).length);
+    expect(textOf(capped.message!)).toContain('長いため後略');
+    expect(JSON.parse(textOf(capped.message!)).task).toEqual(task);
+    const changed = storedState({ task, skillIndex: 'new' }, [state.message!]);
+    expect(cappedState(changed, () => 200_000, 95_000).level).toBeNull();
+    expect(cappedState(state, () => 1_000, 95_000).level).toBeNull();
+  });
+
+  it('with a production-shaped first state (~70k characters) does not summarize again for the next steps after a summary', async () => {
+    quiet();
+    const index = `${'あ'.repeat(35_000)}${'a'.repeat(35_000)}`;
+    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, body: live, skillIndex: index, resultSize: 600, steps: 70, appendOnly: true });
+    expect(await run.settle()).toBe('completed');
+    expect(run.violations).toEqual([]);
+    const first = (body: Body) => JSON.stringify(messagesOf(body)[0]!.content);
+    const starts = run.bodies.flatMap((body, at) => at > 0 && first(body) !== first(run.bodies[at - 1]!) ? [at] : []);
+    expect(starts.length).toBeGreaterThan(0);
+    for (let at = 1; at < starts.length; at++) expect(starts[at]! - starts[at - 1]!).toBeGreaterThanOrEqual(4);
+    expect(starts[0]!).toBeGreaterThanOrEqual(4);
+  }, 240_000);
+
+  it('does not start, fetch or record any recall for a transient body task, and still does for a legacy one', async () => {
+    quiet();
+    const transient: string[] = [], legacy: string[] = [];
+    const a = scenario({ mode: () => 'transient', policy: WIDE_POLICY, body: live, steps: 5, recallLog: transient });
+    await a.settle();
+    expect(transient).toEqual([]);
+    const b = scenario({ mode: () => 'legacy', policy: WIDE_POLICY, steps: 5, recallLog: legacy });
+    await b.settle();
+    expect(legacy).toContain('packet');
+    expect(legacy).toContain('observeMemory');
+  }, 120_000);
 });
 
 describe('cache plan of a transient request', () => {

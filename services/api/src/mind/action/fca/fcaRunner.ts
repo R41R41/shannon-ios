@@ -15,7 +15,7 @@ import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
-import { fcaTransientHistory, shouldForceFcaEpoch } from './fcaCoreHistory.js';
+import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
@@ -103,7 +103,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior);
-  const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
+  const recallContext = ports.recall && !isFcaTransientTask(prior, ports) ? fcaRecallContext(step, prior, signal) : null;
   // The recall's deterministic part runs on the API's one thread. Minecraft run 6 (2026-10-14): started while a body had just logged
   // in, it blocked the thread while a stop was being handed over. Pending I/O (the body's polls) goes first; while the body is still
   // in its first frames after login, the recall starts with the decision packet instead (which starts it if nothing did).

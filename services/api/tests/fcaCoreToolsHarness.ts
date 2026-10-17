@@ -48,6 +48,10 @@ export interface ScenarioOptions {
   restartAt?: number;
   /** A body port (transient mode reads its `transient()` live state and cuts its stored results): the live state of decision n (1-based). */
   body?: (decision: number) => Record<string, unknown>;
+  /** The skill index the task states (its size is what a production-shaped first state is made of). */
+  skillIndex?: string;
+  /** A recall port that records what the runner asks of it. */
+  recallLog?: string[];
   /** The provider answers a request with this thinking-bound check: every request after the first of an epoch extends the one before byte for byte. */
   appendOnly?: boolean;
   /** Decision d answers with a model error instead (a Response), e.g. the 400 of a refused beta. */
@@ -102,7 +106,7 @@ export function scenario(options: ScenarioOptions = {}) {
   });
   const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
   const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
-  const tools: FcaExternalTools = { get definitions() { return options.catalogAt ? options.catalogAt(decisions + 1) : BASE_CATALOG; },
+  const tools: FcaExternalTools = { ...(options.skillIndex ? { skillIndex: () => options.skillIndex! } : {}), get definitions() { return options.catalogAt ? options.catalogAt(decisions + 1) : BASE_CATALOG; },
     async execute(call) {
       // The catalog of the step that is running (the getter reads the next decision's, as the runner asks before it is made).
       const now = options.catalogAt ? options.catalogAt(Math.max(1, decisions)) : BASE_CATALOG;
@@ -121,6 +125,9 @@ export function scenario(options: ScenarioOptions = {}) {
     canRunTask: (_runtime, id) => id === only,
     stepPorts: () => { const mode = options.mode?.(); return { tools, selector, keepBodyTools: () => options.keepBody !== false,
       ...(mode ? { obsMode: mode } : {}),
+      ...(options.recallLog ? { recall: { start: () => options.recallLog!.push('start'), finishSegment: async () => {}, cancel: () => {}, cancelAll: async () => {},
+        packet: async () => { options.recallLog!.push('packet'); return { status: 'ready', items: [], sourceIds: ['mem-1'] }; } } as never,
+        observeMemory: () => { options.recallLog!.push('observeMemory'); return true; } } : {}),
       ...(options.body ? { body: { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), guard: async () => true,
         toolSignal: (_name: string, parent: AbortSignal) => parent, close: async () => {}, transient: () => options.body!(decisions + 1),
         storedResult: (call: { name: string }, text: string) => storedBodyResult(call.name, text) } } : {}),

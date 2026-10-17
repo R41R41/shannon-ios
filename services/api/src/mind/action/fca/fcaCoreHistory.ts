@@ -31,6 +31,14 @@ export interface FcaTransientHistory {
 export interface FcaTransientPorts {
   obsMode?: FcaObsMode; keepBodyTools?(): boolean; selector?: unknown; history?: { codec: FcaHistoryCodec; policy?: Partial<FcaHistoryPolicy> };
 }
+/**
+ * Whether this step belongs to a transient body task (the mode it started with, or starts with now). Its decision carries no recall
+ * packet until P5 brings the past episodes as one-line live state, so the recall is not even started: no memory is fetched, and none is
+ * recorded as a source of a decision that never showed it.
+ */
+export function isFcaTransientTask(prior: Record<string, unknown>, ports: FcaTransientPorts): boolean {
+  return pinOfCheckpoint(prior.fcaToolSelection, ports.obsMode === 'transient' && ports.keepBodyTools?.() === true && !!ports.selector) !== null;
+}
 export function fcaTransientHistory(prior: Record<string, unknown>, catalog: readonly FcaToolDefinition[],
   ports: FcaTransientPorts): FcaTransientHistory | null {
   const pin = pinOfCheckpoint(prior.fcaToolSelection, ports.obsMode === 'transient' && ports.keepBodyTools?.() === true && !!ports.selector);

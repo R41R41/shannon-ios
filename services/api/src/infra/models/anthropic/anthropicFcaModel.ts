@@ -21,10 +21,10 @@ import { connectionFailedBeforeResponse, providerServerError, reportDispatchFail
 import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
-import { cacheFcaBodyRequest } from './anthropicFcaBodyCache.js';
+import { transientRequest } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
-import { clearAtMessage, FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, FCA_TRANSIENT_THINKING,
-  inputTransformations, isFcaClearAtMessage, liveSkillCounts, liveState, renderedRequest, storedState, transientBetaRefused } from './anthropicFcaTransient.js';
+import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
+  renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -278,27 +278,14 @@ export class AnthropicFcaModel implements FcaModel {
     return { decision, history: appended, ...context };
   }
 
-  /**
-   * A transient body task's request (`anthropicFcaTransient.ts`): what changed in the task's state, as a stored user text; the tool
-   * changes; then this turn's live state in a turn-scoped system message, last. The explicit 1h breakpoints only (`cacheFcaBodyRequest`).
-   * The stored round is the turn as sent, so the next request extends it byte for byte, the earlier live states included.
-   */
+  /** A transient body task's request: see `transientRequest` (`anthropicFcaTransientRequest.ts`). */
   private transientRequest(input: FcaModelInput, history: readonly Anthropic.MessageParam[], menu: ReturnType<typeof transientFcaTools>,
     ownerClock: Record<string, unknown> | undefined) {
-    const supplied = decisionFields(input, ownerClock, true);
-    const { message, parts } = storedState(supplied, history);
-    const turn = [...(message ? [message] : []), ...menu.appended, clearAtMessage(liveState(supplied, input.transient))];
-    const system = [{ type: 'text' as const, cache_control: ONE_HOUR,
-      text: `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}` }];
-    const body = cacheFcaBodyRequest({ model: this.model, max_tokens: this.maximumOutputTokens, system, messages: [...history, ...turn], tools: menu.tools,
-      tool_choice: { type: 'auto' as const }, thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
-    } as unknown as Anthropic.MessageCreateParamsNonStreaming);
-    const counts = liveSkillCounts(input.transient);
-    const built: RequestBuilt = { taskId: input.task.id, bodyAttached: input.body !== undefined, level: null, elidedParts: [], ...counts,
-      sent: { ...counts, parts } };
-    return { turn, menu, body, built };
+    const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,
+      systemText: `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}`, input, history, menu,
+      supplied: decisionFields(input, ownerClock, true) });
+    return { ...built, menu, built: built.built as RequestBuilt };
   }
-
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): Anthropic.MessageParam {
     const ids = new Set<string>();
     if (!results.length) throw new Error('FCA_MODEL_RESULTS_INVALID');
