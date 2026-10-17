@@ -14,6 +14,8 @@ import { decideWithOneRetry } from './fcaNoResponse.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
+import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
+import { fcaTransientHistory, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -31,6 +33,8 @@ export interface FcaStepPorts {
   selector?: FcaToolSelector;
   /** This task acts through a body (bound, or made from a body request): a reselection never leaves out all its body tools. */
   keepBodyTools?(): boolean;
+  /** `SHANNON_FCA_OBS_MODE` (`fcaCoreTools.ts`); a body task takes it only when it starts, never after. Absent: legacy. */
+  obsMode?: FcaObsMode;
   recall?: TaskRecall;
   evidence?: FcaEvidence;
   observeMemory?(ids: readonly string[]): boolean;
@@ -109,10 +113,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   } else if (recallContext) observerHandoff('fca', 'recall', { phase: 'start_deferred', reason: 'body_settling' });
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
+  // A transient body task: the core definitions come off the replay budget, and a stale core may start a new epoch (`fcaCoreHistory.ts`).
+  const transient = fcaTransientHistory(prior, catalog, ports);
+  const forceEpoch = transient?.stale && ports.history?.summarizer
+    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId) : undefined;
   const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, ports.history!.policy)) : null;
+  }, signal, transient?.policy ?? ports.history!.policy, forceEpoch ? { forceEpoch } : undefined)) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {
@@ -125,7 +133,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
   const selection = ports.selector ? await metrics.timed('selectorMs', () => selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector!,
-    step.scopeKey, signal, { keepBodyTools: ports.keepBodyTools?.() === true })) : null;
+    step.scopeKey, signal, { keepBodyTools: ports.keepBodyTools?.() === true, ...(ports.obsMode ? { obsMode: ports.obsMode } : {}) })) : null;
   if (selection) {
     input.tools = selectedFcaTools(catalog, selection);
   }
@@ -157,7 +165,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
     ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
     ...(sharedContext ? { sharedContext } : {}),
-    ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) };
+    ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}),
+    ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools } : {}) };
   const output = await decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(request, signal)), { signal, recheck: checked,
     delay: ports.decisionRetryDelayMs,
     log: line => console.warn(`${line} task=${step.taskId}`) }).catch(error => {
@@ -170,6 +179,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
     () => ports.evidence!.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
+  // The epoch's core pin is committed with what its replay will start with next (`continuesFcaEpoch`).
+  if (selection?.core) selection.core = withCoreAnchor(selection.core, input.history, history);
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
   const priorToolFailures = consecutiveToolFailures;

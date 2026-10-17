@@ -3,17 +3,34 @@ import { observerHandoff } from '../../../infra/observer/observerContext.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { providerToolName, toolFailure, type ShannonToolDefinition, type ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaModelInput } from './fcaPorts.js';
+import { readFcaCorePin, selectedTransientTools, transientToolState, withTransientFields, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
 
 export interface FcaToolState {
   version: 1; key: string; inputKey: string; names: string[]; opened: string[]; refresh: boolean;
   recentResults: Array<{ name: string; ok: boolean; summary: string }>;
+  /**
+   * `transient` (`SHANNON_FCA_OBS_MODE`, `fcaCoreTools.ts`): the task declares its core tools at the top level for each epoch
+   * (`core`) and only appends the others (`announced`: those declared since the epoch began). Absent: the legacy menu. Fixed when the
+   * task's first step is selected, never changed after it.
+   */
+  obsMode?: 'transient'; core?: FcaCorePin; announced?: string[];
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-/** Selection changes only with new admitted input, task/child context, catalog definitions, or a known tool failure. */
+/**
+ * Selection changes only with new admitted input, task/child context, catalog definitions, or a known tool failure. A body task whose
+ * mode is `transient` (`SHANNON_FCA_OBS_MODE`; the mode it started with) also has its core tools pinned per epoch and its others appended.
+ */
 export async function selectFcaTools(input: FcaModelInput, catalog: readonly ShannonToolDefinition[], prior: unknown,
-  selector: FcaToolSelector, scopeKey: string, signal: AbortSignal, options: { keepBodyTools?: boolean } = {}): Promise<FcaToolState> {
+  selector: FcaToolSelector, scopeKey: string, signal: AbortSignal, options: { keepBodyTools?: boolean; obsMode?: FcaObsMode } = {}): Promise<FcaToolState> {
   const previous = readState(prior);
+  const state = await legacySelection(input, catalog, previous, selector, scopeKey, signal, options);
+  const transient = previous ? previous.obsMode === 'transient' : options.obsMode === 'transient' && options.keepBodyTools === true;
+  return transient ? transientToolState(state, previous, catalog, input.history, input.task.id) : state;
+}
+
+async function legacySelection(input: FcaModelInput, catalog: readonly ShannonToolDefinition[], previous: FcaToolState | null,
+  selector: FcaToolSelector, scopeKey: string, signal: AbortSignal, options: { keepBodyTools?: boolean }): Promise<FcaToolState> {
   const inputKey = input.messages.length ? digest(input.messages) : previous?.inputKey ?? '';
   const { id, title, goal, completionCriteria } = input.task;
   const key = digest({ task: { id, title, goal, completionCriteria }, children: input.children ?? [], inputKey, catalog });
@@ -108,6 +125,7 @@ function keptBodyTools(wanted: Set<string>, catalog: readonly ShannonToolDefinit
 }
 
 export function selectedFcaTools(catalog: readonly ShannonToolDefinition[], state: FcaToolState): ShannonToolDefinition[] {
+  if (state.obsMode === 'transient' && state.core) return selectedTransientTools(catalog, state);
   const names = new Set([...state.names, ...state.opened]);
   return catalog.filter(tool => names.has(tool.name) || tool.domain === 'memory_read');
 }
@@ -125,9 +143,12 @@ export function openFcaTool(input: unknown, catalog: readonly ShannonToolDefinit
 function readState(value: unknown): FcaToolState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Partial<FcaToolState>;
+  // A transient task's history is shaped for its pinned core: a checkpoint without a valid one is never read as another mode.
+  if (item.obsMode === 'transient' && !readFcaCorePin(item.core)) throw new Error('FCA_CORE_TOOLS_STATE_INVALID');
   const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every(name => typeof name === 'string');
   if (item.version !== 1 || typeof item.key !== 'string' || typeof item.inputKey !== 'string' || typeof item.refresh !== 'boolean'
     || !strings(item.names) || !strings(item.opened) || !Array.isArray(item.recentResults)
     || item.recentResults.some(result => !result || typeof result.name !== 'string' || typeof result.ok !== 'boolean' || typeof result.summary !== 'string')) return null;
-  return { ...item as FcaToolState, names: [...item.names], opened: [...item.opened], recentResults: item.recentResults.slice(-8).map(result => ({ ...result })) };
+  const state: FcaToolState = { ...item as FcaToolState, names: [...item.names], opened: [...item.opened], recentResults: item.recentResults.slice(-8).map(result => ({ ...result })) };
+  return withTransientFields(state, item);
 }
