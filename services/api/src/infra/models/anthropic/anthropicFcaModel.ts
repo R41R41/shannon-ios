@@ -281,7 +281,7 @@ export class AnthropicFcaModel implements FcaModel {
   /** A transient body task's request: see `transientRequest` (`anthropicFcaTransientRequest.ts`). */
   private transientRequest(input: FcaModelInput, history: readonly Anthropic.MessageParam[], menu: ReturnType<typeof transientFcaTools>,
     ownerClock: Record<string, unknown> | undefined) {
-    const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,
+    const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens,
       systemText: `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}`, input, history, menu,
       supplied: decisionFields(input, ownerClock, true) });
     return { ...built, menu, built: built.built as RequestBuilt };

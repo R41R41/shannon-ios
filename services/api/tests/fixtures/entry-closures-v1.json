@@ -277,6 +277,7 @@
     "mind/action/fca/fcaSpokenReport.ts",
     "mind/action/fca/fcaToolState.ts",
     "mind/action/fca/fcaTransientFallback.ts",
+    "mind/action/fca/fcaTransientLimits.ts",
     "mind/action/fca/fcaVoice.ts",
     "mind/action/fca/fcaVoicePorts.ts",
     "mind/action/fca/fcaWaitGate.ts",

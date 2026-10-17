@@ -3,7 +3,9 @@ import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropic
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { cacheFcaBodyRequest, breakpointCount } from '../src/infra/models/anthropic/anthropicFcaBodyCache.js';
 import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest, storedState } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
-import { cappedState } from '../src/infra/models/anthropic/anthropicFcaStateCap.js';
+import { FCA_STATE_LIMIT } from '../src/infra/models/anthropic/anthropicFcaStateCap.js';
+import { publicState } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
+import { FCA_TRANSIENT_STATE_RESERVE_TOKENS } from '../src/mind/action/fca/fcaTransientLimits.js';
 import { FCA_BODY_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
@@ -166,16 +168,50 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     expect(JSON.stringify(anthropicFcaHistoryCodec.project(round as never))).not.toContain('SSSSS');
   });
 
-  it('shortens an epoch\'s first full state above the threshold, marked, and never a changed one', () => {
-    const state = storedState({ task, skillIndex: `${'あ'.repeat(40_000)}` }, []);
-    const { state: capped, level } = cappedState(state, () => 200_000, 95_000);
-    expect(level).not.toBeNull();
-    expect(textOf(capped.message!).length).toBeLessThan(textOf(state.message!).length);
-    expect(textOf(capped.message!)).toContain('長いため後略');
-    expect(JSON.parse(textOf(capped.message!)).task).toEqual(task);
-    const changed = storedState({ task, skillIndex: 'new' }, [state.message!]);
-    expect(cappedState(changed, () => 200_000, 95_000).level).toBeNull();
-    expect(cappedState(state, () => 1_000, 95_000).level).toBeNull();
+  const context = (revision: number, text: string) => ({ affect: { revision, text }, recentOutcomes: [{ eventId: 'e1', appraisalRevision: 0, observation: 'observed' }] });
+
+  it('cuts a stored state above its limit, a full and a changed one alike, marked, keeping the task whole', () => {
+    const state = storedState({ task, skillIndex: 'あ'.repeat(40_000) }, [], FCA_STATE_LIMIT);
+    expect(state.level).not.toBeNull();
+    expect(FCA_STATE_LIMIT.tokens(JSON.parse(textOf(state.message!)))).toBeLessThan(FCA_STATE_LIMIT.maximumTokens + 200);
+    expect(textOf(state.message!)).toContain('長いため後略');
+    expect(JSON.parse(textOf(state.message!)).task).toEqual(task);
+    expect(Object.keys(JSON.parse(textOf(state.message!)).capped)).toEqual(['skillIndex']);
+    const small = storedState({ task, skillIndex: 'S' }, [], FCA_STATE_LIMIT);
+    expect(small.level).toBeNull();
+    const changed = storedState({ task, skillIndex: 'あ'.repeat(40_000), progress: { a: 1 } }, [small.message!], FCA_STATE_LIMIT);
+    expect(changed.level).not.toBeNull();
+    expect(changed.parts).toEqual(['skillIndex', 'progress']);
+  });
+
+  it('restates a cut part whole as soon as it fits, and not before (H1)', () => {
+    const base = { task };
+    const big = storedState({ ...base, sharedContext: context(1, 'あ'.repeat(40_000)) }, [], FCA_STATE_LIMIT);
+    expect(big.level).not.toBeNull();
+    // Same revision and outcomes, still too large: nothing is said again (it would be cut the same way).
+    expect(storedState({ ...base, sharedContext: context(1, 'あ'.repeat(40_000)) }, [big.message!], FCA_STATE_LIMIT).message).toBeNull();
+    // The same revision with a text that fits now: stated whole, once.
+    const fits = storedState({ ...base, sharedContext: context(1, 'small') }, [big.message!], FCA_STATE_LIMIT);
+    expect(fits.parts).toEqual(['sharedContext']);
+    expect(JSON.parse(textOf(fits.message!)).sharedContext.affect.text).toBe('small');
+    expect(JSON.parse(textOf(fits.message!)).capped).toBeUndefined();
+    expect(storedState({ ...base, sharedContext: context(1, 'small') }, [big.message!, fits.message!], FCA_STATE_LIMIT).message).toBeNull();
+  });
+
+  it('keeps the shared context body in the summary projection (L3)', () => {
+    const text = JSON.stringify({ stateUpdate: 'full', task: { id: 't' }, catalog: [{ name: 'a' }], sharedContext: { affect: { feeling: 'KEEP-ME' } } });
+    expect(publicState(text)).toContain('KEEP-ME');
+    expect(publicState(text)).not.toContain('"name":"a"');
+  });
+
+  it('keeps room for the state a step adds: the replay bound is taken down by the reserve, and a production-size part is cut to it (M1)', () => {
+    const limit = FCA_STATE_LIMIT.maximumTokens;
+    expect(limit).toBe(FCA_TRANSIENT_STATE_RESERVE_TOKENS);
+    // A changed skillIndex of ~25k tokens (production size) is cut to the reserve, never stored whole.
+    const first = storedState({ task, skillIndex: 'a' }, [], FCA_STATE_LIMIT).message!;
+    const changed = storedState({ task, skillIndex: 'あ'.repeat(23_000) }, [first], FCA_STATE_LIMIT);
+    expect(changed.level).not.toBeNull();
+    expect(FCA_STATE_LIMIT.tokens(JSON.parse(textOf(changed.message!)))).toBeLessThan(limit + 200);
   });
 
   it('with a production-shaped first state (~70k characters) does not summarize again for the next steps after a summary', async () => {
@@ -189,6 +225,20 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     expect(starts.length).toBeGreaterThan(0);
     for (let at = 1; at < starts.length; at++) expect(starts[at]! - starts[at - 1]!).toBeGreaterThanOrEqual(4);
     expect(starts[0]!).toBeGreaterThanOrEqual(4);
+  }, 240_000);
+
+  it('cuts a first state of ~66k tokens to the reserve and does not summarize every step (M2)', async () => {
+    quiet();
+    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, body: live, skillIndex: 'あ'.repeat(60_000), resultSize: 300, steps: 40, appendOnly: true });
+    expect(await run.settle()).toBe('completed');
+    expect(run.violations).toEqual([]);
+    const first = (body: Body) => JSON.stringify(messagesOf(body)[0]!.content);
+    const starts = run.bodies.flatMap((body, at) => at > 0 && first(body) !== first(run.bodies[at - 1]!) ? [at] : []);
+    for (let at = 1; at < starts.length; at++) expect(starts[at]! - starts[at - 1]!).toBeGreaterThanOrEqual(4);
+    expect(run.summaries()).toBeLessThanOrEqual(3);
+    const stated = stateTexts(run.bodies[0]!)[0]!;
+    expect(stated).toContain('長いため後略');
+    expect(FCA_STATE_LIMIT.tokens(JSON.parse(stated))).toBeLessThan(FCA_STATE_LIMIT.maximumTokens + 200);
   }, 240_000);
 
   it('does not start, fetch or record any recall for a transient body task, and still does for a legacy one', async () => {

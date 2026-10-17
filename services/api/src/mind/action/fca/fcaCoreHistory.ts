@@ -1,6 +1,7 @@
 import { providerToolName } from '../../tools/toolRegistryPorts.js';
 import { continuesFcaEpoch, readFcaCorePin, pinFcaCoreTools, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
 import { FCA_HISTORY_POLICY } from './fcaHistory.js';
+import { FCA_TRANSIENT_STATE_RESERVE_TOKENS } from './fcaTransientLimits.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy } from './fcaHistoryPorts.js';
 import type { FcaToolDefinition } from './fcaPorts.js';
 
@@ -46,7 +47,9 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
   const current = pinFcaCoreTools(catalog), basis = pin ?? current;
   const tokens = ports.history.codec.tokens?.(basis.tools) ?? 0;
   const base = ports.history.policy?.maximumReplayTokens ?? FCA_HISTORY_POLICY.maximumReplayTokens;
-  const policy = { ...ports.history.policy, maximumReplayTokens: Math.max(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, base - tokens) };
+  // The state message a step adds (at most the reserve, `fcaTransientLimits.ts`) is not in the replay yet: its room is kept (review M1/M2).
+  const policy = { ...ports.history.policy,
+    maximumReplayTokens: Math.max(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, base - tokens - FCA_TRANSIENT_STATE_RESERVE_TOKENS) };
   return { policy, stale: pin ? staleness(pin, current, catalog) : null, pin };
 }
 
