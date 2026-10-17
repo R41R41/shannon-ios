@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { estimatedAnthropicTokens, anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
+import { FCA_TRANSIENT_STATE_RESERVE_TOKENS } from '../src/mind/action/fca/fcaTransientLimits.js';
 import { conflictingProviderNames, fcaTransientHistory, FCA_CORE_COOLDOWN_STEPS, FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, shouldForceFcaEpoch } from '../src/mind/action/fca/fcaCoreHistory.js';
 import { pinFcaCoreTools, replayAnchor } from '../src/mind/action/fca/fcaCoreTools.js';
 import { selectFcaTools } from '../src/mind/action/fca/fcaToolState.js';
@@ -24,7 +25,8 @@ describe('transient mode keeps its request below the price step (the core is no 
   it('takes the pinned core estimate off the replay budget, with a floor', () => {
     const codec = { ...anthropicFcaHistoryCodec, tokens: () => 25_000 };
     const found = fcaTransientHistory({}, BASE_CATALOG, { obsMode: 'transient', keepBodyTools: () => true, selector: {}, history: { codec } })!;
-    expect(found.policy.maximumReplayTokens).toBe(FCA_HISTORY_POLICY.maximumReplayTokens - 25_000);
+    // The core's estimate and the room a step's stored state may take (`fcaTransientLimits.ts`) come off the replay bound.
+    expect(found.policy.maximumReplayTokens).toBe(FCA_HISTORY_POLICY.maximumReplayTokens - 25_000 - FCA_TRANSIENT_STATE_RESERVE_TOKENS);
     const huge = fcaTransientHistory({}, BASE_CATALOG, { obsMode: 'transient', keepBodyTools: () => true, selector: {}, history: { codec: { ...codec, tokens: () => 90_000 } } })!;
     expect(huge.policy.maximumReplayTokens).toBe(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS);
     expect(fcaTransientHistory({}, BASE_CATALOG, { keepBodyTools: () => true, selector: {}, history: { codec } })).toBeNull();
