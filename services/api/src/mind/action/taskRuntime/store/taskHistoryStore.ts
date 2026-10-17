@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { checkedTemplate, COMPACTION_BODY_ITEM_CHARACTERS, COMPACTION_SECTIONS } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from '../taskHistoryPorts.js';
-import type { TaskSource, TaskStatus } from '../taskRuntimePorts.js';
+import type { TaskSource, TaskStatus, TaskStep } from '../taskRuntimePorts.js';
 import { enableFcaProvenanceSets, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 
 /** Derived summaries never replace the append-only native history. Caller owns the task transaction and lease fence. */
@@ -14,6 +14,15 @@ export class TaskHistoryStore {
   append(scopeKey: string, taskId: string, stepId: string, entries: string, at: string, status: TaskStatus, sources: readonly TaskSource[]): void {
     this.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json)
       VALUES(?,?,?,?,?,?)`).run(taskId, stepId, entries, at, status, storedSourcesJson(this.db, scopeKey, sources, this.byReference));
+  }
+  /**
+   * A committed step's round. A step closed as `continue` with nothing in its history (a retry after a provider 5xx, a held step: nothing
+   * ran) adds no round: an empty round is not a native round, `FcaHistoryCodec.project` cannot project it, and every later replay
+   * would stop at FCA_HISTORY_INCOMPLETE_ROUND. Any other disposition keeps its round, so a terminal commit's status is still recorded.
+   */
+  appendStep(step: TaskStep, entries: string, disposition: string, at: string, status: TaskStatus): void {
+    if (disposition === 'continue' && entries === '[]') return;
+    this.append(step.scopeKey, step.taskId, step.id, entries, at, status, step.snapshot.sources);
   }
   /** A round's stored sources (a copy, or a reference read now); an unresolved reference stops the read (`FCA_PROVENANCE_UNRESOLVED`). */
   window(scopeKey: string, taskId: string, sources: readonly TaskSource[]): TaskHistoryWindow {

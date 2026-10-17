@@ -324,7 +324,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       const complete = commit.disposition === 'complete' && task.kind !== 'root' && !pending && !awaitingSource;
       const waiting = !pending && (commit.disposition === 'wait' || (commit.disposition === 'complete' && (task.kind === 'root' || awaitingSource)));
       const status = commit.disposition === 'fail' ? 'failed' : complete ? 'completed' : waiting ? 'running' : 'queued';
-      this.histories.append(step.scopeKey, step.taskId, step.id, history, this.now(), status, step.snapshot.sources);
+      this.histories.appendStep(step, history, commit.disposition, this.now(), status);
       this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=? WHERE task_id=?')
         .run(waiting ? awaitingSource && commit.disposition === 'complete' ? 'source' : 'message' : null, step.taskId);
       this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: task.origin === 'maintenance' ? this.maintenance.summary(task) : commit.summary },
