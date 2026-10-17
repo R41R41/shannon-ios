@@ -231,7 +231,10 @@ export class AnthropicFcaModel implements FcaModel {
     await this.options.recordUsage(usage);
     if (!usage.usageComplete) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
     if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }; }
-    if (execution) execution.modelMetrics = decisionRequestMetrics(history, turn, usage, built);
+    // Measurement only: the response is already received and billed, so nothing here may fail the decision.
+    if (execution) {
+      try { execution.modelMetrics = decisionRequestMetrics(history, turn, usage, built); } catch { delete execution.modelMetrics; }
+    }
     validateHaikuCacheUsage(message.usage);
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');

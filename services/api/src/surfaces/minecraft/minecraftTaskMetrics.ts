@@ -114,7 +114,11 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
     noteGistCall(state.gist, d, [...attributed]);
   }
 
-  /** The end of the decision (once): its tag, adoption and gap lines, and the survival counters up to it. */
+  /**
+   * The end of the decision (once): its tag, adoption and gap lines, and the survival counters up to it. Called from the body's
+   * close, before the step commits: when the commit is fenced or the step is retried, the same `d` is measured again and its lines
+   * repeat (the first-reach lines are deduplicated in process only). Readers dedupe by task, d and line kind.
+   */
   function flush(): void {
     if (flushed || !decision) return;
     flushed = true;
