@@ -509,6 +509,7 @@
     "mind/memory/platformSurface.ts",
     "mind/memory/prospectiveMemory.ts",
     "mind/memory/provenanceEdits.ts",
+    "mind/memory/provenanceEditsPorts.ts",
     "mind/memory/selfInterestHandlers.ts",
     "mind/memory/skillCopies.ts",
     "mind/memory/skillDocument.ts",

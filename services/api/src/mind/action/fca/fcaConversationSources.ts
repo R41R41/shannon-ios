@@ -9,7 +9,7 @@ import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaCo
 import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
 import { FcaWalkTiming, type FcaWalkCaller } from './fcaWalkTiming.js';
-import { provenanceEdits } from '../../memory/provenanceEdits.js';
+import { provenanceEdits } from '../../memory/provenanceEditsPorts.js';
 import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers, foldedProvenanceResidual } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
