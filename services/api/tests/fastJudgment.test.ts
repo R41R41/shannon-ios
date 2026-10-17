@@ -55,7 +55,12 @@ function fakeBody() {
     frame: () => ({ poll: { skills: skills.map(name => ({ name })) } }),
     store: { pending: () => (pendingChecks++ < busyFor ? [{ command: { id: 'fca-skill', kind: 'skill', context: { taskId: 'task' } } }] : []),
       command: (id: string) => commands.some(command => (command as { id?: string }).id === id) },
-    async command(input: { id: string; skill?: string; arguments?: unknown }) { commands.push(input); return { id: input.id, outcome: outcomes.shift() ?? 'completed', inputsReleased: true }; },
+    /** An outcome may carry the body's failure type after a colon: `failed:interrupted_by_reflex`. */
+    async command(input: { id: string; skill?: string; arguments?: unknown }) {
+      commands.push(input);
+      const [outcome, failureType] = (outcomes.shift() ?? 'completed').split(':');
+      return { id: input.id, outcome, ...(failureType ? { failureType } : {}), inputsReleased: true };
+    },
   } as unknown as MinecraftControl;
   let active: string | undefined, interrupted = 0, touched = 0;
   const governor = createReflexGovernor();
@@ -343,6 +348,33 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     body.advance(6_000);
     body.see(hurt); await body.see(hurt);
     expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'dig-shelter']);
+  });
+
+  it('P8: a shelter the body\'s own reflex cut off (interrupted_by_reflex) did not fail: shelter again, and no danger cooldown', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.outcomes.push('failed:interrupted_by_reflex');
+    const hurt = { health: 10, nearbyThreats: [zombie(3)] };
+    body.see(hurt); await body.see(hurt);
+    // No `advance` past the cooldown: the reflex answered the danger, so the judgment may look again at the next frames,
+    // and the choice is still shelter (a failed shelter would have turned it into a flee).
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'dig-shelter']);
+    expect(body.holds).not.toContain('reflex_cooldown');
+    expect(body.lines.some(line => line.includes('outcome=failed reflexCut=true'))).toBe(true);
+  });
+
+  it('P8: any other failure type still fails the shelter and arms the cooldown', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.outcomes.push('failed:interrupted');
+    const hurt = { health: 10, nearbyThreats: [zombie(3)] };
+    body.see(hurt); await body.see(hurt);
+    body.see(hurt); expect(body.see(hurt)).toBeNull();
+    expect(body.holds).toContain('reflex_cooldown');
+    body.advance(6_000);
+    await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from']);
   });
 
   it('F4: a new life starts a new episode', async () => {

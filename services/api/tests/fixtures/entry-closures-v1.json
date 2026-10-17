@@ -725,6 +725,7 @@
     "surfaces/minecraft/minecraftLifecycle.ts",
     "surfaces/minecraft/minecraftMetricsState.ts",
     "surfaces/minecraft/minecraftMilestoneLog.ts",
+    "surfaces/minecraft/minecraftObservationReflexes.ts",
     "surfaces/minecraft/minecraftObservationSummary.ts",
     "surfaces/minecraft/minecraftOutcome.ts",
     "surfaces/minecraft/minecraftReflexAdapter.ts",

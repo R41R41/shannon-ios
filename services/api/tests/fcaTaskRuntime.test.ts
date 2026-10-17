@@ -5,6 +5,7 @@ import { actionHarness } from './support/actionThreadHarness.js';
 import { installObserverSink } from '../src/infra/observer/observerContext.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
+import { minecraftSkillResult } from '../src/surfaces/minecraft/minecraftOutcome.js';
 
 type Driver = ReturnType<typeof createTaskRuntimeWiring>;
 type Decide = (input: FcaModelInput, signal: AbortSignal) => Promise<FcaModelOutput> | FcaModelOutput;
@@ -87,6 +88,25 @@ describe('common FCA runner with the real action authority', () => {
     expect(f.driver.runtime.snapshot('owner', task.id)?.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
     expect(f.driver.runtime.pendingReceipts('owner')).toEqual([]);
     expect(f.store.list('owner').filter(action => ['running', 'waiting', 'stopping', 'unknown'].includes(action.state))).toEqual([]);
+  });
+  it('does not count a command the body\'s own reflex cut off (interrupted_by_reflex) among the failures that stop a task (P8)', async () => {
+    const run = async (failureType: string) => {
+      let count = 0;
+      const f = fixture(() => output({ kind: 'wait', summary: 'unused' }));
+      const task = f.child(`reflex-${failureType}`);
+      const driver = createTaskRuntimeWiring({ db: f.db, actions: f.actions, scopeKey: 'owner', now: () => '2026-10-09T00:00:00.000Z', ownerAlone: () => true,
+        model: { async decide() { return output({ kind: 'tools', calls: [{ id: `call-${++count}`, name: 'mc.mine-block', input: {} }] }); }, toolResults: results => ({ results }) },
+        stepPorts: () => ({ tools: { definitions: [{ name: 'mc.mine-block', description: 'Mine one observed block', input: { type: 'object', properties: {}, required: [], additionalProperties: false }, domain: 'minecraft_body', effect: 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] }],
+          async execute() { return minecraftSkillResult({ id: 'x', connectionId: 'c', outcome: 'failed', inputsReleased: true, observedAt: '2026-10-09T00:00:00.000Z', result: 'mine-block: interrupted', failureType, recoverable: true } as never); } } }) });
+      cleanups.push(() => driver.close());
+      for (let round = 0; round < 7; round++) { await driver.tick(); await driver.drain(); }
+      return { count, phase: driver.runtime.get('owner', task.id)?.phase, checkpoint: driver.runtime.snapshot('owner', task.id)?.checkpoint };
+    };
+    // The same text and the same retry hint; only the reflex one is nobody's fault.
+    const plain = await run('interrupted');
+    expect(plain.phase).toBe('stopped'); expect(plain.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
+    const reflex = await run('interrupted_by_reflex');
+    expect(reflex.count).toBe(7); expect(reflex.phase).not.toBe('stopped'); expect(reflex.checkpoint).toMatchObject({ consecutiveToolFailures: 0 });
   });
   it('runs two independent tasks concurrently, bounds the third, and preserves the foreground slot', async () => {
     const pending = new Map<string, ReturnType<typeof blocked>>();

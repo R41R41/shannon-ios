@@ -192,6 +192,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (decision.kind === 'tools') {
     if (!decision.calls.length || decision.calls.length > 8 || new Set(decision.calls.map(call => call.id)).size !== decision.calls.length) throw new Error('FCA_INVALID_CALLS');
     const results: Array<{ id: string; text: string; ok: boolean }> = [...output.auxiliaryResults ?? []];
+    /** Calls the body's own reflex cut off: no fault of the model or the tool, so they neither add to nor clear the failure count. */
+    const reflexCuts = new Set<string>();
     for (const call of decision.calls) {
       await checked();
       if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
@@ -231,13 +233,15 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       ports.tools?.progress?.observed(operationId, call.name, result);
       if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
       results.push({ id: call.id, text: result.text, ok: result.ok });
+      if (result.bodyReflex) reflexCuts.add(call.id);
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }
     if (!bodyStale) {
-      const actual = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name) ? [] : [results[(output.auxiliaryResults?.length ?? 0) + index]!]);
+      const actual = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name) || reflexCuts.has(call.id)
+        ? [] : [results[(output.auxiliaryResults?.length ?? 0) + index]!]);
       if (actual.length) consecutiveToolFailures = actual.every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
     }
     history.push(ports.model.toolResults(results));

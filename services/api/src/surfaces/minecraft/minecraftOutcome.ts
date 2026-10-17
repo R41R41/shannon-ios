@@ -16,8 +16,14 @@ export function minecraftSkillMilliseconds(skill: Pick<MinecraftSkillDefinition,
 
 /** What to do after a failed body skill, from the body's `failureType` (Minebot lane agreement, 2026-10-14). */
 export type MinecraftRetryHint = 'retry_same' | 'change_situation' | 'need_material' | 'invalid_input';
-const RETRY_SAME = new Set(['interrupted', 'timeout', 'movement_incomplete', 'position_verification_failed', 'placement_unconfirmed', 'not_ready',
-  'BODY_DEADLINE']);
+/**
+ * The body's own reflex (a meal, a step back from a creeper) took the body from the command (P8, 2026-10-17). Nothing was wrong
+ * with the command or the model's choice: it can be run again once the reflex is over and a new observation has been read. It is
+ * `retry_same`, and it does not count as a failed step (`ToolResult.bodyReflex`, read by the FCA runner).
+ */
+export const BODY_REFLEX_FAILURE = 'interrupted_by_reflex';
+const RETRY_SAME = new Set(['interrupted', BODY_REFLEX_FAILURE, 'timeout', 'movement_incomplete', 'position_verification_failed',
+  'placement_unconfirmed', 'not_ready', 'BODY_DEADLINE']);
 const NEED_MATERIAL = new Set(['material_missing', 'missing_item', 'missing_tool', 'wrong_tool', 'tool_durability_low', 'tool_broke']);
 const INVALID_INPUT = new Set(['unsupported_target', 'protected_target']);
 /** Fixed words, the same for every failure of a kind (they sit in replayed history, and the cache reads them as they were). */
@@ -47,5 +53,7 @@ export function minecraftSkillResult(receipt: MinecraftControlReceipt): ToolResu
   const text = receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`;
   const hint = minecraftRetryHint(receipt.failureType);
   if (!hint) return toolFailure('failed', text, { retryable: false });
-  return toolFailure('failed', `${text}\n［再試行の目安: ${hint}｜${HINT_WORDS[hint]}］`, { retryable: hint === 'retry_same' || hint === 'change_situation' });
+  const failure = toolFailure('failed', `${text}\n［再試行の目安: ${hint}｜${HINT_WORDS[hint]}］`,
+    { retryable: hint === 'retry_same' || hint === 'change_situation' });
+  return receipt.failureType === BODY_REFLEX_FAILURE ? Object.freeze({ ...failure, bodyReflex: true as const }) : failure;
 }

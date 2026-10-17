@@ -64,6 +64,10 @@ export function createMinecraftFastJudgment(parts: {
     return !pendingSkill(bodyId, own);
   };
 
+  /** Cut off before its time was up (cancelled), or by the body's own reflex (`interrupted_by_reflex`, whenever it came). */
+  const isCutOff = (outcome: string, byReflex: boolean, elapsed: number, skill: string) =>
+    byReflex || (outcome === 'cancelled' && elapsed < fastSkillMilliseconds(skill));
+  const reflexTag = (byReflex: boolean) => byReflex ? ' reflexCut=true' : '';
   const hasSkill = (bodyId: string, skill: string) => !!control.frame(bodyId)?.poll.skills?.some(entry => entry.name === skill);
   /**
    * Never a stale answer: the latest frame is judged again, must be from the same arrival and fresh, and still call for an action.
@@ -129,11 +133,12 @@ export function createMinecraftFastJudgment(parts: {
       }
       parts.touched();
       parts.stepOutcome('unknown');
-      let outcome: string;
+      let outcome: string, byReflex = false;
       try {
         const receipt = await control.command({ id, context: parts.context(bodyId, sessionId), lease: step.lease, kind: 'skill',
           skill: decision.skill, arguments: decision.arguments, milliseconds: fastSkillMilliseconds(decision.skill) }, signal);
         outcome = receipt.outcome;
+        byReflex = receipt.failureType === 'interrupted_by_reflex';
         parts.stepOutcome('acknowledged');
       } catch (error) {
         // Never sent (the body went away, the lease moved): nothing happened. Sent and lost: unknown, as any body command.
@@ -145,10 +150,14 @@ export function createMinecraftFastJudgment(parts: {
       effective = outcome === 'completed';
       // A shelter cut off before its time was up (the FCA's own interrupt cancels the command) did not fail: only a refusal, a failure
       // or a run to its deadline does. The design only says "if hiding failed, flee next" and does not cover interrupts.
-      const cutOff = outcome === 'cancelled' && now() - sentAt < fastSkillMilliseconds(decision.skill);
+      // So is one the body's own reflex took the body from (a meal, a step back from a creeper: `interrupted_by_reflex`, whatever the
+      // time): the body defended itself, and the shelter did not fail. No cooldown either: the reflex answered the danger, and
+      // the judgment is free to look at it again once the body's floor lets go (`floor_active` holds it until then).
+      const cutOff = isCutOff(outcome, byReflex, now() - sentAt, decision.skill);
+      cooldown = !byReflex;
       if (decision.kind === 'shelter') shelterFailed = !effective && !cutOff;
       parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
-        + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}`);
+        + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}${reflexTag(byReflex)}`);
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
         skill: decision.skill, outcome }), sessionId);
     } finally { governor.ended(step.taskId, now(), entry, effective, cooldown); }
