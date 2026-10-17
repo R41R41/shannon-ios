@@ -256,6 +256,7 @@
     "mind/action/fca/fcaConversation.ts",
     "mind/action/fca/fcaConversationPorts.ts",
     "mind/action/fca/fcaConversationSources.ts",
+    "mind/action/fca/fcaCoreHistory.ts",
     "mind/action/fca/fcaCoreTools.ts",
     "mind/action/fca/fcaHistory.ts",
     "mind/action/fca/fcaNoResponse.ts",

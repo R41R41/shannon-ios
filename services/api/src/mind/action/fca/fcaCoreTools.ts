@@ -77,6 +77,7 @@ export function withTransientFields(state: FcaToolState, item: Partial<FcaToolSt
   const core = readFcaCorePin(item.core), announced = item.announced ?? [];
   const whole = item.obsMode === 'transient' && core && Array.isArray(announced) && announced.every(name => typeof name === 'string');
   const { obsMode: _mode, core: _core, announced: _announced, ...legacy } = state;
+  if (item.obsMode === 'transient' && !whole) throw new Error('FCA_CORE_TOOLS_STATE_INVALID');
   return whole ? { ...legacy, obsMode: 'transient', core, announced: [...announced] } : legacy;
 }
 

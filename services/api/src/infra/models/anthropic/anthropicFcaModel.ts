@@ -141,7 +141,7 @@ export class AnthropicFcaModel implements FcaModel {
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
-    // Transient mode (caCoreTools.ts) declares ca_context at the top level, so it needs no selected menu to carry it.
+    // Transient mode (`fcaCoreTools.ts`) declares `fca_context` at the top level, so it needs no selected menu to carry it.
     const transient = input.coreTools !== undefined;
     if (input.sharedContext && !input.catalog && !transient) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
     const { turn, body, menu, built } = observeSync('native', {
@@ -364,9 +364,9 @@ const PRICE_STEP_TOKENS = 100_000;
 /** The decision message's fields, before the parts this epoch already showed are left out (`elidedDecision`). */
 function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown> | undefined, transient = false): Record<string, unknown> {
   // Transient mode lists only the tools that are not core: the core definitions are loaded at the top level.
-  const core = new Set(transient ? (input.coreTools ?? []).map(tool => tool.name) : []);
+  const core = new Set(transient ? (input.coreTools ?? []).flatMap(tool => [tool.name, providerToolName(tool.name)]) : []);
   return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
-    ...(input.catalog ? { catalog: input.catalog.filter(tool => !core.has(tool.name))
+    ...(input.catalog ? { catalog: input.catalog.filter(tool => !core.has(tool.name) && !core.has(providerToolName(tool.name)))
       .map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
     ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),

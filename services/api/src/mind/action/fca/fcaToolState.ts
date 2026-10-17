@@ -3,7 +3,7 @@ import { observerHandoff } from '../../../infra/observer/observerContext.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { providerToolName, toolFailure, type ShannonToolDefinition, type ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaModelInput } from './fcaPorts.js';
-import { selectedTransientTools, transientToolState, withTransientFields, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
+import { readFcaCorePin, selectedTransientTools, transientToolState, withTransientFields, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
 
 export interface FcaToolState {
   version: 1; key: string; inputKey: string; names: string[]; opened: string[]; refresh: boolean;
@@ -122,6 +122,8 @@ export function openFcaTool(input: unknown, catalog: readonly ShannonToolDefinit
 function readState(value: unknown): FcaToolState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Partial<FcaToolState>;
+  // A transient task's history is shaped for its pinned core: a checkpoint without a valid one is never read as another mode.
+  if (item.obsMode === 'transient' && !readFcaCorePin(item.core)) throw new Error('FCA_CORE_TOOLS_STATE_INVALID');
   const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every(name => typeof name === 'string');
   if (item.version !== 1 || typeof item.key !== 'string' || typeof item.inputKey !== 'string' || typeof item.refresh !== 'boolean'
     || !strings(item.names) || !strings(item.opened) || !Array.isArray(item.recentResults)

@@ -29,6 +29,34 @@ function declaredInline(history: readonly Anthropic.MessageParam[]): Set<string>
 }
 
 /**
+ * The provider names of a request, each for one tool. The pinned core claims its names first; a catalog tool that shares a provider
+ * name with a pinned core tool of another name is skipped (the pin was made before it existed; the runner starts a new epoch for it,
+ * `fcaCoreHistory.ts`) and logged, never declared. Two other tools with one name remain a conflict.
+ */
+function claimedNames(input: FcaModelInput, controls: readonly Anthropic.Tool[], auxiliary: readonly Anthropic.Tool[]) {
+  const names = new Map<string, string>();
+  const reserved = new Set([...controls, ...auxiliary].map(tool => tool.name));
+  const claim = (internal: string) => {
+    const name = providerToolName(internal);
+    const taken = names.has(name) && names.get(name) !== internal;
+    if (taken || reserved.has(name) || name === fcaOpenTool.name) throw new Error('FCA_MODEL_TOOL_CONFLICT');
+    names.set(name, internal);
+  };
+  // A pinned core tool the catalog no longer lists stays declared; a call of it is turned away by the runner as not offered.
+  for (const definition of input.coreTools ?? []) claim(definition.name);
+  const skipped = new Set<string>(), pinned = new Set((input.coreTools ?? []).map(definition => definition.name));
+  for (const tool of input.catalog ?? input.tools) {
+    const owner = names.get(providerToolName(tool.name));
+    if (owner !== undefined && owner !== tool.name && pinned.has(owner)) {
+      skipped.add(tool.name);
+      continue;
+    }
+    claim(tool.name);
+  }
+  if (skipped.size) console.info(JSON.stringify({ event: 'fca_core_tools_conflict', taskId: input.task.id, skipped: skipped.size }));
+  return { names, skipped };
+}
+/**
  * The tools of a transient body task's request. The top level holds `tool_open`, the control tools, the auxiliary `fca_context` (always,
  * with or without a shared context) and the epoch's pinned core definitions, in that order and byte for byte the same for the whole
  * epoch: the signatures of thinking blocks bind the set of tools. Every other selected tool is appended as an inline definition the
@@ -37,19 +65,11 @@ function declaredInline(history: readonly Anthropic.MessageParam[]): Set<string>
  */
 export function transientFcaTools(input: FcaModelInput, history: readonly Anthropic.MessageParam[], controls: readonly Anthropic.Tool[],
   auxiliary: readonly Anthropic.Tool[]) {
-  const names = new Map<string, string>();
-  const reserved = new Set([...controls, ...auxiliary].map(tool => tool.name));
-  const claim = (internal: string) => {
-    const name = providerToolName(internal);
-    if (names.has(name) && names.get(name) !== internal || reserved.has(name) || name === fcaOpenTool.name) throw new Error('FCA_MODEL_TOOL_CONFLICT');
-    names.set(name, internal);
-  };
-  for (const tool of input.catalog ?? input.tools) claim(tool.name);
-  // A pinned core tool the catalog no longer lists stays declared; a call of it is turned away by the runner as not offered.
-  for (const definition of input.coreTools ?? []) claim(definition.name);
+  const { names, skipped } = claimedNames(input, controls, auxiliary);
   const core = (input.coreTools ?? []).map(fcaNativeTool), coreNames = new Set(core.map(tool => tool.name));
   const others = new Map<string, Anthropic.Tool>();
   for (const definition of input.tools) {
+    if (skipped.has(definition.name)) continue;
     const tool = fcaNativeTool(definition);
     if (names.get(tool.name) !== definition.name || others.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     if (!coreNames.has(tool.name)) others.set(tool.name, tool);

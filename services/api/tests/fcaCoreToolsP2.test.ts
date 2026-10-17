@@ -112,29 +112,25 @@ describe('transient mode: core tools fixed at the top level, the others appended
     for (const group of groups) expect(added(group.at(-1)!).length).toBeLessThanOrEqual(2);
   }, 120_000);
 
-  it('applies a changed body catalog only at the next epoch, and appends it meanwhile', async () => {
+  it('applies a changed body catalog only at an epoch boundary: the one the change itself starts, never mid-epoch', async () => {
     quiet();
     const changed = [...BASE_CATALOG.map(tool => tool.name === 'mc.skill-1' ? definition(tool.name, 'minecraft_body', '説明を書き換えた。') : tool),
       definition('mc.skill-new', 'minecraft_body')];
-    const run = scenario({ mode: () => 'transient', policy: SUMMARY_POLICY, catalogAt: decision => decision >= 7 ? changed : BASE_CATALOG });
+    const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, catalogAt: decision => decision >= 7 ? changed : BASE_CATALOG });
     expect(await run.settle()).toBe('completed');
     expect(run.violations).toEqual([]);
-    const groups = epochs(run.bodies);
-    const first = groups[0]!;
-    expect(first.length).toBeGreaterThan(7);
-    // The first epoch never changes its top level, though the catalog changed at its seventh decision; the new tool is appended.
-    expect(new Set(first.map(toolsJson)).size).toBe(1);
-    expect(toolNames(first[0]!)).not.toContain('mc_skill-new');
-    expect(added(first.at(-1)!)).toContain('mc_skill-new');
-    // From the next epoch the top level carries the new catalog, and then it stays the same for that epoch.
-    const next = groups[1]!;
-    expect(toolNames(next[0]!)).toContain('mc_skill-new');
-    expect(toolsJson(next[0]!)).not.toBe(toolsJson(first[0]!));
-    expect(JSON.stringify(next[0]!.tools)).toContain('説明を書き換えた');
-    for (const group of groups.slice(1)) expect(new Set(group.map(toolsJson)).size).toBe(1);
-    for (const group of groups.slice(1)) expect(added(group.at(-1)!)).not.toContain('mc_skill-new');
+    // The first six requests (before the change) share one top level; from the seventh, the first replay after the change starts a
+    // new epoch (a summary) and the core is pinned again: the new tool and the new description are on the top level, and stay.
+    const before = run.bodies.slice(0, 6), after = run.bodies.slice(6);
+    expect(new Set(before.map(toolsJson)).size).toBe(1);
+    expect(toolNames(before[0]!)).not.toContain('mc_skill-new');
+    expect(isEpochStart(after[0]!)).toBe(true);
+    expect(new Set(after.map(toolsJson)).size).toBe(1);
+    expect(toolNames(after[0]!)).toContain('mc_skill-new');
+    expect(JSON.stringify(after[0]!.tools)).toContain('説明を書き換えた');
+    // The new core is on the top level, so it is announced inline nowhere.
+    for (const body of after) expect(added(body)).not.toContain('mc_skill-new');
   }, 120_000);
-
   it('offers fca_context at the top level without a shared context and answers a call of it as not provided', async () => {
     quiet();
     const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, contextCall: true });

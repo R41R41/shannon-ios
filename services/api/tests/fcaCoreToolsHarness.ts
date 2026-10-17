@@ -8,7 +8,7 @@ import type { FcaExternalTools, FcaToolDefinition } from '../src/mind/action/fca
 import type { FcaObsMode } from '../src/mind/action/fca/fcaCoreTools.js';
 import type { FcaHistoryPolicy } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js';
-import { providerToolName, toolOk } from '../src/mind/tools/shannonTools.js';
+import { providerToolName, toolFailure, toolOk } from '../src/mind/tools/shannonTools.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
@@ -39,6 +39,12 @@ export interface ScenarioOptions {
   catalogAt?: (decision: number) => readonly FcaToolDefinition[];
   /** Decision 3 also calls `fca_context` (transient only: the legacy menu has none without a shared context). */
   contextCall?: boolean;
+  /** Characters of detail in each tool result (CJK: about 1.1 tokens each). */
+  resultSize?: number;
+  /** The executor checks a call's input against the CURRENT catalog's required properties, as the body's executor does. */
+  strictInput?: boolean;
+  /** Close the driver after this many decision requests and open a new one on the same database (a restart of the API). */
+  restartAt?: number;
 }
 export const SUMMARY_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 9, recentRounds: 3 };
 export const WIDE_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 80, recentRounds: 6, maximumNativeCharacters: 900_000,
@@ -50,10 +56,15 @@ export function scenario(options: ScenarioOptions = {}) {
   const h = actionHarness(now);
   const violations: string[] = [];
   const bodies: Array<Record<string, unknown>> = [];
-  let decisions = 0;
+  let decisions = 0, failures = 0;
   const steps = options.steps ?? 30;
   const template = Object.fromEntries(COMPACTION_SECTIONS.map(section => [section, [`${section}: 原木集めの事実`]]));
   const use = (id: string, name: string, input: Record<string, unknown> = {}) => ({ type: 'tool_use', id, name, input });
+  /** What the tools of this very request ask for: the model writes inputs for the definitions it was given. */
+  const inputFor = (body: Record<string, unknown>, name: string): Record<string, unknown> => {
+    const tool = (body.tools as Array<{ name: string; input_schema?: { required?: string[] } }>).find(item => item.name === name);
+    return { target: 'oak_log', ...Object.fromEntries((tool?.input_schema?.required ?? []).map(key => [key, 'x'])) };
+  };
   const fixture = scriptedAnthropic(body => {
     const violation = anthropicRequestViolation(body);
     if (violation) violations.push(violation);
@@ -66,33 +77,45 @@ export function scenario(options: ScenarioOptions = {}) {
     if (d >= steps) return message([use(`${id}_complete`, 'fca_complete', { summary: '原木を集めた' })], 'tool_use');
     const calls = d === 5 ? [use(id, 'tool_open', { name: 'lazy_alpha' })] : d === 6 ? [use(id, 'lazy_alpha')]
       : d === 12 ? [use(id, 'tool_open', { name: 'lazy_beta' })] : d === 13 ? [use(id, 'lazy_beta')]
-      : [use(id, providerToolName(`mc.skill-${(d % 5) + 1}`), { target: 'oak_log' })];
+      : [use(id, providerToolName(`mc.skill-${(d % 5) + 1}`), inputFor(body, providerToolName(`mc.skill-${(d % 5) + 1}`)))];
     if (options.contextCall && d === 3) calls.unshift(use(`${id}_context`, 'fca_context', { expectations: [], appraisals: [] }));
     return message([{ type: 'thinking', thinking: '次の作業', signature: `signed-${d}-${'s'.repeat(300)}` }, ...calls], 'tool_use');
   });
   const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
   const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
   const tools: FcaExternalTools = { get definitions() { return options.catalogAt ? options.catalogAt(decisions + 1) : BASE_CATALOG; },
-    async execute() { return toolOk(JSON.stringify({ found: 'oak_log', distance: 12 })); } };
+    async execute(call) {
+      // The catalog of the step that is running (the getter reads the next decision's, as the runner asks before it is made).
+      const now = options.catalogAt ? options.catalogAt(Math.max(1, decisions)) : BASE_CATALOG;
+      const current = now.find(item => item.name === call.name);
+      const required = (current?.input as { required?: string[] } | undefined)?.required ?? [];
+      if (options.strictInput && required.some(key => !(call.input as Record<string, unknown> | null)?.[key])) {
+        failures += 1; return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。');
+      }
+      return toolOk(JSON.stringify({ found: 'oak_log', distance: 12, ...(options.resultSize ? { detail: '原木'.repeat(options.resultSize) } : {}) }));
+    } };
   const selector: FcaToolSelector = { async select(request) {
     return { names: request.tools.map(tool => tool.name).filter(name => /^(mc|minecraft)\./u.test(name)), source: 'jev' };
   } };
   let only = '';
-  const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
+  const open = () => createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,
     stepPorts: () => { const mode = options.mode?.(); return { tools, selector, keepBodyTools: () => options.keepBody !== false,
       ...(mode ? { obsMode: mode } : {}), history: { codec: anthropicFcaHistoryCodec, summarizer, ...(options.policy ? { policy: options.policy } : {}) } }; } });
+  let driver = open();
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');
   const task = driver.runtime.createChild('owner', root.id, { title: '原木を集める', goal: '原木を16個集める', completionCriteria: '原木16個を新しい観測で確かめる。' }, 'minecraft-request');
   only = task.id;
+  let restarted = false;
   async function settle() {
     for (let i = 0; i < 400 && !['completed', 'failed', 'unknown'].includes(driver.runtime.get('owner', task.id)?.phase ?? ''); i++) {
+      if (options.restartAt !== undefined && !restarted && decisions >= options.restartAt) { restarted = true; await driver.close(); driver = open(); }
       await driver.tick(); await driver.drain(); time += 1_000;
     }
     return driver.runtime.get('owner', task.id)?.phase;
   }
-  return { driver, task, bodies, allBodies: fixture.bodies, violations, settle };
+  return { get driver() { return driver; }, task, bodies, allBodies: fixture.bodies, violations, settle, get failures() { return failures; } };
 }
 
 /** A request as the golden tests compare it: ids and clock readings of this run replaced, then hashed. */
