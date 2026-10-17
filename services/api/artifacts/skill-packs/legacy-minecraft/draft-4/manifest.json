@@ -10,10 +10,28 @@
     {
       "name": "mc-bed-before-night",
       "path": "mc-bed-before-night/SKILL.md",
-      "sha256": "8d99154537d1eae856590cf0a2a73f858bf304c0fb3b45c4578e50e2fe561888",
+      "sha256": "fe2dfe353ef4f90cf3dc86325eac486b1b8d7311489d28cef5e2f86fda22efb6",
       "revises": {
         "bodySha256": "54eb66a3287e816440f1ba85f758eb3c46c48eafbf3d961af741e8f92536cf5c"
       },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-opening-scout",
+      "path": "mc-opening-scout/SKILL.md",
+      "sha256": "12578f7f07c8364b3f35ce02896bb58e2fa6440edf72592a51eda35ae59626df",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-iron-and-bucket",
+      "path": "mc-iron-and-bucket/SKILL.md",
+      "sha256": "7a5de28e594bbcddc2b0709b17f48367ea2e2e015b76df202462af6b383b619b",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"

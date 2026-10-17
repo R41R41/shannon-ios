@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { SkillMemory, fcaSkillTaskKey } from '../src/mind/memory/skillMemory.js';
 import { SkillImporter, skillArtifactSha256 } from '../src/mind/memory/skillImport.js';
+import type { SkillPack } from '../src/mind/memory/skillImportContract.js';
 import { SKILL_GIST, SKILL_CAPACITY, skillGist } from '../src/mind/memory/skillDocument.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { GENERIC_BODY_TOOLS, bedSearchGivenUp, bedSearchMark, gistToolNames, minecraftSituation, minecraftSkillPointers, noSheepNearby, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
@@ -143,13 +144,16 @@ describe('a call of a bed tool while its gist is shown records the follow (not e
       expect(context.skillGists?.map(item => item.skill)).toEqual([BED]);
       for (const name of ['mc.find-nearest-entity', 'mc.craft-one', 'mc.explore-for-structure', 'mc.sleep-in-bed']) made.body.noteCall!({ id: name, name, input: {} }, `op-${name}`);
     });
-    expect(lines.map(line => line.replace(/^Shannon Minecraft gist follow task=task-bed /u, ''))).toEqual([
+    expect(lines.filter(line => line.includes('gist follow')).map(line => line.replace(/^Shannon Minecraft gist follow task=task-bed /u, ''))).toEqual([
       'tool=mc.find-nearest-entity branch=read_only skills=-',
       'tool=mc.craft-one branch=generic_tool skills=-',
       `tool=mc.explore-for-structure branch=recorded skills=${BED}`,
       `tool=mc.sleep-in-bed branch=recorded skills=${BED}`,
     ]);
     expect(followed).toEqual([BED, BED]);
+    // The content-free adoption line: only the call that matches what the pointed skill is about (the sleep), with a closed tag.
+    expect(lines.filter(line => line.includes('stage adoption'))).toEqual([
+      `Shannon Minecraft stage adoption task=task-bed stage=1 skill=${BED} tag=bed_sleep tool=mc.sleep-in-bed`]);
   });
 });
 
@@ -189,7 +193,10 @@ describe('after her sheep search found none, the bed is not offered again that d
     expect(offered(500, bedSearchMark(mark, dusk(500)))).toEqual(BED_POINTER);
     // A moment without an observation changes nothing; the mark is made only inside the window.
     expect(bedSearchMark(mark, null)).toBe(400);
-    expect(bedSearchGivenUp(dusk(640))).toBeUndefined();
+    // The stage-2 pointer has no window, so a search any time of the day marks it (below the full day's 650 s, so that a new morning clears it).
+    expect(bedSearchGivenUp(dusk(640))).toBe(640);
+    expect(bedSearchGivenUp(dusk(650))).toBeUndefined();
+    expect(bedSearchMark(640, dusk(650))).toBeUndefined();
     expect(bedSearchGivenUp(null)).toBeUndefined();
   });
 
@@ -227,43 +234,40 @@ describe('after her sheep search found none, the bed is not offered again that d
   });
 });
 
-describe('the skill (legacy-minecraft draft-4): the bed gist rewritten as a revision of draft-3', () => {
+describe('the skill (legacy-minecraft draft-4): the bed gist rewritten as a revision of draft-3, with the two opening skills', () => {
   const pack = () => standardSkillPack('legacy-minecraft', 'draft-4')!;
   const body = () => pack().skills.find(entry => entry.name === BED)!.body;
-  const REAL_TOOLS = new Set(['mc.find-nearest-entity', 'mc.craft-one', 'mc.sleep-in-bed', 'mc.attack-continuously']);
+  const REAL_TOOLS = new Set(['mc.find-nearest-entity', 'mc.craft-one', 'mc.sleep-in-bed', 'mc.attack-continuously', 'mc.find-structure', 'mc.recall-places']);
 
-  it('revises the one skill of draft-3 (its exact body), with an exact hash', () => {
-    expect(pack().skills.map(entry => entry.name)).toEqual([BED]);
-    expect(skillArtifactSha256(body())).toBe(pack().skills[0]!.sha256);
+  it('revises the bed skill of draft-3 (its exact body), with exact hashes, and adds two new skills', () => {
+    expect(pack().skills.map(entry => entry.name)).toEqual([BED, 'mc-opening-scout', 'mc-iron-and-bucket']);
+    for (const entry of pack().skills) expect(skillArtifactSha256(entry.body)).toBe(entry.sha256);
     const previous = standardSkillPack('legacy-minecraft', 'draft-3')!.skills[0]!;
     expect(pack().skills[0]!.revises).toEqual({ bodySha256: previous.sha256 });
+    expect(pack().skills[1]).not.toHaveProperty('revises');
+    expect(pack().skills[2]).not.toHaveProperty('revises');
     expect(skillArtifactSha256(previous.body)).toBe(previous.sha256);
-    expect(body()).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
+    for (const entry of pack().skills) expect(entry.body).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
   });
 
-  it('has a gist of three lines within 90 characters: the benefit, a cheap first step, then craft and sleep, naming real tools', () => {
+  it('has the gist the owner chose: the benefit and the village shortcut, the search order and its limit, then giving up to the night retreat', () => {
     const gist = skillGist(body(), observeOnlyStep);
     expect(gist).toHaveLength(SKILL_GIST.lines);
     expect(gist.map(line => line.slice(0, 2))).toEqual(['2.', '3.', '4.']);
     expect(gist.every(line => [...line].length <= SKILL_GIST.width && !line.endsWith('…'))).toBe(true);
     expect(gist.join('')).not.toContain('minecraft.observe');
-    expect(gist[0]).toMatch(/夜をまるごと飛ばせ.*リスポーン地点/u);
-    expect(gist[1]).toContain('mc.find-nearest-entity');
-    expect(gist[1]).toContain('sheep');
-    expect(gist[1]).toContain('諦め');
-    expect(gist[1]).toContain('村');
-    expect(gist[2]).toContain('mc.craft-one');
-    expect(gist[2]).toContain('mc.sleep-in-bed');
+    expect(gist[0]).toMatch(/夜を丸ごと飛ばせる.*村の家のベッド.*mc\.sleep-in-bed/u);
+    expect(gist[1]).toMatch(/村が分かれば村へ.*mc\.find-nearest-entity（sheep）.*3頭倒し.*羊毛3＋板材3.*mc\.craft-one.*6分か12決定まで/u);
+    expect(gist[2]).toMatch(/羊も村も無い.*敵が近い.*暗くなる1分前.*諦め.*mc-night-retreat/u);
     // The discouraging wording is gone from the whole skill.
     expect(body()).not.toContain('地下で過ごす方針は変えない');
-    expect(gist.join('')).not.toContain('mc-night-retreat');
-    const named = [...gistToolNames(gist)];
-    expect(named).toEqual(['mc.find-nearest-entity', 'mc.sleep-in-bed']);
-    // Every `mc.` tool the whole skill names is a real one of the body catalog (mc-night-retreat is a skill, not a tool).
+    // `mc.find-nearest-entity` and `mc.sleep-in-bed` are named as tools; `mc.craft-one` is generic and `mc-night-retreat` is a skill.
+    expect([...gistToolNames(gist)].sort()).toEqual(['mc.find-nearest-entity', 'mc.sleep-in-bed']);
+    // Every `mc.` tool the whole skill names is a real one of the body catalog.
     expect([...body().matchAll(/mc\.[a-z-]+/gu)].every(match => REAL_TOOLS.has(match[0]))).toBe(true);
   });
 
-  it('imports after draft-3 as a revision: problems empty, no new capacity used, hash as in the manifest, other skills untouched', () => {
+  it('imports after draft-3: problems empty, two new skills of capacity, hashes as in the manifest, other skills untouched', () => {
     const memory = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
     const importer = new SkillImporter({ memory, ownerScopeKey: 'owner', check: () => pass, tools: () => [] });
     const apply = (revision: 'draft-1' | 'draft-2' | 'draft-3' | 'draft-4', when: string) => {
@@ -273,8 +277,9 @@ describe('the skill (legacy-minecraft draft-4): the bed gist rewritten as a revi
     apply('draft-1', at); apply('draft-2', later(1)); apply('draft-3', later(2));
     const plan = importer.dryRun('owner', pack());
     expect(plan.problems).toEqual([]);
-    expect(plan.capacity).toEqual({ used: 10, added: 0, limit: SKILL_CAPACITY });
+    expect(plan.capacity).toEqual({ used: 10, added: 2, limit: SKILL_CAPACITY });
     expect(plan.skills[0]).toMatchObject({ name: BED, sha256: pack().skills[0]!.sha256, revises: { bodySha256: standardSkillPack('legacy-minecraft', 'draft-3')!.skills[0]!.sha256 } });
+    expect(plan.skills.map(skill => skill.sha256)).toEqual(pack().skills.map(entry => entry.sha256));
     const retreat = memory.store.byName('owner', 'mc-night-retreat')!, before = memory.store.byName('owner', BED)!;
     expect(apply('draft-4', later(3))).toHaveProperty('receipt');
     const revised = memory.store.byName('owner', BED)!;
@@ -282,8 +287,29 @@ describe('the skill (legacy-minecraft draft-4): the bed gist rewritten as a revi
     expect(revised.version).toBe(before.version + 1);
     expect(skillArtifactSha256(revised.body)).toBe(pack().skills[0]!.sha256);
     expect(revised).toMatchObject({ status: 'trial', madeBy: 'operator_authored' });
+    for (const name of ['mc-opening-scout', 'mc-iron-and-bucket']) {
+      expect(memory.store.byName('owner', name)).toMatchObject({ status: 'trial', madeBy: 'operator_authored', uses: [], successes: 0,
+        provenance: { packId: 'legacy-minecraft', packRevision: 'draft-4' } });
+    }
     expect(memory.store.byName('owner', 'mc-night-retreat')).toMatchObject({ version: retreat.version, body: retreat.body });
     expect(memory.index('owner').split('\n').filter(line => line.includes(BED))).toHaveLength(1);
+    expect(memory.index('owner')).toContain('mc-opening-scout');
+  });
+
+  it('would take a production of 22 skills to 24 of 25, and one more skill over the limit (a full pack is refused)', () => {
+    const memory = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const importer = new SkillImporter({ memory, ownerScopeKey: 'owner', check: () => pass, tools: () => [] });
+    for (const [revision, when] of [['draft-1', at], ['draft-2', later(1)], ['draft-3', later(2)]] as const) {
+      const next = standardSkillPack('legacy-minecraft', revision)!;
+      importer.apply('owner', next, { planHash: importer.dryRun('owner', next).planHash, approvalReference: 'owner-form-20261017' }, when);
+    }
+    // 12 more stand-ins (one pack of other skills) make the 22 of production; the plan's capacity then reads 22 + 2 = 24 of 25.
+    const bodies = Array.from({ length: 12 }, (_, index) => ({ name: `filler-${index}`,
+      body: `---\nname: filler-${index}\ndescription: 場を埋める\n---\n\n## 手順\n1. 何もしない。\n\n## 補助\nなし\n\n## 参考\nなし\n` }));
+    const fillers: SkillPack = { schemaVersion: 1, packId: 'filler', revision: 'draft-1', sourceAuthor: 'test', sourceReference: 'test://filler', referenceRevision: 'abcdef1',
+      validatorRevision: 'skill-import-v1', skills: bodies.map(entry => ({ ...entry, sha256: skillArtifactSha256(entry.body), tools: [] })) };
+    expect(importer.apply('owner', fillers, { planHash: importer.dryRun('owner', fillers).planHash, approvalReference: 'owner-form-20261017' }, later(3))).toHaveProperty('receipt');    expect(importer.dryRun('owner', pack()).capacity).toEqual({ used: 22, added: 2, limit: SKILL_CAPACITY });
+    expect(importer.dryRun('owner', pack()).problems).toEqual([]);
   });
 
   it('cannot revise once the current version has been used (then a new skill name is the way)', () => {

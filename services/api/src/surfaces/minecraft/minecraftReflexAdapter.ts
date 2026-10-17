@@ -1,6 +1,7 @@
 import {
   bedSearchMemory, followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
 } from './minecraftSkillPointers.js';
+import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -129,6 +130,8 @@ export function createMinecraftTaskBody(parts: {
   let lastSignature = '', lastSequence = -1, lastFastSequence = -1;
   // The body tools named by the gists the latest decision was shown (`minecraftSkillContext`), by skill.
   let gistTools: ReadonlyMap<string, ReadonlySet<string>> = new Map();
+  // The skills pointed at the latest decision and her stage then, for the content-free adoption line (`adoptionTags`).
+  let pointedSkills: readonly string[] = [], stageNow: number | null = null;
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
@@ -358,6 +361,14 @@ export function createMinecraftTaskBody(parts: {
       try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
     }
   };
+  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never her content. Measuring only.
+  const noteStageAdoption = (call: { name: string; input: unknown }) => {
+    if (!pointedSkills.length) return;
+    for (const { skill, tag } of adoptionTags(pointedSkills, call)) {
+      const line = `Shannon Minecraft stage adoption task=${step.taskId} stage=${stageNow ?? '-'} skill=${skill} tag=${tag} tool=${call.name}`;
+      try { log(line); } catch { /* logging never fails a step */ }
+    }
+  };
   const body: FcaBodyLifecycle = {
     start(signal) {
       if (started) return; started = true; execution = currentActionExecution();
@@ -376,6 +387,8 @@ export function createMinecraftTaskBody(parts: {
       const situation = minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) });
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
+      pointedSkills = skills.pointed;
+      stageNow = situation.stage;
       return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace, ...skills.fields };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
@@ -396,6 +409,7 @@ export function createMinecraftTaskBody(parts: {
       if (!call.name.startsWith('mc.')) return;
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
       if (!active && !closed) noteGistFollowed(call.name);
+      if (!active && !closed) noteStageAdoption(call);
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };

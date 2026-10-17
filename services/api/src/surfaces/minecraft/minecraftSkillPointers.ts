@@ -1,4 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { HAS_BED, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -15,8 +16,15 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 export interface MinecraftSituation {
   night: boolean; darkSoon: boolean; threatNear: boolean; lowHealth: boolean; hungry: boolean; stalled: boolean; idleWaiting: boolean;
   readyForNether: boolean; inNether: boolean; blazeNear: boolean;
-  /** Dusk is coming (dark in more than a minute and at most `BED_LEAD_SECONDS`, overworld) and she carries no bed. Closed facts only. */
+  /**
+   * A bed is worth looking for and she carries none: dusk is coming (dark in more than a minute and at most `BED_LEAD_SECONDS`,
+   * overworld), or she is at stage 2 by day (no window: the whole day), and she has not looked for sheep and found none today.
+   */
   bedWanted: boolean;
+  /** The opening stage from what she carries (`minecraftStage`, recomputed at every decision); null outside the overworld. */
+  stage: MinecraftStage | null;
+  /** By day in the overworld and no threat near: the moments the stage pointers (not the safety ones) are offered in. */
+  calm: boolean;
 }
 type Pointer = { skill: string; when: string; applies(situation: MinecraftSituation): boolean };
 const POINTERS: readonly Pointer[] = Object.freeze([
@@ -31,6 +39,11 @@ const POINTERS: readonly Pointer[] = Object.freeze([
   { skill: 'mc-blaze-rods', when: 'ネザーでブレイズが近い', applies: s => s.blazeNear },
   { skill: 'mc-nether-portal', when: '鉄のツルハシがありネザーへ向かう前', applies: s => s.readyForNether },
   { skill: 'mc-food-and-pace', when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
+  // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
+  // path is stage 4's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
+  { skill: 'mc-early-toolchain', when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
+  { skill: 'mc-opening-scout', when: '石のツルハシがありベッドが無い昼', applies: s => s.calm && s.stage === 2 },
+  { skill: 'mc-iron-and-bucket', when: 'ベッドがあり鉄のツルハシがまだ無い', applies: s => s.calm && s.stage === 3 },
 ]);
 /** The note beside the pointers: fixed words. */
 export const MINECRAFT_SKILL_POINTER_NOTE = 'いまの状況に合うスキル。動く前に skill_read で開いて手順を確かめる。';
@@ -46,6 +59,8 @@ const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
  * minute, enough for a hunt of several minutes after the decision. It still ends at `DARK_SOON_SECONDS`, where `mc-night-retreat` begins.
  */
 const BED_LEAD_SECONDS = 600;
+/** The day before dark, in seconds: tick 13,000 at 20 ticks a second. A countdown never starts above it. */
+const DAY_SECONDS = 650;
 
 /** The pace facts the situation reads (`minecraftPace`). */
 export interface MinecraftPaceFacts {
@@ -96,38 +111,55 @@ export function noSheepNearby(call: { name: string; input: unknown }, result: { 
 }
 /**
  * The mark of "no sheep near" for the rest of the day: kept while the countdown to dark only falls; a rise (a new day, or after
- * dark) clears it. Marked only inside the bed window, so that the next morning's 650 s is always above it. Outside the overworld the
- * countdown is `Infinity`, which also clears it (accepted: she is elsewhere, and the next search marks again).
+ * dark) clears it. Marked only below the full day's 650 s (`bedSearchGivenUp`), so that the next morning's first reading is above it.
+ * Outside the overworld the countdown is `Infinity`, which also clears it (accepted: she is elsewhere, and the next search marks again).
  */
 export function bedSearchMark(mark: number | undefined, observation: BodyObservation | null): number | undefined {
   if (!observation) return mark;
   return mark !== undefined && darkInSeconds(observation) <= mark ? mark : undefined;
 }
-/** The value to mark with at a search that found none: the seconds to dark now, only inside the bed window. */
+/**
+ * The value to mark with at a search that found none: the seconds to dark now, at any time of the day but its very start (the
+ * stage-2 bed pointer has no window: before P7 only the last `BED_LEAD_SECONDS` were marked). Always below `DAY_SECONDS`, so that
+ * the next morning's first reading is above the mark and clears it.
+ */
 export function bedSearchGivenUp(observation: BodyObservation | null): number | undefined {
   const now = darkInSeconds(observation);
-  return Number.isFinite(now) && now > 0 && now <= BED_LEAD_SECONDS ? now : undefined;
+  return Number.isFinite(now) && now > 0 && now < DAY_SECONDS ? now : undefined;
 }
 
 export function minecraftSituation(observation: BodyObservation | null, pace: MinecraftPaceFacts): MinecraftSituation {
   const world = record(observation?.state.world) ?? {};
   const facts = observation?.facts ?? {};
-  const dimension = typeof world.dimension === 'string' ? world.dimension : typeof facts.dimension === 'string' ? facts.dimension : '';
+  const dimension = dimensionOf(world, facts);
   const overworld = dimension === 'overworld', nether = dimension === 'the_nether';
+  const items = carriedItems(world, facts), dark = darkness(world, overworld), darkIn = untilDark(world);
+  const threatNear = entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR);
+  const stage = overworld ? minecraftStage(items) : null;
+  // By day: not night, not the last minute (where `mc-night-retreat` begins), and the clock (if it is known) is not past dusk.
+  const day = overworld && !dark.night && !dark.darkSoon && darkIn > DARK_SOON_SECONDS;
   return {
-    ...darkness(world, overworld),
-    // Not again for the rest of the day once she looked for sheep and found none (`pace.noSheepDarkIn`): the gist's own "give up for today".
-    bedWanted: overworld && untilDark(world) > DARK_SOON_SECONDS && untilDark(world) <= BED_LEAD_SECONDS
-      && !(pace.noSheepDarkIn !== undefined && untilDark(world) <= pace.noSheepDarkIn)
-      && !carriedItems(world, facts).some(item => HAS_BED.test(item)),
-    threatNear: entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR),
+    ...dark,
+    bedWanted: overworld && bedWanted(items, darkIn, stage === 2 && day, pace.noSheepDarkIn),
+    threatNear, stage, calm: day && !threatNear,
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
-    readyForNether: overworld && pace.milestones?.netherReached !== true
-      && carriedItems(world, facts).some(item => /^(iron|diamond|netherite)_pickaxe/u.test(item)),
+    readyForNether: overworld && pace.milestones?.netherReached !== true && stage === 4,
     inNether: nether,
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
   };
+}
+
+function dimensionOf(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string {
+  return typeof world.dimension === 'string' ? world.dimension : typeof facts.dimension === 'string' ? facts.dimension : '';
+}
+/**
+ * A bed is wanted when she carries none, has not looked for sheep and found none today (`noSheepDarkIn`: the gist's own "give up for today"),
+ * and it is dusk (the window, for anyone) or she is at stage 2 by day (no window at all).
+ */
+function bedWanted(items: readonly string[], darkIn: number, stageTwoByDay: boolean, noSheepDarkIn: number | undefined): boolean {
+  if (items.some(item => HAS_BED.test(item)) || (noSheepDarkIn !== undefined && darkIn <= noSheepDarkIn)) return false;
+  return stageTwoByDay || (darkIn > DARK_SOON_SECONDS && darkIn <= BED_LEAD_SECONDS);
 }
 
 /** Night (time of day 13,000–23,000 ticks) and dark within a minute, in the overworld only. */
@@ -144,8 +176,6 @@ function untilDark(world: Record<string, unknown>): number {
   const timeOfDay = Number.isFinite(ticks) ? ((ticks % 24_000) + 24_000) % 24_000 : null;
   return timeOfDay !== null && timeOfDay < NIGHT_START ? (NIGHT_START - timeOfDay) / 20 : Infinity;
 }
-/** A bed in the inventory (`white_bed×1`), any colour; not `bedrock`. */
-const HAS_BED = /^[a-z_]*_bed(?![a-z])/u;
 function entityNear(entities: readonly unknown[], named: (name: string) => boolean, distance: number): boolean {
   return entities.some(entity => {
     const value = record(entity);
@@ -178,18 +208,21 @@ export interface MinecraftSkillContext {
   fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string };
   /** The body tools each shown gist names, by skill (`gistToolNames`). */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
+  /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
+  pointed: readonly string[];
 }
 
 /** The pointers of a situation and, with `gists`, the gist of each pointed skill that has one. */
 export function minecraftSkillContext(situation: MinecraftSituation, skillNames: ReadonlySet<string>, gists?: SkillGistsPort): MinecraftSkillContext {
   const matched = matching(situation, skillNames);
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
-  if (!matched.length) return { fields: {}, gistTools: new Map() };
-  const shown = gists?.(matched.map(pointer => pointer.skill)) ?? new Map<string, readonly string[]>();
+  const pointed = matched.map(pointer => pointer.skill);
+  if (!matched.length) return { fields: {}, gistTools: new Map(), pointed };
+  const shown = gists?.(pointed) ?? new Map<string, readonly string[]>();
   const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);
-  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE }, gistTools: new Map() };
+  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE }, gistTools: new Map(), pointed };
   const gistTools = new Map(skillGists.map(gist => [gist.skill, gistToolNames(gist.steps)] as const));
-  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE }, gistTools };
+  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE }, gistTools, pointed };
 }
 
 /** The shared observe-first step of a procedure (each decision already carries the body's observation): `minecraft.observe`, no `mc.*` tool. */
