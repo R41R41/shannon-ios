@@ -65,13 +65,21 @@ describe('SHANNON_FCA_SUMMARY_MODEL', () => {
     expect(String(warn.mock.calls[0]![0])).not.toContain('haiku-4');
   });
 
-  it('is read case-insensitively and gives only a body task the Haiku summarizer and policy; without any key it stops at start', () => {
+  it('is read case-insensitively and gives only a body task the Haiku summarizer and policy', () => {
     const configured = configuredFcaSummaries({ SHANNON_FCA_SUMMARY_MODEL: ' Haiku ', SHANNON_ANTHROPIC_API_KEY: 'synthetic' }, decision, recordUsage);
     expect(configured.decision).toBe(decision);
     expect(configured.body.policy).toBe(FCA_BODY_HISTORY_POLICY);
     expect(configured.body.summarizer).not.toBe(decision);
     expect(configuredFcaSummaries({ SHANNON_FCA_SUMMARY_MODEL: 'haiku', SHANNON_HAIKU_API_KEY: 'synthetic' }, decision, recordUsage).body.policy).toBeDefined();
-    expect(() => configuredFcaSummaries({ SHANNON_FCA_SUMMARY_MODEL: 'haiku' }, decision, recordUsage)).toThrow(/^FCA_PROVIDER_REQUIRED: .*SHANNON_HAIKU_API_KEY/u);
+  });
+
+  it('without any key warns once, without a value, and keeps the decision model summarizing instead of stopping the API', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const summaries = configuredFcaSummaries({ SHANNON_FCA_SUMMARY_MODEL: 'haiku', SHANNON_HAIKU_API_KEY: '  ' }, decision, recordUsage);
+    expect(summaries.body).toEqual({ summarizer: decision });
+    expect(summaries.body.summarizer).toBe(decision);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]![0])).toContain('SHANNON_HAIKU_API_KEY');
   });
 
   it('calls claude-haiku-5-5 with the Haiku key and books the call at Haiku prices under that model', async () => {

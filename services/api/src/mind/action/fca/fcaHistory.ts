@@ -28,6 +28,9 @@ export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
  * (fewer only while they alone would pass 8,000). The round count no longer decides (the default's 24 is hit by short rounds long
  * before 24,000 tokens). The characters bounds stay as they are: 24,000 tokens never reach them (at most 2.2 characters a token
  * by the estimate, 64,000 characters native), and the whole-replay bound of 75,000 tokens below the price step stays.
+ * Known limits: a single round over 24,000 tokens has nothing older to summarize and is replayed as a clipped public epoch of at
+ * most 64,000 characters every step (`clippedReplay`); an unusable summary falls back to a public epoch of up to 64,000 characters
+ * and the next step asks again, once (`fallbackFcaHistory`): neither stores a summary, and neither loops within a step.
  */
 export const FCA_BODY_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({
   maximumRounds: 120, recentRounds: 6, maximumConversationTokens: 24_000, compactedConversationTokens: 8_000,
@@ -124,7 +127,11 @@ function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy:
   return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
     && size(conversational) + definitions <= policy.maximumReplayCharacters
     && (codec.tokens?.(history) ?? 0) <= policy.maximumReplayTokens
-    && (policy.maximumConversationTokens === undefined || (codec.tokens?.(conversational) ?? 0) <= policy.maximumConversationTokens);
+    // Measured as the native budget measures (`measured`): without the catalog, skill index, instructions and recall a decision
+    // restates, which the first decision of every new epoch carries in full. The same public form the 8,000-token target measures
+    // (`bootstrapTooLong`); otherwise a compaction would be followed at once by a round over 24,000 and a summary every step.
+    && (policy.maximumConversationTokens === undefined
+      || (codec.tokens?.(conversational.map(entry => codec.measured?.(entry) ?? entry)) ?? 0) <= policy.maximumConversationTokens);
 }
 
 function projectedRounds(window: TaskHistoryWindow, codec: FcaHistoryCodec): ProjectedRound[] {

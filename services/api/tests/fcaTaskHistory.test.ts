@@ -472,6 +472,52 @@ describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () =
     expect([...template['次']![0]!]).toHaveLength(120);
   });
 
+  /**
+   * A production-shaped decision (Minebot lane task 788da00a): the first decision of an epoch restates the catalog, the skill index
+   * and the recall packet in full (about 70,000 characters); the rest of the epoch leaves them out. The public form (what a
+   * bootstrap keeps, and what the trigger measures) has none of them.
+   */
+  const productionRound = (index: number, restated: boolean) => [
+    { role: 'user', content: JSON.stringify({ task: { id: 'task', title: 'history', goal: 'history', completionCriteria: '' }, messages: [],
+      body: `観測${index}${'観'.repeat(700)}`,
+      ...(restated ? { catalog: { tools: 'c'.repeat(20_000) }, skillIndex: 's'.repeat(10_000),
+        recall: { status: 'ready', items: [{ id: 'memory', summary: '記'.repeat(20_000) }] }, contextInstructions: { rule: 'r'.repeat(5_000) } } : {}) }) },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: `signed-${index}` }, { type: 'tool_use', id: `call-${index}`, name: 'task_list', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: `call-${index}`, content: `結果${index}` }] },
+  ];
+
+  it('does not compact again at once after a compaction though the next decision restates 70,000 characters, and still compacts on real growth', async () => {
+    const f = fixture(); let summaries = 0, restated = true, quiet = 0, sinceFirst = -1;
+    for (let index = 1; index <= 60 && sinceFirst < 26; index++) {
+      const step = await f.begin(), before = summaries;
+      await prepareFcaHistory(step, live(f, async () => { summaries++; return summary; }), new AbortController().signal, body);
+      if (summaries > before) { restated = true; if (summaries === 1) sinceFirst = 0; }
+      else if (summaries === 1 && restated === false) quiet += 1;
+      await f.finish(step, index, productionRound(index, restated));
+      if (restated && summaries === 1) expect(JSON.stringify(f.window().rounds.at(-1)!.entries).length).toBeGreaterThan(50_000);
+      restated = false;
+      if (sinceFirst >= 0) sinceFirst += 1;
+      // Ten ordinary steps after the first compaction: the epoch's restating round is behind them and nothing compacts again.
+      if (sinceFirst >= 1 && sinceFirst <= 11) expect(summaries).toBe(1);
+    }
+    expect(quiet).toBeGreaterThanOrEqual(10);
+    // Real growth past 24,000 conversation tokens compacts again, once, down to the target.
+    expect(summaries).toBeGreaterThanOrEqual(2);
+    expect(summaries).toBeLessThanOrEqual(3);
+  });
+
+  it('asks for one summary a step and never loops while the body summarizer keeps giving no usable answer', async () => {
+    const f = fixture(); let calls = 0;
+    for (let index = 1; index <= 30; index++) await f.finish(await f.begin(), index, bodyRound(index, 1_000));
+    const invalid = Object.assign(new Error('FCA_SUMMARY_INVALID'), { reason: 'empty' });
+    for (let step = 1; step <= 3; step++) {
+      const current = await f.begin();
+      await prepareFcaHistory(current, live(f, async () => { calls++; throw invalid; }), new AbortController().signal, body);
+      expect(calls).toBe(step);
+      await f.finish(current, 30 + step, bodyRound(30 + step, 1_000));
+    }
+  });
+
   it('replays a clipped public epoch, with no stored change, when the body summarizer gives no usable answer', async () => {
     const f = fixture();
     for (let index = 1; index <= 30; index++) await f.finish(await f.begin(), index, bodyRound(index, 1_000));
