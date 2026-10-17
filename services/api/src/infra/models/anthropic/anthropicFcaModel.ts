@@ -13,7 +13,8 @@ import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCa
 import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
-import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
+import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCoreTools.js';
+import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
 import { connectionFailedBeforeResponse, providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
@@ -140,15 +141,18 @@ export class AnthropicFcaModel implements FcaModel {
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
-    if (input.sharedContext && !input.catalog) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
+    // Transient mode (caCoreTools.ts) declares ca_context at the top level, so it needs no selected menu to carry it.
+    const transient = input.coreTools !== undefined;
+    if (input.sharedContext && !input.catalog && !transient) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
     const { turn, body, menu, built } = observeSync('native', {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
-      const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
+      const menu = transient ? transientFcaTools(input, history, CONTROL_TOOLS, [FCA_CONTEXT_TOOL])
+        : nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       // A part this epoch's replay already showed in full is not restated (`anthropicFcaHistory.ts`, `elidedDecision`); the message is stored as sent.
-      const supplied = decisionFields(input, ownerClock);
+      const supplied = decisionFields(input, ownerClock, transient);
       const fields = elidedDecision(supplied, restatedKnowledge(history));
       // A system message holding tool changes must immediately follow a user turn and be either the last message or
       // immediately followed by an assistant turn: it may not open the conversation (a live 400, 2026-10-12), nor sit between
@@ -159,7 +163,8 @@ export class AnthropicFcaModel implements FcaModel {
       // The fixed instructions end with their own breakpoint, so that every decision and every task reads them from the cache
       // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
       // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
-      const system = [{ type: 'text' as const, text: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system, cache_control: ONE_HOUR }];
+      const menuInstructions = transient ? `${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}` : FCA_MENU_INSTRUCTIONS;
+      const system = [{ type: 'text' as const, text: input.catalog ? `${this.system}\n\n${menuInstructions}` : this.system, cache_control: ONE_HOUR }];
       const continued = this.options.continued !== false, replay = continued ? markedHistory(history) : history;
       const bodyOf = (turn: Anthropic.MessageParam[]) => {
         const request = {
@@ -235,8 +240,8 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
     if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
-    const decision = decodeDecision(message.content, menu.names, history, input.sharedContext ? FCA_CONTEXT_NAME : undefined);
-    const context = decodeFcaContext(message.content, decision, input);
+    const decision = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
+    const context = !input.sharedContext && transient ? fcaContextNotProvided(message.content) : decodeFcaContext(message.content, decision, input);
     const appended: Anthropic.MessageParam[] = [...turn, { role: 'assistant', content: message.content }];
     if (decision.kind !== 'tools') {
       const control = message.content.find(block => block.type === 'tool_use' && CONTROL_TOOLS.some(tool => tool.name === block.name)) as Anthropic.ToolUseBlock;
@@ -357,9 +362,12 @@ function sentGistFields(turn: readonly Anthropic.MessageParam[], built: RequestB
 const PRICE_STEP_TOKENS = 100_000;
 
 /** The decision message's fields, before the parts this epoch already showed are left out (`elidedDecision`). */
-function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown> | undefined): Record<string, unknown> {
+function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown> | undefined, transient = false): Record<string, unknown> {
+  // Transient mode lists only the tools that are not core: the core definitions are loaded at the top level.
+  const core = new Set(transient ? (input.coreTools ?? []).map(tool => tool.name) : []);
   return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
-    ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
+    ...(input.catalog ? { catalog: input.catalog.filter(tool => !core.has(tool.name))
+      .map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
     ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };

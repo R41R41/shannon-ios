@@ -16,6 +16,15 @@ const openTool = claudeTool({ ...open, input: { ...open.input,
 
 type Change = BetaRequestToolAdditionBlock | BetaRequestToolRemovalBlock;
 
+/** One catalog definition as the provider receives it (not strict: see `nativeFcaTools`). */
+export function fcaNativeTool(definition: FcaModelInput['tools'][number]): Anthropic.Tool {
+  return definition.nativeInputSchema ? {
+    name: providerToolName(definition.name), description: definition.description, strict: false,
+    input_schema: definition.nativeInputSchema as Anthropic.Tool.InputSchema,
+  } : { ...claudeTool(definition), strict: false };
+}
+export { openTool as fcaOpenTool };
+
 /** The installed SDK's inline-tool protocol changes active schemas by append, never by editing a signed prefix. */
 export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic.MessageParam[], controls: readonly Anthropic.Tool[], auxiliary: readonly Anthropic.Tool[] = []) {
   const names = new Map<string, string>();
@@ -31,10 +40,7 @@ export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic
     // production (live 400s, 2026-10-12: "Too many strict tools (40)", "too many optional parameters (30)", and with a
     // 20-tool budget "The compiled grammar is too large"). Catalog inputs keep their schema, with the constraints in words,
     // and the original executor validates every input.
-    const tool: Anthropic.Tool = definition.nativeInputSchema ? {
-      name: providerToolName(definition.name), description: definition.description, strict: false,
-      input_schema: definition.nativeInputSchema as Anthropic.Tool.InputSchema,
-    } : { ...claudeTool(definition), strict: false };
+    const tool = fcaNativeTool(definition);
     if (names.get(tool.name) !== definition.name || selected.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     selected.set(tool.name, tool);
   }

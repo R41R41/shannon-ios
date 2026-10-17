@@ -22,6 +22,11 @@ export interface FcaModelInput {
   tools: readonly FcaToolDefinition[];
   /** Selection mode: every currently allowed tool's metadata; tools contains only selected/opened schemas. */
   catalog?: readonly { name: string; description: string }[];
+  /**
+   * Transient mode (`fcaCoreTools.ts`): the epoch's pinned core definitions, a part of `tools`. They are declared at the top level and
+   * stay byte-identical for the epoch; every other tool of `tools` is only appended. Absent: the legacy menu.
+   */
+  coreTools?: readonly FcaToolDefinition[];
   sharedContext?: FcaSharedContext;
   recall?: TaskRecallPacket;
   body?: { revision: number; observation: BodyObservation | null };

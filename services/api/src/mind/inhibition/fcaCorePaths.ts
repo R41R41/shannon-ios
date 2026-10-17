@@ -8,7 +8,7 @@ export const FCA_CORE_PATHS = Object.freeze([
   'services/api/src/mind/tools/memoryToolDefinitions.ts',
   'services/api/src/wiring/fcaResearchWiring.ts', 'services/api/src/wiring/fcaReadSources.ts',
   'services/api/src/mind/selectors/fcaToolSelection.ts',
-  'services/api/src/infra/models/anthropic/anthropicFcaHistory.ts', 'services/api/src/infra/models/anthropic/anthropicFcaTools.ts', 'services/api/src/infra/models/anthropic/anthropicFcaSummary.ts',
+  'services/api/src/infra/models/anthropic/anthropicFcaHistory.ts', 'services/api/src/infra/models/anthropic/anthropicFcaTools.ts', 'services/api/src/infra/models/anthropic/anthropicFcaCoreTools.ts','services/api/src/infra/models/anthropic/anthropicFcaSummary.ts',
   'services/api/src/wiring/taskRuntimeWiring.ts', 'services/api/src/wiring/serverFcaWiring.ts',
   'services/api/src/infra/http/fcaTaskRoutes.ts', 'services/api/src/infra/models/anthropic/anthropicFcaModel.ts',
   'services/api/src/mind/tools/shannonTaskTools.ts', 'services/api/src/mind/tools/taskToolDefinitions.ts', 'services/api/src/mind/inhibition/fcaCorePaths.ts',

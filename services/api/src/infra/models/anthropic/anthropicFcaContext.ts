@@ -62,6 +62,17 @@ export function decodeFcaContext(content: Anthropic.ContentBlock[], decision: Fc
   return { expectations, appraisals, auxiliaryResults: [contextResult(blocks[0]!.id, rejected, expectations.length, appraisals.length)] };
 }
 
+/**
+ * A transient body task declares `fca_context` at the top level at every decision, shared context or not. Without one the call is
+ * answered here as not provided, and records nothing; the actions beside it are unaffected.
+ */
+export function fcaContextNotProvided(content: Anthropic.ContentBlock[]): { auxiliaryResults?: readonly FcaAuxiliaryResult[] } {
+  const blocks = content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use' && block.name === FCA_CONTEXT_NAME);
+  if (!blocks.length) return {};
+  return { auxiliaryResults: blocks.map(block => ({ id: block.id, ok: false, text: JSON.stringify({ received: false,
+    note: 'No shared context is provided at this decision, so nothing was recorded. The action calls are unaffected.' }) })) };
+}
+
 /** A closed reason for one item of the context call that was left out, and the rule the model reads for it. */
 export interface FcaContextRejection { item: string; reason: keyof typeof CONTEXT_RULES }
 const CONTEXT_RULES = Object.freeze({

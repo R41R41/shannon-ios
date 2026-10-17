@@ -13,6 +13,7 @@ import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from
 import { decideWithOneRetry } from './fcaNoResponse.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
+import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -30,6 +31,8 @@ export interface FcaStepPorts {
   selector?: FcaToolSelector;
   /** This task acts through a body (bound, or made from a body request): a reselection never leaves out all its body tools. */
   keepBodyTools?(): boolean;
+  /** `SHANNON_FCA_OBS_MODE` (`fcaCoreTools.ts`); a body task takes it only when it starts, never after. Absent: legacy. */
+  obsMode?: FcaObsMode;
   recall?: TaskRecall;
   evidence?: FcaEvidence;
   observeMemory?(ids: readonly string[]): boolean;
@@ -123,7 +126,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
   const selection = ports.selector ? await selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector, step.scopeKey, signal,
-    { keepBodyTools: ports.keepBodyTools?.() === true }) : null;
+    { keepBodyTools: ports.keepBodyTools?.() === true, ...(ports.obsMode ? { obsMode: ports.obsMode } : {}) }) : null;
   if (selection) {
     input.tools = selectedFcaTools(catalog, selection);
   }
@@ -155,7 +158,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
     ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
     ...(sharedContext ? { sharedContext } : {}),
-    ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) };
+    ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}),
+    ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools } : {}) };
   const output = await decideWithOneRetry(() => ports.model.decide(request, signal), { signal, recheck: checked, delay: ports.decisionRetryDelayMs,
     log: line => console.warn(`${line} task=${step.taskId}`) }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
@@ -167,6 +171,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
     () => ports.evidence!.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
+  // The epoch's core pin is committed with what its replay will start with next (`continuesFcaEpoch`).
+  if (selection?.core) selection.core = withCoreAnchor(selection.core, input.history, history);
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
   const priorToolFailures = consecutiveToolFailures;

@@ -19,6 +19,7 @@ import type { MinecraftBodyConfiguration } from '../contracts/minecraftBodyContr
 import { createFcaSharedWiring } from './fcaSharedWiring.js';
 import { connectFcaMemoryTools } from './fcaMemoryWiring.js';
 import { createFcaVoiceBridge } from '../mind/action/fca/fcaVoicePorts.js';
+import { fcaObsMode } from '../mind/action/fca/fcaCoreTools.js';
 import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
 import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
@@ -166,7 +167,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
-        return ({ selector, observations, waitCounterpart, keepBodyTools, ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        return ({ selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
         taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
