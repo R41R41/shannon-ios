@@ -190,7 +190,7 @@ describe('exact complete-round FCA history compaction', () => {
       const step = await f.begin(), empty = rows(f).find(row => row.entries_json === '[]')!.sequence;
       const planned = planFcaHistory(f.window(), codec, { ...policy, maximumRounds: 4, recentRounds: 2 });
       expect(planned.kind).toBe('compact'); if (planned.kind !== 'compact') return;
-      expect(f.runtime.commitCompaction(step, { ...planned.request, sequences: [empty, ...planned.request.sequences] }, () => true)).toBe(false);
+      expect(f.runtime.commitCompaction(step, { ...planned.request, template: summary, sequences: [empty, ...planned.request.sequences] }, () => true)).toBe(false);
     });
   });
 
