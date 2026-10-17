@@ -342,10 +342,12 @@ export function createFcaSourceGuard(parts: {
       return foldedProvenanceResidual(fcaProvenanceForCheck(verified, limit, folds), folded);
     } catch { return null; }
   };
+  /** The receipts the kept bases ask again (each once per source and time), for the walk counts. */
+  const baseReads = () => [...bases.values()].reduce((sum, base) => sum + base.reads.length, 0);
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string, via: FcaWalkCaller = 'task') => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId, via));
-  }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: [...bases.values()].reduce((sum, base) => sum + base.reads.length, 0) }) });
+  }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: baseReads() }) });
 }
 
 /** Every receipt once per source and time (the later answer wins), so a base's list does not grow with each extension. */
