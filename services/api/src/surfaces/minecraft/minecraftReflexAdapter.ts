@@ -1,4 +1,7 @@
-import { followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort } from './minecraftSkillPointers.js';
+import {
+  bedSearchMemory, followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+} from './minecraftSkillPointers.js';
+import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -18,6 +21,7 @@ import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
+import { stepMetrics } from './minecraftTaskMetrics.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
@@ -103,6 +107,8 @@ export function createMinecraftTaskBody(parts: {
   /** Syzygy ADR-0011 stage 2 (`SHANNON_MINECRAFT_FAST_JUDGMENT`): danger is judged without an image (`minecraftFastJudgment.ts`). */
   fastJudgment?: boolean;
   log?(line: string): void;
+  /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
+  metricsLog?(line: string): void;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor();
@@ -118,6 +124,8 @@ export function createMinecraftTaskBody(parts: {
   // Her idle waits in this task, kept in the checkpoint as the milestones are (`minecraftIdleWaitMs`).
   const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
+  // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
+  const bedSearch = bedSearchMemory((step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown } | null)?.minecraftNoSheepDarkIn);
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -125,11 +133,16 @@ export function createMinecraftTaskBody(parts: {
   let lastSignature = '', lastSequence = -1, lastFastSequence = -1;
   // The body tools named by the gists the latest decision was shown (`minecraftSkillContext`), by skill.
   let gistTools: ReadonlyMap<string, ReadonlySet<string>> = new Map();
+  // The skills pointed at the latest decision and her stage then, for the content-free adoption line (`adoptionTags`).
+  let pointedSkills: readonly string[] = [], stageNow: number | null = null;
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
   const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
   const log = parts.log ?? ((line: string) => console.info(line));
+  // Measurement only (observation redesign P1): it reads this body's frames and writes journal lines; no decision depends on it.
+  const metrics = stepMetrics(step, now, parts.metricsLog);
+  const measured = (work: () => void) => { try { work(); } catch { /* measuring never fails a step */ } };
   // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
   // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
@@ -332,6 +345,7 @@ export function createMinecraftTaskBody(parts: {
       && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal, entryFacts);
   };
   const poll = () => {
+    if (!closed) measured(() => { const id = bound(), frame = id ? control.observe(id) : null; if (frame) metrics.sample(frame); });
     if (monitoring || closed) return;
     const job = tick(); monitoring = job;
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
@@ -354,6 +368,14 @@ export function createMinecraftTaskBody(parts: {
       try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
     }
   };
+  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never her content. Measuring only.
+  const noteStageAdoption = (call: { name: string; input: unknown }) => {
+    if (!pointedSkills.length) return;
+    for (const { skill, tag } of adoptionTags(pointedSkills, call)) {
+      const line = `Shannon Minecraft stage adoption task=${step.taskId} stage=${stageNow ?? '-'} skill=${skill} tag=${tag} tool=${call.name}`;
+      try { log(line); } catch { /* logging never fails a step */ }
+    }
+  };
   const body: FcaBodyLifecycle = {
     start(signal) {
       if (started) return; started = true; execution = currentActionExecution();
@@ -369,10 +391,14 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits });
+      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) });
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
-      return { revision, observation: observation ? minecraftObservationSummary(observation) : null, pace, ...skills.fields };
+      pointedSkills = skills.pointed;
+      stageNow = situation.stage;
+      const summary = observation ? minecraftObservationSummary(observation) : null;
+      measured(() => metrics.context(observation, summary, skills.fields));
+      return { revision, observation: summary, pace, ...skills.fields };
     },
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
@@ -389,9 +415,11 @@ export function createMinecraftTaskBody(parts: {
     noteCall(call, operationId) {
       decided = true;
       governor.decided(step.taskId, now());
+      measured(() => metrics.noteCall(call.name, call.input, gistTools));
       if (!call.name.startsWith('mc.')) return;
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
       if (!active && !closed) noteGistFollowed(call.name);
+      if (!active && !closed) noteStageAdoption(call);
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };
@@ -402,9 +430,11 @@ export function createMinecraftTaskBody(parts: {
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
       pendingWaitMs = 0;
+      bedSearch.note(call, result, () => live() && bound() ? control.observe(bound()!) : null);
       recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
     },
     async close() {
+      measured(() => metrics.flush());
       if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
       if (monitoring) await monitoring.catch(() => {}); if (active) await active;
       if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
@@ -416,7 +446,9 @@ export function createMinecraftTaskBody(parts: {
   // Offered only while the body can give a picture: every session requires one (`imagesUnavailable`).
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
-    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}) }),
+    checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
+      ...bedSearch.checkpoint(),
+      ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;

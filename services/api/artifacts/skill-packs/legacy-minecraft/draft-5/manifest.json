@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-5",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=0e838a78fa1681acc6d418646f57e28301ec96c4006021febe10893b4dd5165d",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-nether-portal",
+      "path": "mc-nether-portal/SKILL.md",
+      "sha256": "7cd1852ffd27a3862b1fced5a98dfc814a47139b2cf23d729d6e6469a68f02a3",
+      "revises": {
+        "bodySha256": "547d4c1148359eba8f3dafaec07efb80810cd96b0c062021c84a5d47429ae8b7"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    }
+  ]
+}

@@ -47,6 +47,18 @@ async function longestWait(work: () => Promise<unknown>): Promise<number> {
   return longest;
 }
 
+/** The most walks (`count()` growing) that ran between two turns of the event loop while `work` runs: what one slice held the thread for. */
+async function mostWalksInATurn(work: () => Promise<unknown>, count: () => number): Promise<number> {
+  let most = 0, last = count(), running = true;
+  const tick = () => { const now = count(); most = Math.max(most, now - last); last = now; if (running) setImmediate(tick); };
+  setImmediate(tick);
+  try { await work(); } finally { running = false; }
+  await nextTurn();
+  most = Math.max(most, count() - last);
+  return most;
+}
+/** One segment's walks (3 here: a task's two rows and its cover) plus room for the slice's own bookkeeping. */
+const SLICE_WALKS = 6;
 describe('the source guard\'s peek (a verdict it would reuse, never a walk)', () => {
   it('is undefined before a walk, the verdict after it, undefined again once the window or the state version has passed', () => {
     const f = run6RecallShape({ turns: 120, recallingTurns: 4, tasks: 2, recalledPerTask: 4, taskRecallsOfTasks: 1, readsPerTask: 1, skills: 1 });
@@ -289,16 +301,17 @@ describe('closing the held segments of ended tasks', () => {
     quiet();
     const f = segments({ tasks: 40, rows: 2, walkMilliseconds: 10 });
     const g = segments({ tasks: 40, rows: 2, walkMilliseconds: 10 });
-    const started = performance.now();
-    const synchronous = await longestWait(async () => { g.evidence.flush(); });
-    const whole = performance.now() - started;
-    const sliced = await longestWait(() => f.evidence.drain({ segments: true }));
+    // Counted in walks per turn of the event loop, not in milliseconds: a walk costs the same 10 ms everywhere, so the number of walks
+    // that run before the thread is given back is the slice's cost, and it does not move with the machine's load.
+    const synchronous = await mostWalksInATurn(async () => { g.evidence.flush(); }, () => g.calls.visible);
+    const sliced = await mostWalksInATurn(() => f.evidence.drain({ segments: true }), () => f.calls.visible);
     expect(f.deliveries).toHaveLength(40);
     expect(g.deliveries).toHaveLength(40);
-    expect(synchronous).toBeGreaterThan(whole / 2); // the plain flush held the thread for the whole pass
-    expect(sliced).toBeLessThan(250); // one segment (3 walks, ~30 ms) a slice, with room for a slow machine
-    expect(sliced).toBeLessThan(synchronous / 3);
-  }, 60_000);
+    expect(g.calls.visible).toBeGreaterThanOrEqual(40);
+    expect(synchronous).toBe(g.calls.visible); // the plain flush held the thread for every walk of the pass
+    expect(f.calls.visible).toBe(g.calls.visible); // the sliced pass does the same work…
+    expect(sliced).toBeLessThanOrEqual(SLICE_WALKS); // …one segment (a few walks) a slice
+    expect(sliced).toBeLessThan(synchronous / 3);  }, 60_000);
 });
 
 describe('a commit and the rows it did not write', () => {
