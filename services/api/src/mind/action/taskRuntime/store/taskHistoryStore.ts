@@ -32,11 +32,13 @@ export class TaskHistoryStore {
       template: JSON.parse(String(row.template_json)), sources: JSON.parse(String(row.sources_json)),
       resetThroughSequence: Number(row.reset_through_sequence), bootstrapText: String(row.bootstrap_text),
     } : null;
-    const rounds = this.db.prepare('SELECT * FROM fca_task_history WHERE task_id=? AND sequence>? ORDER BY sequence')
+    // Rows stored with no entries (written by a retried step before `appendStep`) are not rounds: every reader sees the window without them.
+    const rounds = this.db.prepare(`SELECT * FROM fca_task_history WHERE task_id=? AND sequence>? AND entries_json<>'[]' ORDER BY sequence`)
       .all(taskId, summary?.throughSequence ?? 0).map(entry => ({ sequence: Number(entry.sequence), stepId: String(entry.step_id),
         committedAt: String(entry.committed_at), entries: JSON.parse(String(entry.entries_json)) as unknown[],
         status: String(entry.committed_status) as TaskHistoryRound['status'],
-        sources: [...requireStoredSources(this.db, scopeKey, String(entry.sources_json))] }));
+        sources: [...requireStoredSources(this.db, scopeKey, String(entry.sources_json))] }))
+      .filter(round => round.entries.length > 0);
     return { revision: summary?.revision ?? 0, sourceRevision: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),
       tailSequence: rounds.at(-1)?.sequence ?? summary?.throughSequence ?? 0, summary, rounds };
   }

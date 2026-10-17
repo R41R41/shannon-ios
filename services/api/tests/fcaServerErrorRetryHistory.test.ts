@@ -18,9 +18,10 @@ const call = (name: string, id: string, value: unknown = {}) => ({ type: 'tool_u
 const serverError = (status: number) => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic' } }),
   { status, headers: { 'content-type': 'application/json' } });
 
-function fixture(answers: Array<Response | Array<Record<string, unknown>>>) {
+function fixture(answers: Array<Response | Array<Record<string, unknown>>>, onRequest: (index: number) => void = () => {}) {
   vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {});
   const provider = scriptedAnthropic((_body, index) => {
+    onRequest(index);
     const answer = answers[index] ?? [call('fca_complete', `complete-${index}`, { summary: '終わり' })];
     return answer instanceof Response ? answer : message(answer, 'tool_use');
   });
@@ -41,7 +42,7 @@ function fixture(answers: Array<Response | Array<Record<string, unknown>>>) {
     .map(row => JSON.parse(row.entries_json) as unknown[]);
   const lines = () => vi.mocked(console.log).mock.calls.map(([line]) => String(line)).filter(line => line.startsWith('Shannon FCA step'));
   const run = async () => { for (let i = 0; i < 50 && !['completed', 'failed', 'unknown'].includes(phase() ?? ''); i++) { await driver.tick(); await driver.drain(); } };
-  return { provider, driver, child, phase, rounds, lines, run };
+  return { db: h.db, provider, driver, child, phase, rounds, lines, run };
 }
 
 describe('a provider server error is retried without leaving a broken history round', () => {
@@ -58,6 +59,24 @@ describe('a provider server error is retried without leaving a broken history ro
     // The third request replays the tool round byte for byte (append-only), and nothing before it.
     const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, rounds[0]!.length);
     expect(JSON.parse(JSON.stringify(replayed))).toMatchObject(JSON.parse(JSON.stringify(rounds[0])));
+  });
+
+  it('resumes a task whose history already holds empty rounds written by the old retry (production rows), without editing them', async () => {
+    let seed: (stepId: string) => void = () => {};
+    const f = fixture([[call('task_list', 'list-1')], [call('task_list', 'list-2')]], index => { if (index === 1) seed('old-retry-2'); });
+    seed = stepId => { f.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json) VALUES(?,?,'[]',?,'queued','[]')`)
+      .run(f.child.id, stepId, '2026-10-17T09:00:00.000Z'); };
+    seed('old-retry-1'); // before the first real round, as a 5xx retry left it; a second one lands between two real rounds
+    await f.run();
+    expect(f.phase()).toBe('completed');
+    expect(f.lines()).toEqual([]);
+    // The legacy rows stay stored as they were (never edited); the three real rounds replay in order around them.
+    const stored = f.rounds();
+    expect(stored.filter(entries => entries.length === 0)).toHaveLength(2);
+    expect(stored.filter(entries => entries.length > 0)).toHaveLength(3);
+    const first = stored.find(entries => entries.length > 0)!;
+    const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, first.length);
+    expect(JSON.parse(JSON.stringify(replayed))).toMatchObject(JSON.parse(JSON.stringify(first)));
   });
 
   it('retries a 529 the same way', async () => {
