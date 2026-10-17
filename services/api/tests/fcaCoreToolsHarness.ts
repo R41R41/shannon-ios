@@ -11,7 +11,8 @@ import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js'
 import { providerToolName, toolFailure, toolOk } from '../src/mind/tools/shannonTools.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
-import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
+import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
+import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { anthropicRequestViolation } from './support/anthropicProviderRules.js';
 
 /**
@@ -45,6 +46,12 @@ export interface ScenarioOptions {
   strictInput?: boolean;
   /** Close the driver after this many decision requests and open a new one on the same database (a restart of the API). */
   restartAt?: number;
+  /** A body port (transient mode reads its `transient()` live state and cuts its stored results): the live state of decision n (1-based). */
+  body?: (decision: number) => Record<string, unknown>;
+  /** The provider answers a request with this thinking-bound check: every request after the first of an epoch extends the one before byte for byte. */
+  appendOnly?: boolean;
+  /** Decision d answers with a model error instead (a Response), e.g. the 400 of a refused beta. */
+  refuse?: (decision: number, body: Record<string, unknown>) => Response | null;
 }
 export const SUMMARY_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 9, recentRounds: 3 };
 export const WIDE_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 80, recentRounds: 6, maximumNativeCharacters: 900_000,
@@ -65,11 +72,23 @@ export function scenario(options: ScenarioOptions = {}) {
     const tool = (body.tools as Array<{ name: string; input_schema?: { required?: string[] } }>).find(item => item.name === name);
     return { target: 'oak_log', ...Object.fromEntries((tool?.input_schema?.required ?? []).map(key => [key, 'x'])) };
   };
+  let previousMessages: unknown[] = [];
   const fixture = scriptedAnthropic(body => {
     const violation = anthropicRequestViolation(body);
     if (violation) violations.push(violation);
     if ((body.tools as Array<{ name?: string }>).some(tool => tool.name === 'fca_history_summary')) {
       return message([use(`toolu_summary_${decisions}`, 'fca_history_summary', { template: JSON.stringify(template) })], 'tool_use');
+    }
+    const refused = options.refuse?.(decisions + 1, body);
+    if (refused) return refused;
+    if (options.appendOnly) {
+      // The provider's signature binding: a request continues the previous one's messages unless it starts a new epoch (a summary's bootstrap).
+      const current = withoutCacheMarkers(body.messages as unknown[]);
+      const starts = typeof (current[0] as { content?: unknown }).content === 'string' && String((current[0] as { content: string }).content).startsWith('{"kind":"fca_public_history"');
+      if (previousMessages.length && !starts && JSON.stringify(current.slice(0, previousMessages.length)) !== JSON.stringify(previousMessages)) {
+        violations.push(`append_only: request ${decisions + 1} does not extend the one before`);
+      }
+      previousMessages = current;
     }
     bodies.push(body);
     decisions += 1;
@@ -101,7 +120,11 @@ export function scenario(options: ScenarioOptions = {}) {
   const open = () => createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,
     stepPorts: () => { const mode = options.mode?.(); return { tools, selector, keepBodyTools: () => options.keepBody !== false,
-      ...(mode ? { obsMode: mode } : {}), history: { codec: anthropicFcaHistoryCodec, summarizer, ...(options.policy ? { policy: options.policy } : {}) } }; } });
+      ...(mode ? { obsMode: mode } : {}),
+      ...(options.body ? { body: { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), guard: async () => true,
+        toolSignal: (_name: string, parent: AbortSignal) => parent, close: async () => {}, transient: () => options.body!(decisions + 1),
+        storedResult: (call: { name: string }, text: string) => storedBodyResult(call.name, text) } } : {}),
+      history: { codec: anthropicFcaHistoryCodec, summarizer, ...(options.policy ? { policy: options.policy } : {}) } }; } });
   let driver = open();
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');
@@ -116,7 +139,7 @@ export function scenario(options: ScenarioOptions = {}) {
     return driver.runtime.get('owner', task.id)?.phase;
   }
   const summaries = () => fixture.bodies.filter(body => (body.tools as Array<{ name?: string }>).some(tool => tool.name === 'fca_history_summary')).length;
-  return { get driver() { return driver; }, task, bodies, allBodies: fixture.bodies, violations, settle, summaries, get failures() { return failures; } };
+  return { get driver() { return driver; }, task, bodies, allBodies: fixture.bodies, headers: fixture.headers, violations, settle, summaries, get failures() { return failures; } };
 }
 
 /** A request as the golden tests compare it: ids and clock readings of this run replaced, then hashed. */

@@ -124,7 +124,7 @@ function retainedRounds(projected: readonly ProjectedRound[], previous: FcaHisto
  */
 function replayFits(history: readonly unknown[], codec: FcaHistoryCodec, policy: FcaHistoryPolicy): boolean {
   const definitional = (entry: unknown) => codec.reproducible?.(entry) === true;
-  const conversational = history.filter(entry => !definitional(entry));
+  const conversational = history.filter(entry => !definitional(entry) && codec.rendered?.(entry) !== false);
   const native = size(conversational.map(entry => codec.measured?.(entry) ?? entry)), definitions = size(history.filter(definitional));
   return native <= policy.maximumNativeCharacters && definitions <= policy.maximumToolDefinitionCharacters
     && size(conversational) + definitions <= policy.maximumReplayCharacters

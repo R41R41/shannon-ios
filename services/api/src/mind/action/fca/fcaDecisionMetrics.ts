@@ -40,7 +40,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
       try {
         const metrics = currentActionExecution()?.modelMetrics, began = Date.parse(createdAt);
         log(JSON.stringify({ event: 'fca_decision_metrics', task: taskId, d: index,
-          t: Number.isFinite(began) ? Math.max(0, Math.round((now() - began) / 1000)) : null, obsMode: 'legacy',
+          t: Number.isFinite(began) ? Math.max(0, Math.round((now() - began) / 1000)) : null, obsMode: metrics?.obsMode ?? 'legacy',
           llmMs: Math.round(spent.llmMs), stepMs: Math.round(clock() - started), selectorMs: Math.round(spent.selectorMs),
           recallMs: Math.round(spent.recallMs), summaryMs: Math.round(spent.summaryMs), tools, toolMs: Math.round(toolMs),
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,

@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { CompactionMessage } from '@shannon/mind';
 import type { FcaHistoryCodec } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
+import { isFcaClearAtMessage } from './anthropicFcaTransient.js';
 
 /** Public projection for a new replay epoch only. The original signed round is never edited or partly replayed. */
 export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
@@ -17,7 +18,10 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
     const message = object(entry);
     return message?.role === 'user' && typeof message.content === 'string' ? { ...message, content: publicDecision(message.content) } : entry;
   },
-  tokens: entries => estimatedAnthropicTokens(entries),
+  // A turn-scoped system message (`anthropicFcaTransient.ts`) that a later message follows is stored but never rendered or billed: every
+  // one in a stored history is such (a round always ends with the user message that answers it), so none of them is counted.
+  rendered: entry => !isFcaClearAtMessage(entry),
+  tokens: entries => estimatedAnthropicTokens(entries.filter(entry => !isFcaClearAtMessage(entry))),
   project(round) {
     const result: CompactionMessage[] = [];
     const calls = new Set<string>(), pending = new Set<string>();
@@ -26,6 +30,8 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
       const message = object(entry);
       if (!message) return null;
       const id = `${round.stepId}:${messageIndex}`;
+      // The live state of a transient decision is not part of what the step was given to work on: left out of every summary.
+      if (isFcaClearAtMessage(message)) continue;
       if (isFcaToolChangeMessage(message)) {
         if (pending.size) return null;
         const changes = (message.content as Array<{ type: string; tool: { name?: string; definition?: { name: string } } }>)

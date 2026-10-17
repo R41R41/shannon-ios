@@ -18,6 +18,11 @@ export interface FcaHistoryCodec {
    * unchanged. Absent: the entry as it is.
    */
   measured?(entry: unknown): unknown;
+  /**
+   * Whether the provider renders (and bills) this native entry in a replay: false for a turn-scoped system message that a later message
+   * follows (`anthropicFcaTransient.ts`), which is stored and replayed byte for byte but counts toward no budget. Absent: every entry does.
+   */
+  rendered?(entry: unknown): boolean;
   /** A conservative estimate of the provider's input tokens for these replayed entries (`maximumReplayTokens`). Absent: not bounded. */
   tokens?(entries: readonly unknown[]): number;
 }
