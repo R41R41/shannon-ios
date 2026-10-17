@@ -1,5 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { HAS_BED, minecraftStage, type MinecraftStage } from './minecraftStage.js';
+import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
+import { minecraftStage, type MinecraftStage } from './minecraftStage.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -133,7 +134,9 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   const facts = observation?.facts ?? {};
   const dimension = dimensionOf(world, facts);
   const overworld = dimension === 'overworld', nether = dimension === 'the_nether';
-  const items = carriedItems(world, facts), dark = darkness(world, overworld), darkIn = untilDark(world);
+  // What she carries: the body's {name, count} stacks (the real frame) and the name×count strings, as the measurement logs read it.
+  // The real frame holds objects; only strings were read before P7, so the stage and the bed check saw (almost) nothing.
+  const items = carriedItemCounts(world, facts), dark = darkness(world, overworld), darkIn = untilDark(world);
   const threatNear = entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR);
   const stage = overworld ? minecraftStage(items) : null;
   // By day: not night, not the last minute (where `mc-night-retreat` begins), and the clock (if it is known) is not past dusk.
@@ -157,8 +160,8 @@ function dimensionOf(world: Record<string, unknown>, facts: Readonly<Record<stri
  * A bed is wanted when she carries none, has not looked for sheep and found none today (`noSheepDarkIn`: the gist's own "give up for today"),
  * and it is dusk (the window, for anyone) or she is at stage 2 by day (no window at all).
  */
-function bedWanted(items: readonly string[], darkIn: number, stageTwoByDay: boolean, noSheepDarkIn: number | undefined): boolean {
-  if (items.some(item => HAS_BED.test(item)) || (noSheepDarkIn !== undefined && darkIn <= noSheepDarkIn)) return false;
+function bedWanted(items: ItemCounts, darkIn: number, stageTwoByDay: boolean, noSheepDarkIn: number | undefined): boolean {
+  if (countMatching(items, BED_ITEM) > 0 || (noSheepDarkIn !== undefined && darkIn <= noSheepDarkIn)) return false;
   return stageTwoByDay || (darkIn > DARK_SOON_SECONDS && darkIn <= BED_LEAD_SECONDS);
 }
 
@@ -186,11 +189,6 @@ function atMost(value: unknown, limit: number): boolean {
   const number = Number(value);
   return value !== undefined && value !== null && Number.isFinite(number) && number <= limit;
 }
-function carriedItems(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string[] {
-  return [...list(world.inventory).filter((item): item is string => typeof item === 'string'),
-    ...Object.entries(facts).filter(([key, value]) => key.startsWith('slot:') && typeof value === 'string').map(([, value]) => String(value))];
-}
-
 /** The pointers of a situation, only to skills in `skillNames`, at most three, in a fixed order. */
 export function minecraftSkillPointers(situation: MinecraftSituation, skillNames: ReadonlySet<string>): string[] {
   return matching(situation, skillNames).map(pointer => `${pointer.skill}（${pointer.when}）`);

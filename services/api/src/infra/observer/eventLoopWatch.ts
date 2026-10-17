@@ -6,6 +6,13 @@
  */
 export const EVENT_LOOP_WATCH = Object.freeze({ intervalMilliseconds: 1_000, thresholdMilliseconds: 500 });
 
+let blockedTotalMilliseconds = 0;
+/**
+ * The sum of the blocks this process's watch has named so far (each at least the threshold; shorter ones are not counted), for
+ * measurement: the difference of two readings is the blocked time between them (`fca_decision_metrics`). 0 where no watch runs.
+ */
+export function eventLoopBlockedMilliseconds(): number { return blockedTotalMilliseconds; }
+
 export function startEventLoopWatch(process: string, options: { now?: () => number; log?: (line: string) => void;
   intervalMilliseconds?: number; thresholdMilliseconds?: number } = {}): () => void {
   const now = options.now ?? (() => performance.now());
@@ -16,6 +23,7 @@ export function startEventLoopWatch(process: string, options: { now?: () => numb
   const timer = setInterval(() => {
     const at = now(), late = Math.round(at - expected);
     expected = at + interval;
+    if (late >= threshold) blockedTotalMilliseconds += late;
     if (late >= threshold) { try { log(`Shannon event loop blocked process=${process} ms=${late}`); } catch { /* never throws */ } }
   }, interval);
   timer.unref?.();

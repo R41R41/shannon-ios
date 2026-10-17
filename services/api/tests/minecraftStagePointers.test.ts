@@ -7,6 +7,8 @@ import { SKILL_CAPACITY, SKILL_GIST, skillGist } from '../src/mind/memory/skillD
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { bedSearchGivenUp, gistToolNames, minecraftSituation, minecraftSkillContext, minecraftSkillPointers, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
 import { ADOPTIONS, adoptionTags, minecraftStage } from '../src/surfaces/minecraft/minecraftStage.js';
+import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
+import { minecraftStage as loggedStage } from '../src/surfaces/minecraft/minecraftMilestoneLog.js';
 import { createMinecraftTaskBody } from '../src/surfaces/minecraft/minecraftReflexAdapter.js';
 import type { TaskRuntime, TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
@@ -23,36 +25,59 @@ const pass = { carries: () => false };
 const MORNING = { time: '100', margin: { darkInSeconds: 645 } }, NOON = { time: '6000', margin: { darkInSeconds: 350 } };
 const STONE = ['oak_planks×4', 'stone_pickaxe×1'], BED_ITEM = 'white_bed×1';
 
+/** The real frame's inventory: `{ name, count, durability? }` objects (body worldFrame.ts), never `name×count` strings. */
+const stack = (item: string) => { const [name, count] = item.split('×'); return { name: name!, count: Number(count ?? 1), durability: 1 }; };
+const framed = (world: Record<string, unknown>) => ({ ...world, ...(Array.isArray(world.inventory) ? { inventory: world.inventory.map(item => typeof item === 'string' ? stack(item) : item) } : {}) });
+const counts = (...items: string[]) => carriedItemCounts({ inventory: items.map(stack) }, {});
 const observation = (world: Record<string, unknown>, facts: Record<string, unknown> = {}): BodyObservation => ({ schemaVersion: 1, bodyId: 'minecraft:world',
   sequence: 1, stateAt: at, receivedAt: at, connected: true,
-  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '300', margin: { darkInSeconds: 635 }, inventory: [], nearbyThreats: [], ...world } },
+  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '300', margin: { darkInSeconds: 635 }, inventory: [], nearbyThreats: [], ...framed(world) } },
   facts: { dimension: 'overworld', ...facts } } as unknown as BodyObservation);
 const situation = (world: Record<string, unknown>, pace: Parameters<typeof minecraftSituation>[1] = calm) => minecraftSituation(observation(world), pace);
 const pointers = (world: Record<string, unknown>, pace: Parameters<typeof minecraftSituation>[1] = calm, names: ReadonlySet<string> = NAMES) =>
   minecraftSkillPointers(situation(world, pace), names).map(line => line.split('（')[0]);
 
 describe('the stage, from what she carries (stateless)', () => {
-  it('is 1 without a stone pickaxe, 2 with one and no bed, 3 with a bed, 4 with an iron pickaxe or better', () => {
-    expect(minecraftStage([])).toBe(1);
-    expect(minecraftStage(['oak_log×3', 'wooden_pickaxe×1', 'cobblestone×9'])).toBe(1);
-    expect(minecraftStage(['stone_pickaxe×1'])).toBe(2);
-    expect(minecraftStage(['stone_pickaxe×1', 'red_bed×1'])).toBe(3);
-    expect(minecraftStage(['iron_pickaxe×1'])).toBe(4);
-    expect(minecraftStage(['diamond_pickaxe×1', 'blue_bed×1'])).toBe(4);
-    // An iron pickaxe is stage 4 whatever else is missing; a bed with no stone pickaxe is still stage 1; bedrock is no bed.
-    expect(minecraftStage(['netherite_pickaxe×1'])).toBe(4);
-    expect(minecraftStage(['white_bed×1'])).toBe(1);
-    expect(minecraftStage(['stone_pickaxe×1', 'bedrock×1'])).toBe(2);
+  it('is 1 without a stone pickaxe, 2 with one and no bed, 3 with a bed, 4 with an iron pickaxe or better (the real object frame)', () => {
+    expect(minecraftStage(counts())).toBe(1);
+    expect(minecraftStage(counts('oak_log×3', 'wooden_pickaxe×1', 'cobblestone×9'))).toBe(1);
+    expect(minecraftStage(counts('stone_pickaxe×1'))).toBe(2);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1'))).toBe(3);
+    expect(minecraftStage(counts('iron_pickaxe×1'))).toBe(4);
+    expect(minecraftStage(counts('diamond_pickaxe×1', 'blue_bed×1'))).toBe(4);
+    // An iron pickaxe is stage 4 whatever else is missing; a bed with no stone pickaxe is still stage 1.
+    expect(minecraftStage(counts('netherite_pickaxe×1'))).toBe(4);
+    expect(minecraftStage(counts('white_bed×1'))).toBe(1);
   });
 
-  it('is read from the inventory and the slot facts of the observation, and only in the overworld', () => {
+  it('matches exact item ids: a golden pickaxe counts for nothing, bedrock and look-alike ids are no bed or pickaxe, underscore colours are beds', () => {
+    expect(minecraftStage(counts('golden_pickaxe×1'))).toBe(1);
+    expect(minecraftStage(counts('stone_pickaxe_head×1', 'wooden_pickaxe×1'))).toBe(1);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'bedrock×1'))).toBe(2);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'light_blue_bed×1'))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'light_gray_bed×1'))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'iron_pickaxe_broken×1'))).toBe(2);
+    // A stack of zero is not carried.
+    expect(minecraftStage(carriedItemCounts({ inventory: [{ name: 'stone_pickaxe', count: 0 }] }, {}))).toBe(1);
+  });
+
+  it('reads objects, name×count strings and slot facts alike, and is the very function the measurement logs use (one definition)', () => {
+    const fromStrings = carriedItemCounts({ inventory: ['stone_pickaxe×1', 'red_bed×1'] }, {});
+    expect(minecraftStage(fromStrings)).toBe(3);
+    expect(minecraftStage(carriedItemCounts({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'light_blue_bed' }))).toBe(3);
+    expect(minecraftStage(carriedItemCounts({ inventory: { stone_pickaxe: 1 } }, {}))).toBe(2);
+    expect(loggedStage).toBe(minecraftStage);
+  });
+
+  it('is read from the observation frame in the overworld only (null elsewhere)', () => {
     expect(situation({ inventory: ['stone_pickaxe×1'] }).stage).toBe(2);
+    // The real frame's stacks (objects) are what the stage reads; before P7 only slot facts were read and the stage was almost always 1.
+    expect(situation({ inventory: [{ name: 'stone_pickaxe', count: 1, durability: 0.9 }, { name: 'light_blue_bed', count: 1 }] }).stage).toBe(3);
     expect(minecraftSituation(observation({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'red_bed' }), calm).stage).toBe(3);
     expect(minecraftSituation(observation({ dimension: 'the_nether', inventory: ['iron_pickaxe×1'] }, { dimension: 'the_nether' }), calm).stage).toBeNull();
     expect(minecraftSituation(null, calm).stage).toBeNull();
   });
 });
-
 describe('the stage pointers, in the calm slots after the safety ones', () => {
   it('points stage 1 at the early toolchain, stage 2 at the bed and the scout, stage 3 at iron, stage 4 at the Nether portal (by day)', () => {
     expect(pointers({ ...MORNING, inventory: ['oak_log×3'] })).toEqual([TOOLCHAIN]);
@@ -162,6 +187,9 @@ describe('what counts as acting on a pointed skill (tool and argument), content-
     expect(tags([PORTAL], 'mc.mine-block', { blockName: 'obsidian' })).toEqual([`${PORTAL}:obsidian_mine`]);
     expect(tags([PORTAL], 'mc.find-blocks', { blockName: 'lava' })).toEqual([`${PORTAL}:lava_find`]);
     expect(tags([PORTAL], 'mc.enter-portal', {})).toEqual([`${PORTAL}:portal_enter`]);
+    expect(tags([PORTAL], 'mc.use-item-on-block', { x: 1, y: 2, z: 3, itemName: 'lava_bucket' })).toEqual([`${PORTAL}:lava_pour`]);
+    expect(tags([PORTAL], 'mc.use-item-on-block', { x: 1, y: 2, z: 3, itemName: 'water_bucket' })).toEqual([`${PORTAL}:water_pour`]);
+    expect(tags([PORTAL], 'mc.use-item-on-block', { x: 1, y: 2, z: 3, itemName: 'bucket' })).toEqual([]);
   });
 
   it('never throws on odd input, matches by exact tool name, and no skill pointed means no match', () => {
@@ -209,7 +237,7 @@ describe('the body task logs an adoption line while a stage skill is pointed (to
 describe('the new and rewritten skills of draft-4 and draft-5', () => {
   /** The body catalog's own tool names (`backend/src/services/minebot/instantSkills`, skillName): a skill may name only these as `mc.`. */
   const REAL_TOOLS = new Set(['mc.find-nearest-entity', 'mc.find-structure', 'mc.recall-places', 'mc.explore-for-structure', 'mc.craft-one', 'mc.sleep-in-bed',
-    'mc.attack-continuously', 'mc.find-blocks', 'mc.mine-block', 'mc.start-smelting', 'mc.build-structure', 'mc.enter-portal']);
+    'mc.attack-continuously', 'mc.find-blocks', 'mc.mine-block', 'mc.start-smelting', 'mc.build-structure', 'mc.enter-portal', 'mc.place-block-at', 'mc.use-item-on-block']);
   const body = (revision: 'draft-4' | 'draft-5', name: string) => standardSkillPack('legacy-minecraft', revision)!.skills.find(entry => entry.name === name)!.body;
   const gistOf = (revision: 'draft-4' | 'draft-5', name: string) => skillGist(body(revision, name), observeOnlyStep);
   const sound = (gist: string[]) => gist.length === SKILL_GIST.lines && gist.every(line => [...line].length <= SKILL_GIST.width && !line.endsWith('…'));
@@ -241,16 +269,19 @@ describe('the new and rewritten skills of draft-4 and draft-5', () => {
 
   it('mc-nether-portal (draft-5): the lava pool, the obsidian and the portal are the three lines of the gist; iron comes after', () => {
     const gist = gistOf('draft-5', PORTAL);
-    expect(gist[0]).toMatch(/溶岩源の隣.*溶岩の縁/u);
-    expect(gist[1]).toMatch(/黒曜石.*枠に要る数/u);
-    expect(gist[2]).toMatch(/mc\.build-structure（nether_portal）.*mc\.enter-portal/u);
+    // Obsidian is mined with a diamond pickaxe only: the stage-4 (iron pickaxe) gist casts the frame in place and never says to mine it.
+    expect(gist[0]).toMatch(/黒曜石は diamond_pickaxe でしか掘れない.*枠の型に溶岩を注ぎ.*水で固めて.*鋳造/u);
+    expect(gist[1]).toMatch(/mc\.place-block-at.*mc\.use-item-on-block（lava_bucket）.*water_bucket/u);
+    expect(gist[2]).toMatch(/着火.*mc\.enter-portal.*mc\.build-structure/u);
+    expect(gist.join('')).not.toMatch(/黒曜石を掘|掘って/u);
     expect(gist.join('')).not.toContain('鉄');
     expect(body('draft-5', PORTAL).indexOf('鉄は先に')).toBeGreaterThan(body('draft-5', PORTAL).indexOf('mc.enter-portal'));
+    expect(body('draft-5', PORTAL)).toContain('diamond_pickaxe');
     // The draft-2 text is the revision's base, and nothing the old text carried is lost but the order.
     const previous = standardSkillPack('legacy-minecraft', 'draft-2')!.skills.find(entry => entry.name === PORTAL)!;
     expect(standardSkillPack('legacy-minecraft', 'draft-5')!.skills[0]!.revises).toEqual({ bodySha256: previous.sha256 });
     expect(skillArtifactSha256(previous.body)).toBe(previous.sha256);
-    for (const phrase of ['盾（板6＋鉄1）', 'バケツ（鉄3', '丸石を多め', 'ハーフブロック', 'ポータル面']) expect(body('draft-5', PORTAL)).toContain(phrase);
+    for (const phrase of ['盾（板6＋鉄1）', 'バケツ（鉄3', '丸石を多め', 'ハーフブロック', 'ポータル面', '掘って10個集め']) expect(body('draft-5', PORTAL)).toContain(phrase);
   });
 
   const fresh = () => {

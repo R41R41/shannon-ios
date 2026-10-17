@@ -22,9 +22,12 @@ const at = '2026-10-17T00:00:00.000Z';
 const later = (minutes: number) => new Date(Date.parse(at) + minutes * 60_000).toISOString();
 const pass = { carries: () => false };
 
+/** The real frame's inventory: `{ name, count, durability? }` objects (body worldFrame.ts), never `name×count` strings. */
+const stack = (item: string) => { const [name, count] = item.split('×'); return { name: name!, count: Number(count ?? 1), durability: 1 }; };
+const framed = (world: Record<string, unknown>) => ({ ...world, ...(Array.isArray(world.inventory) ? { inventory: world.inventory.map(item => typeof item === 'string' ? stack(item) : item) } : {}) });
 const observation = (world: Record<string, unknown>, facts: Record<string, unknown> = {}): BodyObservation => ({ schemaVersion: 1, bodyId: 'minecraft:world',
   sequence: 1, stateAt: at, receivedAt: at, connected: true,
-  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '300', margin: { darkInSeconds: 635 }, inventory: [], nearbyThreats: [], ...world } },
+  state: { world: { dimension: 'overworld', health: 20, food: 20, time: '300', margin: { darkInSeconds: 635 }, inventory: [], nearbyThreats: [], ...framed(world) } },
   facts: { dimension: 'overworld', ...facts } } as unknown as BodyObservation);
 const pointers = (world: Record<string, unknown>, facts: Record<string, unknown> = {}, names: ReadonlySet<string> = NAMES) =>
   minecraftSkillPointers(minecraftSituation(observation(world, facts), calm), names);
@@ -41,6 +44,18 @@ describe('the bed pointer (when dusk is near and she carries no bed)', () => {
     expect(pointers({ time: '9000', margin: undefined })).toEqual(BED_POINTER);
     expect(pointers({ time: '1000', margin: undefined })).toEqual(BED_POINTER);
     expect(pointers({ time: '900', margin: undefined })).toEqual([]);
+  });
+
+  it('reads the real frame: { name, count } stacks and name×count strings say she carries a bed (any colour, even light_blue); a stack of 0 and bedrock do not', () => {
+    const dusk = { time: '9000', margin: { darkInSeconds: 200 } };
+    expect(pointers({ ...dusk, inventory: [{ name: 'light_blue_bed', count: 1, durability: 1 }] })).toEqual([]);
+    expect(pointers({ ...dusk, inventory: [{ name: 'light_gray_bed', count: 1 }] })).toEqual([]);
+    expect(pointers({ ...dusk, inventory: [{ name: 'red_bed', count: 0 }] })).toEqual(BED_POINTER);
+    expect(pointers({ ...dusk, inventory: [{ name: 'bedrock', count: 1 }, { name: 'white_wool', count: 3 }] })).toEqual(BED_POINTER);
+    // The string form is still read (an older body or a fixture).
+    expect(minecraftSkillPointers(minecraftSituation(observation({ ...dusk }), calm), NAMES)).toEqual(BED_POINTER);
+    const strings = { ...observation(dusk), state: { world: { ...(observation(dusk).state.world as object), inventory: ['light_blue_bed×1'] } } } as BodyObservation;
+    expect(minecraftSkillPointers(minecraftSituation(strings, calm), NAMES)).toEqual([]);
   });
 
   it('does not fire when she has a bed (any colour, in the inventory or a slot fact), and bedrock is not a bed', () => {

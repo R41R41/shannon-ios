@@ -10,7 +10,7 @@
     {
       "name": "mc-nether-portal",
       "path": "mc-nether-portal/SKILL.md",
-      "sha256": "e9f150fbba291b070c99cc05b28df3b9a305eec7bb10285210deb3142caa8761",
+      "sha256": "7cd1852ffd27a3862b1fced5a98dfc814a47139b2cf23d729d6e6469a68f02a3",
       "revises": {
         "bodySha256": "547d4c1148359eba8f3dafaec07efb80810cd96b0c062021c84a5d47429ae8b7"
       },

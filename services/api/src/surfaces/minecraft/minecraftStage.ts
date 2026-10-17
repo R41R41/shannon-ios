@@ -1,26 +1,28 @@
+import { BED_ITEM, countMatching, type ItemCounts } from './minecraftItems.js';
+
 /**
- * The stage of her Minecraft opening, read from what she carries (observation redesign P7, owner 2026-10-17). Stateless: it is
- * computed again at every decision from the observation alone, so it can never go stale and nothing of it is stored. Each stage
- * names one skill (`minecraftSkillPointers.ts`), and each skill has the calls that count as acting on it (`adoptionTags`), so that
- * following a skill can be measured beyond the few body tools only it uses. Closed facts and tool names only, never her content.
+ * The stage of her Minecraft opening, read from what she carries: the one definition, shared by the skill pointers
+ * (`minecraftSkillPointers.ts`, observation redesign P7) and the measurement logs (`minecraftMilestoneLog.ts`, P1). Stateless: it is
+ * computed again at every decision from the observation alone, so it can never go stale and nothing of it is stored. The counts come
+ * from `carriedItemCounts` (the body's `{name, count}` stacks, `name×count` strings and `slot:*` facts), matched by exact item id.
+ * Each stage names one skill, and each skill has the calls that count as acting on it (`adoptionTags`), so that following a skill can
+ * be measured beyond the few body tools only it uses. Closed facts and tool names only, never her content.
  */
 export type MinecraftStage = 1 | 2 | 3 | 4;
 
-/** A bed in the inventory (`white_bed×1`), any colour; not `bedrock`. */
-export const HAS_BED = /^[a-z_]*_bed(?![a-z])/u;
-const STONE_TIER_PICKAXE = /^(?:stone|iron|diamond|netherite)_pickaxe/u;
-export const IRON_TIER_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe/u;
+const STONE_TIER_PICKAXE = /^(?:stone|iron|diamond|netherite)_pickaxe$/u;
+const IRON_TIER_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe$/u;
 
 /**
- * 1: no stone pickaxe (the early toolchain). 2: a stone pickaxe and no bed. 3: a bed and no iron pickaxe. 4: an iron pickaxe or
- * better (the Nether path). An iron pickaxe is stage 4 whatever else is missing: the stage never goes back.
+ * 1: no stone pickaxe (the early toolchain). 2: a stone pickaxe (or better) and no bed. 3: a bed and no iron pickaxe. 4: an iron
+ * pickaxe or better (the Nether path). An iron pickaxe is stage 4 whatever else is missing: the stage never goes back. A golden
+ * pickaxe counts for nothing. The pointers read it in the overworld only (null elsewhere); the logs may log the dimension apart.
  */
-export function minecraftStage(items: readonly string[]): MinecraftStage {
-  if (items.some(item => IRON_TIER_PICKAXE.test(item))) return 4;
-  if (!items.some(item => STONE_TIER_PICKAXE.test(item))) return 1;
-  return items.some(item => HAS_BED.test(item)) ? 3 : 2;
+export function minecraftStage(counts: ItemCounts): MinecraftStage {
+  if (countMatching(counts, IRON_TIER_PICKAXE) > 0) return 4;
+  if (countMatching(counts, STONE_TIER_PICKAXE) === 0) return 1;
+  return countMatching(counts, BED_ITEM) > 0 ? 3 : 2;
 }
-
 /** A finished call of hers: the tool and its arguments as she gave them. */
 export interface AdoptionCall { name: string; input: unknown }
 interface Adoption { tag: string; skills: readonly string[]; matches(call: AdoptionCall): boolean }
@@ -41,6 +43,8 @@ const villageCheck = anyOf(tool('mc.recall-places', 'kind', VILLAGE), tool('mc.f
 /**
  * The calls that count as acting on a skill (a tool and an argument), beyond the tools only it names. Used for the content-free
  * line `Shannon Minecraft stage adoption`: which skill was pointed at the decision, which tag her call matched, never any text.
+ * This is the per-skill measure of the pointers. P1's early-game tags (`minecraftAdoptionTags.ts`) and gist predicates (`predicateSkills`)
+ * are separate measures over some of the same calls; the two are not merged, and neither changes what she sees.
  */
 export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'sheep_search', skills: [BED, SCOUT], matches: tool('mc.find-nearest-entity', 'entityType', /^sheep$/u) },
@@ -59,6 +63,8 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'stone_mine', skills: [TOOLCHAIN], matches: tool('mc.mine-block', 'blockName', /^(?:stone|cobblestone)$/u) },
   { tag: 'lava_find', skills: [PORTAL], matches: tool('mc.find-blocks', 'blockName', /lava/u) },
   { tag: 'obsidian_mine', skills: [PORTAL], matches: tool('mc.mine-block', 'blockName', /^obsidian$/u) },
+  { tag: 'lava_pour', skills: [PORTAL], matches: tool('mc.use-item-on-block', 'itemName', /^lava_bucket$/u) },
+  { tag: 'water_pour', skills: [PORTAL], matches: tool('mc.use-item-on-block', 'itemName', /^water_bucket$/u) },
   { tag: 'portal_build', skills: [PORTAL], matches: tool('mc.build-structure', 'structureName', /^nether_portal$/u) },
   { tag: 'portal_enter', skills: [PORTAL], matches: call => call.name === 'mc.enter-portal' },
 ]);
