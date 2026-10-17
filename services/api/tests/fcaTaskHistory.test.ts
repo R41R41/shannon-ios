@@ -6,7 +6,7 @@ import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.j
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
-import { planFcaHistory, prepareFcaHistory } from '../src/mind/action/fca/fcaHistory.js';
+import { FCA_BODY_HISTORY_POLICY, FCA_HISTORY_POLICY, planFcaHistory, prepareFcaHistory } from '../src/mind/action/fca/fcaHistory.js';
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummaryInput } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
@@ -371,6 +371,164 @@ describe('exact complete-round FCA history compaction', () => {
     expect(f.runtime.commitStep(step, { disposition: 'complete', history: entries(3) })?.task.status).toBe('queued');
     expect(f.window().rounds.at(-1)?.status).toBe('queued');
     expect(f.db.prepare('SELECT count(*) AS count FROM fca_task_history').get()?.count).toBe(3);
+  });
+});
+
+// P4 (owner 2026-10-17): a body task's summaries are rare, by Haiku: compacted past ~24k conversation tokens, down to ~8k with the
+// newest 6 rounds whole. Everything below is the policy (`FCA_BODY_HISTORY_POLICY`) with the real codec and a stored history.
+describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () => {
+  /** A decision-shaped round of about `characters` Japanese characters of body report (about 1.1 tokens each), with a call and its result. */
+  const bodyRound = (index: number, characters: number) => [
+    { role: 'user', content: JSON.stringify({ task: { id: 'task', title: 'history', goal: 'history', completionCriteria: '' }, messages: [], body: `観測${index}${'観'.repeat(characters)}` }) },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: `signed-${index}` }, { type: 'tool_use', id: `call-${index}`, name: 'task_list', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: `call-${index}`, content: `結果${index}` }] },
+  ];
+  const tokensOf = (entries: readonly unknown[]) => anthropicFcaHistoryCodec.tokens!(entries);
+  const conversation = (f: ReturnType<typeof fixture>) => tokensOf(f.window().rounds.flatMap(round => round.entries));
+  const body = { ...FCA_BODY_HISTORY_POLICY };
+  const live = (f: ReturnType<typeof fixture>, summarize?: (input: FcaHistorySummaryInput) => Promise<unknown>) =>
+    ({ ...f.ports(summarize), codec: anthropicFcaHistoryCodec });
+
+  it('names the owner\'s numbers: 24,000 to trigger, 8,000 to reach, the newest 6 whole', () => {
+    expect(FCA_BODY_HISTORY_POLICY).toMatchObject({ maximumConversationTokens: 24_000, compactedConversationTokens: 8_000, recentRounds: 6 });
+    expect(FCA_HISTORY_POLICY).not.toHaveProperty('maximumConversationTokens');
+    expect(() => planFcaHistory({ revision: 0, sourceRevision: '', tailSequence: 0, summary: null, rounds: [] }, anthropicFcaHistoryCodec,
+      { maximumConversationTokens: 1_000, compactedConversationTokens: 2_000 })).toThrow('FCA_HISTORY_POLICY');
+  });
+
+  it('compacts exactly when the conversation passes 24,000 tokens, and not for the round count the default allows', async () => {
+    const f = fixture(); let compacted = -1;
+    for (let index = 1; index <= 40 && compacted < 0; index++) {
+      await f.finish(await f.begin(), index, bodyRound(index, 1_000));
+      const plan = planFcaHistory(f.window(), anthropicFcaHistoryCodec, body);
+      if (plan.kind === 'compact') compacted = index; else expect(conversation(f)).toBeLessThanOrEqual(24_000);
+    }
+    expect(compacted).toBeGreaterThan(6);
+    expect(conversation(f)).toBeGreaterThan(24_000);
+    // The default policy keeps the same history as it is (24 rounds, 75,000 tokens): nothing there to compact yet.
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, {})).toMatchObject({ kind: 'ready' });
+    // Many short rounds: the default's 24 rounds decide, the body's tokens do not.
+    const g = fixture();
+    for (let index = 1; index <= 30; index++) await g.finish(await g.begin(), index, bodyRound(index, 50));
+    expect(conversation(g)).toBeLessThan(24_000);
+    expect(planFcaHistory(g.window(), anthropicFcaHistoryCodec, {}).kind).toBe('compact');
+    expect(planFcaHistory(g.window(), anthropicFcaHistoryCodec, body)).toMatchObject({ kind: 'ready' });
+  });
+
+  it('does not count rebuildable tool definitions against the conversation bound, but the whole replay bound still holds', async () => {
+    const f = fixture(), definition = { role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { name: 'mc.big', description: '説明'.repeat(15_000), input_schema: { type: 'object' } } } }] };
+    expect(anthropicFcaHistoryCodec.reproducible!(definition)).toBe(true);
+    await f.finish(await f.begin(), 1, [definition, ...bodyRound(1, 500)]);
+    await f.finish(await f.begin(), 2, bodyRound(2, 500));
+    expect(conversation(f)).toBeGreaterThan(24_000);
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, body)).toMatchObject({ kind: 'ready' });
+    expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...body, maximumReplayTokens: 20_000 }).kind).toBe('compact');
+  });
+
+  it('compacts down to 8,000 tokens with the newest 6 rounds whole, then stays quiet', async () => {
+    const f = fixture(); const inputs: FcaHistorySummaryInput[] = [];
+    let steps = 0;
+    for (; steps < 60 && !inputs.length; steps++) {
+      const step = await f.begin();
+      const replay = await prepareFcaHistory(step, live(f, async input => { inputs.push(structuredClone(input)); return summary; }), new AbortController().signal, body);
+      if (inputs.length) {
+        const stored = f.window();
+        expect(tokensOf(replay.history)).toBeLessThanOrEqual(8_000);
+        expect(stored.rounds).toHaveLength(6);
+        const kept = JSON.parse(stored.summary!.bootstrapText) as { rounds: Array<{ sequence: number }> };
+        expect(kept.rounds.map(round => round.sequence)).toEqual(stored.rounds.map(round => round.sequence));
+        expect(inputs[0]!.rounds.at(-1)!.sequence).toBe(stored.rounds[0]!.sequence - 1);
+        expect(JSON.stringify(inputs)).not.toMatch(/signed-|"thinking"/u);
+      }
+      await f.finish(step, steps + 1, bodyRound(steps + 1, 700));
+    }
+    expect(inputs).toHaveLength(1);
+    // The next steps replay the bootstrap and new rounds without another summary until 24,000 tokens again.
+    for (let more = 0; more < 8; more++) {
+      const step = await f.begin();
+      await prepareFcaHistory(step, live(f, async () => { throw new Error('unexpected summary'); }), new AbortController().signal, body);
+      await f.finish(step, 100 + more, bodyRound(100 + more, 700));
+    }
+  });
+
+  it('keeps fewer than 6 rounds only while they alone would pass the 8,000-token target, never fewer than the newest one', async () => {
+    const f = fixture(); const inputs: FcaHistorySummaryInput[] = [];
+    for (let index = 1; index <= 12; index++) await f.finish(await f.begin(), index, bodyRound(index, 3_000));
+    const step = await f.begin();
+    const replay = await prepareFcaHistory(step, live(f, async input => { inputs.push(structuredClone(input)); return summary; }), new AbortController().signal, body);
+    const kept = f.window().rounds.length;
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(kept).toBeGreaterThanOrEqual(1);
+    expect(kept).toBeLessThan(6);
+    expect(tokensOf(replay.history)).toBeLessThanOrEqual(8_000);
+  });
+
+  it('stores a body summary\'s items up to 120 characters, and no more', async () => {
+    const f = fixture(); await f.append(10);
+    const long = (length: number) => 'あ'.repeat(length);
+    await prepareFcaHistory(await f.begin(), f.ports(async () => ({ '目的': [long(100)], '次': [long(130)] })), new AbortController().signal, policy);
+    const template = f.window().summary!.template as unknown as Record<string, string[]>;
+    expect([...template['目的']![0]!]).toHaveLength(100);
+    expect([...template['次']![0]!]).toHaveLength(120);
+  });
+
+  /**
+   * A production-shaped decision (Minebot lane task 788da00a): the first decision of an epoch restates the catalog, the skill index
+   * and the recall packet in full (about 70,000 characters); the rest of the epoch leaves them out. The public form (what a
+   * bootstrap keeps, and what the trigger measures) has none of them.
+   */
+  const productionRound = (index: number, restated: boolean) => [
+    { role: 'user', content: JSON.stringify({ task: { id: 'task', title: 'history', goal: 'history', completionCriteria: '' }, messages: [],
+      body: `観測${index}${'観'.repeat(700)}`,
+      ...(restated ? { catalog: { tools: 'c'.repeat(20_000) }, skillIndex: 's'.repeat(10_000),
+        recall: { status: 'ready', items: [{ id: 'memory', summary: '記'.repeat(20_000) }] }, contextInstructions: { rule: 'r'.repeat(5_000) } } : {}) }) },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: `signed-${index}` }, { type: 'tool_use', id: `call-${index}`, name: 'task_list', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: `call-${index}`, content: `結果${index}` }] },
+  ];
+
+  it('does not compact again at once after a compaction though the next decision restates 70,000 characters, and still compacts on real growth', async () => {
+    const f = fixture(); let summaries = 0, restated = true, quiet = 0, sinceFirst = -1;
+    for (let index = 1; index <= 60 && sinceFirst < 26; index++) {
+      const step = await f.begin(), before = summaries;
+      await prepareFcaHistory(step, live(f, async () => { summaries++; return summary; }), new AbortController().signal, body);
+      if (summaries > before) { restated = true; if (summaries === 1) sinceFirst = 0; }
+      else if (summaries === 1 && restated === false) quiet += 1;
+      await f.finish(step, index, productionRound(index, restated));
+      if (restated && summaries === 1) expect(JSON.stringify(f.window().rounds.at(-1)!.entries).length).toBeGreaterThan(50_000);
+      restated = false;
+      if (sinceFirst >= 0) sinceFirst += 1;
+      // Ten ordinary steps after the first compaction: the epoch's restating round is behind them and nothing compacts again.
+      if (sinceFirst >= 1 && sinceFirst <= 11) expect(summaries).toBe(1);
+    }
+    expect(quiet).toBeGreaterThanOrEqual(10);
+    // Real growth past 24,000 conversation tokens compacts again, once, down to the target.
+    expect(summaries).toBeGreaterThanOrEqual(2);
+    expect(summaries).toBeLessThanOrEqual(3);
+  });
+
+  it('asks for one summary a step and never loops while the body summarizer keeps giving no usable answer', async () => {
+    const f = fixture(); let calls = 0;
+    for (let index = 1; index <= 30; index++) await f.finish(await f.begin(), index, bodyRound(index, 1_000));
+    const invalid = Object.assign(new Error('FCA_SUMMARY_INVALID'), { reason: 'empty' });
+    for (let step = 1; step <= 3; step++) {
+      const current = await f.begin();
+      await prepareFcaHistory(current, live(f, async () => { calls++; throw invalid; }), new AbortController().signal, body);
+      expect(calls).toBe(step);
+      await f.finish(current, 30 + step, bodyRound(30 + step, 1_000));
+    }
+  });
+
+  it('replays a clipped public epoch, with no stored change, when the body summarizer gives no usable answer', async () => {
+    const f = fixture();
+    for (let index = 1; index <= 30; index++) await f.finish(await f.begin(), index, bodyRound(index, 1_000));
+    const step = await f.begin(), original = f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all();
+    const invalid = Object.assign(new Error('FCA_SUMMARY_INVALID'), { reason: 'template' });
+    const replay = await prepareFcaHistory(step, live(f, async () => { throw invalid; }), new AbortController().signal, body);
+    const epoch = JSON.parse((replay.history[0] as { content: string }).content) as { kind: string; rounds: unknown[] };
+    expect(epoch.kind).toBe('fca_public_history');
+    expect(epoch.rounds.length).toBeGreaterThan(0);
+    expect(f.window().summary).toBeNull();
+    expect(f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all()).toEqual(original);
   });
 });
 

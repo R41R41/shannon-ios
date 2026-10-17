@@ -43,6 +43,7 @@ export {
   type FactJudgement, type FactResolution, type TemporalFact,
 } from './temporalFacts.js';
 export {
+  COMPACTION_BODY_ITEM_CHARACTERS,
   COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, compactionItem, emptyTemplate, mergedTemplate, renderedCompaction, summaryInput,
   type CompactionMessage, type CompactionSection, type CompactionTemplate,
 } from './compaction.js';

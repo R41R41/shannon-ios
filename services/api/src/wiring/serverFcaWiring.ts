@@ -25,6 +25,7 @@ import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
+import { configuredFcaSummaries } from './fcaSummaryWiring.js';
 import { createFcaReadSources, type FcaReadSourcesOptions } from './fcaReadSources.js';
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
@@ -116,7 +117,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const timeZone = ownerTimeZone(values);
     const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
       compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS });
-    const summarizer = createAnthropicFcaSummarizer({ ...provider, recordUsage });
+    // SHANNON_FCA_SUMMARY_MODEL=haiku (P4): a body task's summaries by Haiku, rare; absent, every task is as it was.
+    const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage);
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
@@ -132,7 +134,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       ...taskGates({ ownerScope: parts.ownerScope, guard: () => visible, sleepVisible: (rt, task) => Boolean(sleep?.visible(rt, task)) }),
       stepPorts: (_runtime, step) => {
         if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
-        const history = { codec: anthropicFcaHistoryCodec, summarizer };
+        const history = { codec: anthropicFcaHistoryCodec, summarizer: summaries.decision };
         if (step.snapshot.task.origin === 'own_time') return ownTimeStepPorts(step, { ...parts, runtime: _runtime, selector, history });
         // Her readable skills for the body's situational pointers (`minecraftSkillPointers.ts`): only while `skill.read` is offered.
         const skillNames = () => parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
@@ -170,7 +172,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         sourcesVisible,
         taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
-        history: { codec: anthropicFcaHistoryCodec, summarizer },
+        history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision }) },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(fcaResearchTools({ tools: parts.tools,
           state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
           task: { id: step.taskId, origin: step.snapshot.task.origin, leaseId: step.lease.id },
