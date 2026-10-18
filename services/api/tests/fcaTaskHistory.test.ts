@@ -130,6 +130,70 @@ describe('exact complete-round FCA history compaction', () => {
     expect(restored.window().summary?.resetThroughSequence).toBe(10);
   });
 
+  describe('legacy empty rows (written by the old 5xx and held retries)', () => {
+    /** As the old retry left it: a step closed as `continue` with nothing run, its row stored with the committed status and the step's sources. */
+    async function legacyEmpty(f: ReturnType<typeof fixture>) {
+      const step = await f.begin();
+      await f.finish(step, 0, []); // skipped by `appendStep` now; the row is written below as the old code wrote it
+      f.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json) VALUES(?,?,'[]',?,'queued',?)`)
+        .run(f.task.id, step.id, at, JSON.stringify(step.snapshot.sources));
+    }
+    const rows = (f: ReturnType<typeof fixture>) => f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all() as Array<{ sequence: number; entries_json: string }>;
+    const real = (f: ReturnType<typeof fixture>) => rows(f).filter(row => row.entries_json !== '[]').map(row => row.sequence);
+
+    it('shows every reader the same window with empty rows at the head, middle and tail, through compaction and a later round', async () => {
+      const f = fixture(); const signal = new AbortController().signal, small = { ...policy, maximumRounds: 4, recentRounds: 2 };
+      await legacyEmpty(f);
+      for (const index of [1, 2, 3, 4, 5]) { await f.finish(await f.begin(), index); if (index === 2) await legacyEmpty(f); }
+      await legacyEmpty(f);
+      const stored = rows(f), sequences = real(f);
+      expect(stored.filter(row => row.entries_json === '[]')).toHaveLength(3);
+      expect(sequences).toHaveLength(5);
+      const window = f.window();
+      expect(window.rounds.map(round => round.sequence)).toEqual(sequences);
+      expect(window.tailSequence).toBe(sequences.at(-1));
+      expect(f.runtime.snapshot('owner', f.task.id)!.history).toHaveLength(15); // the task view of the history was never affected
+
+      // Compaction: five real rounds above the bound of four. The two newest stay whole; the three before them are summarized.
+      const step = await f.begin(), inputs: FcaHistorySummaryInput[] = [];
+      const replay = await prepareFcaHistory(step, f.ports(async input => { inputs.push(structuredClone(input)); return summary; }), signal, small);
+      expect(inputs.flatMap(input => input.rounds.map(round => round.sequence))).toEqual(sequences.slice(0, 3));
+      const compacted = f.window();
+      expect(compacted.summary).toMatchObject({ fromSequence: sequences[0], throughSequence: sequences[2], resetThroughSequence: sequences[4] });
+      expect(compacted.rounds.map(round => round.sequence)).toEqual(sequences.slice(3));
+      const bootstrap = JSON.parse(compacted.summary!.bootstrapText) as { rounds: Array<{ sequence: number }> };
+      expect(bootstrap.rounds.map(round => round.sequence)).toEqual(sequences.slice(3));
+      expect(replay.history).toEqual([{ role: 'user', content: compacted.summary!.bootstrapText }]);
+
+      // A new non-empty round after the summary: the bootstrap is reused unchanged and nothing summarizes again.
+      await f.finish(step, 6);
+      const next = await f.begin();
+      const again = await prepareFcaHistory(next, f.ports(async () => { throw new Error('unexpected summary call'); }), signal, small);
+      expect(again.history).toEqual([replay.history[0], ...entries(6)]);
+      expect(f.window().summary?.bootstrapText).toBe(compacted.summary!.bootstrapText);
+      expect(f.window().rounds.map(round => round.sequence)).toEqual([...sequences.slice(3), real(f).at(-1)]);
+
+      // The next compaction is planned and committed over real sequences only, and the stored rows are untouched.
+      await f.finish(next, 7); await f.finish(await f.begin(), 8);
+      const last = await f.begin(), original = rows(f);
+      const planned = planFcaHistory(f.window(), codec, small);
+      expect(planned.kind).toBe('compact'); if (planned.kind !== 'compact') return;
+      expect(planned.request.sequences.every(sequence => real(f).includes(sequence))).toBe(true);
+      expect(planned.request.tailSequence).toBe(real(f).at(-1));
+      expect(f.runtime.commitCompaction(last, { ...planned.request, template: summary }, () => true)).toBe(true);
+      expect(f.window().summary).toMatchObject({ revision: 2, throughSequence: planned.request.sequences.at(-1) });
+      expect(rows(f)).toEqual(original);
+    });
+
+    it('rejects a compaction request that names an empty row as a round', async () => {
+      const f = fixture(); await legacyEmpty(f); await f.append(5);
+      const step = await f.begin(), empty = rows(f).find(row => row.entries_json === '[]')!.sequence;
+      const planned = planFcaHistory(f.window(), codec, { ...policy, maximumRounds: 4, recentRounds: 2 });
+      expect(planned.kind).toBe('compact'); if (planned.kind !== 'compact') return;
+      expect(f.runtime.commitCompaction(step, { ...planned.request, template: summary, sequences: [empty, ...planned.request.sequences] }, () => true)).toBe(false);
+    });
+  });
+
   it('rejects skipped coverage, partial retained bootstrap, stale revisions, forged sources and empty summaries', async () => {
     const f = fixture(); await f.append(10); const step = await f.begin();
     const planned = planFcaHistory(f.window(), codec, policy); expect(planned.kind).toBe('compact'); if (planned.kind !== 'compact') return;

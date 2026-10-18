@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { checkedTemplate, COMPACTION_BODY_ITEM_CHARACTERS, COMPACTION_SECTIONS } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from '../taskHistoryPorts.js';
-import type { TaskSource, TaskStatus } from '../taskRuntimePorts.js';
+import type { TaskSource, TaskStatus, TaskStep } from '../taskRuntimePorts.js';
 import { enableFcaProvenanceSets, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 
 /** Derived summaries never replace the append-only native history. Caller owns the task transaction and lease fence. */
@@ -15,6 +15,16 @@ export class TaskHistoryStore {
     this.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json)
       VALUES(?,?,?,?,?,?)`).run(taskId, stepId, entries, at, status, storedSourcesJson(this.db, scopeKey, sources, this.byReference));
   }
+  /**
+   * A committed step's round. A step closed as `continue` with nothing in its history (a retry after a provider 5xx, a held step: nothing
+   * ran) adds no round: an empty round is not a native round, `FcaHistoryCodec.project` cannot project it, and every later replay
+   * would stop at FCA_HISTORY_INCOMPLETE_ROUND. Any other disposition still writes its row even when empty (a fail row is needed by the
+   * evidence JOINs on step_id and for `committed_status`); `window()` leaves every empty row out, so no reader sees it as a round.
+   */
+  appendStep(step: TaskStep, entries: string, disposition: string, at: string, status: TaskStatus): void {
+    if (disposition === 'continue' && entries === '[]') return;
+    this.append(step.scopeKey, step.taskId, step.id, entries, at, status, step.snapshot.sources);
+  }
   /** A round's stored sources (a copy, or a reference read now); an unresolved reference stops the read (`FCA_PROVENANCE_UNRESOLVED`). */
   window(scopeKey: string, taskId: string, sources: readonly TaskSource[]): TaskHistoryWindow {
     const row = this.db.prepare('SELECT * FROM fca_task_history_summaries WHERE task_id=?').get(taskId);
@@ -23,11 +33,13 @@ export class TaskHistoryStore {
       template: JSON.parse(String(row.template_json)), sources: JSON.parse(String(row.sources_json)),
       resetThroughSequence: Number(row.reset_through_sequence), bootstrapText: String(row.bootstrap_text),
     } : null;
-    const rounds = this.db.prepare('SELECT * FROM fca_task_history WHERE task_id=? AND sequence>? ORDER BY sequence')
+    // Rows stored with no entries (written by a retried step before `appendStep`) are not rounds: every reader sees the window without them.
+    const rounds = this.db.prepare(`SELECT * FROM fca_task_history WHERE task_id=? AND sequence>? AND entries_json<>'[]' ORDER BY sequence`)
       .all(taskId, summary?.throughSequence ?? 0).map(entry => ({ sequence: Number(entry.sequence), stepId: String(entry.step_id),
         committedAt: String(entry.committed_at), entries: JSON.parse(String(entry.entries_json)) as unknown[],
         status: String(entry.committed_status) as TaskHistoryRound['status'],
-        sources: [...requireStoredSources(this.db, scopeKey, String(entry.sources_json))] }));
+        sources: [...requireStoredSources(this.db, scopeKey, String(entry.sources_json))] }))
+      .filter(round => round.entries.length > 0);
     return { revision: summary?.revision ?? 0, sourceRevision: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),
       tailSequence: rounds.at(-1)?.sequence ?? summary?.throughSequence ?? 0, summary, rounds };
   }
