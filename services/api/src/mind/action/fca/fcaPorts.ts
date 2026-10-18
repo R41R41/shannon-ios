@@ -27,6 +27,17 @@ export interface FcaModelInput {
    * stay byte-identical for the epoch; every other tool of `tools` is only appended. Absent: the legacy menu.
    */
   coreTools?: readonly FcaToolDefinition[];
+  /**
+   * Transient mode: the most estimated tokens the epoch's replay may hold (`fcaTransientHistory`: the replay bound less the core). The
+   * stored state of this step joins the replay, so a state that would leave no room for another step is shortened (a summary every
+   * step is what an oversized first state of an epoch costs); `anthropicFcaTransientRequest.ts`.
+   */
+  replayTokenLimit?: number;
+  /**
+   * Transient mode (`anthropicFcaTransient.ts`): the body's live state for this decision only (observation, pace, phase facts, jobs, skill
+   * pointers, notices), from `FcaBodyLifecycle.transient`. It goes into a turn-scoped system message and is never stored.
+   */
+  transient?: Readonly<Record<string, unknown>>;
   sharedContext?: FcaSharedContext;
   recall?: TaskRecallPacket;
   body?: { revision: number; observation: BodyObservation | null };
@@ -46,7 +57,12 @@ export interface FcaBodyLifecycle {
   guard(revision: number): Promise<boolean>;
   toolSignal(name: string, parent: AbortSignal): AbortSignal;
   noteCall?(call: FcaToolCall, operationId: string): void;
-  noteResult?(call: FcaToolCall, result: ToolResult): void;
+  /** `durationMilliseconds`: how long the call took (the transient pace's breakdown by kind of call). */
+  noteResult?(call: FcaToolCall, result: ToolResult, durationMilliseconds?: number): void;
+  /** A transient task's body state for this decision (after `context()`); see `FcaModelInput.transient`. Absent: none. */
+  transient?(): Record<string, unknown>;
+  /** What a transient task stores of one of this body's tool results (the cut text of a long one). Absent: the text as it is. */
+  storedResult?(call: FcaToolCall, text: string): string;
   /** True while the body is in its first frames after a login or respawn: heavy local work (the recall) waits for the decision. */
   settling?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
@@ -59,6 +75,13 @@ export interface FcaModelOutput {
   expectations?: readonly FcaActionExpectation[];
   appraisals?: readonly FcaAffectAppraisal[];
   auxiliaryResults?: readonly FcaAuxiliaryResult[];
+  /**
+   * Transient mode: the stored state had to be cut to fit (`anthropicFcaStateCut.ts`), a new epoch could state it whole (with its
+   * bootstrap and a typical live state), and the next step could not state it whole in this epoch (beside the replay): kept in the
+   * checkpoint, and the next epoch may start sooner. False when the cut is inherent (not even a new epoch's first state fits whole), or
+   * when the next step can restate it in place (a live spike passes by itself).
+   */
+  stateCut?: boolean;
 }
 export interface FcaModel {
   decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput>;

@@ -31,6 +31,14 @@ export interface FcaTransientHistory {
 export interface FcaTransientPorts {
   obsMode?: FcaObsMode; keepBodyTools?(): boolean; selector?: unknown; history?: { codec: FcaHistoryCodec; policy?: Partial<FcaHistoryPolicy> };
 }
+/**
+ * Whether this step belongs to a transient body task (the mode it started with, or starts with now). Its decision carries no recall
+ * packet until P5 brings the past episodes as one-line live state, so the recall is not even started: no memory is fetched, and none is
+ * recorded as a source of a decision that never showed it.
+ */
+export function isFcaTransientTask(prior: Record<string, unknown>, ports: FcaTransientPorts): boolean {
+  return pinOfCheckpoint(prior.fcaToolSelection, ports.obsMode === 'transient' && ports.keepBodyTools?.() === true && !!ports.selector) !== null;
+}
 export function fcaTransientHistory(prior: Record<string, unknown>, catalog: readonly FcaToolDefinition[],
   ports: FcaTransientPorts): FcaTransientHistory | null {
   const pin = pinOfCheckpoint(prior.fcaToolSelection, ports.obsMode === 'transient' && ports.keepBodyTools?.() === true && !!ports.selector);
@@ -46,11 +54,14 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
  * Whether this replay (the epoch replay before any compaction) is to start a new epoch by a summary now: the core is stale; the replay
  * still starts with the message the pin was made for (else a summary already began a new epoch, the failed decision after it being
  * retried: no summary of a summary); and the epoch has lived `FCA_CORE_COOLDOWN_STEPS`. Logs content-free, once for each summary.
+ * `cutLast` (the previous request cut its stored state to fit, a new epoch could state it whole, and the next step could not restate it
+ * in place: `FcaModelOutput.stateCut`, decided by the model with the replay it saw) asks the same: a summary leaves room for the state
+ * the cut shortened, which the new epoch's first state then says whole. A request that could restate it in place sets no `cutLast`.
  */
-export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string): boolean {
+export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string, cutLast = false): boolean {
   const { pin, stale } = state;
-  if (!stale || !pin || !continuesFcaEpoch(pin, replay) || pin.steps < FCA_CORE_COOLDOWN_STEPS) return false;
-  console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId, reason: stale }));
+  if ((!stale && !cutLast) || !pin || !continuesFcaEpoch(pin, replay) || pin.steps < FCA_CORE_COOLDOWN_STEPS) return false;
+  console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId, reason: stale ?? 'state_cut' }));
   return true;
 }
 

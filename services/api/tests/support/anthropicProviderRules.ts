@@ -16,7 +16,7 @@ export function anthropicRequestViolation(body: Record<string, unknown>): string
   }
   const messages = request.messages as Array<{ role: string; content: unknown }>;
   if (messages[0]?.role === 'system') return 'messages.0: a system message that holds tool blocks cannot be the first message';
-  const placement = systemPlacementViolation(messages) ?? toolPairingViolation(messages);
+  const placement = clearAtViolation(body, messages) ?? systemPlacementViolation(messages) ?? toolPairingViolation(messages);
   if (placement) return placement;
   if (strict.length > ANTHROPIC_STRICT_LIMITS.tools) return `Too many strict tools (${strict.length})`;
   const complexity = schemaComplexity(strict.map(tool => tool.input_schema));
@@ -46,6 +46,24 @@ function unsupportedKeyword(node: unknown): string | null {
 }
 
 type RuleMessage = { role: string; content: unknown };
+
+/**
+ * Turn-scoped system messages (beta mid-conversation-system-clear-at-2026-08-21, probe P0): text only, no cache_control, `clear_at` one
+ * of never/next_user_message, and a request that carries one sends the beta header's body shape (no top-level cache_control, which
+ * would land on a message that cannot hold it).
+ */
+function clearAtViolation(body: Record<string, unknown>, messages: readonly RuleMessage[]): string | null {
+  for (const [index, message] of messages.entries()) {
+    const value = message as unknown as Record<string, unknown>;
+    if (!('clear_at' in value)) continue;
+    if (message.role !== 'system') return `messages.${index}: clear_at belongs to a system message`;
+    if (!['never', 'next_user_message'].includes(String(value.clear_at))) return `messages.${index}.clear_at: invalid value`;
+    if (typeof message.content !== 'string' || !message.content.length) return `messages.${index}.content: a turn-scoped system message holds text only`;
+    if (JSON.stringify(message).includes('cache_control')) return `messages.${index}: cache_control is not permitted on a turn-scoped system message`;
+    if (body.cache_control) return 'cache_control: a request with a turn-scoped system message sets no top-level cache_control';
+  }
+  return null;
+}
 const blocks = (message: RuleMessage | undefined): Array<Record<string, unknown>> =>
   message && Array.isArray(message.content) ? message.content.filter(block => block && typeof block === 'object') as Array<Record<string, unknown>> : [];
 const carriesContent = (message: RuleMessage) => typeof message.content === 'string' ? message.content.length > 0

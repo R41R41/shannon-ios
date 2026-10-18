@@ -15,7 +15,8 @@ import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
-import { fcaTransientHistory, shouldForceFcaEpoch } from './fcaCoreHistory.js';
+import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
+import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -102,7 +103,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior);
-  const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
+  const recallContext = ports.recall && !isFcaTransientTask(prior, ports) ? fcaRecallContext(step, prior, signal) : null;
   // The recall's deterministic part runs on the API's one thread. Minecraft run 6 (2026-10-14): started while a body had just logged
   // in, it blocked the thread while a stop was being handed over. Pending I/O (the body's polls) goes first; while the body is still
   // in its first frames after login, the recall starts with the decision packet instead (which starts it if nothing did).
@@ -115,8 +116,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   // A transient body task: the core definitions come off the replay budget, and a stale core may start a new epoch (`fcaCoreHistory.ts`).
   const transient = fcaTransientHistory(prior, catalog, ports);
-  const forceEpoch = transient?.stale && ports.history?.summarizer
-    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId) : undefined;
+  const cutLast = prior.fcaStateCut === true;
+  const forceEpoch = transient && (transient.stale || cutLast) && ports.history?.summarizer
+    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
   const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
@@ -132,7 +134,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       history: replay?.history ?? step.snapshot.history, tools: catalog };
   }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
-  const selection = ports.selector ? await metrics.timed('selectorMs', () => selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector!,
+  let selection = ports.selector ? await metrics.timed('selectorMs', () => selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector!,
     step.scopeKey, signal, { keepBodyTools: ports.keepBodyTools?.() === true, ...(ports.obsMode ? { obsMode: ports.obsMode } : {}) })) : null;
   if (selection) {
     input.tools = selectedFcaTools(catalog, selection);
@@ -166,10 +168,21 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
     ...(sharedContext ? { sharedContext } : {}),
     ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}),
-    ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools } : {}) };
-  const output = await decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(request, signal)), { signal, recheck: checked,
+    ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
+      ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
+      ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) };
+  const decide = (asked: FcaModelInput) => decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(asked, signal)), { signal, recheck: checked,
     delay: ports.decisionRetryDelayMs,
-    log: line => console.warn(`${line} task=${step.taskId}`) }).catch(error => {
+    log: line => console.warn(`${line} task=${step.taskId}`) });
+  const output = await decide(request).catch(async error => {
+    // The very first decision of a transient task refused for its betas: no signed history exists, so it starts again in the legacy shape.
+    if (!isTransientUnsupported(error) || !selection || selection.obsMode !== 'transient' || input.history.length) throw error;
+    console.warn(JSON.stringify({ event: 'fca_obs_mode_fallback', task: step.taskId, from: 'transient', to: 'legacy', reason: 'beta_rejected' }));
+    selection = legacyToolState(selection);
+    input.tools = selectedFcaTools(catalog, selection);
+    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = request;
+    return decide({ ...legacy, tools: input.tools });
+  }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
     throw error;
   });
@@ -227,10 +240,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       metrics.tool(call.name, performance.now() - toolStarted);
       progress({ operationId, tool: call.name, status: result.ok ? 'received' : 'failed', ...(result.ok && result.readReceipt ? { read: result.readReceipt } : {}), ...(result.ok && call.name === 'task.send' && call.input && typeof call.input === 'object' && (call.input as Record<string, unknown>).id === step.snapshot.task.parentId && typeof (call.input as Record<string, unknown>).message === 'string' ? { report: { text: String((call.input as Record<string, unknown>).message) } } : {}) });
       if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
-      ports.body?.noteResult?.(call, result);
+      ports.body?.noteResult?.(call, result, performance.now() - toolStarted);
       ports.tools?.progress?.observed(operationId, call.name, result);
       if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
-      results.push({ id: call.id, text: result.text, ok: result.ok });
+      // A transient body task stores the cut text of a body result (`minecraftStoredResult.ts`); everything else here saw the whole one.
+      const stored = selection?.obsMode === 'transient' && ports.body?.storedResult ? ports.body.storedResult(call, result.text) : result.text;
+      results.push({ id: call.id, text: stored, ok: result.ok });
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
@@ -270,7 +285,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.

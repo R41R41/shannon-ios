@@ -49,9 +49,11 @@ export function sse(value: AnthropicMessage): string {
 /** A fetch that answers each request with the next message (streamed when asked), and keeps every request body. */
 export function scriptedAnthropic(script: AnthropicMessage[] | ((body: Record<string, unknown>, index: number) => AnthropicMessage | Response)) {
   const bodies: Array<Record<string, unknown>> = [];
+  const headers: Array<Record<string, string>> = [];
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     bodies.push(body);
+    headers.push(Object.fromEntries(new Headers(init?.headers as ConstructorParameters<typeof Headers>[0] | undefined).entries()));
     const next = typeof script === 'function' ? script(body, bodies.length - 1) : script[bodies.length - 1];
     if (!next) return new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'no more script' } }), { status: 500, headers: { 'content-type': 'application/json' } });
     if (next instanceof Response) return next;
@@ -59,7 +61,7 @@ export function scriptedAnthropic(script: AnthropicMessage[] | ((body: Record<st
       ? new Response(sse(next), { status: 200, headers: { 'content-type': 'text/event-stream' } })
       : new Response(JSON.stringify(next), { status: 200, headers: { 'content-type': 'application/json', 'request-id': 'req_test' } });
   }) as typeof fetch;
-  return { fetcher, bodies };
+  return { fetcher, bodies, headers };
 }
 
 /**

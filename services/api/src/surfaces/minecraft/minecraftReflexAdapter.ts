@@ -22,6 +22,9 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
+import { createPaceLedger } from './minecraftPaceLedger.js';
+import { minecraftTransientBody } from './minecraftTransientBody.js';
+import { storedBodyResult } from './minecraftStoredResult.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
@@ -126,6 +129,10 @@ export function createMinecraftTaskBody(parts: {
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
   // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
   const bedSearch = bedSearchMemory((step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown } | null)?.minecraftNoSheepDarkIn);
+  // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
+  const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
+    began: Date.parse(step.snapshot.task.createdAt), now });
+  let transientState: (() => Record<string, unknown>) | null = null;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -398,8 +405,12 @@ export function createMinecraftTaskBody(parts: {
       stageNow = situation.stage;
       const summary = observation ? minecraftObservationSummary(observation) : null;
       measured(() => metrics.context(observation, summary, skills.fields));
+      // Built only if the decision is transient (`transient()` below); the legacy decision reads the summary above, as before.
+      transientState = () => minecraftTransientBody({ observation, pace, fields: skills.fields, ledger: paceLedger });
       return { revision, observation: summary, pace, ...skills.fields };
     },
+    transient: () => transientState?.() ?? {},
+    storedResult: (call, text) => storedBodyResult(call.name, text),
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {
       if (!name.startsWith('mc.')) return parent;
@@ -425,7 +436,8 @@ export function createMinecraftTaskBody(parts: {
       activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };
       pendingWaitMs = call.name === 'mc.wait-time' ? waitTimeMilliseconds(call.input) : 0;
     },
-    noteResult(call, result) {
+    noteResult(call, result, durationMilliseconds) {
+      measured(() => paceLedger.note(call, { ok: result.ok, failure: result.failure ?? null }, durationMilliseconds ?? 0));
       if (activeAction?.name === call.name) activeAction = undefined;
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
@@ -448,7 +460,8 @@ export function createMinecraftTaskBody(parts: {
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
     checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
       ...bedSearch.checkpoint(),
-      ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })() }),
+      ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })(),
+      ...(() => { try { return paceLedger.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {
     const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;

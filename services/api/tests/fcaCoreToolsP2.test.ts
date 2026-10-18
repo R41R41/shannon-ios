@@ -86,7 +86,7 @@ describe('transient mode: core tools fixed at the top level, the others appended
     quiet();
     const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY });
     await run.settle();
-    const first = run.bodies[0]!, decision = JSON.parse(messagesOf(first)[0]!.content as string);
+    const first = run.bodies[0]!, decision = JSON.parse((messagesOf(first)[0]!.content as Array<{ text: string }>)[0]!.text);
     expect(decision.catalog.map((tool: { name: string }) => tool.name)).toEqual(['lazy_alpha', 'lazy_beta']);
     expect(JSON.stringify(first.system)).toContain('The core tools are always loaded');
     for (const body of run.bodies) for (const name of added(body)) expect(CORE_PROVIDER).not.toContain(name);
