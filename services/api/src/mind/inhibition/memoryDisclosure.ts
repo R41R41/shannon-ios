@@ -41,7 +41,12 @@ export class DisclosureGate {
 
   private disclosed?: CompanionStateSnapshot;
   private withheldTurns?: readonly ShannonExperience[];
-  private readonly summaries = new Map<string, boolean>();
+  /** A thread's summary verdict; `undefined` while it is being judged. */
+  private readonly summaries = new Map<string, boolean | undefined>();
+  /** How many thread summaries are being judged now, and how many times a ring asked for one of them again (logged once, no ids). */
+  private judging = 0;
+  private ringsMet = 0;
+  private ringsLogged = false;
 
   /**
    * The companion snapshot without the items that must not reach the model: withheld items,
@@ -89,16 +94,31 @@ export class DisclosureGate {
       // A turn of this thread may have recalled another thread's summary, which was built from a turn that recalled this one's (production
       // 2026-10-18 had such rings): while the thread is being judged, asking for it again says withheld, so the judging ends (it used to
       // run until the stack overflowed, and the turn failed with a bare RangeError). The answer that is kept is the cautious one.
-      this.summaries.set(threadId, false);
+      this.summaries.set(threadId, undefined);
+      this.judging += 1;
       try {
         const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
         this.summaries.set(threadId, Boolean(lineage) && lineage!.messages.every(message => this.allowsMessage(message)));
       } catch (error) {
-        this.summaries.delete(threadId);
+        // The half-judged mark must not stay as an answer. If even removing it fails (the stack is gone), the mark stays, which reads as
+        // withheld (the safe side), and the error that goes up is still the original one, not this one.
+        try { this.summaries.delete(threadId); } catch { /* keep the mark: withheld */ }
         throw error;
+      } finally {
+        this.judging -= 1;
       }
+      if (this.judging === 0) this.reportRings();
+    } else if (this.summaries.get(threadId) === undefined) {
+      this.ringsMet += 1; // asked for again while it is still being judged: a ring (answered withheld)
     }
     return this.summaries.get(threadId) === true;
+  }
+
+  /** Once per gate, the first time a judging that met a ring has ended: what happened (a count), never which thread or what it said. */
+  private reportRings(): void {
+    if (!this.ringsMet || this.ringsLogged) return;
+    this.ringsLogged = true;
+    console.warn(`Shannon thread summary ring withheld count=${this.ringsMet}`);
   }
 
   /** An item that carries its own label: a fact, a relationship, a promise, a person memory. */

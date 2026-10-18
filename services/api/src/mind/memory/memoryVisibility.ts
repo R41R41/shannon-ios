@@ -16,7 +16,7 @@ import type { ConversationStore, ShannonExperience, StoredConversationMessage } 
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
-import { DeepChains, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
+import { DeepChains, cautiousOutsideWalks, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
 
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
@@ -92,17 +92,19 @@ export class MemoryWithholding {
    * Whether a remembered turn's read receipt is still available, asked of the native reader once per receipt and time within one
    * read, under this read's own state and walk (`shared`). Minecraft run 6 (2026-10-14): without them every one of a turn's ~1,100
    * receipt checks read and parsed the whole state again, asked the skill store again and walked afresh (`visible=3.6–4.0 s` per
-   * text or voice turn and per FCA step, the API's one thread blocked). A scoped withholding asks under the whole state, as before.
+   * turn and FCA step). A scoped withholding asks under the whole state. A check that runs the stack out is "not visible" as it
+   * was, unless inside a walk (`recallChainDepth.ts`): there it goes up so that the walk can settle the chain.
    */
   private sourceVisible(source: string, observedAt: string): boolean {
     if (this.root !== this) return this.root.sourceVisible(source, observedAt);
-    if (!this.readSourceVisible) return false;
-    if (this.queryDepth === 0) return this.readSourceVisible(this.scopeKey, source, observedAt);
-    const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
-    if (known !== undefined) return known;
-    const result = this.readSourceVisible(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
-    this.sourceDecisions.set(key, result);
-    return result;
+    const read = this.readSourceVisible;
+    return !read ? false : cautiousOutsideWalks(false, () => {
+      if (this.queryDepth === 0) return read(this.scopeKey, source, observedAt);
+      const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
+      const result = known ?? read(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
+      this.sourceDecisions.set(key, result);
+      return result;
+    });
   }
   /** `sourceVisible` for a caller inside this read (`taskMemory.ts`): a read receipt of a remembered item at its time. */
   readSourceAvailable(source: string, observedAt: string): boolean { return this.sourceVisible(source, observedAt); }
@@ -114,7 +116,6 @@ export class MemoryWithholding {
     scoped.root = this.root;
     return scoped;
   }
-
 
   /** Related synchronous checks share one graph walk; a subsequent read starts fresh. */
   withReadSnapshot<T>(work: () => T, preloaded: readonly ShannonExperience[] = []): T {
@@ -147,8 +148,7 @@ export class MemoryWithholding {
     if (this.hiddenExperiences) return this.hiddenExperiences;
     if (this.inactive || !this.store) return this.hiddenExperiences = [];
     const candidates = this.candidates ??= this.store.experienceCandidates(this.scopeKey);
-    // The same remembered turns (the store keeps one read while the database is unchanged) under the same state snapshot are
-    // judged once: each check of a turn used to filter every remembered turn again.
+    // The same remembered turns (one store read while the database is unchanged) under the same state snapshot are judged once.
     const known = HIDDEN_BY_READ.get(candidates)?.get(this.state);
     if (known) return this.hiddenExperiences = known;
     const hidden = Object.freeze(candidates.filter(item => !visibleMemoryText(this.state, item.id, item.summary)

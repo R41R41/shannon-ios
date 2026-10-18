@@ -56,6 +56,9 @@ export class DeepChains {
   }
 }
 
+/** How many `deepWalk`s are running (all synchronous). Inside one an overflow goes up to it; outside every one it is answered at once. */
+let walking = 0;
+
 /**
  * `walk` as it is; if it overflowed the stack, `settle` (below) and `walk` again. `settle` says `'too_deep'` for a chain that is
  * past the walks' bound, which is answered with `cautious`. `chains` and `root`: a root already found too deep in this scope is
@@ -63,12 +66,38 @@ export class DeepChains {
  */
 export function deepWalk<T>(walk: () => T, settle: () => 'ok' | 'too_deep', cautious: T, chains?: DeepChains, root?: string): T {
   if (chains && root !== undefined && chains.tooDeep(root)) return cautious;
+  const outermost = walking === 0;
+  walking += 1;
   try {
-    return walk();
-  } catch (error) {
-    if (!isStackOverflow(error)) throw error;
+    try {
+      return walk();
+    } catch (error) {
+      if (!isStackOverflow(error)) throw error;
+    }
+    try {
+      return settle() === 'too_deep' ? cautious : walk();
+    } catch (error) {
+      // Still out of stack once the chain is settled: the read check itself runs the stack out (a reader that recurses without end),
+      // which is what 5e086d7 answered "not visible", that is, with `cautious`. Inside another walk it goes up to that one instead:
+      // the stack here is deep already, and the outer walk settles from a shallow one.
+      if (outermost && isStackOverflow(error)) return cautious;
+      throw error;
+    }
+  } finally {
+    walking -= 1;
   }
-  return settle() === 'too_deep' ? cautious : walk();
+}
+
+export function insideDeepWalk(): boolean { return walking > 0; }
+
+/** `ask()`, or `cautious` when it runs the stack out outside every `deepWalk` (inside one the overflow goes up to that walk). */
+export function cautiousOutsideWalks<T>(cautious: T, ask: () => T): T {
+  try {
+    return ask();
+  } catch (error) {
+    if (walking === 0 && isStackOverflow(error)) return cautious;
+    throw error;
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { memoryControlFor, visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
-import { MemoryWithholding, isStackOverflow } from '../mind/memory/memoryVisibilityPorts.js';
+import { MemoryWithholding, insideDeepWalk, isStackOverflow } from '../mind/memory/memoryVisibilityPorts.js';
 import type { TaskMemoryReadSnapshot as ReadSourceSnapshot } from '../mind/memory/taskMemoryPorts.js';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import type { StudyStore } from '../mind/action/ownTime/store/studyStore.js';
@@ -7,7 +7,9 @@ import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 import type { AetherContextReader } from '../integrations/aether/aetherContext.js';
 
 /** Taken once, here: asked from a catch block at the very end of the stack, a lookup through another module's exports can itself fail. */
-const stackRanOut = isStackOverflow;
+const stackRanOut = isStackOverflow, insideWalk = insideDeepWalk;
+/** A stack overflow goes up only inside a long recall walk (it settles the chain and asks again); anywhere else it is "not visible", as before. */
+const goesUp = (error: unknown) => stackRanOut(error) && insideWalk();
 
 export interface FcaReadSourcesOptions {
   ownerScope: string; ownerAlone(): boolean; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
@@ -57,7 +59,7 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
       return readSourceVisible(parts, skillOf(undefined), scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
     } catch (error) {
       // A stack overflow inside a long recall walk is not "not visible": it goes up to the walk, which settles the chain and asks again.
-      if (stackRanOut(error)) throw error;
+      if (goesUp(error)) throw error;
       return false;
     }
   };
@@ -162,7 +164,7 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
       }
       return !withholding.withholdsReply({ text, observedAt, recalledMemoryIds: [sourceId, id] });
     } catch (error) {
-      if (stackRanOut(error)) throw error; // see createFcaReadSources: the walk above settles the chain; nothing is remembered as "not visible"
+      if (goesUp(error)) throw error; // see createFcaReadSources: the walk above settles the chain; nothing is remembered as "not visible"
       return false;
     }
 }

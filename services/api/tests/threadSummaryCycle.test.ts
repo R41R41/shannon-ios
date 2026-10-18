@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience, StoredConversationMessage } from '../src/mind/memory/conversationContract.js';
 import { DisclosureGate } from '../src/mind/inhibition/memoryDisclosure.js';
@@ -53,6 +53,37 @@ describe('thread summaries that recall each other', () => {
     const f = world({ a: ['b'], b: ['c'], c: [], d: ['b', 'c'] });
     for (const thread of ['a', 'b', 'c', 'd']) expect(f.gate().allowsThreadSummary(thread)).toBe(true);
     expect(world({ a: ['b'], b: ['a'] }).gate(OWNER_AUDIENCE).allowsThreadSummary('a')).toBe(true);
+  });
+
+  it('log a withheld ring once per gate, as a count, without any thread id or text', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const f = world({ 'secret-a': ['secret-b'], 'secret-b': ['secret-c'], 'secret-c': ['secret-a'], 'secret-d': [] });
+      const gate = f.gate();
+      for (const thread of ['secret-a', 'secret-b', 'secret-c', 'secret-d']) gate.allowsThreadSummary(thread);
+      gate.allowsThreadSummary('secret-a');
+      const lines = warn.mock.calls.map(call => call.join(' ')).filter(line => line.includes('thread summary ring'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^Shannon thread summary ring withheld count=[1-9]\d*$/);
+      expect(lines[0]).not.toMatch(/secret|turn-|hello/);
+      // Another request scope (gate) logs for itself; a thread outside any ring, and the owner alone, log nothing.
+      f.gate().allowsThreadSummary('secret-b');
+      expect(warn.mock.calls.filter(call => String(call[0]).includes('thread summary ring'))).toHaveLength(2);
+      warn.mockClear();
+      f.gate().allowsThreadSummary('secret-d');
+      world({ a: ['b'], b: ['a'] }).gate(OWNER_AUDIENCE).allowsThreadSummary('a');
+      world({ a: ['b'], b: ['c'], c: [], d: ['b', 'c'] }).gate().allowsThreadSummary('d');
+      expect(warn).not.toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+
+  it('keep the original error when even removing the half-judged mark fails', () => {
+    const store = { experiencesById: () => [], threadSummaryLineage: () => { throw new Error('database busy'); } } as unknown as ConversationStore;
+    const gate = new DisclosureGate(UNKNOWN_GUEST_PRESENCE, new InMemoryCompanionStateStore(() => at).snapshot('owner'), store, 'owner');
+    (gate as unknown as { summaries: Map<string, boolean | undefined> }).summaries.delete = () => { throw new RangeError('Maximum call stack size exceeded'); };
+    expect(() => gate.allowsThreadSummary('a')).toThrow('database busy');
+    // The mark that stayed reads as withheld: the safe side.
+    expect(gate.allowsThreadSummary('a')).toBe(false);
   });
 
   it('do not leave a half-judged answer behind when the store throws', () => {

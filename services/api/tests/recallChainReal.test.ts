@@ -79,11 +79,11 @@ describe('a stack overflow inside a read-receipt check', () => {
     expect([gone.reply(), gone.message(), gone.task()]).toEqual([true, true, 0]);
   });
 
-  it('is still "not visible" for any other error, and out of a walk an overflow is raised, not answered', () => {
+  it('is "not visible" for any other error, and for an overflow out of a walk (inside one it goes up, as the tests above show)', () => {
     const throwing = createFcaReadSources({ ownerScope: 'owner', ownerAlone: () => true, state: { snapshot: () => { throw new TypeError('broken'); } }, conversations: {} as ConversationStore });
     expect(throwing('owner', 'aether-document://x', at)).toBe(false);
     const overflowing = createFcaReadSources({ ownerScope: 'owner', ownerAlone: () => true, state: { snapshot: () => { burn(1e7); throw new Error('unreachable'); } }, conversations: {} as ConversationStore });
-    expect(() => overflowing('owner', 'aether-document://x', at)).toThrow(RangeError);
+    expect(overflowing('owner', 'aether-document://x', at)).toBe(false);
   });
 });
 
