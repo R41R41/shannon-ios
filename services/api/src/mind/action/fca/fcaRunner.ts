@@ -17,7 +17,7 @@ import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { fcaTransientHistory, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
-import { NO_REFLEX_CUTS, nextReflexCutRun, reflexCutCheckpoint, reflexCutRunOf } from './fcaReflexCuts.js';
+import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
@@ -246,16 +246,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (!bodyStale) {
       const outcomes = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name)
         ? [] : [{ call, result: results[(output.auxiliaryResults?.length ?? 0) + index]! }]);
-      const actual = outcomes.filter(outcome => !reflexCuts.has(outcome.call.id)), cut = outcomes.filter(outcome => reflexCuts.has(outcome.call.id));
-      if (actual.length) {
-        consecutiveToolFailures = actual.every(outcome => !outcome.result.ok) ? consecutiveToolFailures + 1 : 0;
-        reflexRun = NO_REFLEX_CUTS; // Any other outcome ends a run of cuts.
-      } else if (cut.length) {
-        // Only cuts in this step: they do not count, until the same tool (or any) has been cut off too many times in a row (M2).
-        const next = nextReflexCutRun(reflexRun, cut.map(outcome => outcome.call.name));
-        reflexRun = next.run;
-        if (next.counted) consecutiveToolFailures++;
-      }
+      // A cut call does not count until the same tool (or any) has been cut off too many times in a row; any outcome of its own ends the
+      // run, but a read that worked beside or between cuts does not (`fcaReflexCuts.ts`, M2).
+      ({ failures: consecutiveToolFailures, run: reflexRun } = settleReflexStep(consecutiveToolFailures, reflexRun, outcomes.map(outcome => ({
+        name: outcome.call.name, ok: outcome.result.ok, cut: reflexCuts.has(outcome.call.id),
+        read: catalog.find(tool => tool.name === outcome.call.name)?.effect === 'read' }))));
     }
     history.push(ports.model.toolResults(results));
   }
@@ -303,7 +298,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
-    runtime.stop(step.scopeKey, step.taskId, 'repeated_tool_failure');
+    runtime.stop(step.scopeKey, step.taskId, consecutiveToolFailures >= 5 ? repeatedFailureReason(reflexRun) : 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;
