@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 
 /**
@@ -53,155 +52,6 @@ export const isFcaClearAtMessage = (value: unknown): boolean => {
 export const clearAtMessage = (content: string): Anthropic.MessageParam =>
   ({ role: 'system', clear_at: FCA_CLEAR_AT, content } as unknown as Anthropic.MessageParam);
 
-/** The parts a stored state message may carry, in order. The task is always stated first, and in full. */
-const STATED = ['task', 'children', 'messages', 'catalog', 'skillIndex', 'sharedContext', 'progress'] as const;
-const EMPTY_LIST = new Set(['children', 'messages', 'catalog']);
-/** Parts that may be absent from a decision (no index, no shared context, no progress tools), and so be stated as removed. */
-const OPTIONAL = new Set(['skillIndex', 'sharedContext', 'progress']);
-const STATE_MARK = '{"stateUpdate":';
-
-/** What a part is compared by: the shared context by its revision and its outcomes' progress (its text is large and moves without meaning). */
-function partKey(key: string, value: unknown): string {
-  // A digest: a key is also written into a stored state that cut the part, which must not carry the whole of it again.
-  const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 24);
-  if (key !== 'sharedContext') return digest(JSON.stringify(value));
-  const context = object(value), affect = object(context?.affect), outcomes = Array.isArray(context?.recentOutcomes) ? context.recentOutcomes : [];
-  return digest(JSON.stringify([affect?.revision ?? null, outcomes.map(outcome => {
-    const row = object(outcome);
-    return [row?.eventId ?? null, row?.appraisalRevision ?? null, row?.observation ?? null];
-  })]));
-}
-
-interface Stated { latest: Map<string, string>; messages: Set<string>; capped: Set<string>; any: boolean }
-/**
- * What the history of this epoch already stated: each part as last stated (by `partKey`; a part stated cut is keyed by the key of the
- * whole it was cut from, and is named in `capped`), and the ids of the messages it showed.
- */
-function statedBefore(history: readonly Anthropic.MessageParam[]): Stated {
-  const latest = new Map<string, string>(), messages = new Set<string>(), capped = new Set<string>();
-  let any = false;
-  for (const message of history) {
-    if (message.role !== 'user' || !Array.isArray(message.content)) continue;
-    const block = message.content[0];
-    if (block?.type !== 'text' || !block.text.startsWith(STATE_MARK)) continue;
-    let row: Record<string, unknown> | null = null;
-    try { row = object(JSON.parse(block.text)); } catch { row = null; }
-    if (!row) continue;
-    any = true;
-    noteStated(row, { latest, messages, capped });
-  }
-  return { latest, messages, capped, any };
-}
-
-/** One stored state's parts as stated (a part named under `removed` is no longer stated) and the ids of the messages it showed. */
-function noteStated(row: Record<string, unknown>, into: Pick<Stated, 'latest' | 'messages' | 'capped'>): void {
-  const { latest, messages, capped } = into, cutFrom = object(row.capped);
-  for (const key of STATED) {
-    if (!(key in row)) continue;
-    const whole = cutFrom?.[key];
-    latest.set(key, typeof whole === 'string' ? whole : partKey(key, row[key]));
-    if (typeof whole === 'string') capped.add(key); else capped.delete(key);
-  }
-  for (const name of Array.isArray(row.removed) ? row.removed : []) {
-    if (typeof name === 'string') {
-      latest.delete(name);
-      capped.delete(name);
-    }
-  }
-  for (const item of Array.isArray(row.messages) ? row.messages : []) {
-    const id = object(item)?.id;
-    if (typeof id === 'string') messages.add(id);
-  }
-}
-
-/** The task as the stored state shows it: what it is and is for, not its revision or clock (which change with every step). */
-function statedTask(value: unknown): unknown {
-  const task = object(value);
-  return task ? { id: task.id, title: task.title, goal: task.goal, completionCriteria: task.completionCriteria } : value;
-}
-
-/** The candidates whose value differs from what was last stated, and the optional parts that were stated and are gone (`removed`). */
-function changedParts(candidates: ReadonlyArray<[string, unknown]>, latest: ReadonlyMap<string, string>): { row: Record<string, unknown>; parts: string[] } {
-  const row: Record<string, unknown> = {}, parts: string[] = [], removed: string[] = [];
-  for (const [key, value] of candidates) {
-    // A part that was stated and is gone now is named as removed: "a part it lacks is unchanged" would otherwise keep showing it.
-    if (value === undefined) {
-      if (OPTIONAL.has(key) && latest.has(key)) removed.push(key);
-      continue;
-    }
-    const before = latest.get(key) ?? (EMPTY_LIST.has(key) ? partKey(key, []) : undefined);
-    if (key === 'messages' ? !(value as unknown[]).length : before === partKey(key, value)) continue;
-    row[key] = value;
-    parts.push(key);
-  }
-  if (removed.length) {
-    row.removed = removed;
-    parts.push('removed');
-  }
-  return { row, parts };
-}
-
-/** How much a stored state message may weigh and how a larger one is cut (`anthropicFcaStateCap.ts`). */
-export interface StateLimit {
-  maximumTokens: number; tokens(value: unknown): number;
-  cut(row: Record<string, unknown>, maximumTokens: number): { row: Record<string, unknown>; level: number | null };
-}
-
-/** A part stated cut comes back whole when the state (with it) fits the limit: each such part is tried, in order. */
-function restatedWhole(row: Record<string, unknown>, parts: string[], candidates: ReadonlyArray<[string, unknown]>, stated: Stated, limit: StateLimit): void {
-  for (const [key, value] of candidates) {
-    if (!stated.capped.has(key) || key in row || value === undefined || stated.latest.get(key) !== partKey(key, value)) continue;
-    if (limit.tokens({ stateUpdate: 'changed', ...row, [key]: value }) > limit.maximumTokens) continue;
-    row[key] = value;
-    parts.push(key);
-  }
-}
-
-/** The parts a limit cut, each named with the key of the whole it was cut from, so that a later state can restate it whole. */
-function cutParts(original: Record<string, unknown>, sent: Record<string, unknown>): Record<string, string> {
-  return Object.fromEntries(STATED.filter(key => key in original && JSON.stringify(original[key]) !== JSON.stringify(sent[key]))
-    .map(key => [key, partKey(key, original[key])]));
-}
-
-/**
- * The user message of what changed since the history last stated it (null when nothing did), the names of the parts it carries, and the
- * level it was cut to (null: whole). `supplied` is the decision's fields (`decisionFields`). The first message of an epoch is `full`; it
- * is always the first the epoch holds, because a summary's new epoch replays only its bootstrap text, which states none of the parts.
- * With a `limit` a message above it is cut and marks what it cut (`capped`), and a part cut earlier is restated whole once it fits.
- */
-export function storedState(supplied: Record<string, unknown>, history: readonly Anthropic.MessageParam[],
-  limit?: StateLimit): { message: Anthropic.MessageParam | null; parts: string[]; full: boolean; level: number | null } {
-  const stated = statedBefore(history);
-  const messages = (Array.isArray(supplied.messages) ? supplied.messages as unknown[] : []).filter(item => {
-    const id = object(item)?.id;
-    return typeof id !== 'string' || !stated.messages.has(id);
-  });
-  const candidates: Array<[string, unknown]> = [['task', statedTask(supplied.task)], ['children', supplied.children], ['messages', messages],
-    ['catalog', supplied.catalog], ['skillIndex', supplied.skillIndex], ['sharedContext', supplied.sharedContext], ['progress', supplied.progress]];
-  const changed = changedParts(candidates, stated.latest), parts = changed.parts;
-  let row = changed.row, level: number | null = null;
-  if (limit) restatedWhole(row, parts, candidates, stated, limit);
-  if (!parts.length) return { message: null, parts, full: false, level };
-  if (limit && limit.tokens({ stateUpdate: 'changed', ...row }) > limit.maximumTokens) {
-    const cut = limit.cut(row, limit.maximumTokens);
-    level = cut.level;
-    row = { ...cut.row, ...(level !== null && Object.keys(cutParts(row, cut.row)).length ? { capped: cutParts(row, cut.row) } : {}) };
-  }
-  const text = JSON.stringify({ stateUpdate: stated.any ? 'changed' : 'full', ...row });
-  return { message: { role: 'user', content: [{ type: 'text', text }] }, parts, full: !stated.any, level };
-}
-
-/** The stored state text as a summary or a size budget reads it: the parts the epoch's next `full` states again are named, not repeated. */
-const RESTATED_BY_STATE = ['catalog', 'skillIndex'] as const;
-export function publicState(text: string): string {
-  if (!text.startsWith(STATE_MARK)) return text;
-  let row: Record<string, unknown> | null = null;
-  try { row = object(JSON.parse(text)); } catch { return text; }
-  if (!row || !RESTATED_BY_STATE.some(key => key in row)) return text;
-  const kept = Object.fromEntries(Object.entries(row).filter(([key]) => !(RESTATED_BY_STATE as readonly string[]).includes(key)));
-  return JSON.stringify({ ...kept, restatedEachEpoch: RESTATED_BY_STATE.filter(key => key in row) });
-}
-
 /** A fixed text is not repeated in a live state: its words are in the cached instructions. */
 const withoutRule = (value: unknown): unknown => {
   const holder = object(value);
@@ -214,14 +64,16 @@ const withoutRule = (value: unknown): unknown => {
  * The live state of this decision, as the text of its turn-scoped system message: the owner's clock, the wait fact, the task inbox
  * and the body's own state (`FcaModelInput.transient`). Nothing here is stored as a user message; the next turn reads a new one.
  */
-export function liveState(supplied: Record<string, unknown>, body: Readonly<Record<string, unknown>> | undefined): string {
+export function liveObject(supplied: Record<string, unknown>, body: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> {
   const live: Record<string, unknown> = {};
   if (supplied.ownerClock) live.ownerClock = withoutRule(supplied.ownerClock);
   if (supplied.waiting) live.waiting = withoutRule(supplied.waiting);
   if (supplied.observations) live.observations = supplied.observations;
   if (body && Object.keys(body).length) live.body = body;
-  return JSON.stringify(live);
+  return live;
 }
+export const liveState = (supplied: Record<string, unknown>, body: Readonly<Record<string, unknown>> | undefined): string =>
+  JSON.stringify(liveObject(supplied, body));
 
 /** The pointers and gists a body's live state names, as counts (content-free; for the request's size line). */
 export function liveSkillCounts(body: Readonly<Record<string, unknown>> | undefined): { pointers: number; gists: number } {

@@ -2,15 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { cacheFcaBodyRequest, breakpointCount } from '../src/infra/models/anthropic/anthropicFcaBodyCache.js';
-import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest, storedState } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
-import { FCA_STATE_LIMIT } from '../src/infra/models/anthropic/anthropicFcaStateCap.js';
-import { publicState } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
-import { FCA_TRANSIENT_STATE_RESERVE_TOKENS } from '../src/mind/action/fca/fcaTransientLimits.js';
+import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
+import { publicState, stateMessage, storedState as storedRow } from '../src/infra/models/anthropic/anthropicFcaStoredState.js';
+import { cutToFit } from '../src/infra/models/anthropic/anthropicFcaStateCut.js';
+import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { FCA_BODY_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { anthropicRejection, anthropicRequestViolation } from './support/anthropicProviderRules.js';
-import { definition, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
+import { BASE_CATALOG, definition, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
+
+/** The stored state of a step, with its message (null when nothing is to be stated). */
+function storedState(supplied: Record<string, unknown>, history: readonly unknown[], restate = false) {
+  const state = storedRow(supplied, history as never, restate);
+  return { ...state, message: stateMessage(state.row, state.full) };
+}
 
 type Body = Record<string, unknown>;
 type Msg = { role: string; content: unknown; clear_at?: string };
@@ -169,77 +175,129 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
   });
 
   const context = (revision: number, text: string) => ({ affect: { revision, text }, recentOutcomes: [{ eventId: 'e1', appraisalRevision: 0, observation: 'observed' }] });
+  /** A production-shaped catalog: 80 tools, descriptions of 300 to 1,090 characters (about 56,000). */
+  const catalogOf = (change?: number) => Array.from({ length: 80 }, (_, index) => ({ name: `mc_tool_${index}`,
+    description: `${'あ'.repeat(300 + (index * 10) % 800)}${index === change ? '変更' : ''}` }));
+  const skillIndex = ['[ボクのスキル 25/25]', ...Array.from({ length: 25 }, (_, index) => `- skill-${index}: ${'あ'.repeat(60)}`)].join('\n');
+  const tokensOf = (value: unknown) => estimatedAnthropicTokens(JSON.stringify(value));
+  const costOf = (base: number) => (row: Record<string, unknown>, live: Record<string, unknown>) => base + tokensOf(row) + tokensOf(live);
 
-  it('cuts a stored state above its limit, a full and a changed one alike, marked, keeping the task whole', () => {
-    const state = storedState({ task, skillIndex: 'あ'.repeat(40_000) }, [], FCA_STATE_LIMIT);
-    expect(state.level).not.toBeNull();
-    expect(FCA_STATE_LIMIT.tokens(JSON.parse(textOf(state.message!)))).toBeLessThan(FCA_STATE_LIMIT.maximumTokens + 200);
-    expect(textOf(state.message!)).toContain('長いため後略');
-    expect(JSON.parse(textOf(state.message!)).task).toEqual(task);
-    expect(Object.keys(JSON.parse(textOf(state.message!)).capped)).toEqual(['skillIndex']);
-    const small = storedState({ task, skillIndex: 'S' }, [], FCA_STATE_LIMIT);
-    expect(small.level).toBeNull();
-    const changed = storedState({ task, skillIndex: 'あ'.repeat(40_000), progress: { a: 1 } }, [small.message!], FCA_STATE_LIMIT);
-    expect(changed.level).not.toBeNull();
-    expect(changed.parts).toEqual(['skillIndex', 'progress']);
+  it('states the catalog item by item: whole once, then only what was added, changed or removed', () => {
+    const first = storedState({ task, catalog: catalogOf() }, []);
+    expect((first.row.catalog as unknown[]).length).toBe(80);
+    const message = (state: ReturnType<typeof storedState>, full: boolean) => stateMessage(state.row, full)!;
+    const stated = [message(first, true)];
+    expect(storedState({ task, catalog: catalogOf() }, stated).parts).toEqual([]);
+    const changed = storedState({ task, catalog: catalogOf(3) }, stated);
+    expect(changed.row).toEqual({ catalogChanges: { changed: [catalogOf(3)[3]] } });
+    const added = [...catalogOf(), { name: 'mc_new', description: 'n' }].filter((_, index) => index !== 5);
+    expect(storedState({ task, catalog: added }, stated).row).toEqual({ catalogChanges: { added: [{ name: 'mc_new', description: 'n' }], removed: ['mc_tool_5'] } });
+    // The item-wise state survives one more round: a later change is read against the changes already stated.
+    const second = [...stated, message(changed, false)];
+    expect(storedState({ task, catalog: catalogOf(3) }, second).parts).toEqual([]);
+    expect(storedState({ task, catalog: catalogOf() }, second).row).toEqual({ catalogChanges: { changed: [catalogOf()[3]] } });
   });
 
-  it('restates a cut part whole as soon as it fits, and not before (H1)', () => {
-    const base = { task };
-    const big = storedState({ ...base, sharedContext: context(1, 'あ'.repeat(40_000)) }, [], FCA_STATE_LIMIT);
-    expect(big.level).not.toBeNull();
-    // Same revision and outcomes, still too large: nothing is said again (it would be cut the same way).
-    expect(storedState({ ...base, sharedContext: context(1, 'あ'.repeat(40_000)) }, [big.message!], FCA_STATE_LIMIT).message).toBeNull();
-    // The same revision with a text that fits now: stated whole, once.
-    const fits = storedState({ ...base, sharedContext: context(1, 'small') }, [big.message!], FCA_STATE_LIMIT);
-    expect(fits.parts).toEqual(['sharedContext']);
-    expect(JSON.parse(textOf(fits.message!)).sharedContext.affect.text).toBe('small');
-    expect(JSON.parse(textOf(fits.message!)).capped).toBeUndefined();
-    expect(storedState({ ...base, sharedContext: context(1, 'small') }, [big.message!, fits.message!], FCA_STATE_LIMIT).message).toBeNull();
+  it('cuts only when the whole request does not fit, descriptions first, never a name or the skill index (production shapes)', () => {
+    const catalog = catalogOf(), row = storedState({ task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(4_000)) }, []).row;
+    const cost = costOf(20_000), big = { body: { observation: { text: 'あ'.repeat(30_000) } } }, small = { body: { observation: { text: 'x' } } };
+    expect(cost(row, small)).toBeLessThan(95_000);
+    expect(cutToFit(row, small, cost, 95_000).cut).toBe(false);
+    const fitted = cutToFit(row, big, cost, 95_000);
+    expect(cost(row, big)).toBeGreaterThan(95_000);
+    expect(fitted.cut).toBe(true);
+    expect(fitted.over).toBe(false);
+    expect(cost(fitted.row, fitted.live)).toBeLessThanOrEqual(95_000);
+    // Descriptions went first; the live state and the other parts were not needed.
+    expect(fitted.levels.catalog).not.toBeNull();
+    expect(fitted.levels.live).toBeNull();
+    expect(fitted.levels.state).toBeNull();
+    expect((fitted.row.catalog as Array<{ name: string }>).map(item => item.name)).toEqual(catalog.map(item => item.name));
+    expect(fitted.row.skillIndex).toBe(skillIndex);
+    expect(Object.keys(fitted.row.cappedCatalog as object).length).toBeGreaterThan(0);
+    expect(fitted.live).toEqual(big);
   });
+
+  it('goes on to the other long texts, then the live state, then names only; and says so when even that does not fit', () => {
+    const catalog = catalogOf(), row = storedState({ task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(30_000)) }, []).row;
+    const big = { body: { observation: { text: 'あ'.repeat(60_000) } } };
+    const names = (value: Record<string, unknown>) => (value.catalog as Array<{ name: string }>).map(item => item.name);
+    // The live state alone is far over what is left: it is cut after the catalog and the shared context are at their floors.
+    const deep = cutToFit(row, big, costOf(20_000), 95_000);
+    expect(deep.over).toBe(false);
+    expect(deep.levels.live).not.toBeNull();
+    expect(names(deep.row)).toEqual(catalog.map(item => item.name));
+    expect(deep.row.skillIndex).toBe(skillIndex);
+    // A request that cannot fit even with nothing but names is sent as it is, flagged, with every name and the skill index.
+    const hopeless = cutToFit(row, big, costOf(94_000), 95_000);
+    expect(hopeless.over).toBe(true);
+    expect(names(hopeless.row)).toEqual(catalog.map(item => item.name));
+    expect(hopeless.row.skillIndex).toBe(skillIndex);
+    expect(hopeless.levels.catalog).toBe(0);
+  });
+
+  it('restates what was cut whole once the request fits, and not before', () => {
+    const catalog = catalogOf(), supplied = { task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(30_000)) };
+    const first = storedState(supplied, []);
+    const cut = cutToFit(first.row, { body: { observation: { text: 'あ'.repeat(60_000) } } }, costOf(20_000), 95_000);
+    const message = stateMessage(cut.row, true)!;
+    expect(Object.keys(cut.row.capped as object)).toEqual(['sharedContext']);
+    // Nothing changed, but parts are cut: asking to restate lists them whole (the caller decides if that fits).
+    const none = storedState(supplied, [message]);
+    expect(none.parts).toEqual([]);
+    expect(none.hasCut).toBe(true);
+    const whole = storedState(supplied, [message], true);
+    expect(JSON.stringify(whole.row.sharedContext)).toBe(JSON.stringify(supplied.sharedContext));
+    expect((whole.row.catalogChanges as { changed: Array<{ name: string; description: string }> }).changed.length)
+      .toBe(Object.keys(cut.row.cappedCatalog as object).length);
+    const restated = stateMessage(whole.row, false)!;
+    expect(storedState(supplied, [message, restated], true).parts).toEqual([]);
+    expect(storedState(supplied, [message, restated]).hasCut).toBe(false);
+  });
+
+  it('with production shapes keeps every name and the skill index, stays within 95k, restates once the live state is small, and changes the catalog by item', async () => {
+    quiet();
+    const info = vi.mocked(console.info), warn = vi.mocked(console.warn), log = vi.mocked(console.log);
+    const core = [...BASE_CATALOG]; // the harness's scripted model also opens its two small lazy tools
+    const lazy = (change?: number) => catalogOf(change).map(item => definition(item.name, 'host_folder', item.description));
+    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, skillIndex, appendOnly: true, steps: 14,
+      catalogAt: decision => [...core, ...lazy(decision >= 9 ? 3 : undefined)],
+      body: decision => ({ observation: { text: decision <= 2 ? 'あ'.repeat(30_000) : 'x' }, pace: { elapsedMinutes: decision } }) });
+    const phase = await run.settle();
+    if (phase !== 'completed') throw new Error(JSON.stringify([...warn.mock.calls, ...log.mock.calls].map(call => String(call[0]).slice(0, 300)).slice(-6)));
+    expect(run.violations).toEqual([]);
+    const sizes = run.bodies.map(body => estimatedAnthropicTokens(renderedRequest(body as never)));
+    expect(sizes.filter(size => size > 95_000), JSON.stringify(sizes)).toEqual([]);
+    const first = JSON.parse(stateTexts(run.bodies[0]!)[0]!);
+    expect(first.catalog.map((item: { name: string }) => item.name).filter((name: string) => name.startsWith('mc_tool_'))).toEqual(catalogOf().map(item => item.name));
+    expect(first.skillIndex).toBe(skillIndex);
+    expect(Object.keys(first.cappedCatalog).length).toBeGreaterThan(0);
+    expect(JSON.stringify(first.catalog)).toContain('長いため後略');
+    expect(info.mock.calls.some(call => String(call[0]).includes('"event":"fca_request_compacted"') && String(call[0]).includes('"transient":true'))).toBe(true);
+    // Once the live state is small the cut descriptions come back whole (the whole request fits), and the catalog is never stated whole again.
+    const all = [...new Set(run.bodies.flatMap(stateTexts))].map(text => JSON.parse(text) as Record<string, unknown>);
+    // While the cut copy sits in the replay the whole one does not fit beside it; the next epoch (summary) starts with it whole.
+    const fulls = all.filter(row => row.stateUpdate === 'full');
+    const whole = fulls.filter(row => !('cappedCatalog' in row));
+    expect(whole.length).toBeGreaterThan(0);
+    for (const item of (whole[0]!.catalog as Array<{ name: string; description: string }>).filter(entry => entry.name.startsWith('mc_tool_'))) {
+      const original = catalogOf().find(known => known.name === item.name)!.description.length;
+      expect(item.description.length, item.name).toBeGreaterThanOrEqual(original);
+    }
+    expect(run.summaries()).toBeGreaterThan(0);
+    // The catalog is stated whole only as the first state of an epoch (a summary starts a new one).
+    expect(all.filter(row => 'catalog' in row && row.stateUpdate === 'changed')).toEqual([]);
+    const oneChange = all.filter(row => (row.catalogChanges as { changed?: Array<{ name: string }> } | undefined)?.changed?.some(item => item.name === 'mc_tool_3')
+      && (row.catalogChanges as { changed: unknown[] }).changed.length === 1);
+    expect(oneChange.length).toBe(1);
+    expect(run.summaries()).toBeLessThanOrEqual(3);
+  }, 240_000);
 
   it('keeps the shared context body in the summary projection (L3)', () => {
     const text = JSON.stringify({ stateUpdate: 'full', task: { id: 't' }, catalog: [{ name: 'a' }], sharedContext: { affect: { feeling: 'KEEP-ME' } } });
     expect(publicState(text)).toContain('KEEP-ME');
     expect(publicState(text)).not.toContain('"name":"a"');
   });
-
-  it('keeps room for the state a step adds: the replay bound is taken down by the reserve, and a production-size part is cut to it (M1)', () => {
-    const limit = FCA_STATE_LIMIT.maximumTokens;
-    expect(limit).toBe(FCA_TRANSIENT_STATE_RESERVE_TOKENS);
-    // A changed skillIndex of ~25k tokens (production size) is cut to the reserve, never stored whole.
-    const first = storedState({ task, skillIndex: 'a' }, [], FCA_STATE_LIMIT).message!;
-    const changed = storedState({ task, skillIndex: 'あ'.repeat(23_000) }, [first], FCA_STATE_LIMIT);
-    expect(changed.level).not.toBeNull();
-    expect(FCA_STATE_LIMIT.tokens(JSON.parse(textOf(changed.message!)))).toBeLessThan(limit + 200);
-  });
-
-  it('with a production-shaped first state (~70k characters) does not summarize again for the next steps after a summary', async () => {
-    quiet();
-    const index = `${'あ'.repeat(35_000)}${'a'.repeat(35_000)}`;
-    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, body: live, skillIndex: index, resultSize: 600, steps: 70, appendOnly: true });
-    expect(await run.settle()).toBe('completed');
-    expect(run.violations).toEqual([]);
-    const first = (body: Body) => JSON.stringify(messagesOf(body)[0]!.content);
-    const starts = run.bodies.flatMap((body, at) => at > 0 && first(body) !== first(run.bodies[at - 1]!) ? [at] : []);
-    expect(starts.length).toBeGreaterThan(0);
-    for (let at = 1; at < starts.length; at++) expect(starts[at]! - starts[at - 1]!).toBeGreaterThanOrEqual(4);
-    expect(starts[0]!).toBeGreaterThanOrEqual(4);
-  }, 240_000);
-
-  it('cuts a first state of ~66k tokens to the reserve and does not summarize every step (M2)', async () => {
-    quiet();
-    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, body: live, skillIndex: 'あ'.repeat(60_000), resultSize: 300, steps: 40, appendOnly: true });
-    expect(await run.settle()).toBe('completed');
-    expect(run.violations).toEqual([]);
-    const first = (body: Body) => JSON.stringify(messagesOf(body)[0]!.content);
-    const starts = run.bodies.flatMap((body, at) => at > 0 && first(body) !== first(run.bodies[at - 1]!) ? [at] : []);
-    for (let at = 1; at < starts.length; at++) expect(starts[at]! - starts[at - 1]!).toBeGreaterThanOrEqual(4);
-    expect(run.summaries()).toBeLessThanOrEqual(3);
-    const stated = stateTexts(run.bodies[0]!)[0]!;
-    expect(stated).toContain('長いため後略');
-    expect(FCA_STATE_LIMIT.tokens(JSON.parse(stated))).toBeLessThan(FCA_STATE_LIMIT.maximumTokens + 200);
-  }, 240_000);
 
   it('does not start, fetch or record any recall for a transient body task, and still does for a legacy one', async () => {
     quiet();

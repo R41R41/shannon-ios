@@ -69,6 +69,8 @@ export interface FcaModelOutput {
   expectations?: readonly FcaActionExpectation[];
   appraisals?: readonly FcaAffectAppraisal[];
   auxiliaryResults?: readonly FcaAuxiliaryResult[];
+  /** Transient mode: the request had to be cut to fit (`anthropicFcaStateCut.ts`); kept in the checkpoint, and the next epoch may start sooner. */
+  stateCut?: boolean;
 }
 export interface FcaModel {
   decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput>;

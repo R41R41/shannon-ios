@@ -275,13 +275,14 @@ export class AnthropicFcaModel implements FcaModel {
       appended.push(this.toolResults([...(context.auxiliaryResults ?? []), { id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
       delete context.auxiliaryResults;
     }
-    return { decision, history: appended, ...context };
+    // A transient request that had to be cut says so: the runner may start the next epoch earlier (`fcaStateCut`).
+    return { decision, history: appended, ...context, ...((built as RequestBuilt).sent ? { stateCut: (built as RequestBuilt).sent!.cut } : {}) };
   }
 
   /** A transient body task's request: see `transientRequest` (`anthropicFcaTransientRequest.ts`). */
   private transientRequest(input: FcaModelInput, history: readonly Anthropic.MessageParam[], menu: ReturnType<typeof transientFcaTools>,
     ownerClock: Record<string, unknown> | undefined) {
-    const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens,
+    const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,
       systemText: `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}`, input, history, menu,
       supplied: decisionFields(input, ownerClock, true) });
     return { ...built, menu, built: built.built as RequestBuilt };
@@ -368,7 +369,7 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
 /** What the caller handed this decision before the message was elided and shortened (content-free): see `sentGistFields`. */
 interface RequestBuilt { taskId: string; bodyAttached: boolean; level: number | null; pointers: number; gists: number; elidedParts: readonly string[];
   /** A transient request: the pointers and gists its live state names (the stored text carries none) and the stored parts it states. */
-  sent?: { pointers: number; gists: number; parts: readonly string[] } }
+  sent?: { pointers: number; gists: number; parts: readonly string[]; cut: boolean } }
 /** The skill pointers and gists of a body context, as counts (0 when none or not a list). */
 function skillCounts(body: unknown): { pointers: number; gists: number } {
   const fields = body && typeof body === 'object' ? body as { skillPointers?: unknown; skillGists?: unknown } : {};

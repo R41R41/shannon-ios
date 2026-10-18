@@ -2,7 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { CompactionMessage } from '@shannon/mind';
 import type { FcaHistoryCodec } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
-import { isFcaClearAtMessage, publicState } from './anthropicFcaTransient.js';
+import { isFcaClearAtMessage } from './anthropicFcaTransient.js';
+import { publicState } from './anthropicFcaStoredState.js';
 
 /** Public projection for a new replay epoch only. The original signed round is never edited or partly replayed. */
 export const anthropicFcaHistoryCodec: FcaHistoryCodec = {

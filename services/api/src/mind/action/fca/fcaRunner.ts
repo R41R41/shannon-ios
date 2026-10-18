@@ -116,8 +116,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   // A transient body task: the core definitions come off the replay budget, and a stale core may start a new epoch (`fcaCoreHistory.ts`).
   const transient = fcaTransientHistory(prior, catalog, ports);
-  const forceEpoch = transient?.stale && ports.history?.summarizer
-    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId) : undefined;
+  const cutLast = prior.fcaStateCut === true;
+  const forceEpoch = transient && (transient.stale || cutLast) && ports.history?.summarizer
+    ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
   const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
@@ -283,7 +284,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.

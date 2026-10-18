@@ -1,7 +1,6 @@
 import { providerToolName } from '../../tools/toolRegistryPorts.js';
 import { continuesFcaEpoch, readFcaCorePin, pinFcaCoreTools, type FcaCorePin, type FcaObsMode } from './fcaCoreTools.js';
 import { FCA_HISTORY_POLICY } from './fcaHistory.js';
-import { FCA_TRANSIENT_STATE_RESERVE_TOKENS } from './fcaTransientLimits.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy } from './fcaHistoryPorts.js';
 import type { FcaToolDefinition } from './fcaPorts.js';
 
@@ -47,9 +46,7 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
   const current = pinFcaCoreTools(catalog), basis = pin ?? current;
   const tokens = ports.history.codec.tokens?.(basis.tools) ?? 0;
   const base = ports.history.policy?.maximumReplayTokens ?? FCA_HISTORY_POLICY.maximumReplayTokens;
-  // The state message a step adds (at most the reserve, `fcaTransientLimits.ts`) is not in the replay yet: its room is kept (review M1/M2).
-  const policy = { ...ports.history.policy,
-    maximumReplayTokens: Math.max(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, base - tokens - FCA_TRANSIENT_STATE_RESERVE_TOKENS) };
+  const policy = { ...ports.history.policy, maximumReplayTokens: Math.max(FCA_TRANSIENT_MINIMUM_REPLAY_TOKENS, base - tokens) };
   return { policy, stale: pin ? staleness(pin, current, catalog) : null, pin };
 }
 
@@ -57,11 +54,13 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
  * Whether this replay (the epoch replay before any compaction) is to start a new epoch by a summary now: the core is stale; the replay
  * still starts with the message the pin was made for (else a summary already began a new epoch, the failed decision after it being
  * retried: no summary of a summary); and the epoch has lived `FCA_CORE_COOLDOWN_STEPS`. Logs content-free, once for each summary.
+ * `cutLast` (the previous request had to be cut to fit, `FcaModelOutput.stateCut`) asks the same: a summary leaves room for the state
+ * the cut shortened, which a later state then restates whole.
  */
-export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string): boolean {
+export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string, cutLast = false): boolean {
   const { pin, stale } = state;
-  if (!stale || !pin || !continuesFcaEpoch(pin, replay) || pin.steps < FCA_CORE_COOLDOWN_STEPS) return false;
-  console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId, reason: stale }));
+  if ((!stale && !cutLast) || !pin || !continuesFcaEpoch(pin, replay) || pin.steps < FCA_CORE_COOLDOWN_STEPS) return false;
+  console.info(JSON.stringify({ event: 'fca_core_tools_stale', taskId, reason: stale ?? 'state_cut' }));
   return true;
 }
 
