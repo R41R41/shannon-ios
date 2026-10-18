@@ -16,6 +16,7 @@ import type { ConversationStore, ShannonExperience, StoredConversationMessage } 
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
+import { DeepChains, cautiousOutsideWalks, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
 
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
@@ -67,10 +68,19 @@ export class MemoryWithholding {
   private root: MemoryWithholding = this;
   private externalReadsPossible = true;
   private queryDepth = 0;
+  private readonly lookups: RecallLookups = {
+    experience: id => this.experience(id),
+    knowledgeSources: id => this.knowledge().get(id.slice(id.indexOf(':') + 1))?.sourceExperienceIds ?? [],
+  };
+  /** The chains past the walks' bound that this read has found (`recallChainDepth.ts`), per walk. */
+  private readonly deepRecalled = new DeepChains('recalled');
+  private readonly deepRead = new DeepChains('read');
   /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
   private query<T>(work: () => T): T {
     if (this.queryDepth === 0) {
       this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear(); this.sourceDecisions.clear();
+      this.deepRecalled.reset();
+      this.deepRead.reset();
       this.walk = {};
       this.externalReadsPossible = this.store?.hasReadSourceProvenance?.(this.scopeKey) !== false;
     }
@@ -82,17 +92,19 @@ export class MemoryWithholding {
    * Whether a remembered turn's read receipt is still available, asked of the native reader once per receipt and time within one
    * read, under this read's own state and walk (`shared`). Minecraft run 6 (2026-10-14): without them every one of a turn's ~1,100
    * receipt checks read and parsed the whole state again, asked the skill store again and walked afresh (`visible=3.6–4.0 s` per
-   * text or voice turn and per FCA step, the API's one thread blocked). A scoped withholding asks under the whole state, as before.
+   * turn and FCA step). A scoped withholding asks under the whole state. A check that runs the stack out is "not visible" as it
+   * was, unless inside a walk (`recallChainDepth.ts`): there it goes up so that the walk can settle the chain.
    */
   private sourceVisible(source: string, observedAt: string): boolean {
     if (this.root !== this) return this.root.sourceVisible(source, observedAt);
-    if (!this.readSourceVisible) return false;
-    if (this.queryDepth === 0) return this.readSourceVisible(this.scopeKey, source, observedAt);
-    const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
-    if (known !== undefined) return known;
-    const result = this.readSourceVisible(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
-    this.sourceDecisions.set(key, result);
-    return result;
+    const read = this.readSourceVisible;
+    return !read ? false : cautiousOutsideWalks(false, () => {
+      if (this.queryDepth === 0) return read(this.scopeKey, source, observedAt);
+      const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
+      const result = known ?? read(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
+      this.sourceDecisions.set(key, result);
+      return result;
+    });
   }
   /** `sourceVisible` for a caller inside this read (`taskMemory.ts`): a read receipt of a remembered item at its time. */
   readSourceAvailable(source: string, observedAt: string): boolean { return this.sourceVisible(source, observedAt); }
@@ -104,7 +116,6 @@ export class MemoryWithholding {
     scoped.root = this.root;
     return scoped;
   }
-
 
   /** Related synchronous checks share one graph walk; a subsequent read starts fresh. */
   withReadSnapshot<T>(work: () => T, preloaded: readonly ShannonExperience[] = []): T {
@@ -137,8 +148,7 @@ export class MemoryWithholding {
     if (this.hiddenExperiences) return this.hiddenExperiences;
     if (this.inactive || !this.store) return this.hiddenExperiences = [];
     const candidates = this.candidates ??= this.store.experienceCandidates(this.scopeKey);
-    // The same remembered turns (the store keeps one read while the database is unchanged) under the same state snapshot are
-    // judged once: each check of a turn used to filter every remembered turn again.
+    // The same remembered turns (one store read while the database is unchanged) under the same state snapshot are judged once.
     const known = HIDDEN_BY_READ.get(candidates)?.get(this.state);
     if (known) return this.hiddenExperiences = known;
     const hidden = Object.freeze(candidates.filter(item => !visibleMemoryText(this.state, item.id, item.summary)
@@ -150,7 +160,14 @@ export class MemoryWithholding {
   }
 
   /** A recalled ID that is itself withheld: the reply was generated from the withheld content. */
-  private recalledWithheld(id: string, observedAt: string, seen = new Set<string>()): boolean {
+  private recalledWithheld(id: string, observedAt: string, seen?: Set<string>): boolean {
+    if (seen) return this.recalledWithheldWithin(id, observedAt, seen);
+    // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
+    const root = JSON.stringify([id, observedAt]);
+    const settle = settleRecalled(root, this.lookups, this.deepRecalled, (at, time) => { this.recalledWithheldWithin(at, time, new Set()); });
+    return deepWalk(() => this.recalledWithheldWithin(id, observedAt, new Set()), settle, true, this.deepRecalled, root);
+  }
+  private recalledWithheldWithin(id: string, observedAt: string, seen: Set<string>): boolean {
     if (seen.has(id) || seen.size >= 5000) return true;
     const key = JSON.stringify([id, observedAt]), known = this.recalledDecisions.get(key);
     if (known !== undefined) return known;
@@ -200,7 +217,13 @@ export class MemoryWithholding {
   }
 
   /** Source availability is independent of memory-control rules and must survive derived summaries. */
-  private unavailableRead(id: string, seen = new Set<string>()): boolean {
+  private unavailableRead(id: string, seen?: Set<string>): boolean {
+    if (seen) return this.unavailableReadWithin(id, seen);
+    const settle = () => settleDeepChains([id], at => readEdges(at, this.lookups), at => { this.unavailableReadWithin(at, new Set()); },
+      undefined, undefined, this.deepRead);
+    return deepWalk(() => this.unavailableReadWithin(id, new Set()), settle, true, this.deepRead, id);
+  }
+  private unavailableReadWithin(id: string, seen: Set<string>): boolean {
     if (!this.externalReadsPossible) return false;
     if (seen.has(id) || seen.size >= 5000) return true;
     const known = this.readDecisions.get(id); if (known !== undefined) return known;
