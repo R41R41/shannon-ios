@@ -75,6 +75,11 @@ export interface TaskRuntimeOptions {
   sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   now?: () => string;
   /**
+   * Whether `retireUnknown` must leave this unknown task alone for now: a Minecraft request waiting for its body to return, whose
+   * lost step the Minecraft recovery closes (`fcaBodyRecovery.ts`). Absent: none, and every unknown task retires at its exit.
+   */
+  holdUnknown?(task: TaskRecord): boolean;
+  /**
    * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }` inherits only the
    * asking conversation's sources, and step records store their sources by reference (`infra/sqlite/fcaProvenanceSets.ts`).
    * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are read either way.

@@ -51,6 +51,8 @@ export function fcaSourceOf(sourceId: string, taskId: string): boolean {
  * The one read path of action leases outside the action store (Syzygy ADR-0009 stage 1, S1). Every read is synchronous on the
  * caller's own connection, so a caller inside its own transaction keeps that transaction as its commit fence. It never writes.
  */
+/** A step of an FCA task whose outcome was lost, with the lease it ran under (`ActionLeaseReader.lostFcaSteps`). */
+export interface LostFcaStep { actionId: string; taskId: string; lease: { id: string; generation: number; holder: string } }
 /** How an accepted lifecycle operation ended (`lifecycleOutcomes`). */
 export type LifecycleOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
 
@@ -201,6 +203,26 @@ export class ActionLeaseReader {
       WHERE a.state='unknown' AND a.kind='agentTask' AND a.holder IS NULL AND a.last_holder IS NOT NULL ORDER BY r.retained_at,a.id LIMIT 32`).all(resource);
     return rows.map(row => ({ actionId: String(row.id), scopeKey: String(row.scope_key),
       lease: { id: String(row.id), generation: Number(row.generation) - 1, holder: String(row.last_holder) } }));
+  }
+
+  /**
+   * The steps of nonterminal FCA tasks (in the scope) whose outcome was lost, oldest first, each as the lease it ran under: the
+   * action is `unknown` (the attempt before the one that closed it), or still marked live though its lease ended before `at`
+   * (a process that died cannot renew it; the sweep has not run yet). The Minecraft recovery closes them (`fcaBodyRecovery.ts`).
+   */
+  lostFcaSteps(scopeKey: string, at: string): LostFcaStep[] {
+    const instant = Date.parse(at);
+    return this.db.prepare(`SELECT a.id,a.source_id,a.state,a.generation,a.holder,a.last_holder,a.lease_until FROM mind_actions a
+      JOIN agent_tasks t ON t.task_id=substr(a.source_id,5,instr(substr(a.source_id,5),':')-1)
+      WHERE a.scope_key=? AND a.kind='agentTask' AND a.source_id LIKE 'fca:%' AND a.state IN ('unknown','running','waiting','stopping')
+      AND t.scope_key=a.scope_key AND t.status NOT IN ('completed','failed','cancelled') ORDER BY a.created_at,a.id`).all(scopeKey).flatMap(row => {
+      const taskId = fcaTaskIdOf(String(row.source_id)), unknown = row.state === 'unknown';
+      const ended = row.lease_until === null || Date.parse(String(row.lease_until)) <= instant;
+      const holder = unknown ? row.last_holder : row.holder;
+      if (!taskId || !(unknown || ended) || typeof holder !== 'string') return [];
+      const lease = { id: String(row.id), generation: Number(row.generation) - (unknown ? 1 : 0), holder };
+      return [{ actionId: lease.id, taskId, lease }];
+    });
   }
 
   unknownLifecycleCommands(resource: string): string[] {

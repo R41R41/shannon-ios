@@ -2,7 +2,9 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicFcaModel, createAnthropicFcaModel, type AnthropicFcaClient, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
-import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
+import { estimatedAnthropicCostUsd, unknownCostUpperBound } from '../src/infra/models/claude/claudeUsage.js';
+import { retryAfterMilliseconds } from '../src/infra/models/anthropic/anthropicFcaFailure.js';
+import { FcaProviderError } from '../src/mind/action/fca/fcaProviderRetry.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import { claudeTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
@@ -394,15 +396,39 @@ describe('FCA native transport boundary', () => {
     expect(() => createAnthropicFcaModel({ recordUsage() {} })).toThrow('ANTHROPIC_API_KEY_REQUIRED');
   });
 
-  it.each([400, 500])('never retries HTTP %s; a server error keeps its unknown spend but is a known outcome', async status => {
+  it.each([400, 500])('never retries HTTP %s itself; an answered error is a known outcome that books nothing (the runner asks again)', async status => {
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic-private-error' } }),
       { status, headers: { 'content-type': 'application/json' } }));
     const receipts: AnthropicFcaUsage[] = [];
     const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage: usage => { receipts.push(usage); } });
-    await expect(model.decide(input(), signal())).rejects.toThrow(`FCA_MODEL_HTTP_${status}`);
+    const execution = ({ lease: { id: 'a', holder: 'api', generation: 1 }, signal: signal(), permit: async () => ({}) }) as unknown as ActionExecution;
+    const failure = await inActionExecution(execution, () => model.decide(input(), signal())).catch(error => error as Error);
+    expect(failure).toMatchObject({ message: `FCA_MODEL_HTTP_${status}` });
+    expect(failure instanceof FcaProviderError).toBe(status === 500); // a 400 is a plain closed code: it is never asked again
     expect(fixture.bodies).toHaveLength(1);
-    expect(receipts).toHaveLength(status === 400 ? 0 : 1);
-    if (status === 500) expect(receipts[0]).toMatchObject({ usageComplete: false });
+    // The provider answered an error: no decision, no charge. Before 2026-10-19 a 500 booked a whole-context upper bound (about
+    // a dollar a request), which, repeated by the retries of one outage, would have booked a task's cap away.
+    expect(receipts).toHaveLength(0);
+    expect(execution.modelOutcome).toBe('acknowledged');
+  });
+
+  it.each([[429, '7', 7_000], [529, '0.5', 500], [503, undefined, null]] as const)('carries the status and the retry-after of an answered %s for the runner', async (status, retryAfter, expected) => {
+    const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'x' } }),
+      { status, headers: { 'content-type': 'application/json', ...(retryAfter ? { 'retry-after': retryAfter } : {}) } }));
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
+    const failure = await model.decide(input(), signal()).catch(error => error as Error);
+    expect(failure).toBeInstanceOf(FcaProviderError);
+    expect(failure).toMatchObject({ message: `FCA_MODEL_HTTP_${status}`, status, retryAfterMs: expected });
+  });
+
+  it('reads retry-after-ms before retry-after, and an HTTP date, bounded', () => {
+    expect(retryAfterMilliseconds({ headers: new Headers({ 'retry-after-ms': '1500', 'retry-after': '9' }) })).toBe(1_500);
+    expect(retryAfterMilliseconds({ headers: new Headers({ 'retry-after': '3' }) })).toBe(3_000);
+    expect(retryAfterMilliseconds({ headers: new Headers({ 'retry-after': new Date(10_000 + 4_000).toUTCString() }) }, 10_000)).toBe(4_000);
+    expect(retryAfterMilliseconds({ headers: new Headers({ 'retry-after': '99999' }) })).toBe(600_000);
+    expect(retryAfterMilliseconds({ headers: new Headers({ 'retry-after': 'soon' }) })).toBeNull();
+    expect(retryAfterMilliseconds({ headers: { 'retry-after': '2' } })).toBe(2_000);
+    expect(retryAfterMilliseconds({})).toBeNull();
   });
 
   describe('a request that got no answer at all (Minebot runs 12 and 13: APIConnectionError, ETIMEDOUT)', () => {
@@ -410,20 +436,52 @@ describe('FCA native transport boundary', () => {
     const wire = (code?: string) => (async () => { throw new TypeError('fetch failed', code ? { cause: Object.assign(new Error('connection failed'), { code }) } : undefined); }) as unknown as typeof fetch;
     const executionOf = () => ({ lease: { id: 'a', holder: 'api', generation: 1 }, signal: signal(), permit: async () => ({}) }) as unknown as ActionExecution;
 
-    it.each(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'UND_ERR_CONNECT_TIMEOUT'])('%s is marked as no response: still unknown for a caller that does not retry, never sent twice by the adapter', async code => {
-      let sent = 0;
-      const counting = (async () => { sent += 1; return wire(code)(''); }) as unknown as typeof fetch;
+    it.each([['ETIMEDOUT', true], ['ECONNRESET', true], ['ECONNREFUSED', false], ['ENOTFOUND', false], ['UND_ERR_CONNECT_TIMEOUT', false]] as const)(
+      '%s is marked as no response (may have been charged: %s): still unknown for a caller that does not retry, never sent twice by the adapter', async (code, charged) => {
+        let sent = 0;
+        const counting = (async () => { sent += 1; return wire(code)(''); }) as unknown as typeof fetch;
+        const receipts: AnthropicFcaUsage[] = [];
+        const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: counting, recordUsage: usage => { receipts.push(usage); } });
+        const execution = executionOf();
+        const failure = await inActionExecution(execution, () => model.decide(input(), signal())).catch(error => error as Error);
+        expect(failure).toBeInstanceOf(FcaNoResponseError);
+        expect((failure as Error).message).toBe('FCA_MODEL_RESPONSE_UNKNOWN');
+        expect(failure).toMatchObject({ reason: 'no_response', possiblyBilled: charged });
+        expect(sent).toBe(1);
+        expect(execution.modelOutcome).toBe('unknown');
+        // A request that never left this machine books nothing; one the provider may have processed books an upper bound.
+        expect(receipts).toHaveLength(charged ? 1 : 0);
+        if (charged) {
+          expect(receipts[0]).toMatchObject({ usageComplete: false });
+          expect(receipts[0]!.estimatedCostUsd).toBeGreaterThan(0);
+        }
+      });
+
+    it('books a request that may have been charged at an upper bound sized by the request, not by a whole context', async () => {
       const receipts: AnthropicFcaUsage[] = [];
-      const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: counting, recordUsage: usage => { receipts.push(usage); } });
-      const execution = executionOf();
-      const failure = await inActionExecution(execution, () => model.decide(input(), signal())).catch(error => error as Error);
-      expect(failure).toBeInstanceOf(FcaNoResponseError);
-      expect((failure as Error).message).toBe('FCA_MODEL_RESPONSE_UNKNOWN');
-      expect(sent).toBe(1);
-      expect(execution.modelOutcome).toBe('unknown');
+      const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: wire('ETIMEDOUT'), recordUsage: usage => { receipts.push(usage); } });
+      await inActionExecution(executionOf(), () => model.decide(input(), signal())).catch(() => undefined);
       expect(receipts).toHaveLength(1);
-      expect(receipts[0]).toMatchObject({ usageComplete: false });
+      const wholeContext = unknownCostUpperBound('claude-haiku-5-5', 4_000);
       expect(receipts[0]!.estimatedCostUsd).toBeGreaterThan(0);
+      expect(receipts[0]!.estimatedCostUsd).toBeLessThan(wholeContext / 10);
+      // At least the request's own tokens written to the one-hour cache, plus the output ceiling.
+      expect(receipts[0]!.estimatedCostUsd).toBeGreaterThan(unknownCostUpperBound('claude-haiku-5-5', 4_000, 0, { input: 0, cacheWrite: 1_000, cacheRead: 0 }));
+    });
+
+    it('treats the SDK\'s own timeout and this process\'s deadline as a request that may have been charged and got no answer', async () => {
+      const timedOut = (async () => { throw new DOMException('The operation was aborted', 'AbortError'); }) as unknown as typeof fetch;
+      const receipts: AnthropicFcaUsage[] = [];
+      const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: timedOut, recordUsage: usage => { receipts.push(usage); } });
+      const sdk = await inActionExecution(executionOf(), () => model.decide(input(), signal())).catch(error => error as Error);
+      expect(sdk).toBeInstanceOf(FcaNoResponseError);
+      expect(sdk).toMatchObject({ message: 'FCA_MODEL_RESPONSE_UNKNOWN', reason: 'timeout', possiblyBilled: true });
+      const late = createAnthropicFcaModel({ apiKey: 'synthetic', timeoutMilliseconds: 5, recordUsage: usage => { receipts.push(usage); },
+        fetcher: ((_url: unknown, init?: RequestInit) => new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('x', 'AbortError'))))) as unknown as typeof fetch });
+      const deadline = await inActionExecution(executionOf(), () => late.decide(input(), signal())).catch(error => error as Error);
+      expect(deadline).toBeInstanceOf(FcaNoResponseError);
+      expect(deadline).toMatchObject({ message: 'FCA_MODEL_ABORTED', reason: 'timeout', possiblyBilled: true });
+      expect(receipts.map(receipt => receipt.usageComplete)).toEqual([false, false]);
     });
 
     it('books both calls when the runner asks again: the first as an unknown upper bound, the second by its actual usage', async () => {
@@ -447,7 +505,6 @@ describe('FCA native transport boundary', () => {
         return inActionExecution(executionOf(), () => model.decide(input(), controller.signal)).catch(error => error as Error);
       };
       for (const failure of [await run(wire()), await run(wire('EWHATEVER')),
-        await run((async () => { throw new DOMException('The operation was aborted', 'AbortError'); }) as unknown as typeof fetch),
         await run((async () => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'x' } }), { status: 500, headers: { 'content-type': 'application/json' } })) as typeof fetch),
         await run((async () => new Response('{"id":"msg_1","type":"mess', { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch)]) {
         expect(failure).toBeInstanceOf(Error);

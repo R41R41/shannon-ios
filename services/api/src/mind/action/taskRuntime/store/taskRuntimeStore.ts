@@ -62,7 +62,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       send: (scope, source, target, text, id) => this.sendInTransaction(scope, source, target, text, id),
       redeliver: (task, stepId, reason) => this.inbox.redeliverLost(task, stepId, reason),
       wake: (task, reason) => { this.inbox.wake(task.scopeKey, task.id, reason); },
-      notice: (scope, taskId, stepId, operationId, text) => this.progressStore.notice(scope, taskId, stepId, operationId, text) });
+      notice: (scope, taskId, stepId, operationId, text) => this.progressStore.notice(scope, taskId, stepId, operationId, text), hold: options.holdUnknown });
     this.inbox = new TaskInbox(db, { authority: this.authority, sources: this.sources, now: this.now, messages: id => this.messages(id),
       checkpoint: id => this.checkpoint(id), required: (scope, id) => this.required(scope, id),
       stepValid: step => this.matches(step) && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now()) });

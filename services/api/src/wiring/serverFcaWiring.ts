@@ -59,6 +59,7 @@ import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.j
 import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
+import { createFcaBodyRecovery, fcaBodyReturnWindow } from './fcaBodyRecovery.js';
 import { stepVisibility, taskGates } from './fcaPeekGates.js';
 import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
@@ -131,6 +132,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
     const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'),
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
+      // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release (`fcaBodyRecovery.ts`).
+      ...(minecraft ? { bodyRecovery: recoveryParts => createFcaBodyRecovery({ ...recoveryParts,
+        windowMs: fcaBodyReturnWindow(values.SHANNON_FCA_BODY_RETURN_MINUTES),
+        body: { bound: id => minecraft.control.store.body(id), connected: id => minecraft.control.frame(id) !== null,
+          release: step => minecraft.recheck.releaseStep(step) } }) } : {}),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
       ...taskGates({ ownerScope: parts.ownerScope, guard: () => visible, sleepVisible: (rt, task) => Boolean(sleep?.visible(rt, task)) }),
       stepPorts: (_runtime, step) => {

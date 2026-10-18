@@ -7,10 +7,11 @@ import { actionHarness } from './support/actionThreadHarness.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 
 /**
- * A step whose model call got an HTTP 5xx is closed as `continue` and run once more (`retryAfterServerError`). That commit used to
- * store an empty history round, which `anthropicFcaHistoryCodec.project` rejects: the step after the retry that ran a tool then
- * failed in `prepareFcaHistory` with FCA_HISTORY_INCOMPLETE_ROUND and the task ended `unknown`. Here the real runner, the real
- * SQLite store, the real Anthropic adapter and its history codec are used, with a scripted provider.
+ * A decision the provider answered with an HTTP 5xx is asked again inside its step (`decideWithRetry`, up to five attempts); when
+ * all of them fail, the step is closed as `continue` and run again (`taskRuntimeUnavailable.ts`). That commit used to store an
+ * empty history round, which `anthropicFcaHistoryCodec.project` rejects: the step after the retry that ran a tool then failed in
+ * `prepareFcaHistory` with FCA_HISTORY_INCOMPLETE_ROUND and the task ended `unknown`. Here the real runner, the real SQLite store,
+ * the real Anthropic adapter and its history codec are used, with a scripted provider.
  */
 const cleanups: Array<() => void | Promise<void>> = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const close of cleanups.splice(0).reverse()) await close(); });
@@ -46,19 +47,30 @@ function fixture(answers: Array<Response | Array<Record<string, unknown>>>, onRe
   return { db: h.db, provider, driver, child, phase, rounds, lines, run };
 }
 
+const failures = (status: number, count: number) => Array.from({ length: count }, () => serverError(status));
+
 describe('a provider server error is retried without leaving a broken history round', () => {
-  it('runs a tool step after one 500 and completes: no empty round is stored and the replay stays valid', async () => {
+  it('asks the same decision again inside its step after a 500: one step, no round for the failed request', async () => {
     const f = fixture([serverError(500), [call('task_list', 'list-1')]]);
     await f.run();
     expect(f.phase()).toBe('completed');
+    expect(f.lines()).toEqual([]); // no step was closed and run again
+    expect(f.provider.bodies).toHaveLength(3); // 500, the tool step, the completing step
+    expect(f.rounds().every(entries => entries.length > 0)).toBe(true);
+  });
+
+  it('runs a tool step after a whole round of 500s and completes: no empty round is stored and the replay stays valid', async () => {
+    const f = fixture([...failures(500, 5), [call('task_list', 'list-1')]]);
+    await f.run();
+    expect(f.phase()).toBe('completed');
     expect(f.lines()).toEqual([`Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_500`]);
-    expect(f.provider.bodies).toHaveLength(3); // 500, the tool step, the completing step: one resend only
+    expect(f.provider.bodies).toHaveLength(7); // five attempts of the first step, the tool step, the completing step: no request twice more
     // The retried step committed nothing: only the tool step and the completing step are rounds, each one codec-projectable.
     const rounds = f.rounds();
     expect(rounds).toHaveLength(2);
     expect(rounds.every(entries => entries.length > 0)).toBe(true);
     // The third request replays the tool round byte for byte (append-only), and nothing before it.
-    const replayed = (f.provider.bodies[2]!.messages as unknown[]).slice(0, rounds[0]!.length);
+    const replayed = (f.provider.bodies[6]!.messages as unknown[]).slice(0, rounds[0]!.length);
     expect(JSON.stringify(withoutCacheMarkers(replayed))).toBe(JSON.stringify(rounds[0]));
   });
 
@@ -88,12 +100,20 @@ describe('a provider server error is retried without leaving a broken history ro
     expect(f.rounds().every(entries => entries.length > 0)).toBe(true);
   });
 
-  it('fails the task with its report after a second 500, as before, and never sends a third request', async () => {
-    const f = fixture([serverError(500), serverError(500), [call('task_list', 'list-1')]]);
+  it('fails a task that is not a Minecraft request with its report once its two rounds of five attempts all fail, and sends no eleventh request', async () => {
+    const f = fixture([...failures(500, 12), [call('task_list', 'list-1')]]);
     await f.run();
     expect(f.phase()).toBe('failed');
     expect(f.driver.runtime.get('owner', f.child.id)).toMatchObject({ summary: rejectedTaskReport('天気') });
-    expect(f.provider.bodies).toHaveLength(2);
+    expect(f.provider.bodies).toHaveLength(10);
     expect(f.lines()).toEqual([`Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_500`, `Shannon FCA step failed task=${f.child.id} code=FCA_MODEL_HTTP_500`]);
+  });
+
+  it('counts the second round afresh after a decision came back: a later outage gets its own rounds (the count was once per task lifetime)', async () => {
+    // Round one fails, the next step answers a tool call, then another full round fails and the next step succeeds.
+    const f = fixture([...failures(500, 5), [call('task_list', 'list-1')], ...failures(500, 5), [call('task_list', 'list-2')]]);
+    await f.run();
+    expect(f.phase()).toBe('completed');
+    expect(f.lines()).toEqual([`Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_500`, `Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_500`]);
   });
 });

@@ -8,8 +8,9 @@ import { actionHarness } from './support/actionThreadHarness.js';
 
 /**
  * Minebot runs 12 and 13 (2026-10-16/17): a decision request failed with APIConnectionError / ETIMEDOUT, no answer came back, and the
- * step stayed unknown for three minutes until retired. A request that got no answer is now asked once more by the runner, after
- * 2-5 s and its own gate; a second failure, any other failure and a stop end as before.
+ * step stayed unknown for three minutes until retired. A request that got no answer is asked again by the runner (since 2026-10-19 up
+ * to five attempts with backoff, `fcaProviderRetry.ts`), each time after its own gate; any other failure and a stop end as before,
+ * and when the attempts run out the step ran nothing and the task goes on (`taskRuntimeUnavailable.ts`) instead of sitting unknown.
  */
 const at = '2026-10-17T09:00:00.000Z', closes: Array<() => Promise<void> | void> = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const close of closes.splice(0).reverse()) await close(); });
@@ -56,7 +57,7 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     expect(f.phase()).toBe('completed');
     expect(f.events()).not.toContain('fca_recovery_unknown');
     expect(f.inputs[1]).toBe(f.inputs[0]);
-    expect(f.warnings().some(line => line.startsWith('Shannon FCA decision retried after no response task='))).toBe(true);
+    expect(f.warnings()).toContain(`Shannon FCA decision retry reason=no_response attempt=2/5 waitMs=0 task=${f.task.id}`);
     expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join('\n')).not.toContain('step unknown');
   });
 
@@ -71,15 +72,34 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     expect(f.calls()).toBe(2);
   });
 
-  it('waits before asking again, and never asks a third time: a second failure ends as it did before (unknown)', async () => {
+  it('waits before asking again, asks again after a second failure, and stops asking once the provider may have charged three requests', async () => {
     const f = fixture(['no_response', 'no_response', 'ok'], { delay: 30 });
     const begun = Date.now();
     await f.driver.tick(); await f.driver.drain();
-    expect(Date.now() - begun).toBeGreaterThanOrEqual(25);
-    expect(f.calls()).toBe(2);
-    expect(f.phase()).toBe('unknown');
-    expect(f.events()).toContain('fca_recovery_unknown');
-    expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line))).toContain(`Shannon FCA step unknown task=${f.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
+    expect(Date.now() - begun).toBeGreaterThanOrEqual(55); // two waits of 30 ms
+    expect(f.calls()).toBe(3);
+    expect(f.phase()).toBe('completed');
+    const g = fixture(['no_response', 'no_response', 'no_response', 'ok']);
+    await g.driver.tick(); await g.driver.drain();
+    // Three requests that may have been charged end this decision's retries (`maxPossiblyBilled`); its step ran nothing, so it is
+    // closed as `continue` and the task asks again from a fresh step instead of sitting unknown.
+    expect(g.calls()).toBe(3);
+    expect(g.phase()).not.toBe('unknown');
+    expect(g.events()).not.toContain('fca_recovery_unknown');
+    expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line))).toContain(`Shannon FCA step retried task=${g.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
+    await g.driver.tick(); await g.driver.drain();
+    expect(g.calls()).toBe(4);
+    expect(g.phase()).toBe('completed');
+  });
+
+  it('fails a task that is not a Minecraft request with its report after its one further round, never leaving it unknown', async () => {
+    const f = fixture(Array(8).fill('no_response') as Script);
+    for (let i = 0; i < 6 && f.phase() !== 'failed'; i++) { await f.driver.tick(); await f.driver.drain(); }
+    expect(f.calls()).toBe(6); // two rounds of three requests
+    expect(f.phase()).toBe('failed');
+    expect(f.events()).not.toContain('fca_recovery_unknown');
+    const lines = vi.mocked(console.log).mock.calls.map(([line]) => String(line));
+    expect(lines).toContain(`Shannon FCA step failed task=${f.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
   });
 
   it.each([['an unclassified unknown failure', 'unknown'], ['a failure after an answer arrived (a decision refused)', 'rejected']] as const)('does not ask again after %s', async (_label, kind) => {

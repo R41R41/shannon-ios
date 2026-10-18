@@ -36,6 +36,12 @@ export interface FcaBudget {
   recordUsage(usd: number): void;
   before(task: TaskView, lease: ActionLease): Promise<BudgetVerdict>;
   after(task: TaskView, lease: ActionLease, reservationId?: string): Promise<void>;
+  /**
+   * Whether the step holding this lease still has room, inside its task's cap, for one more request that may be charged: the yen spent
+   * by the task's settled steps plus what this step has booked so far (including the unknown bounds of requests that timed out) must
+   * stay under the cap. A decision's retries stop where it turns false (`FcaStepPorts.retryAllowed`). Absent: always true.
+   */
+  room?(task: TaskView, lease: ActionLease): boolean;
 }
 
 const capped = (task: TaskView, cap: { yen: number; steps: number }) =>
@@ -61,6 +67,7 @@ export function fcaBudget(options: {
 }): FcaBudget {
   const usd = new Map<string, number>();
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
+  const yenOf = (cost: number) => cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160) : 0;
   return {
     // Only a step this budget opened is counted (calls outside a counted step are not kept), and at most a bounded few are in flight.
     recordUsage(cost) {
@@ -88,12 +95,17 @@ export function fcaBudget(options: {
       if (!reserved) usd.delete(lease.id);
       return reserved ? { ok: true, reservationId } : { ok: false, code: 'own_time_budget', report: '今日の自分の予算の残りが足りないので、ここで止めました。' };
     },
+    room(task, lease) {
+      if (!counted(task) || !usd.has(lease.id)) return true;
+      const booked = usd.get(lease.id) ?? 0;
+      return options.store.spent(task.id).yen + yenOf(booked) < capOf(task, options).yen;
+    },
     async after(task, lease, reservationId) {
       const cost = usd.get(lease.id) ?? 0;
       usd.delete(lease.id);
       if (!counted(task)) return;
       const at = options.now();
-      const yen = cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160) : 0;
+      const yen = yenOf(cost);
       try {
         // The cap counts paid steps only (owner answer 3): a step that called no model costs nothing and is not a step of it.
         if (yen > 0) options.store.add(task.id, task.scopeKey, task.origin, yen, at);
