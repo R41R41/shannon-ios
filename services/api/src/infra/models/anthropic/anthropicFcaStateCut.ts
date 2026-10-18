@@ -12,9 +12,10 @@ import { itemKey, partKey } from './anthropicFcaStoredState.js';
  * read by every later step, and the live state is read by this step alone; so a live state larger than a typical one (`LIVE_TYPICAL_TOKENS`,
  * a spike) gives way first, and only down to a typical size. Otherwise, in this order, each stage only after the one before is at its floor
  * (review 4, M2/M3):
- *   1. a live spike, to the size of a typical live state: first the low-value structure of the body's observation (the farther entities and
- *      the later facts, `anthropicFcaLiveTrim.ts`), then its long texts, never below `TEXT_FLOOR`. A live state that is not above a typical
- *      one is left whole here;
+ *   1. a live spike, to the size of a typical live state: first its long texts (the gists), down to `TEXT_FLOOR` at the lowest, then the
+ *      low-value structure of the body's observation (the farther entities and the later facts, `anthropicFcaLiveTrim.ts`), each only as
+ *      far as the size needs (review 5, L-3: a gist's tail costs the model less than the entities and facts it sees nowhere else). A live
+ *      state that is not above a typical one is left whole here;
  *   2. the catalog items' descriptions (never an item's name), to the highest common length that fits, down to `CATALOG_FLOOR`;
  *   3. the long texts of the stored state's other parts (the shared context, the goal progress; never the skill index, the task,
  *      the messages or the children), down to `TEXT_FLOOR`;
@@ -151,13 +152,35 @@ export function cutToFit(row: Row, live: Row, fits: Fits): CutResult {
     levels[key] = highest(floor, top, level => fitsAt({ ...levels, [key]: level }));
     return true;
   };
+  /** The long texts of the live state cut to the floor and then as high as `goal` allows; false when even the floor does not reach it. */
+  const cutTexts = (goal: (at: Levels) => boolean): boolean => {
+    const texts = longestLive(applied(row, live, { ...levels, live: null }).live);
+    if (texts <= TEXT_FLOOR) return goal(levels);
+    levels.live = TEXT_FLOOR;
+    if (!goal(levels)) return false;
+    levels.live = highest(TEXT_FLOOR, texts, level => goal({ ...levels, live: level }));
+    return true;
+  };
   /**
-   * The gentlest shrink of the live state (its structure, then its long texts down to the floor) at which `goal` holds, the other levels
-   * as they stand; when none does, the deepest shrink there is. True when the goal holds.
+   * The gentlest shrink of the live state at which `goal` holds, the other levels as they stand; when none does, the deepest shrink there
+   * is. True when the goal holds. By default the structure goes first (the far entities and the late facts), then the long texts down to
+   * the floor. With `textsFirst` the long texts go first, down to the floor, and only then the structure (review 5, L-3: in a spike, a gist's
+   * tail is worth less than the entities and facts of the observation, which have no copy beyond this request).
    */
-  const shrinkLive = (goal: (at: Levels) => boolean): boolean => {
+  const shrinkLive = (goal: (at: Levels) => boolean, textsFirst = false): boolean => {
     levels.trim = null;
     levels.live = null;
+    if (textsFirst) {
+      if (cutTexts(goal)) return true;
+      for (const level of trims) {
+        if (goal({ ...levels, trim: level })) {
+          levels.trim = level;
+          return true;
+        }
+      }
+      levels.trim = trims.length ? trims[trims.length - 1]! : null;
+      return false;
+    }
     for (const level of trims) {
       if (goal({ ...levels, trim: level })) {
         levels.trim = level;
@@ -165,16 +188,11 @@ export function cutToFit(row: Row, live: Row, fits: Fits): CutResult {
       }
     }
     levels.trim = trims.length ? trims[trims.length - 1]! : null;
-    const texts = longestLive(applied(row, live, levels).live);
-    if (texts <= TEXT_FLOOR) return goal(levels);
-    levels.live = TEXT_FLOOR;
-    if (!goal(levels)) return false;
-    levels.live = highest(TEXT_FLOOR, texts, level => goal({ ...levels, live: level }));
-    return true;
+    return cutTexts(goal);
   };
   if (tokensOf(levels) > LIVE_TYPICAL_TOKENS) {
     // A spike gives way to a typical live state, or to the size at which the request fits, whichever comes first.
-    shrinkLive(at => fitsAt(at) || tokensOf(at) <= LIVE_TYPICAL_TOKENS);
+    shrinkLive(at => fitsAt(at) || tokensOf(at) <= LIVE_TYPICAL_TOKENS, true);
     if (fitsAt(levels)) return result(false);
   }
   if (stage('catalog', CATALOG_FLOOR, descriptions) || stage('state', TEXT_FLOOR, stateTexts)) return result(false);

@@ -3,7 +3,7 @@ import { villageDistance } from './minecraftAdoptionTags.js';
 import { BED_ITEM, carriedItemCounts, COOKED_FOOD, countMatching, EDIBLE_FOOD } from './minecraftItems.js';
 import type { createPaceLedger } from './minecraftPaceLedger.js';
 import { minecraftStage } from './minecraftStage.js';
-import { minecraftTransientObservation } from './minecraftTransientObservation.js';
+import { cleanDeep, cleanText, minecraftTransientObservation } from './minecraftTransientObservation.js';
 
 /**
  * The body part of a transient decision's live state (observation redesign P3, `SHANNON_FCA_OBS_MODE=transient`): what changes from
@@ -18,18 +18,21 @@ const record = (value: unknown): Record<string, unknown> | null =>
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const FOODS = 8, JOBS = 800, SURFACE_Y = 55;
 
-/** The external jobs the world frame reports (a furnace and when it finishes): absent unless the body gives them. */
+/**
+ * The external jobs the world frame reports (a furnace and when it finishes): absent unless the body gives them. Like every string the world
+ * supplies they are cleaned (review 5, L-2): control and hidden characters out, keys and texts alike.
+ */
 function jobsOf(world: Record<string, unknown>): BodyValue | undefined {
   const present = (item: unknown) => Array.isArray(item) ? item.length > 0 : !!record(item) && Object.keys(item as object).length > 0;
   const value = [world.jobs, world.activeFurnaces, world.backgroundJobs].find(present);
-  return value !== undefined && JSON.stringify(value).length <= JOBS ? value as BodyValue : undefined;
+  return value !== undefined && JSON.stringify(value).length <= JOBS ? cleanDeep(value as BodyValue) : undefined;
 }
 
 /** What phase she is in, from what she carries and where she is: the shared `minecraftStage` and `carriedItemCounts`. */
 export function minecraftPhaseFacts(observation: BodyObservation, elapsedMinutes: number | null): Record<string, unknown> {
   const world = record(observation.state.world) ?? {}, counts = carriedItemCounts(world, observation.facts);
   const food = [...counts].filter(([name]) => EDIBLE_FOOD.test(name)).slice(0, FOODS).map(([name, count]) => `${name}×${count}`);
-  const biome = typeof world.biome === 'string' && world.biome.trim() ? world.biome : null;
+  const biome = (typeof world.biome === 'string' ? cleanText(world.biome) : '') || null;
   const fact = observation.facts.dimension;
   const dimension = typeof world.dimension === 'string' ? world.dimension : typeof fact === 'string' ? fact : null;
   const y = finite(record(world.position)?.y), places = record(world.rememberedPlaces);

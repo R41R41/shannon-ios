@@ -1,6 +1,8 @@
 /**
  * The structure of a transient live state that can be left out when the request does not fit (observation redesign P3, review 4, M2),
- * before any text is cut: a text cut makes a name or a pointer unreadable, a missing far entity or late fact costs the model much less.
+ * before a name or a pointer is touched: a text cut makes a name or a pointer unreadable, a missing far entity or late fact costs the model
+ * much less. (Of the long texts, a live spike gives up the gists' tails first, to the 400-character floor, and only then this structure;
+ * a live state that is not a spike gives up this structure first: `anthropicFcaStateCut.ts`.)
  * The live state is the body's (`minecraftTransientBody.ts`): `body.observation` with `nearbyEntities` and `facts`.
  *
  * Only low-value structure goes, in this order of levels, and what went is named in `observation.trimmed` (the count of each):

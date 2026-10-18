@@ -36,8 +36,8 @@ export interface CutStages {
  * The stored round is the turn as sent, so the next request extends it byte for byte, the earlier live states included.
  *
  * Size: as for a legacy decision message, nothing is cut unless the WHOLE request (core, replay, this step's state, the tool additions
- * and the live state) is estimated above `compactAboveTokens`; then `cutToFit` first lets a live spike give way (the farther entities and
- * later facts, then its long texts, down to a typical live state), then shortens descriptions, then other long texts, never a name or
+ * and the live state) is estimated above `compactAboveTokens`; then `cutToFit` first lets a live spike give way (its long texts down to the 400-character
+ * floor, then the farther entities and later facts, down to a typical live state), then shortens descriptions, then other long texts, never a name or
  * the skill index (`anthropicFcaStateCut.ts`). One more bound holds the cut to what the owner's rule needs: the state this step
  * stores joins the replay, which is bounded below the price step too (`replayTokenLimit`); a state that would leave no room for another
  * step would be summarized away every step, so it is shortened to fit (and only if even names alone cannot, the bound is let go).
@@ -115,8 +115,10 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   const body = cacheFcaBodyRequest({ model, max_tokens: parts.maximumOutputTokens, system, messages: [...history, ...turn], tools: menu.tools,
     tool_choice: { type: 'auto' as const }, thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
   } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+  // `level`: the lowest of the character levels cut; when only the live state's structure was trimmed (no text cut), its trim level (1 to 5),
+  // so that a trim alone is not reported as no cut at all (review 5, L-4); the whole stages are in `sent.stages`.
   const counts = liveSkillCounts(input.transient), levels = [stages.catalog, stages.state, stages.live].filter((level): level is number => level !== null);
-  const built = { taskId: input.task.id, bodyAttached: input.body !== undefined, level: levels.length ? Math.min(...levels) : null,
+  const built = { taskId: input.task.id, bodyAttached: input.body !== undefined, level: levels.length ? Math.min(...levels) : stages.trim,
     elidedParts: [] as string[], ...counts, sent: { ...counts, parts: stored.parts, cut: restorable, ...(fitted.cut || deferred ? { stages } : {}) } };
   return { turn, body, built };
 }
