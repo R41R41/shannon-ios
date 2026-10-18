@@ -54,8 +54,8 @@ export function fcaTransientHistory(prior: Record<string, unknown>, catalog: rea
  * Whether this replay (the epoch replay before any compaction) is to start a new epoch by a summary now: the core is stale; the replay
  * still starts with the message the pin was made for (else a summary already began a new epoch, the failed decision after it being
  * retried: no summary of a summary); and the epoch has lived `FCA_CORE_COOLDOWN_STEPS`. Logs content-free, once for each summary.
- * `cutLast` (the previous request had to be cut to fit, `FcaModelOutput.stateCut`) asks the same: a summary leaves room for the state
- * the cut shortened, which a later state then restates whole.
+ * `cutLast` (the previous request cut its stored state to fit, and a new epoch could state it whole: `FcaModelOutput.stateCut`) asks the
+ * same: a summary leaves room for the state the cut shortened, which the new epoch's first state then says whole.
  */
 export function shouldForceFcaEpoch(state: FcaTransientHistory, replay: readonly unknown[], taskId: string, cutLast = false): boolean {
   const { pin, stale } = state;

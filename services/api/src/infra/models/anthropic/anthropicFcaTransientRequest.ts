@@ -3,9 +3,29 @@ import type { FcaModelInput } from '../../../mind/action/fca/fcaPorts.js';
 import { cacheFcaBodyRequest } from './anthropicFcaBodyCache.js';
 import { estimatedAnthropicTokens } from './anthropicFcaHistory.js';
 import { HAIKU_PROTOCOL_PREFIX } from './haikuCache.js';
-import { cutToFit, type Levels } from './anthropicFcaStateCut.js';
+import { cutToFit, type CutResult } from './anthropicFcaStateCut.js';
 import { stateMessage, storedState } from './anthropicFcaStoredState.js';
 import { clearAtMessage, FCA_TRANSIENT_THINKING, liveObject, liveSkillCounts, renderedRequest } from './anthropicFcaTransient.js';
+
+/** The room (estimated tokens) one more round takes in the replay: its calls, their stored results and the answer's blocks. */
+export const FCA_TRANSIENT_ROUND_TOKENS = 4_000;
+/** What a summary's bootstrap takes of a new epoch's replay (`FCA_BODY_HISTORY_POLICY` compacts down to 8,000). */
+export const FCA_TRANSIENT_BOOTSTRAP_TOKENS = 8_000;
+/** What a typical live state takes of a new epoch's first request. */
+export const FCA_TRANSIENT_LIVE_TOKENS = 10_000;
+
+/** How a request was shortened, content-free (`fca_decision_metrics.cut`, `fca_request_compacted`). Levels are characters; null: not cut. */
+export interface CutStages {
+  catalog: number | null; state: number | null; live: number | null;
+  /** Even the floor left the request over `compactAboveTokens`. */
+  over: boolean;
+  /** The replay bound could not be kept (even names only left no room for another step), so only the request bound was. */
+  replayRelaxed: boolean;
+  /** A part cut earlier could not be restated whole in this request. */
+  deferred: boolean;
+  /** The parts and the catalog items this state names as cut (`capped`, `cappedCatalog`). */
+  parts: number; items: number;
+}
 
 /**
  * A transient body task's request (`anthropicFcaTransient.ts`): what changed in the task's state, as a stored user text; the tool
@@ -14,7 +34,10 @@ import { clearAtMessage, FCA_TRANSIENT_THINKING, liveObject, liveSkillCounts, re
  *
  * Size: as for a legacy decision message, nothing is cut unless the WHOLE request (core, replay, this step's state, the tool additions
  * and the live state) is estimated above `compactAboveTokens`; then `cutToFit` shortens descriptions, then other long texts, never a
- * name or the skill index (`anthropicFcaStateCut.ts`). A part that was cut earlier is stated whole again as soon as the request fits.
+ * name or the skill index (`anthropicFcaStateCut.ts`). One more bound holds the cut to what the owner's rule needs: the state this step
+ * stores joins the replay, which is bounded below the price step too (`replayTokenLimit`); a state that would leave no room for another
+ * step would be summarized away every step, so it is shortened to fit (and only if even names alone cannot, the bound is let go).
+ * A part that was cut earlier is stated whole again as soon as the request fits.
  *
  * Known limit (review 4): a tool opened by `tool_open` is declared in this turn's `tool_addition`, one block for each tool (up to dozens),
  * between the last stored block of the previous request and this one's. The cache looks back about 20 blocks for the earlier write, so
@@ -24,18 +47,28 @@ import { clearAtMessage, FCA_TRANSIENT_THINKING, liveObject, liveSkillCounts, re
 export function transientRequest(parts: { model: string; maximumOutputTokens: number; compactAboveTokens: number; systemText: string;
   input: FcaModelInput; supplied: Record<string, unknown>; history: readonly Anthropic.MessageParam[];
   menu: { tools: Anthropic.Tool[]; appended: Anthropic.MessageParam[] } }) {
-  const { model, input, supplied, history, menu } = parts, maximum = parts.compactAboveTokens;
+  const { model, input, supplied, history, menu } = parts, maximum = parts.compactAboveTokens, limit = input.replayTokenLimit;
   const hour = { type: 'ephemeral' as const, ttl: '1h' as const };
   const system = [{ type: 'text' as const, cache_control: hour, text: parts.systemText }];
-  // The whole request as it would be sent with this state and this live state (the way a legacy decision measured its body).
-  const turnOf = (row: Record<string, unknown>, live: Record<string, unknown>, full: boolean) =>
-    [...[stateMessage(row, full)].filter((message): message is Anthropic.MessageParam => message !== null), ...menu.appended, clearAtMessage(JSON.stringify(live))];
   const fixed = { model, max_tokens: parts.maximumOutputTokens, tools: menu.tools, tool_choice: { type: 'auto' as const },
-    thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const } };
-  // The request as sent: the transport protocol's prefix comes before the system text (`cacheFcaBodyRequest`).
+    thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
+    system: [{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: hour }, ...system] };
+  const turnOf = (row: Record<string, unknown>, live: Record<string, unknown> | null, full: boolean): Anthropic.MessageParam[] => [
+    ...[stateMessage(row, full)].filter((message): message is Anthropic.MessageParam => message !== null), ...menu.appended,
+    ...(live ? [clearAtMessage(JSON.stringify(live))] : [])];
+  // The request with an empty turn: everything the history, the tools and the instructions weigh (the way a legacy decision measured its body).
   // 64 tokens for the cache marker the last stored block gets (`cacheFcaBodyRequest`), which this estimate does not carry.
-  const cost = (row: Record<string, unknown>, live: Record<string, unknown>, full: boolean) => 64 + estimatedAnthropicTokens(renderedRequest({ ...fixed,
-    system: [{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: hour }, ...system], messages: [...history, ...turnOf(row, live, full)] }));
+  const requestBase = estimatedAnthropicTokens(renderedRequest({ ...fixed, messages: [...history] })) + 64;
+  const emptyBase = estimatedAnthropicTokens({ ...fixed, messages: [] }) + 64;
+  const requestTokens = (row: Record<string, unknown>, live: Record<string, unknown>, full: boolean) =>
+    requestBase + estimatedAnthropicTokens(turnOf(row, live, full));
+  // What a new epoch would hold if it started with this state: a bootstrap, the state, one round.
+  const replayTokens = (row: Record<string, unknown>, full: boolean) =>
+    FCA_TRANSIENT_BOOTSTRAP_TOKENS + estimatedAnthropicTokens(turnOf(row, null, full)) + FCA_TRANSIENT_ROUND_TOKENS;
+  const requestFits = (full: boolean) => (row: Record<string, unknown>, live: Record<string, unknown>) => requestTokens(row, live, full) <= maximum;
+  const bothFit = (full: boolean) => (row: Record<string, unknown>, live: Record<string, unknown>) =>
+    requestFits(full)(row, live) && (limit === undefined || replayTokens(row, full) <= limit);
+
   const live = liveObject(supplied, input.transient);
   let stored = storedState(supplied, history);
   let deferred = false;
@@ -43,24 +76,37 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
     // A part cut earlier is stated whole again as soon as the request fits with it. While the cut copy is in the replay the whole one may
     // not fit beside it: that is reported like a cut (`stateCut`), so that the next epoch (whose first state is whole) starts sooner.
     const whole = storedState(supplied, history, true);
-    if (cost(whole.row, live, whole.full) <= maximum) stored = whole;
+    if (bothFit(whole.full)(whole.row, live)) stored = whole;
     else deferred = true;
   }
-  const fitted = cutToFit(stored.row, live, (row, next) => cost(row, next, stored.full), maximum);
-  const compacted = fitted.cut;
-  if (compacted) logCut(model, maximum, fitted.levels, fitted.over);
+  let fitted = cutToFit(stored.row, live, bothFit(stored.full));
+  const replayRelaxed = fitted.over && limit !== undefined;
+  if (replayRelaxed) fitted = cutToFit(stored.row, live, requestFits(stored.full));
+  const stages = stagesOf(fitted, deferred, replayRelaxed);
+  const storedCut = stages.catalog !== null || stages.state !== null;
+  // A summary starts a new epoch whose first state is whole: worth forcing only if a whole state fits one (with a typical live state).
+  const restorable = (storedCut || deferred) && (() => {
+    const fresh = storedState(supplied, []).row;
+    return emptyBase + estimatedAnthropicTokens(turnOf(fresh, null, true)) + FCA_TRANSIENT_LIVE_TOKENS <= maximum
+      && (limit === undefined || replayTokens(fresh, true) <= limit);
+  })();
+  if (fitted.cut) logCut(model, maximum, stages);
   const turn = turnOf(fitted.row, fitted.live, stored.full);
   const body = cacheFcaBodyRequest({ model, max_tokens: parts.maximumOutputTokens, system, messages: [...history, ...turn], tools: menu.tools,
     tool_choice: { type: 'auto' as const }, thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
   } as unknown as Anthropic.MessageCreateParamsNonStreaming);
-  const counts = liveSkillCounts(input.transient), levels = Object.values(fitted.levels).filter((level): level is number => level !== null);
+  const counts = liveSkillCounts(input.transient), levels = [stages.catalog, stages.state, stages.live].filter((level): level is number => level !== null);
   const built = { taskId: input.task.id, bodyAttached: input.body !== undefined, level: levels.length ? Math.min(...levels) : null,
-    elidedParts: [] as string[], ...counts, sent: { ...counts, parts: stored.parts, cut: compacted || deferred } };
+    elidedParts: [] as string[], ...counts, sent: { ...counts, parts: stored.parts, cut: restorable, ...(fitted.cut || deferred ? { stages } : {}) } };
   return { turn, body, built };
 }
 
-/** What was cut, content-free: the level of each stage (null: not cut) and whether even the floor left the request over. */
-function logCut(model: string, maximum: number, levels: Levels, over: boolean): void {
-  console.info(JSON.stringify({ event: 'fca_request_compacted', model, maximumTokens: maximum, transient: true, catalog: levels.catalog, state: levels.state,
-    live: levels.live, over }));
+/** What was cut, content-free. */
+function stagesOf(fitted: CutResult, deferred: boolean, replayRelaxed: boolean): CutStages {
+  const named = (value: unknown) => value && typeof value === 'object' ? Object.keys(value).length : 0;
+  return { ...fitted.levels, over: fitted.over, replayRelaxed, deferred, parts: named(fitted.row.capped), items: named(fitted.row.cappedCatalog) };
+}
+
+function logCut(model: string, maximum: number, stages: CutStages): void {
+  console.info(JSON.stringify({ event: 'fca_request_compacted', model, maximumTokens: maximum, transient: true, ...stages }));
 }

@@ -169,6 +169,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(sharedContext ? { sharedContext } : {}),
     ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}),
     ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
+      ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) };
   const decide = (asked: FcaModelInput) => decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(asked, signal)), { signal, recheck: checked,
     delay: ports.decisionRetryDelayMs,
@@ -179,7 +180,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     console.warn(JSON.stringify({ event: 'fca_obs_mode_fallback', task: step.taskId, from: 'transient', to: 'legacy', reason: 'beta_rejected' }));
     selection = legacyToolState(selection);
     input.tools = selectedFcaTools(catalog, selection);
-    const { coreTools: _core, transient: _live, ...legacy } = request;
+    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = request;
     return decide({ ...legacy, tools: input.tools });
   }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });

@@ -21,7 +21,7 @@ import { connectionFailedBeforeResponse, providerServerError, reportDispatchFail
 import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
-import { transientRequest } from './anthropicFcaTransientRequest.js';
+import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
   renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
@@ -259,7 +259,7 @@ export class AnthropicFcaModel implements FcaModel {
       console.warn(JSON.stringify({ event: 'fca_input_transformations', task: input.task.id, count: transformed.count, reasons: transformed.reasons }));
     }
     if (execution) {
-      const extra = transient ? { providerTransformations: transformed.count } : undefined;
+      const extra = transient ? { providerTransformations: transformed.count, cuts: (built as RequestBuilt).sent?.stages } : undefined;
       try { execution.modelMetrics = decisionRequestMetrics(history, turn, usage, built, extra); } catch { delete execution.modelMetrics; }
     }
     validateHaikuCacheUsage(message.usage);
@@ -275,7 +275,7 @@ export class AnthropicFcaModel implements FcaModel {
       appended.push(this.toolResults([...(context.auxiliaryResults ?? []), { id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
       delete context.auxiliaryResults;
     }
-    // A transient request that had to be cut says so: the runner may start the next epoch earlier (`fcaStateCut`).
+    // A transient request whose state was cut, and could be whole in a new epoch, says so: the runner may start the next epoch earlier (`fcaStateCut`).
     return { decision, history: appended, ...context, ...((built as RequestBuilt).sent ? { stateCut: (built as RequestBuilt).sent!.cut } : {}) };
   }
 
@@ -369,7 +369,7 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
 /** What the caller handed this decision before the message was elided and shortened (content-free): see `sentGistFields`. */
 interface RequestBuilt { taskId: string; bodyAttached: boolean; level: number | null; pointers: number; gists: number; elidedParts: readonly string[];
   /** A transient request: the pointers and gists its live state names (the stored text carries none) and the stored parts it states. */
-  sent?: { pointers: number; gists: number; parts: readonly string[]; cut: boolean } }
+  sent?: { pointers: number; gists: number; parts: readonly string[]; cut: boolean; stages?: CutStages } }
 /** The skill pointers and gists of a body context, as counts (0 when none or not a list). */
 function skillCounts(body: unknown): { pointers: number; gists: number } {
   const fields = body && typeof body === 'object' ? body as { skillPointers?: unknown; skillGists?: unknown } : {};

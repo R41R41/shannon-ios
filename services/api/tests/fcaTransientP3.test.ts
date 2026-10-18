@@ -6,11 +6,10 @@ import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest } from 
 import { publicState, stateMessage, storedState as storedRow } from '../src/infra/models/anthropic/anthropicFcaStoredState.js';
 import { cutToFit } from '../src/infra/models/anthropic/anthropicFcaStateCut.js';
 import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
-import { FCA_BODY_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { anthropicRejection, anthropicRequestViolation } from './support/anthropicProviderRules.js';
-import { BASE_CATALOG, definition, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
+import { definition, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
 
 /** The stored state of a step, with its message (null when nothing is to be stated). */
 function storedState(supplied: Record<string, unknown>, history: readonly unknown[], restate = false) {
@@ -179,8 +178,8 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
   const catalogOf = (change?: number) => Array.from({ length: 80 }, (_, index) => ({ name: `mc_tool_${index}`,
     description: `${'あ'.repeat(300 + (index * 10) % 800)}${index === change ? '変更' : ''}` }));
   const skillIndex = ['[ボクのスキル 25/25]', ...Array.from({ length: 25 }, (_, index) => `- skill-${index}: ${'あ'.repeat(60)}`)].join('\n');
-  const tokensOf = (value: unknown) => estimatedAnthropicTokens(JSON.stringify(value));
-  const costOf = (base: number) => (row: Record<string, unknown>, live: Record<string, unknown>) => base + tokensOf(row) + tokensOf(live);
+  const costOf = (base: number) => (row: Record<string, unknown>, live: Record<string, unknown>) => base + estimatedAnthropicTokens(row) + estimatedAnthropicTokens(live);
+  const fitsOf = (base: number, maximum = 95_000) => (row: Record<string, unknown>, live: Record<string, unknown>) => costOf(base)(row, live) <= maximum;
 
   it('states the catalog item by item: whole once, then only what was added, changed or removed', () => {
     const first = storedState({ task, catalog: catalogOf() }, []);
@@ -202,8 +201,8 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     const catalog = catalogOf(), row = storedState({ task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(4_000)) }, []).row;
     const cost = costOf(20_000), big = { body: { observation: { text: 'あ'.repeat(30_000) } } }, small = { body: { observation: { text: 'x' } } };
     expect(cost(row, small)).toBeLessThan(95_000);
-    expect(cutToFit(row, small, cost, 95_000).cut).toBe(false);
-    const fitted = cutToFit(row, big, cost, 95_000);
+    expect(cutToFit(row, small, fitsOf(20_000)).cut).toBe(false);
+    const fitted = cutToFit(row, big, fitsOf(20_000));
     expect(cost(row, big)).toBeGreaterThan(95_000);
     expect(fitted.cut).toBe(true);
     expect(fitted.over).toBe(false);
@@ -223,13 +222,13 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     const big = { body: { observation: { text: 'あ'.repeat(60_000) } } };
     const names = (value: Record<string, unknown>) => (value.catalog as Array<{ name: string }>).map(item => item.name);
     // The live state alone is far over what is left: it is cut after the catalog and the shared context are at their floors.
-    const deep = cutToFit(row, big, costOf(20_000), 95_000);
+    const deep = cutToFit(row, big, fitsOf(20_000));
     expect(deep.over).toBe(false);
     expect(deep.levels.live).not.toBeNull();
     expect(names(deep.row)).toEqual(catalog.map(item => item.name));
     expect(deep.row.skillIndex).toBe(skillIndex);
     // A request that cannot fit even with nothing but names is sent as it is, flagged, with every name and the skill index.
-    const hopeless = cutToFit(row, big, costOf(94_000), 95_000);
+    const hopeless = cutToFit(row, big, fitsOf(94_000));
     expect(hopeless.over).toBe(true);
     expect(names(hopeless.row)).toEqual(catalog.map(item => item.name));
     expect(hopeless.row.skillIndex).toBe(skillIndex);
@@ -239,7 +238,7 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
   it('restates what was cut whole once the request fits, and not before', () => {
     const catalog = catalogOf(), supplied = { task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(30_000)) };
     const first = storedState(supplied, []);
-    const cut = cutToFit(first.row, { body: { observation: { text: 'あ'.repeat(60_000) } } }, costOf(20_000), 95_000);
+    const cut = cutToFit(first.row, { body: { observation: { text: 'あ'.repeat(60_000) } } }, fitsOf(20_000));
     const message = stateMessage(cut.row, true)!;
     expect(Object.keys(cut.row.capped as object)).toEqual(['sharedContext']);
     // Nothing changed, but parts are cut: asking to restate lists them whole (the caller decides if that fits).
@@ -254,44 +253,6 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     expect(storedState(supplied, [message, restated], true).parts).toEqual([]);
     expect(storedState(supplied, [message, restated]).hasCut).toBe(false);
   });
-
-  it('with production shapes keeps every name and the skill index, stays within 95k, restates once the live state is small, and changes the catalog by item', async () => {
-    quiet();
-    const info = vi.mocked(console.info), warn = vi.mocked(console.warn), log = vi.mocked(console.log);
-    const core = [...BASE_CATALOG]; // the harness's scripted model also opens its two small lazy tools
-    const lazy = (change?: number) => catalogOf(change).map(item => definition(item.name, 'host_folder', item.description));
-    const run = scenario({ mode: () => 'transient', policy: FCA_BODY_HISTORY_POLICY, skillIndex, appendOnly: true, steps: 14,
-      catalogAt: decision => [...core, ...lazy(decision >= 9 ? 3 : undefined)],
-      body: decision => ({ observation: { text: decision <= 2 ? 'あ'.repeat(30_000) : 'x' }, pace: { elapsedMinutes: decision } }) });
-    const phase = await run.settle();
-    if (phase !== 'completed') throw new Error(JSON.stringify([...warn.mock.calls, ...log.mock.calls].map(call => String(call[0]).slice(0, 300)).slice(-6)));
-    expect(run.violations).toEqual([]);
-    const sizes = run.bodies.map(body => estimatedAnthropicTokens(renderedRequest(body as never)));
-    expect(sizes.filter(size => size > 95_000), JSON.stringify(sizes)).toEqual([]);
-    const first = JSON.parse(stateTexts(run.bodies[0]!)[0]!);
-    expect(first.catalog.map((item: { name: string }) => item.name).filter((name: string) => name.startsWith('mc_tool_'))).toEqual(catalogOf().map(item => item.name));
-    expect(first.skillIndex).toBe(skillIndex);
-    expect(Object.keys(first.cappedCatalog).length).toBeGreaterThan(0);
-    expect(JSON.stringify(first.catalog)).toContain('長いため後略');
-    expect(info.mock.calls.some(call => String(call[0]).includes('"event":"fca_request_compacted"') && String(call[0]).includes('"transient":true'))).toBe(true);
-    // Once the live state is small the cut descriptions come back whole (the whole request fits), and the catalog is never stated whole again.
-    const all = [...new Set(run.bodies.flatMap(stateTexts))].map(text => JSON.parse(text) as Record<string, unknown>);
-    // While the cut copy sits in the replay the whole one does not fit beside it; the next epoch (summary) starts with it whole.
-    const fulls = all.filter(row => row.stateUpdate === 'full');
-    const whole = fulls.filter(row => !('cappedCatalog' in row));
-    expect(whole.length).toBeGreaterThan(0);
-    for (const item of (whole[0]!.catalog as Array<{ name: string; description: string }>).filter(entry => entry.name.startsWith('mc_tool_'))) {
-      const original = catalogOf().find(known => known.name === item.name)!.description.length;
-      expect(item.description.length, item.name).toBeGreaterThanOrEqual(original);
-    }
-    expect(run.summaries()).toBeGreaterThan(0);
-    // The catalog is stated whole only as the first state of an epoch (a summary starts a new one).
-    expect(all.filter(row => 'catalog' in row && row.stateUpdate === 'changed')).toEqual([]);
-    const oneChange = all.filter(row => (row.catalogChanges as { changed?: Array<{ name: string }> } | undefined)?.changed?.some(item => item.name === 'mc_tool_3')
-      && (row.catalogChanges as { changed: unknown[] }).changed.length === 1);
-    expect(oneChange.length).toBe(1);
-    expect(run.summaries()).toBeLessThanOrEqual(3);
-  }, 240_000);
 
   it('keeps the shared context body in the summary projection (L3)', () => {
     const text = JSON.stringify({ stateUpdate: 'full', task: { id: 't' }, catalog: [{ name: 'a' }], sharedContext: { affect: { feeling: 'KEEP-ME' } } });

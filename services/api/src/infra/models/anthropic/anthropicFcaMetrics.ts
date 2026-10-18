@@ -4,6 +4,7 @@ import { estimatedAnthropicTokens } from './anthropicFcaHistory.js';
 import type { AnthropicFcaUsage } from './anthropicFcaModel.js';
 import { isFcaClearAtMessage } from './anthropicFcaTransient.js';
 
+type Metrics = NonNullable<ActionExecution['modelMetrics']>;
 /**
  * Observation redesign P1: what one decision's request weighed, for the journal's `fca_decision_metrics` line (written by the runner,
  * which also has the timings). Counts only: the replayed (stored) history and this turn's messages as token estimates
@@ -12,11 +13,11 @@ import { isFcaClearAtMessage } from './anthropicFcaTransient.js';
  */
 export function decisionRequestMetrics(history: readonly Anthropic.MessageParam[], turn: readonly Anthropic.MessageParam[], usage: AnthropicFcaUsage,
   built: { level: number | null; elidedParts: readonly string[] },
-  transient?: { providerTransformations: number }): NonNullable<ActionExecution['modelMetrics']> {
+  transient?: { providerTransformations: number; cuts?: Metrics['cuts'] }): Metrics {
   const read = usage.cachedInputTokens, write = usage.cacheCreationInputTokens;
   // A turn-scoped system message that a later message follows is stored but never rendered: not part of the stored tokens.
   return { storedTokens: estimatedAnthropicTokens(history.filter(message => !isFcaClearAtMessage(message))), tailTokens: estimatedAnthropicTokens(turn),
     inputNew: Math.max(0, usage.inputTokens - read - write), inputRead: read, inputWrite: write, outputTokens: usage.outputTokens,
     inputTransformations: built.elidedParts.length + (built.level === null ? 0 : 1) + (transient?.providerTransformations ?? 0),
-    ...(transient ? { obsMode: 'transient' as const } : {}) };
+    ...(transient ? { obsMode: 'transient' as const } : {}), ...(transient?.cuts ? { cuts: transient.cuts } : {}) };
 }

@@ -9,7 +9,9 @@ import { eventLoopBlockedMilliseconds } from '../../../infra/observer/eventLoopW
  *   {"event":"fca_decision_metrics","task":<id>,"d":<decision, from 1>,"t":<seconds since the task began>,"obsMode":"legacy",
  *    "llmMs","stepMs","selectorMs","recallMs","summaryMs":<ms>,"tools":[<names>],"toolMs":<ms>,
  *    "storedTokens","tailTokens":<estimates|null>,"in":{"new","read","write"}|null,"out":<tokens|null>,
- *    "loopBlockedMs":<ms of event-loop blocks named meanwhile>,"inputTransformations":<n, when the model reported it>}
+ *    "loopBlockedMs":<ms of event-loop blocks named meanwhile>,"inputTransformations":<n, when the model reported it>,
+ *    "cut":{"catalog","state","live":<characters or null>,"over","replayRelaxed","deferred":<bool>,"parts","items":<n>} (a transient request
+ *    that was shortened to fit: the stage of each cut, whether even the floor left it over, how many parts and tool descriptions are named cut)}
  */
 type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs';
 const toolName = (name: string) => /^[A-Za-z0-9_.:-]{1,80}$/u.test(name) ? name : 'other';
@@ -46,7 +48,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,
           in: metrics ? { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite } : null, out: metrics?.outputTokens ?? null,
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
-          ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}) }));
+          ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
       } catch { /* measuring never fails a step */ }
     },
   };

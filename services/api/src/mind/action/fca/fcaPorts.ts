@@ -28,6 +28,12 @@ export interface FcaModelInput {
    */
   coreTools?: readonly FcaToolDefinition[];
   /**
+   * Transient mode: the most estimated tokens the epoch's replay may hold (`fcaTransientHistory`: the replay bound less the core). The
+   * stored state of this step joins the replay, so a state that would leave no room for another step is shortened (a summary every
+   * step is what an oversized first state of an epoch costs); `anthropicFcaTransientRequest.ts`.
+   */
+  replayTokenLimit?: number;
+  /**
    * Transient mode (`anthropicFcaTransient.ts`): the body's live state for this decision only (observation, pace, phase facts, jobs, skill
    * pointers, notices), from `FcaBodyLifecycle.transient`. It goes into a turn-scoped system message and is never stored.
    */
@@ -69,7 +75,10 @@ export interface FcaModelOutput {
   expectations?: readonly FcaActionExpectation[];
   appraisals?: readonly FcaAffectAppraisal[];
   auxiliaryResults?: readonly FcaAuxiliaryResult[];
-  /** Transient mode: the request had to be cut to fit (`anthropicFcaStateCut.ts`); kept in the checkpoint, and the next epoch may start sooner. */
+  /**
+   * Transient mode: the stored state had to be cut to fit (`anthropicFcaStateCut.ts`) and a new epoch could state it whole; kept in the
+   * checkpoint, and the next epoch may start sooner. False when the cut is inherent (not even a new epoch's first state fits whole).
+   */
   stateCut?: boolean;
 }
 export interface FcaModel {
