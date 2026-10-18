@@ -86,8 +86,17 @@ export class DisclosureGate {
   allowsThreadSummary(threadId: string): boolean {
     if (this.ownerOnly) return true;
     if (!this.summaries.has(threadId)) {
-      const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
-      this.summaries.set(threadId, Boolean(lineage) && lineage!.messages.every(message => this.allowsMessage(message)));
+      // A turn of this thread may have recalled another thread's summary, which was built from a turn that recalled this one's (production
+      // 2026-10-18 had such rings): while the thread is being judged, asking for it again says withheld, so the judging ends (it used to
+      // run until the stack overflowed, and the turn failed with a bare RangeError). The answer that is kept is the cautious one.
+      this.summaries.set(threadId, false);
+      try {
+        const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
+        this.summaries.set(threadId, Boolean(lineage) && lineage!.messages.every(message => this.allowsMessage(message)));
+      } catch (error) {
+        this.summaries.delete(threadId);
+        throw error;
+      }
     }
     return this.summaries.get(threadId) === true;
   }

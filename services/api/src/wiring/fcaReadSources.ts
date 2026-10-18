@@ -1,10 +1,13 @@
 import { memoryControlFor, visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
-import { MemoryWithholding } from '../mind/memory/memoryVisibilityPorts.js';
+import { MemoryWithholding, isStackOverflow } from '../mind/memory/memoryVisibilityPorts.js';
 import type { TaskMemoryReadSnapshot as ReadSourceSnapshot } from '../mind/memory/taskMemoryPorts.js';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import type { StudyStore } from '../mind/action/ownTime/store/studyStore.js';
 import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 import type { AetherContextReader } from '../integrations/aether/aetherContext.js';
+
+/** Taken once, here: asked from a catch block at the very end of the stack, a lookup through another module's exports can itself fail. */
+const stackRanOut = isStackOverflow;
 
 export interface FcaReadSourcesOptions {
   ownerScope: string; ownerAlone(): boolean; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
@@ -52,7 +55,11 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
       // that same state (2026-10-13: each of a turn's ~224 checks loaded every remembered turn again, ~3 s a turn on the VM).
       const state = parts.state.snapshot(scopeKey);
       return readSourceVisible(parts, skillOf(undefined), scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
-    } catch { return false; }
+    } catch (error) {
+      // A stack overflow inside a long recall walk is not "not visible": it goes up to the walk, which settles the chain and asks again.
+      if (stackRanOut(error)) throw error;
+      return false;
+    }
   };
 }
 
@@ -154,7 +161,10 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
         default: return false;
       }
       return !withholding.withholdsReply({ text, observedAt, recalledMemoryIds: [sourceId, id] });
-    } catch { return false; }
+    } catch (error) {
+      if (stackRanOut(error)) throw error; // see createFcaReadSources: the walk above settles the chain; nothing is remembered as "not visible"
+      return false;
+    }
 }
 
 /** Storage of an already-authorized receipt checks local forgetting/correction, not a new remote read.

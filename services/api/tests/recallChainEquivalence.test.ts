@@ -14,10 +14,12 @@ vi.mock('../src/mind/memory/recallChainDepth.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/mind/memory/recallChainDepth.js')>();
   return {
     ...actual,
-    deepWalk: <T>(walk: () => T, settle: () => 'ok' | 'too_deep', cautious: T): T =>
-      force.on ? (settle() === 'too_deep' ? cautious : walk()) : actual.deepWalk(walk, settle, cautious),
-    settleDeepChains: (roots: readonly string[], children: (id: string) => readonly string[], warm: (id: string) => void, maximum?: number) =>
-      actual.settleDeepChains(roots, children, warm, maximum, force.on ? 0 : undefined),
+    deepWalk: <T>(walk: () => T, settle: () => 'ok' | 'too_deep', cautious: T, chains?: import('../src/mind/memory/recallChainDepth.js').DeepChains, root?: string): T =>
+      force.on ? (chains && root !== undefined && chains.tooDeep(root) ? cautious : settle() === 'too_deep' ? cautious : walk())
+        : actual.deepWalk(walk, settle, cautious, chains, root),
+    settleDeepChains: (roots: readonly string[], children: (id: string) => readonly string[], warm: (id: string) => void, maximum?: number,
+      _settleAbove?: number, chains?: import('../src/mind/memory/recallChainDepth.js').DeepChains) =>
+      actual.settleDeepChains(roots, children, warm, maximum, force.on ? 0 : undefined, chains),
   };
 });
 

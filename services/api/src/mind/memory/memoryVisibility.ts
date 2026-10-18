@@ -16,7 +16,7 @@ import type { ConversationStore, ShannonExperience, StoredConversationMessage } 
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
-import { deepWalk, readEdges, recalledKeyEdges, settleDeepChains, type RecallLookups } from './recallChainDepth.js';
+import { DeepChains, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
 
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
@@ -72,10 +72,15 @@ export class MemoryWithholding {
     experience: id => this.experience(id),
     knowledgeSources: id => this.knowledge().get(id.slice(id.indexOf(':') + 1))?.sourceExperienceIds ?? [],
   };
+  /** The chains past the walks' bound that this read has found (`recallChainDepth.ts`), per walk. */
+  private readonly deepRecalled = new DeepChains('recalled');
+  private readonly deepRead = new DeepChains('read');
   /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
   private query<T>(work: () => T): T {
     if (this.queryDepth === 0) {
       this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear(); this.sourceDecisions.clear();
+      this.deepRecalled.reset();
+      this.deepRead.reset();
       this.walk = {};
       this.externalReadsPossible = this.store?.hasReadSourceProvenance?.(this.scopeKey) !== false;
     }
@@ -158,12 +163,11 @@ export class MemoryWithholding {
   private recalledWithheld(id: string, observedAt: string, seen?: Set<string>): boolean {
     if (seen) return this.recalledWithheldWithin(id, observedAt, seen);
     // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
-    const settle = () => settleDeepChains([JSON.stringify([id, observedAt])], key => recalledKeyEdges(key, this.lookups), key => {
-      const [at, time] = JSON.parse(key) as [string, string];
-      this.recalledWithheldWithin(at, time, new Set());
-    });
-    return deepWalk(() => this.recalledWithheldWithin(id, observedAt, new Set()), settle, true);
-  }  private recalledWithheldWithin(id: string, observedAt: string, seen: Set<string>): boolean {
+    const root = JSON.stringify([id, observedAt]);
+    const settle = settleRecalled(root, this.lookups, this.deepRecalled, (at, time) => { this.recalledWithheldWithin(at, time, new Set()); });
+    return deepWalk(() => this.recalledWithheldWithin(id, observedAt, new Set()), settle, true, this.deepRecalled, root);
+  }
+  private recalledWithheldWithin(id: string, observedAt: string, seen: Set<string>): boolean {
     if (seen.has(id) || seen.size >= 5000) return true;
     const key = JSON.stringify([id, observedAt]), known = this.recalledDecisions.get(key);
     if (known !== undefined) return known;
@@ -215,9 +219,11 @@ export class MemoryWithholding {
   /** Source availability is independent of memory-control rules and must survive derived summaries. */
   private unavailableRead(id: string, seen?: Set<string>): boolean {
     if (seen) return this.unavailableReadWithin(id, seen);
-    const settle = () => settleDeepChains([id], at => readEdges(at, this.lookups), at => { this.unavailableReadWithin(at, new Set()); });
-    return deepWalk(() => this.unavailableReadWithin(id, new Set()), settle, true);
-  }  private unavailableReadWithin(id: string, seen: Set<string>): boolean {
+    const settle = () => settleDeepChains([id], at => readEdges(at, this.lookups), at => { this.unavailableReadWithin(at, new Set()); },
+      undefined, undefined, this.deepRead);
+    return deepWalk(() => this.unavailableReadWithin(id, new Set()), settle, true, this.deepRead, id);
+  }
+  private unavailableReadWithin(id: string, seen: Set<string>): boolean {
     if (!this.externalReadsPossible) return false;
     if (seen.has(id) || seen.size >= 5000) return true;
     const known = this.readDecisions.get(id); if (known !== undefined) return known;
