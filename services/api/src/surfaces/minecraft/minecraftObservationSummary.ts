@@ -1,4 +1,5 @@
 import type { BodyFact, BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
+import { jobsLine, reflexesLine } from './minecraftObservationReflexes.js';
 
 /**
  * What a decision of a Minecraft task carries about the body: a bounded summary of the latest observation, never the whole
@@ -47,6 +48,8 @@ function world(value: { readonly [key: string]: BodyValue }, omitted: string[]):
       out.inventory = entries.length > INVENTORY ? [...entries.slice(0, INVENTORY), `ほか${entries.length - INVENTORY}種`] : entries;
     } else if (key === 'nearbyThreats') out[key] = listed(item, ['name', 'distance', 'secondsToContact', 'canReachMe'], 5)!;
     else if (key === 'nearbyEntities') out[key] = listed(item, ['name', 'kind', 'distance'], LIST)!;
+    else if (key === 'reflexes' && reflexesLine(item)) out[key] = reflexesLine(item)!;
+    else if (key === 'jobs' && jobsLine(item)) out[key] = jobsLine(item)!;
     else if (size(item) <= SMALL_VALUE) out[key] = item!;
     else omitted.push(`world.${key}`);
   }

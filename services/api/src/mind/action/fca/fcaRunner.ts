@@ -18,6 +18,7 @@ import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
+import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
@@ -197,6 +198,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
   const priorToolFailures = consecutiveToolFailures;
+  const priorReflexRun = reflexCutRunOf(prior);
+  let reflexRun = priorReflexRun;
+  /** Whether the step that took the failure count to its present value counted a reflex cut as the failure (the stop reason below). */
+  let failedByCuts = false;
   let completionVerificationFailures = Number(prior.completionVerificationFailures ?? 0);
   if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
   let completionRejected = false;
@@ -205,6 +210,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (decision.kind === 'tools') {
     if (!decision.calls.length || decision.calls.length > 8 || new Set(decision.calls.map(call => call.id)).size !== decision.calls.length) throw new Error('FCA_INVALID_CALLS');
     const results: Array<{ id: string; text: string; ok: boolean }> = [...output.auxiliaryResults ?? []];
+    /** Calls the body's own reflex cut off: no fault of the model or the tool, so they neither add to nor clear the failure count
+     * (until the bound of `fcaReflexCuts.ts`). */
+    const reflexCuts = new Set<string>();
     for (const call of decision.calls) {
       await checked();
       if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
@@ -246,14 +254,20 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       // A transient body task stores the cut text of a body result (`minecraftStoredResult.ts`); everything else here saw the whole one.
       const stored = selection?.obsMode === 'transient' && ports.body?.storedResult ? ports.body.storedResult(call, result.text) : result.text;
       results.push({ id: call.id, text: stored, ok: result.ok });
+      if (result.bodyReflex) reflexCuts.add(call.id);
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }
     if (!bodyStale) {
-      const actual = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name) ? [] : [results[(output.auxiliaryResults?.length ?? 0) + index]!]);
-      if (actual.length) consecutiveToolFailures = actual.every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
+      const outcomes = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name)
+        ? [] : [{ call, result: results[(output.auxiliaryResults?.length ?? 0) + index]! }]);
+      // A cut call does not count until the same tool (or any) has been cut off too many times in a row; any outcome of its own ends the
+      // run, but a read that worked beside or between cuts does not (`fcaReflexCuts.ts`, M2).
+      ({ failures: consecutiveToolFailures, run: reflexRun, byCuts: failedByCuts } = settleReflexStep(consecutiveToolFailures, reflexRun, outcomes.map(outcome => ({
+        name: outcome.call.name, ok: outcome.result.ok, cut: reflexCuts.has(outcome.call.id),
+        read: catalog.find(tool => tool.name === outcome.call.name)?.effect === 'read' }))));
     }
     history.push(ports.model.toolResults(results));
   }
@@ -281,11 +295,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
   await closeFcaMonitors(ports);
   if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
-  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; }
+  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; }
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
@@ -301,7 +315,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
-    runtime.stop(step.scopeKey, step.taskId, 'repeated_tool_failure');
+    runtime.stop(step.scopeKey, step.taskId, consecutiveToolFailures >= 5 ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;
