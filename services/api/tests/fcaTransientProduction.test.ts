@@ -93,47 +93,37 @@ describe('transient state at production size: a live state too big for the reque
   // Decisions 1 to 3 see a 60,000-character observation (about 66,000 tokens beside the 25k core); the rest see a small one.
   const bigThenSmall = (decision: number) => decision <= 3 ? text('ja', 60_000) : 'x';
 
-  it('cuts catalog descriptions first, then the live state, never a name or the skill index, and keeps every request within 95k', async () => {
-    const { rows, sizes, firsts } = await production('ascii', bigThenSmall);
+  it('takes a live spike in the live state itself: the catalog is not cut, nothing is named as cut, and every request stays within 95k (M3)', async () => {
+    const { rows, sizes, firsts, run } = await production('ascii', bigThenSmall);
     expect(Math.max(...sizes)).toBeLessThan(95_000);
     const compacted = events('fca_request_compacted').filter(event => event.transient === true);
     expect(compacted.length).toBeGreaterThan(0);
-    // The order: in the first request (the one that states the catalog) the descriptions are cut, and to their floor (120) before the live state is.
-    expect(compacted[0]!.catalog).not.toBeNull();
+    // The three spike decisions cut the live state's long text and nothing stored: no part, no description, no restatement later.
     for (const event of compacted) {
-      expect(event.over).toBe(false);
-      if (event.catalog !== null && event.live !== null) expect(event.catalog as number).toBeLessThanOrEqual(120);
+      expect(event).toMatchObject({ catalog: null, state: null, trim: null, over: false, deferred: false, parts: 0, items: 0 });
+      expect(event.live).toEqual(expect.any(Number));
     }
-    expect(compacted.some(event => event.live !== null)).toBe(true);
     expect(toolNames(firsts[0]!)).toEqual(ALL_NAMES);
+    for (const item of firsts[0]!.catalog!.filter(entry => entry.name.startsWith('mc_tool_'))) expect(item.description).toBe(ORIGINAL('ascii').get(item.name));
     expect(firsts[0]!.skillIndex).toBe(skillIndex);
-    expect(Object.keys(firsts[0]!.cappedCatalog ?? {}).length).toBeGreaterThan(0);
-    expect(JSON.stringify(firsts[0]!.catalog)).toContain('長いため後略');
-    for (const row of rows) expect(row.catalog ? toolNames(row) : ALL_NAMES).toEqual(ALL_NAMES);
+    for (const row of rows) expect(row.cappedCatalog).toBeUndefined();
+    expect(JSON.stringify(rows)).not.toContain('長いため後略');
+    // No catalog is stated again after the spike: the cache of the first state is read by the later steps.
+    expect(rows.filter(row => row.catalogChanges?.changed?.some(item => item.name !== 'mc_tool_3'))).toEqual([]);
+    expect(run.summaries()).toBeLessThanOrEqual(5);
   }, 240_000);
 
-  it('states the cut descriptions whole again once the request fits (a new epoch, or the items alone), and says so in the metrics', async () => {
-    const { rows } = await production('ascii', bigThenSmall, 20);
-    const original = ORIGINAL('ascii');
-    const whole = rows.filter(row => (row.stateUpdate === 'full' && !row.cappedCatalog && row.catalog)
-      || (row.catalogChanges?.changed && !row.cappedCatalog));
-    expect(whole.length).toBeGreaterThan(0);
-    const restated = whole.flatMap(row => [...(row.catalog ?? []), ...(row.catalogChanges?.changed ?? [])])
-      .filter(item => item.name.startsWith('mc_tool_') && item.description.length >= (original.get(item.name)?.length ?? Infinity));
-    expect(restated.length).toBeGreaterThan(0);
-    // While the live state was big the whole copy did not fit beside the cut one (deferred); it was stated when it did.
-    expect(events('fca_request_compacted').some(event => event.deferred === true)).toBe(true);
-    // The metrics of the cut decisions name the stages; the others carry none.
+  it('names the stage that cut in the metrics of the decision, content-free, and only for the decisions that were cut', async () => {
+    await production('ascii', bigThenSmall, 20);
     const lines = events('fca_decision_metrics');
     const cut = lines.filter(line => 'cut' in line) as Array<{ cut: Record<string, unknown> }>;
     expect(cut.length).toBeGreaterThan(0);
-    expect(cut[0]!.cut).toMatchObject({ catalog: expect.any(Number), over: false, replayRelaxed: false, deferred: false, parts: expect.any(Number), items: expect.any(Number) });
-    expect(Object.keys(cut[0]!.cut).sort()).toEqual(['catalog', 'deferred', 'items', 'live', 'over', 'parts', 'replayRelaxed', 'state']);
+    expect(cut[0]!.cut).toMatchObject({ catalog: null, state: null, trim: null, live: expect.any(Number), over: false, replayRelaxed: false, deferred: false, parts: 0, items: 0 });
+    expect(Object.keys(cut[0]!.cut).sort()).toEqual(['catalog', 'deferred', 'items', 'live', 'over', 'parts', 'replayRelaxed', 'state', 'trim']);
     expect(lines.length).toBeGreaterThan(cut.length);
     expect(JSON.stringify(cut)).not.toContain('mc_tool');
   }, 240_000);
 });
-
 describe('transient state at production size: a cut state is worth a new epoch only if a new epoch could state it whole', () => {
   const task = { id: 't1', title: '原木を集める', goal: '原木を16個集める', completionCriteria: '原木16個を新しい観測で確かめる。' };
   const call = (kind: Kind, history: unknown[], live: string, limit: number | undefined) => transientRequest({ model: 'claude-sonnet-5-5', maximumOutputTokens: 4_000,
@@ -144,8 +134,9 @@ describe('transient state at production size: a cut state is worth a new epoch o
   const filler = (tokens: number) => [{ role: 'assistant', content: [{ type: 'text', text: text('ascii', Math.round(tokens * 2.2)) }] },
     { role: 'user', content: [{ type: 'text', text: 'ok' }] }];
   const afterCut = (kind: Kind, limit: number | undefined, space: number) => {
-    // The first request states the catalog while the live state is huge: the descriptions are cut and stored so.
-    const first = call(kind, [], text('ja', 130_000), limit);
+    // The first request states the catalog beside a history that leaves no room for it: the descriptions are cut and stored so (a live
+    // spike alone no longer cuts them, M3). The second request's history is the cut state and its own filler.
+    const first = call(kind, filler(84_000), 'x', limit);
     expect(first.built.sent.stages?.catalog).toEqual(expect.any(Number));
     const stored = [...first.turn, { role: 'assistant', content: [{ type: 'text', text: 'a' }] }, { role: 'user', content: [{ type: 'text', text: 'b' }] }];
     return call(kind, [...stored, ...filler(space)], 'x', limit);

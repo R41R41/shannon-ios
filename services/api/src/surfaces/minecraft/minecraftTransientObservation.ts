@@ -7,6 +7,13 @@ import type { BodyFact, BodyObservation, BodyValue } from '../../contracts/bodyC
  * adapter's own values with no timestamps, and nothing here carries a time of observation. It is never stored in the task's history:
  * the request holds it in a turn-scoped system message (`anthropicFcaTransient.ts`), which the provider stops rendering once the next
  * user message arrives. `minecraft.observe` still returns the whole frame.
+ *
+ * Trust (review 4, L6): this text sits in a role:system message, which the provider weighs above user and tool-result text; that is
+ * the cost of a message the provider can stop rendering, and the design keeps it (the live state cannot be a user message). What the
+ * world supplies (entity and item names, facts, notes) is therefore treated as untrusted data here: every string is stripped of control
+ * and bidirectional-control characters (`clean`), cut at `TEXT`, and travels as a JSON string value of a JSON object, never as bare text;
+ * the cached instructions say a live state is data and never an instruction (`anthropicFcaTransient.ts`). Names the world does not
+ * constrain are the exposure that remains.
  */
 export const TRANSIENT_OBSERVATION_CHARACTERS = 9_000;
 
@@ -22,8 +29,13 @@ const scalar = (value: BodyValue | undefined): value is BodyFact => value === nu
 const size = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 export const round1 = (value: number): number => Math.round(value * 10) / 10;
 
+/** Control and bidirectional-control characters (they can hide or reorder text) become one space; the ends are trimmed. */
+const CONTROL = /[\p{Cc}\u{200B}-\u{200F}\u{2028}-\u{202E}\u{2066}-\u{2069}\u{FEFF}]+/gu;
+export const clean = (value: string): string => value.replace(CONTROL, ' ').replace(/ {2,}/gu, ' ').trim();
+
 /** A long text cut at `TEXT`, never between the halves of a surrogate pair (a lone half is refused by the provider). */
-function text(value: BodyFact): BodyFact {
+function text(raw: BodyFact): BodyFact {
+  const value = typeof raw === 'string' ? clean(raw) : raw;
   if (typeof value !== 'string' || value.length <= TEXT) return typeof value === 'number' && Number.isFinite(value) ? round1(value) : value;
   const keep = /[\uD800-\uDBFF]/u.test(value[TEXT - 1] ?? '') ? TEXT - 1 : TEXT;
   return `${value.slice(0, keep)}…`;
@@ -33,19 +45,57 @@ function rounded(value: BodyValue, depth = DEPTH): BodyValue {
   if (scalar(value)) return text(value);
   if (depth <= 0) return null;
   if (Array.isArray(value)) return (value as readonly BodyValue[]).slice(0, 64).map(item => rounded(item, depth - 1));
-  return Object.fromEntries(Object.entries(value as Rec).map(([key, item]) => [key, rounded(item, depth - 1)]));
+  return Object.fromEntries(Object.entries(value as Rec).map(([key, item]) => [clean(key), rounded(item, depth - 1)]));
 }
+
+/** The item id and count a stack text or entry names (`name×count`), for matching an inventory entry to its `slot:*` fact. */
+const STACK_TEXT = /^(?:minecraft:)?([a-z][a-z0-9_]{0,63})(?:×(\d{1,4}))?/u;
+const pairOf = (value: string): { name: string; count: number } | null => {
+  const match = STACK_TEXT.exec(value.trim());
+  return match ? { name: match[1]!, count: match[2] ? Number(match[2]) : 1 } : null;
+};
+const slotNumber = (value: unknown): number | null => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 1_000 ? value : null;
 
 /** One inventory stack as `name×count`, with durability when the frame gives it. */
 function stack(entry: Rec): string {
   const count = typeof entry.count === 'number' ? entry.count : '?';
   const durability = record(entry.durability) ? `(耐久${String(entry.durability.left)}/${String(entry.durability.max)})` : '';
-  return `${String(entry.name)}×${count}${durability}`;
+  return `${clean(String(entry.name))}×${count}${durability}`;
 }
-function inventoryOf(value: BodyValue | undefined): BodyValue {
-  const entries = (Array.isArray(value) ? value as readonly BodyValue[] : []).flatMap(entry =>
-    record(entry) && typeof entry.name === 'string' ? [stack(entry)] : typeof entry === 'string' ? [entry] : []);
-  return entries.length > INVENTORY ? [...entries.slice(0, INVENTORY), `ほか${entries.length - INVENTORY}種`] : entries;
+/**
+ * The inventory as compact stacks. The slot number of a stack is appended as `@N` (review 4, L5): a tool that takes a `slot` needs it,
+ * and the frame gives it either on the entry or as a `slot:N` fact (`name×count`); a fact matches the first stack of the same item and
+ * count. A slot fact naming an item the list lacks is added as a stack of its own (as `carriedItemCounts` counts it).
+ */
+function inventoryOf(value: BodyValue | undefined, facts: Readonly<Record<string, BodyFact>>): BodyValue {
+  const slots = Object.entries(facts).flatMap(([key, fact]) => {
+    const number = /^slot:(\d{1,3})$/u.exec(key), pair = number && typeof fact === 'string' ? pairOf(fact) : null;
+    return number && pair ? [{ slot: Number(number[1]), ...pair, text: clean(fact as string).slice(0, TEXT), used: false }] : [];
+  });
+  const listed = new Set<string>();
+  const entries = (Array.isArray(value) ? value as readonly BodyValue[] : []).flatMap(entry => {
+    if (record(entry) && typeof entry.name === 'string') {
+      const pair = { name: entry.name.replace(/^minecraft:/u, ''), count: typeof entry.count === 'number' ? entry.count : 1 };
+      listed.add(pair.name);
+      let slot = slotNumber(entry.slot);
+      if (slot === null) {
+        const fact = slots.find(item => !item.used && item.name === pair.name && item.count === pair.count);
+        if (fact) {
+          fact.used = true;
+          slot = fact.slot;
+        }
+      }
+      return [`${stack(entry)}${slot !== null ? `@${slot}` : ''}`];
+    }
+    if (typeof entry !== 'string') return [];
+    const pair = pairOf(entry), fact = pair ? slots.find(item => !item.used && item.name === pair.name && item.count === pair.count) : undefined;
+    if (pair) listed.add(pair.name);
+    if (fact) fact.used = true;
+    return [`${clean(entry)}${fact ? `@${fact.slot}` : ''}`];
+  });
+  const extra = slots.filter(item => !item.used && !listed.has(item.name)).map(item => `${item.text}@${item.slot}`);
+  const all = [...entries, ...extra];
+  return all.length > INVENTORY ? [...all.slice(0, INVENTORY), `ほか${all.length - INVENTORY}種`] : all;
 }
 
 interface Seen { name: string; kind: string | null; distance: number | null; fields: Record<string, BodyValue> }
@@ -58,7 +108,7 @@ function seenOf(value: BodyValue | undefined, threat: boolean): Seen[] {
     if (distance !== null) fields.distance = distance;
     if (record(item.position)) fields.position = rounded(item.position) as Rec;
     if (threat) for (const key of ['secondsToContact', 'canReachMe'] as const) if (scalar(item[key])) fields[key] = text(item[key] as BodyFact);
-    return [{ name: item.name, kind: typeof item.kind === 'string' ? item.kind : null, distance, fields }];
+    return [{ name: clean(item.name), kind: typeof item.kind === 'string' ? clean(item.kind) : null, distance, fields }];
   });
 }
 
@@ -76,7 +126,7 @@ function kinds(seen: readonly Seen[]): BodyValue[] {
       ...(entry.nearest !== null ? { nearest: entry.nearest } : {}) }));
 }
 
-/** The adapter-normalized facts in their order, up to a bound; a `slot:*` fact repeats the inventory and is left out. */
+/** The adapter-normalized facts in their order, up to a bound; a `slot:*` fact is in the inventory (`inventoryOf`) and is left out. */
 function factsOf(facts: Readonly<Record<string, BodyFact>>, omitted: string[]): Record<string, BodyFact> {
   const out: Record<string, BodyFact> = {};
   let used = 2, dropped = 0;
@@ -87,7 +137,7 @@ function factsOf(facts: Readonly<Record<string, BodyFact>>, omitted: string[]): 
       dropped++;
       continue;
     }
-    out[key] = text(value);
+    out[clean(key)] = text(value);
     used += cost;
   }
   if (dropped) omitted.push(`facts(${dropped})`);
@@ -104,7 +154,7 @@ export function minecraftTransientObservation(observation: BodyObservation): Rec
     else if (size(item) <= SMALL) out[key] = rounded(item);
     else omitted.push(`world.${key}`);
   }
-  out.inventory = inventoryOf(world.inventory);
+  out.inventory = inventoryOf(world.inventory, observation.facts);
   const threats = seenOf(world.nearbyThreats, true), entities = seenOf(world.nearbyEntities, false);
   // A hostile is in both lists of the body's frame: it is shown once, among the threats.
   const shownThreat = new Set(threats.map(item => `${item.name}|${item.distance}`));

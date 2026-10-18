@@ -9,7 +9,8 @@ export interface ActionExecution {
   modelMetrics?:{storedTokens:number;tailTokens:number;inputNew:number;inputRead:number;inputWrite:number;outputTokens:number;
     inputTransformations:number;obsMode?:'transient';
     /** A transient request: how it was shortened to fit (levels in characters, null: not cut), content-free. */
-    cuts?:{catalog:number|null;state:number|null;live:number|null;over:boolean;replayRelaxed:boolean;deferred:boolean;parts:number;items:number}};
+    cuts?:{catalog:number|null;state:number|null;live:number|null;trim:number|null;over:boolean;replayRelaxed:boolean;deferred:boolean;
+      parts:number;items:number}};
   /**
    * An FCA step asked its model for its decision (`fcaRunner.ts`). Before that, a step has run only internal work and model calls
    * whose results it keeps (recall, tool selection, history summaries): a hold there may be retried (`heldBeforeAnyEffect`).

@@ -100,10 +100,17 @@ function noteCatalog(row: Record<string, unknown>, into: Stated): void {
   note(changes.changed);
 }
 
-/** The task as the stored state shows it: what it is and is for, not its revision or clock (which change with every step). */
+/**
+ * What a legacy decision showed of the task and a transient one states (review 4, M1): everything but the fields that move with every
+ * step and say nothing the model decides on, `revision` and `updatedAt` (stating them would make the task a changed part each step).
+ * `parentId` is what `task.send` needs; `kind`, `origin`, `status`, `phase`, `pauseReason`, `summary` and `childIds` are the task's
+ * state, stated again only when one of them changes. In the legacy order.
+ */
+const TASK_FIELDS = ['id', 'scopeKey', 'parentId', 'kind', 'origin', 'title', 'goal', 'completionCriteria', 'status', 'pauseReason',
+  'summary', 'createdAt', 'phase', 'childIds'] as const;
 function statedTask(value: unknown): unknown {
   const task = object(value);
-  return task ? { id: task.id, title: task.title, goal: task.goal, completionCriteria: task.completionCriteria } : value;
+  return task ? Object.fromEntries(TASK_FIELDS.filter(key => task[key] !== undefined).map(key => [key, task[key]])) : value;
 }
 
 /**
@@ -111,7 +118,16 @@ function statedTask(value: unknown): unknown {
  * (and, with `restate`, the items stated cut earlier, whole again). Nothing when nothing changed.
  */
 function catalogPart(current: unknown, stated: Stated, restate: boolean): Record<string, unknown> {
-  const items = (Array.isArray(current) ? current as unknown[] : []).filter(item => typeof object(item)?.name === 'string');
+  // One entry for each provider name, the first (review 4, L4): two tools whose names meet after `.` becomes `_` can be told apart by
+  // nothing the model writes (a call finds the first, `fcaToolState.ts`), and the catalog is compared by that name, so both of them would
+  // be stated as changed at every step. Such a pair is refused earlier (`FCA_MODEL_TOOL_CONFLICT`); this keeps the diff stable regardless.
+  const seen = new Set<string>();
+  const items = (Array.isArray(current) ? current as unknown[] : []).filter(item => {
+    const name = object(item)?.name;
+    if (typeof name !== 'string' || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
   if (stated.catalog === null) return items.length ? { catalog: items } : {};
   const now = new Set(items.map(item => String(object(item)!.name)));
   const added: unknown[] = [], changed: unknown[] = [];

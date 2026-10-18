@@ -76,8 +76,10 @@ export interface FcaModelOutput {
   appraisals?: readonly FcaAffectAppraisal[];
   auxiliaryResults?: readonly FcaAuxiliaryResult[];
   /**
-   * Transient mode: the stored state had to be cut to fit (`anthropicFcaStateCut.ts`) and a new epoch could state it whole; kept in the
-   * checkpoint, and the next epoch may start sooner. False when the cut is inherent (not even a new epoch's first state fits whole).
+   * Transient mode: the stored state had to be cut to fit (`anthropicFcaStateCut.ts`), a new epoch could state it whole (with its
+   * bootstrap and a typical live state), and the next step could not state it whole in this epoch (beside the replay): kept in the
+   * checkpoint, and the next epoch may start sooner. False when the cut is inherent (not even a new epoch's first state fits whole), or
+   * when the next step can restate it in place (a live spike passes by itself).
    */
   stateCut?: boolean;
 }

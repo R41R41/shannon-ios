@@ -82,6 +82,7 @@
     "infra/models/anthropic/anthropicFcaContext.ts",
     "infra/models/anthropic/anthropicFcaCoreTools.ts",
     "infra/models/anthropic/anthropicFcaHistory.ts",
+    "infra/models/anthropic/anthropicFcaLiveTrim.ts",
     "infra/models/anthropic/anthropicFcaMetrics.ts",
     "infra/models/anthropic/anthropicFcaModel.ts",
     "infra/models/anthropic/anthropicFcaStateCut.ts",

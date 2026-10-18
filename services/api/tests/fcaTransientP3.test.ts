@@ -4,7 +4,7 @@ import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropi
 import { cacheFcaBodyRequest, breakpointCount } from '../src/infra/models/anthropic/anthropicFcaBodyCache.js';
 import { FCA_TRANSIENT_BETAS, clearAtMessage, liveState, renderedRequest } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
 import { publicState, stateMessage, storedState as storedRow } from '../src/infra/models/anthropic/anthropicFcaStoredState.js';
-import { cutToFit } from '../src/infra/models/anthropic/anthropicFcaStateCut.js';
+import { cutToFit, LIVE_TYPICAL_TOKENS } from '../src/infra/models/anthropic/anthropicFcaStateCut.js';
 import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
@@ -197,24 +197,34 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     expect(storedState({ task, catalog: catalogOf() }, second).row).toEqual({ catalogChanges: { changed: [catalogOf()[3]] } });
   });
 
-  it('cuts only when the whole request does not fit, descriptions first, never a name or the skill index (production shapes)', () => {
+  it('cuts only when the whole request does not fit: a live spike gives way first, then descriptions, never a name or the skill index (production shapes)', () => {
     const catalog = catalogOf(), row = storedState({ task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(4_000)) }, []).row;
     const cost = costOf(20_000), big = { body: { observation: { text: 'あ'.repeat(30_000) } } }, small = { body: { observation: { text: 'x' } } };
     expect(cost(row, small)).toBeLessThan(95_000);
     expect(cutToFit(row, small, fitsOf(20_000)).cut).toBe(false);
+    // With room for a typical live state beside the stored state, a spike is taken by the live state alone (M3): nothing stored is cut.
+    const spike = cutToFit(row, big, fitsOf(5_000));
+    expect(costOf(5_000)(row, big)).toBeGreaterThan(95_000);
+    expect(spike.cut).toBe(true);
+    expect(spike.over).toBe(false);
+    expect(costOf(5_000)(spike.row, spike.live)).toBeLessThanOrEqual(95_000);
+    expect(spike.levels.live).not.toBeNull();
+    expect(spike.levels.catalog).toBeNull();
+    expect(spike.levels.state).toBeNull();
+    expect(spike.row).toEqual(row);
+    // Without that room the descriptions are cut next, the live state only down to a typical size; the other parts are not needed.
     const fitted = cutToFit(row, big, fitsOf(20_000));
     expect(cost(row, big)).toBeGreaterThan(95_000);
     expect(fitted.cut).toBe(true);
     expect(fitted.over).toBe(false);
     expect(cost(fitted.row, fitted.live)).toBeLessThanOrEqual(95_000);
-    // Descriptions went first; the live state and the other parts were not needed.
+    expect(fitted.levels.live).not.toBeNull();
     expect(fitted.levels.catalog).not.toBeNull();
-    expect(fitted.levels.live).toBeNull();
     expect(fitted.levels.state).toBeNull();
+    expect(estimatedAnthropicTokens(JSON.stringify(fitted.live))).toBeLessThanOrEqual(LIVE_TYPICAL_TOKENS);
     expect((fitted.row.catalog as Array<{ name: string }>).map(item => item.name)).toEqual(catalog.map(item => item.name));
     expect(fitted.row.skillIndex).toBe(skillIndex);
     expect(Object.keys(fitted.row.cappedCatalog as object).length).toBeGreaterThan(0);
-    expect(fitted.live).toEqual(big);
   });
 
   it('goes on to the other long texts, then the live state, then names only; and says so when even that does not fit', () => {
@@ -238,7 +248,7 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
   it('restates what was cut whole once the request fits, and not before', () => {
     const catalog = catalogOf(), supplied = { task, catalog, skillIndex, sharedContext: context(1, 'あ'.repeat(30_000)) };
     const first = storedState(supplied, []);
-    const cut = cutToFit(first.row, { body: { observation: { text: 'あ'.repeat(60_000) } } }, fitsOf(20_000));
+    const cut = cutToFit(first.row, { body: { observation: { text: 'あ'.repeat(60_000) } } }, fitsOf(45_000));
     const message = stateMessage(cut.row, true)!;
     expect(Object.keys(cut.row.capped as object)).toEqual(['sharedContext']);
     // Nothing changed, but parts are cut: asking to restate lists them whole (the caller decides if that fits).
