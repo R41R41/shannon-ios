@@ -208,6 +208,14 @@ describe('common FCA runner with the real action authority', () => {
     const plain = await stepRounds(Array.from({ length: 5 }, (): Step => [['mine', 'plain']]));
     expect(plain.phase).toBe('stopped'); expect(plain.stops).toEqual(['repeated_tool_failure']);
   });
+  it('stops as an ordinary tool failure, not a reflex stop, when an ordinary failure is what reaches the limit after a run of cuts (P8 third review)', async () => {
+    const ordinary = await stepRounds([...Array.from({ length: 6 }, () => cutStep()), [['mine', 'plain']]]);
+    expect(ordinary.phase).toBe('stopped'); expect(ordinary.stops).toEqual(['repeated_tool_failure']);
+    expect(ordinary.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
+    // The same run pushed over by one more cut is the cuts' stop.
+    const cuts = await stepRounds(Array.from({ length: 7 }, () => cutStep()));
+    expect(cuts.phase).toBe('stopped'); expect(cuts.stops).toEqual(['repeated_reflex_interruption']);
+  });
   it('does not let a read that worked between two cuts end the run: cut, observe, cut, observe ... (M2)', async () => {
     const alternating = Array.from({ length: 7 }, (_, index): Step => index % 2 ? [['observe', 'ok']] : cutStep());
     const four = await stepRounds(alternating.slice(0, 7));

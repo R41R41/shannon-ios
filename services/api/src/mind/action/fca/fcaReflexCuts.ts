@@ -44,23 +44,27 @@ export interface StepCall { name: string; ok: boolean; read: boolean; cut: boole
  * The failure count and the run of cuts after one step's calls (the goal/replan tools already left out).
  * A call that was cut is counted among the run whatever else the step held; a read that worked beside or between cuts changes neither.
  */
-export function settleReflexStep(failures: number, run: ReflexCutRun, calls: readonly StepCall[]): { failures: number; run: ReflexCutRun } {
+export function settleReflexStep(failures: number, run: ReflexCutRun, calls: readonly StepCall[]): { failures: number; run: ReflexCutRun; byCuts: boolean } {
   const cut = calls.filter(call => call.cut), rest = calls.filter(call => !call.cut);
   if (rest.some(call => !(call.read && call.ok))) {
     // An outcome of its own: every call but the cut ones decides the count, and the run is over.
-    return { failures: rest.every(call => !call.ok) ? failures + 1 : 0, run: NO_REFLEX_CUTS };
+    return { failures: rest.every(call => !call.ok) ? failures + 1 : 0, run: NO_REFLEX_CUTS, byCuts: false };
   }
   if (cut.length) {
     const next = nextReflexCutRun(run, cut.map(call => call.name));
-    return { failures: next.counted ? failures + 1 : failures, run: next.run };
+    return { failures: next.counted ? failures + 1 : failures, run: next.run, byCuts: next.counted };
   }
   // Only reads that worked: with no run going they are a success as before; with one going they leave it, and what it counted, as they found it.
-  return rest.length && !run.total ? { failures: 0, run } : { failures, run };
+  return { ...(rest.length && !run.total ? { failures: 0, run } : { failures, run }), byCuts: false };
 }
 
-/** The stop reason for a task that has reached the failure limit: the cuts' own, when a run of them is what got it there. */
-export function repeatedFailureReason(run: ReflexCutRun): string {
-  return run.total > 0 ? REPEATED_REFLEX_INTERRUPTION : 'repeated_tool_failure';
+/**
+ * The stop reason for a task that has reached the failure limit: the cuts' own only when the cuts are what pushed it over, that is, the
+ * step that reached the limit counted a cut as its failure (`byCuts` of `settleReflexStep`). A run of cuts still going when an ordinary
+ * failure reached the limit is not the reason it stopped (P8 third review): that is `repeated_tool_failure`, as it always was.
+ */
+export function repeatedFailureReason(pushedOverByCuts: boolean): string {
+  return pushedOverByCuts ? REPEATED_REFLEX_INTERRUPTION : 'repeated_tool_failure';
 }
 
 /** What to commit; explicit zeros only when the stored run has to be cleared (the stored checkpoint is spread under this one). */

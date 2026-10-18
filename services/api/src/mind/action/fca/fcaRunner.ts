@@ -187,6 +187,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const priorToolFailures = consecutiveToolFailures;
   const priorReflexRun = reflexCutRunOf(prior);
   let reflexRun = priorReflexRun;
+  /** Whether the step that took the failure count to its present value counted a reflex cut as the failure (the stop reason below). */
+  let failedByCuts = false;
   let completionVerificationFailures = Number(prior.completionVerificationFailures ?? 0);
   if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
   let completionRejected = false;
@@ -248,7 +250,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         ? [] : [{ call, result: results[(output.auxiliaryResults?.length ?? 0) + index]! }]);
       // A cut call does not count until the same tool (or any) has been cut off too many times in a row; any outcome of its own ends the
       // run, but a read that worked beside or between cuts does not (`fcaReflexCuts.ts`, M2).
-      ({ failures: consecutiveToolFailures, run: reflexRun } = settleReflexStep(consecutiveToolFailures, reflexRun, outcomes.map(outcome => ({
+      ({ failures: consecutiveToolFailures, run: reflexRun, byCuts: failedByCuts } = settleReflexStep(consecutiveToolFailures, reflexRun, outcomes.map(outcome => ({
         name: outcome.call.name, ok: outcome.result.ok, cut: reflexCuts.has(outcome.call.id),
         read: catalog.find(tool => tool.name === outcome.call.name)?.effect === 'read' }))));
     }
@@ -278,7 +280,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
   await closeFcaMonitors(ports);
   if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
-  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; }
+  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; }
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
@@ -298,7 +300,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
-    runtime.stop(step.scopeKey, step.taskId, consecutiveToolFailures >= 5 ? repeatedFailureReason(reflexRun) : 'repeated_tool_failure');
+    runtime.stop(step.scopeKey, step.taskId, consecutiveToolFailures >= 5 ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;
