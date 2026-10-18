@@ -89,24 +89,68 @@ describe('common FCA runner with the real action authority', () => {
     expect(f.driver.runtime.pendingReceipts('owner')).toEqual([]);
     expect(f.store.list('owner').filter(action => ['running', 'waiting', 'stopping', 'unknown'].includes(action.state))).toEqual([]);
   });
-  it('does not count a command the body\'s own reflex cut off (interrupted_by_reflex) among the failures that stop a task (P8)', async () => {
-    const run = async (failureType: string) => {
-      let count = 0;
-      const f = fixture(() => output({ kind: 'wait', summary: 'unused' }));
-      const task = f.child(`reflex-${failureType}`);
-      const driver = createTaskRuntimeWiring({ db: f.db, actions: f.actions, scopeKey: 'owner', now: () => '2026-10-09T00:00:00.000Z', ownerAlone: () => true,
-        model: { async decide() { return output({ kind: 'tools', calls: [{ id: `call-${++count}`, name: 'mc.mine-block', input: {} }] }); }, toolResults: results => ({ results }) },
-        stepPorts: () => ({ tools: { definitions: [{ name: 'mc.mine-block', description: 'Mine one observed block', input: { type: 'object', properties: {}, required: [], additionalProperties: false }, domain: 'minecraft_body', effect: 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] }],
-          async execute() { return minecraftSkillResult({ id: 'x', connectionId: 'c', outcome: 'failed', inputsReleased: true, observedAt: '2026-10-09T00:00:00.000Z', result: 'mine-block: interrupted', failureType, recoverable: true } as never); } } }) });
-      cleanups.push(() => driver.close());
-      for (let round = 0; round < 7; round++) { await driver.tick(); await driver.drain(); }
-      return { count, phase: driver.runtime.get('owner', task.id)?.phase, checkpoint: driver.runtime.snapshot('owner', task.id)?.checkpoint };
-    };
-    // The same text and the same retry hint; only the reflex one is nobody's fault.
-    const plain = await run('interrupted');
+  /** One round per entry: the tool the model calls and how the body answers (a reflex cut it off, an ordinary failure, or it worked). */
+  type Round = [tool: 'mine' | 'move', answer: 'reflex' | 'plain' | 'ok'];
+  const bodyRounds = async (rounds: readonly Round[]) => {
+    let count = 0;
+    const f = fixture(() => output({ kind: 'wait', summary: 'unused' }));
+    const task = f.child(`rounds-${rounds.length}`);
+    const definition = (name: string) => ({ name, description: name, input: { type: 'object', properties: {}, required: [], additionalProperties: false }, domain: 'minecraft_body', effect: 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] }) as const;
+    const names = { mine: 'mc.mine-block', move: 'mc.move-to' } as const;
+    const driver = createTaskRuntimeWiring({ db: f.db, actions: f.actions, scopeKey: 'owner', now: () => '2026-10-09T00:00:00.000Z', ownerAlone: () => true,
+      model: { async decide() { return output({ kind: 'tools', calls: [{ id: `call-${++count}`, name: names[rounds[Math.min(count, rounds.length) - 1]![0]], input: {} }] }); }, toolResults: results => ({ results }) },
+      stepPorts: () => ({ tools: { definitions: [definition(names.mine), definition(names.move)],
+        async execute() {
+          const answer = rounds[count - 1]![1];
+          if (answer === 'ok') return { ok: true, text: 'done', retryable: false };
+          return minecraftSkillResult({ id: 'x', connectionId: 'c', outcome: 'failed', inputsReleased: true, observedAt: '2026-10-09T00:00:00.000Z', result: 'interrupted',
+            failureType: answer === 'reflex' ? 'interrupted_by_reflex' : 'interrupted', recoverable: true } as never);
+        } } }) });
+    cleanups.push(() => driver.close());
+    for (let round = 0; round < rounds.length; round++) { await driver.tick(); await driver.drain(); }
+    return { count, phase: driver.runtime.get('owner', task.id)?.phase, checkpoint: driver.runtime.snapshot('owner', task.id)?.checkpoint };
+  };
+  const repeat = (round: Round, times: number): Round[] => Array.from({ length: times }, () => round);
+  it('does not count a command the body\'s own reflex cut off (interrupted_by_reflex) among the failures that stop a task, unless it keeps happening (P8)', async () => {
+    // The same text and the same retry hint; an ordinary interruption is a failed step.
+    const plain = await bodyRounds(repeat(['mine', 'plain'], 7));
     expect(plain.phase).toBe('stopped'); expect(plain.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
-    const reflex = await run('interrupted_by_reflex');
-    expect(reflex.count).toBe(7); expect(reflex.phase).not.toBe('stopped'); expect(reflex.checkpoint).toMatchObject({ consecutiveToolFailures: 0 });
+    // One or two cuts of one tool are nobody's fault.
+    const few = await bodyRounds(repeat(['mine', 'reflex'], 2));
+    expect(few.count).toBe(2); expect(few.phase).not.toBe('stopped');
+    expect(few.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 2, reflexCutTool: 'mc.mine-block', reflexCutToolRun: 2 });
+  });
+  it('treats the same tool cut off by a reflex 3 times in a row as an ordinary failure, so that it stops the task (M2)', async () => {
+    const third = await bodyRounds(repeat(['mine', 'reflex'], 3));
+    expect(third.checkpoint).toMatchObject({ consecutiveToolFailures: 1 });
+    const six = await bodyRounds(repeat(['mine', 'reflex'], 6));
+    expect(six.phase).not.toBe('stopped'); expect(six.checkpoint).toMatchObject({ consecutiveToolFailures: 4 });
+    const seven = await bodyRounds(repeat(['mine', 'reflex'], 7));
+    expect(seven.count).toBe(7); expect(seven.phase).toBe('stopped'); expect(seven.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
+  });
+  it('treats 6 cuts in a row of mixed tools as an ordinary failure, but not fewer (M2)', async () => {
+    const alternating = (times: number): Round[] => Array.from({ length: times }, (_, index): Round => [index % 2 ? 'move' : 'mine', 'reflex']);
+    const five = await bodyRounds(alternating(5));
+    expect(five.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 5, reflexCutToolRun: 1 });
+    const six = await bodyRounds(alternating(6));
+    expect(six.phase).not.toBe('stopped'); expect(six.checkpoint).toMatchObject({ consecutiveToolFailures: 1 });
+    const ten = await bodyRounds(alternating(10));
+    expect(ten.count).toBe(10); expect(ten.phase).toBe('stopped'); expect(ten.checkpoint).toMatchObject({ consecutiveToolFailures: 5 });
+  });
+  it('ends a run of cuts with a successful step, an ordinary failure or another tool (M2)', async () => {
+    const cut = (tool: 'mine' | 'move', times: number) => repeat([tool, 'reflex'], times);
+    // A success between: 2 + 2 cuts of one tool are two short runs.
+    const success = await bodyRounds([...cut('mine', 2), ['mine', 'ok'], ...cut('mine', 2)]);
+    expect(success.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 2, reflexCutToolRun: 2 });
+    // An ordinary failure between: it counts once, and the cuts begin again.
+    const failure = await bodyRounds([...cut('mine', 2), ['mine', 'plain'], ...cut('mine', 2)]);
+    expect(failure.checkpoint).toMatchObject({ consecutiveToolFailures: 1, consecutiveReflexCuts: 2, reflexCutToolRun: 2 });
+    // Another tool between: the same-tool run restarts (2, 1, 2), while the cuts in all go on to 5.
+    const other = await bodyRounds([...cut('mine', 2), ...cut('move', 1), ...cut('mine', 2)]);
+    expect(other.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 5, reflexCutToolRun: 2 });
+    // A run that ended with a success is gone from the checkpoint, and cannot be added to later.
+    const cleared = await bodyRounds([...cut('mine', 2), ['mine', 'ok']]);
+    expect(cleared.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 0, reflexCutToolRun: 0 });
   });
   it('runs two independent tasks concurrently, bounds the third, and preserves the foreground slot', async () => {
     const pending = new Map<string, ReturnType<typeof blocked>>();
