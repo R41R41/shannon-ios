@@ -388,7 +388,7 @@ describe('GET /v1/ops', () => {
   it('answers 200 with a null snapshot before any report', async () => {
     const { read } = await harness();
     expect(await read()).toEqual({ status: 200, body: {
-      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
+      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED, settings: { freshWorld: false },
     } });
   });
 
@@ -397,7 +397,7 @@ describe('GET /v1/ops', () => {
     await report();
     const { scopeKey: _scopeKey, ...expected } = snapshot();
     expect((await read()).body).toEqual({
-      schemaVersion: 1, snapshot: expected, receivedAt: START, stale: false, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
+      schemaVersion: 1, snapshot: expected, receivedAt: START, stale: false, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED, settings: { freshWorld: false },
     });
   });
 
@@ -439,7 +439,7 @@ describe('SHANNON_PLATFORM_OPS_INGEST', () => {
     expect(await report()).toMatchObject({ status: 403, body: { error: 'OPS_INGEST_DISABLED' } });
     expect((await report(snapshot(), null)).status).toBe(401);
     expect(await read()).toEqual({ status: 200, body: {
-      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
+      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED, settings: { freshWorld: false },
     } });
     expect(store.count()).toBe(1);
     delete environment.SHANNON_PLATFORM_OPS_INGEST;
@@ -470,7 +470,9 @@ describe('the snapshot stays out of every prompt', () => {
     const uses = server.split('\n').filter(line => /\bopsStore\b/u.test(line) && !line.startsWith('import ')).map(line => line.trim());
     const commandBridge = uses.find(line => line.startsWith('const lifecycle = configuredMinecraftLifecycle('));
     expect(commandBridge).toContain('ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined');
-    expect(commandBridge!.replace('opsStore.commands', '')).not.toMatch(/\bopsStore\b/u);
+    // 「新しいワールドで始める」: besides the command journal, only the setting's own store (opsWorldPolicyStore.ts), never the snapshot.
+    expect(commandBridge).toContain('freshWorld: { policy: opsStore.worldPolicy,');
+    expect(commandBridge!.replace('opsStore.commands', '').replace('opsStore.worldPolicy', '')).not.toMatch(/\bopsStore\b/u);
     expect(uses.filter(line => line !== commandBridge)).toEqual([
       'const opsStore = new SQLiteOpsStore(configuredDatabasePath());',
       'store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,',
@@ -491,7 +493,7 @@ describe('the snapshot stays out of every prompt', () => {
       'opsStore.ts', 'serverHttp.ts', 'sqliteStoreContext.ts', 'opsCommandContract.ts', 'opsCommandStore.ts',
       'serverOpsCommandRoutes.ts', 'opsMinecraftLifecycleContract.ts', 'minecraftLifecycleContract.ts', 'actionThreadContract.ts',
       // The one read path of action leases (Syzygy ADR-0009 stage 1, S1): synchronous reads, no prompt, no model.
-      'actionLeaseReader.ts'].map(apiSourcePath)];
+      'actionLeaseReader.ts', 'opsWorldPolicyStore.ts', 'opsSettingsContract.ts'].map(apiSourcePath)];
     for (const name of owners) {
       const imports = resolvedImports(name);
       expect(imports.length, name).toBeGreaterThan(0);
@@ -510,7 +512,7 @@ describe('docs/ops-contract.md', () => {
       'schedule.run', 'service.start', 'service.stop', 'minecraft.start', 'minecraft.stop', 'progressive-lab-', 'idempotencyKey',
       'SHANNON_PLATFORM_OPS_COMMANDS', 'OPS_COMMANDS_DISABLED', 'OPS_STALE', 'TARGET_UNKNOWN', 'TARGET_NOT_ALLOWED', 'IDEMPOTENCY_KEY_REUSED',
       'TOO_MANY_OPEN_COMMANDS', 'OPS_COMMAND_NOT_FOUND', 'OPS_COMMAND_NOT_CLAIMED', 'OPS_COMMAND_FINISHED', 'no_report', 'ops_commands',
-      'Open questions', ...OPS_COMMAND_REPORT_CODES.map(code => `\`${code}\``),
+      'Open questions', '/v1/ops/settings', 'settings.freshWorld', 'ops_minecraft_world_policy', 'ops.settings.freshWorld', 'minecraft.fresh_world', ...OPS_COMMAND_REPORT_CODES.map(code => `\`${code}\``),
       ...[...OPS_SERVICE_START_ALLOWED, ...OPS_SERVICE_STOP_ALLOWED].map(id => `\`${id}\``),
       `${OPS_COMMAND_LIMITS.open} open`, `${OPS_COMMAND_LIMITS.perHour} an hour`, `${OPS_COMMAND_LIMITS.claimWithinSeconds} seconds`,
       `${OPS_COMMAND_LIMITS.reportWithinSeconds} seconds`, `last ${OPS_COMMAND_LIMITS.recent}`,

@@ -4,6 +4,7 @@ import type {
 } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import type { LifecycleRunner, LifecycleSettlement } from './minecraftLifecycleRunner.js';
+import type { FreshWorldAdmission } from './freshWorldWiring.js';
 
 /** The source and command id of an operator's lifecycle operation: `operator:<operation uuid>`. */
 export const OPERATOR_LIFECYCLE_SOURCE = /^operator:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -44,6 +45,8 @@ export function createOperatorLifecycle(parts: {
   allowed(authority: MinecraftLifecycleAuthority, command?: Pick<MinecraftLifecycleCommand, 'id' | 'serverId' | 'action'>): boolean;
   /** How long set_day waits for an unsettled state, and how often it looks (tests shorten both). */
   setDaySettleMs?: number; setDayStepMs?: number;
+  /** 「新しいワールドで始める」 (`freshWorldWiring.ts`), decided when an operator's start is admitted. Absent: never. */
+  freshWorld?: FreshWorldAdmission;
 }) {
   const refused = (code: Exclude<OperatorLifecycleAdmission, { ok: true }>['code'], message: string): OperatorLifecycleAdmission =>
     ({ ok: false, code, message });
@@ -83,7 +86,8 @@ export function createOperatorLifecycle(parts: {
         return refused('refused', '実行権・停止設定・現在の入力条件を確認できません。');
       }
       if (!await parts.runner.takeBody(own)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
-      void parts.runner.detach(own, { ...request, authority }, settled);
+      const options = parts.freshWorld?.({ ...request, origin: 'owner_request', via: 'operator' });
+      void parts.runner.detach(own, { ...request, authority, ...(options ? { options } : {}) }, settled);
       return { ok: true, lifecycleId: request.id, actionId: own.execution.lease.id };
     },
   };

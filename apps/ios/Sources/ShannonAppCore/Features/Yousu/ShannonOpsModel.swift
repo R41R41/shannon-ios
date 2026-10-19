@@ -45,6 +45,10 @@ public final class ShannonOpsModel {
     public private(set) var connectionIsInvalid = false
     public private(set) var isSending = false
     public private(set) var notice: Notice?
+    /// A switch is being saved (「新しいワールドで始める」); the switch waits for the server's answer.
+    public private(set) var isSavingSettings = false
+    /// Why the last press of a switch did not take, in one sentence; cleared by the next press.
+    public private(set) var settingsMessage: String?
 
     private let scopeKey: String
     private let client: (any ShannonYousuServing)?
@@ -121,6 +125,9 @@ public final class ShannonOpsModel {
         guard isCurrentPairing, let view, view.commandsSupported, isCurrent(at: date), !isSending else { return .nothing }
         return view.allowed
     }
+
+    /// 「新しいワールドで始める」 as the server holds it. Nil from a server without the switch: then none is offered.
+    public var freshWorld: Bool? { isCurrentPairing ? view?.settings?.freshWorld : nil }
 
     public var commandsSupported: Bool { view?.commandsSupported == true }
     public var commands: [ShannonOpsCommandDTO] { view?.commands ?? [] }
@@ -351,6 +358,26 @@ public final class ShannonOpsModel {
 
     public func dismissNotice() {
         notice = nil
+    }
+
+    /// 「新しいワールドで始める」. The displayed value changes only after the server stored it; a refusal or a lost
+    /// answer leaves it as it was and says so. One call per press, never retried (`docs/ops-contract.md`).
+    public func setFreshWorld(_ on: Bool) async {
+        guard let client, !isSavingSettings, isCurrentPairing, freshWorld != nil, freshWorld != on else { return }
+        let epoch = pairingEpoch
+        isSavingSettings = true
+        settingsMessage = nil
+        defer { isSavingSettings = false }
+        do {
+            let saved = try await client.setOpsSettings(scopeKey: scopeKey, freshWorld: on)
+            // Unpaired or paired anew meanwhile: the answer belongs to a pairing that is gone.
+            guard epoch == ShannonOpsPairingEpoch.shared.value, let current = view else { return }
+            view = current.replacing(settings: saved)
+            // A reading that was already on its way may carry the value from before; the next one is the server's own.
+            await refresh()
+        } catch {
+            settingsMessage = ShannonGeneratedStrings.opsFreshWorldSaveFailed
+        }
     }
 
     /// How old the report already was when it was read: on the server's own clock when the answer carried it,

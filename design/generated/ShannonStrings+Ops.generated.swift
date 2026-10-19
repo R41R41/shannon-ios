@@ -118,6 +118,12 @@ extension ShannonGeneratedStrings {
     public static let opsServicesEmpty = "報告されているサービスはありません。"
     /// `ops.notReported`
     public static let opsNotReported = "運用の報告は、まだ届いていません。"
+    /// `ops.freshWorld.title`
+    public static let opsFreshWorldTitle = "新しいワールドで始める"
+    /// `ops.freshWorld.footnote`
+    public static let opsFreshWorldFootnote = "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）"
+    /// `ops.freshWorld.saveFailed`
+    public static let opsFreshWorldSaveFailed = "「新しいワールドで始める」を保存できませんでした。設定は今のままです。もう一度お試しください。"
     /// `ops.minebot.needServer`
     public static let opsMinebotNeedServer = "起動するには、先に Minecraft サーバーを開始してください"
     /// `ops.report.latest`

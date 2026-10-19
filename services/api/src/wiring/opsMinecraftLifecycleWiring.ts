@@ -5,6 +5,7 @@ import type { OpsCommandCode, OpsCommandOutcome, OpsCommandRequest } from '../co
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
+import type { FreshWorldAdmission } from './freshWorldWiring.js';
 
 /** The native window an Ops operation needs inside its claim window: the operator's deadline and the cancellation drain. */
 const OPS_LIFECYCLE_LEASE_MS = 130_000;
@@ -24,6 +25,8 @@ function outcome(receipt: MinecraftLifecycleReceipt): { outcome: OpsCommandOutco
 export function createOpsMinecraftLifecycle(parts: {
   commands: OpsCommandStore; actions: ActionThreads; service: MinecraftLifecycle; scopeKey: string; deviceId: string;
   now(): string; enabled(): boolean; ownerAlone(): boolean;
+  /** 「新しいワールドで始める」 (`freshWorldWiring.ts`), decided when a start of the owner's Ops request is admitted. Absent: never. */
+  freshWorld?: FreshWorldAdmission;
 }) {
   const runner = createLifecycleRunner({ actions: parts.actions, service: parts.service, deviceId: parts.deviceId })!;
   const running = new Map<string, Promise<void>>();
@@ -58,8 +61,10 @@ export function createOpsMinecraftLifecycle(parts: {
       }
       // One atomic permit attempt. An unknown/live body conflict is refused at once, never waited for.
       if (!await runner.takeBody(active)) return report(null, false);
-      await runner.detach(active, { id: row.lifecycleId, ...row.mapping, authority: { scopeKey: parts.scopeKey, origin: 'owner_request',
-        executionId: active.execution.lease.id, lease: active.execution.lease, sourceIds: [`ops-command:${row.command.id}`] } },
+      // A start newly asked for on this page; decided last, with the body taken (a claim the slot refused never reaches here).
+      const options = parts.freshWorld?.({ id: row.lifecycleId, ...row.mapping, origin: 'owner_request', via: 'ops' });
+      await runner.detach(active, { id: row.lifecycleId, ...row.mapping, ...(options ? { options } : {}), authority: { scopeKey: parts.scopeKey,
+        origin: 'owner_request', executionId: active.execution.lease.id, lease: active.execution.lease, sourceIds: [`ops-command:${row.command.id}`] } },
       settlement => report(settlement.receipt, settlement.issued));
     } catch {
       await active.finish('failed', 'ops_native_not_started').catch(() => {});

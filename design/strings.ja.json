@@ -676,6 +676,27 @@
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
+      "key": "ops.freshWorld.title",
+      "text": "新しいワールドで始める",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "only": "apple",
+      "note": "運用の Minecraft サーバーの項目にあるスイッチ（POST /v1/ops/settings の freshWorld）。Windows の運用画面は、同じ API（docs/ops-contract.md）でこの文言に合わせて作る。"
+    },
+    {
+      "key": "ops.freshWorld.footnote",
+      "text": "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "only": "apple",
+      "note": "「新しいワールドで始める」のスイッチの注記。消えるものを先に言う。"
+    },
+    {
+      "key": "ops.freshWorld.saveFailed",
+      "text": "「新しいワールドで始める」を保存できませんでした。設定は今のままです。もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift",
+      "only": "apple",
+      "note": "保存が通らなかったとき。表示は、サーバーが保存してから変える。"
+    },
+    {
       "key": "ops.minebot.needServer",
       "text": "起動するには、先に Minecraft サーバーを開始してください",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",

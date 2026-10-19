@@ -625,10 +625,11 @@ describe('GET /v1/ops with commands on', () => {
     expect(await read()).toEqual({
       schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180,
       commands: [], commandsSupported: true, allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false },
+      settings: { freshWorld: false },
     });
     await report();
     const body = await read();
-    expect(Object.keys(body).sort()).toEqual(['allowed', 'commands', 'commandsSupported', 'receivedAt', 'schemaVersion', 'snapshot', 'stale', 'staleAfterSeconds']);
+    expect(Object.keys(body).sort()).toEqual(['allowed', 'commands', 'commandsSupported', 'receivedAt', 'schemaVersion', 'settings', 'snapshot', 'stale', 'staleAfterSeconds']);
     expect(body).toMatchObject({ stale: false, commandsSupported: true, commands: [] });
     expect(body.allowed).toEqual({
       serviceStart: ['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minebot', 'minecraft'],

@@ -32,6 +32,9 @@ public protocol ShannonYousuServing: Sendable {
     func loadOps(scopeKey: String) async throws -> ShannonOpsReading
     /// One call per press. It is never retried here: a retry could run an operation twice.
     func sendOpsCommand(scopeKey: String, idempotencyKey: String, type: ShannonOpsCommandType, target: String) async -> ShannonOpsSendOutcome
+    /// `POST /v1/ops/settings` `{freshWorld}` (「新しいワールドで始める」): the switches as the server stored them.
+    /// One call per press, never retried; a throw means nothing is known to have been saved.
+    func setOpsSettings(scopeKey: String, freshWorld: Bool) async throws -> ShannonOpsSettingsDTO
     func loadShannonNow(scopeKey: String) async throws -> ShannonNowDTO
     func loadShannonOwnTime(scopeKey: String) async throws -> ShannonNowOwnTimeDTO
     func loadShannonStudyWaiting(scopeKey: String) async throws -> ShannonNowStudyDTO
@@ -68,6 +71,9 @@ public protocol ShannonYousuServing: Sendable {
 }
 
 extension ShannonYousuServing {
+    /// A reader without the 運用 switches answers as an older server does: no switch is offered.
+    public func setOpsSettings(scopeKey: String, freshWorld: Bool) async throws -> ShannonOpsSettingsDTO { throw ShannonAPIError.rejected(status: 404) }
+
     /// A reader without the mood history answers as an older server does: the trend is left out.
     public func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
         throw ShannonAPIError.rejected(status: 404)
@@ -127,6 +133,15 @@ extension ShannonAPIClient: ShannonYousuServing {
         }
         guard let decoded = try? JSONDecoder().decode(ShannonOpsCommandResponseDTO.self, from: data) else { return .unreadable }
         return .accepted(decoded.command)
+    }
+
+    public func setOpsSettings(scopeKey: String, freshWorld: Bool) async throws -> ShannonOpsSettingsDTO {
+        let connection = currentConnection()
+        return try await response(ShannonOpsSettingsResponseDTO.self, for: autonomyPost(
+            "/v1/ops/settings",
+            body: ShannonOpsSettingsRequestDTO(scopeKey: connection?.scopeKey ?? scopeKey, freshWorld: freshWorld),
+            connection: connection
+        )).settings
     }
 
     public func loadShannonNow(scopeKey: String) async throws -> ShannonNowDTO {

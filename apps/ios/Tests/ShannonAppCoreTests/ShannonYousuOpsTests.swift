@@ -13,8 +13,16 @@ private final class FakeYousuClient: ShannonYousuServing, @unchecked Sendable {
     var afterSend: (() -> Void)?
     /// The pairing the readings belong to; nil as for an app that is not paired.
     var scope: String? = "server|owner|device-1"
+    /// What `POST /v1/ops/settings` answers; an older server refuses.
+    var settingsResult: Result<ShannonOpsSettingsDTO, Error> = .failure(ShannonAPIError.rejected(status: 404))
+    var savedSettings: [Bool] = []
 
     func opsReportScope(scopeKey: String) -> String? { scope }
+
+    func setOpsSettings(scopeKey: String, freshWorld: Bool) async throws -> ShannonOpsSettingsDTO {
+        savedSettings.append(freshWorld)
+        return try settingsResult.get()
+    }
 
     func loadOps(scopeKey: String) async throws -> ShannonOpsReading {
         if let loadError { throw loadError }
@@ -504,6 +512,87 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertFalse(model.isSupported)
         XCTAssertFalse(model.hasReport)
         XCTAssertFalse(model.needsAttention)
+    }
+
+    // MARK: 新しいワールドで始める (`settings.freshWorld`, docs/ops-contract.md)
+
+    private func withSettings(_ settings: String?) throws -> ShannonOpsViewDTO {
+        let settingsJSON = settings.map { "\"settings\": \($0)," } ?? ""
+        let json = """
+        { "schemaVersion": 1, "receivedAt": "2026-10-03T07:00:00.000Z", "stale": false, "staleAfterSeconds": 180,
+          "commandsSupported": true, "commands": [], "allowed": { "serviceStart": [], "serviceStop": [], "minecraft": true, "scheduleRun": false, "minebotStart": false },
+          \(settingsJSON)
+          "snapshot": { "reportedAt": "2026-10-03T06:59:58.000Z", "runtime": { "release": "v1", "startedAt": "2026-10-03T00:00:00.000Z" },
+            "services": \(ShannonYousuOpsTests.services), "minebot": [], "skills": [], "schedules": [] } }
+        """
+        return try decode(json)
+    }
+
+    func testTheFreshWorldSwitchIsReadFromSettingsAndAbsentFromAnOlderServer() throws {
+        XCTAssertEqual(try withSettings(#"{ "freshWorld": true }"#).settings, ShannonOpsSettingsDTO(freshWorld: true))
+        XCTAssertEqual(try withSettings(#"{ "freshWorld": false }"#).settings, ShannonOpsSettingsDTO(freshWorld: false))
+        // No switch is offered when the server does not say, or says it in a shape this app cannot read.
+        XCTAssertNil(try withSettings(nil).settings)
+        XCTAssertNil(try withSettings(#"{ "freshWorld": "true" }"#).settings)
+        XCTAssertNil(try withSettings(#"{}"#).settings)
+        XCTAssertNil(try withSettings("7").settings)
+    }
+
+    @MainActor
+    func testTheFreshWorldSwitchChangesOnlyAfterTheServerStoredIt() async throws {
+        let (model, client, _) = await loaded(try withSettings(#"{ "freshWorld": false }"#))
+        XCTAssertEqual(model.freshWorld, false)
+
+        // The server saved it: the switch moves, and the next reading is the server's own.
+        client.settingsResult = .success(ShannonOpsSettingsDTO(freshWorld: true))
+        client.reading = ShannonOpsReading(view: try withSettings(#"{ "freshWorld": true }"#))
+        await model.setFreshWorld(true)
+        XCTAssertEqual(client.savedSettings, [true])
+        XCTAssertEqual(model.freshWorld, true)
+        XCTAssertNil(model.settingsMessage)
+        XCTAssertFalse(model.isSavingSettings)
+
+        // The same value is not sent again.
+        await model.setFreshWorld(true)
+        XCTAssertEqual(client.savedSettings, [true])
+    }
+
+    @MainActor
+    func testARefusedOrLostFreshWorldSaveLeavesTheSwitchWhereItWasAndSaysSo() async throws {
+        let (model, client, _) = await loaded(try withSettings(#"{ "freshWorld": false }"#))
+        let failures: [Error] = [ShannonAPIError.rejected(status: 500), ShannonAPIError.rejected(status: 400), URLError(.timedOut)]
+        for failure in failures {
+            client.settingsResult = .failure(failure)
+            await model.setFreshWorld(true)
+            XCTAssertEqual(model.freshWorld, false)
+            XCTAssertEqual(model.settingsMessage, ShannonGeneratedStrings.opsFreshWorldSaveFailed)
+        }
+        XCTAssertEqual(client.savedSettings, [true, true, true])
+        // The next press clears the sentence, and a success shows the saved value.
+        client.settingsResult = .success(ShannonOpsSettingsDTO(freshWorld: true))
+        client.reading = ShannonOpsReading(view: try withSettings(#"{ "freshWorld": true }"#))
+        await model.setFreshWorld(true)
+        XCTAssertNil(model.settingsMessage)
+        XCTAssertEqual(model.freshWorld, true)
+    }
+
+    @MainActor
+    func testNoFreshWorldSwitchWithoutTheServersSettingsOrWithoutAClient() async throws {
+        let (older, client, _) = await loaded(try withSettings(nil))
+        XCTAssertNil(older.freshWorld)
+        await older.setFreshWorld(true)
+        XCTAssertTrue(client.savedSettings.isEmpty)
+
+        let (paired, other, _) = await loaded(try withSettings(#"{ "freshWorld": true }"#))
+        other.settingsResult = .success(ShannonOpsSettingsDTO(freshWorld: false))
+        other.reading = ShannonOpsReading(view: try withSettings(#"{ "freshWorld": false }"#))
+        await paired.setFreshWorld(false)
+        XCTAssertEqual(paired.freshWorld, false)
+        // Unpairing forgets the reading at once: nothing of the old pairing is shown or sent.
+        ShannonOpsModel.forgetArrivedReports(in: try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)")))
+        XCTAssertNil(paired.freshWorld)
+        await paired.setFreshWorld(true)
+        XCTAssertEqual(other.savedSettings, [false])
     }
 
     // MARK: Wording

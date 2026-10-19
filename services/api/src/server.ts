@@ -73,6 +73,7 @@ import { closeBodyReactionStores, configuredBodyReactionOptions, configuredInner
 import { opsCommandsEnabled } from './contracts/opsCommandContract.js';
 import { opsIngestEnabled } from './contracts/opsContract.js';
 import { SQLiteOpsStore } from './infra/ops/store/opsStore.js';
+import { freshWorldSettingRecorder } from './wiring/freshWorldWiring.js';
 import { createOpsRoute, isOpsPath } from './infra/ops/serverOpsRoutes.js';
 import { dispatchWithChatSentences } from './surfaces/text/serverChatSentenceStream.js';
 import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './contracts/calendarContract.js';
@@ -261,6 +262,7 @@ const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
   server: scopeKey => opsServer.view(scopeKey),
+  recordSetting: freshWorldSettingRecorder(autonomyStore.activity, autonomyConfig),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
@@ -281,7 +283,7 @@ const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
-const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, ...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
+const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, freshWorld: { policy: opsStore.worldPolicy, activity: autonomyStore.activity, config: autonomyConfig, bodyTasksOpen: () => fca?.minecraftTasksOpen() ?? null },...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
 if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
 // `opsCli.ts skills import`: the paired route's own import over the operator's socket (`skillImportCommand.ts`).
 const operatorSkillImport = { importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, now };

@@ -119,7 +119,8 @@ A failed report must never delay or fail the runtime's own work: send it in the 
   "staleAfterSeconds": 180,
   "commands": [],
   "commandsSupported": false,
-  "allowed": { "serviceStart": [], "serviceStop": [], "minecraft": false, "scheduleRun": false }
+  "allowed": { "serviceStart": [], "serviceStop": [], "minecraft": false, "scheduleRun": false },
+  "settings": { "freshWorld": false }
 }
 ```
 
@@ -132,6 +133,7 @@ A failed report must never delay or fail the runtime's own work: send it in the 
 | `commands` | array | `[]` while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
 | `commandsSupported` | boolean | `false` while commands are switched off. A client shows command controls only when this is `true`. |
 | `allowed` | object | What a command would be accepted for now; nothing while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
+| `settings` | object | The owner's switches that are not commands. Always present, whatever the commands switch and the snapshot say. `settings.freshWorld` is `false` for a scope that never set it and whenever the stored value cannot be read. See [「新しいワールドで始める」](#fresh-world-switch). A client that predates it ignores the field. |
 | `server` | object, absent | This API's own self-diagnosis: the models it resolved, the persona hash, its tools, the deployed revision, and which integrations are configured. **Only for the owner's scope** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`); absent for any other scope. See [The server's self-diagnosis](#the-servers-self-diagnosis). | With stage 3 of ADR-0008 switched on, `server.mind` adds the mind's state (numbers and booleans only): `workspace` (`faulted`, `faults` since the process started, `busyWrites`: journal writes that met a busy database, which are kept and retried, not faults) and `memoryOutbox` (`pending`, `oldestPendingSeconds`, `failed`); a part switched off is `null`, and with every part off the field is absent. `server.liveness` (stabilization 2026-10-12, `wiring/livenessWiring.ts`) is the latest liveness check, timestamps, counts and closed codes only: `checkedAt`, `incidents` (`sleep_stalled`: a due nightly sleep of the owner's scope not completed for 30 h and none completed in that time; `own_time_stalled`: own time on and not paused, not resting by its own schedule (daily session cap reached or a budget-blocked day), and quiet for 6 h after the later of its last session/step and the time it was due back (`resumeAt`, next scheduled start); `mind_worker_restarting`: 3 or more mind worker starts in an hour), `sleep` (`lastCompletedAt`, `oldestDueAt`), `ownTime` (`enabled`, `paused`, `lastActivityAt`, `resumeAt`) and `mindWorker` (`startsLastHour`, `startsLastDay`, `lastStartAt`). The API checks every 10 minutes and logs one `Shannon liveness: incident …` line when an incident begins and one `Shannon liveness: recovered …` line when it ends. Since ADR-0009 stage 1 `ownTime` also has `lastSessionAt`, and each incident episode (`ops_liveness_episodes`) sends the owner's registered devices one neutral push notice (`kind: liveness_incident`, no thread). Also owner only (ADR-0009 stage 1): `server.switches.warnings` (findings of the switch table at boot: `requires_off`, `unrecognized_value`, `quoted_value`, names only), `server.execution` (`unknownBacklog.actions`/`.tasks` older than 10 minutes, `liveActionsByKind`, `claimRefusals` by closed reason since the mind worker started, `sharedResources`, `multiSegmentTasks`, `retained` (`held` keys still retained after an unknown release, `oldestAt`, `oldestAgeMinutes`), `sleepLastCompletedAt`, `ownTimeLastSessionAt`, `modelRequestRejections` by `status:class`, and since S3 `projectionMismatches` and `projectionNulls`: execution rows whose new state does not project back onto the old columns, and rows still missing a new column, both expected 0, -1 when unreadable; since S4 `stateMismatches`, task rows whose stored state or wait reason is not what their old columns and checkpoint say, expected 0, and `transitionRefusals` (`since`, `byReason`: task moves the state machine refused in this API process, by `<reason>:<kind>:<from>><to>`, expected none); since S6 `claimRefusals` reasons are `pool_<pool>`, `class_<class>`, `resource_held`, `failures` and `not_queued`) and `server.modelCache` (content-free receipts of this process's Claude requests: route, model, token counts, short prefix hashes; per day and route the turns whose first request read the cache). One `Shannon execution daily:` line is logged at start and once a day. Retained keys (an Agent Host lock with its folder lock, the Minecraft body) are recorded when an unknown action's slot is released (`mind_action_retained_resources`) and end with a release proof: the domain's proof, the Agent Host task settling (completed, failed, cancelled or paused by the owner), the action closing, or the owner's `POST /v1/action-threads/<id>/release-retained` (`{requestId}`, owner device only, idempotent; 409 `ACTION_NOTHING_RETAINED` when nothing is held). Every end is audited in `mind_action_retained_releases` (who, when, which keys, why). `mind_worker_restarting` leaves out starts within ten minutes of a newly deployed revision's first start.
 
 What the desktop shows:
@@ -152,6 +154,41 @@ What the desktop shows:
 | `429` | `RATE_LIMITED` | More than 120 reads in a minute. |
 
 If the API itself is unreachable (the same VM), the request fails at the network level; the client treats that as the API being down, which is a different message from `stale`.
+
+<a id="fresh-world-switch"></a>
+## `POST /v1/ops/settings` and 「新しいワールドで始める」
+
+The owner's 運用 page has one switch that is not a command: **「新しいワールドで始める」**. On, a start of the home Minecraft server that the owner newly asks for, while the server is stopped and nothing else is open, asks the body to **delete the current world and start a new one** (it cannot be undone). Off, every start is exactly what it was before. It is off by default, and any doubt is off.
+
+- `Authorization: Bearer <device token>` — a paired device; the scope is the device's own, as on every device route (a server run locally with a fixed token requires `scopeKey` in the body). The bridge credential is refused. At most 30 writes a minute per scope.
+- Body: `{ "freshWorld": boolean }`. Nothing else is accepted (`scopeKey` only for a fixed local token). Anything but a boolean, a non-JSON body, or another field is `400 INVALID_REQUEST`.
+- Answer: `200 { "settings": { "freshWorld": boolean } }`, the value as stored. Writing the value that is already stored changes nothing and records nothing. `GET /v1/ops` returns the same object as `settings`.
+
+| Status | `error` | Meaning |
+| --- | --- | --- |
+| `400` | `INVALID_REQUEST` | `freshWorld` is not a boolean, the body is not JSON, or it names another field (or `scopeKey` is missing, fixed local token only). |
+| `401` | `PAIRING_REQUIRED` | Missing or wrong device token, or the bridge credential. |
+| `405` | `METHOD_NOT_ALLOWED` | Not `POST`. |
+| `413` | `REQUEST_TOO_LARGE` | Over 1 KiB. |
+| `429` | `RATE_LIMITED` | More than 30 writes in a minute. |
+
+The client changes what it shows only after the `200` (the switch is a real server state, not a local choice), and shows its footnote: 「オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）」.
+
+### Record
+
+`ops_minecraft_world_policy` (`scope_key` primary key, `fresh_world` integer not null, `changed_at` text not null): one row per scope, created with `CREATE TABLE IF NOT EXISTS` on the connection of `ops_snapshots`, outside the numbered migrations. A missing row is off; only a stored `1` is on. Each change is written to the owner's activity record (「したことの記録」, tool `ops.settings.freshWorld`, reason `fresh_world_on` / `fresh_world_off`) with no content: turning it **on** needs that record to be written first (no record, no switch); turning it **off** is stored first and is never undone by a missing record.
+
+### Where it takes effect
+
+The API puts `options: { "freshWorld": true }` on a Minecraft lifecycle `start` command (`MinecraftLifecycleCommand.options`, optional; absent on every other command, so a body that predates it sees exactly the old command) only when **all** of these hold at the moment the start is admitted (`wiring/freshWorldWiring.ts`, one decision used by all three ways in):
+
+1. The switch is on (read from the table at that moment).
+2. The owner newly asked for it: a conversation's `minecraft.start` (the `respond` turn), the Ops `minecraft.start` for `minecraft:shannon-home`, or the operator CLI's `lifecycle start`. Never an FCA task step (`agentTask`), her own time, a recovery or a resend (a command that already exists keeps exactly what it was issued with; `options` is part of the command's identity and a different one is `MINECRAFT_LIFECYCLE_OPERATION_CONFLICT`).
+3. The server is `shannon-home` and its state, from a fresh frame of the paired operator, is `stopped`.
+4. No Minecraft-bound task is open: none running, stopping or unknown (any phase but `stopped`, `completed`, `failed`), and the tasks can be read.
+5. No earlier lifecycle command is unresolved.
+
+The decision is written to the activity record without content (tool `minecraft.fresh_world`, reason `fresh_world_applied`, or `fresh_world_server_not_stopped` / `_tasks_open` / `_tasks_unknown` / `_unresolved_operation` when the switch was on and the world was kept; operation id, server and how it was asked only). A decision that cannot be recorded is "no". With the switch off nothing is recorded. The body (not this API, which cannot touch the world files) reads `options.freshWorld` on `start` and deletes and recreates the world; the API only asks.
 
 ## Model and cache operations
 

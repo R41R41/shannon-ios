@@ -22,9 +22,18 @@ export interface MinecraftLifecycleAuthority {
   /** Original execution and provenance; operator never manufactures an owner request. */
   executionId: string; lease: ActionLease; sourceIds: readonly string[];
 }
+/**
+ * What a command may additionally ask of the body. Optional and absent on every command that does not ask: a body that predates it
+ * ignores it, and an API that predates it never sends it. `freshWorld: true` is only ever on a `start` of `shannon-home` that the
+ * owner newly asked for while the server was stopped and nothing else was open (`wiring/freshWorldWiring.ts`); the body then
+ * deletes the current world and starts a new one. It is part of the command's identity: it is never added to, or taken from, a
+ * command that already exists.
+ */
+export interface MinecraftLifecycleOptions { freshWorld?: true }
 export interface MinecraftLifecycleCommand {
   schemaVersion: 1; id: string; connectionId: string; serverId: string;
   action: MinecraftLifecycleAction; authority: MinecraftLifecycleAuthority; issuedAt: string; deadlineAt: string;
+  options?: MinecraftLifecycleOptions;
 }
 export interface MinecraftLifecycleReceipt {
   id: string; connectionId: string; serverId: string; action: MinecraftLifecycleAction;
@@ -44,6 +53,7 @@ export interface MinecraftLifecycleReply {
 }
 export interface MinecraftLifecycleRequest {
   id: string; serverId: string; action: MinecraftLifecycleAction; authority: MinecraftLifecycleAuthority;
+  options?: MinecraftLifecycleOptions;
 }
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/u.test(v);
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

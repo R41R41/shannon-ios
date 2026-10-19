@@ -4,6 +4,7 @@ import { bearerAuthorized } from '../auth/apiAuth.js';
 import { validScopeKey } from '../http/apiValidation.js';
 import { OPS_LIMITS, OPS_SCHEMA_VERSION, validatedOpsSnapshot, type OpsSnapshot } from '../../contracts/opsContract.js';
 import type { OpsCommandAllowed } from '../../contracts/opsCommandContract.js';
+import { OPS_SETTINGS_LIMITS, OPS_SETTINGS_PATH, validatedOpsSettingsRequest, type OpsSettings } from '../../contracts/opsSettingsContract.js';
 import type { OpsCommand } from './store/opsCommandStore.js';
 import type { SQLiteOpsStore } from './store/opsStore.js';
 import { createOpsCommandRoute, isOpsCommandPath, opsCommandsView } from './serverOpsCommandRoutes.js';
@@ -31,6 +32,12 @@ export interface OpsRouteDependencies {
    * Null for any scope but the owner's; the field is then absent. Absent: never shown.
    */
   server?: (scopeKey: string) => object | null;
+  /**
+   * Writes one change of a setting to the owner's activity record (content-free: which switch and its new value). Absent:
+   * a change is stored without a record, which only a test does. Throwing refuses turning a setting ON (it is stored after
+   * the record); turning it OFF is stored first and a failing record does not undo it.
+   */
+  recordSetting?: (scopeKey: string, change: { setting: 'freshWorld'; value: boolean; at: string }) => void;
 }
 
 export interface OpsReadResponse {
@@ -44,12 +51,14 @@ export interface OpsReadResponse {
   commandsSupported: boolean;
   /** Stage 2: what a command would be accepted for right now. A client shows only these controls. */
   allowed: OpsCommandAllowed;
+  /** The owner's switches that are not commands. Always present; a switch that was never set, or cannot be read, is off. */
+  settings: OpsSettings;
   /** This API's own models, persona hash, tools, revision and integrations. Only for the owner's scope; absent otherwise. */
   server?: object;
 }
 
 export function isOpsPath(path: string): boolean {
-  return path === OPS_SNAPSHOT_PATH || path === OPS_READ_PATH || isOpsCommandPath(path);
+  return path === OPS_SNAPSHOT_PATH || path === OPS_READ_PATH || path === OPS_SETTINGS_PATH || isOpsCommandPath(path);
 }
 
 /**
@@ -61,6 +70,7 @@ export function isOpsPath(path: string): boolean {
 export function createOpsRoute(dependencies: OpsRouteDependencies) {
   const snapshotUsage = new Map<string, { startedAt: number; count: number }>();
   const readUsage = new Map<string, { startedAt: number; count: number }>();
+  const settingsUsage = new Map<string, { startedAt: number; count: number }>();
   const commandRoute = createOpsCommandRoute(dependencies);
 
   async function report(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -109,11 +119,54 @@ export function createOpsRoute(dependencies: OpsRouteDependencies) {
     sendJson(response, 200, opsReadResponse(dependencies, scopeKey));
   }
 
+  /** `POST /v1/ops/settings`: the owner's device writes a switch; the answer is the switch as stored. */
+  async function writeSettings(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    const device = dependencies.device(request.headers.authorization);
+    if (!device) return sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
+    let body: unknown;
+    try {
+      body = await readJson(request, OPS_SETTINGS_LIMITS.bodyBytes);
+    } catch (error) {
+      if (error instanceof SyntaxError) return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'The body must be JSON.' });
+      if (error instanceof Error && error.message === 'request body too large') return sendJson(response, 413, { error: 'REQUEST_TOO_LARGE' });
+      throw error;
+    }
+    // The scope is the device's own; a fixed local token names it in the body, as for a command.
+    const scopeKey = device.scopeKey ?? (body as { scopeKey?: unknown } | null)?.scopeKey;
+    if (!validScopeKey(scopeKey)) return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'scopeKey is required' });
+    if (!consumeDeviceAllowance(settingsUsage, scopeKey, OPS_SETTINGS_LIMITS.writesPerMinute)) {
+      return sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many requests; retry after a minute.' });
+    }
+    const requested = validatedOpsSettingsRequest(body);
+    if ('error' in requested) return sendJson(response, requested.status, { error: requested.error, message: requested.message });
+
+    const at = new Date(Date.parse(dependencies.now())).toISOString();
+    if (requested.freshWorld !== dependencies.store.worldPolicy.freshWorld(scopeKey)) {
+      const change = { setting: 'freshWorld' as const, value: requested.freshWorld, at };
+      if (requested.freshWorld) {
+        // Turning it on asks for a world to be deleted later: no record, no switch.
+        dependencies.recordSetting?.(scopeKey, change);
+        dependencies.store.worldPolicy.set(scopeKey, true, at);
+      } else {
+        dependencies.store.worldPolicy.set(scopeKey, false, at);
+        try { dependencies.recordSetting?.(scopeKey, change); } catch { /* Off is already stored; it is never undone for a missing record. */ }
+      }
+    }
+    sendJson(response, 200, { settings: settingsView(dependencies, scopeKey) });
+  }
+
   return async (path: string, request: IncomingMessage, response: ServerResponse, query: URLSearchParams): Promise<void> => {
-    if (path === OPS_SNAPSHOT_PATH) await report(request, response);
+    if (path === OPS_SETTINGS_PATH) await writeSettings(request, response);
+    else if (path === OPS_SNAPSHOT_PATH) await report(request, response);
     else if (isOpsCommandPath(path)) await commandRoute(path, request, response);
     else read(request, response, query);
   };
+}
+
+/** The owner's switches as stored (`GET /v1/ops` `settings`, and the answer of `POST /v1/ops/settings`). */
+function settingsView(dependencies: Pick<OpsRouteDependencies, 'store'>, scopeKey: string): OpsSettings {
+  return { freshWorld: dependencies.store.worldPolicy.freshWorld(scopeKey) };
 }
 
 /** What a device reads. With ingest off, or before any report, the snapshot and its time are null. */
@@ -130,6 +183,7 @@ export function opsReadResponse(
     stale: !(ageMs <= OPS_LIMITS.staleAfterSeconds * 1000),
     staleAfterSeconds: OPS_LIMITS.staleAfterSeconds,
     ...opsCommandsView(dependencies, scopeKey),
+    settings: settingsView(dependencies, scopeKey),
     ...(server ? { server } : {}),
   };
 }

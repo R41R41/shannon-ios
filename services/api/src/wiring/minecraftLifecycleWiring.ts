@@ -8,6 +8,7 @@ import { createLifecycleRunner, type LifecycleSettlement } from './minecraftLife
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { LifecycleOutcomeKind } from '../mind/action/respond/lifecycleOutcomeLine.js';
 import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE, setDayReadiness } from './operatorLifecycleWiring.js';
+import { freshWorldAdmissionOf, type FreshWorldPorts } from './freshWorldWiring.js';
 import { operatorLifecycleAllowed } from '../infra/ops/store/operatorAuditStore.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
@@ -74,6 +75,11 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
    * Absent (the own-time worker, tests): only the 【知らせ:作業終了】 notice tells her.
    */
   told?: LifecycleOutcomeTeller;
+  /**
+   * 「新しいワールドで始める」 (`freshWorldWiring.ts`): the switch, the activity record and the open-task probe. Absent (the own-time
+   * worker, tests): no start ever asks for a new world.
+   */
+  freshWorld?: FreshWorldPorts;
 }) {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE')) return null;
   const configuration = configuredMinecraftBody(values);
@@ -115,6 +121,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   const lifecycleStore = new MinecraftLifecycleStore(db, id => leases.unknownExited(id));
   const service = new MinecraftLifecycle(lifecycleStore, configuration, { now: () => Date.parse(now()), allowed, servers: new Set(serverIds) });
   const runner = createLifecycleRunner({ actions: parts.actions, service, deviceId: configuration.deviceId });
+  // One decision for the three ways the owner newly asks for a start (a conversation, the Ops page, the operator CLI).
+  const freshWorld = freshWorldAdmissionOf(parts.freshWorld, { scopeKey: configuration.ownerScopeKey, service, now });
   /**
    * The owner's conversation request (2026-10-13 TI-REQ): admitted under its own `minecraft` action and the body, answered
    * 「受け付けた」 at once, finished in the background; its late outcome reaches her as a 【知らせ:作業終了】 notice
@@ -142,7 +150,10 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     if (!await runner!.takeBody(own)) return failure('conflict', BUSY_TEXT.body);
     // Its end is told to him in her words when it settles (`lifecycleOutcomeTellingWiring.ts`); the notice tells her either way. Not
     // awaited: writing the line (up to 20 s) never holds the operation's close or a shutdown.
-    void runner!.detach(own, { id: request.id, serverId: request.serverId, action: request.action, authority }, settlement => {
+    // Decided last, with the body taken: the state it reads is the freshest, and nothing after it can refuse the start.
+    const options = freshWorld({ ...request, origin: 'owner_request', via: 'conversation' });
+    const operation = { id: request.id, serverId: request.serverId, action: request.action, authority, ...(options ? { options } : {}) };
+    void runner!.detach(own, operation, settlement => {
       void parts.told?.({ scopeKey: configuration.ownerScopeKey, threadId: request.threadId, operationId: request.id, action: request.action,
         outcome: settledOutcome(settlement) });
     });
@@ -208,8 +219,9 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   parts.autonomy.tools.useMinecraftLifecycle(port);
   const recovery = parts.actions ? createMinecraftLifecycleRecovery({ db, service, actions: parts.actions, deviceId: configuration.deviceId }) : null;
   const ops = parts.ops && serverIds.includes('shannon-home') ? createOpsMinecraftLifecycle({ ...parts.ops, service, scopeKey: configuration.ownerScopeKey,
-    deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone }) : null;
-  const operator = createOperatorLifecycle({ service, runner, scopeKey: configuration.ownerScopeKey, serverIds, ownerAlone: parts.ownerAlone, allowed });
+    deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone, freshWorld }) : null;
+  const operator = createOperatorLifecycle({ service, runner, scopeKey: configuration.ownerScopeKey, serverIds, ownerAlone: parts.ownerAlone, allowed,
+    freshWorld });
   return { service, ops, operator, recover: () => recovery?.recover() ?? Promise.resolve(),
     async close() { await ops?.close(); await runner?.close(); await recovery?.close(); db.close(); } };
 }

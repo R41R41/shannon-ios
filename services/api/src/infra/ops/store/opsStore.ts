@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { OpsCommandStore } from './opsCommandStore.js';
+import { OpsWorldPolicyStore } from './opsWorldPolicyStore.js';
 import type { OpsSnapshot } from '../../../contracts/opsContract.js';
 import { secureDatabaseFiles } from '../../sqlite/sqliteStoreContext.js';
 
@@ -17,6 +18,8 @@ export class SQLiteOpsStore {
   private readonly database: DatabaseSync;
   /** Stage 2: the record of commands, on the same connection and with the same single holder. */
   readonly commands: OpsCommandStore;
+  /** The owner's 「新しいワールドで始める」 switch (`opsWorldPolicyStore.ts`): a setting, not a snapshot, on the same connection. */
+  readonly worldPolicy: OpsWorldPolicyStore;
 
   constructor(path: string) {
     this.database = new DatabaseSync(path);
@@ -31,6 +34,7 @@ export class SQLiteOpsStore {
       );
     `);
     this.commands = new OpsCommandStore(this.database);
+    this.worldPolicy = new OpsWorldPolicyStore(this.database);
     secureDatabaseFiles(path);
   }
 

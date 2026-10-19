@@ -78,7 +78,8 @@ export class MinecraftLifecycle {
   async execute(request: MinecraftLifecycleRequest, signal?: AbortSignal): Promise<MinecraftLifecycleReceipt> {
     const previous = this.store.command(request.id);
     if (previous) {
-      if (previous.action !== request.action || previous.serverId !== request.serverId || JSON.stringify(previous.authority) !== JSON.stringify(request.authority)) throw new Error('MINECRAFT_LIFECYCLE_OPERATION_CONFLICT');
+      if (previous.action !== request.action || previous.serverId !== request.serverId || JSON.stringify(previous.authority) !== JSON.stringify(request.authority)
+        || JSON.stringify(previous.options ?? null) !== JSON.stringify(request.options ?? null)) throw new Error('MINECRAFT_LIFECYCLE_OPERATION_CONFLICT');
       const receipt = this.store.receipt(request.id);
       if (receipt && receipt.outcome !== 'unknown' && receipt.inputsReleased) return receipt;
       throw new Error('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');

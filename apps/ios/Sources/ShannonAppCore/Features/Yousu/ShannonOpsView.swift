@@ -120,9 +120,10 @@ public struct ShannonOpsView: View {
                 ForEach(snapshot.minebot) { ShannonOpsMinebotTaskRow(bot: $0, current: current, palette: palette) }
             }
         }
-        if !groups.minecraft.isEmpty {
+        if !groups.minecraft.isEmpty || model.freshWorld != nil {
             Section("Minecraft サーバー") {
                 ForEach(groups.minecraft) { serviceRow($0, current: current, palette: palette) }
+                if model.freshWorld != nil { ShannonOpsFreshWorldToggle(model: model, palette: palette) }
             }
         }
         if snapshot.services.isEmpty {
@@ -255,6 +256,37 @@ public struct ShannonOpsView: View {
         let clock = ShannonYousuTime.clock(receivedAt)
         guard withAge, let ago = ShannonYousuTime.ago(receivedAt) else { return clock }
         return "\(clock)（\(ago)）"
+    }
+}
+
+/// 「新しいワールドで始める」. It is a setting the server stores, not a command: the position changes only after the
+/// server stored the new value, and a refusal leaves it where it was and says so.
+struct ShannonOpsFreshWorldToggle: View {
+    @Bindable var model: ShannonOpsModel
+    let palette: ShannonPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+            Toggle(isOn: Binding(
+                get: { model.freshWorld ?? false },
+                set: { on in Task { await model.setFreshWorld(on) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ShannonGeneratedStrings.opsFreshWorldTitle)
+                    Text(ShannonGeneratedStrings.opsFreshWorldFootnote)
+                        .font(.shannon(.footnote))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(model.freshWorld == nil || model.isSavingSettings)
+            .frame(minHeight: ShannonTouchTarget.minimum)
+            .accessibilityIdentifier("ops-fresh-world-toggle")
+            if let message = model.settingsMessage {
+                Label(message, systemImage: "exclamationmark.circle")
+                    .font(.shannon(.footnote))
+                    .foregroundStyle(palette.danger)
+            }
+        }
     }
 }
 

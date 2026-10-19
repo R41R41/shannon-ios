@@ -318,6 +318,16 @@ public struct ShannonOpsAllowedDTO: Decodable, Equatable, Sendable {
     }
 }
 
+/// The owner's switches that are not commands (`settings` of `GET /v1/ops`, docs/ops-contract.md).
+/// `freshWorld` is 「新しいワールドで始める」: the server stores it, so this is the server's value, never a local choice.
+public struct ShannonOpsSettingsDTO: Decodable, Equatable, Sendable {
+    public let freshWorld: Bool
+
+    public init(freshWorld: Bool) {
+        self.freshWorld = freshWorld
+    }
+}
+
 /// The answer of `GET /v1/ops`, already held to the rules of the contract:
 /// no snapshot is always stale, and a stale or unsupported answer allows nothing,
 /// whatever the fields say.
@@ -330,10 +340,13 @@ public struct ShannonOpsViewDTO: Decodable, Equatable, Sendable {
     /// The last 20 commands, newest first.
     public let commands: [ShannonOpsCommandDTO]
     public let allowed: ShannonOpsAllowedDTO
+    /// Nil from a server that has no such switches (or an answer that cannot be read): then no switch is offered.
+    public let settings: ShannonOpsSettingsDTO?
 
     public init(
         snapshot: ShannonOpsSnapshotDTO?, receivedAt: String?, stale: Bool, staleAfterSeconds: Double = 180,
-        commandsSupported: Bool, commands: [ShannonOpsCommandDTO] = [], allowed: ShannonOpsAllowedDTO = .nothing
+        commandsSupported: Bool, commands: [ShannonOpsCommandDTO] = [], allowed: ShannonOpsAllowedDTO = .nothing,
+        settings: ShannonOpsSettingsDTO? = nil
     ) {
         let isStale = snapshot == nil || stale
         self.snapshot = snapshot
@@ -343,10 +356,19 @@ public struct ShannonOpsViewDTO: Decodable, Equatable, Sendable {
         self.commandsSupported = commandsSupported
         self.commands = commandsSupported ? Array(commands.prefix(20)) : []
         self.allowed = commandsSupported && !isStale ? allowed : .nothing
+        self.settings = settings
+    }
+
+    /// The same answer with the switches the server just stored.
+    func replacing(settings: ShannonOpsSettingsDTO) -> ShannonOpsViewDTO {
+        ShannonOpsViewDTO(
+            snapshot: snapshot, receivedAt: receivedAt, stale: stale, staleAfterSeconds: staleAfterSeconds,
+            commandsSupported: commandsSupported, commands: commands, allowed: allowed, settings: settings
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
-        case snapshot, receivedAt, stale, staleAfterSeconds, commandsSupported, commands, allowed
+        case snapshot, receivedAt, stale, staleAfterSeconds, commandsSupported, commands, allowed, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -360,7 +382,8 @@ public struct ShannonOpsViewDTO: Decodable, Equatable, Sendable {
             staleAfterSeconds: seconds.flatMap { $0 > 0 ? $0 : nil } ?? 180,
             commandsSupported: (try? container.decodeIfPresent(Bool.self, forKey: .commandsSupported)) == true,
             commands: (try? container.decode(ShannonLossyList<ShannonOpsCommandDTO>.self, forKey: .commands))?.items ?? [],
-            allowed: (try? container.decodeIfPresent(ShannonOpsAllowedDTO.self, forKey: .allowed)) ?? .nothing
+            allowed: (try? container.decodeIfPresent(ShannonOpsAllowedDTO.self, forKey: .allowed)) ?? .nothing,
+            settings: try? container.decodeIfPresent(ShannonOpsSettingsDTO.self, forKey: .settings)
         )
     }
 }
@@ -374,6 +397,15 @@ struct ShannonOpsCommandRequestDTO: Encodable, Equatable, Sendable {
 
 struct ShannonOpsCommandResponseDTO: Decodable, Sendable {
     let command: ShannonOpsCommandDTO
+}
+
+struct ShannonOpsSettingsRequestDTO: Encodable, Equatable, Sendable {
+    let scopeKey: String
+    let freshWorld: Bool
+}
+
+struct ShannonOpsSettingsResponseDTO: Decodable, Sendable {
+    let settings: ShannonOpsSettingsDTO
 }
 
 struct ShannonOpsErrorDTO: Decodable, Sendable {
