@@ -2,6 +2,7 @@ import {
   OWNER_PERSON_KEY, drawersIn, episodeLine, replyFacts, foldEpisodeLedger, innerNoteDay, ledgerFacts, memoryControlFor, repetitionFacts,
   FOLLOW_UP_LIMITS, followUpLine, followUpTopics, greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
   type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type PhraseWatch, type RepetitionWatch,
+  type AffectionStage,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { FeelingDays } from './feelingDays.js';
@@ -42,6 +43,8 @@ export interface FeelingLines {
   carriedLines: readonly string[];
   /** The carried lines a touch is judged with: without the boundaries she was told and has not endorsed (review L2). */
   carriedTouchLines: readonly string[];
+  /** `SHANNON_AFFECTION`, the owner alone: her stage, and the value it came from (never in a prompt). */
+  affection?: { stage: AffectionStage; value: number };
 }
 
 export interface FeelingKey {
@@ -140,7 +143,8 @@ export class FeelingEvents {
         return { ledger, watch, phrases, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone),
           repetitionLine: [repetitionLine(watch), said, ...this.greeting(scopeKey, key, at, snapshot, words)].filter(Boolean).join('\n'),
           facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts },
-          carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines };
+          carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines,
+          ...(carried.affection ? { affection: carried.affection } : {}) };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);

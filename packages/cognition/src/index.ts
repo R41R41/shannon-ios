@@ -406,6 +406,9 @@ export * from './replyCheck.js';
 export * from './textRegister.js';
 export * from './feelingSentence.js';
 export * from './relationshipLedger.js';
+// Owner 2026-10-20 (`SHANNON_AFFECTION`): her affection, its stages and the core of each stage.
+export * from './affection.js';
+export { characterCoreForStage } from './characterCoreStages.js';
 export * from './feelingDays.js';
 export * from './episodeMemory.js';
 export * from './boundaryMemory.js';

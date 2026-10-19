@@ -400,6 +400,8 @@ export class ShannonApiKernel {
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     if(this.mind?.sync)await this.mind.sync();
     const feelingBlock = feelingTurn ? await feelingText.block(feelingTurn) : ''; // Without a port, not even a tick.
+    layered = feelingText.staged(feelingTurn, layered); // Owner 2026-10-20: the core of her affection's stage (none: as it was).
+    systemPrompt = layered.prompt;
     const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null, ...feelingText.paced(feelingTurn, message) }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),

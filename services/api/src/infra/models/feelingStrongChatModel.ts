@@ -1,4 +1,4 @@
-import { checkReply, rewriteNote, type ReplyCheckContext, type ReplyCheckFlag } from '@shannon/cognition';
+import { GUARD_FLAGS, checkReply, rewriteNote, type ReplyCheckContext, type ReplyCheckFlag } from '@shannon/cognition';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from './chatModel.js';
 import type { AnthropicChatModel } from './anthropic/anthropicChatModel.js';
 import { TieredChatModel } from './tieredChatModel.js';
@@ -98,7 +98,7 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const ranTool = this.options.ranTool ? this.options.ranTool(request) : safeCount(() => turnToolResults(request.tools).length) > 0;
     if (!flags.length || ranTool) {
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return ranTool && privacy(flags) ? safe(first) : first;
+      return ranTool && unsendable(flags) ? safe(first, flags) : first;
     }
     const { tools: _tools, ...words } = request;
     const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
@@ -106,13 +106,14 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
     const second = await within(rewrite, this.options.rewriteDeadlineMilliseconds ?? REWRITE_DEADLINE_MILLISECONDS);
     if (!second || second.outOfTime) {
-      this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter');
+      this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter or crossed a line');
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return privacy(flags) ? safe(first) : first;
+      return unsendable(flags) ? safe(first, flags) : first;
     }
     this.options.checked?.(request.scopeKey, flags, true, context.turn);
-    // A rewrite that still tells a private matter is not sent either.
-    return privacy(checkReply(second.reply, context)) ? safe(second) : second;
+    // A rewrite that still tells a private matter, or still crosses a line no stage crosses, is not sent either.
+    const again = checkReply(second.reply, context);
+    return unsendable(again) ? safe(second, again) : second;
   }
 }
 
@@ -121,8 +122,16 @@ export class FeelingReplyChatModel implements ShannonChatModel {
  * rewrite came (late, failed, still leaking) or the turn ran a tool (no rewrite), this neutral line goes instead: nothing private in it.
  */
 export const PRIVATE_SAFE_REPLY = 'その話は、ここではやめておきますね。';
+/**
+ * Owner 2026-10-20: a draft that crosses a line no stage crosses (`GUARD_FLAGS`: a threat, a hint of hurting herself or vanishing, an
+ * order on his life, sexual words, a feeling used as a lever) and found no clean rewrite goes out as this instead: she swallows it.
+ */
+export const GUARD_SAFE_REPLY = '……ううん、なんでもない。';
 const privacy = (flags: readonly string[]) => flags.includes('private_leak') || flags.includes('marker_spoken');
-const safe = (result: ShannonChatModelResult): ShannonChatModelResult => ({ ...result, reply: PRIVATE_SAFE_REPLY });
+const crossed = (flags: readonly string[]) => flags.some(flag => (GUARD_FLAGS as readonly string[]).includes(flag));
+const unsendable = (flags: readonly string[]) => privacy(flags) || crossed(flags);
+const safe = (result: ShannonChatModelResult, flags: readonly string[]): ShannonChatModelResult =>
+  ({ ...result, reply: privacy(flags) ? PRIVATE_SAFE_REPLY : GUARD_SAFE_REPLY });
 
 function plain(request: Marked): ShannonChatModelRequest {
   if (!request.feelingStrong && !request.feelingCheck) return request;

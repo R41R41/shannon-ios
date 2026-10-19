@@ -291,6 +291,10 @@ export const SWITCHES = [
     doc: 'ADR-0013 §6: her inner note reads the fast layer and the ledger as narrator (honne not from her replies); intent and until unchanged.',
   },
   {
+    name: 'SHANNON_AFFECTION', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN', 'SHANNON_INNER_NOTE'],
+    doc: 'Owner 2026-10-20: her affection for him (no cap) picks her core\'s stage and stance lean; facts of the two of them. SHANNON_AFFECTION_STAGE.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

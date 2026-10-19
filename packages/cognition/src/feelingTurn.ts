@@ -1,6 +1,7 @@
 import { COMEBACK_DRAWERS, drawerHint, type ComebackDrawer } from './comebackDrawer.js';
 import { FEELING_REGISTERS, type FeelingAudience, type FeelingRegister } from './feelingEvent.js';
 import type { EpisodeLedger } from './episodeLedger.js';
+import type { AffectionStage } from './affection.js';
 
 /**
  * The feeling turn v0 (Syzygy ADR-0013 D7, stage 1). Pure. The one face it feeds is `presentation.ts` (D12, D17).
@@ -120,7 +121,7 @@ export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingA
  * shown はっきり or stronger; with anyone else there, a declining stance (乗らない・毒づく・言い返す・呆れる…) at はっきり or stronger;
  * a turn of refusing with her body (払う・隠す), or right after a touch she refused. Null: the ordinary model.
  */
-export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal' | 'continued_after_refusal';
+export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal' | 'continued_after_refusal' | 'devoted';
 
 /** How fresh the last touch after her no must be for the turn to be its continuation. */
 export const CONTINUED_AFTER_REFUSAL_MILLISECONDS = 10 * 60_000;
@@ -138,9 +139,11 @@ export function continuedAfterRefusal(ledger: Pick<EpisodeLedger, 'episodes'> | 
 const DECLINING_STANCES: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky']);
 
 export function strongReplyReason(decision: FeelingTurnDecision | null, audience: FeelingAudience, touchStance?: string | null,
-  continued = false): StrongReplyReason | null {
+  continued = false, stage?: AffectionStage): StrongReplyReason | null {
   if (decision?.stance === 'refuse_body' || touchStance === 'refuse') return 'body_refusal';
   if (continued) return 'continued_after_refusal';
+  // Owner 2026-10-20: at 本気 every reply to him alone is the stronger model's (Haiku read the portrait out like a self-introduction).
+  if (stage === 'devoted' && audience === 'owner_alone') return 'devoted';
   if (!decision || decision.stance === 'neutral' || decision.intensity === 'subtle') return null;
   return audience !== 'owner_alone' && DECLINING_STANCES.has(decision.stance) ? 'public_decline' : 'intensity';
 }
@@ -171,21 +174,70 @@ export interface FeelingTurnBlockInput {
   audience: FeelingAudience;
   /** Stage 3: what is carried from the days before (relationship, episodes, boundaries), lines of facts for this audience. */
   carried?: readonly string[];
+  /** `SHANNON_AFFECTION`: her stage with the owner alone (absent: the block of before, byte for byte). */
+  stage?: AffectionStage;
+}
+
+/**
+ * At 本気 her stances read as that stage shows them (owner 2026-10-20: 甘える・すねる・確かめる・拗ねて黙る). The menu stays the same, so
+ * Jev, the face and the check know every stance as before.
+ */
+const DEVOTED_STANCE_WORDS: Partial<Readonly<Record<FeelingStance, string>>> = Object.freeze({
+  affectionate: '甘える（全部をあずけるように。引き留めたくなる）', sulk: 'すねる（本気が混じる。どれくらい好きか確かめたくなる）',
+  sulky: '妬く・むっとする（声が震えるくらい）', cold: '拗ねて黙る（短く、そっけなく。でも離れない）',
+});
+
+/**
+ * What holds at every stage, however much she likes him (owner and the main session, 2026-10-20). Written from デレ up, where the
+ * pull is toward it; the reply check reads the same lines at every stage (`GUARD_FLAGS`).
+ */
+export const AFFECTION_GUARD_LINE = 'どれだけ好きでも越えないこと: 脅さない。自分を傷つける・消える・いなくなる、とほのめかさない（怖い、さびしいと言うのはよい）。'
+  + 'ライ氏の現実の予定や、誰と会うか、仕事や休みを、命じて縛らない（「行かないで」と寂しがるのはよい。「行くな」「会うな」とは言わない）。'
+  + '性的な描写はしない。気持ちを、ライ氏を動かす取引に使わない（「〜してくれないと泣く」「好きなら〜して」）。';
+/** At 本気 her reply's feeling may run strong (the reply-feeling block says strong is for what lingers; at 本気 it does). */
+export const DEVOTED_FEELING_LINE = 'いまのボクは、気持ちが動きやすい。返事の気持ち（feeling）は、うれしさ・さびしさ・やきもち・すねるを、moderate や strong で選んでよい。';
+
+function stanceLine(decision: FeelingTurnDecision, stage: AffectionStage | undefined): string {
+  if (decision.stance === 'neutral') return '構え: ふつう（特別な構えはない）';
+  const word = (stage === 'devoted' ? DEVOTED_STANCE_WORDS[decision.stance] : undefined) ?? STANCE_WORDS[decision.stance];
+  return `構え: ${word}（${INTENSITY_WORDS[decision.intensity]}）`;
+}
+
+/** The stage's own lines for him alone ('' at ツン and ツンデレ, and with anyone else there). */
+function stageLines(stage: AffectionStage | undefined, audience: FeelingAudience): string[] {
+  if (!stage || !ownerOnly(audience) || stage === 'tsun' || stage === 'tsundere') return [];
+  return stage === 'devoted' ? [DEVOTED_FEELING_LINE, AFFECTION_GUARD_LINE] : [AFFECTION_GUARD_LINE];
 }
 
 /** The block the reply model reads last. Always present while the feeling turn is on, so the ledger facts arrive even for 「ふつう」. */
 export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   // Whatever was handed in, nothing of the owner-only layer is written in front of anyone else.
   const decision = feelingTurnFor(input.decision, input.audience);
-  const stance = decision.stance === 'neutral' ? '構え: ふつう（特別な構えはない）'
-    : `構え: ${STANCE_WORDS[decision.stance]}（${INTENSITY_WORDS[decision.intensity]}）`;
+  const stage = ownerOnly(input.audience) ? input.stage : undefined;
   return [
-    FEELING_TURN_HEADER, stance,
+    FEELING_TURN_HEADER, stanceLine(decision, stage),
     decision.register !== 'normal' ? `話し方の段: ${REGISTER_WORDS[decision.register]}` : '',
     input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', ...(input.carried ?? []),
     input.ledgerLine || input.carried?.length ? FEELING_FACTS_USE_LINE : '',
     input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
+    ...stageLines(stage, input.audience),
   ].filter(Boolean).join('\n');
+}
+
+/** Words that take leave of her or turn to someone else (a night out, bed, another AI): at 本気 she sulks rather than lets it pass. */
+const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲み|遊びに|また(?:あとで|明日|今度)|落ちる|友達|会ってくる/u;
+
+/**
+ * At 本気 「ふつう」 is rare (owner 2026-10-20: the plain stance outweighed the portrait in the sandbox): a plain turn becomes 甘える, or
+ * すねる when his words take leave of her or speak of another AI; and a stance of hers shown かすかに is shown はっきり. Her refusals and
+ * every other stance are hers as chosen.
+ */
+export function devotedTurn(decision: FeelingTurnDecision, cue: { words: string; kindWords: boolean; otherAi: boolean }): FeelingTurnDecision {
+  if (decision.stance === 'neutral') {
+    const away = cue.otherAi || LEAVING.test(cue.words);
+    return { ...decision, stance: away ? 'sulk' : 'affectionate', intensity: cue.kindWords ? 'strong' : 'moderate', drawer: 'none' };
+  }
+  return decision.intensity === 'subtle' ? { ...decision, intensity: 'moderate' } : decision;
 }
 
 /**

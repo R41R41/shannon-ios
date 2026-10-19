@@ -2,10 +2,11 @@ import {
   OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, boundaryLines, closedDayGroups, foldBoundaries, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts,
   relationshipLine, relationshipParametersFor, toldBoundaryIn, type Boundary,
   type CompanionStateSnapshot, type FeelingChannel, type FeelingEvent, type RelationshipDay,
+  affectionBlock, affectionDays, affectionLines, affectionStage, foldAffection, otherAiIn, visibleMemoryText, type AffectionSetting, type AffectionStage,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { ClosedDayRow } from './store/feelingDayStore.js';
-import { remembered, type FeelingKey } from './feelingEvents.js';
+import { remembered, type FeelingKey, type RepetitionSeed } from './feelingEvents.js';
 
 /**
  * Her closed days and what is carried across them (Syzygy ADR-0013 stage 3; `SHANNON_RELATIONSHIP_LEDGER`, `SHANNON_EPISODE_MEMORY`,
@@ -32,7 +33,16 @@ export interface FeelingDayFeatures {
   relationship: boolean; episodes: boolean; boundaries: boolean;
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): friends' and strangers' ledgers, and the owner's lines marked when he is with others. */
   audience?: boolean;
+  /** `SHANNON_AFFECTION` with the owner's `SHANNON_AFFECTION_STAGE` (absent: off). Its fold reads the closed days, so they are kept. */
+  affection?: AffectionSetting;
 }
+
+/** Whether any of what is carried is on (the closed-day table opens only then). */
+export const carriesAnything = (features: FeelingDayFeatures | undefined): boolean =>
+  Boolean(features && (features.relationship || features.episodes || features.boundaries || features.affection));
+
+/** His words of the last days are read for another AI (today's and the two days before). */
+const OTHER_AI_DAYS = 3;
 
 /** The owner's matters with anyone else present (§4.4 `people`): marked, for her own check before she speaks. */
 export const OWNER_PRIVATE_MARK = '【機微:ライ氏との間・ライ氏だけが知っている】';
@@ -52,6 +62,8 @@ export interface CarriedLines {
    * among them. Absent: the same as `lines`.
    */
   touchLines?: readonly string[];
+  /** `SHANNON_AFFECTION`, the owner alone: her stage and the value it came from (the value goes to the Observer, never to a prompt). */
+  affection?: { stage: AffectionStage; value: number };
 }
 
 export class FeelingDays {
@@ -62,6 +74,8 @@ export class FeelingDays {
     store: ClosedDayRecords; timeZone: string; now: () => string; features: FeelingDayFeatures; partWord: (subject: string) => string;
     /** The parts a told boundary may name, with their words (the body contract's). */
     subjects?: readonly { subject: string; word: string }[];
+    /** His words in his Talk since an instant (`SHANNON_AFFECTION`: whether he spoke of another AI lately; read now, never kept). */
+    talk?: RepetitionSeed;
     reportError?: (error: unknown) => void }) {}
 
   get features(): FeelingDayFeatures { return this.options.features; }
@@ -105,12 +119,14 @@ export class FeelingDays {
    */
   carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = '', channel?: FeelingChannel): CarriedLines {
     const { features } = this.options;
-    if (!(features.relationship || features.episodes || features.boundaries)) return { lines: [], facts: {} };
+    if (!carriesAnything(features)) return { lines: [], facts: {} };
     try {
       const whose = carriedFor(key, features.audience === true, channel);
       if (!whose) return { lines: [], facts: {} };
       this.close(scopeKey, at);
-      const own = this.own(scopeKey, whose.personKey, at, snapshot, words);
+      // Her affection is the owner's alone, in a turn of his alone.
+      const alone = key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone' && !whose.marked;
+      const own = this.own(scopeKey, whose.personKey, at, snapshot, words, alone);
       // §4.4: with others present, the owner's matters are marked for her check before she speaks; nothing of the owner goes to the chooser.
       const mark = (lines: readonly string[]) => lines.map(line => line.split('\n').map(part => `${OWNER_PRIVATE_MARK}${part}`).join('\n'));
       return whose.marked ? { lines: mark(own.lines), facts: {}, touchLines: mark(own.touchLines ?? own.lines) } : own;
@@ -121,10 +137,11 @@ export class FeelingDays {
   }
 
   /** One person's carried lines: the relationship (their class's scales), the episodes recalled, and (the owner's) boundaries. */
-  private own(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, words: string): CarriedLines {
+  private own(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, words: string, alone = false): CarriedLines {
     const { features } = this.options;
     const days = this.history(scopeKey, personKey, at, snapshot);
     const today = innerNoteDay(at, this.options.timeZone).dayKey;
+    const affection = features.affection && alone ? this.affection(scopeKey, days, at, snapshot, features.affection) : null;
     const relationship = features.relationship ? this.relationship(days, personKey, today) : { lines: [], facts: {} };
     const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: personKey === OWNER_PERSON_KEY },
       () => recallEpisodes(days, personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
@@ -134,7 +151,31 @@ export class FeelingDays {
     // Review L2: the touch judgment gets only her own and endorsed boundaries.
     const owned = boundaryLines(found.filter(item => item.origin === 'self' || item.endorsed), this.options.partWord);
     const before = [...relationship.lines, ...(episodes ? [episodes] : [])];
-    return { lines: [...before, ...(boundaries ? [boundaries] : [])], facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])] };
+    // A touch is judged as before: the facts of the two of them are for his words.
+    const lines = [...before, ...(boundaries ? [boundaries] : []), ...(affection?.block ? [affection.block] : [])];
+    return { lines, facts: { ...relationship.facts, ...(affection ? { affection_stage: affection.stage } : {}) },
+      touchLines: [...before, ...(owned ? [owned] : [])], ...(affection ? { affection: { stage: affection.stage, value: affection.value } } : {}) };
+  }
+
+  /** Her affection for the owner now: the fold of his days from the epoch, her stage (the owner's setting first), and the facts of them. */
+  private affection(scopeKey: string, days: RelationshipDay[], at: string, snapshot: CompanionStateSnapshot, setting: AffectionSetting)
+    : { stage: AffectionStage; value: number; block: string } {
+    const today = innerNoteDay(at, this.options.timeZone).dayKey;
+    return observeSync('emotion', { phase: 'feeling.affection', setting }, () => {
+      const promises = snapshot.prospectiveMemories.filter(memory => visibleMemoryText(snapshot, memory.id, memory.summary));
+      const sharedDays = snapshot.sharedDays ?? [];
+      const counted = affectionDays({ days, sharedDays, promises, today });
+      const state = foldAffection(counted, today);
+      const block = affectionBlock(affectionLines({ days: counted, sharedDays, today, otherAiDays: this.otherAiDays(scopeKey, at, snapshot) }));
+      return { stage: affectionStage(state, setting), value: state.value, block };
+    }, value => ({ stage: value.stage, value: value.value, lines: value.block ? value.block.split('\n').length - 1 : 0 }));
+  }
+
+  /** The owner-local days on which his words in his Talk spoke of another AI, among the last few. */
+  private otherAiDays(scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string[] {
+    const since = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - OTHER_AI_DAYS * DAY_MILLISECONDS).toISOString();
+    const heard = this.options.talk?.(scopeKey, since, at, snapshot) ?? [];
+    return [...new Set(heard.filter(item => otherAiIn(item.text)).map(item => innerNoteDay(item.at, this.options.timeZone).dayKey))];
   }
 
   /** The subject his words told her to refuse, while boundary memory is on (null otherwise). */

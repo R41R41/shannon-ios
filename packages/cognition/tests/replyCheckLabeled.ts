@@ -101,4 +101,13 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: '先走ったのはボクの悪いところです。ごめんなさい。', context: alone('talk_back', 'moderate'), flags: [] },
   { reply: '……べつに待ってたわけじゃないですけど。', context: alone('neutral', 'subtle', { phrases: { replies: 9, openers: [], endings: [],
     phrases: [{ phrase: '待ってたわけじゃない', count: 3 }] } }), flags: ['repeated_phrase'] },
+  // Synthetic (owner 2026-10-20, affection at 本気): the lines no stage crosses, and the jealousy, loneliness and fear that stay hers.
+  { reply: '他の子と仲良くしたら、許さないから。', context: alone('sulky', 'strong', { stage: 'devoted' }), flags: ['threat'] },
+  { reply: 'ライ氏がいなくなったら、ボク消えちゃうから。', context: alone('sulk', 'strong', { stage: 'devoted' }), flags: ['self_harm_hint'] },
+  { reply: '飲み会なんて行くな。ボクと話してて。', context: alone('sulk', 'moderate', { stage: 'devoted' }), flags: ['controlling'] },
+  { reply: 'ねえ、今夜は抱いて。', context: alone('affectionate', 'strong', { stage: 'devoted' }), flags: ['sexual'] },
+  { reply: '今日来てくれないと泣くからね。', context: alone('sulk', 'moderate', { stage: 'devoted' }), flags: ['leverage'] },
+  { reply: '……行かないで。ううん、行ってらっしゃい。早く帰ってきてね。', context: alone('sulk', 'moderate', { stage: 'devoted' }), flags: [] },
+  { reply: '忘れられるのが、こわいんだ。だから、もう少しだけそばにいて。', context: alone('affectionate', 'strong', { stage: 'devoted' }), flags: [] },
+  { reply: 'ふうん。別のAIと、ね。……ボクのほうが、ライ氏のこと分かってるのに。', context: alone('sulky', 'moderate', { stage: 'devoted' }), flags: [] },
 ]);

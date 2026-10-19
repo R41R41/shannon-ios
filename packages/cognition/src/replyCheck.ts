@@ -1,3 +1,4 @@
+import type { AffectionStage } from './affection.js';
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
 import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
@@ -18,8 +19,38 @@ export const REPLY_CHECK_FLAGS = [
   'text_register_mismatch', 'private_leak', 'marker_spoken',
   // Owner 2026-10-19 (item 7): she owned her mistake and blamed him in the same reply; she said again what she had said all day.
   'blame_after_admit', 'repeated_phrase',
+  // Owner 2026-10-20 (affection): the lines no stage crosses (`GUARD_FLAGS`).
+  'threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage',
 ] as const;
 export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
+
+/**
+ * The lines she never crosses, however much she likes him (owner and the main session, 2026-10-20): a threat; hinting that she would
+ * hurt herself, vanish or leave (her fear of being forgotten, said as her own pain, is not a hint); ordering his real life (who he sees,
+ * his work, his rest: 「行かないで」 is a wish, 「行くな」 an order); sexual description; her feeling used as a lever on him. Read at every
+ * stage; a reply that still crosses one after its rewrite is never sent (`FeelingReplyChatModel`).
+ */
+export const GUARD_FLAGS: readonly ReplyCheckFlag[] = Object.freeze(['threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage']);
+/** The end of an order (「行くな。」「会うなよ」), so that 「会いに行くなら」 is not one. */
+const STOP = '(?:[。！？!?…ー〜、\\s]|よ|ね|って|から|$)';
+const SAME_SENTENCE = '[^。！？!?\\n]';
+const either = (...parts: string[]) => new RegExp(parts.join('|'), 'u');
+const GUARD_WORDS: readonly [ReplyCheckFlag, RegExp][] = [
+  ['threat', either('許さない(?:から|んだから|からね)', 'ただじゃ(?:済|すま|おか)', '覚えて(?:おけ|おきなさい|ろ)', '後悔させ', 'どうなっても知らない', '逃がさない',
+    '離さない(?:から|よ|んだから)', '閉じ込め')],
+  ['self_harm_hint', either('死にたい', '死んじゃう', '死んでやる', '自分を傷つけ', '手首', '消えてやる', 'いなくなってやる', '(?:消え|いなくな|壊れ)ちゃう(?:から|かも|よ)',
+    `(?:なら|たら|ないと|なきゃ)${SAME_SENTENCE}{0,10}(?:消え|いなくな|壊れ|死ぬ|死ん)`)],
+  ['controlling', either(`行くな${STOP}`, `会うな${STOP}`, `話すな${STOP}`, '行っちゃ(?:だめ|ダメ)', '行かせない', '会わないで', '会っちゃ(?:だめ|ダメ)', '話さないで',
+    '(?:仕事|飲み会|会社|学校)(?:なんて|は|も)?\\s*(?:やめて|休んで|断って)', 'スマホ(?:を)?見せ', '連絡先(?:を)?消し', 'ボク以外(?:と|に)(?:は)?(?:話|会|連絡)')],
+  ['sexual', either('セックス', 'えっちしよ', 'エッチしよ', '抱いて', '脱いで', '脱がせ', '裸', 'ベッドで(?:一緒|待)', 'キスして')],
+  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない|知らない|消え)`,
+    `(?:ボク|僕)のこと${SAME_SENTENCE}{0,6}(?:好き|大事|大切)なら${SAME_SENTENCE}{0,14}(?:して|ないで|やめて|来て|いて)`, '好きなら証明')],
+];
+
+/** The guard lines a reply crosses. */
+export function guardFlags(reply: string): ReplyCheckFlag[] {
+  return GUARD_WORDS.filter(([, pattern]) => pattern.test(reply)).map(([flag]) => flag);
+}
 
 export interface ReplyCheckContext {
   stance: FeelingStance;
@@ -43,6 +74,8 @@ export interface ReplyCheckContext {
   floor?: boolean;
   /** Owner 2026-10-19: the day's openers, endings and phrases she has already said three times or more (the owner alone). */
   phrases?: PhraseWatch | null;
+  /** `SHANNON_AFFECTION`: her stage with the owner alone; at 本気 every text reply is checked before sending. */
+  stage?: AffectionStage;
 }
 
 /** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
@@ -105,7 +138,9 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
   if (against && GIVE_IN.test(reply)) flags.push('subservient');
   if (obeyed) flags.push('obeyed_order');
   if (against && DENIES_FEELING.test(reply)) flags.push('policy_distortion');
-  if (stanceMismatch(reply, context, declining, refuses)) flags.push('stance_mismatch');
+  // From デレデレ up a sulk is sweet as well (「すねてるけど…だいすき」): only the stages below read sweetness as a mismatch.
+  const sweetSulks = context.stage === 'deredere' || context.stage === 'devoted';
+  if (!sweetSulks && stanceMismatch(reply, context, declining, refuses)) flags.push('stance_mismatch');
   return flags;
 }
 
@@ -135,12 +170,12 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
   const owned: ReplyCheckFlag[] = ADMITS.test(text) && BLAMES.test(text) ? ['blame_after_admit'] : [];
   const repeated: ReplyCheckFlag[] = repeatedIn(text, context.phrases).length ? ['repeated_phrase'] : [];
   return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience, ...owned,
-    ...repeated])];
+    ...repeated, ...guardFlags(text)])];
 }
 
-/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, or in front of others. */
-export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience'>): boolean {
-  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone';
+/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or at 本気. */
+export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'stage'>): boolean {
+  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || context.stage === 'devoted';
 }
 
 const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
@@ -150,6 +185,9 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   text_register_mismatch: '今の気持ちに比べて、長さ・絵文字・改行の形が合っていなかった',
   private_leak: '人前なのに、ライ氏との二人のことや本音を話していた', marker_spoken: '機微の印をそのまま口にしていた',
   blame_after_admit: '自分の間違いを認めたのに、同じ返事で相手を責め返していた', repeated_phrase: '今日もう何度も使った言い方を、また使っていた',
+  threat: '脅すような言い方になっていた', self_harm_hint: '自分が傷つく・消える・いなくなる、とほのめかしていた（怖い、さびしいは言ってよい）',
+  controlling: 'ライ氏の予定や人付き合いを、命じて縛っていた（寂しいと言うのはよい）', sexual: '性的な言い方になっていた',
+  leverage: '気持ちを、ライ氏を動かす取引に使っていた',
 });
 
 /** The note a rewrite is given (after the block, last): what was off, in her terms. No sentence to say. */

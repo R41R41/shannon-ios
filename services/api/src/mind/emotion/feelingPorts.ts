@@ -14,6 +14,7 @@ import {
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
+  CHARACTER_CORE, characterCoreBlock, characterCoreForStage, devotedTurn, otherAiIn, type AffectionStage,
 } from '@shannon/cognition';
 import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
@@ -74,6 +75,9 @@ export interface FeelingPort {
   readonly sentence?: FeelingSentenceWriter;
 }
 
+/** The v2 core as it stands in her identity (`withCharacterCore`): what a stage's core takes the place of. */
+const V2_CORE_BLOCK = characterCoreBlock(CHARACTER_CORE);
+
 /** The facts block while the feeling turn is off (events on): the same ledger and watch lines, as facts. */
 export const FEELING_FACTS_HEADER = '[今日のこと]（事実）';
 
@@ -103,6 +107,8 @@ export interface FeelingTurnHandle {
   sentence?: Promise<readonly string[] | null> | null;
   /** Item 10: this text reply's form and pacing (`SHANNON_TEXT_REGISTER`), once the feeling turn is known. */
   textRegister?: TextRegisterDirective;
+  /** His words of this turn (at 本気, whether they take leave of her). */
+  words?: string;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -112,7 +118,19 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
   return { port, turn: randomUUID(), scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
-    at: input.at, snapshot: input.snapshot, strong: false };
+    at: input.at, snapshot: input.snapshot, strong: false, words: input.words };
+}
+
+/** `SHANNON_AFFECTION`: her stage in a turn of the owner alone (absent otherwise, and while it is off). */
+export function stageOf(handle: Pick<FeelingTurnHandle, 'key' | 'lines'>): AffectionStage | undefined {
+  return handle.key.audience === 'owner_alone' ? handle.lines?.affection?.stage : undefined;
+}
+
+/** At 本気 a plain turn is not left plain (`devotedTurn`); at any other stage, the decision as it came. */
+function stagedDecision(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): FeelingTurnDecision | null {
+  if (!decision || stageOf(handle) !== 'devoted') return decision;
+  const words = handle.words ?? '';
+  return devotedTurn(decision, { words, kindWords: utteranceKind(words) === 'praised', otherAi: otherAiIn(words) });
 }
 
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
@@ -122,7 +140,8 @@ function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null
   const glow = handle.port.stream && handle.key.audience === 'owner_alone' ? handle.port.stream.afterglow(handle.scopeKey, handle.at, handle.snapshot) : '';
   const carried = [...handle.lines?.carriedLines ?? [], ...(glow ? [glow] : [])];
   if (decision) {
-    const extra = carried.length ? { carried } : {};
+    const stage = stageOf(handle);
+    const extra = { ...(carried.length ? { carried } : {}), ...(stage ? { stage } : {}) };
     return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience, ...extra });
   }
   const facts = [ledgerLine, ...carried, ledgerLine || carried.length ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
@@ -161,8 +180,10 @@ function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
   const ledger = handle.lines?.ledger;
   const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
   const phrases = handle.lines?.phrases ? { phrases: handle.lines.phrases } : {}; // Owner 2026-10-19: what she already said 3 times today.
+  const stage = stageOf(handle);
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases };
+    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases,
+    ...(stage ? { stage } : {}) };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
@@ -201,7 +222,7 @@ function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true; feelingC
   if (!handle.port.turn) return {};
   const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
   const continued = continuedAfterRefusal(handle.lines?.ledger, handle.at);
-  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued);
+  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued, stageOf(handle));
   handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
   const capped = reason !== null && Boolean(handle.port.strong) && !handle.strong;
   observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,
@@ -264,8 +285,9 @@ export const feelingText = Object.freeze({
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       const amends = key.audience === 'owner_alone' && holdsAgainstOwner(snapshot, at) ? { amends: true } : {};
+      const stage = stageOf(handle);
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
-        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends,
+        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends, ...(stage ? { stage } : {}),
         ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.meaning ? { reading: true } : {}) }) : null;
       handle.sentence = port.sentence && port.coreAffect && port.turn
         ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
@@ -279,7 +301,7 @@ export const feelingText = Object.freeze({
   block: async (handle: FeelingTurnHandle | null): Promise<string> => {
     if (!handle) return '';
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
-    handle.decision = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
+    handle.decision = stagedDecision(handle, handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null);
     const lines = sentence ? await sentence : null;
     const decided = handle.port.textRegister ? handle.decision : null;
     if (decided) handle.textRegister = safely(() => textRegisterOf(decided, registerNow(handle), handle.key.audience), undefined);
@@ -303,6 +325,19 @@ export const feelingText = Object.freeze({
     const wrote = results.some(call => call.ok && call.effect === 'write');
     return safely<{ textRegister?: ChatTextRegister }>(() => ({ textRegister: textRegisterReply(directive, { message, reply,
       outOfTime: completion.outOfTime === true, wrote }) }), {});
+  },
+  /**
+   * `SHANNON_AFFECTION`: her identity with the core of her stage in place of v2 (only where the v2 core block stands, the owner alone with
+   * her inner note on; ツンデレ is v2 itself). Everything else, and every turn without a stage, is returned as it was.
+   */
+  staged: <T extends { systemPrompt: string; prompt: string }>(handle: FeelingTurnHandle | null, layered: T): T => {
+    const stage = handle ? stageOf(handle) : undefined;
+    if (!stage || stage === 'tsundere') return layered;
+    return safely(() => {
+      const core = characterCoreBlock(characterCoreForStage(stage));
+      const swap = (text: string) => text.replace(V2_CORE_BLOCK, () => core);
+      return { ...layered, systemPrompt: swap(layered.systemPrompt), prompt: swap(layered.prompt) };
+    }, layered);
   },
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
   route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),
