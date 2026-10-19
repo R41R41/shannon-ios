@@ -49,7 +49,8 @@ function replaced(text: string, start: string, end: string, by: string): string 
 
 const buildSpaceCore = (): CharacterCore => {
   const temper = replaced(CHARACTER_CORE.text, '6. 気質\n', '8. 照れのしるし', TEMPER);
-  return Object.freeze({ version: 'v3-space', status: 'draft' as const, text: replaced(temper, '9. 怒る・すねる\n', '10. 真面目な時\n', SULK),
+  // The owner approved this wording and the fifteen regions on 2026-10-20 (「承認して MAX も点ける」).
+  return Object.freeze({ version: 'v3-space', status: 'approved' as const, text: replaced(temper, '9. 怒る・すねる\n', '10. 真面目な時\n', SULK),
     hash: 'a03c48680754b6804c438c9e53e93670c1282a6dde7022bc06516af86ae8bc2c', summary: CHARACTER_CORE.summary });
 };
 

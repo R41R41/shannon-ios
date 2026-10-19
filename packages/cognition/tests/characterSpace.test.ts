@@ -191,7 +191,7 @@ describe('her core while her space is on', () => {
   it('is a versioned draft, its hash the sha256 of its version, text and summary', () => {
     const core = characterCoreForSpace();
     expect(core.version).toBe('v3-space');
-    expect(core.status).toBe('draft');
+    expect(core.status).toBe('approved');
     expect(createHash('sha256').update(characterCoreHashInput(core)).digest('hex')).toBe(core.hash);
     expect(characterCoreBlock(core)).toMatch(new RegExp(`^\\[ボクの性格の核 v3-space #${core.hash.slice(0, 8)}\\]\\n`, 'u'));
   });
