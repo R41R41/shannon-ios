@@ -6,6 +6,7 @@ import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
 import { freshWorldOfSettlement, freshWorldReportOf, type FreshWorldAdmission, type FreshWorldReport } from './freshWorldWiring.js';
+import { unlessBusy } from '../infra/sqlite/sqliteBusy.js';
 
 /** The native window an Ops operation needs inside its claim window: the operator's deadline and the cancellation drain. */
 const OPS_LIFECYCLE_LEASE_MS = 130_000;
@@ -78,13 +79,21 @@ export function createOpsMinecraftLifecycle(parts: {
   };
   const wake = () => {
     if (closed) return;
+    // A timer's pass: a busy database skips it (the next tick projects and claims), never an uncaught throw that exits the API
+    // (Minecraft run 18, 07:06:08 JST: `OpsCommandStore.settle` threw `database is locked` here and the API restarted eight times).
+    unlessBusy('ops.lifecycle.wake', () => claimNext(), undefined);
+  };
+  const claimNext = () => {
     projectReceipts();
     if (!parts.enabled() || !parts.ownerAlone() || !parts.service.available(parts.scopeKey)) return;
     // One API broker admission at a time; a crash cannot replay claimed requests.
     if (running.size) return;
     const row = parts.commands.lifecyclePending(parts.scopeKey, parts.now())[0];
     if (!row) return;
-    const work = execute(row).finally(() => { running.delete(row.command.id); });
+    // Its later writes (a report in the settlement) run after the timer's pass: a busy one is logged and left to the next pass's
+    // projection (`projectReceipts`), never an unhandled rejection.
+    const work = execute(row).catch(error => { unlessBusy('ops.lifecycle.execute', () => { throw error; }, undefined); })
+      .finally(() => { running.delete(row.command.id); });
     running.set(row.command.id, work);
   };
   const timer = setInterval(wake, 1000); timer.unref();

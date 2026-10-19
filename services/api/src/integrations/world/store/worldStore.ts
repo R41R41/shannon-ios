@@ -1,3 +1,4 @@
+import { retryWhileBusy } from '../../../infra/sqlite/sqliteBusy.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -20,8 +21,11 @@ export class SQLiteWorldStore {
   constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString()) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
-    this.prepareSchema();
-    this.seedConfiguredSources();
+    // Busy at the start (run 18: the world worker died here while another connection held the lock): tried again for about a minute.
+    retryWhileBusy('world.start', () => {
+      this.prepareSchema();
+      this.seedConfiguredSources();
+    });
     this.secureFiles();
   }
 

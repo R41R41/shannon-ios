@@ -177,7 +177,9 @@ const RETREAT = 'mc-night-retreat', SHELTER = 'mc-night-shelter';
  * are separate measures over some of the same calls; the two are not merged, and neither changes what she sees.
  */
 export const ADOPTIONS: readonly Adoption[] = Object.freeze([
-  { tag: 'sheep_search', skills: [BED, SCOUT, FOOD_BED], matches: tool('mc.find-nearest-entity', 'entityType', /^sheep$/u) },
+  // Minebot 2026-10-20 (run 18): `explore-for-structure` looks for animals too, sheep of a colour among them.
+  { tag: 'sheep_search', skills: [BED, SCOUT, FOOD_BED], matches: anyOf(tool('mc.find-nearest-entity', 'entityType', /^sheep$/u),
+    tool('mc.explore-for-structure', 'structureType', /^sheep$/u)) },
   { tag: 'village_check', skills: [BED, SCOUT, FOOD_BED, FIRST_DAY], matches: villageCheck },
   { tag: 'sheep_hunt', skills: [BED, FOOD_BED], matches: tool('mc.attack-continuously', 'entityName', /^sheep$/u) },
   { tag: 'bed_craft', skills: [BED, FOOD_BED], matches: tool('mc.craft-one', 'itemName', /^[a-z_]*_bed$/u) },

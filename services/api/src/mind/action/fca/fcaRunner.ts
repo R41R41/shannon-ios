@@ -23,6 +23,8 @@ import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleRefle
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
+/** How old a lease grant may be reused for a check between outside calls (`checked`). */
+export const FCA_PERMIT_REUSE_MS = 250;
 /** The result of a body action left unrun because an earlier body action of the same response failed (the guard in `executeFcaStep`). */
 export const FCA_EARLIER_ACTION_FAILED = '同じ応答で先に呼んだ体の操作が失敗したため、この操作は実行していません。先の結果と新しい観測から判断し直してください。';
 /**
@@ -93,7 +95,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
   const progress = (event: TaskProgressEvent) => {
     if (maintenance) return;
-    try { runtime.recordProgress?.(step, event); } catch { /* Optional UI observations never change an operation's actual outcome. */ }
+    // Optional UI observations never change an operation's actual outcome.
+    try { metrics.timedSync('progressMs', () => runtime.recordProgress?.(step, event)); } catch { /* as above */ }
   };
   // Her own-time work (ADR-0009 stage 2, E4) is hers, not a conversation: it is held by its own gate, not by who is present.
   const ownTime = step.snapshot.task.origin === 'own_time';
@@ -108,16 +111,29 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     console.warn(`Shannon FCA execution held task=${step.taskId} reason=${reason}`);
     return new Error('FCA_EXECUTION_HELD');
   };
-  const checked = () => metrics.timed('permitMs', () => observeAsync('gate', { phase: 'step_permit' }, async () => {
+  // Minecraft run 18: the lease was asked of the mind at every check, about ten a decision at about 0.12 s each (1.27 s a decision).
+  // Now `fresh` asks it just before an outside call that needs it (the summarizer, the model, a retry, a tool that does not ask it
+  // itself); `reuse` (between steps of the decision's own preparation) asks only when the last grant is `FCA_PERMIT_REUSE_MS` old, so a
+  // selector or a recall that took longer is followed by an ask; `local` asks nothing where the next outside call asks for itself (a
+  // body tool, the completion's verification) or the commit checks the lease in its own transaction. The local checks (who is
+  // present, the sources, the task's phase, a stop) run at every check, and once more after an ask (the event loop ran meanwhile);
+  // with no ask nothing ran between, so they are not repeated (each sources check can walk the task's provenance: run 18 named 323
+  // walks of 100 ms or more, 73 s in all).
+  let permittedAt = Number.NEGATIVE_INFINITY;
+  const local = () => {
     signal.throwIfAborted();
-    const before = heldReason();
-    if (before) throw held(before);
+    const reason = heldReason();
+    if (reason) throw held(reason);
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
-    if (!await ports.permit()) throw held('permit_denied');
-    signal.throwIfAborted();
-    const after = heldReason();
-    if (after) throw held(after);
-    if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
+  };
+  const checked = (mode: 'fresh' | 'reuse' | 'local' = 'reuse') => metrics.timed('permitMs', () => observeAsync('gate', { phase: 'step_permit' }, async () => {
+    local();
+    if (mode === 'fresh' || (mode === 'reuse' && performance.now() - permittedAt > FCA_PERMIT_REUSE_MS)) {
+      metrics.asked();
+      if (!await ports.permit()) throw held('permit_denied');
+      permittedAt = performance.now();
+      local();
+    }
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   }, () => ({ allowed: true })));
   await checked();
@@ -142,7 +158,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
   const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
-    permit: async () => { await checked(); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
+    permit: async () => { await checked('fresh'); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
   }, signal, transient?.policy ?? ports.history!.policy, forceEpoch ? { forceEpoch } : undefined)) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = metrics.timedSync('contextMs', () => observeSync('context', provenance, () => {
@@ -229,11 +245,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   let latest = { asked: request, at: Date.now() };
   const decide = (asked: FcaModelInput) => {
     latest = { asked, at: Date.now() };
-    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, signal)), { signal, recheck: checked,
+    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, signal)), { signal, recheck: () => checked('fresh'),
       delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
       refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; },
       log: line => console.warn(`${line} task=${step.taskId}`) });
   };
+  await checked('fresh');
   const output = await decide(request).catch(async error => {
     // The very first decision of a transient task refused for its betas: no signed history exists, so it starts again in the legacy shape.
     if (!isTransientUnsupported(error) || !selection || selection.obsMode !== 'transient' || input.history.length) throw error;
@@ -256,7 +273,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     throw error;
   });
   progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'received' });
-  await checked();
+  await checked('local');
   let bodyStale = !await stillFresh();
   if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
     () => ports.evidence!.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
@@ -294,7 +311,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     let earlierFailed = false;
     const notRun = new Set<string>();
     for (const call of decision.calls) {
-      await checked();
+      await checked(ports.tools?.permitsItself?.(call.name) ? 'local' : 'fresh');
       if (!await stillFresh()) bodyStale = true;
       const operationId = `${step.id}:${call.id}`;
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
@@ -369,14 +386,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   // A wait nobody can answer is turned away a bounded number of times, then committed and the task stopped (below).
   const gated = waitGate.apply(disposition);
   disposition = gated.disposition;
-  await checked();
+  await checked('local');
   if (disposition === 'complete' && !bodyStale && ports.tools?.progress) await metrics.timed('verifyMs', async () => {
     // Final native evidence must not race a new reflex using this same enclosing lease.
     // Stop and drain the physical monitor first; keep the task inbox monitor observing.
     await ports.body?.close();
     if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
     if (!bodyStale) {
-      const verification = await ports.tools!.progress!.verifyCompletion({ scopeKey: step.scopeKey, taskId: step.taskId, operationId: `${step.id}:completion`, name: 'goal.verify', input: {}, signal }, checked);
+      const verification = await ports.tools!.progress!.verifyCompletion({ scopeKey: step.scopeKey, taskId: step.taskId, operationId: `${step.id}:completion`, name: 'goal.verify', input: {}, signal }, () => checked('fresh'));
       if (verification.status === 'not_verified') { disposition = 'continue'; completionRejected = true; completionVerificationFailures++; }
       else completionVerificationFailures = 0;
     }
@@ -387,7 +404,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await metrics.timed('closeMs', () => closeFcaMonitors(ports));
   if (!await stillFresh()) bodyStale = true;
   if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; }
-  await checked();
+  await checked('local');
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = metrics.timedSync('commitMs', () => observeSync('store', provenance, () => runtime.commitStep(step, {
     history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),

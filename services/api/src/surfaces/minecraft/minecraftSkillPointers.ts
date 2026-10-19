@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
-import { adoptionTags, adoptionTools, fed, milestoneLines, minecraftStage, type MinecraftStage } from './minecraftStage.js';
+import { adoptionTags, adoptionTools, fed, milestoneLines, milestoneNow, minecraftStage, type MinecraftStage } from './minecraftStage.js';
+export { milestoneFollowMemory } from './minecraftMilestoneFollow.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -56,6 +57,12 @@ export interface MinecraftSituation {
   strongholdWanted: boolean;
   /** In the overworld at stage 6 or with eyes of ender, and no bow, fewer than `ARROWS` arrows or no carved pumpkin. */
   kitMissing: boolean;
+  /** The name of the step now (`milestoneNow`); null without an observation. */
+  milestoneName?: string | null;
+  /** The step's procedure put first after daytime decisions that went elsewhere (`minecraftMilestoneFollow.ts`); set by the adapter. */
+  milestoneSteps?: readonly string[];
+  /** Fewer than twelve planks' worth of wood (`WOOD_PLANKS`, a log is four): the first day's pointer stays at stage 2 (run 18). */
+  woodShort?: boolean;
 }
 /**
  * A pointer names its skill and the skills it succeeds (legacy-minecraft draft-6, 2026-10-19): the first of `skills` she can read now
@@ -85,6 +92,9 @@ const POINTERS: readonly Pointer[] = Object.freeze([
   // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
   // path is stage 5's and 6's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
   { skills: ['mc-first-day', 'mc-early-toolchain'], when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
+  // Run 18: the stone pickaxe took the first day's pointer away with 2 logs and 3 planks, and the wood never came (D45: no planks
+  // for a pickaxe). It stays at stage 2 while the wood is short.
+  { skills: ['mc-first-day'], when: '木材が板材12枚分に足りない', applies: s => s.calm && s.stage === 2 && s.woodShort === true },
   { skills: [FOOD_BED, 'mc-opening-scout'], when: '石のツルハシがあり食料かベッドが無い昼', applies: s => s.calm && s.stage === 2 && !(s.bedGivenUp && s.fed) },
   // Iron from stage 3, and at stage 2 once the day's sheep search found none (with the food pointer beside it while food is short).
   { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシ・バケツ・鉄の全身の防具のどれかが無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
@@ -106,6 +116,8 @@ const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
  * in five, so at twelve exactly the stronghold pointer would go away at the first loss), and the arrows of a kit (the crystals).
  */
 const EYES_FOR_PORTAL = 12, EYES_TO_SEARCH = 8, ARROWS = 32;
+/** The wood the milestone 「木材」 asks for, in planks (a log is four). */
+const WOOD_PLANKS = 12;
 /**
  * How long before dark the bed search is suggested (20 ticks a second, the day before dark is 650 s: 600 s is from about tick 1,000).
  * Minecraft run 14 (2026-10-17, Sonnet): at 300 s the gist was shown 11 times in two dusks and never followed. A decision takes 10-70 s,
@@ -218,6 +230,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   return {
     ...dark,
     threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
+    ...stepNow(observation, world, items, dimension, pace.milestones?.netherReached === true),
     oneHitFrom: threatNear ? oneHitFrom(world.margin) : null, dropsLeft: dropsLine(world),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
@@ -225,9 +238,15 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
     ...openingPath(items, stage, darkIn, day, pace),
     ...laterPath(items, dimension, stage),
-    milestone: observation ? milestoneLines({ counts: items, dimension, netherReached: pace.milestones?.netherReached === true,
-      bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' }) : [],
   };
+}
+
+/** The owner's order now (its lines and its name), and the wood short of the step 「木材」. */
+function stepNow(observation: BodyObservation | null, world: Record<string, unknown>, items: ItemCounts, dimension: string, netherReached: boolean)
+  : Pick<MinecraftSituation, 'milestone' | 'milestoneName' | 'woodShort'> {
+  const facts = { counts: items, dimension, netherReached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' };
+  return { milestone: observation ? milestoneLines(facts) : [], milestoneName: observation ? milestoneNow(facts).now.name : null,
+    woodShort: dimension === 'overworld' && countMatching(items, /_log$/u) * 4 + countMatching(items, /_planks$/u) < WOOD_PLANKS };
 }
 
 /** The overworld opening up to the Nether: the bed before dark, the day's sheep search given up, food enough, the portal (null stage: elsewhere). */
@@ -369,7 +388,8 @@ export interface MinecraftSkillContext {
    * The body's pointer fields: none on a calm moment but the milestone; with no gist shown, `skillPointers` and `skillPointerNote` as
    * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
    */
-  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[]; reminders?: string[] };
+  fields: { milestoneSteps?: string[]; skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[];
+    reminders?: string[] };
   /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
@@ -383,12 +403,16 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const pointed = matched.map(pointer => pointer.skill);
   const milestone = { ...(situation.milestone.length ? { milestone: [...situation.milestone] } : {}),
     ...reminders(situation) };
-  if (!matched.length) return { fields: milestone, gistTools: new Map(), pointed };
+  // The step's procedure goes first, ahead of the pointers and their gists (never a gist: a use would hold a skill's revision).
+  const head = situation.milestoneSteps?.length ? { milestoneSteps: [...situation.milestoneSteps] } : {};
+  if (!matched.length) return { fields: { ...head, ...milestone }, gistTools: new Map(), pointed };
   const shown = gists?.(pointed) ?? new Map<string, readonly string[]>();
   const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);
-  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE, ...milestone }, gistTools: new Map(), pointed };
+  if (!skillGists.length) {
+    return { fields: { ...head, skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE, ...milestone }, gistTools: new Map(), pointed };
+  }
   const gistTools = new Map(skillGists.map(gist => [gist.skill, followedBy(gist)] as const));
-  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE, ...milestone }, gistTools, pointed };
+  return { fields: { ...head, skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE, ...milestone }, gistTools, pointed };
 }
 /** The tools a shown gist is followed by: those it names, else (a gist of how to go on, draft-6) its skill's specific adoption tools. */
 function followedBy(gist: MinecraftSkillGist): Set<string> {

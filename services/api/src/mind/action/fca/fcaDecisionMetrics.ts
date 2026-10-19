@@ -19,9 +19,10 @@ import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
  * Production run 15 (2026-10-19): the first stretch of every decision held the thread 2.5-8.8 s and no part named it.
  *
  * The rest of a step (run 15: 7.7 s a decision named by no part, and 1.9 s between one decision's commit and the next one's start):
- *   "other":{"startMs","permitMs","guardMs","contextMs","verifyMs","closeMs","commitMs"} — the monitors' start, the lease and audience
+ *   "other":{"startMs","permitMs","guardMs","contextMs","verifyMs","closeMs","commitMs","progressMs"} — the monitors' start, the lease and audience
  *     checks (`checked`, every one of them), the waits for a settled body and observation revision, building the request's parts, the
- *     completion check, closing the monitors and the recall segment, and the commit;
+ *     completion check, closing the monitors and the recall segment, the commit, and the progress records of the decision and its tools;
+ *   "permitAsks" — how many of the checks asked the lease of the mind (Minecraft run 18: about ten, 0.12 s each);
  *   "gap":{"sinceCommitMs","afterMs","waitMs","admitMs"} — from the previous decision's commit to this step's start: the previous step's
  *     work after its commit (`afterMs`: its budget and receipts), the scheduler's wait for its next turn (`waitMs`), and this step's
  *     admission (`admitMs`: lease, begin, budget, ports); null for a first step, or when the scheduler did not say (`ActionExecution.admission`);
@@ -30,7 +31,7 @@ import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
  * after a cut-off call in `guardMs` and `toolMs`; read each as where time went, not as a share of `stepMs` to add up.
  */
 type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs' | 'evidenceMs';
-type Other = 'startMs' | 'permitMs' | 'guardMs' | 'contextMs' | 'verifyMs' | 'closeMs' | 'commitMs';
+type Other = 'startMs' | 'permitMs' | 'guardMs' | 'contextMs' | 'verifyMs' | 'closeMs' | 'commitMs' | 'progressMs';
 const toolName = (name: string) => /^[A-Za-z0-9_.:-]{1,80}$/u.test(name) ? name : 'other';
 const whole = (value: number) => Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 
@@ -42,9 +43,9 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   if (execution) delete execution.modelMetrics; // A reading of an earlier decision on the same execution is never this one's.
   const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0, recallStartMs: 0, evidenceMs: 0 };
   const other: Record<Other, number> = { startMs: options.enteredAt === undefined ? 0 : Math.max(0, started - options.enteredAt),
-    permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0 };
+    permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0, progressMs: 0 };
   const committedBefore = typeof prior.fcaCommittedAt === 'number' && Number.isFinite(prior.fcaCommittedAt) ? prior.fcaCommittedAt : null;
-  let toolMs = 0;
+  let toolMs = 0, permitAsks = 0;
   const tools: string[] = [], skipped: string[] = [];
   let recalled: BodyRecallMeasure | null = null;
   /** The time before this step, from the previous decision's commit (`gap` above). */
@@ -72,6 +73,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
       tools.push(toolName(name));
       toolMs += milliseconds;
     },
+    /** One ask of the action lease of the mind (checked in fcaRunner.ts asks only some of the times it checks). */
+    asked(): void { permitAsks += 1; },
     /** A body action of the response left unrun because an earlier one of it failed. */
     skipped(name: string): void { skipped.push(toolName(name)); },
     /** What a body task's recall did (`bodyTaskRecall.ts`: pool, groups, shown, characters, cue tags, Jev). Content-free. */
@@ -90,7 +93,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,
           in: metrics ? { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite } : null, out: metrics?.outputTokens ?? null,
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
-          other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), gap: gap(),
+          other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), permitAsks, gap: gap(),
           ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
           ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
       } catch { /* measuring never fails a step */ }

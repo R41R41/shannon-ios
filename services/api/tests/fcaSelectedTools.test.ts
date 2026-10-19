@@ -196,7 +196,9 @@ describe('FCA external-tool source and unknown-outcome boundaries', () => {
     expect(selections).toBe(0); expect(f.inputs).toHaveLength(0); expect(permits).toBe(0);
     visible = true;
     await expect(runFcaStep(step, f.ports, new AbortController().signal)).rejects.toThrow('FCA_SOURCE_WITHHELD');
-    expect(selections).toBe(1); expect(f.inputs).toHaveLength(0); expect(permits).toBe(2);
+    // One lease ask: the check before the selector reuses the grant of the step's first check (`FCA_PERMIT_REUSE_MS`, Minecraft
+    // run 18); visibility is checked at every check all the same, and the one after the selection withholds it.
+    expect(selections).toBe(1); expect(f.inputs).toHaveLength(0); expect(permits).toBe(1);
   });
 
   it('rechecks source visibility after the asynchronous permit, before any model input is used', async () => {

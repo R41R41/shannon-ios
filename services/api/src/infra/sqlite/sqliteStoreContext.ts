@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { ShannonEmotionTiming } from '@shannon/cognition';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 import { prepared } from './sqliteOpen.js';
+import { sqliteContention } from './sqliteBusy.js';
 import type { SQLiteShannonStoreOptions } from './sqliteStore.js';
 
 export class SQLiteStoreContext {
@@ -49,14 +50,23 @@ export class SQLiteStoreContext {
 
   transaction<T>(operation: () => T): T {
     if (this.database.isTransaction) return operation();
-    this.database.exec('BEGIN IMMEDIATE');
+    // Where it was taken, for the slow-lock line (Minecraft run 18: a lock held about 150 s that no journal could place).
+    const site = new Error(), asked = Date.now();
+    try { this.database.exec('BEGIN IMMEDIATE'); } catch (error) {
+      // Never taken (busy past the timeout): the wait is named as well.
+      sqliteContention(site, Date.now() - asked, 0);
+      throw error;
+    }
+    const taken = Date.now();
     try {
       const result = operation();
       this.database.exec('COMMIT');
+      sqliteContention(site, taken - asked, Date.now() - taken);
       secureDatabaseFiles(this.options.path);
       return result;
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      sqliteContention(site, taken - asked, Date.now() - taken);
       throw error;
     }
   }
