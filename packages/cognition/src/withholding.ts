@@ -142,26 +142,52 @@ function derivedRules(snapshot: CompanionStateSnapshot): readonly MemoryWithhold
 /**
  * Whether a text restates the withheld item: it contains enough of the item's key terms. A pure value of the rule and the text, and
  * a walk of a task's provenance asks it of the same long text (a skill's body) under the same rule once for every time the text was
- * read at (thousands): kept per rule, for the texts that are long enough to be worth it. Bounded; cleared when full.
+ * read at (thousands): kept per rule, for the texts that are long enough to be worth it. Bounded per rule (`RESTATED_KEPT`) and in all
+ * (`RESTATED_TOTAL_*`: entries and the characters of the texts kept, over every rule); the whole cache is dropped when the total is full.
  */
-const RESTATED = new WeakMap<MemoryWithholdingRule, Map<string, boolean>>();
+interface RestatedAnswers { answers: Map<string, boolean>; characters: number }
+let restated = new WeakMap<MemoryWithholdingRule, RestatedAnswers>();
+let restatedEntries = 0, restatedCharacters = 0;
 const RESTATED_KEPT = 256, RESTATED_MINIMUM_CHARACTERS = 256, RESTATED_MAXIMUM_CHARACTERS = 20_000;
+const RESTATED_TOTAL_ENTRIES = 1_024, RESTATED_TOTAL_CHARACTERS = 4_000_000;
+
+/** How much the restatement cache holds now (for a test that holds its bound). */
+export function restatedMemoryKept(): { entries: number; characters: number } { return { entries: restatedEntries, characters: restatedCharacters }; }
+
 export function restatesWithheldMemory(rule: MemoryWithholdingRule, text: string): boolean {
   if (!rule.terms.length) return false;
   const keep = text.length >= RESTATED_MINIMUM_CHARACTERS && text.length <= RESTATED_MAXIMUM_CHARACTERS;
-  let known: Map<string, boolean> | undefined;
+  let known: RestatedAnswers | undefined;
   if (keep) {
-    known = RESTATED.get(rule);
-    if (!known) RESTATED.set(rule, known = new Map());
-    const answer = known.get(text);
+    known = restated.get(rule);
+    const answer = known?.answers.get(text);
     if (answer !== undefined) return answer;
   }
   const result = restates(rule, text);
-  if (known) {
-    if (known.size >= RESTATED_KEPT) known.clear();
-    known.set(text, result);
-  }
+  if (keep) keepRestated(rule, known, text, result);
   return result;
+}
+
+/** Keeps an answer under the bounds (per rule, and in all): a rule that is full is emptied, and the whole cache is dropped when its total is. */
+function keepRestated(rule: MemoryWithholdingRule, known: RestatedAnswers | undefined, text: string, result: boolean): void {
+  let answers = known;
+  if (restatedEntries >= RESTATED_TOTAL_ENTRIES || restatedCharacters + text.length > RESTATED_TOTAL_CHARACTERS) {
+    restated = new WeakMap();
+    restatedEntries = 0;
+    restatedCharacters = 0;
+    answers = undefined;
+  }
+  if (answers && answers.answers.size >= RESTATED_KEPT) {
+    restatedEntries -= answers.answers.size;
+    restatedCharacters -= answers.characters;
+    answers.answers.clear();
+    answers.characters = 0;
+  }
+  if (!answers) restated.set(rule, answers = { answers: new Map(), characters: 0 });
+  answers.answers.set(text, result);
+  answers.characters += text.length;
+  restatedEntries += 1;
+  restatedCharacters += text.length;
 }
 
 function restates(rule: MemoryWithholdingRule, text: string): boolean {

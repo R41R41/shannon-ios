@@ -113,7 +113,11 @@ export function createFcaSourceGuard(parts: {
   const clock = parts.clock ?? Date.now;
   type Epoch = { version: number; at: number; mark: string | null; state: CompanionStateSnapshot; candidates: readonly ShannonExperience[];
     withheld: readonly ShannonExperience[]; secrets?: SecretCheck; withholding?: MemoryWithholding;
-    /** The withholding the read receipts of the checks of this epoch are asked under (`recordedReads`). */
+    /**
+     * The withholding the read receipts of the checks of this epoch are asked under (`recordedReads`). It reads rows lazily (a turn by
+     * id, the knowledge documents) and keeps them, so it lives only as long as the database is unchanged since the epoch's mark: past
+     * a change (`epochFor`) it is dropped. No time bound is added by it; its memos end with each check (`withReadSnapshot`).
+     */
     reads?: MemoryWithholding };
   const epochs = new Map<string, Epoch>();
   /** The snapshot and remembered turns of this moment: one load per state version, reused for `FCA_MEMORY_EPOCH_MS`. */
@@ -124,7 +128,10 @@ export function createFcaSourceGuard(parts: {
     if (known && mark !== null && known.mark === mark && now >= known.at && now - known.at < FCA_MEMORY_EPOCH_MS) return known;
     const state = parts.state.snapshot(scopeKey), at = clock();
     if (known && known.version === state.version && at >= known.at && at - known.at < FCA_MEMORY_EPOCH_MS) {
+      // The turns and the state are the epoch's (as before this reuse existed), but the database has changed since `reads` took its rows
+      // (a knowledge document, a turn it read by id): it is made again, so what it holds is never older than the mark it is kept under.
       known.mark = mark;
+      known.reads = undefined;
       return known;
     }
     const candidates = parts.conversations.experienceCandidates(scopeKey);

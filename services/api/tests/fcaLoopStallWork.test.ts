@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { OWNER_AUDIENCE, memoryWithholdingRules, restatesWithheldMemory, type MemoryWithholdingRule } from '@shannon/cognition';
+import { DatabaseSync } from 'node:sqlite';
+import { OWNER_AUDIENCE, memoryWithholdingRules, restatedMemoryKept, restatesWithheldMemory, type MemoryWithholdingRule } from '@shannon/cognition';
 import { fcaDenseWorld, rng } from './support/fcaDenseWorld.js';
 import { MEMORY_AT } from './support/memoryWorld.js';
 import { createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { createTaskMemory } from '../src/mind/memory/taskMemoryPorts.js';
-import { MemoryWithholding } from '../src/mind/memory/memoryVisibility.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { prepared } from '../src/infra/sqlite/sqliteOpen.js';
 import { versionRevisionId } from '../src/mind/memory/skillLineage.js';
+import { counting } from './support/callCounts.js';
 
 /**
  * Production run 14 (2026-10-17): `event loop blocked` 204 times in 30 minutes, median 3.3 s, while a Minecraft task ran. Offline, on a
@@ -15,21 +16,11 @@ import { versionRevisionId } from '../src/mind/memory/skillLineage.js';
  * recall of each step were found to ask the same questions of the recall graph over and over: every chunk of 40 ids walked the whole
  * graph below it again, every check of a receipt began a scope of its own, every re-asked receipt read its skill's every revision.
  * The budgets below are questions asked of the graph, counted, not seconds: they do not move with the machine, and the old code is far
- * over each (the numbers in the comments are origin/main's, 0c0ad93). `fcaLoopStallBudget.test.ts` holds the time budget.
+ * over each (the numbers in the comments are origin/main's, 0c0ad93). `fcaLoopStallBudget.test.ts` holds the same kind of budget over a whole
+ * task run, also counted; the seconds are `tests/perf/loopStallBudget.ts` (not in CI: a time bound fails on a loaded machine).
  */
 const cleanups: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
-
-/** Counts calls of the named methods of every `MemoryWithholding` while it runs. */
-function counting<T>(names: readonly string[], work: () => T): { value: T; counts: Record<string, number> } {
-  const proto = MemoryWithholding.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
-  const counts: Record<string, number> = {}, originals = new Map<string, (...args: unknown[]) => unknown>();
-  for (const name of names) {
-    const original = proto[name]!; originals.set(name, original); counts[name] = 0;
-    proto[name] = function (this: unknown, ...args: unknown[]) { counts[name]! += 1; return original.apply(this, args); };
-  }
-  try { return { value: work(), counts }; } finally { for (const [name, original] of originals) proto[name] = original; }
-}
 
 describe('a walk of a production-dense provenance asks the recall graph a bounded number of questions', () => {
   it('asks no more than a third of what origin/main asked for 190 ids over 100 provenance rows', () => {
@@ -188,6 +179,60 @@ describe('the small caches stay exact', () => {
       expect(restatesWithheldMemory(rule, other)).toBe(false);
       expect(restatesWithheldMemory(rule, 'ＡＢＣ')).toBe(false);
     }
+  });
+
+  it('holds the restatement answers to a bound over all rules (entries and characters), and answers as an uncached check does at every step', () => {
+    const rules = Array.from({ length: 40 }, (_, index): MemoryWithholdingRule => Object.freeze({ memoryId: `m${index}`, boundary: '2026-01-01T00:00:00.000Z', wide: false,
+      needed: 1, terms: Object.freeze([Object.freeze([`語${index}号`])]) }));
+    // Texts of 600 characters fill the entry bound; texts of 20,000 characters fill the character bound long before it.
+    for (const length of [600, 20_000]) {
+      let mostCharacters = 0, mostEntries = 0, drops = 0, before = restatedMemoryKept().entries;
+      for (let round = 0; round < 3; round++) for (const [index, rule] of rules.entries()) for (let k = 0; k < 60; k++) {
+        const has = k % 2 === 0, text = `${'あ'.repeat(length - 20)}${has ? `語${index}号` : `語${index + 1}号`}${String(k).padStart(8, '0')}`;
+        expect(restatesWithheldMemory(rule, text)).toBe(has);
+        const held = restatedMemoryKept();
+        expect(held.entries).toBeLessThanOrEqual(1_024);
+        expect(held.characters).toBeLessThanOrEqual(4_000_000);
+        if (held.entries < before) drops += 1;
+        before = held.entries; mostEntries = Math.max(mostEntries, held.entries); mostCharacters = Math.max(mostCharacters, held.characters);
+      }
+      // It did hold answers (it is worth its keep), up to the bound that applies to these texts, and was dropped, not grown, when full.
+      expect(drops).toBeGreaterThan(0);
+      if (length === 600) expect(mostEntries).toBe(1_024); else expect(mostCharacters).toBeGreaterThan(3_000_000);
+    }
+  });
+
+  it('moves the change mark for another connection\'s commit and for this one\'s row changes, not for its schema changes, with its statements prepared once', () => {
+    const world = fcaDenseWorld({ ordinary: 20, episodes: 2, skills: 2 }); cleanups.push(() => world.close());
+    const store = world.world.store, database = store.fcaDatabase();
+    const mark = () => store.changeMark()!;
+    const first = mark();
+    expect(mark()).toBe(first);
+    // Another connection to the same file: a commit moves the mark, a checkpoint and its reads do not.
+    const other = new DatabaseSync(world.world.path);
+    try {
+      other.exec('CREATE TABLE IF NOT EXISTS loop_stall_mark(x INTEGER)');
+      const afterOther = mark();
+      expect(afterOther).not.toBe(first);
+      expect(mark()).toBe(afterOther);
+      other.exec('INSERT INTO loop_stall_mark VALUES (1)');
+      const afterInsert = mark();
+      expect(afterInsert).not.toBe(afterOther);
+      other.prepare('SELECT count(*) AS n FROM loop_stall_mark').get();
+      expect(mark()).toBe(afterInsert);
+      // This connection: a schema change changes no row, so it does not move the mark (documented at `changeMark`); a row change does, a rolled back one too.
+      database.exec('CREATE TABLE loop_stall_own(x INTEGER)');
+      expect(mark()).toBe(afterInsert);
+      database.exec('INSERT INTO loop_stall_own VALUES (1)');
+      const afterOwn = mark();
+      expect(afterOwn).not.toBe(afterInsert);
+      database.exec('BEGIN; INSERT INTO loop_stall_own VALUES (2); ROLLBACK;');
+      expect(mark()).not.toBe(afterOwn);
+    } finally { other.close(); }
+    // Statements: once the two are prepared, a mark compiles nothing.
+    mark();
+    const { counts } = counting([], () => { for (let call = 0; call < 200; call++) mark(); }, { statements: true });
+    expect(counts.prepare).toBe(0);
   });
 
   it('prepares a statement once per connection and text, and answers as a fresh one does', () => {

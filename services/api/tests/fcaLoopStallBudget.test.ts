@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runLoopStall } from './support/fcaLoopStallHarness.js';
+import { WITHHOLDING_QUESTIONS, countingAsync } from './support/callCounts.js';
 
 /**
  * Production run 14 (2026-10-17, 06:34-07:04 JST): `event loop blocked` 204 times in 30 minutes, 808 s in all (46% of the run), median
@@ -8,23 +9,29 @@ import { runLoopStall } from './support/fcaLoopStallHarness.js';
  * turns (counts only, `support/fcaDenseWorld.ts`), a body that polls every 100 ms with a 20,000-character frame, and a task that
  * already holds a run 14 provenance (100 rows over 190 turns and 25 skill revisions).
  *
- * The budget is for the API's one thread over the task's first steps: no hold longer than 650 ms (origin/main 0c0ad93, measured on the
- * same machine: 950-1,040 ms; this branch: 340-440 ms) and at most 17% of the time in holds of 50 ms or more (origin/main 20-24%; this
- * branch 8-10%). The VM runs the same code about five times slower, so what is 100 ms here is a block that `event loop blocked` names there.
- * `fcaLoopStallWork.test.ts` holds the same fixes by the questions they ask, which do not move with the machine.
- * To measure more steps, or to profile: `node --import tsx tests/perf/loopStallBench.ts` (`STEPS`, `SEED_ROWS`, `PROFILE`, `TIMELINE`).
+ * The budget here is COUNTED, not timed: the questions the task's first steps asked of the recall graph and the statements the database
+ * compiled. They do not move with the machine or with what else runs on it (CI runs this suite beside others, `--maxWorkers=4`); a time
+ * budget failed under load (a 650 ms hold seen as 663 ms, 17% blocked seen as 21%). Measured on the same run, this branch / origin/main
+ * (0c0ad93), unloaded and with 24 busy loops beside it (this branch varied by under 7%):
+ *   withholdsReply          48.6-51.8 k /  89.9 k      sourceVisible        38.9 k /  90.5 k
+ *   recalledWithheldWithin  158.8-159.4 k / 611 k      withholdsExperience  12.4 k /  33.1 k
+ *   provenanceWithheld      19.5-19.9 k /  218 k       statements prepared  10.9-11.0 k / 55 k
+ * The bounds below sit between the two, about 1.4 to 1.8 times this branch. The run in seconds (no hold longer than 650 ms, under 17% of
+ * the time in holds of 50 ms or more; origin/main 950-1,040 ms and 20-24%, this branch 340-440 ms and 8-10%; the VM runs the same code about
+ * five times slower) is `node --import tsx tests/perf/loopStallBudget.ts`, and `tests/perf/loopStallBench.ts` measures more steps and
+ * profiles. `fcaLoopStallWork.test.ts` holds the same fixes on single walks.
  */
-describe('a Minecraft body task on production-dense memory keeps the API\'s one thread free', () => {
-  it('holds it for at most 650 ms at a time, and under 17% of the time in holds of 50 ms or more, over its first steps', async () => {
-    const run = await runLoopStall({ steps: 3, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 });
+const BOUNDS: Record<string, number> = { withholdsReply: 72_000, recalledWithheldWithin: 250_000, provenanceWithheld: 40_000, sourceVisible: 60_000,
+  withholdsExperience: 18_000, prepare: 20_000 };
+
+describe('a Minecraft body task on production-dense memory asks the recall graph a bounded number of questions', () => {
+  it('asks and compiles no more than the bounds below over its first steps, and every step is decided', async () => {
+    const { value: run, counts } = await countingAsync(WITHHOLDING_QUESTIONS, () =>
+      runLoopStall({ steps: 3, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 }), { statements: true });
     try {
       expect(run.decisions).toBeGreaterThanOrEqual(4);
-      const longestCheck = Math.max(0, ...run.walks.map(walk => walk.total));
-      expect(longestCheck, `the longest check of the source guard (${run.walks.map(walk => `${walk.mode}/${walk.via} ${walk.total}ms`).join(', ')})`).toBeLessThan(300);
-      expect(run.loop.maxMs, `longest holds ${run.loop.longest.join(', ')} ms`).toBeLessThan(650);
-      expect(run.loop.blockedFraction, `blocked ${Math.round(run.loop.blockedMs)} ms of ${Math.round(run.wallMs)} ms`).toBeLessThan(0.17);
-      // The watch of production names a hold of 500 ms or more: none here.
-      expect(run.watch.filter(ms => ms >= 650)).toEqual([]);
+      expect(run.warnings.filter(line => /FCA_SOURCE_WITHHELD|poll failed|capped/u.test(line))).toEqual([]);
+      for (const [name, bound] of Object.entries(BOUNDS)) expect(counts[name], `${name} of ${JSON.stringify(counts)}`).toBeLessThan(bound);
     } finally { await run.close(); }
   }, 120_000);
 });

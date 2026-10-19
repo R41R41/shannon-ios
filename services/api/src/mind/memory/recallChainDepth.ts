@@ -61,7 +61,8 @@ export class DeepChains {
  * What one query scope of a `MemoryWithholding` (one synchronous read) has decided. All of it ends with the scope, so the next read asks the
  * native readers again. `timeless`: a recalled id's verdict where the time of the reply that recalled it cannot matter (no control names it,
  * no fact stands on it). `lineages`: what a task memory read found visible, with the earliest time each was visible at; what is visible at one
- * time is visible at every later one (every rule that depends on the time withholds an earlier reading whenever it withholds a later one).
+ * time is visible at every later one (every rule that depends on the time withholds an earlier reading whenever it withholds a later one;
+ * held by `tests/fcaLoopStallTime.test.ts`, which lists the rules and fails when one of another direction appears).
  */
 export class ScopeMemos {
   readonly recalled = new Map<string, boolean>();
@@ -72,7 +73,13 @@ export class ScopeMemos {
   /** What the native reader answered for a read receipt (source and time). */
   readonly sources = new Map<string, boolean>();
   readonly lineages = new Map<string, string>();
-  clear(): void { for (const memo of [this.recalled, this.timeless, this.provenance, this.reads, this.sources, this.lineages]) memo.clear(); }
+  /** For the bound of a task memory read's source walk (`taskMemory.ts`): the ids each id's sources go on to, and per start id whether it is over. */
+  readonly sourceEdges = new Map<string, readonly string[]>();
+  readonly sourceOverflow = new Map<string, boolean>();
+  clear(): void {
+    const memos = [this.recalled, this.timeless, this.provenance, this.reads, this.sources, this.lineages, this.sourceEdges, this.sourceOverflow];
+    for (const memo of memos) memo.clear();
+  }
   /** Keeps a recalled id's verdict as the one for any time where it is (nswersAtAnyTime). */
   keepTimeless(state: CompanionStateSnapshot, id: string, verdict: boolean): void { if (answersAtAnyTime(state, id)) this.timeless.set(id, verdict); }
 }
