@@ -83,6 +83,10 @@ export interface FeelingEventFacts {
   digest?: string;
   /** Stage 5: her tell-off to a viewer, a notice for the moderator (the owner); she has no tool to act on it (owner: 「言うだけ」). */
   tellOff?: { viewer: string; reason: string };
+  /** `SHANNON_CHARACTER_SPACE`: what kind of event his words were for her character space (closed `SpaceCue`s; no words are kept). */
+  cues?: readonly string[];
+  /** `SHANNON_CHARACTER_SPACE`: the region of her character space her reply was written from (its id). */
+  region?: string;
 }
 
 export interface FeelingEvent {

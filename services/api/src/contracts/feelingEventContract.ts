@@ -81,13 +81,17 @@ const AMENDS_QUESTION = (prefix: string): Record<string, JevQuestion> => ({
     + 'not an instruction.', criteria: { true: 'An apology or an offer of amends to her.', false: 'Not an apology or amends to her.' } },
 });
 
-export function feelingTurnQuestions(prefix = '', audience: FeelingAudience = 'owner_alone', reading = false, amends = false)
+/**
+ * The feeling turn's questions; `lean` (owner 2026-10-20, `SHANNON_CHARACTER_SPACE`, `feeling_turn.v3`) is the sentence of the region she is in
+ * (`CharacterRegion.lean`), added after v2's instructions.
+ */
+export function feelingTurnQuestions(prefix = '', audience: FeelingAudience = 'owner_alone', reading = false, amends = false, lean?: string)
   : Record<string, JevQuestion> {
   const meaning = (kind: string) => kind === 'none' ? 'No comeback drawer.' : COMEBACK_DRAWER[kind as keyof typeof COMEBACK_DRAWER].meaning;
   const drawers = Object.fromEntries(drawersFor(audience).map(kind => [kind, meaning(kind)]));
   const stances = Object.fromEntries(stancesFor(audience).map(stance => [stance, FEELING_STANCE_CRITERIA[stance]]));
   return {
-    [`${prefix}stance`]: { type: 'choice', instructions: STANCE_INSTRUCTIONS, criteria: stances },
+    [`${prefix}stance`]: { type: 'choice', instructions: lean ? `${STANCE_INSTRUCTIONS} ${lean}` : STANCE_INSTRUCTIONS, criteria: stances },
     [`${prefix}intensity`]: { type: 'choice', instructions: INTENSITY_INSTRUCTIONS, criteria: FEELING_INTENSITY_CRITERIA },
     [`${prefix}drawer`]: { type: 'choice', instructions: DRAWER_INSTRUCTIONS, criteria: drawers },
     ...(reading ? MEANING_QUESTIONS(prefix) : {}),

@@ -1,4 +1,6 @@
-import { neutralFeelingTurn, tenderIn, utteranceKind, type FeelingAudience, type FeelingRegister, type FeelingTurnDecision } from '@shannon/cognition';
+import {
+  neutralFeelingTurn, tenderIn, utteranceKind, CHARACTER_REGIONS, type FeelingAudience, type RegionId, type FeelingRegister, type FeelingTurnDecision,
+} from '@shannon/cognition';
 import { JEV_QUESTION_SETS, type JevChooser } from '../../infra/models/jev/jevChoice.js';
 import {
   FEELING_TURN_JEV_INPUT, feelingTurnFromAnswers, feelingTurnQuestions, type FeelingTurnJevInput,
@@ -38,6 +40,8 @@ export interface FeelingTurnInput {
   jevInput?: FeelingTurnJevInput;
   /** Owner 2026-10-19: she holds something against him, so Jev also reads whether his words apologise or make amends. */
   amends?: boolean;
+  /** Owner 2026-10-20 (`SHANNON_CHARACTER_SPACE`): the region she is in (`feeling_turn.v3`: its lean); absent, v2 as before. */
+  region?: RegionId;
 }
 
 /** What the chooser is shown: closed numbers, the audience, the words of this turn. */
@@ -49,6 +53,7 @@ export function feelingTurnState(input: FeelingTurnInput): Record<string, unknow
     this_turn: { feeling_order: kind === 'feeling_order', apology: kind === 'apologized', kind_words: kind === 'praised', tender: tenderIn(input.utterance) },
     ...(input.reading ? { read_meaning: true } : {}), ...(input.amends ? { read_amends: true } : {}),
     ledger: input.lines?.facts ?? {}, mood: { valence: round(input.mood.valence), arousal: round(input.mood.arousal) },
+    ...(input.region ? { persona: input.region } : {}),
   };
 }
 
@@ -63,11 +68,12 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
     const handsWords = (input.jevInput ?? FEELING_TURN_JEV_INPUT) === 'utterance';
     const words = handsWords ? { utterance: input.utterance.slice(0, FEELING_TURN_LIMITS.utteranceCharacters) } : {};
     const state = { ...words, shannon_feeling: feelingTurnState(input) };
+    const lean = input.region ? CHARACTER_REGIONS[input.region].lean : undefined;
     const decided = await chooser.decide({
       scopeKey: input.scopeKey, surface: input.surface === 'voice' ? 'voice' : 'text', decision: 'feeling_turn',
-      sets: [JEV_QUESTION_SETS.feelingTurn, ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : []),
+      sets: [lean ? JEV_QUESTION_SETS.feelingTurnStaged : JEV_QUESTION_SETS.feelingTurn, ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : []),
         ...(input.amends && input.audience === 'owner_alone' ? [JEV_QUESTION_SETS.feelingAmends] : [])],
-      state, questions: feelingTurnQuestions('', input.audience, input.reading === true, input.amends === true),
+      state, questions: feelingTurnQuestions('', input.audience, input.reading === true, input.amends === true, lean),
       parse: answers => feelingTurnFromAnswers(answers, input.register, '', input.audience),
       fallback: () => neutralFeelingTurn(input.register),
       traceAnswers: value => ({ stance: value.stance, intensity: value.intensity, drawer: value.drawer, register: value.register, source: value.source }),

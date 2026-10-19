@@ -394,7 +394,7 @@ export class ShannonApiKernel {
     if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await textStage('tool_select_timeout', fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }), () => toolOffer.tools!) };
     toolOffer = { ...toolOffer, tools: conversationHintMenu(toolOffer.tools, Boolean(work)) };
     if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
-    layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
+    layered = feelingText.staged(feelingTurn, turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true)); // Step 6: her skills' index; her character space's core (owner 2026-10-20; none: as it was).
     systemPrompt = layered.prompt;
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing). ADR-0013: her feeling turn, ≤200 ms more.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });

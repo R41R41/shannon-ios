@@ -8,7 +8,7 @@ import type { FeelingEvent, FeelingEventFacts, FeelingEventKind } from './feelin
 // Stage 5 (review T4): a viewer's comments are kept too (their kind and tags; never a digest), so each viewer has their own light ledger.
 const KEPT_KINDS: ReadonlySet<FeelingEventKind> = new Set(['touched', 'spoke', 'apologized', 'praised', 'feeling_order', 'own_refusal', 'own_boundary',
   'comment']);
-const KEPT_FACTS = ['touchKind', 'part', 'stance', 'refusal', 'tags', 'meaning', 'toldBoundary', 'commentKind'] as const;
+const KEPT_FACTS = ['touchKind', 'part', 'stance', 'refusal', 'tags', 'meaning', 'toldBoundary', 'commentKind', 'cues'] as const;
 
 /** The event as a closed day keeps it, or null when the day does not keep it (her replies that do not refuse). */
 export function closedDayEvent(event: FeelingEvent): FeelingEvent | null {

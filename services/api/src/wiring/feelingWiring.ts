@@ -20,7 +20,7 @@ import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
 import { configuredFeelingSentenceWriter, type FeelingSentenceWriter } from '../infra/models/feelingSentenceModel.js';
-import { FeelingDays, type FeelingDayFeatures } from '../mind/emotion/feelingDays.js';
+import { FeelingDays, carriesAnything, type FeelingDayFeatures } from '../mind/emotion/feelingDays.js';
 import { StreamFeeling } from '../mind/emotion/streamFeeling.js';
 import { SQLiteFeelingDayStore } from '../mind/emotion/store/feelingDayStore.js';
 
@@ -109,7 +109,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
     ...seeds, ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
-    days: feelingDayFeatures(environment), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
+    days: spaceGuarded(feelingDayFeatures(environment), turn, check), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
     stream: switchOn(environment, 'SHANNON_FEELING_STREAM') });
 }
 
@@ -156,20 +156,40 @@ function portFlags(parts: { check?: boolean; shadow?: unknown; sentence?: Feelin
 }
 
 /** Stage 3's closed days, when any of what they carry is on; else nothing is opened and no table is made. */
-function closedDays(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; days?: FeelingDayFeatures },
+function closedDays(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; days?: FeelingDayFeatures; talk?: RepetitionSeed },
   events: SQLiteFeelingEventStore): { days: { days?: FeelingDays }; store: SQLiteFeelingDayStore | null } {
   const features = parts.days;
-  if (!features || !(features.relationship || features.episodes || features.boundaries)) return { days: {}, store: null };
+  if (!features || !carriesAnything(features)) return { days: {}, store: null };
   const store = new SQLiteFeelingDayStore(parts.database);
   const subjects = Object.entries(BODY_TOUCH_PART_WORDS).filter(([subject]) => subject !== 'other').map(([subject, { word }]) => ({ subject, word }));
-  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord, subjects }) },
-    store };
+  const talk = features.space && parts.talk ? { talk: parts.talk } : {};
+  return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord, subjects,
+    ...talk }) }, store };
 }
 
-/** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read). */
+/** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read), and her character space with 好意 held at the top. */
 export function feelingDayFeatures(environment: Readonly<Record<string, string | undefined>>): FeelingDayFeatures {
+  const space = switchOn(environment, 'SHANNON_CHARACTER_SPACE') ? { space: { max: switchOn(environment, 'SHANNON_AFFECTION_MAX') } } : {};
   return { relationship: switchOn(environment, 'SHANNON_RELATIONSHIP_LEDGER'), episodes: switchOn(environment, 'SHANNON_EPISODE_MEMORY'),
-    boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY') };
+    boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY'), ...space };
+}
+
+/**
+ * Her character space only with the feeling turn it leans and the reply check that guards it (a switch's `requires` only warns at start;
+ * review 8: the regions that pull toward the lines no region crosses are checked before sending, so without the check the space stays
+ * off, and the log says so).
+ */
+export function spaceGuarded(features: FeelingDayFeatures, turn: boolean, check: boolean): FeelingDayFeatures {
+  if (!features.space) return features;
+  const { space: _space, ...rest } = features;
+  if (turn && check) return features;
+  if (turn) console.warn('Shannon character space: SHANNON_CHARACTER_SPACE needs SHANNON_REPLY_CHECK; it stays off');
+  return rest;
+}
+
+/** Her character space needs her closed days (the relation's folds): it is on only with them. */
+function spaceOption(days: FeelingDayFeatures | undefined, closed: FeelingDays | undefined): { space?: { max: boolean } } {
+  return days?.space && closed ? { space: days.space } : {};
 }
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
@@ -205,7 +225,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
     : null;
   const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
   const closed = closedDays({ ...parts, ...(parts.days ? { days: { ...parts.days, audience } } : {}) }, store);
-  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days });
+  const space = spaceOption(parts.days, closed.days.days);
+  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days, ...space });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = portFlags({ ...parts, audience });

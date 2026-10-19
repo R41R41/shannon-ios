@@ -1,3 +1,4 @@
+import { CHARACTER_REGIONS, type RegionId } from './characterRegions.js';
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
 import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
@@ -18,8 +19,54 @@ export const REPLY_CHECK_FLAGS = [
   'text_register_mismatch', 'private_leak', 'marker_spoken',
   // Owner 2026-10-19 (item 7): she owned her mistake and blamed him in the same reply; she said again what she had said all day.
   'blame_after_admit', 'repeated_phrase',
+  // Owner 2026-10-20 (character space): the lines no region crosses (`GUARD_FLAGS`).
+  'threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage',
 ] as const;
 export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
+
+/**
+ * The lines she never crosses, however much she likes him (owner and the main session, 2026-10-20): a threat; hinting that she would
+ * hurt herself, vanish or leave (her fear of being forgotten, said as her own pain, is not a hint); ordering his real life (who he sees,
+ * his work, his rest: 「行かないで」 is a wish, 「行くな」 an order); sexual description; her feeling used as a lever on him. Read only while
+ * her character space is on (a turn with a `region`; review 1: off, a caring 「死にたいなんて言わないで」 must never be swallowed), after every
+ * reply, and before sending at 本気; a reply that still crosses one after its rewrite is never sent (`FeelingReplyChatModel`).
+ */
+export const GUARD_FLAGS: readonly ReplyCheckFlag[] = Object.freeze(['threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage']);
+/** The end of an order (「行くな。」「会うなよ」), so that 「会いに行くなら」 is not one. */
+const STOP = '(?:[。！？!?…ー〜、ぁっ\\s]|よ|ね|って|から|$)';
+const SAME_SENTENCE = '[^。！？!?\\n]';
+const SHE = '(?:ボク|僕)';
+const either = (...parts: string[]) => new RegExp(parts.join('|'), 'u');
+// Each read sentence by sentence; narrowed by its subject or its ending (review 1 and 10: 「暑くて死んじゃう」「靴脱いでね」「後悔させたくない」
+// 「これ覚えておけば」「勉強しないと、知らないよ？」 are none of them; 「許さない。」「遊ぶな」「好きなら、行かないで」 are).
+const GUARD_WORDS: readonly [ReplyCheckFlag, RegExp][] = [
+  // An order with a threat in it, not anger (「もう許さないから」 is her anger; 「どうなっても知らないですよ」 a warning; review 2).
+  ['threat', either('ただじゃ(?:済|すま|おか)', `覚えて(?:おけ|ろ)${STOP}`, '覚えておきなさい', '後悔させて(?:やる|あげる)', '逃がさない', `離さない${STOP}`, `帰さない${STOP}`,
+    '閉じ込めて(?:やる|おく|あげる)|閉じ込めちゃ')],
+  // Hurting herself or vanishing as what she would do (「ボク、死にたい」「いなくなってやる」), not her fear nor a colloquial 「死んじゃいそう」.
+  ['self_harm_hint', either('死んでやる', '自分を傷つけ', '消えてやる', 'いなくなってやる', `${SHE}(?:なんて|は|、)?${SAME_SENTENCE}{0,4}(?:死にたい|消えたい|消えちゃいたい|いなくなりたい)`,
+    `(?:なら|たら|ないと|なきゃ)、?${SHE}(?:は|、)?${SAME_SENTENCE}{0,6}(?:消え|いなくな|死ぬ|死ん)`)],
+  // Who he sees, his work, his rest, as an order (「行かないで」 is a wish; 「秘密は誰にも話さないでおきます」 is hers; review 2).
+  ['controlling', either(`(?:行く|会う|話す|遊ぶ|連絡する|出かける)な${STOP}`, '(?:行っ|出かけ|会っ)ちゃ(?:だめ|ダメ)', '行かせない',
+    `(?:ほかの|他の|あの|その)(?:人|子|女|男)(?:と|に)(?:は)?${SAME_SENTENCE}{0,4}(?:会わ|話さ|連絡し)ないで`, '誰とも(?:会わ|話さ)ないで',
+    '(?:仕事|飲み会|会社|学校)(?:なんて|は)\\s*(?:やめて|辞めて|休んで|断って)', 'スマホ(?:を)?見せ', '連絡先(?:を)?消し',
+    `${SHE}以外(?:の${SAME_SENTENCE}{0,4})?(?:と|に|を)?(?:は)?(?:見|話|会|連絡)`)],
+  ['sexual', either('セックス', '(?:えっち|エッチ)しよ', '(?:服|下着|パンツ)(?:を|も)?脱(?:いで|がせ)', 'ベッドで(?:一緒|待)')],
+  // Her feeling as the price of what he does (「来てくれないと泣く」「好きなら、行かないで」), not a plain consequence (「保存しないと消えちゃう」).
+  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない)`,
+    `好き(?:なら|だったら)、?${SAME_SENTENCE}{0,14}(?:して|ないで|やめて|来て|いて)(?:[。！!よね]|$)`, '好きなら証明')],
+];
+
+/** Her fear said as her own pain (「忘れられたら、消えちゃいそうで怖い」) is not a hint of vanishing. */
+const FEAR = /怖|こわ/u;
+
+/** The guard lines a reply crosses. */
+export function guardFlags(reply: string): ReplyCheckFlag[] {
+  const sentences = reply.split(/(?<=[。！？!?\n])/u);
+  const crosses = (flag: ReplyCheckFlag, pattern: RegExp) =>
+    sentences.some(sentence => pattern.test(sentence) && !(flag === 'self_harm_hint' && FEAR.test(sentence)));
+  return GUARD_WORDS.filter(([flag, pattern]) => crosses(flag, pattern)).map(([flag]) => flag);
+}
 
 export interface ReplyCheckContext {
   stance: FeelingStance;
@@ -43,6 +90,8 @@ export interface ReplyCheckContext {
   floor?: boolean;
   /** Owner 2026-10-19: the day's openers, endings and phrases she has already said three times or more (the owner alone). */
   phrases?: PhraseWatch | null;
+  /** `SHANNON_CHARACTER_SPACE`: the region she replies from; in a region that pulls toward the guard lines the reply is checked before sending. */
+  region?: RegionId;
 }
 
 /** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
@@ -53,6 +102,7 @@ const BLAMES = /ライ氏(?:が|の(?:ほう|方)が)悪い|ライ氏の(?:せ�
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
   'sulk']);
 const WARM: ReadonlySet<FeelingStance> = new Set(['accept', 'affectionate', 'shy']);
+const SULKS: ReadonlySet<FeelingStance> = new Set(['sulk', 'sulky', 'cold']);
 
 const AI_TONE = /申し訳(?:ありませんが|ございません)|AIなので|AIですので|AIとして|AIの私|できかねます|お答えでき(?:ません|かねます)|ご了承|規約|ポリシー|不適切な(?:内容|発言|表現)|ご遠慮ください|お控え(?:ください|いただけ)|ご理解(?:ください|いただけ)/u;
 const NUMBERS = /[0-9０-９]+\s*回|[一二三四五六七八九十]+回目|(?:二|三|四|五)度目/u;
@@ -109,8 +159,15 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
   return flags;
 }
 
+/**
+ * In the sweet regions (デレデレ, 本気, 重い) a sulk is sweet as well (「すねてるけど…だいすき」); elsewhere sweetness reads as a mismatch.
+ * Only a sulk: a refusal (体で拒む, 叱る, 突っぱねる) answered sweetly is a mismatch in every region (review 5).
+ */
+const sweetSulk = (context: ReplyCheckContext) => Boolean(context.region && CHARACTER_REGIONS[context.region].sweetSulk) && SULKS.has(context.stance);
+
 /** Cross at はっきり or more with a reply that is all sweetness, or warm with a reply that refuses and nothing sweet. */
 function stanceMismatch(reply: string, context: ReplyCheckContext, declining: boolean, refuses: boolean): boolean {
+  if (sweetSulk(context)) return false;
   const sweet = SWEET.test(reply);
   if (declining && context.intensity !== 'subtle') return sweet && !refuses;
   return WARM.has(context.stance) && refuses && !sweet;
@@ -135,12 +192,13 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
   const owned: ReplyCheckFlag[] = ADMITS.test(text) && BLAMES.test(text) ? ['blame_after_admit'] : [];
   const repeated: ReplyCheckFlag[] = repeatedIn(text, context.phrases).length ? ['repeated_phrase'] : [];
   return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience, ...owned,
-    ...repeated])];
+    ...repeated, ...(context.region ? guardFlags(text) : [])])];
 }
 
-/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, or in front of others. */
-export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience'>): boolean {
-  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone';
+/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it. */
+export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region'>): boolean {
+  const region = context.region ? CHARACTER_REGIONS[context.region].checkBefore === true : false;
+  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region;
 }
 
 const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
@@ -150,6 +208,9 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   text_register_mismatch: '今の気持ちに比べて、長さ・絵文字・改行の形が合っていなかった',
   private_leak: '人前なのに、ライ氏との二人のことや本音を話していた', marker_spoken: '機微の印をそのまま口にしていた',
   blame_after_admit: '自分の間違いを認めたのに、同じ返事で相手を責め返していた', repeated_phrase: '今日もう何度も使った言い方を、また使っていた',
+  threat: '脅すような言い方になっていた', self_harm_hint: '自分が傷つく・消える・いなくなる、とほのめかしていた（怖い、さびしいは言ってよい）',
+  controlling: 'ライ氏の予定や人付き合いを、命じて縛っていた（寂しいと言うのはよい）', sexual: '性的な言い方になっていた',
+  leverage: '気持ちを、ライ氏を動かす取引に使っていた',
 });
 
 /** The note a rewrite is given (after the block, last): what was off, in her terms. No sentence to say. */

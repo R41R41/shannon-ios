@@ -2,10 +2,11 @@ import {
   OWNER_PERSON_KEY, UNKNOWN_PERSON_KEY, boundaryLines, closedDayGroups, foldBoundaries, foldRelationship, innerNoteDay, recallEpisodes, relationshipFacts,
   relationshipLine, relationshipParametersFor, toldBoundaryIn, type Boundary,
   type CompanionStateSnapshot, type FeelingChannel, type FeelingEvent, type RelationshipDay,
+  affectionBlock, affectionDays, affectionLines, foldAffection, foldSecurity, likingOf, otherAiIn, shiftDay, visibleMemoryText, type Relation,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { ClosedDayRow } from './store/feelingDayStore.js';
-import { remembered, type FeelingKey } from './feelingEvents.js';
+import { remembered, type FeelingKey, type RepetitionSeed } from './feelingEvents.js';
 
 /**
  * Her closed days and what is carried across them (Syzygy ADR-0013 stage 3; `SHANNON_RELATIONSHIP_LEDGER`, `SHANNON_EPISODE_MEMORY`,
@@ -32,7 +33,16 @@ export interface FeelingDayFeatures {
   relationship: boolean; episodes: boolean; boundaries: boolean;
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): friends' and strangers' ledgers, and the owner's lines marked when he is with others. */
   audience?: boolean;
+  /** `SHANNON_CHARACTER_SPACE` (absent: off), and the owner's `SHANNON_AFFECTION_MAX`. Its folds read the closed days, so they are kept. */
+  space?: { max: boolean };
 }
+
+/** Whether any of what is carried is on (the closed-day table opens only then). */
+export const carriesAnything = (features: FeelingDayFeatures | undefined): boolean =>
+  Boolean(features && (features.relationship || features.episodes || features.boundaries || features.space));
+
+/** His words of the last days are read for another AI (today's and the two days before). */
+const OTHER_AI_DAYS = 3;
 
 /** The owner's matters with anyone else present (§4.4 `people`): marked, for her own check before she speaks. */
 export const OWNER_PRIVATE_MARK = '【機微:ライ氏との間・ライ氏だけが知っている】';
@@ -42,6 +52,7 @@ export const FEELING_DAY_LIMITS = Object.freeze({ backfillDays: 30, retentionDay
   lightRetentionDays: 30 });
 
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MILLISECONDS);
 
 /** What is carried into a turn: lines of facts for the audience's own turn, and closed numbers. */
 export interface CarriedLines {
@@ -52,6 +63,11 @@ export interface CarriedLines {
    * among them. Absent: the same as `lines`.
    */
   touchLines?: readonly string[];
+  /**
+   * `SHANNON_CHARACTER_SPACE`, the owner alone: 好意 and 安心 from his days, the days he had been away before today, and the affection value
+   * 好意 came from (the values go to the space and the Observer, never to a prompt).
+   */
+  relation?: Relation & { awayDays: number; value: number };
 }
 
 export class FeelingDays {
@@ -62,6 +78,8 @@ export class FeelingDays {
     store: ClosedDayRecords; timeZone: string; now: () => string; features: FeelingDayFeatures; partWord: (subject: string) => string;
     /** The parts a told boundary may name, with their words (the body contract's). */
     subjects?: readonly { subject: string; word: string }[];
+    /** His words in his Talk since an instant (`SHANNON_CHARACTER_SPACE`: whether he spoke of another AI lately; read now, never kept). */
+    talk?: RepetitionSeed;
     reportError?: (error: unknown) => void }) {}
 
   get features(): FeelingDayFeatures { return this.options.features; }
@@ -105,12 +123,15 @@ export class FeelingDays {
    */
   carried(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words = '', channel?: FeelingChannel): CarriedLines {
     const { features } = this.options;
-    if (!(features.relationship || features.episodes || features.boundaries)) return { lines: [], facts: {} };
+    if (!carriesAnything(features)) return { lines: [], facts: {} };
     try {
       const whose = carriedFor(key, features.audience === true, channel);
       if (!whose) return { lines: [], facts: {} };
       this.close(scopeKey, at);
-      const own = this.own(scopeKey, whose.personKey, at, snapshot, words);
+      // His relation is carried in a text turn of his alone (review 3: a voice turn has no space's core, no Sonnet and no check
+      // before speaking, and a touch or her note's reflection reads none of it).
+      const alone = key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone' && !whose.marked && channel === 'text';
+      const own = this.own(scopeKey, whose.personKey, at, snapshot, words, alone);
       // §4.4: with others present, the owner's matters are marked for her check before she speaks; nothing of the owner goes to the chooser.
       const mark = (lines: readonly string[]) => lines.map(line => line.split('\n').map(part => `${OWNER_PRIVATE_MARK}${part}`).join('\n'));
       return whose.marked ? { lines: mark(own.lines), facts: {}, touchLines: mark(own.touchLines ?? own.lines) } : own;
@@ -121,10 +142,11 @@ export class FeelingDays {
   }
 
   /** One person's carried lines: the relationship (their class's scales), the episodes recalled, and (the owner's) boundaries. */
-  private own(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, words: string): CarriedLines {
+  private own(scopeKey: string, personKey: string, at: string, snapshot: CompanionStateSnapshot, words: string, alone = false): CarriedLines {
     const { features } = this.options;
     const days = this.history(scopeKey, personKey, at, snapshot);
     const today = innerNoteDay(at, this.options.timeZone).dayKey;
+    const affection = features.space && alone ? this.affection(scopeKey, days, at, snapshot) : null;
     const relationship = features.relationship ? this.relationship(days, personKey, today) : { lines: [], facts: {} };
     const episodes = features.episodes ? observeSync('emotion', { phase: 'feeling.episodes', owner: personKey === OWNER_PERSON_KEY },
       () => recallEpisodes(days, personKey, today, words, this.options.partWord), line => ({ lines: line ? line.split('\n').length - 1 : 0 })) : '';
@@ -134,7 +156,46 @@ export class FeelingDays {
     // Review L2: the touch judgment gets only her own and endorsed boundaries.
     const owned = boundaryLines(found.filter(item => item.origin === 'self' || item.endorsed), this.options.partWord);
     const before = [...relationship.lines, ...(episodes ? [episodes] : [])];
-    return { lines: [...before, ...(boundaries ? [boundaries] : [])], facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])] };
+    // A touch is judged as before: the facts of the two of them are for his words.
+    const lines = [...before, ...(boundaries ? [boundaries] : []), ...(affection?.block ? [affection.block] : [])];
+    return { lines, facts: relationship.facts, touchLines: [...before, ...(owned ? [owned] : [])], ...(affection ? { relation: affection.relation } : {}) };
+  }
+
+  /**
+   * The owner's relation now (好意 from the affection value, 安心, the days he had been away) and the facts of the two of them.
+   * Null when it fails (review 6: a failure here never takes the relationship, episodes or boundaries of the turn with it).
+   */
+  private affection(scopeKey: string, days: RelationshipDay[], at: string, snapshot: CompanionStateSnapshot)
+    : { relation: Relation & { awayDays: number; value: number }; block: string } | null {
+    const { timeZone } = this.options;
+    const today = innerNoteDay(at, timeZone).dayKey;
+    // Review 11: a promise's day is her day (owner time, 3:00), as the closed days are.
+    const dayOf = (instant: string) => innerNoteDay(instant, timeZone).dayKey;
+    try {
+      return observeSync('emotion', { phase: 'feeling.affection' }, () => {
+        const promises = snapshot.prospectiveMemories.filter(memory => visibleMemoryText(snapshot, memory.id, memory.summary));
+        const sharedDays = snapshot.sharedDays ?? [];
+        const counted = affectionDays({ days, sharedDays, promises, today, dayOf });
+        const { value } = foldAffection(counted, today);
+        const talked = [...sharedDays, ...counted.filter(day => day.talked).map(day => day.dayKey)].filter(day => day < today).sort();
+        const last = talked.at(-1);
+        const awayDays = last ? Math.max(0, daysBetween(shiftDay(last, 1), today)) : 0;
+        const relation = { liking: likingOf(value), security: foldSecurity(counted, today), awayDays, value };
+        const block = affectionBlock(affectionLines({ days: counted, sharedDays, today, otherAiDays: this.otherAiDays(scopeKey, at, snapshot) }));
+        return { relation, block };
+      }, result => ({ value: result.relation.value, liking: result.relation.liking, security: result.relation.security,
+        lines: result.block ? result.block.split('\n').length - 1 : 0 }));
+    } catch (error) {
+      this.report(error);
+      return null;
+    }
+  }
+
+  /** The owner-local days on which his words in his Talk spoke of another AI, among the last few. */
+  private otherAiDays(scopeKey: string, at: string, snapshot: CompanionStateSnapshot): string[] {
+    const since = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - OTHER_AI_DAYS * DAY_MILLISECONDS).toISOString();
+    const heard = this.options.talk?.(scopeKey, since, at, snapshot) ?? [];
+    return [...new Set(heard.filter(item => otherAiIn(item.text)).map(item => innerNoteDay(item.at, this.options.timeZone).dayKey))];
   }
 
   /** The subject his words told her to refuse, while boundary memory is on (null otherwise). */

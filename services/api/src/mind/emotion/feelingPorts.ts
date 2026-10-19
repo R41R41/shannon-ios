@@ -6,15 +6,17 @@
  */
 import {
   FEELING_FACTS_USE_LINE, FEELING_TURN_HEADER, drawersIn, faceFor, faceForMood, feelingActor, feelingTurnBlock, neutralFeelingTurn, presentShannonFeeling,
-  checkBeforeSending, checkReply, feelingSentenceBlock,
-  fastLayerWords, advanceCoreAffect, registerOfLevel,
+  checkBeforeSending, feelingSentenceBlock,
+  fastLayerWords, advanceCoreAffect,
   type TextRegisterDirective, toldBoundariesOpen, OWNER_PERSON_KEY, type FeelingSpeaker,
   continuedAfterRefusal, foldFeelingDynamics, replyFacts, strongReplyReason, utteranceTags,
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
-  type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
+  type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace, CHARACTER_REGIONS,
 } from '@shannon/cognition';
+import { capFor, regionFace, regionOf, routedOrChecked, spaceDecision, spaceIdentity, warnCapped } from './characterSpaceHooks.js';
+import { checkContext, checkFacts, registerNow } from './feelingTurnCheck.js';
 import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -103,6 +105,8 @@ export interface FeelingTurnHandle {
   sentence?: Promise<readonly string[] | null> | null;
   /** Item 10: this text reply's form and pacing (`SHANNON_TEXT_REGISTER`), once the feeling turn is known. */
   textRegister?: TextRegisterDirective;
+  /** His words of this turn (at 本気, whether they take leave of her). */
+  words?: string;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -112,7 +116,7 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
   const register = lines?.ledger.register ?? 'normal';
   const order = utteranceKind(input.words) === 'feeling_order';
   return { port, turn: randomUUID(), scopeKey: input.scopeKey, key: input.key, channel: input.channel, lines, order, register, pending: null, decision: null,
-    at: input.at, snapshot: input.snapshot, strong: false };
+    at: input.at, snapshot: input.snapshot, strong: false, words: input.words };
 }
 
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
@@ -122,12 +126,26 @@ function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null
   const glow = handle.port.stream && handle.key.audience === 'owner_alone' ? handle.port.stream.afterglow(handle.scopeKey, handle.at, handle.snapshot) : '';
   const carried = [...handle.lines?.carriedLines ?? [], ...(glow ? [glow] : [])];
   if (decision) {
-    const extra = carried.length ? { carried } : {};
+    const space = handle.lines?.space;
+    const persona = space ? { persona: { block: space.block, vivid: CHARACTER_REGIONS[space.selection.primary].vivid === true } } : {};
+    const extra = { ...(carried.length ? { carried } : {}), ...persona };
     return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience, ...extra });
   }
   const facts = [ledgerLine, ...carried, ledgerLine || carried.length ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
   return facts.length ? [FEELING_FACTS_HEADER, ...facts].join('\n') : '';
 }
+
+/** `SHANNON_CHARACTER_SPACE`: the region her reply was written from (on her reply's event; nothing otherwise). */
+const spaceReply = (handle: FeelingTurnHandle): { region?: string } => {
+  const region = regionOf(handle);
+  return region ? { region } : {};
+};
+
+/** `SHANNON_CHARACTER_SPACE`: what kind of event his words were for her space (closed cues, on his words' event; nothing otherwise). */
+const spokenCues = (handle: FeelingTurnHandle): { cues?: readonly string[] } => {
+  const cues = handle.lines?.space?.cues;
+  return cues?.length ? { cues } : {};
+};
 
 /** The events after a turn: his words (what kind of thing they were) and her reply (its closed facts, and the stance it was given). */
 function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string; reply: string; turnId: string; sourceId: string | null }): void {
@@ -138,58 +156,17 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const strong = handle.strong ? { replyModel: 'strong' as const } : {};
   const check = checkFacts(handle, input.reply);
   const register = handle.register !== 'normal' ? { register: handle.register } : {};
-  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check };
+  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check, ...spaceReply(handle) };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
   // His words' closed tags only while something reads them (the fast layer, the closed days' folds; review Low).
   const tags = handle.port.coreAffect || handle.port.days ? utteranceTags(input.words) : [];
   const meaning = handle.decision?.meaning ? { meaning: handle.decision.meaning } : {};
   const told = handle.port.days?.toldIn(input.words);
   const said = { id: `turn:${handle.channel}:${input.turnId}`, kind: utteranceKind(input.words),
-    facts: { ...(tags.length ? { tags } : {}), ...meaning, ...(told ? { toldBoundary: told } : {}) } };
+    facts: { ...(tags.length ? { tags } : {}), ...meaning, ...(told ? { toldBoundary: told } : {}), ...spokenCues(handle) } };
   if (input.words.trim()) record({ ...base, ...said });
   if (input.reply.trim()) record({ ...base, id: `reply:${handle.channel}:${input.turnId}`, kind: 'own_reply', facts });
   if (handle.strong) handle.port.events.releaseStrong(handle.scopeKey, handle.at);
-}
-
-/** The reply check's context of a turn, or null without the check or a decision. */
-function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
-  if (!handle.port.check || !handle.decision) return null;
-  const violation = continuedAfterRefusal(handle.lines?.ledger, handle.at);
-  const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
-  const form = handle.textRegister ? { form: { maxCharacters: handle.textRegister.maxCharacters, emoji: handle.textRegister.emoji,
-    lineBreaks: handle.textRegister.lineBreaks } } : {};
-  const ledger = handle.lines?.ledger;
-  const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
-  const phrases = handle.lines?.phrases ? { phrases: handle.lines.phrases } : {}; // Owner 2026-10-19: what she already said 3 times today.
-  return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases };
-}
-
-/** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
-function registerNow(handle: FeelingTurnHandle): FeelingRegister {
-  const level = handle.port.coreAffect ? composureLevel(handle) : undefined;
-  return level !== undefined ? registerOfLevel(level) : handle.register;
-}
-
-/** The shadow's composure step for this key now (for the check's register flags only). */
-function composureLevel(handle: FeelingTurnHandle): number | undefined {
-  const events = () => handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot);
-  // Re-review S4-4: with others in a place (a group, a call), her composure is the place's, each person a source within it.
-  const { key } = handle;
-  const place = handle.port.audience && key.sceneId && key.audience !== 'owner_alone' && !key.personKey.startsWith('scene:')
-    ? { personKey: `scene:${key.sceneId}`, audience: key.audience, sceneId: key.sceneId } : key;
-  return safely(() => foldFeelingDynamics(events(), place, {}, { sourceCap: handle.port.audience === true }).composure.level, undefined);
-}
-
-/** A reply's check: the one made before sending when there was one, else checked now (voice, and text turns not checked before). */
-function checkFacts(handle: FeelingTurnHandle, reply: string): { checkFlags?: readonly string[]; rewritten?: true } {
-  const context = checkContext(handle);
-  if (!context) return {};
-  const before = handle.channel === 'text' ? handle.port.events.takeCheck(handle.scopeKey, handle.turn) : null;
-  const flags = before ? before.flags : checkReply(reply, context);
-  observeSync('emotion', { phase: 'feeling.reply_check', audience: handle.key.audience, before: Boolean(before) }, () => null,
-    () => ({ flags: [...flags], rewritten: before?.rewritten === true }));
-  return { ...(flags.length ? { checkFlags: flags } : {}), ...(before?.rewritten ? { rewritten: true as const } : {}) };
 }
 
 /**
@@ -201,12 +178,13 @@ function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true; feelingC
   if (!handle.port.turn) return {};
   const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
   const continued = continuedAfterRefusal(handle.lines?.ledger, handle.at);
-  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued);
-  handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
+  const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued, Boolean(regionOf(handle)));
+  const cap = capFor(reason, strong.cap);
+  handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, cap);
   const capped = reason !== null && Boolean(handle.port.strong) && !handle.strong;
   observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,
     () => ({ model: handle.strong ? 'sonnet' : 'haiku', reason: reason ?? 'none', capped }));
-  if (capped) console.warn('Shannon feeling reply model: the day\'s cap of strong replies is reached; this reply stays on Haiku');
+  if (capped) warnCapped(reason);
   const check = checkContext(handle);
   const before = check && checkBeforeSending(check) ? { feelingCheck: check } : {};
   return { ...(handle.strong ? { feelingStrong: true as const } : {}), ...before };
@@ -264,8 +242,9 @@ export const feelingText = Object.freeze({
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
       const amends = key.audience === 'owner_alone' && holdsAgainstOwner(snapshot, at) ? { amends: true } : {};
+      const region = regionOf(handle);
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
-        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends,
+        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends, ...(region ? { region } : {}),
         ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.meaning ? { reading: true } : {}) }) : null;
       handle.sentence = port.sentence && port.coreAffect && port.turn
         ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
@@ -279,7 +258,8 @@ export const feelingText = Object.freeze({
   block: async (handle: FeelingTurnHandle | null): Promise<string> => {
     if (!handle) return '';
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
-    handle.decision = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
+    const chosen = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
+    handle.decision = safely(() => spaceDecision(handle, chosen), chosen);
     const lines = sentence ? await sentence : null;
     const decided = handle.port.textRegister ? handle.decision : null;
     if (decided) handle.textRegister = safely(() => textRegisterOf(decided, registerNow(handle), handle.key.audience), undefined);
@@ -304,15 +284,18 @@ export const feelingText = Object.freeze({
     return safely<{ textRegister?: ChatTextRegister }>(() => ({ textRegister: textRegisterReply(directive, { message, reply,
       outOfTime: completion.outOfTime === true, wrote }) }), {});
   },
+  /** `SHANNON_CHARACTER_SPACE`: her identity with the space's core in place of v2 (`characterSpaceHooks.ts`); as it was otherwise. */
+  staged: spaceIdentity,
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
-  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),
+  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } =>
+    (handle ? routedOrChecked(handle, routeReply, checkContext) : {}),
   /** The message face under `SHANNON_SINGLE_FACE`: the turn's stance, else the reply's feeling (never her own apology), else the mood. */
   face: (handle: FeelingTurnHandle | null, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, at: string): ReplyEmotion => {
     if (!handle?.port.singleFace) return resolved;
     return safely(() => {
       const visible = resolved.messageEmotion.kind;
       const stance = handle.decision && handle.decision.stance !== 'neutral' ? { kind: 'turn' as const, stance: handle.decision.stance } : undefined;
-      const state = faceState(handle.port, handle.scopeKey, handle.key, at, snapshot, { mood: faceForMood(snapshot.emotion),
+      const state = faceState(handle.port, handle.scopeKey, handle.key, at, snapshot, { mood: regionFace(handle) ?? faceForMood(snapshot.emotion),
         ...(visible ? { feeling: visible } : {}), ...(stance ? { stance } : {}), ...turnHints(handle) });
       return replyWithFace(resolved, feelingFace(state, handle.key.audience), presentFor(state, handle.key.audience, 'icon'));
     }, resolved);

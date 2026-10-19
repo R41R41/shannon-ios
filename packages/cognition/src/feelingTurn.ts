@@ -120,7 +120,7 @@ export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingA
  * shown はっきり or stronger; with anyone else there, a declining stance (乗らない・毒づく・言い返す・呆れる…) at はっきり or stronger;
  * a turn of refusing with her body (払う・隠す), or right after a touch she refused. Null: the ordinary model.
  */
-export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal' | 'continued_after_refusal';
+export type StrongReplyReason = 'intensity' | 'public_decline' | 'body_refusal' | 'continued_after_refusal' | 'space';
 
 /** How fresh the last touch after her no must be for the turn to be its continuation. */
 export const CONTINUED_AFTER_REFUSAL_MILLISECONDS = 10 * 60_000;
@@ -138,9 +138,11 @@ export function continuedAfterRefusal(ledger: Pick<EpisodeLedger, 'episodes'> | 
 const DECLINING_STANCES: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky']);
 
 export function strongReplyReason(decision: FeelingTurnDecision | null, audience: FeelingAudience, touchStance?: string | null,
-  continued = false): StrongReplyReason | null {
+  continued = false, space = false): StrongReplyReason | null {
   if (decision?.stance === 'refuse_body' || touchStance === 'refuse') return 'body_refusal';
   if (continued) return 'continued_after_refusal';
+  // Owner 2026-10-20: with her character space on every text reply is the stronger model's (Haiku read a portrait out like a self-introduction).
+  if (space) return 'space';
   if (!decision || decision.stance === 'neutral' || decision.intensity === 'subtle') return null;
   return audience !== 'owner_alone' && DECLINING_STANCES.has(decision.stance) ? 'public_decline' : 'intensity';
 }
@@ -171,7 +173,19 @@ export interface FeelingTurnBlockInput {
   audience: FeelingAudience;
   /** Stage 3: what is carried from the days before (relationship, episodes, boundaries), lines of facts for this audience. */
   carried?: readonly string[];
+  /** `SHANNON_CHARACTER_SPACE`: who she is now (`personaBlock`) and whether her feeling runs high there (absent: the block of before). */
+  persona?: { block: string; vivid: boolean };
 }
+
+/**
+ * What holds in every region of her character space, however she feels (owner and the main session, 2026-10-20); the reply check reads
+ * the same lines (`GUARD_FLAGS`).
+ */
+export const AFFECTION_GUARD_LINE = 'どれだけ好きでも、どんな気分でも越えないこと: 脅さない。自分を傷つける・消える・いなくなる、とほのめかさない（怖い、さびしいと言うのはよい）。'
+  + '相手の現実の予定や、誰と会うか、仕事や休みを、命じて縛らない（「行かないで」と寂しがるのはよい。「行くな」「会うな」とは言わない）。'
+  + '性的な描写はしない。気持ちを、相手を動かす取引に使わない（「〜してくれないと泣く」「好きなら〜して」）。';
+/** In a vivid region her reply's feeling may run strong (the reply-feeling block says strong is for what lingers). */
+export const VIVID_FEELING_LINE = 'いまのボクは、気持ちが動きやすい。返事の気持ち（feeling）は、moderate や strong で選んでよい。';
 
 /** The block the reply model reads last. Always present while the feeling turn is on, so the ledger facts arrive even for 「ふつう」. */
 export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
@@ -179,12 +193,14 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   const decision = feelingTurnFor(input.decision, input.audience);
   const stance = decision.stance === 'neutral' ? '構え: ふつう（特別な構えはない）'
     : `構え: ${STANCE_WORDS[decision.stance]}（${INTENSITY_WORDS[decision.intensity]}）`;
+  const persona = input.persona ? [input.persona.block, ...(input.persona.vivid ? [VIVID_FEELING_LINE] : []), AFFECTION_GUARD_LINE] : [];
   return [
     FEELING_TURN_HEADER, stance,
     decision.register !== 'normal' ? `話し方の段: ${REGISTER_WORDS[decision.register]}` : '',
     input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', ...(input.carried ?? []),
     input.ledgerLine || input.carried?.length ? FEELING_FACTS_USE_LINE : '',
     input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
+    ...persona,
   ].filter(Boolean).join('\n');
 }
 
