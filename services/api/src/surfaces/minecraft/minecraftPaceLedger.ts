@@ -65,14 +65,19 @@ export function createPaceLedger(parts: { kept: unknown; began: number; now(): n
       state.held = [...state.held, ...fresh].slice(0, MAXIMUM_KINDS);
       state.achievedAt = seconds();
     },
-    /** A finished call: its duration under its kind, and the run of the same failure. */
-    note(call: { name: string; input: unknown }, result: { ok: boolean; failure?: string | null }, milliseconds: number): void {
+    /**
+     * A finished call: its duration under its kind, and the run of the same failure. A call the body's own reflex cut off
+     * (`bodyReflex`, failureType `interrupted_by_reflex`) is no failure of the call: it is retry_same (P8), so it neither adds to
+     * the run nor ends it (review 6, L-2); its time still counts under its kind.
+     */
+    note(call: { name: string; input: unknown }, result: { ok: boolean; failure?: string | null; bodyReflex?: boolean }, milliseconds: number): void {
       const kind = paceKind(call.name);
       if (kind === null) return;
       if (Number.isFinite(milliseconds) && milliseconds >= 0) {
         const spent = Math.min(Math.round(milliseconds), 3_600_000);
         state.calls = [...state.calls, [seconds(), kind, spent] as [number, PaceKind, number]].slice(-MAXIMUM_CALLS);
       }
+      if (result.bodyReflex === true) return;
       if (result.ok) {
         state.failure = null;
         return;

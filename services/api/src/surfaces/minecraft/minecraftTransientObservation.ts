@@ -1,4 +1,5 @@
 import type { BodyFact, BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
+import { reflexesLine } from './minecraftObservationReflexes.js';
 
 /**
  * The body's observation as a transient decision reads it (observation redesign P3, `SHANNON_FCA_OBS_MODE=transient`): the old Minebot
@@ -106,7 +107,7 @@ interface Stacked { display: string; name: string | null; count: number; slot: n
 function inventoryOf(value: BodyValue | undefined, facts: Readonly<Record<string, BodyFact>>): { inventory: BodyValue; represented: Set<string> } {
   const slots: SlotFact[] = Object.entries(facts).flatMap(([key, fact]) => {
     const number = /^slot:(\d{1,3})$/u.exec(key), pair = number && typeof fact === 'string' ? pairOf(fact) : null;
-    return number && pair ? [{ key, slot: Number(number[1]), ...pair, text: clean(fact as string).slice(0, TEXT), used: false }] : [];
+    return number && pair ? [{ key, slot: Number(number[1]), ...pair, text: cleanText(fact as string), used: false }] : [];
   });
   const items: Stacked[] = (Array.isArray(value) ? value as readonly BodyValue[] : []).flatMap((entry): Stacked[] => {
     if (record(entry) && typeof entry.name === 'string') {
@@ -200,16 +201,29 @@ function factsOf(facts: Readonly<Record<string, BodyFact>>, represented: Readonl
   return out;
 }
 
-export function minecraftTransientObservation(observation: BodyObservation): Record<string, BodyValue> {
+/** One part of the world frame that the observation copies: as it is when small; the body's reflexes, when too long, as their one line (L-3). */
+function copyWorldPart(out: Record<string, BodyValue>, omitted: string[], raw: string, item: BodyValue): void {
+  const key = clean(raw);
+  if (scalar(item)) out[key] = text(item);
+  else if (size(item) <= SMALL) out[key] = rounded(item);
+  else {
+    // The line the legacy summary says (`reflexesLine`), never only a name.
+    const line = raw === 'reflexes' ? reflexesLine(item) : null;
+    if (line) out[key] = clean(line);
+    else omitted.push(`world.${key}`);
+  }
+}
+
+/**
+ * `options.leave`: world parts that are said elsewhere in the live state (the jobs, `minecraftTransientBody.ts`): they are not copied here
+ * a second time (review 6, L-3).
+ */
+export function minecraftTransientObservation(observation: BodyObservation, options: { leave?: readonly string[] } = {}): Record<string, BodyValue> {
   const omitted: string[] = [];
   const world = record(observation.state.world) ? observation.state.world as Rec : {};
   const out: Record<string, BodyValue> = { connected: observation.connected };
   for (const [raw, item] of Object.entries(world)) {
-    if (OWN.has(raw)) continue;
-    const key = clean(raw);
-    if (scalar(item)) out[key] = text(item);
-    else if (size(item) <= SMALL) out[key] = rounded(item);
-    else omitted.push(`world.${key}`);
+    if (!OWN.has(raw) && !options.leave?.includes(raw)) copyWorldPart(out, omitted, raw, item);
   }
   const { inventory, represented } = inventoryOf(world.inventory, observation.facts);
   out.inventory = inventory;
