@@ -1,4 +1,4 @@
-import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
+import { isPauseNotice, type TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime } from '../taskRuntime/taskRuntimePorts.js';
 
 /**
@@ -115,6 +115,16 @@ export function fallbackSpokenReport(report: string, title = ''): string {
 }
 
 /**
+ * What a call says of the runtime's own pause notice (`paused:` report, status `paused`), M-3: fixed and accurate, never reworded by a
+ * model (which could take the stopped task for a failed one) and never 「…の結果が届いています」 (a pause is not a result). `reason` is a
+ * clause that goes before 「ため」; without it the sentence says only that the request is paused and can be resumed.
+ */
+export function pausedReportLine(title: string, reason?: string): string {
+  const named = [...title.replace(/\s+/gu, ' ').trim()].slice(0, 22).join('');
+  return `${named ? `『${named}』` : 'この依頼'}は${reason ? `${reason}ため` : ''}一時停止しています。再開できます。`;
+}
+
+/**
  * What is said of a request the operator handed over for him (review 2026-10-14, M1): never 「頼まれて調べた」, never as his
  * request, and no model is asked to word it; the result itself stays on the screen.
  */
@@ -199,6 +209,8 @@ export function createSpokenReports(parts: {
       if (!report || task.origin !== 'owner_request' || report.spoken || !report.text.trim()) return;
       if (attempted.has(key) || controller.signal.aborted) return;
       remember(key);
+      // A pause report (an older one without its sentence) is said in its fixed words, whoever asked: no model, no 「結果が届いています」.
+      if (isPauseNotice(report)) return write(scopeKey, task.id, report.id, pausedReportLine(task.title));
       const fixed = fixedReportLine(task, parts.requester?.(task) ?? 'owner');
       if (fixed) return write(scopeKey, task.id, report.id, fixed);
       const short = alreadyShort(report.text);

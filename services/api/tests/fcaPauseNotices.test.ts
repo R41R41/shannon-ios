@@ -7,7 +7,7 @@ import {
 import { pausedSummary } from '../src/wiring/taskPauseNotice.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { TaskBodyRecoveryStore } from '../src/mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
-import type { TaskAuthority } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskAuthority, TaskRuntime } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { ActionLeaseReader } from '../src/mind/action/threads/store/actionLeaseReader.js';
 import { bodyOperations } from '../src/surfaces/minecraft/store/minecraftOperationReconcile.js';
 import { BODY_ID, minecraftWorld } from './support/fcaBodyRecoveryWorld.js';
@@ -61,7 +61,7 @@ describe('every pause of a Minecraft request tells the owner once (M-2)', () => 
     expect(reportOf(w, api)).toBeUndefined(); // an unknown request is not a paused one: nothing yet
     w.advance(31 * MINUTE);
     await w.until(api, () => w.phase(api) === 'stopped', 'paused after the window');
-    expect(api.driver.runtime.progress!('owner', task.id)).toMatchObject({ currentStep: 'fca.result', status: 'failed' });
+    expect(api.driver.runtime.progress!('owner', task.id)).toMatchObject({ currentStep: 'fca.result', status: 'paused' });
     expect(reportOf(w, api)?.text).toBe(REPORT(BODY_ABSENT_SUMMARY)); // without the operator's hint, which is in the summary only
     expect(reportOf(w, api)?.text).toContain('再開できます');
     expect(reportOf(w, api)?.id.startsWith('paused:body_not_returned:')).toBe(true);
@@ -135,7 +135,9 @@ describe('every pause of a Minecraft request tells the owner once (M-2)', () => 
     w.advance(31 * MINUTE);
     await w.until(api, () => w.phase(api) === 'stopped', 'paused after the window');
     expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
-    expect(api.driver.runtime.progress!('owner', task.id)).toBeNull();
+    // The report is gone; what the task had observed before the pause (its move) is put back, as it was.
+    expect(api.driver.runtime.progress!('owner', task.id)).toMatchObject({ currentStep: 'mc.move', status: 'running' });
+    expect(reportOf(w, api)).toBeUndefined();
     await ticks(api, 10);
     w.advance(31 * MINUTE);
     await w.until(api, () => w.phase(api) === 'stopped', 'stopped when the window ran out');
@@ -156,7 +158,8 @@ describe('what a pause said is gone when the owner resumes the request (M-1)', (
     expect(pausedSummary(api.driver.runtime.get('owner', task.id)!.summary)).toBe(true); // with the operator's hint
     expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
     expect(api.driver.runtime.get('owner', task.id)?.summary).toBe('');
-    expect(api.driver.runtime.progress!('owner', task.id)).toBeNull();
+    expect(api.driver.runtime.progress!('owner', task.id)).toMatchObject({ currentStep: 'mc.move', status: 'running' });
+    expect(reportOf(w, api)).toBeUndefined();
     w.connectBody(api, 'c2', 'drop-on-release');
     await w.until(api, () => w.phase(api) === 'completed', 'goes on once the body is back');
     expect(api.driver.runtime.get('owner', task.id)?.summary).toBe('done');
@@ -236,7 +239,7 @@ describe('the tasks that owe a notice are found by their checkpoint\'s key, not 
 
 describe('a pass that does not pause says nothing of it, and one task\'s failure stops no other (L-5)', () => {
   /** A recovery of the world's database whose authority can be made to answer as if another pass had got there first, or to fail for one task. */
-  function lone(w: World, api: ReturnType<World['startApi']>) {
+  function lone(w: World, api: ReturnType<World['startApi']>, runtime: TaskRuntime = api.driver.runtime) {
     const real = new SQLiteFcaTaskAuthority(w.db);
     const logs: string[] = [];
     const control: { inTransaction: number; moved: boolean; failFor: string | null } = { inTransaction: 0, moved: false, failFor: null };
@@ -257,7 +260,7 @@ describe('a pass that does not pause says nothing of it, and one task\'s failure
       }
       return typeof value === 'function' ? value.bind(target) as unknown : value;
     } }) as unknown as TaskAuthority;
-    const recovery = createFcaBodyRecovery({ db: w.db, authority, runtime: api.driver.runtime, actions: w.actions, scopeKey: 'owner', now: w.now, running: () => false,
+    const recovery = createFcaBodyRecovery({ db: w.db, authority, runtime, actions: w.actions, scopeKey: 'owner', now: w.now, running: () => false,
       passMs: 0, log: line => logs.push(line),
       body: { bound: () => BODY_ID, connected: () => false, release: async () => ({ code: 'recheck_busy', actionIds: [], detail: '' }) } });
     const unknown = (id: string) => real.event('owner', id, 'fca_recovery_unknown', w.now(), { status: 'paused', pauseReason: 'fca_unknown' }, {});
@@ -303,5 +306,100 @@ describe('a pass that does not pause says nothing of it, and one task\'s failure
     f.control.failFor = null;
     f.recovery.expire(); // the next tick tries the failed one again
     expect(api.driver.runtime.get('owner', two.id)?.phase).toBe('stopped');
+  });
+
+  describe('a pause whose notice cannot be written stays paused, and the notice is written at a later tick (L-2, L-3)', () => {
+    /** The runtime of the API, whose pause notices fail while control.failing is set. */
+    function flaky(api: ReturnType<World['startApi']>) {
+      const control = { failing: true, attempts: 0 };
+      const runtime = new Proxy(api.driver.runtime, { get(target, property) {
+        if (property === 'recordPauseNotice') {
+          return (...args: Parameters<NonNullable<TaskRuntime['recordPauseNotice']>>) => {
+            control.attempts++;
+            if (control.failing) throw new Error('FCA_STORE_BUSY');
+            return target.recordPauseNotice!(...args);
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === 'function' ? value.bind(target) as unknown : value;
+      } }) as unknown as TaskRuntime;
+      return { control, runtime };
+    }
+
+    it('L-2: an unknown task is paused though its notice failed, tells the owner once at the next tick, in fixed words, and the retry ends there', () => {
+      const w = world();
+      const api = w.startApi();
+      const task = child(api, '採掘');
+      const { control, runtime } = flaky(api);
+      const f = lone(w, api, runtime);
+      f.unknown(task.id);
+      w.advance(31 * MINUTE);
+      f.recovery.expire();
+      expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped', phase: 'stopped' });
+      expect(api.driver.runtime.progress!('owner', task.id)).toBeNull();
+      expect(f.recovery.retained().unannounced).toBe(1);
+      expect(f.logs).toContain(`Shannon FCA body recovery task=${task.id} code=notice_deferred`);
+      f.recovery.expire(); // still failing: it stays pending and the pause is untouched
+      expect(f.recovery.retained().unannounced).toBe(1);
+      expect(api.driver.runtime.get('owner', task.id)?.phase).toBe('stopped');
+      control.failing = false;
+      f.recovery.expire();
+      expect(f.recovery.retained().unannounced).toBe(0);
+      expect(api.driver.runtime.progress!('owner', task.id)).toMatchObject({ status: 'paused',
+        report: { text: `「採掘」は、${BODY_ABSENT_SUMMARY}`, spoken: '『採掘』は体が戻らなかったため一時停止しています。再開できます。' } });
+      expect(api.driver.runtime.progress!('owner', task.id)?.report?.id.startsWith('paused:body_not_returned:')).toBe(true);
+      const attempts = control.attempts;
+      f.recovery.expire();
+      f.recovery.expire();
+      expect(control.attempts).toBe(attempts); // written: nothing more is tried
+    });
+
+    it('lets go of a pending notice when the owner resumed the task before it could be written', () => {
+      const w = world();
+      const api = w.startApi();
+      const task = child(api, '採掘');
+      const { control, runtime } = flaky(api);
+      const f = lone(w, api, runtime);
+      f.unknown(task.id);
+      w.advance(31 * MINUTE);
+      f.recovery.expire();
+      expect(f.recovery.retained().unannounced).toBe(1);
+      expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+      control.failing = false;
+      f.recovery.expire();
+      expect(f.recovery.retained().unannounced).toBe(0);
+      expect(api.driver.runtime.progress!('owner', task.id)).toBeNull(); // a resumed task is not told it is paused
+    });
+
+    it('L-3: a resumed request stopped again for want of its body stays stopped when the notice fails, and tells the owner at the next tick', async () => {
+      const w = world();
+      const { task, api } = await strandedSkill(w);
+      await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+      w.advance(31 * MINUTE);
+      await w.until(api, () => w.phase(api) === 'stopped', 'paused after the window');
+      expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+      await ticks(api, 10);
+      let failing = true;
+      const runtime = api.driver.runtime, real = runtime.recordPauseNotice!.bind(runtime);
+      let tried = 0;
+      runtime.recordPauseNotice = (...args: Parameters<NonNullable<TaskRuntime['recordPauseNotice']>>) => {
+        tried++;
+        if (failing) throw new Error('FCA_STORE_BUSY');
+        return real(...args);
+      };
+      w.advance(31 * MINUTE);
+      await w.until(api, () => w.phase(api) === 'stopped', 'stopped when the window ran out');
+      expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped' });
+      expect(reportOf(w, api)).toBeUndefined();
+      expect(api.recovery.retained().unannounced).toBe(1);
+      failing = false;
+      await w.until(api, () => reportOf(w, api) !== undefined, 'the notice is written at a later tick');
+      expect(reportOf(w, api)?.id.startsWith('paused:body_not_returned:')).toBe(true);
+      expect(reportOf(w, api)?.spoken).toBe('『マイクラ』は体が戻らなかったため一時停止しています。再開できます。');
+      expect(api.recovery.retained().unannounced).toBe(0);
+      await ticks(api, 20);
+      expect(observed(w)).toBe(2); // the first pause, and this one: written once
+      expect(tried).toBeGreaterThan(1); // the failed write, and the one that took
+    });
   });
 });

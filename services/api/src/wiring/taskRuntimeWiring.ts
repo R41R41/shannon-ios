@@ -19,7 +19,7 @@ import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from 
 import type { FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
 import { settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
-import { pausedSummary } from './taskPauseNotice.js';
+import { pausedSpoken, pausedSummary } from './taskPauseNotice.js';
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
@@ -99,7 +99,9 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     note: (taskId, summary) => {
       authority.transaction(() => authority.event(scopeKey, taskId, 'fca_note', now(), { summary }, {}));
     },
-    pauseNotice: (taskId, key, text) => { runtime.recordPauseNotice?.(scopeKey, taskId, key, text); },
+    pauseNotice: (taskId, key, text) => {
+      runtime.recordPauseNotice?.(scopeKey, taskId, key, text, pausedSpoken(runtime.get(scopeKey, taskId)?.title ?? '', text));
+    },
     log: line => console.log(line) };
   let closing = false, ticking = false;
   /** The scheduling gate of the options, and no lost Minecraft step left to close (`fcaBodyRecovery.ts`). */

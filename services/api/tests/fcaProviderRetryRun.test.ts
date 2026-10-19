@@ -167,7 +167,7 @@ describe('a decision is asked again inside its step after a provider error (C-20
     expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
     // M-1: what the pause said is gone the moment the owner resumes it (summary and report).
     expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe('');
-    expect(f.driver.runtime.progress!('owner', f.child.id)).toBeNull();
+    expect(f.driver.runtime.progress!('owner', f.child.id)?.report).toBeUndefined(); // the progress it had before is put back, without the report
     await f.run();
     // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one yen step then reaches the cap by confirmed spend,
     // and that is the cap's to end, as before.
@@ -208,14 +208,14 @@ describe('a Minecraft request goes on through an outage of the provider and is p
     await f.run();
     expect(f.phase()).toBe('stopped');
     const notice = f.driver.runtime.progress!('owner', f.child.id);
-    expect(notice).toMatchObject({ currentStep: 'fca.result', status: 'failed', report: { text: `「採掘」は、${PROVIDER_UNAVAILABLE_SUMMARY}` } });
+    expect(notice).toMatchObject({ currentStep: 'fca.result', status: 'paused', report: { text: `「採掘」は、${PROVIDER_UNAVAILABLE_SUMMARY}`, spoken: '『採掘』はモデルの応答が続けて得られなかったため一時停止しています。再開できます。' } });
     expect(notice?.report?.id.startsWith('paused:')).toBe(true);
     expect(notice?.report?.text).not.toContain('石を集める'); // the owner's title only, never his words
     for (let i = 0; i < 4; i++) { await f.driver.tick(); await f.driver.drain(); }
     expect(f.reports()).toBe(1); // once, however long it stays paused
     expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
     expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe(''); // not "paused" any more, before any step runs
-    expect(f.driver.runtime.progress!('owner', f.child.id)).toBeNull();
+    expect(f.driver.runtime.progress!('owner', f.child.id)?.report).toBeUndefined();
     await f.run();
     expect(f.phase()).toBe('completed');
     const result = f.driver.runtime.progress!('owner', f.child.id)?.report;

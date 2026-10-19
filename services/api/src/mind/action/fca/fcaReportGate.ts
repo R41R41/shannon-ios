@@ -1,6 +1,6 @@
 import { QUIET_END_HOUR, QUIET_START_HOUR } from '../../../contracts/initiativeTiming.js';
 import { localDateParts } from '../../../infra/time/localDate.js';
-import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
+import { isPauseNotice, type TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import { sameRequest } from './fcaConversation.js';
 
@@ -14,6 +14,8 @@ import { sameRequest } from './fcaConversation.js';
  * - `drop`, never delivered: a sibling for the same request (the same words folded, `sameRequest`, or admitted by the same turn
  *   with at least `TOPIC_OVERLAP` shared topic pieces) already delivered, or, for a failure, completed or still runs; a failure
  *   older than `REPORT_STALE_MS`; a result older than that once he has, after it finished, talked about the same thing.
+ *   The runtime's own pause notice (`paused:` report, status `paused`) is not a failure: it is dropped as stale an hour after the notice
+ *   (not after the task was made), and it neither counts as a failure for a sibling's drop nor is dropped by one's pause but a later one.
  * - `hold`, delivered later: owner-local quiet hours (23–7) while he has not talked in that Talk for `OWNER_ACTIVE_MS`.
  * - `deliver` otherwise.
  *
@@ -55,8 +57,14 @@ function topicWords(text: string): Set<string> {
   return new Set(pieces.filter(piece => !COMMON.has(piece)));
 }
 
+/** The runtime's own report that it paused the task (resumable): its status is `paused`, and an older row says it by its `paused:` id. */
+function pausing(progress: TaskProgress | null | undefined): boolean {
+  return progress?.status === 'paused' || isPauseNotice(progress?.report);
+}
+
+/** A failure: the task failed, or its stored progress says so. A pause is neither (M-1): it is news of its own, never a failure's. */
 function failed(task: TaskView, progress: TaskProgress): boolean {
-  return task.phase === 'failed' || progress.status === 'failed';
+  return task.phase === 'failed' || (progress.status === 'failed' && !pausing(progress));
 }
 
 /** True when two texts share at least `TOPIC_OVERLAP` distinct topic pieces. */
@@ -100,27 +108,35 @@ function sameRequestSiblings(parts: ReportGateParts, task: TaskView): TaskView[]
 export function siblingMark(sibling: TaskView, progress: TaskProgress | null | undefined): string {
   const report = progress?.report;
   const phase = ACTIVE.includes(sibling.phase) ? 'active' : sibling.phase;
-  return [sibling.id, sibling.origin, sibling.goal, phase, progress?.status === 'failed' ? 1 : 0,
+  return [sibling.id, sibling.origin, sibling.goal, phase, pausing(progress) ? 2 : progress?.status === 'failed' ? 1 : 0,
     report?.id ?? '', report?.updatedAt ?? '', report?.text.trim() ? 1 : 0, report?.heard ? 1 : 0].join('\u0000');
 }
 
 /** One request, at most one notice: true when a sibling already answers it (or, for a failure, still works on it). */
 function supersededBySibling(parts: ReportGateParts, task: TaskView, progress: TaskProgress): boolean {
-  const report = progress.report!, isFailure = failed(task, progress);
+  // A pause is news like a failure is (the same request answered or still worked on makes it moot); of two, the later one.
+  const report = progress.report!, isFailure = failed(task, progress) || pausing(progress);
   return sameRequestSiblings(parts, task).some(sibling => {
     const theirs = parts.runtime.progress?.(parts.ownerScope, sibling.id) ?? null;
     const theirReport = theirs?.report;
     const answered = sibling.phase === 'completed' && Boolean(theirReport?.text.trim()) && !failed(sibling, theirs!);
     // A failure is not news while the same request was answered or is still being worked on; of two failures, the later one.
-    const laterFailure = Boolean(theirReport && failed(sibling, theirs!) && theirReport.updatedAt > report.updatedAt);
+    // A sibling's pause is not a failure: it never drops a real failure; a pause is dropped by a later failure or a later pause.
+    const later = Boolean(theirReport && theirReport.updatedAt > report.updatedAt);
+    const laterFailure = later && (failed(sibling, theirs!) || (pausing(progress) && pausing(theirs)));
     if (isFailure) return answered || ACTIVE.includes(sibling.phase) || laterFailure;
     // Of two answers, the one that came first (or the one already said in its turn).
     return answered && Boolean(theirReport!.heard || theirReport!.updatedAt < report.updatedAt);
   });
 }
 
-/** Older than `REPORT_STALE_MS`: a failure always, a result once he has talked about the same thing in that Talk after it finished. */
+/**
+ * Older than `REPORT_STALE_MS`: a failure always, a result once he has talked about the same thing in that Talk after it finished. A
+ * pause is as old as its notice, not as its task (a long Minecraft request pauses hours after it was made, M-1), and talking about the
+ * same thing does not make it stale.
+ */
 function stale(task: TaskView, progress: TaskProgress, history: ReturnType<ReportGateParts['history']>, at: number): boolean {
+  if (pausing(progress)) return at - Date.parse(progress.report!.updatedAt) > REPORT_STALE_MS;
   if (at - Date.parse(task.createdAt) <= REPORT_STALE_MS) return false;
   if (failed(task, progress)) return true;
   const finished = Date.parse(progress.report!.updatedAt);
