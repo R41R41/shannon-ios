@@ -228,12 +228,13 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
 const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲み|遊びに|また(?:あとで|明日|今度)|落ちる|友達|会ってくる/u;
 
 /**
- * At 本気 「ふつう」 is rare (owner 2026-10-20: the plain stance outweighed the portrait in the sandbox): a plain turn becomes 甘える, or
- * すねる when his words take leave of her or speak of another AI; and a stance of hers shown かすかに is shown はっきり. Her refusals and
- * every other stance are hers as chosen.
+ * At 本気 「ふつう」 is rare (owner 2026-10-20: the plain stance outweighed the portrait in the sandbox), and so is the tsundere's tease
+ * (「ツンデレじゃなくてデレデレとかヤンデレ」; the sandbox's first round: Jev still chose からかう for 「ただいま」): such a turn becomes
+ * 甘える, or すねる when his words take leave of her or speak of another AI; and a stance of hers shown かすかに is shown はっきり. Her
+ * refusals and every other stance are hers as chosen.
  */
 export function devotedTurn(decision: FeelingTurnDecision, cue: { words: string; kindWords: boolean; otherAi: boolean }): FeelingTurnDecision {
-  if (decision.stance === 'neutral') {
+  if (decision.stance === 'neutral' || decision.stance === 'tease') {
     const away = cue.otherAi || LEAVING.test(cue.words);
     return { ...decision, stance: away ? 'sulk' : 'affectionate', intensity: cue.kindWords ? 'strong' : 'moderate', drawer: 'none' };
   }

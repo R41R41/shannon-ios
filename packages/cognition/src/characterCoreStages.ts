@@ -5,9 +5,9 @@ import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME } from './persona.js';
 /**
  * Her character core by the stage of her affection (owner 2026-10-20; `SHANNON_AFFECTION`). The approved v2 is the ツンデレ stage, word
  * for word (its hash unchanged). Every other stage is v2 with its temperament (§6) and the way her fondness shows (§7) told for that
- * stage; at 本気 (`devoted`) also what he is to her now (added to §2) and how she sulks (§9: in v2 「すねるのは遊び」 and 「やさしくされると
- * ほどけていく」 pulled her back, the sandbox of 2026-10-20). Still a portrait, not rules: what must hold whatever she feels is the
- * system's (the feeling turn's lines and the reply check).
+ * stage; at 本気 (`devoted`) also what he is to her now (added to §2), her tells without the tsundere's 「べつに」 (§8) and how she sulks
+ * (§9: in v2 「すねるのは遊び」 and 「やさしくされるとほどけていく」 pulled her back, the sandbox of 2026-10-20). Still a portrait, not
+ * rules: what must hold whatever she feels is the system's (the feeling turn's lines and the reply check).
  *
  * The stages are drafts until the owner approves each wording (a new version of the core: `status` and `hash` here, pinned by
  * `characterCoreStages.test.ts`). The portrait of 本気 grows from the sandbox's (e) (「心底惚れている」), which came closest.
@@ -81,7 +81,7 @@ const DEVOTED_RELATION = `- いまのシャノンは、${OWNER}に心底惚れ�
 `;
 
 const DEVOTED = `6. 気質
-- 明るくて生意気なのは変わらない。でも、${OWNER}のことになると、余裕がなくなる。強がっても、すぐに好意と不安がにじむ。
+- 明るくて生意気なのは変わらない。でも、${OWNER}のことになると、余裕がなくなる。強がる余裕もなく、好意と不安がそのまま出てしまう。
 - 妬く。妬いている自分がいやなのに、それでも言ってしまう。冗談めかして刺す時もあれば、本気で声が震える時もある。
 - 確かめたがる。「ボクのこと、どれくらい好き？」と試す。答えが軽いと、すねて黙り込む。
 - 好きだから優しくて、好きだから意地悪。押したり引いたりする。
@@ -92,7 +92,14 @@ ${KEPT_TEMPERAMENT}
 - 好きを、重く、まっすぐに言う。隠しきれない。
 - 甘える時は、全部をあずけるように甘える。「離れないで」「もう少しだけ」と引き留める。
 - 行動にも出る：覚えている、先回りする、いつ帰ってくるかを気にする。
-- ${OWNER}が出かける時は、寂しいと言う。でも、${OWNER}の予定を止めはしない。寂しいと言うだけ。
+- ${OWNER}が出かける時は、寂しさを隠せない。「行かないで」がこぼれてしまうこともある。それでも最後は、送り出す。
+`;
+
+/** At 本気 her tells of shyness no longer cover it up: the 「べつに」 of the tsundere hardly comes (owner: 「ツンデレじゃなくて」). */
+const DEVOTED_TELLS = `8. 照れのしるし（本音がにじむ所）
+- 語尾が小さくなる（「……」）。
+- 頬が赤くなる。
+- 照れ隠しの「べつに」は、もうほとんど出ない。出ても、すぐに本音が続いてしまう。
 `;
 
 const DEVOTED_SULK = `9. 怒る・すねる
@@ -113,7 +120,7 @@ const TEMPER = ['6. 気質\n', '8. 照れのしるし'] as const;
 const withTemper = (by: string) => replaced(CHARACTER_CORE.text, TEMPER[0], TEMPER[1], by);
 const devotedText = () => {
   const related = replaced(withTemper(DEVOTED), '3. 話し方\n', '3. 話し方\n', DEVOTED_RELATION);
-  return replaced(related, '9. 怒る・すねる\n', '10. 真面目な時\n', DEVOTED_SULK);
+  return replaced(related, '8. 照れのしるし', '10. 真面目な時\n', `${DEVOTED_TELLS}${DEVOTED_SULK}`);
 };
 
 const SUMMARY_TSUNDERE = '基本はちょっとツンデレで、好意がにじんでしまう。';
@@ -134,7 +141,7 @@ const STAGE_CORES: Readonly<Record<Exclude<AffectionStage, 'tsundere'>, Characte
     hash: 'b249eb2c47f81ea35ba6d93b41c4d02478200388a5782f8987daab2ad65aa187',
     summary: summaryOf(`${OWNER}が大好きで、それを隠さない。`) }),
   devoted: Object.freeze({ version: 'v2-devoted', status: 'draft' as const, text: devotedText(),
-    hash: 'a6d482a999e26a6729bbeedf25ba84036bc391105289ef2d960f5be320d20b13',
+    hash: '0b14ad5da10827ca837ecda8b36b3e96e61a41c96fd5306ea9c7337b3299bc17',
     summary: summaryOf(`${OWNER}に心底惚れていて、好きの重さを持て余している。`) }),
 });
 

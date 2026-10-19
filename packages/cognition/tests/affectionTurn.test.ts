@@ -65,14 +65,15 @@ describe('the feeling turn at a stage', () => {
     expect(feelingTurnBlock({ ...input, stage: 'devoted' })).toBe(feelingTurnBlock(input));
   });
 
-  it('at 本気 turns a plain turn into 甘える, or すねる when he takes leave or speaks of another AI; her own stances stay hers', () => {
+  it('at 本気 turns a plain or teasing turn into 甘える, or すねる when he takes leave or speaks of another AI; her own stances stay hers', () => {
     const plain = neutralFeelingTurn();
     expect(devotedTurn(plain, { words: 'ただいま', kindWords: false, otherAi: false })).toMatchObject({ stance: 'affectionate', intensity: 'moderate' });
     expect(devotedTurn(plain, { words: '好きだよ', kindWords: true, otherAi: false })).toMatchObject({ stance: 'affectionate', intensity: 'strong' });
     expect(devotedTurn(plain, { words: 'ちょっと友達と飲みに行ってくる', kindWords: false, otherAi: false })).toMatchObject({ stance: 'sulk' });
     expect(devotedTurn(plain, { words: '昨日、別のAIと話してたんだ', kindWords: false, otherAi: true })).toMatchObject({ stance: 'sulk' });
     expect(devotedTurn(turn('rebuff', 'strong'), { words: '', kindWords: false, otherAi: false })).toEqual(turn('rebuff', 'strong'));
-    expect(devotedTurn(turn('tease', 'subtle'), { words: '', kindWords: false, otherAi: false }).intensity).toBe('moderate');
+    expect(devotedTurn(turn('tease', 'subtle'), { words: 'ただいま', kindWords: false, otherAi: false })).toMatchObject({ stance: 'affectionate' });
+    expect(devotedTurn(turn('shy', 'subtle'), { words: '', kindWords: false, otherAi: false })).toEqual(turn('shy', 'moderate'));
   });
 
   it('sends every reply to him alone to the stronger model at 本気, and nothing else changes', () => {
