@@ -102,6 +102,32 @@ List or revoke devices with `list` and `revoke <device-id>`. The database stores
 only HMAC digests of codes and tokens. Back up `shannon.sqlite` and its WAL/SHM
 files as one SQLite backup unit while preserving mode `0600`.
 
+### Rotating the auth pepper
+
+`SHANNON_AUTH_PEPPER` keys every stored digest, so replacing it alone would make
+every paired device's token stop matching. Rotate it side by side instead:
+
+1. The old value moves to `SHANNON_AUTH_PEPPER_PREVIOUS` and a new one becomes
+   `SHANNON_AUTH_PEPPER`. A token that matches only under the previous pepper is
+   accepted once and, in the same transaction, its digest is rewritten under the
+   new one (`device_tokens.pepper_id` records which pepper keyed a row). A pairing
+   code from before the switch still pairs for its 30 minutes. Revoked or expired
+   tokens are never accepted under either pepper.
+2. `authCli.ts pepper-status` prints how many active devices have moved and the
+   display names of those that have not (never a value or digest), ending with
+   `remaining=N`.
+3. At `remaining=0`, remove `SHANNON_AUTH_PEPPER_PREVIOUS`. A device still left at
+   that point has to pair again.
+
+Without `SHANNON_AUTH_PEPPER_PREVIOUS` (or with it empty) authentication is
+unchanged. The API refuses to start when it equals `SHANNON_AUTH_PEPPER` or is
+shorter than 32 characters. `rotate-auth-pepper.sh` runs the whole procedure on
+the VM (`check`, `rotate`, `status`, `rollback`, `rollback-exact`, `finish`); feed
+it through `ssh -o BatchMode=yes azure-constant-server bash -s -- <mode> < rotate-auth-pepper.sh`
+from a LF file. It edits `api.env` with Python only, keeps mode `0600`, backs the
+file up under `~/.config/shannon-ios/backups/` before every change, and never prints a value.
+The backups hold the old pepper; delete them once the rotation is finished.
+
 The API and worker deliberately share only the SQLite file. Install and enable
 both unit templates together at the eventual reviewed release; do not run the
 new API without the worker, because queued affect and memory updates would then
