@@ -28,7 +28,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   progress(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.read(id) : null; }
   recordSpokenReport(s: string, id: string, r: string, t: string, heard?: true) { return this.progressStore[heard ? 'hear' : 'speak'](s, id, r, t); }
   recordProgress(step: TaskStep, event: TaskProgressEvent) { return this.progressStore.record(step, event, () => this.matches(step) && this.get(step.scopeKey, step.taskId)?.phase === 'executing' && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())); }
-  recordPauseNotice(scope: string, id: string, key: string, text: string) { return this.progressStore.pauseNotice(scope, id, key, text); }
+  recordPauseNotice(s: string, id: string, key: string, text: string, spoken?: string) { return this.progressStore.pauseNotice(s, id, key, text, spoken); }
   admitSleep(scope: string, jobId: string) {
     const root = this.authority.root(scope);
     if (root && this.options.sleepTicket?.(scope, jobId)) this.authority.transaction(() => this.recovery.revive(root, 'sleep_admission'));

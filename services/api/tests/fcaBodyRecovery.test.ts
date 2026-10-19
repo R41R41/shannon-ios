@@ -90,7 +90,7 @@ describe('a restart while the model was deciding (no body operation was sent)', 
     expect(skillCommands(again)).toEqual([]);
     // Nothing is kept for a step that was closed and a task that goes on (L-8).
     await ticks(w, api, 3);
-    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0, unannounced: 0 });
     expect(w.events()).toContain('fca_body_recovered');
     expect(w.events()).not.toContain('fca_unknown_retired');
     expect(taskActions(w, task.id)[0]).toMatchObject({ state: 'failed', result: FCA_BODY_RECOVERY_CODE });
@@ -539,7 +539,7 @@ describe('what is kept per step and task is let go (L-8)', () => {
     const body = w.connectBody(api, 'c2', 'drop-on-release');
     await w.until(api, () => w.phase(api) === 'completed', 'goes on');
     await ticks(w, api, 3);
-    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0, unannounced: 0 });
     expect(releaseCommands(body)).toHaveLength(1);
     expect(task.id).toBeTruthy();
   });
@@ -587,7 +587,7 @@ describe('a paused request does not keep the body held (M-C)', () => {
     expect(releaseCommands(body)).toHaveLength(1);
     expect(skillCommands(body)).toEqual([]);
     await ticks(w, api, 3);
-    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0, unannounced: 0 });
     expect(attemptRows(w)).toEqual([]);
   });
 
@@ -802,7 +802,7 @@ describe('what is kept per step is let go when the task leaves (L-8, forget)', (
     w.advance(4 * MINUTE); // the work task's exit
     await w.until(api, () => w.phase(api) === 'failed', 'retired at its exit');
     await ticks(w, api, 5);
-    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0, unannounced: 0 });
     expect(attemptRows(w)).toEqual([]);
   });
 });

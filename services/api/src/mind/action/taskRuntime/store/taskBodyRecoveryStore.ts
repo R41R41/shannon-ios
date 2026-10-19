@@ -16,7 +16,10 @@ export interface LostStepEffects {
  * recoveries among it). The caller holds the authority transaction and writes the event after it.
  */
 export class TaskBodyRecoveryStore {
-  /** False when the extra tables could not be made (a read-only database): the counts then live in memory only, as they did. */
+  /**
+   * False when the extra table could not be made (a read-only database): the counts then live in memory only, as they did. An index
+   * that cannot be made does not count (L-6): `ensureBodyRecoverySchema` leaves it for the next start and the table stays in use.
+   */
   private tables = true;
 
   constructor(private readonly db: DatabaseSync) {

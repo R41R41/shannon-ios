@@ -8,7 +8,7 @@ import {
 } from '../surfaces/minecraft/store/minecraftOperationReconcile.js';
 import { fcaReleaseEvidence } from './configuredActionResourceProof.js';
 import type { BodyRecheckResult } from './minecraftBodyRecheckWiring.js';
-import { pausedReport } from './taskPauseNotice.js';
+import { createPauseAnnouncer } from './fcaPauseAnnouncer.js';
 import { storeNotice } from './fcaBodyRecoveryNotice.js';
 
 /**
@@ -56,7 +56,7 @@ export interface FcaBodyRecovery {
   advance(): Promise<void>;
   idle(): Promise<void>;
   /** Diagnostics: what is kept per lost step and per task. Every count returns to zero once nothing is waited for (L-8). */
-  retained(): { releasing: number; told: number; awaiting: number; exhausted: number };
+  retained(): { releasing: number; told: number; awaiting: number; exhausted: number; unannounced: number };
 }
 
 /** How the body is asked for a step's proof: while its task is active (`attempts`) or paused (`held`). */
@@ -76,6 +76,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
   const releasing = new Map<string, ReleaseState>();
   /** Tasks whose release attempts ran out in this pass, and resumed tasks whose waiting has been said to the owner. */
   const exhausted = new Set<string>(), awaiting = new Set<string>();
+  const notices = createPauseAnnouncer({ runtime, authority, scopeKey, log });
   let lost: LostFcaStep[] = [];
   let working: Promise<void> | null = null, lastPass = Number.NEGATIVE_INFINITY;
 
@@ -171,7 +172,8 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
       checkpoints.releaseStep(task.id, { clearStop: true });
       const change = { status: 'paused' as const, pauseReason: 'fca_stopped', summary: pausedSummary(task.id, summary), proof: true };
       const after = authority.event(scopeKey, task.id, 'fca_body_paused', parts.now(), change, { reason });
-      runtime.recordPauseNotice?.(scopeKey, task.id, `${reason}:${after.revision}`, pausedReport(current.title, summary));
+      // L-2: the notice is in this commit when it can be; a notice that cannot be written never undoes the pause (it is tried again).
+      notices.announce(current, `${reason}:${after.revision}`, summary);
       return true;
     });
     if (paused) say(task.id, 'paused', `reason=${reason}${detail ? ` ${detail}` : ''}`);
@@ -186,10 +188,8 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
         authority.transaction(() => checkpoints.changeOwed(task.id, { add: owedMarkers(task.id) }));
       } catch { /* the step is still open: the notice is sent when it is closed */ }
       annotate(task.id, pausedSummary(task.id, summary));
-      try {
-        // M-2: the owner hears of it once; the stop has taken, so a failure of the report does not undo it (the summary says so too).
-        runtime.recordPauseNotice?.(scopeKey, task.id, `${reason}:${stopped?.revision ?? 0}`, pausedReport(task.title, summary));
-      } catch { /* the summary above is what remains */ }
+      // M-2: the owner hears of it once; the stop has taken, so a failure of the report does not undo it (L-3: it is tried again).
+      notices.announce(task, `${reason}:${stopped?.revision ?? 0}`, summary);
       say(task.id, 'paused', `reason=${reason}`);
       return true;
     } catch {
@@ -452,6 +452,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
         log(`Shannon FCA body recovery task=${id} code=pass_failed`); // one task's failure never stops the others; the next pass tries again
       }
     }
+    notices.retry();
     const open = refreshBlocked();
     forget(new Set(open.map(step => step.actionId)), ids);
   }
@@ -483,6 +484,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
       try {
         refreshBlocked();
         pauseExpired();
+        notices.retry();
       } catch {
         log('Shannon FCA body recovery code=expire_failed'); // the scheduler goes on; the next tick tries again
       }
@@ -491,6 +493,6 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
     idle: async () => {
       await working;
     },
-    retained: () => ({ releasing: releasing.size, told: told.size, awaiting: awaiting.size, exhausted: exhausted.size }),
+    retained: () => ({ releasing: releasing.size, told: told.size, awaiting: awaiting.size, exhausted: exhausted.size, unannounced: notices.pending() }),
   };
 }
