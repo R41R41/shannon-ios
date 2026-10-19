@@ -7,13 +7,17 @@ import { eventLoopBlockedMilliseconds } from '../../../infra/observer/eventLoopW
  * (`fcaDecisionIndex`, the decision's number). Never a prompt, a summary text or an argument: task id, numbers and tool names only.
  *
  *   {"event":"fca_decision_metrics","task":<id>,"d":<decision, from 1>,"t":<seconds since the task began>,"obsMode":"legacy",
- *    "llmMs","stepMs","selectorMs","recallMs","summaryMs":<ms>,"tools":[<names>],"toolMs":<ms>,
+ *    "llmMs","stepMs","selectorMs","recallMs","recallStartMs","evidenceMs","summaryMs":<ms>,"tools":[<names>],"toolMs":<ms>,
  *    "storedTokens","tailTokens":<estimates|null>,"in":{"new","read","write"}|null,"out":<tokens|null>,
  *    "loopBlockedMs":<ms of event-loop blocks named meanwhile>,"inputTransformations":<n, when the model reported it>,
  *    "cut":{"catalog","state","live":<characters or null>,"over","replayRelaxed","deferred":<bool>,"parts","items":<n>} (a transient request
  *    that was shortened to fit: the stage of each cut, whether even the floor left it over, how many parts and tool descriptions are named cut)}
+ *
+ * `recallStartMs` is what the recall's deterministic start held the API's one thread (0 when a settling body defers it into the packet,
+ * whose time is then in `recallMs`); `evidenceMs` is the evidence's shared context, wall time like `recallMs` (it lets I/O through).
+ * Production run 15 (2026-10-19): the first stretch of every decision held the thread 2.5-8.8 s and no part named it.
  */
-type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs';
+type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs' | 'evidenceMs';
 const toolName = (name: string) => /^[A-Za-z0-9_.:-]{1,80}$/u.test(name) ? name : 'other';
 
 export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Readonly<Record<string, unknown>>,
@@ -22,7 +26,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const before = Number(prior.fcaDecisionIndex), index = (Number.isSafeInteger(before) && before >= 0 ? before : 0) + 1;
   const started = clock(), loopStarted = eventLoopBlockedMilliseconds(), execution = currentActionExecution();
   if (execution) delete execution.modelMetrics; // A reading of an earlier decision on the same execution is never this one's.
-  const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0 };
+  const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0, recallStartMs: 0, evidenceMs: 0 };
   let toolMs = 0;
   const tools: string[] = [];
   return {
@@ -31,6 +35,11 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     async timed<T>(part: Spent, work: () => Promise<T>): Promise<T> {
       const at = clock();
       try { return await work(); } finally { spent[part] += clock() - at; }
+    },
+    /** `timed` for synchronous work: what it held the API's one thread. */
+    timedSync<T>(part: Spent, work: () => T): T {
+      const at = clock();
+      try { return work(); } finally { spent[part] += clock() - at; }
     },
     tool(name: string, milliseconds: number): void {
       tools.push(toolName(name));
@@ -44,7 +53,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
         log(JSON.stringify({ event: 'fca_decision_metrics', task: taskId, d: index,
           t: Number.isFinite(began) ? Math.max(0, Math.round((now() - began) / 1000)) : null, obsMode: metrics?.obsMode ?? 'legacy',
           llmMs: Math.round(spent.llmMs), stepMs: Math.round(clock() - started), selectorMs: Math.round(spent.selectorMs),
-          recallMs: Math.round(spent.recallMs), summaryMs: Math.round(spent.summaryMs), tools, toolMs: Math.round(toolMs),
+          recallMs: Math.round(spent.recallMs), recallStartMs: Math.round(spent.recallStartMs), evidenceMs: Math.round(spent.evidenceMs),
+          summaryMs: Math.round(spent.summaryMs), tools, toolMs: Math.round(toolMs),
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,
           in: metrics ? { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite } : null, out: metrics?.outputTokens ?? null,
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),

@@ -116,7 +116,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (recallContext && !ports.body?.settling?.()) {
     await new Promise<void>(resolve => setImmediate(resolve));
     signal.throwIfAborted();
-    observerHandoff('fca', 'recall', { phase: 'start' }); ports.recall!.start(recallContext.input);
+    observerHandoff('fca', 'recall', { phase: 'start' }); metrics.timedSync('recallStartMs', () => ports.recall!.start(recallContext.input));
   } else if (recallContext) observerHandoff('fca', 'recall', { phase: 'start_deferred', reason: 'body_settling' });
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
@@ -153,7 +153,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   if (recall) observerHandoff('recall', 'context', { phase: 'decision_packet', status: recall.status, itemCount: recall.items.length, sourceCount: recall.sourceIds.length });
   // Minecraft run 7 (2026-10-14): 1.8–5.8 s of the API's one thread per step here. It now walks rarely and lets I/O through between walks.
-  const sharedContext = ports.evidence ? await observeAsync('emotion', { phase: 'shared_context' }, () => ports.evidence!.prepare(step),
+  const sharedContext = ports.evidence ? await observeAsync('emotion', { phase: 'shared_context' }, () => metrics.timed('evidenceMs', () => ports.evidence!.prepare(step)),
     value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
   for (const observation of ports.observations ?? []) await observation.guard(observation.revision());

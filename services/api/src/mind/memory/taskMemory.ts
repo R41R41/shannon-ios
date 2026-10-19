@@ -208,12 +208,15 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     readState?: CompanionStateSnapshot) => {
     const found = new Set<string>(), pending = [...ids], state = readState ?? parts.state.snapshot(scope), scalars = scalarIndex(state);
     const experienceOf = cachedExperience ?? ((id: string) => parts.conversations.experiencesById?.(scope, [id])[0] ?? null);
-    while (pending.length) {
-      const id = pending.shift()!;
+    // An index, not `shift()`: the queue held every edge met (production run 15, 2026-10-19: ~44,000 for one item of a body task's
+    // episode pool), and shifting an array that long moves all of it each time, which held the API's thread for seconds per decision.
+    for (let next = 0; next < pending.length; next++) {
+      const id = pending[next]!;
       if (found.has(id)) continue;
       found.add(id);
       if (found.size > walkLimit) throw new Error('TASK_MEMORY_LINEAGE_LIMIT');
-      pending.push(...sourceEdges(scope, id, experienceOf, state, scalars));
+      // An id already found would be passed over when its turn came: it is not queued (the order of `found` is the same).
+      for (const edge of sourceEdges(scope, id, experienceOf, state, scalars)) if (!found.has(edge)) pending.push(edge);
     }
     return [...found];
   };

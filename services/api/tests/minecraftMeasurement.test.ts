@@ -170,7 +170,7 @@ describe('the decision metrics line', () => {
     await inActionExecution({ modelMetrics: { storedTokens: 100, tailTokens: 20, inputNew: 5, inputRead: 90, inputWrite: 10, outputTokens: 30, inputTransformations: 2 } } as never,
       async () => metrics.emit());
     expect(JSON.parse(lines[0]!)).toEqual({ event: 'fca_decision_metrics', task: 'task-1', d: 5, t: 60, obsMode: 'legacy', llmMs: 10, stepMs: 30, selectorMs: 0,
-      recallMs: 0, summaryMs: 0, tools: ['mc.craft-one', 'other'], toolMs: 10, storedTokens: 100, tailTokens: 20, in: { new: 5, read: 90, write: 10 }, out: 30,
+      recallMs: 0, recallStartMs: 0, evidenceMs: 0, summaryMs: 0, tools: ['mc.craft-one', 'other'], toolMs: 10, storedTokens: 100, tailTokens: 20, in: { new: 5, read: 90, write: 10 }, out: 30,
       loopBlockedMs: 0, inputTransformations: 2 });
   });
 });
