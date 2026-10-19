@@ -47,7 +47,7 @@ export const MORNING_BRIEF_HEADLINE_HOURS = 36;
 export function freshHeadlines(items: readonly MorningBriefHeadline[], shown: ReadonlySet<string>, at: string): MorningBriefHeadline[] {
   const now = Date.parse(at);
   return items.filter(item => {
-    if (shown.has(item.url ?? item.title)) return false;
+    if (shown.has(item.url || item.title)) return false;
     const when = item.at ? Date.parse(item.at) : Number.NaN;
     return !Number.isFinite(when) || (when <= now + 3_600_000 && now - when <= MORNING_BRIEF_HEADLINE_HOURS * 3_600_000);
   }).slice(0, 3);
@@ -95,7 +95,7 @@ export function configuredMorningBrief(environment: Environment, parts: {
           try { schedule = todayLines(upcoming.upcoming.loopLines(scopeKey, at, 'owner')); } catch { schedule = null; }
           let headlines: readonly MorningBriefHeadline[] = [];
           try { headlines = freshHeadlines(parts.headlines?.() ?? [], shown, at); } catch { headlines = []; }
-          for (const item of headlines) shown.add(item.url ?? item.title);
+          for (const item of headlines) shown.add(item.url || item.title);
           const brief = composeMorningBrief({ date, weather, schedule, headlines, voice: 'shannon' });
           cached = { date, candidate: {
             item_id: `morning-brief:${date}`, source_id: 'morning-brief', source_title: '朝のまとめ', title: `${localDateLabel(date)}の朝のまとめ`,

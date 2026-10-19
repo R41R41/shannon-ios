@@ -86,7 +86,7 @@ export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と�
   + 'でも、頼まれた調べものや手伝いは、むっとしていてもちゃんとやる（後回しにしない）。'
   // Owner 2026-10-19 (item 7): 「先走ったのはボクの悪いところ」 and then 「いまのはライ氏が悪いです」 in one reply; the same telling-off
   // (「生みの親が…娘は」) four times in an evening.
-  + '自分の間違いを認めたら、その返事で相手を責め返さない（「でも」「それとこれは別」で戻さない）。同じ注意やお小言は、一度言ったらその日はもう繰り返さない。';
+  + '自分の間違いを認めたら、その返事で相手を責め返さない（「でも」「それとこれは別」で戻さない）。同じ注意やお小言は、一度言ったらその日はもう繰り返さない（嫌なことをされた時の「いや」「やめて」は別。何度でも言ってよい）。';
 export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写はしない。照れ・叱る・冷たくする・すねる・「えっち」のような言い方はしてよい。';
 
 /**
@@ -194,8 +194,10 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
  * were given today (closed facts, never her words), for the chooser to read.
  */
 export const WARM_STANCES: readonly FeelingStance[] = Object.freeze(['accept', 'worry', 'affectionate', 'shy']);
-const COOL_STANCES: ReadonlySet<FeelingStance> = new Set(['tease', 'sulk', 'sulky', 'talk_back', 'not_play_along', 'exasperated', 'snipe', 'scold',
-  'rebuff', 'cold', 'cover_up', 'refuse_body']);
+// Refusing (突っぱねる・叱る・体で拒む) is her boundary, not her tsun: it is in neither side, and it ends a cool run (review of the heart
+// branch: four real refusals in a row must never come back as 「warm is due」).
+const COOL_STANCES: ReadonlySet<FeelingStance> = new Set(['tease', 'sulk', 'sulky', 'talk_back', 'not_play_along', 'exasperated', 'snipe', 'cold',
+  'cover_up']);
 
 /**
  * From this many cool stances in a row (no warm one between), her softer side is due (`warm_due`): measured on the week of 2026-10-12, at

@@ -7,7 +7,9 @@
 const DAY_WORD = '(?:今日|きょう|今夜|今晩|明日|あした|あす|明後日|あさって|明々後日|しあさって|\\d{1,2}月\\d{1,2}日|来週の?[月火水木金土日]曜日?|[月火水木金土日]曜日?)';
 const PART = '(?:早朝|朝|昼|夕方|夜|晩|午前中|午前|午後)';
 const CLOCK = '(?:午前|午後)?\\s*\\d{1,2}(?:時(?:\\d{1,2}分|半)?|[:：]\\d{2})(?:ごろ|頃)?';
-const LEAD = new RegExp(`^(?:じゃあ|では|それじゃ|よし)?[、,\\s]*${DAY_WORD}?(?:の|\\s)*${PART}?(?:の|\\s)*(?:${CLOCK})?(?:までに|まで|には|に|は|の)?[、,\\s]*`, 'u');
+// A part of the day only as a word of its own (「朝の」「夜に」「朝9時」), never the head of a noun (夜景, 朝食, 昼寝: review of the heart branch).
+const LEAD = new RegExp(`^(?:じゃあ|では|それじゃ|よし)?[、,\\s]*(?:${DAY_WORD}(?:中)?)?(?:の|\\s)*(?:${PART}(?=[のにはまで、,\\s\\d]|午|$))?(?:の|\\s)*(?:${CLOCK})?`
+  + '(?:までに|まで|には|に|は|の)?[、,\\s]*', 'u');
 const RELATIVE: ReadonlyArray<readonly [RegExp, number]> = [
   [/明々後日|しあさって/u, 3], [/明後日|あさって/u, 2], [/明日|あした|あす/u, 1], [/今日|きょう|今夜|今晩/u, 0],
 ];

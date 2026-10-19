@@ -89,13 +89,18 @@ export const VOICE_FOREIGN_LINE = '[聞き取り] いまの言葉はふだんの
 export const VOICE_BACKGROUND_LINE = '[聞き取り] いまの言葉は、ボクに話しかけたというより、動画やテレビなど周りの音を拾ったようにも聞こえる。'
   + '話しかけられたか分からない時は、中身に乗る前に「それ、ボクに言った？」と軽く確かめる。違ったら、謝りすぎたり黙りこんだりせず、そのまま会話を続ける。';
 
+/** A short word of English he says himself (「Hello」「Thank you」「OK」): not another language to ask about. */
+const ENGLISH_EVERYDAY = /^(?:hello|hi|hey|thank you|thanks|ok(?:ay)?|good (?:morning|night)|bye|yes|no|sorry|nice|cool|wow)[\s!.?]*$/iu;
+/** A narration this long (characters, without spaces and marks), not speaking to her, may be a video beside him. */
+export const VOICE_BACKGROUND_CHARACTERS = 140;
+
 export function voiceHearingLines(rawText: string): string[] {
   const text = rawText.trim();
   const characters = Array.from(text.replace(/[\s\p{P}\p{S}\d]/gu, ''));
   if (characters.length < 4) return [];
   const japanese = (text.match(JAPANESE) ?? []).length / characters.length;
-  if (japanese < 0.3) return [VOICE_FOREIGN_LINE];
-  return characters.length >= 90 && !ADDRESSED.test(text) ? [VOICE_BACKGROUND_LINE] : [];
+  if (japanese < 0.3) return characters.length >= 8 && !ENGLISH_EVERYDAY.test(text) ? [VOICE_FOREIGN_LINE] : [];
+  return characters.length >= VOICE_BACKGROUND_CHARACTERS && !ADDRESSED.test(text) ? [VOICE_BACKGROUND_LINE] : [];
 }
 
 export function voiceTranscriptInterpretationPrompt(uncertain: boolean, rawText: string, noActing = false): string {

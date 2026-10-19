@@ -18,6 +18,10 @@ describe('what he talked about, to come back to (owner 2026-10-19, item 11)', ()
     for (const word of ['よかった', 'すごい', 'かわいい', 'ちゃん', '嬉しい', '今日']) expect(isTopicNoun(word), word).toBe(false);
     for (const word of ['福岡', 'スプラトゥーン', '風邪', 'typescript']) expect(isTopicNoun(word), word).toBe(true);
     expect(deriveResonantInterest('すごい', [{ summary: 'すごい' }])).toBeNull();
+    // Review of the heart branch: a word all in hiragana may still be a topic of hers.
+    expect(deriveResonantInterest('うどんが食べたい', [{ summary: 'うどんが好き' }])).toBe('うどん');
+    expect(topicsOf('来週福岡に行く')).toEqual(['福岡']);
+    expect(topicsOf('ずっと心配してたんだ')).toEqual([]);
     expect(deriveResonantInterest('福岡の天気', [{ summary: '福岡に行った' }])).toBe('福岡');
   });
 

@@ -16,7 +16,7 @@ export const FEELING_MOOD_TARGET = Object.freeze({ pleasant: 0.6, unpleasant: -0
 export function feelingMoodStep(mood: { valence: number; arousal: number }, feeling: ShannonExpressiveEmotion | undefined)
   : { valence: number; arousal: number } | null {
   if (!feeling || feeling.visibility === 'hidden' || !MOOD_LIKE.has(feeling.primary)) return null;
-  const kind = feeling.primary, share = FEELING_MOOD_SHARE * Math.max(0, Math.min(1, feeling.intensity));
+  const kind = feeling.primary, share = FEELING_MOOD_SHARE * (Number.isFinite(feeling.intensity) ? Math.max(0, Math.min(1, feeling.intensity)) : 0);
   const valence = POSITIVE.has(kind) ? FEELING_MOOD_TARGET.pleasant : NEGATIVE.has(kind) ? FEELING_MOOD_TARGET.unpleasant : mood.valence;
   const arousal = HIGH_ENERGY.has(kind) ? FEELING_MOOD_TARGET.lively : LOW_ENERGY.has(kind) ? FEELING_MOOD_TARGET.quiet : mood.arousal;
   const step = { valence: (valence - mood.valence) * share, arousal: (arousal - mood.arousal) * share };

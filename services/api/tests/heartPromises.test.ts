@@ -79,5 +79,16 @@ describe('a wake-up she told him is kept, and closed (owner 2026-10-19)', () => 
     // Not told: not closed.
     state = withPromises([wake()]);
     expect(closeToldRequests(store, 'owner', '2026-10-14T09:00:00.000Z', () => false)).toEqual([]);
+    // Review of the heart branch: a request for more than the notice of the time (a result to tell) is never closed by the notice.
+    const result = wake({ id: 'p3', summary: '明日の9:20に結果を教えて' });
+    state = withPromises([result]);
+    expect(closeToldRequests(store, 'owner', '2026-10-14T09:00:00.000Z', () => true)).toEqual([]);
+  });
+
+  it('keeps the head of a noun and a day\'s 「中」 out of what is cut (review of the heart branch)', () => {
+    expect(promiseTopic('夜景を見に行く')).toBe('夜景を見に行く');
+    expect(promiseTopic('明日朝食を作る')).toBe('朝食を作る');
+    expect(promiseTopic('今日中に資料をまとめる')).toBe('資料をまとめる');
+    expect(promiseTopic('明日の朝に起こして')).toBe('起こして');
   });
 });

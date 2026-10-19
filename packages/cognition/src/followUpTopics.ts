@@ -6,7 +6,8 @@
  */
 const KANJI_KATAKANA = /[\p{Script=Han}\p{Script=Katakana}A-Za-z]/u;
 const NOISE = new Set(['今日', '明日', '昨日', '今夜', '今朝', '最近', '本当', '全部', '自分', '時間', '感じ', '気持ち', '元気', '調子', '大丈夫',
-  'シャノン', 'ライ氏', '名前', '会話', '返事', '画面', '頭', '体', '手', '胸', '髪', '腰', '声']);
+  'シャノン', 'ライ氏', '名前', '会話', '返事', '画面', '頭', '体', '手', '胸', '髪', '腰', '声', '心配', '安心', '我慢', '無理', '期待', '想像', '用意',
+  '確認', '説明', '質問', '連絡', '失礼', '邪魔']);
 
 /** A topic of talk: a noun with kanji, katakana or letters, not ending in kana (an adjective or a verb), not a word of every day. */
 export function isTopicNoun(value: string): boolean {
@@ -16,7 +17,19 @@ export function isTopicNoun(value: string): boolean {
   return !/\p{Script=Hiragana}$/u.test(text);
 }
 
-const PLACE = /([\p{Script=Han}\p{Script=Katakana}ー]{2,10})(?:に|へ)(?:行(?:く|った|って|きた)|来(?:た|て)|着い|いる|いた)/gu;
+/**
+ * A word that may be a topic of hers (`deriveResonantInterest`): a topic noun, or a word all in hiragana that does not end as an
+ * adjective, a verb or a name's suffix (うどん, ねこ; never よかった, すごい, かわいい, ちゃん).
+ */
+export function isTopicWord(value: string): boolean {
+  const text = value.normalize('NFKC').trim();
+  if (/^[\p{Script=Hiragana}ー]+$/u.test(text)) {
+    return Array.from(text).length >= 2 && !NOISE.has(text) && !/(?:い|かった|った|た|だ|る|ね|よ|な|ちゃん|さん|くん|です|ます)$/u.test(text);
+  }
+  return isTopicNoun(text);
+}
+
+const PLACE =/([\p{Script=Han}\p{Script=Katakana}ー]{2,10})(?:に|へ)(?:行(?:く|った|って|きた)|来(?:た|て)|着い|いる|いた)/gu;
 const BACK_FROM = /([\p{Script=Han}\p{Script=Katakana}ー]{2,10})から(?:帰|戻)/gu;
 const DOING = /([\p{Script=Katakana}ー]{3,12}|[\p{Script=Han}]{2,6})(?:が忙し|を?して(?:た|る|い)|を?やって|が好き|にハマ|を?見て|を?食べ|を?飲ん)/gu;
 const LIFE = /(風邪|発熱|頭痛|腹痛|体調|誕生日|旅行|出張|試験|面接|引っ越し|発表|プレゼン|締め切り|ライブ|映画|病院)/gu;
@@ -27,7 +40,7 @@ export function topicsOf(message: string): string[] {
   const found: string[] = [];
   for (const pattern of [PLACE, BACK_FROM, DOING, LIFE]) {
     for (const match of text.matchAll(pattern)) {
-      const topic = (match[1] ?? '').replace(/^(?:今日|昨日|明日|今)/u, '');
+      const topic = (match[1] ?? '').replace(/^(?:今日|昨日|明日|今週|来週|先週|今月|来月|週末|今度|今)/u, '');
       if (isTopicNoun(topic) && !found.includes(topic)) found.push(topic);
     }
   }

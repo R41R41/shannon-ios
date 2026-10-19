@@ -103,6 +103,9 @@ const FINAL_MARKS = /[\s。！？!?…‥・〜~ー)）」』\p{Extended_Pictogr
 const GENERIC_ENDING = /(?:[でま]す|ました|ません|でした|ましょう|ください|ている|てる|だ|る|た|い)[よねか]?$/u;
 const ALL_HIRAGANA = /^[\p{Script=Hiragana}ー]+$/u;
 const HIRAGANA = /\p{Script=Hiragana}/gu;
+/** The set phrases of politeness (「ありがとうございます」「しておきますね」): no habit to avoid, so no phrase is read across them. */
+const POLITE_SET_PHRASES = new RegExp(['ありがとう(?:ございます|ございました)?', 'ございます', 'ください', 'おやすみ(?:なさい)?', 'おはよう(?:ございます)?',
+  'こんにちは', 'こんばんは', 'お疲れ(?:さま|様)(?:です|でした)?', 'おつかれ', 'しておきます', 'よろしく(?:お願いします)?', 'いらっしゃい', 'ごめんなさい', 'すみません'].join('|'), 'gu');
 
 function plainText(text: string): string {
   return text.normalize('NFKC').replace(/\[([^\]]*)\]\([^)]*\)/gu, '$1').replace(/https?:\/\/\S+/gu, '').replace(/[ \t]+/gu, '').trim();
@@ -127,7 +130,7 @@ function endingOf(text: string): string | null {
 
 function phrasesOf(text: string): Set<string> {
   const found = new Set<string>();
-  for (const clause of text.split(CLAUSE_BREAK)) {
+  for (const clause of text.replace(POLITE_SET_PHRASES, '、').split(CLAUSE_BREAK)) {
     const characters = Array.from(clause);
     for (let start = 0; start < characters.length; start += 1) {
       for (let length = PHRASE_LIMITS.shortest; length <= PHRASE_LIMITS.longest && start + length <= characters.length; length += 1) {

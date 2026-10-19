@@ -43,7 +43,9 @@ const promises = (() => {
   try { return (JSON.parse(snapshot?.snapshot_json ?? '{}').prospectiveMemories ?? []) as { status: string; dueAt?: string; dueDate?: string }[]; } catch { return []; }
 })();
 
-const until = option('--until') ?? new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+// Her day now: the local date of three hours ago in his zone (0:00–3:00 belongs to the day before).
+const until = option('--until') ?? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+  .format(new Date(Date.now() - 3 * 3_600_000));
 const result = Array.from({ length: days }, (_, index) => {
   const day = new Date(Date.parse(`${until}T00:00:00Z`) - (days - 1 - index) * 86_400_000).toISOString().slice(0, 10);
   const start = dayStart(day), end = new Date(Date.parse(start) + 86_400_000).toISOString();
@@ -63,7 +65,7 @@ const result = Array.from({ length: days }, (_, index) => {
       .map(event => String(facts(event.facts_json).turnStance ?? '')).filter(Boolean),
     reachOuts,
     promises: { due: due.length, told: Number(told), closed: due.filter(item => item.status === 'completed').length,
-      openAfterTime: due.filter(item => item.status === 'pending' && (item.dueAt ?? `${item.dueDate}T23:59:59Z`) < new Date().toISOString()).length },
+      openAfterTime: due.filter(item => item.status === 'pending' && (item.dueAt ?? end) < new Date().toISOString()).length },
     touchStances: events.filter(event => event.kind === 'touched').map(event => String(facts(event.facts_json).stance ?? '')).filter(Boolean),
   };
   return heartDayNumbers(input);

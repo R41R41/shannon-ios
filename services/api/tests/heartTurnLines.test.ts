@@ -38,7 +38,11 @@ describe('hearing (owner 2026-10-19, item 13)', () => {
   it('asks first when the words came in another language, or read like a video beside him', () => {
     expect(voiceHearingLines('Quem que é esse nome?')).toEqual([VOICE_FOREIGN_LINE]);
     const narration = 'この映画では主人公が森の奥で古い地図を見つけ、仲間たちと一緒に失われた王国を探す旅に出ることになります。'
-      + '途中で何度も危険な目にあいながらも、最後には本当に大切なものに気づいていくという、心温まる物語になっています';
+      + '途中で何度も危険な目にあいながらも、最後には本当に大切なものに気づいていくという、心温まる物語になっています。'
+      + '監督は前作でも同じ森を舞台にしていて、細かいところに前の作品とのつながりが隠されているのも見どころの一つになっています';
+    expect(voiceHearingLines('Hello')).toEqual([]);
+    expect(voiceHearingLines('Thank you!')).toEqual([]);
+    expect(voiceHearingLines('この映画では主人公が森の奥で古い地図を見つけ、仲間たちと一緒に失われた王国を探す旅に出ることになります')).toEqual([]);
     expect(voiceHearingLines(narration)).toEqual([VOICE_BACKGROUND_LINE]);
     expect(voiceHearingLines('元気?')).toEqual([]);
     expect(voiceHearingLines('シャノン、明日の天気を調べて教えて')).toEqual([]);

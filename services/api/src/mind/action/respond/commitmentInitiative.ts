@@ -31,8 +31,11 @@ export function commitmentItemId(memory: ProspectiveMemory): string {
   return `commitment:${memory.id}:${memory.updatedAt}`;
 }
 
-/** A promise that asks her to tell him something at a time (to wake him, remind him, tell him): kept by telling him. */
-const TELLING_REQUEST = /(?:起こして|声(?:を)?(?:かけて|掛けて)|リマインドして|思い出させて|知らせて|教えて|呼んで)/u;
+/**
+ * A promise that asks her only to speak up at a time (to wake him, call him, remind him): kept by telling him. 「結果を教えて」「調べて
+ * 知らせて」 ask for something more than the notice of the time, and are never closed by it (review of the heart branch).
+ */
+const TELLING_REQUEST = /(?:起こして|声(?:を)?(?:かけて|掛けて)|リマインドして|思い出させて|呼んで)/u;
 
 /**
  * Closes what she kept by telling him (owner 2026-10-19: a wake-up of 9:20 stayed an open promise for days): a pending request to be

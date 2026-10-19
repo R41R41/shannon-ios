@@ -61,6 +61,10 @@ describe('her stances lean back toward warmth (owner 2026-10-19)', () => {
       warm_due: 0 });
     const cool = [...three, reply('sulky', 6)];
     expect(stanceFacts(stanceBalance(cool))).toMatchObject({ cool_stance_run: 4, warm_due: 1 });
+    // Review of the heart branch: refusing is her boundary, never counted toward 「warm is due」.
+    const refusing = [reply('refuse_body', 1), reply('rebuff', 2), reply('scold', 3), reply('refuse_body', 4), reply('rebuff', 5)];
+    expect(stanceFacts(stanceBalance(refusing))).toMatchObject({ cool_stance_run: 0, warm_due: 0 });
+    expect(watchPhrases(['ありがとうございます、ライ氏。', 'はい、ありがとうございます。', '本当にありがとうございます。']).phrases).toEqual([]);
     const warmed = [...cool, reply('worry', 7)];
     expect(stanceFacts(stanceBalance(warmed))).toMatchObject({ warm_stances_today: 1, cool_stance_run: 0, warm_due: 0 });
     expect(stanceFacts(stanceBalance([]))).toEqual({ stances_today: 'none', warm_stances_today: 0, cool_stance_run: 0, warm_due: 0 });

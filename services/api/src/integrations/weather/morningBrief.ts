@@ -84,7 +84,9 @@ function specialDayLine(items: readonly MorningBriefSchedule[] | null): string {
   if (!item) return '';
   const title = item.title.replace(/\s+/gu, ' ').trim();
   const whose = /^(.{1,20}?)(?:[’']s\b|の誕生日)/u.exec(title)?.[1]?.trim();
-  if (whose && /birthday|誕生日/iu.test(title)) return `今日は${clip(whose, 20)}さんの誕生日ですね。何か送りますか？`;
+  if (whose === SHANNON_OWNER_NAME || whose === '僕' || whose === '自分') return `今日は${SHANNON_OWNER_NAME}の誕生日ですね。おめでとうございます。`;
+  const honored = whose && /(?:氏|さん|くん|ちゃん|様)$/u.test(whose) ? whose : whose ? `${whose}さん` : '';
+  if (honored && /birthday|誕生日/iu.test(title)) return `今日は${clip(honored, 22)}の誕生日ですね。何か送りますか？`;
   return `今日は「${clip(title, 30)}」の日ですね。`;
 }
 
