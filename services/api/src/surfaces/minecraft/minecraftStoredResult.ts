@@ -25,6 +25,22 @@ function observation(text: string): BodyObservation | null {
   } catch { return null; }
 }
 
+/**
+ * The retry hint a failed body skill ends its text with (`minecraftOutcome.ts`: `［再試行の目安: retry_same｜…］` after a line break). It is the
+ * outcome of the call, so a cut never takes it (review 6, L-1): the body of the text is cut and the hint stays at the end.
+ */
+const RETRY_HINT_TAIL = /\n［再試行の目安: [A-Za-z_]{1,40}｜[^］\n]{0,120}］\s*$/u;
+
+/** A body result cut at `STORED_BODY_RESULT_CHARACTERS`; a trailing retry hint is kept whole and counts inside the limit. */
+function cutBodyResult(text: string): string {
+  if (text.length <= STORED_BODY_RESULT_CHARACTERS) return text;
+  const match = RETRY_HINT_TAIL.exec(text);
+  if (!match) return marked(text, head(text, STORED_BODY_RESULT_CHARACTERS));
+  const tail = match[0].trimEnd(), body = text.slice(0, match.index);
+  const cut = `${marked(body, head(body, STORED_BODY_RESULT_CHARACTERS - tail.length))}${tail}`;
+  return cut.length < text.length ? cut : text; // Never longer than what was cut.
+}
+
 /** A body tool is one of `mc.*` and `minecraft.*`; any other tool's result is stored as it is. */
 export function storedBodyResult(name: string, text: string): string {
   if (!name.startsWith('mc.') && !name.startsWith('minecraft.')) return text;
@@ -33,5 +49,5 @@ export function storedBodyResult(name: string, text: string): string {
     const summary = frame ? JSON.stringify(minecraftObservationSummary(frame)) : text;
     return marked(text, head(summary, MINECRAFT_OBSERVATION_SUMMARY_CHARACTERS));
   }
-  return marked(text, head(text, STORED_BODY_RESULT_CHARACTERS));
+  return cutBodyResult(text);
 }

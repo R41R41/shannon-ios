@@ -5,7 +5,7 @@ import { actionResource, type ActionThreads, type ActionLease } from '../contrac
 import { SQLiteFcaTaskAuthority } from '../mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { migrateAgentTasks } from '../mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteTaskRuntimeStore } from '../mind/action/taskRuntime/store/taskRuntimeStore.js';
-import type { TaskStep, TaskRuntime, TaskView, TaskSleepTicket } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskStep, TaskRuntime, TaskView, TaskSleepTicket, TaskAuthority } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaModel } from '../mind/action/fca/fcaPorts.js';
 import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution, type ActionExecution } from '../infra/context/actionExecution.js';
@@ -17,6 +17,9 @@ import {
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 import type { FcaBudget } from './fcaBudgetWiring.js';
+import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
+import { settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
+import { pausedSpoken, pausedSummary } from './taskPauseNotice.js';
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
@@ -38,10 +41,21 @@ export interface TaskRuntimeWiringOptions {
   budget?: FcaBudget;
   /** `SHANNON_FCA_PROVENANCE_REFS` (`TaskRuntimeOptions.provenanceRefs`). */
   provenanceRefs?: boolean;
-  /** The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`); tests give 0. */
+  /**
+   * The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`), and between the retries
+   * of one decision (`decideWithRetry`, which otherwise backs off exponentially); tests give 0.
+   */
   providerRetryDelayMs?(): number;
+  /**
+   * Minecraft requests that survive a step whose outcome was lost (`fcaBodyRecovery.ts`), made once the runtime exists. Absent: a
+   * lost step is unknown and retired as before.
+   */
+  bodyRecovery?(parts: { db: DatabaseSync; authority: TaskAuthority; runtime: TaskRuntime; actions: ActionThreads; scopeKey: string;
+    now(): string; running(taskId: string): boolean }): FcaBodyRecovery;
+  /** Tests: the wait between the rounds of a Minecraft request whose decision was unavailable (`taskRuntimeUnavailable.ts`). */
+  bodyUnavailableCooldownMs?(cycles: number): number;
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
-    | 'waitCounterpart' | 'keepBodyTools' | 'obsMode'>>;
+    | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
@@ -57,7 +71,10 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const originMatches = !!task && action?.origin === task.origin && (task.origin === 'owner_request' || task.origin === 'own_time' || sleepTicketed());
     return originMatches && fcaTaskLeaseValid(action, scope, taskId, lease, at);
   };
+  /** Set below, once the runtime and the table of running tasks exist; `retireUnknown` asks it which unknown tasks to leave alone. */
+  let recovery: FcaBodyRecovery | undefined;
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
+    holdUnknown: task => recovery?.holds(task) ?? false, pausedSummary,
     ...(options.provenanceRefs ? { provenanceRefs: true } : {}),
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
@@ -70,7 +87,25 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   }
   /** The tasks this process runs; `claimed` once their action holds a slot (until then the slot is counted here). */
   const running = new Map<string, { controller: AbortController; done: Promise<void>; slotClass: SlotClass; claimed: boolean }>();
+  recovery = options.bodyRecovery?.({ db, authority, runtime, actions, scopeKey, now, running: id => running.has(id) });
+  const unavailable: UnavailableParts = { runtime, scopeKey,
+    isBodyTask: taskId => {
+      const task = runtime.get(scopeKey, taskId);
+      return !!task && recovery?.isBodyTask(task) === true;
+    },
+    otherCooldownMs: () => options.providerRetryDelayMs?.() ?? PROVIDER_RETRY_DELAY(),
+    bodyCooldownMs: options.bodyUnavailableCooldownMs ?? (options.providerRetryDelayMs ? () => options.providerRetryDelayMs!() : undefined),
+    fail: step => failRejectedStep(step),
+    note: (taskId, summary) => {
+      authority.transaction(() => authority.event(scopeKey, taskId, 'fca_note', now(), { summary }, {}));
+    },
+    pauseNotice: (taskId, key, text) => {
+      runtime.recordPauseNotice?.(scopeKey, taskId, key, text, pausedSpoken(runtime.get(scopeKey, taskId)?.title ?? '', text));
+    },
+    log: line => console.log(line) };
   let closing = false, ticking = false;
+  /** The scheduling gate of the options, and no lost Minecraft step left to close (`fcaBodyRecovery.ts`). */
+  const schedulable = (taskId: string) => schedulingGate(options)?.(runtime, taskId) !== false && !recovery?.blocks(taskId);
   const classify = (lease: ActionLease) => leaseOutcome(classifyLease(leases.inScope(lease.id, scopeKey), lease, now()));
   async function flushReceipts(): Promise<void> {
     for (const receipt of runtime.pendingReceipts(scopeKey)) {
@@ -109,7 +144,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   }
   async function execute(taskId: string, controller: AbortController): Promise<void> {
     const task = recoverAdmission(taskId);
-    if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false) return;
+    if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false || recovery?.blocks(taskId)) return;
     return withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others', taskId, parentTaskId: task.parentId }, async () => {
     observerHandoff('taskHub', 'queue', { phase: 'admission' });
     const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
@@ -126,7 +161,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
       if (!budgeted.ok) {
         // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to settleFailedStep.
-        await stopForBudget(admitted, budgeted.report);
+        await stopForBudget(admitted, budgeted.report, budgeted.code === 'task_estimates');
         await flushReceipts();
         return;
       }
@@ -135,6 +170,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
         observerHandoff('queue', 'fca', { stepId: admitted.id });
         await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
+            ...(options.providerRetryDelayMs ? { decisionRetryDelayMs: () => options.providerRetryDelayMs!() } : {}),
+            retryAllowed: () => options.budget?.room?.(task, active.execution.lease) ?? true,
             ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
             executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
       } finally {
@@ -157,6 +194,12 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   /** Closes a step that threw: a confirmed stop, a known refusal, or else an unknown outcome. Logs only the closed code. */
   async function settleFailedStep(error: unknown, taskId: string, step: TaskStep | null, stepPorts: StepPorts, execution: ActionExecution): Promise<void> {
     const code = fcaErrorCode(error);
+    // A decision that never came back ran nothing (`taskRuntimeUnavailable.ts`): a further round, a pause of a Minecraft request, or
+    // a known failure with its report. A task being stopped is left to the stop.
+    if (step && await settleUnavailableStep(unavailable, step, error, execution)) {
+      await flushReceipts();
+      return;
+    }
     if (step && stoppedSafely(taskId, stepPorts, execution)) {
       // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
       console.log(`Shannon FCA step stopped task=${taskId} code=${code}`);
@@ -232,18 +275,27 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * A task at its cap, or an own-time task without budget (E3): failed with its report in one commit. A task with unfinished
    * children cannot fail while they run, so it and its children are stopped instead and this step closes as stopped. Any
    * refusal is thrown to the caller, which closes the step through settleFailedStep.
+   *
+   * `pausing` (only unconfirmed charges would take the task over its cap, `fcaBudgetWiring.ts`): the task is never failed. It is stopped
+   * (resumable by the owner) with the report as its summary, whether or not it has children.
    */
-  async function stopForBudget(step: TaskStep, report: string): Promise<void> {
-    runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
+  async function stopForBudget(step: TaskStep, report: string, pausing = false): Promise<void> {
+    if (!pausing) runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
     const task = runtime.get(scopeKey, step.taskId);
     const open = (id: string) => !['completed', 'failed', 'stopped', undefined].includes(runtime.get(scopeKey, id)?.phase);
-    if (task?.childIds.some(open)) {
-      const stopped = runtime.stop(scopeKey, step.taskId, 'fca_budget_capped');
+    if (pausing || task?.childIds.some(open)) {
+      const stopped = runtime.stop(scopeKey, step.taskId, pausing ? 'fca_budget_estimates' : 'fca_budget_capped');
       for (const item of stopped) if (item.id !== step.taskId) running.get(item.id)?.controller.abort();
       for (const live of runtime.activeSteps(scopeKey)) {
         if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());
       }
       if (!runtime.recordStoppedStep(step)) throw new Error('FCA_BUDGET_STOP_UNRECORDED');
+      if (pausing) {
+        // The failure this replaced left a report (`fca.result`); the pause leaves its own, once (the step id is its key). `recordProgress`
+        // is not used: the task is stopping now, so no step may record.
+        unavailable.note(step.taskId, report);
+        try { unavailable.pauseNotice(step.taskId, step.id, report); } catch { /* the task is paused either way; its summary says so */ }
+      }
       return;
     }
     if (!runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] })) throw new Error('FCA_BUDGET_COMMIT_REFUSED');
@@ -284,6 +336,10 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     try {
       await flushReceipts();
       runtime.recover(scopeKey, classify);
+      // A Minecraft request left unknown goes on once its body has proven its release (`fcaBodyRecovery.ts`): the pause of one whose
+      // body did not return runs here, before the retirement below; the rest is a background pass.
+      recovery?.expire();
+      void recovery?.advance();
       // An unknown step is never replayed, but after the deadline its task stops holding parents, limits and sleep.
       const retired = runtime.retireUnknown?.(scopeKey, now()) ?? [];
       const minutes = UNKNOWN_EXIT_MODEL_ONLY_MS / 60_000;
@@ -298,8 +354,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const slots = leases.slots(scopeKey, now());
       const starting = [...running.values()].filter(job => !job.claimed).map(job => job.slotClass);
       for (const task of runtime.readyTasks(scopeKey, 256)) {
-        if (pending.has(task.id) || running.has(task.id) || !executionAllowed(task)
-          || schedulingGate(options)?.(runtime, task.id) === false) continue;
+        if (pending.has(task.id) || running.has(task.id) || !executionAllowed(task) || !schedulable(task.id)) continue;
         const slotClass = slotClassOf({ kind: 'agentTask', sourceId: `fca:${task.id}:${task.revision}` }, deriveTaskKind(task.kind));
         if (!slotAdmissible(slotClass, [...slots.live, ...starting], slots.limits).ok) continue;
         starting.push(slotClass);
@@ -318,8 +373,16 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     return tasks;
   }
   return { runtime, tick, stop,
-    async drain() { await Promise.all([...running.values()].map(job => job.done)); },
-    async close() { closing = true; for (const job of running.values()) job.controller.abort(); await Promise.all([...running.values()].map(job => job.done)); },
+    async drain() {
+      await Promise.all([...running.values()].map(job => job.done));
+      await recovery?.idle();
+    },
+    async close() {
+      closing = true;
+      for (const job of running.values()) job.controller.abort();
+      await Promise.all([...running.values()].map(job => job.done));
+      await recovery?.idle();
+    },
   };
 }
 

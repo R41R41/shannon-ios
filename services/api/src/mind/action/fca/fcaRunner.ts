@@ -10,7 +10,7 @@ import type { TaskRecall } from '../../recall/taskRecallPorts.js';
 import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
-import { decideWithOneRetry } from './fcaNoResponse.js';
+import { decideWithRetry, FCA_RETRY_REFRESH_MS } from './fcaProviderRetry.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
@@ -57,8 +57,13 @@ export interface FcaStepPorts {
    * (an operator's hand-over); absent means a wait is never questioned.
    */
   waitCounterpart?(): boolean;
-  /** The wait before the one retry of a decision that got no answer (`fcaNoResponse.ts`); 2-5 s when absent (tests: 0). */
-  decisionRetryDelayMs?(): number;
+  /**
+   * The wait before a decision that carried no answer is asked again (`fcaProviderRetry.ts`): the suggested exponential, jittered wait,
+   * which already honours the provider's `retry-after`, when absent (tests: 0, or a spy on `suggestedMs`).
+   */
+  decisionRetryDelayMs?(suggestedMs: number, failed: number): number;
+  /** False once the task's budget has no room for another request that may be charged: the decision's retries end there. */
+  retryAllowed?(): boolean;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -152,9 +157,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
   for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
-  const observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
+  let observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
   const observationFresh = async () => (await Promise.all((ports.observations ?? []).map((observation, index) => observation.guard(observationRevisions[index]!)))).every(Boolean);
-  const bodyRevision = ports.body?.revision() ?? 0;
+  let bodyRevision = ports.body?.revision() ?? 0;
   const skillIndex = ports.tools?.skillIndex?.();
   const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
   const waiting = waitGate.fact();
@@ -172,17 +177,51 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
       ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) };
-  const decide = (asked: FcaModelInput) => decideWithOneRetry(() => metrics.timed('llmMs', () => ports.model.decide(asked, signal)), { signal, recheck: checked,
-    delay: ports.decisionRetryDelayMs,
-    log: line => console.warn(`${line} task=${step.taskId}`) });
+  // A failed attempt that carried no decision leaves nothing to apply: its outcome is known, its spend was recorded by the adapter.
+  const answeredNothing = () => { if (execution && execution.stepOutcome !== 'unknown') execution.modelOutcome = 'acknowledged'; };
+  /**
+   * A request asked again after a wait of ten seconds or more is rebuilt from the body's present observation: the one built before
+   * the first attempt is minutes old by then, and a decision made on it would be discarded as stale (`bodyStale` below). The body
+   * settles and its revision is read again exactly as before the first request; what the decision is later checked against is that
+   * new revision. Nothing else of the request changes (the history, the tools and the messages are the ones the first attempt had).
+   */
+  const freshen = async (asked: FcaModelInput): Promise<FcaModelInput> => {
+    if (ports.body) await ports.body.guard(ports.body.revision());
+    for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
+    observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
+    bodyRevision = ports.body?.revision() ?? 0;
+    return { ...asked,
+      ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
+      ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}),
+      ...(ports.body ? { body: ports.body.context() } : {}),
+      ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
+  };
+  /** The request in hand (the one last sent, rebuilt by every `freshen`) and when it was built: a fallback starts from this, never from the first one. */
+  let latest = { asked: request, at: Date.now() };
+  const decide = (asked: FcaModelInput) => {
+    latest = { asked, at: Date.now() };
+    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, signal)), { signal, recheck: checked,
+      delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
+      refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; },
+      log: line => console.warn(`${line} task=${step.taskId}`) });
+  };
   const output = await decide(request).catch(async error => {
     // The very first decision of a transient task refused for its betas: no signed history exists, so it starts again in the legacy shape.
     if (!isTransientUnsupported(error) || !selection || selection.obsMode !== 'transient' || input.history.length) throw error;
     console.warn(JSON.stringify({ event: 'fca_obs_mode_fallback', task: step.taskId, from: 'transient', to: 'legacy', reason: 'beta_rejected' }));
     selection = legacyToolState(selection);
     input.tools = selectedFcaTools(catalog, selection);
-    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = request;
-    return decide({ ...legacy, tools: input.tools });
+    // The legacy request is made from the request in hand (its observations, body and progress may have been rebuilt meanwhile, and
+    // `bodyRevision` and `observationRevisions` already name that observation), not from the first one (M-B). If that one has grown old
+    // while the attempts ran, it is rebuilt again, with the gate before and after as for every further request.
+    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = latest.asked;
+    let legacyRequest: FcaModelInput = { ...legacy, tools: input.tools };
+    if (Date.now() - latest.at >= FCA_RETRY_REFRESH_MS) {
+      await checked();
+      legacyRequest = await freshen(legacyRequest);
+      await checked();
+    }
+    return decide(legacyRequest);
   }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
     throw error;
@@ -299,7 +338,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.

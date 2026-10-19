@@ -1,3 +1,4 @@
+import { memoryControlFor, type CompanionStateSnapshot } from '@shannon/cognition';
 /**
  * Walks of the recall graph (what a remembered turn recalled, and what that recalled) are recursive, and a game chat that goes on for
  * days makes one long chain of turns that each recalled the one before. 2026-10-17: at a few thousand turns the recursion overflowed
@@ -54,6 +55,43 @@ export class DeepChains {
     this.warned = true;
     console.warn(`Shannon recall chain too deep walk=${this.walk} links>${this.maximum}`);
   }
+}
+
+/**
+ * What one query scope of a `MemoryWithholding` (one synchronous read) has decided. All of it ends with the scope, so the next read asks the
+ * native readers again. `timeless`: a recalled id's verdict where the time of the reply that recalled it cannot matter (no control names it,
+ * no fact stands on it). `lineages`: what a task memory read found visible, with the earliest time each was visible at; what is visible at one
+ * time is visible at every later one (every rule that depends on the time withholds an earlier reading whenever it withholds a later one;
+ * held by `tests/fcaLoopStallTime.test.ts`, which lists the rules and fails when one of another direction appears).
+ */
+export class ScopeMemos {
+  readonly recalled = new Map<string, boolean>();
+  readonly timeless = new Map<string, boolean>();
+  /** The part of a recalled id's verdict that does not depend on the time of the reply that recalled it (one walk per id). */
+  readonly provenance = new Map<string, boolean>();
+  readonly reads = new Map<string, boolean>();
+  /** What the native reader answered for a read receipt (source and time). */
+  readonly sources = new Map<string, boolean>();
+  readonly lineages = new Map<string, string>();
+  /** For the bound of a task memory read's source walk (`taskMemory.ts`): the ids each id's sources go on to, and per start id whether it is over. */
+  readonly sourceEdges = new Map<string, readonly string[]>();
+  readonly sourceOverflow = new Map<string, boolean>();
+  clear(): void {
+    const memos = [this.recalled, this.timeless, this.provenance, this.reads, this.sources, this.lineages, this.sourceEdges, this.sourceOverflow];
+    for (const memo of memos) memo.clear();
+  }
+  /** Keeps a recalled id's verdict as the one for any time where it is (nswersAtAnyTime). */
+  keepTimeless(state: CompanionStateSnapshot, id: string, verdict: boolean): void { if (answersAtAnyTime(state, id)) this.timeless.set(id, verdict); }
+}
+
+/**
+ * Whether a recalled id's verdict (`MemoryWithholding.computeRecalled`) is the same for a reply of any time: no memory control names it and no
+ * fact, relationship or promise stands on it, so the verdict is the walk of what it read and recalled alone (`ScopeMemos.timeless`).
+ */
+export function answersAtAnyTime(state: CompanionStateSnapshot, id: string): boolean {
+  const stands = (items: ReadonlyArray<{ id: string }>) => items.some(item => item.id === id);
+  return !id.startsWith('thread:') && !id.startsWith('knowledge:') && !memoryControlFor(state, id)
+    && !stands(state.userFacts) && !stands(state.relationships) && !stands(state.prospectiveMemories);
 }
 
 /** How many `deepWalk`s are running (all synchronous). Inside one an overflow goes up to it; outside every one it is answered at once. */

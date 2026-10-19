@@ -22,6 +22,9 @@ export const FCA_TURN_BUDGET_MS = 800;
 export const FCA_CONTEXT_ITEMS = 8;
 const ACTIVE_PHASES = ['ready', 'executing', 'waiting', 'stopping', 'unknown'];
 const WORK_GUIDANCE = 'Use actual task phases and received findings to answer progress questions. Running is not completed. '
+  + 'A progress status "paused" means the runtime stopped the task by itself (a lost body, a missing model answer or a spending check) '
+  + 'and the owner may resume it: '
+  + 'it did not fail and has no result, so never call it failed or finished. '
   + 'Say that something is unconfirmed only when it changes the answer; never add a routine disclaimer about search snippets.';
 /** 2026-10-13: a report already read aloud in a call was announced again (「結果がそろいました」) when the owner only said 「なるほど」.
  * Rich chat (same day): the report card in the Talk already carries the result, so a text reply does not restate it either. */

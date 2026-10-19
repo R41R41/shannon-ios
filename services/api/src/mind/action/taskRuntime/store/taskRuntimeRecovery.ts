@@ -22,6 +22,8 @@ export interface TaskRecoveryParts {
   wake?(task: TaskRecord, reason: string): void;
   /** The owner-visible report that a task could not finish (`TaskProgressStore.notice`). */
   notice?(scope: string, taskId: string, stepId: string | null, operationId: string, text: string): void;
+  /** An unknown task that is not retired yet, though its exit has come (`TaskRuntimeOptions.holdUnknown`). */
+  hold?(task: TaskRecord): boolean;
 }
 const terminal = (task: TaskRecord) => ['completed', 'failed', 'cancelled'].includes(task.status);
 
@@ -92,7 +94,7 @@ export class TaskRuntimeRecovery {
     for (const task of this.parts.all(scopeKey)) {
       if (task.pauseReason !== 'fca_unknown' || terminal(task) || receipted.has(task.id)) continue;
       const kind = deriveTaskKind(task.kind);
-      if (!unknownDue(this.unknownSince(scopeKey, task.id), at, kind)) continue;
+      if (!unknownDue(this.unknownSince(scopeKey, task.id), at, kind) || this.parts.hold?.(task)) continue;
       this.retire(task, unknownExit(this.actedOnBody(task.id) ? 'external' : kind ? effectClassOf(kind) : 'none', kind).code);
       retired.push(this.parts.get(scopeKey, task.id)!);
     }

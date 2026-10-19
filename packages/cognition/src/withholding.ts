@@ -46,8 +46,9 @@ const NORMALIZED = new Map<string, string>();
 const NORMALIZED_KEPT = 4_096, NORMALIZED_CHARACTERS = 2_000_000;
 let normalizedCharacters = 0;
 function normalized(value: string): string {
-  // A short text is normalized faster than it is looked up and kept.
-  if (value.length < 256) return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
+  // A very short text is normalized faster than it is looked up and kept; from a few dozen characters the locale's lower-casing costs
+  // more than the lookup (a recall step normalized the same remembered replies under each rule of each check).
+  if (value.length < 32) return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
   const known = NORMALIZED.get(value);
   if (known !== undefined) return known;
   const result = value.normalize('NFKC').toLocaleLowerCase('ja-JP');
@@ -105,8 +106,22 @@ function controlBasis(snapshot: CompanionStateSnapshot, control: MemoryControl):
     .filter((value): value is string => Boolean(value)).join('\n');
 }
 
+/**
+ * The rules of a snapshot are a pure value of its controls and facts (a snapshot is frozen), made once per snapshot object: every check
+ * of one moment builds its own `MemoryWithholding` over the same snapshot, and each used to derive the key terms of every control again.
+ */
+const RULES = new WeakMap<CompanionStateSnapshot, readonly MemoryWithholdingRule[]>();
+
 /** One rule per forgotten, rejected or corrected item. An active, uncorrected item withholds nothing. */
 export function memoryWithholdingRules(snapshot: CompanionStateSnapshot): readonly MemoryWithholdingRule[] {
+  const known = RULES.get(snapshot);
+  if (known) return known;
+  const rules = derivedRules(snapshot);
+  if (Object.isFrozen(snapshot)) RULES.set(snapshot, rules);
+  return rules;
+}
+
+function derivedRules(snapshot: CompanionStateSnapshot): readonly MemoryWithholdingRule[] {
   return Object.freeze(snapshot.memoryControls.flatMap(control => {
     const hidden = control.status !== 'active';
     if (!hidden && !control.overrideText) return [];
@@ -124,9 +139,58 @@ export function memoryWithholdingRules(snapshot: CompanionStateSnapshot): readon
   }));
 }
 
-/** Whether a text restates the withheld item: it contains enough of the item's key terms. */
+/**
+ * Whether a text restates the withheld item: it contains enough of the item's key terms. A pure value of the rule and the text, and
+ * a walk of a task's provenance asks it of the same long text (a skill's body) under the same rule once for every time the text was
+ * read at (thousands): kept per rule, for the texts that are long enough to be worth it. Bounded per rule (`RESTATED_KEPT`) and in all
+ * (`RESTATED_TOTAL_*`: entries and the characters of the texts kept, over every rule); the whole cache is dropped when the total is full.
+ */
+interface RestatedAnswers { answers: Map<string, boolean>; characters: number }
+let restated = new WeakMap<MemoryWithholdingRule, RestatedAnswers>();
+let restatedEntries = 0, restatedCharacters = 0;
+const RESTATED_KEPT = 256, RESTATED_MINIMUM_CHARACTERS = 256, RESTATED_MAXIMUM_CHARACTERS = 20_000;
+const RESTATED_TOTAL_ENTRIES = 1_024, RESTATED_TOTAL_CHARACTERS = 4_000_000;
+
+/** How much the restatement cache holds now (for a test that holds its bound). */
+export function restatedMemoryKept(): { entries: number; characters: number } { return { entries: restatedEntries, characters: restatedCharacters }; }
+
 export function restatesWithheldMemory(rule: MemoryWithholdingRule, text: string): boolean {
   if (!rule.terms.length) return false;
+  const keep = text.length >= RESTATED_MINIMUM_CHARACTERS && text.length <= RESTATED_MAXIMUM_CHARACTERS;
+  let known: RestatedAnswers | undefined;
+  if (keep) {
+    known = restated.get(rule);
+    const answer = known?.answers.get(text);
+    if (answer !== undefined) return answer;
+  }
+  const result = restates(rule, text);
+  if (keep) keepRestated(rule, known, text, result);
+  return result;
+}
+
+/** Keeps an answer under the bounds (per rule, and in all): a rule that is full is emptied, and the whole cache is dropped when its total is. */
+function keepRestated(rule: MemoryWithholdingRule, known: RestatedAnswers | undefined, text: string, result: boolean): void {
+  let answers = known;
+  if (restatedEntries >= RESTATED_TOTAL_ENTRIES || restatedCharacters + text.length > RESTATED_TOTAL_CHARACTERS) {
+    restated = new WeakMap();
+    restatedEntries = 0;
+    restatedCharacters = 0;
+    answers = undefined;
+  }
+  if (answers && answers.answers.size >= RESTATED_KEPT) {
+    restatedEntries -= answers.answers.size;
+    restatedCharacters -= answers.characters;
+    answers.answers.clear();
+    answers.characters = 0;
+  }
+  if (!answers) restated.set(rule, answers = { answers: new Map(), characters: 0 });
+  answers.answers.set(text, result);
+  answers.characters += text.length;
+  restatedEntries += 1;
+  restatedCharacters += text.length;
+}
+
+function restates(rule: MemoryWithholdingRule, text: string): boolean {
   const haystack = normalized(text);
   let matched = 0;
   for (const group of rule.terms) {

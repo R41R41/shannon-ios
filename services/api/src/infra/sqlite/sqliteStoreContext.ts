@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ShannonEmotionTiming } from '@shannon/cognition';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
+import { prepared } from './sqliteOpen.js';
 import type { SQLiteShannonStoreOptions } from './sqliteStore.js';
 
 export class SQLiteStoreContext {
@@ -24,6 +25,9 @@ export class SQLiteStoreContext {
   }
 
   now(): string { return this.options.now(); }
+
+  /** A statement of fixed text that a hot path runs again and again, prepared once (prepared in sqliteOpen.ts). */
+  prepared(text: string) { return prepared(this.database, text); }
 
   /** The timing every emotion event of this store is reduced with. */
   emotionTiming(): ShannonEmotionTiming { return this.options.emotionTiming ?? emotionTiming(); }

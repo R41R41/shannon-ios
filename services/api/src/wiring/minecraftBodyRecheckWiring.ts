@@ -89,6 +89,28 @@ export function createMinecraftBodyRecheck(parts: {
     running = job;
     return job;
   }
+  /**
+   * One physical release of one step, now (the Minecraft recovery, `fcaBodyRecovery.ts`): an unknown step need not wait for its
+   * unknown exit to record the body as retained before the body is asked. The same command, proof and attempt count as above; the
+   * recovery judges the evidence itself. Busy while another re-check runs. Every call that reaches the body writes one `recheck:` row, so
+   * the caller owns the bound: the recovery asks with a backoff (10 s doubling to 5 min) and at most `FCA_BODY_RELEASE_ATTEMPTS` times
+   * per lost step before it pauses the task (`fcaBodyRecovery.ts`); a call that finds no body connection writes no row.
+   */
+  function releaseStep(step: { actionId: string; scopeKey: string; lease: ActionLease }): Promise<BodyRecheckResult> {
+    if (running || closing) return Promise.resolve({ code: 'recheck_busy', actionIds: [], detail: 'a re-check is running' });
+    const job = (async (): Promise<BodyRecheckResult> => {
+      const tried = attempts.get(step.actionId) ?? 0;
+      const code = await recheck(step, tried + 1);
+      if (code === 'not_confirmed' || code === 'proof_refused') attempts.set(step.actionId, tried + 1);
+      if (code === 'released') attempts.delete(step.actionId);
+      parts.log?.(`Shannon Minecraft body re-check origin=recovery action=${step.actionId} code=${code}`);
+      return { code, actionIds: [step.actionId], detail: code };
+    })().catch((error: unknown): BodyRecheckResult => ({ code: 'not_confirmed', actionIds: [step.actionId],
+      detail: error instanceof Error ? error.message.slice(0, 120) : 'error' }))
+      .finally(() => { if (running === job) running = null; });
+    running = job;
+    return job;
+  }
   const timer = setInterval(() => { if (!closing && !running && held().length) void request('start'); }, parts.tickMilliseconds ?? TICK_MS);
   timer.unref();
   async function close() {
@@ -96,6 +118,6 @@ export function createMinecraftBodyRecheck(parts: {
     clearInterval(timer);
     await running;
   }
-  return { request, held, close };
+  return { request, held, close, releaseStep };
 }
 export type MinecraftBodyRecheck = ReturnType<typeof createMinecraftBodyRecheck>;

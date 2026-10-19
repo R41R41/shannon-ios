@@ -8,7 +8,12 @@ import type { BodyValue } from '../../contracts/bodyControlContract.js';
  */
 const LINE = 320;
 const record = (value: BodyValue | undefined): value is { readonly [key: string]: BodyValue } => !!value && typeof value === 'object' && !Array.isArray(value);
-const clip = (text: string) => text.length <= LINE ? text : `${text.slice(0, LINE - 1)}…`;
+/** A line cut at `LINE`, never between the halves of a surrogate pair (a lone half is refused by the provider). */
+const clip = (text: string) => {
+  if (text.length <= LINE) return text;
+  const keep = /[\uD800-\uDBFF]/u.test(text[LINE - 2] ?? '') ? LINE - 2 : LINE - 1;
+  return `${text.slice(0, keep)}…`;
+};
 const number = (value: BodyValue | undefined) => typeof value === 'number' && Number.isFinite(value) ? value : null;
 
 /** `体の反射（新しい順）: 5秒前 盾を構えた／40秒前 食事（パン）｜接続以来 shield×3 eat×1`. */
