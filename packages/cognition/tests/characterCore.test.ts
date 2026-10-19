@@ -7,9 +7,9 @@ import {
 
 describe('character core (Syzygy ADR-0012 D6)', () => {
   it('is versioned and its hash is the sha256 of its version, text and summary: a change of a word is a change of this one file', () => {
-    // v2 (2026-10-19): the section the owner asked for; its wording waits for his approval.
+    // v2 (2026-10-19): the section the owner asked for; he approved its wording the same day.
     expect(CHARACTER_CORE.version).toBe('v2');
-    expect(CHARACTER_CORE.status).toBe('draft');
+    expect(CHARACTER_CORE.status).toBe('approved');
     expect(createHash('sha256').update(characterCoreHashInput(CHARACTER_CORE)).digest('hex')).toBe(CHARACTER_CORE.hash);
     expect(characterCoreBlock()).toMatch(new RegExp(`^\\[ボクの性格の核 v2 #${CHARACTER_CORE.hash.slice(0, 8)}\\]\\n`, 'u'));
   });

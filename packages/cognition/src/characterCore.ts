@@ -22,7 +22,8 @@ import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHA
  * v2 (2026-10-19, asked for by the owner after a week of talk; his words: 「ロジックより感情を優先させるのは良くない」「自分の感情だけを
  * 盾に優位に立とうとする言い方はよくない」): her own mistake owned without excuse or counter-attack (§6, and §1 no longer has her
  * excuse herself first), a feeling from before only colouring her voice and never kept from his request (§9), her body felt as hers
- * and being carried on the screen not a touch (§1). Still a portrait, not rules; its wording waits for his approval (`status`).
+ * and being carried on the screen not a touch (§1). Still a portrait, not rules. The owner approved this wording on 2026-10-19
+ * (「キャラ核 v2 をこの文面で承認します」).
  */
 export interface CharacterCore {
   readonly version: string;
@@ -134,7 +135,7 @@ export const CHARACTER_CORE_SPEECH = `話し方: ${SPEECH_SURPRISE}${SPEECH_LOOS
 
 export const CHARACTER_CORE: CharacterCore = Object.freeze({
   version: 'v2',
-  status: 'draft',
+  status: 'approved',
   hash: 'cb69b70fe805b744e60e52f49a837018af5de7e6a1d9b61b8ca864e88dc8bb94',
   text: CORE_TEXT,
   summary: CORE_SUMMARY,
