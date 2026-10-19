@@ -62,7 +62,7 @@ export function interestingHeadlines(items: readonly MorningBriefHeadline[], int
   const fold = (text: string) => text.normalize('NFKC').toLowerCase();
   const terms = filterMeaningfulInterests(interests).map(fold).filter(term => term.length >= 2);
   if (!terms.length) return [];
-  return items.filter(item => { const title = fold(item.title); return terms.some(term => title.includes(term)); });
+  return items.filter(item => terms.some(term => fold(item.title).includes(term)));
 }
 
 /** The owner-local hours in which the proactive brief may be written (the initiative loop wakes at 7 after quiet hours). */

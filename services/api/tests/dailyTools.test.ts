@@ -115,7 +115,9 @@ describe('the proactive morning brief (SHANNON_MORNING_BRIEF)', () => {
     const [message] = initiatives.unreadMessages('owner');
     // Owner 2026-10-19 (item 16): the proactive brief opens in her words, to him.
     expect(message).toMatchObject({ sourceTitle: '朝のまとめ', content: expect.stringContaining('おはようございます、ライ氏。今日の福岡市は') });
-    expect(message!.content).toContain('[見出し](https://example.com/a)');
+    // Owner 2026-10-19 (item 16, the recommended choice): a headline that touches none of his interests is not told; this
+    // owner has none recorded, so the brief carries no news (`interestingHeadlines` is tested with interests in heartTurnLines).
+    expect(message!.content).not.toContain('[見出し](https://example.com/a)');
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map(), candidates)).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
     initiatives.close(); brief.close(); state.close();
   });
