@@ -266,10 +266,13 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     /**
      * The guard that goes with the batch rule of `BODY_RULE` (the old Minebot's `earlier_action_failed`, ShannonExecutor.ts:971-974; L104:
      * 14 of 239 body calls): once a body action of this response has failed, the body actions after it are not run, since each was chosen
-     * for the world the failed one was to leave. Reads still run. A call not run is neither a failure of its own (the failure count, the
-     * pace ledger, the progress failures and the tool selection never see it) nor a stale result; its evidence is observed as not run.
+     * for the world the failed one was to leave. Reads still run, and so does every tool that is not the body's (the goal and replan tools,
+     * a research write): only a body task's body actions (`minecraft_body`, not `read`) stop and are stopped. A call not run is neither a
+     * failure of its own (the failure count, the pace ledger, the progress failures and the tool selection never see it) nor a stale
+     * result, and it is no event (`FcaEvidence.notRun`).
      */
-    const bodyAction = (name: string) => ports.tools?.definitions.some(definition => definition.name === name && definition.effect !== 'read') === true;
+    const bodyAction = (name: string) => bodyTask && ports.tools?.definitions.some(definition => definition.name === name
+      && definition.domain === 'minecraft_body' && definition.effect !== 'read') === true;
     let earlierFailed = false;
     const notRun = new Set<string>();
     for (const call of decision.calls) {
@@ -308,7 +311,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { progress({ operationId, tool: call.name, status: 'unknown' }); ports.evidence?.unknown(step, call); throw error; });
       if (skipped) metrics.skipped(call.name); else metrics.tool(call.name, performance.now() - toolStarted);
       progress({ operationId, tool: call.name, status: result.ok ? 'received' : 'failed', ...(result.ok && result.readReceipt ? { read: result.readReceipt } : {}), ...(result.ok && call.name === 'task.send' && call.input && typeof call.input === 'object' && (call.input as Record<string, unknown>).id === step.snapshot.task.parentId && typeof (call.input as Record<string, unknown>).message === 'string' ? { report: { text: String((call.input as Record<string, unknown>).message) } } : {}) });
-      if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
+      if (skipped) ports.evidence?.notRun?.(step, call);
+      else if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
       if (skipped) {
         notRun.add(call.id);
         results.push({ id: call.id, text: result.text, ok: false });

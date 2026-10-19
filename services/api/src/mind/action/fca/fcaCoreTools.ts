@@ -11,7 +11,8 @@ import type { FcaToolState } from './fcaToolState.js';
  *
  * The default is `transient` (2026-10-19, after the L-1 to L-4 fixes of 85339a3; the estimate on production run 15's requests is in
  * `tests/fcaDecisionCostEstimate.test.ts`: a body decision's input from about 65k tokens, a third of them written, to a few thousand new
- * ones). `legacy` (the shape before, byte for byte) is the way back; anything else unknown is read as the default.
+ * ones). `legacy` (the request shape before) is the way back; anything else unknown is read as the default. What the same round changed
+ * for every body task applies in both shapes: no recall, the body's shared context (`bodySharedContext`), the batch rule and its guard.
  */
 export type FcaObsMode = 'legacy' | 'transient';
 export function fcaObsMode(value: string | undefined): FcaObsMode {

@@ -17,8 +17,9 @@ import { itemKey, partKey } from './anthropicFcaStoredState.js';
  *      far as the size needs (review 5, L-3: a gist's tail costs the model less than the entities and facts it sees nowhere else). A live
  *      state that is not above a typical one is left whole here;
  *   2. the catalog items' descriptions (never an item's name), to the highest common length that fits, down to `CATALOG_FLOOR`;
- *   3. the long texts of the stored state's other parts (the shared context, the goal progress; never the skill index, the task,
- *      the messages or the children), down to `TEXT_FLOOR`;
+ *   3. the long texts of the stored state's other parts (the goal progress; never the skill index, the task, the messages or the
+ *      children), down to `TEXT_FLOOR`. The shared context is live state since 2026-10-19 (`liveObject`), cut with it at stage 4; it is
+ *      still named here for a state stored before;
  *   4. the live state again, as far as it takes: the structure, then the long texts, never below `TEXT_FLOOR` (a text of 400 characters or
  *      less is never touched, so a name, a pointer, an inventory entry or a tool name always arrives; the pointers, the gists' skill names,
  *      the inventory, the kinds and the tool names are never cut even when long; never the clock or the wait fact);

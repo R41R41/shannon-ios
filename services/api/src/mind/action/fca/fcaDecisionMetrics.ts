@@ -25,6 +25,8 @@ import { eventLoopBlockedMilliseconds } from '../../../infra/observer/eventLoopW
  *     work after its commit (`afterMs`: its budget and receipts), the scheduler's wait for its next turn (`waitMs`), and this step's
  *     admission (`admitMs`: lease, begin, budget, ports); null for a first step, or when the scheduler did not say (`ActionExecution.admission`);
  *   "skipped":[<names>] — body actions of the response left unrun because an earlier one of it failed (`fcaRunner.ts`).
+ * The parts may overlap: a check inside the summary, the selection or the completion check is in `permitMs` too, and a freshness wait
+ * after a cut-off call in `guardMs` and `toolMs`; read each as where time went, not as a share of `stepMs` to add up.
  */
 type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs' | 'evidenceMs';
 type Other = 'startMs' | 'permitMs' | 'guardMs' | 'contextMs' | 'verifyMs' | 'closeMs' | 'commitMs';

@@ -23,18 +23,23 @@ const tool = (name: string, effect: 'read' | 'write'): FcaToolDefinition => ({ n
   audiences: ['owner_alone'], surfaces: ['text'] });
 
 function driverWith(parts: { decide(count: number): FcaModelOutput; execute(name: string, count: number): { ok: boolean; text: string };
-  continueAtOnce?: boolean; canRunTask?(): boolean; canScheduleTask?(): boolean }) {
+  continueAtOnce?: boolean; canRunTask?(): boolean; canScheduleTask?(): boolean; keepBody?: boolean }) {
   const time = '2026-10-19T08:00:00.000Z';
   const h = actionHarness(() => time);
   let count = 0;
   const executed: string[] = [], results: Array<Array<{ id: string; text: string; ok: boolean }>> = [];
-  const noted: string[] = [];
-  const definitions = [tool('mc.craft-one', 'write'), tool('mc.place-block-at', 'write'), tool('minecraft.observe', 'read')];
+  const noted: string[] = [], evidence: string[] = [];
+  const definitions = [tool('mc.craft-one', 'write'), tool('mc.place-block-at', 'write'), tool('minecraft.observe', 'read'),
+    { ...tool('goal.set_conditions', 'write'), domain: 'task_runtime' as const }, { ...tool('folder.create', 'write'), domain: 'host_folder' as const }];
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', now: () => time, ownerAlone: () => true,
     ...(parts.continueAtOnce ? { continueAtOnce: true } : {}),
     ...(parts.canRunTask ? { canRunTask: () => parts.canRunTask!() } : {}), ...(parts.canScheduleTask ? { canScheduleTask: () => parts.canScheduleTask!() } : {}),
     model: { async decide() { count++; return parts.decide(count); }, toolResults: list => { results.push([...list]); return { role: 'user', results: list }; } },
-    stepPorts: () => ({ tools: { definitions, async execute(call) {
+    stepPorts: () => ({ keepBodyTools: () => parts.keepBody !== false,
+      evidence: { async prepare() { return { affect: {} as never, recentOutcomes: [] }; }, beforeActions: () => true,
+        observed: (_step: unknown, call: { id: string }) => { evidence.push(`observed:${call.id}`); }, unknown() {},
+        notRun: (_step: unknown, call: { id: string }) => { evidence.push(`notRun:${call.id}`); }, committed() {}, flush() {} },
+      tools: { definitions, async execute(call) {
       executed.push(call.name);
       const answer = parts.execute(call.name, count);
       return answer.ok ? { ok: true, text: answer.text, retryable: false } : { ok: false, text: answer.text, failure: 'failed', retryable: true };
@@ -43,7 +48,7 @@ function driverWith(parts: { decide(count: number): FcaModelOutput; execute(name
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');
   const task = driver.runtime.createChild('owner', root.id, { title: 'iron', goal: 'iron pickaxe', completionCriteria: 'seen' }, 'request-iron');
-  return { driver, task, executed, results, noted, count: () => count };
+  return { driver, task, executed, results, noted, evidence, count: () => count };
 }
 
 describe('the earlier-failure guard that goes with the batch rule (old Minebot earlier_action_failed)', () => {
@@ -61,8 +66,9 @@ describe('the earlier-failure guard that goes with the batch rule (old Minebot e
     expect(first!.map(result => [result.id, result.ok])).toEqual([['a', false], ['b', false], ['c', true], ['d', false]]);
     expect(first![1]!.text).toBe(FCA_EARLIER_ACTION_FAILED);
     expect(first![3]!.text).toBe(FCA_EARLIER_ACTION_FAILED);
-    // The pace ledger hears of what ran only.
+    // The pace ledger hears of what ran only, and a call not run is no event.
     expect(d.noted).toEqual(['mc.craft-one', 'minecraft.observe']);
+    expect(d.evidence).toEqual(['observed:a', 'notRun:b', 'observed:c', 'notRun:d']);
     const checkpoint = d.driver.runtime.snapshot('owner', d.task.id)?.checkpoint as Record<string, unknown>;
     // A failed write and a read that worked: as before the guard, not a step of failures only.
     expect(checkpoint.consecutiveToolFailures).toBe(0);
@@ -83,6 +89,29 @@ describe('the earlier-failure guard that goes with the batch rule (old Minebot e
     expect(d.executed).toEqual(['minecraft.observe', 'mc.place-block-at', 'mc.place-block-at']);
     // Two steps whose calls that ran all failed: two, not three (the craft was never run).
     expect((d.driver.runtime.snapshot('owner', d.task.id)?.checkpoint as Record<string, unknown>).consecutiveToolFailures).toBe(2);
+  });
+  it('is the body\'s only: a failed goal or folder write stops no body action, a failed body action stops neither of them', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const d = driverWith({
+      decide: count => count === 1 ? output({ kind: 'tools', calls: [{ id: 'a', name: 'goal.set_conditions', input: {} }, { id: 'b', name: 'mc.craft-one', input: {} },
+        { id: 'c', name: 'folder.create', input: {} }, { id: 'd', name: 'mc.place-block-at', input: {} }] })
+        : count === 2 ? output({ kind: 'tools', calls: [{ id: 'e', name: 'mc.place-block-at', input: {} }, { id: 'f', name: 'goal.set_conditions', input: {} }, { id: 'g', name: 'folder.create', input: {} }] })
+        : output({ kind: 'wait', summary: 'waiting' }),
+      execute: name => name === 'mc.craft-one' ? { ok: true, text: 'crafted' } : { ok: false, text: 'refused' },
+    });
+    await d.driver.tick(); await d.driver.drain();
+    expect(d.executed).toEqual(['goal.set_conditions', 'mc.craft-one', 'folder.create', 'mc.place-block-at']);
+    await d.driver.tick(); await d.driver.drain();
+    expect(d.executed.slice(4)).toEqual(['mc.place-block-at', 'goal.set_conditions', 'folder.create']);
+  });
+  it('does not apply to a task that is not a body task', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const d = driverWith({ keepBody: false,
+      decide: count => count === 1 ? output({ kind: 'tools', calls: [{ id: 'a', name: 'mc.craft-one', input: {} }, { id: 'b', name: 'mc.place-block-at', input: {} }] })
+        : output({ kind: 'wait', summary: 'waiting' }),
+      execute: name => name === 'mc.craft-one' ? { ok: false, text: 'no table' } : { ok: true, text: 'placed' } });
+    await d.driver.tick(); await d.driver.drain();
+    expect(d.executed).toEqual(['mc.craft-one', 'mc.place-block-at']);
   });
 });
 

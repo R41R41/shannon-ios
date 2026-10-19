@@ -45,7 +45,7 @@ function fixture(provenanceRefs = false, slowFlushMilliseconds?: number) {
     ...(slowFlushMilliseconds === undefined ? {} : { slowFlushMilliseconds }), onOutcome: outcome => { deliveries.push(outcome); } });
   let sourceIndex = 0;
   /** One committed step of the task with these calls and results, under fresh provenance (one more memory row each step). */
-  async function step(calls: Array<[string, ReturnType<typeof ok> | null]>, taskId = task.id, recalled?: readonly string[]) {
+  async function step(calls: Array<[string, ReturnType<typeof ok> | null | 'not_run']>, taskId = task.id, recalled?: readonly string[]) {
     const current = runtime.get('owner', taskId)!;
     const action = await h.actions.claim((await h.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request',
       sourceId: `fca:${taskId}:${current.revision}`, resources: [actionResource('owner', `fca:${taskId}`)] })).id);
@@ -57,7 +57,8 @@ function fixture(provenanceRefs = false, slowFlushMilliseconds?: number) {
     expect(evidence.beforeActions(begun, { decision: { kind: 'tools', calls: toolCalls }, history: [] })).toBe(true);
     toolCalls.forEach((call, index) => {
       const result = calls[index]![1];
-      if (result) evidence.observed(begun, call, result); else evidence.unknown(begun, call);
+      if (result === 'not_run') evidence.notRun(begun, call);
+      else if (result) evidence.observed(begun, call, result); else evidence.unknown(begun, call);
     });
     runtime.commitStep(begun, { disposition: 'continue', history: [{ role: 'assistant', content: 'round' }] });
     await h.actions.finish(begun.lease, 'completed', 'fca_segment_committed');
@@ -97,6 +98,15 @@ describe.each([[false], [true]])('Minecraft body actions remembered per segment 
     expect(record.observedResult).toBe('{"verified":true}');
     expect(new Set(record.sourceIds).size).toBe(record.sourceIds.length);
     expect(record.sourceIds).toEqual(expect.arrayContaining(['memory-shared', 'memory-4', 'memory-5', 'memory-6']));
+  });
+
+  it('leaves a call the runner did not run out of the segment and the evidence: no event, no failure (earlier-failure guard, 2026-10-19)', async () => {
+    const f = fixture(byReference);
+    await f.step([['mc.move-to', ok()]]);
+    f.deliveries.length = 0;
+    await f.step([['mc.move-to', failed()], ['mc.place-block-at', 'not_run'], ['mc.craft-one', 'not_run']]);
+    expect(f.deliveries.map(item => item.segment!.actions.map(action => [action.name, action.notable ?? null]))).toEqual([[['mc.move-to', 'failure']]]);
+    expect(Number((f.h.db.prepare("SELECT COUNT(*) AS n FROM fca_action_evidence WHERE name IN ('mc.place-block-at','mc.craft-one')").get() as { n: number }).n)).toBe(0);
   });
 
   it('closes the segment at once on a failure, an unknown outcome, danger or a missed prediction: nothing safety-relevant waits', async () => {

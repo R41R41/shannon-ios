@@ -197,14 +197,14 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       }
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
+      // Only a step that committed starts the next one's wait (a failed one's time is no gap after a commit); bounded like the tasks.
+      finishedAt.set(taskId, Date.now());
+      if (finishedAt.size > 256) finishedAt.delete(finishedAt.keys().next().value!);
       return true;
     } catch (error) {
       await settleFailedStep(error, taskId, step, stepPorts, active.execution);
       return false;
-    } finally {
-      active.stop();
-      if (step) finishedAt.set(taskId, Date.now());
-    }
+    } finally { active.stop(); }
     });
   }
   type StepPorts = ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;

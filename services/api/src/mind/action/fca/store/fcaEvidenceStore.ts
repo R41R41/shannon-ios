@@ -206,6 +206,12 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
     // An expired original lease cannot be replaced by a new writer. Its pre-action prediction remains pending/unobserved.
     if (this.options.validStep(step)) this.settle(step, call, null);
   }
+  /** The row `beforeActions` registered for a call never run is removed while it is still pending: nothing happened to observe. */
+  notRun(step: TaskStep, call: FcaToolCall): void {
+    if (!this.options.validStep(step)) return;
+    this.options.db.prepare("DELETE FROM fca_action_evidence WHERE scope_key=? AND event_id=? AND task_id=? AND observation='pending'")
+      .run(step.scopeKey, `${step.id}:${call.id}`, step.taskId);
+  }
   /**
    * The step's own outcomes are delivered here, in the step's turn; the segments of tasks that ended wait for the maintenance tick
    * (`drain`), sliced, unless something else flushes first. Nothing is lost by the wait: a segment closes whenever it is asked.

@@ -37,6 +37,11 @@ export interface FcaEvidence {
   beforeActions(step: TaskStep, output: FcaModelOutput): boolean;
   observed(step: TaskStep, call: FcaToolCall, result: ToolResult): void;
   unknown(step: TaskStep, call: FcaToolCall): void;
+  /**
+   * A call registered by `beforeActions` that the runner did not run (an earlier body action of the response failed, `fcaRunner.ts`):
+   * it has no outcome, so it is no event, no failure and no notable action of a segment.
+   */
+  notRun?(step: TaskStep, call: FcaToolCall): void;
   committed(step: TaskStep): void;
   flush(): void;
 }
