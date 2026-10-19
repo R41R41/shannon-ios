@@ -46,6 +46,7 @@ export {
   DEVICE_REMINDER_BOUNDARY,
   NO_TIMER_BOUNDARY,
   PROMISE_SLOT_BOUNDARY,
+  PROMISE_ON_TIME_BOUNDARY,
   withDeviceReminderBoundary,
   SHANNON_LIMITATIONS,
   SHANNON_MINECRAFT_BODY_CAPABILITY,
@@ -393,6 +394,7 @@ export * from './episodeLedger.js';
 export * from './repetitionWatch.js';
 export * from './comebackDrawer.js';
 export * from './feelingTurn.js';
+export { PROMISE_PAST_HOURS, promiseDateLabel, promiseStanding, promiseTopic, promiseWithDate } from './promiseWords.js';
 export * from './presentation.js';
 // Syzygy ADR-0013 stage 2: appraisal, core affect and mood, the composure reserve, and their fold.
 export * from './appraisal.js';

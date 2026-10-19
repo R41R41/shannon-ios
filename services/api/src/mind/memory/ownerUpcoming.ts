@@ -1,6 +1,6 @@
 import { searchOptions, searchTerms, matchesSearch, type SearchOptions } from '../../infra/search/searchQuery.js';
 import {
-  UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER, discloseSnapshot, visibleMemoryText,
+  UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER, discloseSnapshot, promiseTopic, visibleMemoryText,
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import type { SQLiteUpcomingStore, UpcomingTask } from './store/upcomingStore.js';
@@ -196,8 +196,10 @@ export class OwnerUpcoming {
     const lastDay = localDay(until, this.timeZone);
     return state.prospectiveMemories.flatMap((memory): UpcomingItem[] => {
       if (memory.status !== 'pending') return [];
-      const title = visibleMemoryText(owned, memory.id, memory.summary);
-      if (!title || (memory.sourceExperienceId && !visibleMemoryText(owned, memory.sourceExperienceId, memory.summary))) return [];
+      const visible = visibleMemoryText(owned, memory.id, memory.summary);
+      if (!visible || (memory.sourceExperienceId && !visibleMemoryText(owned, memory.sourceExperienceId, memory.summary))) return [];
+      // Owner 2026-10-19: what it is about, with its time beside it (never 「9:20 明日の9:20に起こして」 in a morning brief).
+      const title = promiseTopic(visible);
       if (memory.dueAt) {
         const due = Date.parse(memory.dueAt);
         return Number.isFinite(due) && due >= Date.parse(now) && due < Date.parse(until) ? [{ kind: 'promise', title, start: new Date(due).toISOString(), allDay: false, subject: `promise:${memory.id}` }] : [];

@@ -105,7 +105,7 @@
   "text-promise": {
    "openai": [
     "0bf1d11810630300bfce6e8c",
-    "30430d00c9c9d811d755ab51"
+    "f23aa73939717b9ba5814d41"
    ],
    "jev": [
     "f17a979f3ecda4026575be1d",
@@ -113,7 +113,7 @@
    ],
    "prompts": [
     "6dde4bc1fed5b1c03d9f7c73",
-    "c33686614c9a7f0b6c7943dc"
+    "300d5fbe5b3536a12dc134cf"
    ],
    "state": [
     "activity_events:7c98c7c696b0cf2ada25f531",
@@ -168,7 +168,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:26a4b8005acdc203172c1400",
+    "prompt_projections:9b8e9a10448de41c456750b6",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",

@@ -1,4 +1,4 @@
-import { SHANNON_OWNER_NAME, shannonOneLineVoice } from '@shannon/cognition';
+import { SHANNON_OWNER_NAME, promiseTopic, shannonOneLineVoice } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { QUIET_END_HOUR, QUIET_START_HOUR } from '../../../contracts/initiativeTiming.js';
@@ -101,7 +101,8 @@ export function commitmentFactSentence(facts: CommitmentFacts): string {
     const itsTime = notes.length === 0 && !facts.pastDay;
     return itsTime ? `${day}の約束の時刻です（内容はアプリで確認できます）。` : `${day}の約束のお知らせです（${[...notes, '内容はアプリで確認できます'].join('・')}）。`;
   }
-  const title = facts.title.replace(/\s+/gu, ' ').trim().slice(0, 240);
+  // Owner 2026-10-19: what it is about, without the day it was said with (「明日の9:20に起こして」 told on the day as 「起こして」).
+  const title = promiseTopic(facts.title).slice(0, 240);
   // A plain lateness keeps its wording of before; anything else is its notes as they are.
   const plain = facts.deferredTo === undefined && !facts.quietHeld && notes.length === 1;
   const note = notes.length === 0 ? '' : plain ? `（${notes[0]}のお知らせ）` : `（${notes.join('・')}）`;

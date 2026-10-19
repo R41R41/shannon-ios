@@ -52,6 +52,9 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * Two digests of `body-touch` were changed by hand on 2026-10-19 for a change that is not stage 3's (owner: a feeling that lingers is
  * slept on, and told as an undertone): the chat prompt after the touches (its line of what still lingers) and `companion_states`
  * (what lingers now carries when it was last noted, `notedAt`). Nothing else of afb38c28 changed.
+ * Three digests of `text-promise` were changed by hand the same day for another change that is not stage 3's (owner: an open promise is
+ * told with the date its day word meant, under a header that says when to mention it): its second chat request, that request's prompt,
+ * and `prompt_projections` (the same prompt as kept).
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

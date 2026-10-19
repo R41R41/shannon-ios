@@ -692,12 +692,15 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // by the Claude requests' `turnClockLine`): with it taken out, every digest below is what it was.
     // Owner 2026-10-19: the line of what still lingers also says it is an undertone of her voice and apart from what he asks
     // (`LINGERING_UNDERTONE_LINE`): bafcae8b… and d1910d3c… before; the digests below are with that line.
+    // Owner 2026-10-19 (promises): 「今日はもう別のAIと話すね」 is kept as a promise, and the shared state now tells an open promise with
+    // the date its day word meant (「10月…日はもう別のAIと話すね」) under a header that says when to mention it: 28e15c87…, 9af9ebe9… and
+    // 309217bf… before.
     const seen = { ...off.seen, requests: off.seen.requests.map(({ clock: _clock, ...rest }) => rest) };
     const withoutThread = { ...seen, requests: seen.requests.map(({ threadKey: _thread, richBlocks: _rich, ...rest }) => rest) };
     const withoutRich = { ...seen, requests: seen.requests.map(({ richBlocks: _rich, ...rest }) => rest) };
-    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('28e15c873e2121dce62fc1da1f537837c27d69a59d68652efc28244afea25d97');
-    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('9af9ebe947320afed2f145af21d52305cabeeef93b7fc15000b7c40cd2bd4a2b');
-    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('309217bfaf28f6126c5fbc042eed8299ad25c5b70f47a469297b677367e719fb'); // 08e050f8… before 2026-10-19
+    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('ae4afc4e99fdb23687d8bc2f8db5c6aa5d9f32c52a24b754d7ee255ba54a3f19');
+    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('0594d42cbef720939086f5d81c9b871d414ac1ed35a1227487215795a6f51b1a');
+    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('461f17d76319f4249ab145e37672e7770a875ac695666a0f1125d9dea931b6c7'); // 08e050f8… before 2026-10-19
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

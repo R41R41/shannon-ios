@@ -23,6 +23,7 @@ import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import { configuredCommitmentLineWriter } from './mind/action/respond/commitmentLineModel.js';
+import { closeToldRequests } from './mind/action/respond/commitmentInitiative.js';
 import { switchOn } from '@shannon/switches';
 import { OWNER_CALL_LIMITS } from './mind/perception/ownerCallElsewhere.js';
 import { commitmentLinePreparer } from './wiring/commitmentLinesWiring.js';
@@ -97,6 +98,9 @@ try {
         // Never over him: while one of his devices reports a call with her, a promise is text only (`promiseNotices.ts`).
         const told = initiativeStore.deliverDuePromises(at, 'Asia/Tokyo', lines, inCallWithHer);
         if (told.sent > 0) console.log(`Shannon promise delivered: ${told.sent}`);
+        // Owner 2026-10-19: a wake-up or a reminder she told him at its time is kept, and closed.
+        const closed = closeToldRequests(stateStore, configuredOwnerScope(process.env), at, (scope, item) => initiativeSources.delivered(scope, item));
+        if (closed.length > 0) console.log(`Shannon promise closed after telling: ${closed.length}`);
       } catch (error) {
         if (stopping) break;
         console.log(`Shannon promise pass failed: ${error instanceof Error ? error.name : 'unknown'}`);

@@ -197,6 +197,15 @@ export const PROMISE_SLOT_BOUNDARY = '[Reminder capability] The owner asked for 
   + 'The request is kept as a promise and she mentions it inside her once-a-day message slot, which may be later than the requested time. '
   + 'Say this limit plainly, in です・ます. Do not promise to wake, call or notify them at that time.';
 
+/**
+ * The same with promises told at their time (`SHANNON_PROMISE_ON_TIME`, on by default; owner 2026-10-19: she said she could not wake
+ * him at 9:20, then kept saying for days that she would): what she can do, said as what she will do.
+ */
+export const PROMISE_ON_TIME_BOUNDARY = '[Reminder capability] The owner asked for something at a clock time. Shannon keeps it as a promise and '
+  + 'sends him a short message of hers at that time (between 23:00 and 7:00 it waits until 7:00). It is a message, not an alarm that rings '
+  + 'until he wakes. Say plainly, in her own words, that she will send a word at that time; when it is about waking, also ask him to set '
+  + 'his phone alarm. Do not say she cannot speak at that time, and do not promise to wake him.';
+
 /** The boundary when the turn offers her device's timer and reminder tools: what to call, and when it is done. */
 export const DEVICE_REMINDER_BOUNDARY = '[Reminder capability] The owner asked to be alerted after an interval or at a clock time. '
   + 'Do it on his device now: timer_start for an interval (「1時間後に起こして」 is 3600 seconds), reminder_create for a clock time or a named reminder. '
@@ -211,7 +220,8 @@ export const DEVICE_REMINDER_BOUNDARY = '[Reminder capability] The owner asked t
  * there, keeps the honest boundary.
  */
 export function withDeviceReminderBoundary(turnContext: string): string {
-  return turnContext.replace(NO_TIMER_BOUNDARY, DEVICE_REMINDER_BOUNDARY).replace(PROMISE_SLOT_BOUNDARY, DEVICE_REMINDER_BOUNDARY);
+  return turnContext.replace(NO_TIMER_BOUNDARY, DEVICE_REMINDER_BOUNDARY).replace(PROMISE_SLOT_BOUNDARY, DEVICE_REMINDER_BOUNDARY)
+    .replace(PROMISE_ON_TIME_BOUNDARY, DEVICE_REMINDER_BOUNDARY);
 }
 
 /** Capabilities the API may add to the description while it has them. */
