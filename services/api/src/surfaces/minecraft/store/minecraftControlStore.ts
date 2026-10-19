@@ -2,6 +2,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../../../contracts/minecraftControlContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
 
+/** The marker of a receipt the API wrote when it closed an operation the body never answered (`minecraftOperationReconcile.ts`). */
+export const RECONCILED_BY_RELEASE = 'release_proof';
+
+/** Whether a stored receipt is that closing, not the body's own answer. */
+export function reconciledReceipt(receipt: unknown): boolean {
+  return !!receipt && typeof receipt === 'object' && (receipt as { reconciled?: unknown }).reconciled === RECONCILED_BY_RELEASE;
+}
+
 /**
  * Operation receipts only, not a task or lease authority. A command handed in a poll reply is `delivered`; the body's next poll
  * confirms it (`running`: it lists the command as active or sends its receipt). Minecraft run 6 (2026-10-14): a reply written
@@ -74,8 +82,20 @@ export class MinecraftControlStore {
     if (!command || command.connectionId !== receipt.connectionId) return false;
     const { image: _pixels, ...retained } = receipt;
     const previous = this.receipt(receipt.id);
+    if (previous && reconciledReceipt(previous)) return this.lateReceipt(previous, retained);
     if (previous) return JSON.stringify(previous) === JSON.stringify(retained);
     this.db.prepare("UPDATE fca_body_operations SET phase='settled',receipt_json=? WHERE id=? AND receipt_json IS NULL").run(JSON.stringify(retained), receipt.id);
+    return true;
+  }
+  /**
+   * The body's own answer to an operation the API closed after the body proved its inputs released (`reconcileOperations`): a known
+   * answer replaces the closing, an unknown one leaves it; either is acknowledged, so the body stops sending it.
+   */
+  private lateReceipt(closing: MinecraftControlReceipt, answer: MinecraftControlReceipt): boolean {
+    if (answer.outcome !== 'unknown' && answer.inputsReleased) {
+      this.db.prepare('UPDATE fca_body_operations SET receipt_json=? WHERE id=? AND receipt_json=?')
+        .run(JSON.stringify(answer), answer.id, JSON.stringify(closing));
+    }
     return true;
   }
   /** The last command sent under this lease (its task, body and session), or null when it sent none. */

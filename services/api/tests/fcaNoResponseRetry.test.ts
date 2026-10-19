@@ -8,23 +8,27 @@ import { actionHarness } from './support/actionThreadHarness.js';
 
 /**
  * Minebot runs 12 and 13 (2026-10-16/17): a decision request failed with APIConnectionError / ETIMEDOUT, no answer came back, and the
- * step stayed unknown for three minutes until retired. A request that got no answer is now asked once more by the runner, after
- * 2-5 s and its own gate; a second failure, any other failure and a stop end as before.
+ * step stayed unknown for three minutes until retired. A request that got no answer is asked again by the runner (since 2026-10-19 up
+ * to five attempts with backoff, `fcaProviderRetry.ts`), each time after its own gate; any other failure and a stop end as before,
+ * and when the attempts run out the step ran nothing and the task goes on (`taskRuntimeUnavailable.ts`) instead of sitting unknown.
  */
 const at = '2026-10-17T09:00:00.000Z', closes: Array<() => Promise<void> | void> = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const close of closes.splice(0).reverse()) await close(); });
 const complete: FcaModelOutput = { decision: { kind: 'complete', summary: 'Done' }, history: [{ role: 'assistant', content: 'done' }] };
 
 type Script = Array<'no_response' | 'unknown' | 'rejected' | 'http503' | 'ok'>;
-function fixture(script: Script, options: { delay?: number; holdAfterFirst?: boolean; onDecide?(call: number): void } = {}) {
+function fixture(script: Script, options: { delay?: number; holdAfterFirst?: boolean; onDecide?(call: number): void; moving?: { revision: number } } = {}) {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const h = actionHarness(() => at); migrateAgentTasks(h.db);
   const inputs: FcaModelInput[] = [], bodyEvents: string[] = [];
   let calls = 0, holding = false, started = 0, closed = 0;
   const controller = new AbortController();
-  const body: FcaBodyLifecycle = { start() { started += 1; bodyEvents.push('start'); }, revision: () => 0, context: () => ({ revision: 0, observation: null }),
-    async guard() { return true; }, toolSignal: (_name, parent) => parent, async close() { closed += 1; bodyEvents.push('close'); } };
+  // `moving`: a body whose revision the test changes; a decision made against any other revision than the present one is stale.
+  const live = options.moving ?? { revision: 0 };
+  const body: FcaBodyLifecycle = { start() { started += 1; bodyEvents.push('start'); }, revision: () => live.revision,
+    context: () => ({ revision: live.revision, observation: null }),
+    async guard(revision: number) { return revision === live.revision; }, toolSignal: (_name, parent) => parent, async close() { closed += 1; bodyEvents.push('close'); } };
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => at, providerRetryDelayMs: () => 0,
     model: { async decide(input: FcaModelInput) {
       inputs.push(input); calls += 1; options.onDecide?.(calls);
@@ -56,7 +60,7 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     expect(f.phase()).toBe('completed');
     expect(f.events()).not.toContain('fca_recovery_unknown');
     expect(f.inputs[1]).toBe(f.inputs[0]);
-    expect(f.warnings().some(line => line.startsWith('Shannon FCA decision retried after no response task='))).toBe(true);
+    expect(f.warnings()).toContain(`Shannon FCA decision retry reason=no_response attempt=2/5 waitMs=0 task=${f.task.id}`);
     expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join('\n')).not.toContain('step unknown');
   });
 
@@ -71,15 +75,34 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     expect(f.calls()).toBe(2);
   });
 
-  it('waits before asking again, and never asks a third time: a second failure ends as it did before (unknown)', async () => {
+  it('waits before asking again, asks again after a second failure, and stops asking once the provider may have charged three requests', async () => {
     const f = fixture(['no_response', 'no_response', 'ok'], { delay: 30 });
     const begun = Date.now();
     await f.driver.tick(); await f.driver.drain();
-    expect(Date.now() - begun).toBeGreaterThanOrEqual(25);
-    expect(f.calls()).toBe(2);
-    expect(f.phase()).toBe('unknown');
-    expect(f.events()).toContain('fca_recovery_unknown');
-    expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line))).toContain(`Shannon FCA step unknown task=${f.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
+    expect(Date.now() - begun).toBeGreaterThanOrEqual(55); // two waits of 30 ms
+    expect(f.calls()).toBe(3);
+    expect(f.phase()).toBe('completed');
+    const g = fixture(['no_response', 'no_response', 'no_response', 'ok']);
+    await g.driver.tick(); await g.driver.drain();
+    // Three requests that may have been charged end this decision's retries (`maxPossiblyBilled`); its step ran nothing, so it is
+    // closed as `continue` and the task asks again from a fresh step instead of sitting unknown.
+    expect(g.calls()).toBe(3);
+    expect(g.phase()).not.toBe('unknown');
+    expect(g.events()).not.toContain('fca_recovery_unknown');
+    expect(vi.mocked(console.log).mock.calls.map(([line]) => String(line))).toContain(`Shannon FCA step retried task=${g.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
+    await g.driver.tick(); await g.driver.drain();
+    expect(g.calls()).toBe(4);
+    expect(g.phase()).toBe('completed');
+  });
+
+  it('fails a task that is not a Minecraft request with its report after its one further round, never leaving it unknown', async () => {
+    const f = fixture(Array(8).fill('no_response') as Script);
+    for (let i = 0; i < 6 && f.phase() !== 'failed'; i++) { await f.driver.tick(); await f.driver.drain(); }
+    expect(f.calls()).toBe(6); // two rounds of three requests
+    expect(f.phase()).toBe('failed');
+    expect(f.events()).not.toContain('fca_recovery_unknown');
+    const lines = vi.mocked(console.log).mock.calls.map(([line]) => String(line));
+    expect(lines).toContain(`Shannon FCA step failed task=${f.task.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
   });
 
   it.each([['an unclassified unknown failure', 'unknown'], ['a failure after an answer arrived (a decision refused)', 'rejected']] as const)('does not ask again after %s', async (_label, kind) => {
@@ -106,6 +129,32 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     await f.driver.tick(); await f.driver.drain();
     expect(f.calls()).toBe(1);
     expect(f.phase()).toBe('unknown');
+  });
+
+  it('asks again with the body\'s present observation after a long wait, so the answer is not discarded as stale (M-6)', async () => {
+    const moving = { revision: 3 };
+    let offset = 0;
+    const real = Date.now.bind(Date);
+    vi.spyOn(Date, 'now').mockImplementation(() => real() + offset);
+    const f = fixture(['no_response', 'ok'], { moving, onDecide: call => { if (call === 1) { offset += 11_000; moving.revision = 7; } } });
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.calls()).toBe(2);
+    // The first request carried the observation of the time it was built; the second, built after eleven seconds, the present one.
+    expect(f.inputs[0]!.body?.revision).toBe(3);
+    expect(f.inputs[1]!.body?.revision).toBe(7);
+    expect(f.inputs[1]).not.toBe(f.inputs[0]);
+    expect(f.inputs[1]!.history).toBe(f.inputs[0]!.history); // nothing but the live parts changed
+    expect(f.phase()).toBe('completed'); // the decision was judged against the new revision, not discarded
+    expect(f.warnings()).toContain(`Shannon FCA decision request refreshed task=${f.task.id}`);
+  });
+
+  it('keeps the request built before the first attempt when the wait was short, even if the body moved', async () => {
+    const moving = { revision: 3 };
+    const f = fixture(['no_response', 'ok'], { moving, onDecide: call => { if (call === 1) moving.revision = 7; } });
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.inputs[1]).toBe(f.inputs[0]);
+    expect(f.phase()).not.toBe('completed'); // stale: its decision is discarded, as it was before this fix, for a wait this short
+    expect(f.warnings().some(line => line.includes('request refreshed'))).toBe(false);
   });
 
   it('does not ask again once the step is stopped during the wait', async () => {

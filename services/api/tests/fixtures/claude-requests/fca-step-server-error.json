@@ -168,18 +168,7 @@
  "outcome": {
   "result": {
    "error": "FCA_MODEL_HTTP_500",
-   "receipts": [
-    {
-     "model": "claude-haiku-5-5",
-     "usageComplete": false,
-     "inputTokens": 0,
-     "cachedInputTokens": 0,
-     "cacheCreationInputTokens": 0,
-     "outputTokens": 0,
-     "totalTokens": 0,
-     "estimatedCostUsd": 1.01
-    }
-   ]
+   "receipts": []
   }
  }
 }

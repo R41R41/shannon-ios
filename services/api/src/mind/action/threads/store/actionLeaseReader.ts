@@ -51,6 +51,18 @@ export function fcaSourceOf(sourceId: string, taskId: string): boolean {
  * The one read path of action leases outside the action store (Syzygy ADR-0009 stage 1, S1). Every read is synchronous on the
  * caller's own connection, so a caller inside its own transaction keeps that transaction as its commit fence. It never writes.
  */
+/** A step of an FCA task whose outcome was lost, with the lease it ran under (`ActionLeaseReader.lostFcaSteps`). */
+export interface LostFcaStep {
+  actionId: string; taskId: string; lease: { id: string; generation: number; holder: string };
+  /** When the lost step began (its `fca_step_started` event), or null. */
+  startedAt: string | null;
+  /**
+   * When the step was last known alive: the end of its lease while the action still records it, else the latest sign of life it left
+   * (the newest progress observation of its task or body operation of its lease, never past the sweep), else the step's start. Never
+   * "when the recovery noticed": a swept action loses its lease end, and a request is not made young by a reboot, nor a long step old.
+   */
+  lostAt: string | null;
+}
 /** How an accepted lifecycle operation ended (`lifecycleOutcomes`). */
 export type LifecycleOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
 
@@ -201,6 +213,60 @@ export class ActionLeaseReader {
       WHERE a.state='unknown' AND a.kind='agentTask' AND a.holder IS NULL AND a.last_holder IS NOT NULL ORDER BY r.retained_at,a.id LIMIT 32`).all(resource);
     return rows.map(row => ({ actionId: String(row.id), scopeKey: String(row.scope_key),
       lease: { id: String(row.id), generation: Number(row.generation) - 1, holder: String(row.last_holder) } }));
+  }
+
+  /**
+   * The steps of nonterminal FCA tasks (in the scope) whose outcome was lost, oldest first, each as the lease it ran under: the
+   * action is `unknown` (the attempt before the one that closed it), or still marked live though its lease ended before `at`
+   * (a process that died cannot renew it; the sweep has not run yet). The Minecraft recovery closes them (`fcaBodyRecovery.ts`).
+   */
+  lostFcaSteps(scopeKey: string, at: string): LostFcaStep[] {
+    const instant = Date.parse(at);
+    return this.db.prepare(`SELECT a.id,a.source_id,a.state,a.generation,a.holder,a.last_holder,a.lease_until,a.updated_at FROM mind_actions a
+      JOIN agent_tasks t ON t.task_id=substr(a.source_id,5,instr(substr(a.source_id,5),':')-1)
+      WHERE a.scope_key=? AND a.kind='agentTask' AND a.source_id LIKE 'fca:%' AND a.state IN ('unknown','running','waiting','stopping')
+      AND t.scope_key=a.scope_key AND t.status NOT IN ('completed','failed','cancelled') ORDER BY a.created_at,a.id`).all(scopeKey).flatMap(row => {
+      const taskId = fcaTaskIdOf(String(row.source_id)), unknown = row.state === 'unknown';
+      const ended = row.lease_until === null || Date.parse(String(row.lease_until)) <= instant;
+      const holder = unknown ? row.last_holder : row.holder;
+      if (!taskId || !(unknown || ended) || typeof holder !== 'string') return [];
+      const lease = { id: String(row.id), generation: Number(row.generation) - (unknown ? 1 : 0), holder };
+      const started = this.db.prepare(`SELECT occurred_at FROM agent_task_events WHERE task_id=? AND event_type='fca_step_started'
+        AND json_extract(payload_json,'$.actionId')=? AND json_extract(payload_json,'$.generation')=? ORDER BY sequence DESC LIMIT 1`)
+        .get(taskId, lease.id, lease.generation);
+      const startedAt = typeof started?.occurred_at === 'string' ? started.occurred_at : null;
+      const leaseEnd = typeof row.lease_until === 'string' && Number.isFinite(Date.parse(row.lease_until)) ? row.lease_until : null;
+      return [{ actionId: lease.id, taskId, lease, startedAt,
+        lostAt: leaseEnd ?? this.lastAliveAt(taskId, lease, startedAt, String(row.updated_at)) }];
+    });
+  }
+
+  /**
+   * When a swept step (no lease end on record) was last known alive, from what it left: the newest progress observation of the task
+   * and the newest body operation (made, or answered) of this lease, never later than the action's own last update (the sweep) and never
+   * earlier than the step's start. A long step is therefore not dated from its start (L-2). Without any of them: the step's start.
+   */
+  private lastAliveAt(taskId: string, lease: { id: string; generation: number }, startedAt: string | null, updatedAt: string): string | null {
+    if (startedAt === null) return null;
+    const floor = Date.parse(startedAt), ceiling = Date.parse(updatedAt);
+    if (!Number.isFinite(floor)) return startedAt;
+    let latest = floor;
+    const consider = (value: unknown) => {
+      const at = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+      if (Number.isFinite(at) && at > latest && (!Number.isFinite(ceiling) || at <= ceiling)) latest = at;
+    };
+    consider(this.db.prepare(`SELECT MAX(occurred_at) AS at FROM agent_task_events WHERE task_id=? AND event_type='fca_progress_observed'
+      AND occurred_at>=?`).get(taskId, startedAt)?.at);
+    if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fca_body_operations'").get()) {
+      const operations = this.db.prepare(`SELECT created_at,json_extract(receipt_json,'$.observedAt') AS observed FROM fca_body_operations
+        WHERE task_id=? AND json_extract(command_json,'$.lease.id')=? AND json_extract(command_json,'$.lease.generation')=?`)
+        .all(taskId, lease.id, lease.generation);
+      for (const operation of operations) {
+        consider(operation.created_at);
+        consider(operation.observed);
+      }
+    }
+    return new Date(latest).toISOString();
   }
 
   unknownLifecycleCommands(resource: string): string[] {

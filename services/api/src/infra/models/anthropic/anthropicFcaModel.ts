@@ -17,8 +17,8 @@ import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCor
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided } from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
-import { connectionFailedBeforeResponse, providerServerError, reportDispatchFailure, reportRejection } from './anthropicRejection.js';
-import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
+import { reportDispatchFailure, reportRejection } from './anthropicRejection.js';
+import { classifyDispatchFailure, failureError, failureMayHaveBeenCharged, refusalError } from './anthropicFcaFailure.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
@@ -199,7 +199,7 @@ export class AnthropicFcaModel implements FcaModel {
         elidedParts: unchangedParts(fields) };
       return { turn, menu, body: bodyOf(turn), built };
     }, value => observedFcaRequest(value.body), { model: this.model });
-    logRequestSize(this.model, history, body, turn, built);
+    const requestTokens = logRequestSize(this.model, history, body, turn, built);
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     // Once sent, a stop lets the request finish within its grace (`stopGraceMilliseconds`); the timeout still applies.
@@ -224,8 +224,8 @@ export class AnthropicFcaModel implements FcaModel {
       });
       message = (await claudeToolLoop(body, { session: undefined, send, isAnswer: () => true, refusal: 'final', maxRounds: 1 })).final!;
     } catch (error) {
-      // No hidden resend, including after an abort: this adapter never sends twice. The one visible, logged retry of a request that got
-      // no answer at all belongs to the runner (`decideWithOneRetry`). Never expose provider error text containing request material.
+      // No hidden resend, including after an abort: this adapter never sends twice. The visible, logged retries of a request that
+      // carried no decision belong to the runner (`decideWithRetry`). Never expose provider error text containing request material.
       if (!dispatched) throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_NOT_DISPATCHED');
       if (error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500) {
         // Content-free: status, provider error type and a closed message class (`anthropicRejection.ts`).
@@ -234,20 +234,19 @@ export class AnthropicFcaModel implements FcaModel {
         // The very first decision of a transient task, refused for its betas: nothing ran and no signed history exists, so the runner may
         // start the task again in the legacy shape (`fcaTransientFallback.ts`).
         if (transient && history.length === 0 && transientBetaRefused(error.status, error.message)) throw new Error(FCA_TRANSIENT_UNSUPPORTED);
-        throw new Error(`FCA_MODEL_HTTP_${error.status}`);
+        throw refusalError(error.status, error);
       }
       reportDispatchFailure('fca', error);
-      await this.options.recordUsage(this.usage(undefined));
-      if (!combined.aborted && providerServerError(error)) {
-        // The provider answered with a server error: no decision came back, so the step's outcome is known even though its
-        // spend stays recorded as unknown (2026-10-13: such a step sat unknown for ten minutes holding a research slot while
-        // the owner waited). The runner runs the step once more after a short wait, then fails the task with its report.
-        if (execution) execution.modelOutcome = 'acknowledged';
-        throw new Error(`FCA_MODEL_HTTP_${error.status}`);
-      }
-      if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
-      // No answer reached us, so no decision exists to apply: the runner may ask once more (`decideWithOneRetry`); its outcome stays unknown.
-      throw connectionFailedBeforeResponse(error) ? new FcaNoResponseError() : new Error('FCA_MODEL_RESPONSE_UNKNOWN');
+      const failure = classifyDispatchFailure(error, { stopped: signal.aborted, deadline: timeout.aborted });
+      // The provider's own server error (5xx, 529) carries no decision and no charge: the step's outcome is known (2026-10-13: such a
+      // step sat unknown for ten minutes holding a research slot), and nothing is booked, as for a 4xx. Any other failure may have been
+      // processed and charged by the provider: booked at an upper bound sized by this request, never as a whole context (an outage's
+      // retries would otherwise book the cap away). One that never left this machine (refused, unresolved) is booked as nothing.
+      if (failure.kind === 'server' && execution) {
+        execution.modelOutcome = 'acknowledged';
+        execution.modelUsage = { inputTokens: 0, outputTokens: 0 };
+      } else if (failureMayHaveBeenCharged(failure)) await this.options.recordUsage(this.usage(undefined, requestTokens));
+      throw failureError(failure);
     } finally { grace?.dispose(); }
     const usage = this.usage(message.usage);
     await this.options.recordUsage(usage);
@@ -299,7 +298,11 @@ export class AnthropicFcaModel implements FcaModel {
     }) };
   }
 
-  private usage(native: Anthropic.Message['usage'] | undefined): AnthropicFcaUsage {
+  /**
+   * `requestTokens`: with no usage at all (a request whose bill is unknown), the estimate of the request's input tokens bounds what it
+   * may have cost: the whole request written to the one-hour cache, with a quarter more for the estimate's error, and its output ceiling.
+   */
+  private usage(native: Anthropic.Message['usage'] | undefined, requestTokens?: number): AnthropicFcaUsage {
     const counts = {
       input: knownCount(native?.input_tokens), output: knownCount(native?.output_tokens),
       cacheWrite: knownCount(native?.cache_creation_input_tokens), cacheRead: knownCount(native?.cache_read_input_tokens), searches: 0,
@@ -309,7 +312,8 @@ export class AnthropicFcaModel implements FcaModel {
     const total = input + counts.output;
     const complete = [native?.input_tokens, native?.output_tokens, native?.cache_creation_input_tokens, native?.cache_read_input_tokens].every(tokenCount)
       && Number.isSafeInteger(total);
-    const bound = complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens, 0, knownInput(native));
+    const sized = !native && requestTokens !== undefined ? { input: 0, cacheWrite: Math.ceil(requestTokens * 1.25), cacheRead: 0 } : null;
+    const bound = complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens, 0, sized ?? knownInput(native));
     return { model: this.model, usageComplete: complete, inputTokens: input, cachedInputTokens: counts.cacheRead,
       cacheCreationInputTokens: counts.cacheWrite, outputTokens: counts.output, totalTokens: total,
       estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), bound),
@@ -353,7 +357,7 @@ function observedFcaResponse(message: Anthropic.Message) {
  * unnoticed (review P3-1): characters of the replayed history, of its inline tool definitions, and of the whole request.
  */
 function logRequestSize(model: string, history: readonly Anthropic.MessageParam[], body: Anthropic.MessageCreateParamsNonStreaming,
-  turn: readonly Anthropic.MessageParam[], built: RequestBuilt): void {
+  turn: readonly Anthropic.MessageParam[], built: RequestBuilt): number {
   const definitional = (message: Anthropic.MessageParam) => isFcaToolChangeMessage(message as unknown as Record<string, unknown>);
   const definitions = history.filter(definitional);
   // `historyCharacters` is the whole replay, its inline definitions included; `nativeHistoryCharacters` is the part the 64k
@@ -365,6 +369,7 @@ function logRequestSize(model: string, history: readonly Anthropic.MessageParam[
     skillGists: (built.sent ?? sentCounts(turn)).gists, ...sentGistFields(turn, built) }));
   // The replay is bounded below the step (`maximumReplayTokens`); a request that still passes it is sent and priced as it is.
   if (estimatedInputTokens > PRICE_STEP_TOKENS) console.warn(JSON.stringify({ event: 'fca_request_price_step', model, estimatedInputTokens }));
+  return estimatedInputTokens;
 }
 /** What the caller handed this decision before the message was elided and shortened (content-free): see `sentGistFields`. */
 interface RequestBuilt { taskId: string; bodyAttached: boolean; level: number | null; pointers: number; gists: number; elidedParts: readonly string[];

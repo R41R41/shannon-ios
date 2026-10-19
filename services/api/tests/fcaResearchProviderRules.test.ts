@@ -127,7 +127,7 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(lines).toEqual([`Shannon FCA step failed task=${child.id} code=FCA_HISTORY_RECENT_LIMIT`]);
   });
 
-  it('runs a step the provider answered with a server error once more, then fails it with its report, logging closed facts (2026-10-13)', async () => {
+  it('runs a step the provider answered with a server error once more (five attempts each), then fails it with its report, logging closed facts (2026-10-13)', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic-private-error' } }),
@@ -137,11 +137,11 @@ describe('a refused FCA decision fails the research task at once and tells the o
     await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'failed');
     expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'failed', summary: rejectedTaskReport('明日の天気') });
     expect(driver.runtime.snapshot('owner', parent.id)!.messages).toEqual([expect.objectContaining({ sourceTaskId: child.id })]);
-    expect(fixture.bodies).toHaveLength(2); // one retry, never more
+    expect(fixture.bodies).toHaveLength(10); // two rounds of five attempts, never more
     const lines = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'));
     expect(lines).toEqual([`Shannon FCA step retried task=${child.id} code=FCA_MODEL_HTTP_500`, `Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_500`]);
     const facts = warn.mock.calls.map(args => String(args[0])).filter(line => line.includes('anthropic_request_failed'));
-    expect(facts.map(line => JSON.parse(line))).toEqual(Array(2).fill({ event: 'anthropic_request_failed', lane: 'fca', errorClass: 'InternalServerError', status: 500, type: 'api_error', cause: null }));
+    expect(facts.map(line => JSON.parse(line))).toEqual(Array(10).fill({ event: 'anthropic_request_failed', lane: 'fca', errorClass: 'InternalServerError', status: 500, type: 'api_error', cause: null }));
     expect(facts.join('\n')).not.toContain('synthetic-private-error');
   });
 
@@ -177,20 +177,34 @@ describe('a refused FCA decision fails the research task at once and tells the o
     expect(sameDecision(fixture.bodies[1]!)).toBe(sameDecision(fixture.bodies[0]!));
   });
 
-  it('keeps throttling and lost answers unknown, then reports the retired task to the owner', async () => {
+  it('asks again after throttling (429), then fails the task with its report instead of leaving it unknown (2026-10-19)', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fixture = scriptedAnthropic(() => new Response(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }),
       { status: 429, headers: { 'content-type': 'application/json' } }));
     const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {} });
+    const { driver, parent, child } = runtime(model);
+    await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'failed');
+    expect(driver.runtime.get('owner', child.id)).toMatchObject({ phase: 'failed', summary: rejectedTaskReport('明日の天気') });
+    expect(fixture.bodies).toHaveLength(10);
+    const lines = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA step'));
+    expect(lines).toEqual([`Shannon FCA step retried task=${child.id} code=FCA_MODEL_HTTP_429`, `Shannon FCA step failed task=${child.id} code=FCA_MODEL_HTTP_429`]);
+    expect(driver.runtime.snapshot('owner', parent.id)!.messages).toEqual([expect.objectContaining({ sourceTaskId: child.id, text: rejectedTaskReport('明日の天気') })]);
+  });
+
+  it('keeps an unclassified lost answer unknown, then reports the retired task to the owner', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    let asked = 0;
+    const model: FcaModel = { decide: async () => { asked += 1; throw new Error('FCA_MODEL_RESPONSE_UNKNOWN'); }, toolResults: () => [] };
     const { driver, parent, child, advance } = runtime(model);
     await settle(driver, () => driver.runtime.get('owner', child.id)?.phase === 'unknown');
     expect(driver.runtime.get('owner', child.id)?.phase).toBe('unknown');
-    expect(log.mock.calls.map(args => String(args[0]))).toContain(`Shannon FCA step unknown task=${child.id} code=FCA_MODEL_HTTP_429`);
+    expect(log.mock.calls.map(args => String(args[0]))).toContain(`Shannon FCA step unknown task=${child.id} code=FCA_MODEL_RESPONSE_UNKNOWN`);
 
     advance(11 * 60_000); await driver.tick(); await driver.drain();
     expect(driver.runtime.get('owner', child.id)?.phase).toBe('failed');
     expect(driver.runtime.snapshot('owner', parent.id)!.messages.map(entry => entry.id)).toContain(`result:retired:${child.id}`);
     expect(driver.runtime.progress?.('owner', child.id)).toMatchObject({ status: 'failed', report: { id: `retired:${child.id}`, text: retiredTaskReport('明日の天気') } });
-    expect(fixture.bodies).toHaveLength(1);
+    expect(asked).toBe(1);
   });
 });
