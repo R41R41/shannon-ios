@@ -1,9 +1,12 @@
 /** Paired devices and pairing codes, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `deviceAuth.ts` and the pairing code's normal form, moved unchanged into the auth store folder; the pepper stays there). */
 import { DatabaseSync } from 'node:sqlite';
-import type { IssuedPairingCode, ShannonDevicePrincipal, ShannonDeviceRecord, ShannonPairingResult, SQLiteDeviceAuthOptions } from '../deviceAuth.js';
+import type {
+  IssuedPairingCode, PepperMigrationStatus, ShannonDevicePrincipal, ShannonDeviceRecord, ShannonPairingResult, SQLiteDeviceAuthOptions,
+} from '../deviceAuth.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { dirname } from 'node:path';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
+import { ensureColumns } from '../../sqlite/schemaColumns.js';
 
 const PAIRING_LIFETIME_MS = 30 * 60_000;
 
@@ -29,6 +32,7 @@ interface DeviceRow {
   expires_at: number;
   last_used_at: number | null;
   revoked_at: number | null;
+  pepper_id: string | null;
 }
 
 /**
@@ -38,10 +42,22 @@ interface DeviceRow {
 export class SQLiteDeviceAuthStore {
   private readonly database: DatabaseSync;
   private readonly now: () => number;
+  private readonly previousPepper: string | null;
+  /** Which pepper keyed a token row (`pepper_id`): a keyed digest of a fixed label, so the pepper itself is never stored. */
+  private readonly pepperId: string;
 
   constructor(private readonly options: SQLiteDeviceAuthOptions) {
     if (!options.path.trim()) throw new Error('SHANNON_DATABASE_PATH is required');
     if (options.pepper.trim().length < 32) throw new Error('SHANNON_AUTH_PEPPER must contain at least 32 characters');
+    const previousPepper = options.previousPepper?.trim() ? options.previousPepper : null;
+    if (previousPepper !== null && previousPepper.trim().length < 32) {
+      throw new Error('SHANNON_AUTH_PEPPER_PREVIOUS must contain at least 32 characters');
+    }
+    if (previousPepper !== null && previousPepper.trim() === options.pepper.trim()) {
+      throw new Error('SHANNON_AUTH_PEPPER_PREVIOUS must differ from SHANNON_AUTH_PEPPER');
+    }
+    this.previousPepper = previousPepper;
+    this.pepperId = pepperIdentifier(options.pepper);
     this.now = options.now ?? Date.now;
     prepareDatabaseLocation(options.path);
     this.database = new DatabaseSync(options.path);
@@ -67,12 +83,15 @@ export class SQLiteDeviceAuthStore {
         created_at INTEGER NOT NULL,
         expires_at INTEGER NOT NULL,
         last_used_at INTEGER,
-        revoked_at INTEGER
+        revoked_at INTEGER,
+        pepper_id TEXT
       );
 
       CREATE INDEX IF NOT EXISTS device_tokens_active_expiry
         ON device_tokens (revoked_at, expires_at);
     `);
+    // Added only (pepper rotation): a row from before it has no pepper_id and counts as not yet on the current pepper.
+    ensureColumns(this.database, 'device_tokens', { pepper_id: 'TEXT' });
     secureDatabaseFiles(options.path);
   }
 
@@ -117,7 +136,10 @@ export class SQLiteDeviceAuthStore {
       this.database.prepare(`
         UPDATE device_pairing SET failed_attempts = failed_attempts + 1 WHERE singleton = 1
       `).run();
-      if (!safeHashEqual(row.code_hash, this.digest(normalizedCode))) return;
+      // A code lives 30 minutes, so one keyed by the previous pepper is matched as it is rather than rekeyed; both are always compared.
+      const currentMatch = safeHashEqual(row.code_hash, this.digest(normalizedCode));
+      const previousMatch = this.previousPepper !== null && safeHashEqual(row.code_hash, this.digest(normalizedCode, this.previousPepper));
+      if (!currentMatch && !previousMatch) return;
 
       this.database.prepare(`
         DELETE FROM device_tokens WHERE expires_at <= ? OR revoked_at IS NOT NULL
@@ -133,9 +155,9 @@ export class SQLiteDeviceAuthStore {
       const name = normalizeDisplayName(displayName);
       this.database.prepare(`
         INSERT INTO device_tokens
-          (device_id, token_hash, scope_key, display_name, created_at, expires_at, last_used_at, revoked_at)
-        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
-      `).run(deviceId, this.digest(token), row.scope_key, name, pairedAt, expiresAt);
+          (device_id, token_hash, scope_key, display_name, created_at, expires_at, last_used_at, revoked_at, pepper_id)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+      `).run(deviceId, this.digest(token), row.scope_key, name, pairedAt, expiresAt, this.pepperId);
       this.database.prepare('DELETE FROM device_pairing WHERE singleton = 1').run();
       result = Object.freeze({
         token,
@@ -153,20 +175,40 @@ export class SQLiteDeviceAuthStore {
     const token = header.slice('Bearer '.length);
     if (!DEVICE_TOKEN_PATTERN.test(token)) return null;
     const authenticatedAt = this.now();
-    const row = this.database.prepare(`
-      SELECT device_id, scope_key, display_name, expires_at, last_used_at, revoked_at
-      FROM device_tokens
-      WHERE token_hash = ? AND expires_at > ? AND revoked_at IS NULL
-    `).get(this.digest(token), authenticatedAt) as unknown as DeviceRow | undefined;
-    if (!row) return null;
-    if (row.last_used_at === null || authenticatedAt - row.last_used_at >= 5 * 60_000) {
-      this.database.prepare('UPDATE device_tokens SET last_used_at = ? WHERE device_id = ?')
-        .run(authenticatedAt, row.device_id);
+    const row = this.activeTokenRow(this.digest(token), authenticatedAt);
+    if (row) {
+      // pepper_id is filled once for a row from before the column, so the migration count also knows tokens already on this pepper.
+      if (row.last_used_at === null || authenticatedAt - row.last_used_at >= 5 * 60_000 || row.pepper_id !== this.pepperId) {
+        this.database.prepare('UPDATE device_tokens SET last_used_at = ?, pepper_id = ? WHERE device_id = ?')
+          .run(authenticatedAt, this.pepperId, row.device_id);
+      }
+      return devicePrincipal(row);
     }
+    if (this.previousPepper === null) return null;
+    return this.rekeyFromPreviousPepper(token, this.previousPepper, authenticatedAt);
+  }
+
+  /** Active tokens not yet confirmed under the current pepper (SHANNON_AUTH_PEPPER_PREVIOUS can go when none remain). */
+  pepperMigration(): PepperMigrationStatus {
+    const timestamp = this.now();
+    const active = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM device_tokens WHERE expires_at > ? AND revoked_at IS NULL
+    `).get(timestamp) as unknown as { count: number };
+    const remaining = this.database.prepare(`
+      SELECT device_id, display_name, last_used_at
+      FROM device_tokens
+      WHERE expires_at > ? AND revoked_at IS NULL AND (pepper_id IS NULL OR pepper_id <> ?)
+      ORDER BY created_at ASC
+    `).all(timestamp, this.pepperId) as unknown as Pick<DeviceRow, 'device_id' | 'display_name' | 'last_used_at'>[];
     return Object.freeze({
-      deviceId: row.device_id,
-      scopeKey: row.scope_key,
-      displayName: row.display_name,
+      previousPepperConfigured: this.previousPepper !== null,
+      activeDevices: Number(active.count),
+      onCurrentPepper: Number(active.count) - remaining.length,
+      remaining: Object.freeze(remaining.map(row => Object.freeze({
+        deviceId: row.device_id,
+        displayName: row.display_name,
+        lastUsedAt: row.last_used_at === null ? null : new Date(row.last_used_at).toISOString(),
+      }))),
     });
   }
 
@@ -213,8 +255,34 @@ export class SQLiteDeviceAuthStore {
     this.database.close();
   }
 
-  private digest(value: string): string {
-    return createHmac('sha256', this.options.pepper).update(value).digest('hex');
+  private digest(value: string, pepper = this.options.pepper): string {
+    return createHmac('sha256', pepper).update(value).digest('hex');
+  }
+
+  private activeTokenRow(tokenHash: string, timestamp: number): DeviceRow | undefined {
+    return this.database.prepare(`
+      SELECT device_id, scope_key, display_name, expires_at, last_used_at, revoked_at, pepper_id
+      FROM device_tokens
+      WHERE token_hash = ? AND expires_at > ? AND revoked_at IS NULL
+    `).get(tokenHash, timestamp) as unknown as DeviceRow | undefined;
+  }
+
+  /** A token keyed by the previous pepper: in one transaction, found still active and its digest replaced by the current pepper's. */
+  private rekeyFromPreviousPepper(token: string, previousPepper: string, authenticatedAt: number): ShannonDevicePrincipal | null {
+    const previousHash = this.digest(token, previousPepper);
+    // A read first: a token matching neither pepper never takes the write lock (bearer requests are not rate limited).
+    if (!this.activeTokenRow(previousHash, authenticatedAt)) return null;
+    let principal: ShannonDevicePrincipal | null = null;
+    this.transaction(() => {
+      const row = this.activeTokenRow(previousHash, authenticatedAt);
+      if (!row) return;
+      const result = this.database.prepare(`
+        UPDATE device_tokens SET token_hash = ?, pepper_id = ?, last_used_at = ?
+        WHERE device_id = ? AND token_hash = ? AND expires_at > ? AND revoked_at IS NULL
+      `).run(this.digest(token), this.pepperId, authenticatedAt, row.device_id, previousHash, authenticatedAt);
+      if (Number(result.changes) === 1) principal = devicePrincipal(row);
+    });
+    return principal;
   }
 
   private transaction(operation: () => void): void {
@@ -228,6 +296,19 @@ export class SQLiteDeviceAuthStore {
       throw error;
     }
   }
+}
+
+function devicePrincipal(row: DeviceRow): ShannonDevicePrincipal {
+  return Object.freeze({
+    deviceId: row.device_id,
+    scopeKey: row.scope_key,
+    displayName: row.display_name,
+  });
+}
+
+/** 32 bits only: enough to tell two random peppers apart, too few to confirm a guessed pepper offline from the database. */
+function pepperIdentifier(pepper: string): string {
+  return createHmac('sha256', pepper).update('shannon-auth-pepper-id/v1').digest('hex').slice(0, 8);
 }
 
 function deviceRecord(row: DeviceRow): Readonly<ShannonDeviceRecord> {

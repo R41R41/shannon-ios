@@ -35,7 +35,7 @@ import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { createSkillsRoute, isSkillsPath, ownerSkillRecorder } from './infra/http/skillRoutes.js';
-import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
+import { configuredAuthPepper, configuredPreviousAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { ShannonMemoryService } from './mind/memory/memoryService.js';
 import { SQLiteWorldStore } from './integrations/world/store/worldStore.js';
@@ -250,7 +250,7 @@ const host = parseHost(process.env.SHANNON_API_HOST);
 const authMode = configuredAuthMode(host);
 const apiToken = authMode === 'fixed' ? configuredApiToken(host, process.env.SHANNON_API_TOKEN) : null;
 const deviceAuth = authMode === 'paired'
-  ? new SQLiteDeviceAuthStore({ path: configuredDatabasePath(), pepper: configuredAuthPepper() })
+  ? new SQLiteDeviceAuthStore({ path: configuredDatabasePath(), pepper: configuredAuthPepper(), previousPepper: configuredPreviousAuthPepper() })
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,shannonNowOwnerScope(process.env),principal=>minecraft.isGameDevice(principal));
