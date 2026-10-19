@@ -30,7 +30,12 @@ export interface TaskMemory {
    * `shared`: the caller's own snapshot and withholding of one synchronous check (the FCA source guard), so that a check of many
    * sources walks the recall graph once instead of once per chunk. Absent, the read takes its own, as before.
    */
-  read(scopeKey: string, ids: readonly string[], present: MemoryAudience, shared?: TaskMemoryReadSnapshot): TaskMemoryItem[];
+  read(scopeKey: string, ids: readonly string[], present: MemoryAudience, shared?: TaskMemoryReadSnapshot,
+    /**
+     * provenance: false: the items come without their provenance (each one's whole lineage of sources is not walked to list it). A caller
+     * that only asks which ids are readable (the FCA source guard's walk, everySourceVisible) has no use for it.
+     */
+    options?: { provenance?: boolean }): TaskMemoryItem[];
   execute(name: string, input: Record<string, unknown>, context: TaskMemoryContext, signal?: AbortSignal): Promise<TaskMemoryResult>;
 }
 export { createTaskMemory } from './taskMemory.js';

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { dataVersion } from './sqliteOpen.js';
+import { dataVersion, prepared } from './sqliteOpen.js';
 
 /**
  * The remembered turns as last read, per scope, kept with the database's change mark at that read. 2026-10-13: one text turn read
@@ -25,11 +25,38 @@ export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, 
   return value;
 }
 
+const keptReads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unknown }>>();
+const KEPT_READS = 64;
+
+/**
+ * `load()` once per key while this connection's database is unchanged: the same rule as `readWhileUnchanged` for reads that are many
+ * (a thread's messages: one recall step asked for the same few threads 14 times, each read and parsed whole) and fixed by their key.
+ * At most `KEPT_READS` keys are kept, the oldest dropped; a changed database is read again.
+ */
+export function readKeptWhileUnchanged<T>(database: DatabaseSync, key: string, load: () => T): T {
+  if (database.isTransaction) return load();
+  let kept = keptReads.get(database);
+  if (!kept) keptReads.set(database, kept = new Map());
+  const mark = changeMark(database), known = kept.get(key);
+  if (known?.mark === mark) return known.value as T;
+  const value = load();
+  if (!known && kept.size >= KEPT_READS) kept.delete(kept.keys().next().value!);
+  kept.set(key, { mark, value });
+  return value;
+}
+
 /** The database's change mark (above): equal marks mean every row reads as it did (inside a transaction: none, `null`). */
 export function databaseChangeMark(database: DatabaseSync): string | null { return database.isTransaction ? null : changeMark(database); }
 
+/**
+ * Row changes only: `total_changes()` counts the rows this connection changed, `data_version` the commits of every other connection.
+ * A schema change made on this very connection (CREATE, ALTER, DROP, an index) changes no row and so does not move the mark, and a
+ * checkpoint moves nothing either. That is as it must be for what is kept under the mark (rows read, and values derived from rows
+ * alone): none of it depends on the schema, and a statement kept by `prepared` compiles itself again when the schema changes (SQLite).
+ * A value kept under the mark that did depend on the schema would have to be keyed by it too. Both statements are prepared once.
+ */
 function changeMark(database: DatabaseSync): string {
-  const changes = database.prepare('SELECT total_changes() AS changes').get() as { changes: number };
+  const changes = prepared(database, 'SELECT total_changes() AS changes').get() as { changes: number };
   return `${changes.changes}:${dataVersion(database)}`;
 }
 

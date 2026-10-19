@@ -1,6 +1,6 @@
 import type { ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
-import { databaseChangeMark } from './experienceCandidateReads.js';
+import { databaseChangeMark, readKeptWhileUnchanged } from './experienceCandidateReads.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
@@ -347,7 +347,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string) { return this.conversations.appendNote(scopeKey, threadId, content, observedAt, noteKind); }
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]) { return this.conversations.recordTurnCaptures(scopeKey, captures); }
   turnCaptures(scopeKey: string, turnIds: readonly string[]) { return this.conversations.turnCaptures(scopeKey, turnIds); }
-  threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
+  /** A thread's messages, kept while the database is unchanged: one recall step asked for the same few threads 14 times, each read and parsed whole. */
+  threadSummaryLineage(scopeKey: string, threadId: string) {
+    return readKeptWhileUnchanged(this.context.database, `lineage\u0000${scopeKey}\u0000${threadId}`,
+      () => this.conversations.threadSummaryLineage(scopeKey, threadId));
+  }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
   hasReadSourceProvenance(scopeKey: string) { return this.conversations.hasReadSourceProvenance(scopeKey); }
   /** The database's change mark (`experienceCandidateReads.ts`): rows read under an equal mark are the rows it holds now. */

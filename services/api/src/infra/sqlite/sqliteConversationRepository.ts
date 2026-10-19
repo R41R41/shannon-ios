@@ -279,7 +279,7 @@ export class SQLiteConversationRepository implements ConversationStore {
   experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
     const ids = [...new Set(experienceIds)].slice(0, 200);
     if (!ids.length) return Object.freeze([]);
-    const rows = this.context.database.prepare(`
+    const rows = this.context.prepared(`
       SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json FROM experience_events
       WHERE scope_key = ? AND event_type = 'turn.completed' AND event_id IN (${ids.map(() => '?').join(', ')})
     `).all(scopeKey, ...ids) as unknown as EventRow[];
@@ -291,7 +291,7 @@ export class SQLiteConversationRepository implements ConversationStore {
     // This fresh existence check is independent of FCA enablement and reads no payloads.
     // A range on the unique event_id index (`task:` up to, not including, `task;`), the same rows as GLOB 'task:*' without a scan:
     // this is asked at the start of every withholding read (2026-10-12: about a second per voice turn on 855 turns).
-    return Boolean(this.context.database.prepare(`SELECT 1 FROM experience_events
+    return Boolean(this.context.prepared(`SELECT 1 FROM experience_events
       WHERE event_id >= 'task:' AND event_id < 'task;' AND +scope_key = ? AND +event_type = 'turn.completed' LIMIT 1`).get(scopeKey));
   }
 
@@ -439,10 +439,10 @@ export class SQLiteConversationRepository implements ConversationStore {
   }
 
   threadSummaryLineage(scopeKey: string, threadId: string): ThreadSummaryLineage {
-    const thread = this.context.database.prepare(`
+    const thread = this.context.prepared(`
       SELECT summary_chain_started_at, updated_at FROM conversation_threads WHERE scope_key = ? AND thread_id = ?
     `).get(scopeKey, threadId) as unknown as { summary_chain_started_at: string | null; updated_at: string } | undefined;
-    const rows = this.context.database.prepare(`
+    const rows = this.context.prepared(`
       SELECT message_id, thread_id, turn_id, role, content, observed_at, metadata_json
       FROM conversation_messages WHERE scope_key = ? AND thread_id = ?
       ORDER BY sequence DESC LIMIT ?

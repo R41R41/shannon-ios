@@ -356,6 +356,7 @@ export type { MemoryAudience, MemoryDisclosure, MemorySensitivity, MemorySensiti
 export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
 export { memoryEvidenceCacheSize, memoryEvidenceCounters, resetMemoryEvidenceCache, withoutMemoryEvidenceCache } from './memoryEvidence.js';
 export { memoryKeyTerms, memoryWithholdingRules, restatesWithheldMemory, ruleWithholdsText, type MemoryWithholdingRule } from './withholding.js';
+export { restatedMemoryKept } from './withholding.js';
 export { ownerDay } from './ownerDay.js';
 export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInterestActive, selfInterestLine,
   selfInterestIndexUsed, selfInterestNightKey, selfInterestProjection,

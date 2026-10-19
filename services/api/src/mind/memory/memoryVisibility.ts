@@ -16,7 +16,7 @@ import type { ConversationStore, ShannonExperience, StoredConversationMessage } 
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { observedStep } from '../../infra/observer/observerContext.js';
-import { DeepChains, cautiousOutsideWalks, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
+import { DeepChains, ScopeMemos, cautiousOutsideWalks, deepWalk, readEdges, settleDeepChains, settleRecalled, type RecallLookups } from './recallChainDepth.js';
 
 /** Withheld turns per read of the remembered turns and per state snapshot (both immutable objects; `MemoryWithholding.hidden`). */
 const HIDDEN_BY_READ = new WeakMap<readonly ShannonExperience[], WeakMap<CompanionStateSnapshot, readonly ShannonExperience[]>>();
@@ -56,12 +56,7 @@ export class MemoryWithholding {
   private knowledgeDocuments?: ReadonlyMap<string, ShannonKnowledgeDocument>;
   private readonly experiences = new Map<string, ShannonExperience | null>();
   private readonly summaryDecisions = new Map<string, boolean>();
-  private readonly recalledDecisions = new Map<string, boolean>();
-  /** The part of a recalled id's verdict that does not depend on the time of the reply that recalled it (one walk per id). */
-  private readonly provenanceDecisions = new Map<string, boolean>();
-  private readonly readDecisions = new Map<string, boolean>();
-  /** What the native reader answered for a read receipt (source and time) within one synchronous read (`sourceVisible`). */
-  private readonly sourceDecisions = new Map<string, boolean>();
+  readonly memos = new ScopeMemos();
   /** One object per synchronous read, so the source reader's own per-walk memo (`fcaReadSources.ts`) ends with the read. */
   private walk: object = {};
   /** The withholding whose state and walk a scoped one (summary lineage) asks native read receipts under: the whole state's. */
@@ -78,7 +73,7 @@ export class MemoryWithholding {
   /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
   private query<T>(work: () => T): T {
     if (this.queryDepth === 0) {
-      this.recalledDecisions.clear(); this.provenanceDecisions.clear(); this.readDecisions.clear(); this.sourceDecisions.clear();
+      this.memos.clear();
       this.deepRecalled.reset();
       this.deepRead.reset();
       this.walk = {};
@@ -100,9 +95,9 @@ export class MemoryWithholding {
     const read = this.readSourceVisible;
     return !read ? false : cautiousOutsideWalks(false, () => {
       if (this.queryDepth === 0) return read(this.scopeKey, source, observedAt);
-      const key = `${source}\u0000${observedAt}`, known = this.sourceDecisions.get(key);
+      const key = `${source}\u0000${observedAt}`, known = this.memos.sources.get(key);
       const result = known ?? read(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
-      this.sourceDecisions.set(key, result);
+      this.memos.sources.set(key, result);
       return result;
     });
   }
@@ -162,6 +157,9 @@ export class MemoryWithholding {
   /** A recalled ID that is itself withheld: the reply was generated from the withheld content. */
   private recalledWithheld(id: string, observedAt: string, seen?: Set<string>): boolean {
     if (seen) return this.recalledWithheldWithin(id, observedAt, seen);
+    // Decided already in this scope, and no chain found too deep (`deepWalk` answers those cautiously): the memoized verdict, unsettled.
+    const known = this.deepRecalled.bounds.size === 0 ? this.memos.timeless.get(id) ?? this.memos.recalled.get(`${observedAt}\u0000${id}`) : undefined;
+    if (known !== undefined) return known;
     // A long chain of turns that each recalled the one before overflows the stack (`recallChainDepth.ts`): then it is settled from its far end.
     const root = JSON.stringify([id, observedAt]);
     const settle = settleRecalled(root, this.lookups, this.deepRecalled, (at, time) => { this.recalledWithheldWithin(at, time, new Set()); });
@@ -169,11 +167,13 @@ export class MemoryWithholding {
   }
   private recalledWithheldWithin(id: string, observedAt: string, seen: Set<string>): boolean {
     if (seen.has(id) || seen.size >= 5000) return true;
-    const key = JSON.stringify([id, observedAt]), known = this.recalledDecisions.get(key);
+    const key = `${observedAt}\u0000${id}`, known = this.memos.timeless.get(id) ?? this.memos.recalled.get(key);
     if (known !== undefined) return known;
     seen.add(id);
     try {
-      const result = this.computeRecalled(id, observedAt, seen); this.recalledDecisions.set(key, result); return result;
+      const result = this.computeRecalled(id, observedAt, seen); this.memos.recalled.set(key, result);
+      this.memos.keepTimeless(this.state, id, result);
+      return result;
     } finally { seen.delete(id); }
   }
   private computeRecalled(id: string, observedAt: string, seen: Set<string>): boolean {
@@ -203,10 +203,10 @@ export class MemoryWithholding {
    * reply that recalled it. 2026-10-13: keyed by the recalling reply's time, one research step walked the recall graph for 10 s.
    */
   private provenanceWithheld(id: string, seen: Set<string>): boolean {
-    const known = this.provenanceDecisions.get(id);
+    const known = this.memos.provenance.get(id);
     if (known !== undefined) return known;
     const result = this.computeProvenance(id, seen);
-    this.provenanceDecisions.set(id, result);
+    this.memos.provenance.set(id, result);
     return result;
   }
   private computeProvenance(id: string, seen: Set<string>): boolean {
@@ -226,7 +226,7 @@ export class MemoryWithholding {
   private unavailableReadWithin(id: string, seen: Set<string>): boolean {
     if (!this.externalReadsPossible) return false;
     if (seen.has(id) || seen.size >= 5000) return true;
-    const known = this.readDecisions.get(id); if (known !== undefined) return known;
+    const known = this.memos.reads.get(id); if (known !== undefined) return known;
     seen.add(id);
     try {
       const experience = id.startsWith('knowledge:') ? null : this.experience(id);
@@ -234,7 +234,7 @@ export class MemoryWithholding {
         ? Boolean(this.knowledge().get(id.slice(10))?.sourceExperienceIds.some(ref => this.unavailableRead(ref, seen)))
         : Boolean(experience && ((experience.readSourceIds ?? []).some(ref => !this.sourceVisible(ref, experience.observedAt))
           || (experience.recalledMemoryIds ?? []).some(ref => this.unavailableRead(ref, seen))));
-      this.readDecisions.set(id, result); return result;
+      this.memos.reads.set(id, result); return result;
     } finally { seen.delete(id); }
   }
   private messageReadUnavailable(message: StoredConversationMessage): boolean {

@@ -21,23 +21,30 @@ import type { TaskStep } from '../../src/mind/action/taskRuntime/taskRuntimePort
 export const PRODUCTION_SHAPE = Object.freeze({ experiences: 855, turns: 14, recalledPerTurn: 36, readsPerTurn: 6, children: 6, messages: 64, skills: 10 });
 const emotion = { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' as const };
 
-export function fcaProductionShape(shape: Partial<Record<keyof typeof PRODUCTION_SHAPE, number>> & { budgetMs?: number } = {}) {
+export function fcaProductionShape(shape: Partial<Record<keyof typeof PRODUCTION_SHAPE, number>> & { budgetMs?: number;
+  /** Which earlier turns a remembered turn recalled (default: ten, spread); the dense graph of the loop-stall bench gives its own. */
+  recalledOf?: (index: number, earlier: readonly string[]) => string[];
+  /** Characters of each skill's steps (default 400; a real skill's body is several thousand). */
+  skillBody?: number;
+  /** How many of the latest remembered turns are forgotten (default 1; production had two controls on 2026-10-19). */
+  forgets?: number } = {}) {
   const size = { ...PRODUCTION_SHAPE, ...shape };
   const world = memoryWorld();
   const ids: string[] = [];
   for (let index = 0; index < size.experiences; index++) {
     world.advance(60_000);
-    const recalled = ids.length ? Array.from({ length: Math.min(10, ids.length) }, (_, k) => ids[(index * 7 + k * 13) % ids.length]!) : [];
+    const recalled = shape.recalledOf ? shape.recalledOf(index, ids)
+      : ids.length ? Array.from({ length: Math.min(10, ids.length) }, (_, k) => ids[(index * 7 + k * 13) % ids.length]!) : [];
     ids.push(world.store.appendTurn('owner', `thread-${index % 3}`, `質問${index}について${String.fromCharCode(0x4e00 + index)}${'あ'.repeat(120)}`,
       `返答${index}${String.fromCharCode(0x5000 + index)}${'い'.repeat(160)}`, world.now(),
       { capturedStateVersion: 0, messageEmotion: emotion, recalledMemoryIds: recalled }).id);
   }
   const forgotten = ids.at(-1)!;
-  new ShannonMemoryService(world.store, world.store, world.now).mutate('owner', { memoryId: forgotten, action: 'forget' });
+  for (let k = 0; k < (shape.forgets ?? 1); k++) new ShannonMemoryService(world.store, world.store, world.now).mutate('owner', { memoryId: ids.at(-1 - k)!, action: 'forget' });
   const skillDb = new DatabaseSync(':memory:');
   const memory = new SkillMemory({ database: skillDb, createsSchema: true, defer: work => work() });
   for (let index = 0; index < size.skills; index++) {
-    const added = memory.create('owner', { draft: { name: `skill-${index}`, description: `手順${index}`, steps: `手順${index}の本文${'う'.repeat(400)}`,
+    const added = memory.create('owner', { draft: { name: `skill-${index}`, description: `手順${index}`, steps: `手順${index}の本文${'う'.repeat(shape.skillBody ?? 400)}`,
       aids: '- 確認', references: '- 元資料' }, evidence: [] }, { carries: () => false }, world.now());
     if ('rejected' in added) throw new Error(added.rejected);
   }

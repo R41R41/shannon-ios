@@ -45,7 +45,7 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
     const walk = shared.walk ?? shared.withholding;
     let known = walks.get(walk);
     if (!known) walks.set(walk, known = new Map());
-    const key = JSON.stringify([scopeKey, skillId, revisionId ?? null]);
+    const key = revisionId === undefined ? `${scopeKey}\u0000${skillId}` : `${scopeKey}\u0000${skillId}\u0000${revisionId}\u0001`;
     if (!known.has(key)) known.set(key, parts.skill?.(scopeKey, skillId, revisionId) ?? null);
     return known.get(key)!;
   };
@@ -97,13 +97,56 @@ function readSourceJob(conversations: ConversationStore) {
 
 type SkillReader = (scopeKey: string, skillId: string, revisionId?: string) => { body: string } | null;
 
+/** What a receipt's text says by itself (a pure function of it): its family, the id it names, and for a skill the skill, the revision and the controls naming them. */
+interface ParsedSource { family: string; id: string; skill?: { skillId: string; revisionId: string | undefined; controlKeys: readonly string[] } }
+const SOURCE_PATTERN = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u;
+const PARSED = new Map<string, ParsedSource | null>();
+const PARSED_KEPT = 8_192;
+
+/**
+ * A receipt is checked once for every time it was read at (thousands in one walk), and each time its text was matched against four
+ * expressions and decoded. Parsed once; null for one that is not a receipt of a family, or whose id is unusable (answered "not visible", as before).
+ */
+function parsedSource(sourceId: string): ParsedSource | null {
+  const known = PARSED.get(sourceId);
+  if (known !== undefined) return known;
+  let result: ParsedSource | null;
+  try {
+    result = parseSource(sourceId);
+  } catch (error) {
+    if (goesUp(error)) throw error;
+    result = null; // a malformed escape: not a receipt, as the caller's catch answered
+  }
+  if (PARSED.size >= PARSED_KEPT) PARSED.clear();
+  PARSED.set(sourceId, result);
+  return result;
+}
+
+function parseSource(sourceId: string): ParsedSource | null {
+  const match = SOURCE_PATTERN.exec(sourceId);
+  if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return null;
+  const family = match[1]!, id = decodeURIComponent(match[2]!);
+  if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return null;
+  if (family !== 'shannon-skill') return { family, id };
+  const skill = parsedSkill(match[2]!, id);
+  return skill ? { family, id, skill } : null;
+}
+
+/** `/revision/` is a skill.read pin, `/gist-revision/` and `/gist` a gist pin (`fcaSkillGistSource.ts`): the same checks. */
+function parsedSkill(encoded: string, id: string): NonNullable<ParsedSource['skill']> | null {
+  const revision = /^([^/]+)\/(?:gist-)?revision\/([^/]+)$/u.exec(encoded), bare = /^([^/]+)\/gist$/u.exec(encoded);
+  const skillId = revision ? decodeURIComponent(revision[1]!) : bare ? decodeURIComponent(bare[1]!) : id;
+  const revisionId = revision ? decodeURIComponent(revision[2]!) : undefined;
+  if (!skillId || (revisionId !== undefined && (!revisionId || /[\u0000-\u001f\u007f]/u.test(revisionId)))) return null;
+  const controlKeys = [skillId, `shannon-skill://${encodeURIComponent(skillId)}`, ...(revisionId ? [revisionId] : [])];
+  return { skillId, revisionId, controlKeys };
+}
 function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, scopeKey: string, sourceId: string, observedAt: string,
   shared: ReadSourceSnapshot): boolean {
     try {
-      const match = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u.exec(sourceId);
-      if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return false;
-      const family = match[1]!, id = decodeURIComponent(match[2]!);
-      if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
+      const parsed = parsedSource(sourceId);
+      if (!parsed) return false;
+      const { family, id } = parsed;
       const { state, withholding } = shared;
       const blocked = [sourceId, id].some(key => {
         const control = memoryControlFor(state, key);
@@ -123,11 +166,8 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
         }
         case 'shannon-skill': {
           // `/revision/` is a skill.read pin, `/gist-revision/` and `/gist` a gist pin (`fcaSkillGistSource.ts`): the same checks.
-          const revision = /^([^/]+)\/(?:gist-)?revision\/([^/]+)$/u.exec(match[2]!), bare = /^([^/]+)\/gist$/u.exec(match[2]!);
-          const skillId = revision ? decodeURIComponent(revision[1]!) : bare ? decodeURIComponent(bare[1]!) : id;
-          const revisionId = revision ? decodeURIComponent(revision[2]!) : undefined;
-          if (!skillId || (revisionId !== undefined && (!revisionId || /[\u0000-\u001f\u007f]/u.test(revisionId)))) return false;
-          if ([skillId, `shannon-skill://${encodeURIComponent(skillId)}`, ...(revisionId ? [revisionId] : [])].some(key => {
+          const { skillId, revisionId, controlKeys } = parsed.skill!;
+          if (controlKeys.some(key => {
             const control = memoryControlFor(state, key);
             return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
           })) return false;

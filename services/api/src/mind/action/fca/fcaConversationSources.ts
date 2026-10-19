@@ -100,6 +100,8 @@ export function createFcaSourceGuard(parts: {
   log?(line: string): void;
   /** `FCA_SOURCE_BASE_MS` unless a test compares it with another window. */
   baseMilliseconds?: number;
+  /** `FCA_SOURCE_WALK_LOG_MS` unless a measurement wants every check above a smaller bound. */
+  walkLogMilliseconds?: number;
 }): FcaSourceGuard {
   const baseWindow = parts.baseMilliseconds ?? FCA_SOURCE_BASE_MS;
   const monotonic = parts.monotonic ?? (() => performance.now());
@@ -109,16 +111,32 @@ export function createFcaSourceGuard(parts: {
   type Verdict = { version: number; at: number; visible: boolean; reads: ReadonlyArray<readonly [string, string, boolean]> };
   const verdicts = new Map<string, Verdict>();
   const clock = parts.clock ?? Date.now;
-  type Epoch = { version: number; at: number; state: CompanionStateSnapshot; candidates: readonly ShannonExperience[];
-    withheld: readonly ShannonExperience[]; secrets?: SecretCheck; withholding?: MemoryWithholding };
+  type Epoch = { version: number; at: number; mark: string | null; state: CompanionStateSnapshot; candidates: readonly ShannonExperience[];
+    withheld: readonly ShannonExperience[]; secrets?: SecretCheck; withholding?: MemoryWithholding;
+    /**
+     * The withholding the read receipts of the checks of this epoch are asked under (`recordedReads`). It reads rows lazily (a turn by
+     * id, the knowledge documents) and keeps them, so it lives only as long as the database is unchanged since the epoch's mark: past
+     * a change (`epochFor`) it is dropped. No time bound is added by it; its memos end with each check (`withReadSnapshot`).
+     */
+    reads?: MemoryWithholding };
   const epochs = new Map<string, Epoch>();
   /** The snapshot and remembered turns of this moment: one load per state version, reused for `FCA_MEMORY_EPOCH_MS`. */
   const epochFor = (scopeKey: string): Epoch => {
-    const state = parts.state.snapshot(scopeKey), at = clock(), known = epochs.get(scopeKey);
-    if (known && known.version === state.version && at >= known.at && at - known.at < FCA_MEMORY_EPOCH_MS) return known;
+    // While the database is unchanged since the epoch was made (its change mark: every write of any connection moves it) the state has the same
+    // version, so the state is not read and parsed again to find that out.
+    const mark = parts.conversations.changeMark?.() ?? null, known = epochs.get(scopeKey), now = clock();
+    if (known && mark !== null && known.mark === mark && now >= known.at && now - known.at < FCA_MEMORY_EPOCH_MS) return known;
+    const state = parts.state.snapshot(scopeKey), at = clock();
+    if (known && known.version === state.version && at >= known.at && at - known.at < FCA_MEMORY_EPOCH_MS) {
+      // The turns and the state are the epoch's (as before this reuse existed), but the database has changed since `reads` took its rows
+      // (a knowledge document, a turn it read by id): it is made again, so what it holds is never older than the mark it is kept under.
+      known.mark = mark;
+      known.reads = undefined;
+      return known;
+    }
     const candidates = parts.conversations.experienceCandidates(scopeKey);
     const withheld = new MemoryWithholding(state, parts.conversations, scopeKey, candidates).withheldExperiences();
-    const fresh: Epoch = { version: state.version, at, state, candidates, withheld };
+    const fresh: Epoch = { version: state.version, at, mark, state, candidates, withheld };
     epochs.set(scopeKey, fresh);
     return fresh;
   };
@@ -126,17 +144,19 @@ export function createFcaSourceGuard(parts: {
   const recordedReads = (epoch: Epoch, scopeKey: string) => {
     const { state, candidates, withheld } = epoch;
     const seen = new Map<string, readonly [string, string, boolean]>();
-    let withholding: MemoryWithholding | null = null;
+    // The remembered turns are put in a withholding once per epoch, not once per check; what the reader memoizes for one walk (a skill it
+    // read) is kept under this check's own `walk`, so a later check asks again.
+    const withholding = () => epoch.reads ??= new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
+    const walk = {};
     const check = parts.readSourceVisible ? (scope: string, id: string, observedAt: string): boolean => {
       if (scope !== scopeKey) return parts.readSourceVisible!(scope, id, observedAt);
       const key = JSON.stringify([id, observedAt]);
-      if (!seen.has(key)) {
-        withholding ??= new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
-        seen.set(key, [id, observedAt, parts.readSourceVisible!(scope, id, observedAt, { state, withholding })]);
-      }
+      if (!seen.has(key)) seen.set(key, [id, observedAt, parts.readSourceVisible!(scope, id, observedAt, { state, withholding: withholding(), walk })]);
       return seen.get(key)![2];
     } : undefined;
-    return { check, list: () => [...seen.values()] };
+    /** The checks made inside `work` are one synchronous read of the receipts: they share the withholding's memos and its one look at the turns' receipts. */
+    const together = <T>(work: () => T): T => parts.readSourceVisible ? withholding().withReadSnapshot(work) : work();
+    return { check, together, list: () => [...seen.values()] };
   };
   /** Still the same answers for every receipt a stored verdict consulted, under the current snapshot. */
   const readsUnchanged = (epoch: Epoch, scopeKey: string, reads: Verdict['reads'], every = false): boolean => {
@@ -147,11 +167,14 @@ export function createFcaSourceGuard(parts: {
     // source that went away is seen at once. (A receipt that was invisible at every time stays so until the verdict expires: closed.)
     // A base older than a verdict (`every`) asks every distinct receipt at every time it was consulted: the longer window must not
     // widen the gap of one representative time.
-    if (every) return reads.every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
-    const representative = new Map<string, readonly [string, string, boolean]>();
-    for (const read of reads) if (!representative.has(read[0]) || (read[2] && !representative.get(read[0])![2])) representative.set(read[0], read);
-    return [...representative.values()].every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible);
+    // Which receipt stands for each source is a function of the list alone (a verdict's list is made once and never changed), and a walked
+    // list holds a receipt for every source and every time the walk met it (thousands): found once per list, not at every use.
+    let once = representatives.get(reads);
+    if (!once && !every) representatives.set(reads, once = oneVisibleTimePerReceipt(reads));
+    const asked = every ? reads : once!;
+    return again.together(() => asked.every(([id, observedAt, visible]) => again.check?.(scopeKey, id, observedAt) === visible));
   };
+  const representatives = new WeakMap<object, Array<readonly [string, string, boolean]>>();
   const capped = new Set<string>();
   const counts = { walked: 0, reused: 0, partial: 0 };
   /**
@@ -194,7 +217,7 @@ export function createFcaSourceGuard(parts: {
     try {
       return judge(scopeKey, task, rows, pendingStepId, peek, timing);
     } finally {
-      timing.report(FCA_SOURCE_WALK_LOG_MS, via, log);
+      timing.report(parts.walkLogMilliseconds ?? FCA_SOURCE_WALK_LOG_MS, via, log);
     }
   };
   const judge = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: boolean,
@@ -242,7 +265,7 @@ export function createFcaSourceGuard(parts: {
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
       // memory chunk used to build its own and walk the whole graph again.
       const visible = timing.time('walk', () => !walked.length
-        || withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding)));
+        || reads.together(() => withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding))));
       // A base keeps the time of its own full walk, so it is never extended past `baseWindow`; it asks again every read it consulted
       // (each distinct receipt once: the list does not grow over the window).
       const baseAt = base?.at ?? at, allReads = distinctReads([...base?.reads ?? [], ...reads.list()]);
@@ -276,7 +299,7 @@ export function createFcaSourceGuard(parts: {
       if (source.kind === 'memory') {
         const memory = createTaskMemory({ ...checked, now: () => source.observedAt });
         const ids = [...new Set(source.recalledMemoryIds)];
-        for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }, shared).length !== ids.slice(offset, offset + 40).length) return false;
+        for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }, shared, { provenance: false }).length !== ids.slice(offset, offset + 40).length) return false;
         if (source.readSourceIds?.some(id => !checked.readSourceVisible?.(scopeKey, id, source.observedAt))
           || withholding.withholdsReply({ text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n'),
             observedAt: source.observedAt, recalledMemoryIds: source.recalledMemoryIds })) return false;
@@ -348,6 +371,13 @@ export function createFcaSourceGuard(parts: {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId, via));
   }, { sources: sourcesVisible, peek, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: baseReads() }) });
+}
+
+/** For each source, one time it was consulted at: one it was visible at if any, else its first (what a verdict still within its window asks again). */
+export function oneVisibleTimePerReceipt(reads: ReadonlyArray<readonly [string, string, boolean]>): Array<readonly [string, string, boolean]> {
+  const representative = new Map<string, readonly [string, string, boolean]>();
+  for (const read of reads) if (!representative.has(read[0]) || (read[2] && !representative.get(read[0])![2])) representative.set(read[0], read);
+  return [...representative.values()];
 }
 
 /** Every receipt once per source and time (the later answer wins), so a base's list does not grow with each extension. */

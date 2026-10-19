@@ -50,8 +50,21 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
   sources?: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>, clock: () => number = Date.now): SkillTurnPorts {
   type Checks = { version: number; at: number; pass: (sources: readonly string[]) => boolean; check: SkillBodyCheck | null; bodies: Map<string, boolean> };
   const reused = new Map<string, Checks>();
+  /**
+   * The state as last read, kept while the database is unchanged (its change mark moves with every write of any connection): a receipt
+   * of a skill is checked thousands of times a walk, and each check read and parsed the state twice. What the checks use of it (the
+   * memory controls, the version) is a function of the rows; the state's own clock (what fades) is not read here.
+   */
+  const states = new Map<string, { mark: string; state: CompanionStateSnapshot }>();
+  const stateOf = (scopeKey: string): CompanionStateSnapshot => {
+    const mark = sources?.changeMark?.() ?? null, known = states.get(scopeKey);
+    if (mark !== null && known?.mark === mark) return known.state;
+    const state = snapshot(scopeKey);
+    if (mark !== null) states.set(scopeKey, { mark, state });
+    return state;
+  };
   const checksFor = (scopeKey: string, store: NonNullable<typeof sources>): Checks => {
-    const state = snapshot(scopeKey), at = clock(), known = reused.get(scopeKey);
+    const state = stateOf(scopeKey), at = clock(), known = reused.get(scopeKey);
     if (known && known.version === state.version && at >= known.at && at - known.at < SKILL_CHECK_REUSE_MS) return known;
     const pass = skillSourcesPass(store, memory, scopeKey);
     const fresh = { version: state.version, at, pass, check: skillBodyCheck(state, store, scopeKey), bodies: new Map<string, boolean>() };
@@ -59,7 +72,7 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
     return fresh;
   };
   const visible = (scopeKey: string) => {
-    const state = snapshot(scopeKey);
+    const state = stateOf(scopeKey);
     return (experienceId: string) => isExperienceSourceVisible(state, experienceId);
   };
   const usable = (scopeKey: string) => {
@@ -92,7 +105,7 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
       if (!skill || skill.status === 'retired' || skill.exportHold === 'withdrawn' || !isVisible(skill.skillId)
         || !isVisible(versionRevisionId(skill.skillId, skill.version)) || !pass(skill.sources)) return null;
       if (!bodyPasses(skill.body)) return null;
-      const revision = revisionId ? memory.store.revisions(scopeKey, id).find(item => item.revisionId === revisionId && item.kind === 'version') : null;
+      const revision = revisionId ? memory.store.version(scopeKey, id, revisionId) : null;
       if (revisionId && !revision) return null;
       if (revisionId && !isVisible(revisionId)) return null;
       const body = revision?.body ?? skill.body;
