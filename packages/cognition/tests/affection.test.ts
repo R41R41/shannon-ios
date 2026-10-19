@@ -1,32 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AFFECTION_EPOCH, AFFECTION_PARAMETERS, AFFECTION_STAGES, affectionBlock, affectionDays, affectionLines, affectionStage, affectionStageOf, foldAffection,
-  otherAiIn, parsedAffectionSetting, type AffectionDay, type FeelingEvent, type RelationshipDay,
+  AFFECTION_EPOCH, AFFECTION_PARAMETERS, SECURITY_PARAMETERS, affectionBlock, affectionDays, affectionLines, foldAffection, foldSecurity, likingOf,
+  otherAiIn, type AffectionDay, type FeelingEvent, type RelationshipDay,
 } from '../src/index.js';
 import { shiftDay } from '../src/temperament.js';
 
-/** Her affection (owner 2026-10-20): one value with no cap, folded from the epoch; the stage it reaches; the facts of the two of them. */
+/** Her affection (owner 2026-10-20): one value with no cap, folded from the epoch, as 好意; 安心; the facts of the two of them. */
 const day = (offset: number, extra: Partial<AffectionDay> = {}): AffectionDay => ({ dayKey: shiftDay(AFFECTION_EPOCH, offset), talked: true, kindWords: 0,
-  apologies: 0, hurtfulWords: 0, lewdWords: 0, violations: 0, keptPromises: 0, missedPromises: 0, ...extra });
+  apologies: 0, hurtfulWords: 0, lewdWords: 0, violations: 0, keptPromises: 0, missedPromises: 0, otherAi: 0, ...extra });
 const talkedFor = (days: number) => Array.from({ length: days }, (_, index) => day(index));
 const after = (days: number) => shiftDay(AFFECTION_EPOCH, days);
 
 const event = (kind: FeelingEvent['kind'], at: string, facts: FeelingEvent['facts'] = {}, id = `${kind}:${at}`): FeelingEvent => ({ id, kind,
   personKey: 'owner', identity: 'registered', audience: 'owner_alone', channel: 'text', sceneId: null, sourceId: null, facts, occurredAt: at });
 
-describe('the value and its stage', () => {
-  it('starts at the approved v2 core\'s ツンデレ and has no upper bound', () => {
-    expect(foldAffection([], AFFECTION_EPOCH)).toEqual({ value: AFFECTION_PARAMETERS.start, stage: 'tsundere', lastLoss: null });
+describe('the value, 好意 and 安心', () => {
+  it('starts in the middle of 好意 and has no upper bound; 好意 nears 1 slowly and never reaches it', () => {
+    expect(foldAffection([], AFFECTION_EPOCH)).toEqual({ value: AFFECTION_PARAMETERS.start, lastLoss: null });
+    expect(likingOf(AFFECTION_PARAMETERS.start)).toBe(0);
     const year = foldAffection(talkedFor(400).map(item => ({ ...item, kindWords: 4 })), after(400));
     expect(year.value).toBeGreaterThan(1_000);
-    expect(year.stage).toBe('deredere');
-  });
-
-  it('takes a month of daily talk to デレ and about three months to デレデレ; 本気 is never reached by the value', () => {
-    expect(foldAffection(talkedFor(30), after(30)).stage).toBe('dere');
-    expect(foldAffection(talkedFor(60), after(60)).stage).toBe('dere');
-    expect(foldAffection(talkedFor(100), after(100)).stage).toBe('deredere');
-    expect(AFFECTION_STAGES.map(stage => affectionStageOf(stage === 'devoted' ? 1e9 : 0))).not.toContain('devoted');
+    expect(likingOf(year.value)).toBeLessThanOrEqual(1);
+    expect(likingOf(foldAffection(talkedFor(30), after(30)).value)).toBeCloseTo(0.291, 2);
+    expect(likingOf(foldAffection(talkedFor(100), after(100)).value)).toBeCloseTo(0.762, 2);
+    expect(likingOf(0)).toBeLessThan(-0.4);
   });
 
   it('costs nothing for two days away, then each further day', () => {
@@ -47,16 +44,15 @@ describe('the value and its stage', () => {
 
   it('never falls below zero', () => {
     expect(foldAffection(talkedFor(20).map(item => ({ ...item, hurtfulWords: 3 })), after(20)).value).toBe(0);
-    expect(foldAffection([], after(200)).stage).toBe('tsun');
   });
 
-  it('is held at a stage by the owner\'s setting, 本気 included', () => {
-    const state = foldAffection([], AFFECTION_EPOCH);
-    expect(affectionStage(state, 'auto')).toBe('tsundere');
-    expect(affectionStage(state, 'devoted')).toBe('devoted');
-    expect(parsedAffectionSetting(' Devoted ')).toBe('devoted');
-    expect(parsedAffectionSetting('max')).toBe('auto');
-    expect(parsedAffectionSetting(undefined)).toBe('auto');
+  it('folds 安心: his talk of another AI, a long absence and a touch after her no take from it; apologies and quiet days give back', () => {
+    expect(foldSecurity([], AFFECTION_EPOCH)).toBe(SECURITY_PARAMETERS.base);
+    const shaken = foldSecurity([day(0, { otherAi: 1 }), day(1, { violations: 1 })], after(2));
+    expect(shaken).toBeCloseTo(SECURITY_PARAMETERS.base + 2 * SECURITY_PARAMETERS.talkDay + SECURITY_PARAMETERS.otherAi + SECURITY_PARAMETERS.violation, 5);
+    expect(foldSecurity([day(0, { otherAi: 1 }), day(1, { violations: 1 }), ...talkedFor(30).slice(2)], after(30))).toBeGreaterThan(shaken + 0.15);
+    expect(foldSecurity([day(0, { apologies: 1 })], after(1))).toBeGreaterThan(SECURITY_PARAMETERS.base);
+    expect(foldSecurity([], after(30))).toBeLessThan(0);
   });
 });
 

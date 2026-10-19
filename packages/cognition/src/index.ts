@@ -10,6 +10,7 @@ export {
   SHARED_DAY_WINDOW,
   calibrateTemperament,
   explainTemperament,
+  shiftDay,
   temperamentEvidence,
   type ShannonTemperamentEvidence,
   type ShannonTemperamentReasons,
@@ -406,9 +407,12 @@ export * from './replyCheck.js';
 export * from './textRegister.js';
 export * from './feelingSentence.js';
 export * from './relationshipLedger.js';
-// Owner 2026-10-20 (`SHANNON_AFFECTION`): her affection, its stages and the core of each stage.
+// Owner 2026-10-20 (`SHANNON_CHARACTER_SPACE`): her affection (好意) and 安心, her character space, its regions and the core beside it.
 export * from './affection.js';
-export { characterCoreForStage } from './characterCoreStages.js';
+export * from './characterSpace.js';
+export * from './characterRegions.js';
+export * from './characterPersona.js';
+export { characterCoreForSpace } from './characterCoreSpace.js';
 export * from './feelingDays.js';
 export * from './episodeMemory.js';
 export * from './boundaryMemory.js';

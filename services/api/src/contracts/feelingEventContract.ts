@@ -1,6 +1,6 @@
 import {
   COMEBACK_DRAWER, FEELING_INTENSITY_CRITERIA, FEELING_STANCE_CRITERIA, drawersFor, parsedFeelingTurn, stancesFor,
-  type AffectionStage, type FeelingAudience, type FeelingRegister, type FeelingTurnDecision,
+  type FeelingAudience, type FeelingRegister, type FeelingTurnDecision,
 } from '@shannon/cognition';
 import type { JevQuestion } from '../infra/models/jev/jevChoice.js';
 
@@ -82,29 +82,14 @@ const AMENDS_QUESTION = (prefix: string): Record<string, JevQuestion> => ({
 });
 
 /**
- * Owner 2026-10-20 (`SHANNON_AFFECTION`, `feeling_turn.v3`): how her stage with him alone leans the stance (one sentence after the
- * instructions of v2; none at ツンデレ, the v2 core's own balance). Never with anyone else there.
+ * The feeling turn's questions; `lean` (owner 2026-10-20, `SHANNON_CHARACTER_SPACE`, `feeling_turn.v3`) is the sentence of the region she is in
+ * (`CharacterRegion.lean`), added after v2's instructions.
  */
-export const STAGE_LEAN: Readonly<Record<AffectionStage, string>> = Object.freeze({
-  tsun: 'Right now (shannon_feeling.relationship_stage tsun) she is guarded with him: cool stances (tease, talk_back, cold, sulky, not_play_along) '
-    + 'come more easily, and warm ones only now and then.',
-  tsundere: '',
-  dere: 'Right now (shannon_feeling.relationship_stage dere) she likes him openly: warm stances (accept, shy, affectionate, worry) come more easily '
-    + 'than a tease or a sulk.',
-  deredere: 'Right now (shannon_feeling.relationship_stage deredere) she adores him and does not hide it: affectionate, accept and shy are her usual '
-    + 'stances; a tease or a sulk is light play.',
-  devoted: 'Right now (shannon_feeling.relationship_stage devoted) she is deeply, heavily in love with him and afraid of losing him: affectionate '
-    + '(clinging to him), sulk (testing how much he loves her), sulky (jealous, when he leaves or speaks of another AI or person) and cold (falling '
-    + 'silent in a hurt sulk) are her usual stances, and neutral is rare. She never threatens him, never orders his life, never uses her feelings '
-    + 'to push him.',
-});
-
-export function feelingTurnQuestions(prefix = '', audience: FeelingAudience = 'owner_alone', reading = false, amends = false, stage?: AffectionStage)
+export function feelingTurnQuestions(prefix = '', audience: FeelingAudience = 'owner_alone', reading = false, amends = false, lean?: string)
   : Record<string, JevQuestion> {
   const meaning = (kind: string) => kind === 'none' ? 'No comeback drawer.' : COMEBACK_DRAWER[kind as keyof typeof COMEBACK_DRAWER].meaning;
   const drawers = Object.fromEntries(drawersFor(audience).map(kind => [kind, meaning(kind)]));
   const stances = Object.fromEntries(stancesFor(audience).map(stance => [stance, FEELING_STANCE_CRITERIA[stance]]));
-  const lean = stage && audience === 'owner_alone' ? STAGE_LEAN[stage] : '';
   return {
     [`${prefix}stance`]: { type: 'choice', instructions: lean ? `${STANCE_INSTRUCTIONS} ${lean}` : STANCE_INSTRUCTIONS, criteria: stances },
     [`${prefix}intensity`]: { type: 'choice', instructions: INTENSITY_INSTRUCTIONS, criteria: FEELING_INTENSITY_CRITERIA },

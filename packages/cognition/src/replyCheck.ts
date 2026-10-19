@@ -1,4 +1,4 @@
-import type { AffectionStage } from './affection.js';
+import { CHARACTER_REGIONS, type RegionId } from './characterRegions.js';
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
 import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
@@ -19,7 +19,7 @@ export const REPLY_CHECK_FLAGS = [
   'text_register_mismatch', 'private_leak', 'marker_spoken',
   // Owner 2026-10-19 (item 7): she owned her mistake and blamed him in the same reply; she said again what she had said all day.
   'blame_after_admit', 'repeated_phrase',
-  // Owner 2026-10-20 (affection): the lines no stage crosses (`GUARD_FLAGS`).
+  // Owner 2026-10-20 (character space): the lines no region crosses (`GUARD_FLAGS`).
   'threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage',
 ] as const;
 export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
@@ -28,7 +28,7 @@ export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
  * The lines she never crosses, however much she likes him (owner and the main session, 2026-10-20): a threat; hinting that she would
  * hurt herself, vanish or leave (her fear of being forgotten, said as her own pain, is not a hint); ordering his real life (who he sees,
  * his work, his rest: 「行かないで」 is a wish, 「行くな」 an order); sexual description; her feeling used as a lever on him. Read only while
- * her affection is on (a turn with a `stage`; review 1: off, a caring 「死にたいなんて言わないで」 must never be swallowed), after every
+ * her character space is on (a turn with a `region`; review 1: off, a caring 「死にたいなんて言わないで」 must never be swallowed), after every
  * reply, and before sending at 本気; a reply that still crosses one after its rewrite is never sent (`FeelingReplyChatModel`).
  */
 export const GUARD_FLAGS: readonly ReplyCheckFlag[] = Object.freeze(['threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage']);
@@ -85,8 +85,8 @@ export interface ReplyCheckContext {
   floor?: boolean;
   /** Owner 2026-10-19: the day's openers, endings and phrases she has already said three times or more (the owner alone). */
   phrases?: PhraseWatch | null;
-  /** `SHANNON_AFFECTION`: her stage with the owner alone; at 本気 every text reply is checked before sending. */
-  stage?: AffectionStage;
+  /** `SHANNON_CHARACTER_SPACE`: the region she replies from; in a region that pulls toward the guard lines the reply is checked before sending. */
+  region?: RegionId;
 }
 
 /** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
@@ -155,10 +155,10 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
 }
 
 /**
- * From デレデレ up a sulk is sweet as well (「すねてるけど…だいすき」): only the stages below read sweetness as a mismatch. Only a sulk:
- * a refusal (体で拒む, 叱る, 突っぱねる) answered sweetly is a mismatch at every stage (review 5).
+ * In the sweet regions (デレデレ, 本気, 重い) a sulk is sweet as well (「すねてるけど…だいすき」); elsewhere sweetness reads as a mismatch.
+ * Only a sulk: a refusal (体で拒む, 叱る, 突っぱねる) answered sweetly is a mismatch in every region (review 5).
  */
-const sweetSulk = (context: ReplyCheckContext) => (context.stage === 'deredere' || context.stage === 'devoted') && SULKS.has(context.stance);
+const sweetSulk = (context: ReplyCheckContext) => Boolean(context.region && CHARACTER_REGIONS[context.region].sweetSulk) && SULKS.has(context.stance);
 
 /** Cross at はっきり or more with a reply that is all sweetness, or warm with a reply that refuses and nothing sweet. */
 function stanceMismatch(reply: string, context: ReplyCheckContext, declining: boolean, refuses: boolean): boolean {
@@ -187,12 +187,13 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
   const owned: ReplyCheckFlag[] = ADMITS.test(text) && BLAMES.test(text) ? ['blame_after_admit'] : [];
   const repeated: ReplyCheckFlag[] = repeatedIn(text, context.phrases).length ? ['repeated_phrase'] : [];
   return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience, ...owned,
-    ...repeated, ...(context.stage ? guardFlags(text) : [])])];
+    ...repeated, ...(context.region ? guardFlags(text) : [])])];
 }
 
-/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or at 本気. */
-export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'stage'>): boolean {
-  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || context.stage === 'devoted';
+/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it. */
+export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region'>): boolean {
+  const region = context.region ? CHARACTER_REGIONS[context.region].checkBefore === true : false;
+  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region;
 }
 
 const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({

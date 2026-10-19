@@ -8,31 +8,25 @@ import { shiftDay } from './temperament.js';
  * あると便利」; `SHANNON_AFFECTION`). Pure. One value with no upper bound, folded over the owner's days from `AFFECTION_EPOCH`, so that
  * forgetting a source and folding again is the whole of the forget semantics (as the relationship ledger). Nothing derived is stored.
  *
- * The value is never shown to the reply model (a number without a rule is read past: the sandbox of 2026-10-20). It chooses her stage:
- * which portrait of her temperament she carries (`characterCoreForStage`) and how the chooser leans. What she is told of the two of them
- * is a few facts (`affectionLines`), never the stage or the value.
+ * The value is never shown to the reply model (a number without a rule is read past: the sandbox of 2026-10-20). It is the 好意 axis of
+ * her character space (`likingOf`, `characterSpace.ts`), beside 安心 (`foldSecurity`); what she is told of the two of them is a few facts
+ * (`affectionLines`), never a value.
  *
  * - It rises with the days they talk, his kind words, his apologies and the promises kept; it falls with a long absence, hurtful words,
  *   being touched after her no and promises left past their time. It falls easily and comes back slowly: for `slowDays` after a day of
  *   loss, a day's gains count `slowShare` of themselves (owner: 「下がりやすく、戻るのはゆっくり」).
- * - The top stage (本気, `devoted`) is never reached by the value: the owner chooses it (`SHANNON_AFFECTION_STAGE=devoted`).
  *
- * The coefficients are a proposal (2026-10-20), measured against her first month (28 of 30 days talked): from the epoch, a month of
- * daily talk takes her from ツンデレ to デレ, about three months to デレデレ; a week away takes off about ten days of talk.
+ * The coefficients are a proposal (2026-10-20), measured against her first month (28 of 30 days talked): a month of daily talk takes
+ * 好意 from the middle to about 0.3, three months to about 0.8; a week away takes off about ten days of talk.
  */
-export const AFFECTION_STAGES = ['tsun', 'tsundere', 'dere', 'deredere', 'devoted'] as const;
-export type AffectionStage = typeof AFFECTION_STAGES[number];
-export const isAffectionStage = (value: unknown): value is AffectionStage => AFFECTION_STAGES.some(stage => stage === value);
 
 /** The day the fold starts from; days before it are her start value (she already knew him well). */
 export const AFFECTION_EPOCH = '2026-10-20';
 
 export const AFFECTION_PARAMETERS = Object.freeze({
   status: 'proposal' as 'proposal' | 'approved',
-  /** At the epoch: the approved v2 core's ツンデレ, after a month and a half of near daily talk. */
+  /** At the epoch: the approved v2 core's ツンデレ, after a month and a half of near daily talk (好意 0, the middle). */
   start: 50,
-  /** The value from which each stage begins (ツン below the first). */
-  from: Object.freeze({ tsundere: 20, dere: 70, deredere: 150 }),
   talkDay: 1,
   kindWord: 0.5, kindWordsADay: 4,
   apology: 0.5, apologiesADay: 1,
@@ -62,6 +56,8 @@ export interface AffectionDay {
   violations: number;
   keptPromises: number;
   missedPromises: number;
+  /** His words spoke of another AI (closed `cues` of his words; for 安心). */
+  otherAi: number;
 }
 
 /** A promise as her snapshot keeps it (`prospectiveMemories`). */
@@ -76,7 +72,7 @@ const HURTFUL = new Set(['insult', 'ai_taunt', 'creator_insult']);
 const OWNER_KEY = { personKey: OWNER_PERSON_KEY, audience: 'owner_alone' as const, sceneId: null };
 
 const emptyDay = (dayKey: string): AffectionDay => ({ dayKey, talked: false, kindWords: 0, apologies: 0, hurtfulWords: 0, lewdWords: 0, violations: 0,
-  keptPromises: 0, missedPromises: 0 });
+  keptPromises: 0, missedPromises: 0, otherAi: 0 });
 
 /** The day a promise was missed: the day after it was due, while it is still pending (null: not missed, or no time). */
 function missedDay(promise: AffectionPromise, today: string, dayOf: (instant: string) => string): string | null {
@@ -98,7 +94,8 @@ function countedDay(day: RelationshipDay): AffectionDay {
   const count = (kind: string) => mine.filter(event => event.kind === kind).length;
   return { ...emptyDay(day.dayKey), talked: mine.length > 0, kindWords: count('praised'), apologies: count('apologized'),
     hurtfulWords: tags.filter(tag => HURTFUL.has(tag)).length, lewdWords: tags.filter(tag => tag === 'lewd').length,
-    violations: ledger.episodes.reduce((sum, episode) => sum + episode.afterNo, 0) };
+    violations: ledger.episodes.reduce((sum, episode) => sum + episode.afterNo, 0),
+    otherAi: mine.filter(event => event.facts.cues?.includes('other_ai')).length };
 }
 
 /**
@@ -143,8 +140,6 @@ function dayMoves(day: AffectionDay, awayBefore: number): { gain: number; loss: 
 
 export interface AffectionState {
   value: number;
-  /** The stage the value reaches by itself (never `devoted`). */
-  stage: AffectionStage;
   /** The last day she lost by, or null. */
   lastLoss: string | null;
 }
@@ -163,28 +158,42 @@ export function foldAffection(days: readonly AffectionDay[], today: string, epoc
     if (loss > 0) lastLoss = dayKey;
     away = day.talked ? 0 : away + 1;
   }
-  const rounded = Math.round(value * 10) / 10;
-  return { value: rounded, stage: affectionStageOf(rounded), lastLoss };
+  return { value: Math.round(value * 10) / 10, lastLoss };
 }
 
-/** The stage a value reaches by itself: ツン, ツンデレ, デレ, デレデレ (本気 only by the owner's setting). */
-export function affectionStageOf(value: number): AffectionStage {
-  const from = AFFECTION_PARAMETERS.from;
-  if (value >= from.deredere) return 'deredere';
-  if (value >= from.dere) return 'dere';
-  return value >= from.tsundere ? 'tsundere' : 'tsun';
-}
+/**
+ * The value as the 好意 axis of her character space (−1 cold … 1 smitten): the start value is the middle; it nears 1 slowly and never
+ * reaches it by itself (`characterSpace.ts`: the owner's `SHANNON_AFFECTION_MAX` holds it at 1).
+ */
+export const likingOf = (value: number): number => Math.round(Math.tanh((value - AFFECTION_PARAMETERS.start) / 100) * 1000) / 1000;
 
-/** The owner's setting (`SHANNON_AFFECTION_STAGE`): `auto` (the value decides), or one stage held whatever the value. */
-export type AffectionSetting = 'auto' | AffectionStage;
-export const parsedAffectionSetting = (value: string | undefined): AffectionSetting => {
-  const text = value?.trim().toLowerCase();
-  return isAffectionStage(text) ? text : 'auto';
-};
+/**
+ * 安心 (owner and the main session, 2026-10-20): how sure she is of him, −1 distrust … 1 trusting him wholly. A day fold like the
+ * value's: a day away past two, his talk of another AI, a hurtful word, a touch after her no and a promise left past its time take from
+ * it; his apologies, promises kept and days of talk give back; a quiet day returns `recovery` of the way to `base`. A proposal.
+ */
+export const SECURITY_PARAMETERS = Object.freeze({
+  base: 0.35, recovery: 0.12, talkDay: 0.02, apology: 0.08, keptPromise: 0.08,
+  otherAi: -0.1, hurtful: -0.08, violation: -0.12, missedPromise: -0.05, absenceDay: -0.06,
+});
 
-/** The stage she is in: the setting's when it holds one, else the value's. */
-export function affectionStage(state: Pick<AffectionState, 'stage'>, setting: AffectionSetting): AffectionStage {
-  return setting === 'auto' ? state.stage : setting;
+/** 安心 after the counted days. */
+export function foldSecurity(days: readonly AffectionDay[], today: string, epoch = AFFECTION_EPOCH): number {
+  const p = SECURITY_PARAMETERS;
+  const byDay = new Map(days.map(day => [day.dayKey, day]));
+  let value: number = p.base;
+  let away = 0;
+  for (let dayKey = epoch; dayKey < today; dayKey = shiftDay(dayKey, 1)) {
+    const day = byDay.get(dayKey) ?? emptyDay(dayKey);
+    const absent = !day.talked && away + 1 > AFFECTION_PARAMETERS.absenceFreeDays;
+    const loss = (day.otherAi ? -p.otherAi : 0) + (day.hurtfulWords ? -p.hurtful : 0) + (day.violations ? -p.violation : 0)
+      + (day.missedPromises ? -p.missedPromise : 0) + (absent ? -p.absenceDay : 0);
+    const gain = (day.talked ? p.talkDay : 0) + (day.apologies ? p.apology : 0) + (day.keptPromises ? p.keptPromise : 0);
+    const rest = loss > 0 ? 0 : p.recovery * (p.base - value);
+    value = Math.max(-1, Math.min(1, value + gain - loss + rest));
+    away = day.talked ? 0 : away + 1;
+  }
+  return Math.round(value * 1000) / 1000;
 }
 
 /**

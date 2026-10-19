@@ -2,8 +2,8 @@ import {
   OWNER_PERSON_KEY, drawersIn, episodeLine, replyFacts, foldEpisodeLedger, innerNoteDay, ledgerFacts, memoryControlFor, repetitionFacts,
   FOLLOW_UP_LIMITS, followUpLine, followUpTopics, greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
   type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type PhraseWatch, type RepetitionWatch,
-  type AffectionStage,
 } from '@shannon/cognition';
+import { spaceOf, type SpaceInput, type SpaceLines } from './characterSpaceTurn.js';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { FeelingDays } from './feelingDays.js';
 
@@ -43,8 +43,8 @@ export interface FeelingLines {
   carriedLines: readonly string[];
   /** The carried lines a touch is judged with: without the boundaries she was told and has not endorsed (review L2). */
   carriedTouchLines: readonly string[];
-  /** `SHANNON_AFFECTION`, the owner alone: her stage, and the value it came from (never in a prompt). */
-  affection?: { stage: AffectionStage; value: number };
+  /** `SHANNON_CHARACTER_SPACE`, a text turn: her place in the space and who she is there. */
+  space?: SpaceLines;
 }
 
 export interface FeelingKey {
@@ -88,7 +88,9 @@ export class FeelingEvents {
     /** Stage 2 (`SHANNON_CORE_AFFECT`): told of every recorded event, after it is written (the shadow of her fast layer). */
     onRecorded?: (scopeKey: string, event: FeelingEvent) => void;
     /** Stage 3: her closed days and what is carried across them (absent: nothing is carried). */
-    days?: FeelingDays }) {}
+    days?: FeelingDays;
+    /** `SHANNON_CHARACTER_SPACE` (absent: off), with the owner's `SHANNON_AFFECTION_MAX`. */
+    space?: { max: boolean } }) {}
 
   get timeZone(): string { return this.options.timeZone; }
 
@@ -127,7 +129,8 @@ export class FeelingEvents {
     : FeelingLines | null {
     try {
       return observeSync('emotion', { phase: 'feeling.ledger', audience: key.audience, owner: key.personKey === OWNER_PERSON_KEY }, () => {
-        const ledger = foldEpisodeLedger(this.today(scopeKey, at, snapshot), key);
+        const day = this.today(scopeKey, at, snapshot);
+        const ledger = foldEpisodeLedger(day, key);
         const { replies, texts } = this.todaysReplies(scopeKey, key, at, snapshot);
         const watch = watchRepetition(replies, key.audience);
         // Owner 2026-10-19: the day's openers, endings and phrases of her words in his Talk (read now, never kept).
@@ -144,11 +147,22 @@ export class FeelingEvents {
           repetitionLine: [repetitionLine(watch), said, ...this.greeting(scopeKey, key, at, snapshot, words)].filter(Boolean).join('\n'),
           facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts },
           carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines,
-          ...(carried.affection ? { affection: carried.affection } : {}) };
+          ...this.spaceFor({ key, at, snapshot, words, events: day, ...(carried.relation ? { relation: carried.relation } : {}) }, channel) };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);
       return null;
+    }
+  }
+
+  /** Her character space in a text turn (`SHANNON_CHARACTER_SPACE`); nothing otherwise, or when it fails (a turn goes on without it). */
+  private spaceFor(input: Omit<SpaceInput, 'timeZone' | 'max'>, channel?: FeelingEvent['channel']): { space?: SpaceLines } {
+    if (!this.options.space || channel !== 'text') return {};
+    try {
+      return { space: spaceOf({ ...input, timeZone: this.options.timeZone, max: this.options.space.max }) };
+    } catch (error) {
+      this.report(error);
+      return {};
     }
   }
 

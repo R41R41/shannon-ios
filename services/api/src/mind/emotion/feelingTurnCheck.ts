@@ -1,13 +1,13 @@
 /**
  * The reply check's side of a feeling turn (Syzygy ADR-0013 stage 2, `SHANNON_REPLY_CHECK`): the context a turn's reply is checked
  * with, the register her composure holds, and the check recorded on her reply. Moved unchanged out of `feelingPorts.ts` (2026-10-20,
- * the 500-line ceiling), with her affection's stage added to the context. Core: emotion.
+ * the 500-line ceiling), with her character space's region added to the context. Core: emotion.
  */
 import {
   checkReply, continuedAfterRefusal, foldFeelingDynamics, registerOfLevel, type FeelingRegister, type ReplyCheckContext,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
-import { stageOf } from './affectionTurn.js';
+import { regionOf } from './characterSpaceHooks.js';
 import type { FeelingTurnHandle } from './feelingPorts.js';
 
 const safely = <T>(work: () => T, fallback: T): T => {
@@ -24,10 +24,10 @@ export function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | nul
   const ledger = handle.lines?.ledger;
   const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
   const phrases = handle.lines?.phrases ? { phrases: handle.lines.phrases } : {}; // Owner 2026-10-19: what she already said 3 times today.
-  const stage = stageOf(handle);
+  const region = regionOf(handle);
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
     turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases,
-    ...(stage ? { stage } : {}) };
+    ...(region ? { region } : {}) };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */

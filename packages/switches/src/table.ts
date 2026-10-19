@@ -291,8 +291,12 @@ export const SWITCHES = [
     doc: 'ADR-0013 §6: her inner note reads the fast layer and the ledger as narrator (honne not from her replies); intent and until unchanged.',
   },
   {
-    name: 'SHANNON_AFFECTION', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN', 'SHANNON_INNER_NOTE'],
-    doc: 'Owner 2026-10-20: her affection for him (no cap) picks her core\'s stage and stance lean; facts of the two of them. SHANNON_AFFECTION_STAGE.',
+    name: 'SHANNON_CHARACTER_SPACE', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_TURN', 'SHANNON_INNER_NOTE'],
+    doc: 'Owner 2026-10-20: six axes (mood: 快 覚醒 優位 遊び; per person: 好意 安心) pick her region (portrait, lines, face); text replies on Sonnet.',
+  },
+  {
+    name: 'SHANNON_AFFECTION_MAX', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CHARACTER_SPACE', 'SHANNON_REPLY_CHECK'],
+    doc: 'Owner 2026-10-20: the owner holds her 好意 at its top; 本気 and 重い open with him alone (never reached by the value).',
   },
   {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],

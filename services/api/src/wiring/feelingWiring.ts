@@ -1,5 +1,5 @@
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
-import { OWNER_AUDIENCE, parsedAffectionSetting, type CompanionStateSnapshot, type FeelingEvent } from '@shannon/cognition';
+import { OWNER_AUDIENCE, type CompanionStateSnapshot, type FeelingEvent } from '@shannon/cognition';
 import { FeelingShadow } from '../mind/emotion/feelingShadow.js';
 import { SQLiteFeelingShadowStore } from '../mind/emotion/store/feelingShadowStore.js';
 import { FeelingEvents, type RepetitionSeed } from '../mind/emotion/feelingEvents.js';
@@ -109,7 +109,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
     ...seeds, ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
-    days: affectionGuarded(feelingDayFeatures(environment), turn, check), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
+    days: spaceGuarded(feelingDayFeatures(environment), turn, check), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
     stream: switchOn(environment, 'SHANNON_FEELING_STREAM') });
 }
 
@@ -162,29 +162,35 @@ function closedDays(parts: { database: string | DatabaseSync; now: () => string;
   if (!features || !carriesAnything(features)) return { days: {}, store: null };
   const store = new SQLiteFeelingDayStore(parts.database);
   const subjects = Object.entries(BODY_TOUCH_PART_WORDS).filter(([subject]) => subject !== 'other').map(([subject, { word }]) => ({ subject, word }));
-  const talk = features.affection && parts.talk ? { talk: parts.talk } : {};
+  const talk = features.space && parts.talk ? { talk: parts.talk } : {};
   return { days: { days: new FeelingDays({ events, store, timeZone: parts.timeZone, now: parts.now, features, partWord: feelingPartWord, subjects,
     ...talk }) }, store };
 }
 
-/** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read), and her affection with its stage setting. */
+/** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read), and her character space with 好意 held at the top. */
 export function feelingDayFeatures(environment: Readonly<Record<string, string | undefined>>): FeelingDayFeatures {
-  const affection = switchOn(environment, 'SHANNON_AFFECTION') ? { affection: parsedAffectionSetting(environment.SHANNON_AFFECTION_STAGE) } : {};
+  const space = switchOn(environment, 'SHANNON_CHARACTER_SPACE') ? { space: { max: switchOn(environment, 'SHANNON_AFFECTION_MAX') } } : {};
   return { relationship: switchOn(environment, 'SHANNON_RELATIONSHIP_LEDGER'), episodes: switchOn(environment, 'SHANNON_EPISODE_MEMORY'),
-    boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY'), ...affection };
+    boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY'), ...space };
 }
 
 /**
- * Her affection only with the feeling turn it leans (a switch's `requires` only warns at start), and 本気 only with the reply check
- * (owner 2026-10-20: the lines no stage crosses are checked before every reply at 本気): without it, デレデレ is the most she is held at.
+ * Her character space only with the feeling turn it leans (a switch's `requires` only warns at start), and her 好意 held at the top only
+ * with the reply check (owner 2026-10-20: the lines no region crosses are checked before every reply of 本気 and 重い); without it the
+ * value decides and 本気 and 重い stay closed, and the log says so.
  */
-export function affectionGuarded(features: FeelingDayFeatures, turn: boolean, check: boolean): FeelingDayFeatures {
-  if (!features.affection) return features;
-  const { affection, ...rest } = features;
+export function spaceGuarded(features: FeelingDayFeatures, turn: boolean, check: boolean): FeelingDayFeatures {
+  if (!features.space) return features;
+  const { space, ...rest } = features;
   if (!turn) return rest;
-  if (affection !== 'devoted' || check) return features;
-  console.warn('Shannon affection: SHANNON_AFFECTION_STAGE=devoted needs SHANNON_REPLY_CHECK; she is held at deredere');
-  return { ...rest, affection: 'deredere' };
+  if (!space.max || check) return features;
+  console.warn('Shannon character space: SHANNON_AFFECTION_MAX needs SHANNON_REPLY_CHECK; 好意 is left to the value');
+  return { ...rest, space: { max: false } };
+}
+
+/** Her character space needs her closed days (the relation's folds): it is on only with them. */
+function spaceOption(days: FeelingDayFeatures | undefined, closed: FeelingDays | undefined): { space?: { max: boolean } } {
+  return days?.space && closed ? { space: days.space } : {};
 }
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
@@ -220,7 +226,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
     : null;
   const onRecorded = shadow ? { onRecorded: (scopeKey: string, event: FeelingEvent) => shadow.recorded(scopeKey, event) } : {};
   const closed = closedDays({ ...parts, ...(parts.days ? { days: { ...parts.days, audience } } : {}) }, store);
-  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days });
+  const space = spaceOption(parts.days, closed.days.days);
+  events = new FeelingEvents({ store, now: parts.now, timeZone: parts.timeZone, partWord: feelingPartWord, ...seed, ...onRecorded, ...closed.days, ...space });
   const strong = parts.strong ? { strong: { cap: parts.strong.cap } } : {};
   const jevInput = parts.jevInput ?? FEELING_TURN_JEV_INPUT;
   const flags = portFlags({ ...parts, audience });
