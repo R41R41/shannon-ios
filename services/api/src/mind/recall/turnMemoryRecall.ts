@@ -59,6 +59,8 @@ export interface TurnMemoryRecall {
   walksTree?(conversationClass: string | undefined): boolean;
   /** Step 8: what the server knows of others present, which tree recall checks before and after each Jev call. */
   watchAudience?(watch: { othersKnown(scopeKey: string): boolean }): void;
+  /** The memories nearest one text by embedding (`SemanticMemoryRecall.nearest`): a body task's candidates (`bodyTaskRecall.ts`). */
+  nearest?: SemanticMemoryRecall['nearest'];
 }
 
 /** A voice turn's rerank cap when `SHANNON_VOICE_RERANK_TIMEOUT_MS` is unset or invalid. */
@@ -78,6 +80,7 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
   ) {}
 
   walksTree(conversationClass: string | undefined): boolean { return this.tree?.walksTree(conversationClass) ?? false; }
+  nearest(input: Parameters<SemanticMemoryRecall['nearest']>[0]): ReturnType<SemanticMemoryRecall['nearest']> { return this.semantic.nearest(input); }
 
   watchAudience(watch: { othersKnown(scopeKey: string): boolean }): void { this.audienceWatch = watch; this.tree?.watchAudience(watch); }
 

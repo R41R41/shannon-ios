@@ -22,7 +22,9 @@ export const DEFAULT_SEMANTIC_MEMORY_CONFIG: SemanticMemoryConfig = Object.freez
   enabled: true,
   maximumModelCallsPerTurn: 4,
   timeoutMilliseconds: 4_000,
-  scanLimit: 5_000,
+  // The candidates are held in memory while the index says nothing changed (`embeddingVersion`), so the bound no longer costs a read
+  // of every vector at each search; 5,000 (the bound until 2026-10-19) would have left the oldest memories out once there were more.
+  scanLimit: 50_000,
   rerankCandidates: 12,
   maximumAdditional: 3,
   minimumRelevance: 0.5,
@@ -140,9 +142,59 @@ export class SemanticMemoryRecall {
     }
   }
 
-  private eligibleCandidates(input: SemanticRecallInput, model: string): StoredEmbeddingCandidate[] {
+  /**
+   * The memories nearest one text (a body task's goal, `bodyTaskRecall.ts`): one embedding call and the similarity to every eligible
+   * candidate, no rewrite and no rerank. Withheld and forgotten ones are left out as in `recall`; ids and similarities only.
+   */
+  async nearest(input: Pick<SemanticRecallInput, 'scopeKey' | 'query' | 'snapshot' | 'present' | 'signal' | 'isEligible'> & { limit: number }):
+    Promise<{ status: SemanticRecallStatus; hits: ReadonlyArray<{ id: string; similarity: number }>; elapsedMilliseconds: number }> {
+    const startedAt = this.nowMilliseconds();
+    const finish = (status: SemanticRecallStatus, hits: ReadonlyArray<{ id: string; similarity: number }> = []) =>
+      ({ status, hits, elapsedMilliseconds: Math.max(0, Math.round(this.nowMilliseconds() - startedAt)) });
+    if (!this.available) return finish('disabled');
+    if (!input.query.trim()) return finish('skipped');
+    const deadline = AbortSignal.timeout(this.config.timeoutMilliseconds);
+    const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
+    try {
+      const [vector] = await this.gateway!.embed(input.scopeKey, [input.query], 'memory', signal);
+      signal.throwIfAborted();
+      if (!vector) return finish('empty');
+      const withholding = new MemoryWithholding(input.snapshot, conversationStoreOf(this.index), input.scopeKey);
+      const ranked = this.eligibleCandidates(input, this.gateway!.embeddingModel)
+        .map(candidate => ({ candidate, similarity: cosineSimilarity(vector, candidate.vector) }))
+        .filter(row => row.similarity >= this.config.minimumSimilarity)
+        .sort((left, right) => right.similarity - left.similarity || right.candidate.observedAt.localeCompare(left.candidate.observedAt));
+      const hits: Array<{ id: string; similarity: number }> = [];
+      for (const { candidate, similarity } of ranked) {
+        if (hits.length >= input.limit) break;
+        const withheld = candidate.kind === 'thread'
+          ? withholding.withholdsThreadSummary(candidate.threadId ?? candidate.sourceId, candidate.summary, candidate.observedAt)
+          : candidate.kind === 'experience' && withholding.withholdsExperience(candidate);
+        if (!withheld) hits.push({ id: candidate.id, similarity });
+      }
+      return finish(hits.length ? 'used' : 'empty', hits);
+    } catch {
+      return finish(signal.aborted ? 'timeout' : 'failed');
+    }
+  }
+
+  /** The index's candidates, held while its version is the same (no vector is read again then); read every time without one. */
+  private stored(scopeKey: string, model: string): readonly StoredEmbeddingCandidate[] {
+    const index = this.index!, version = index.embeddingVersion?.(scopeKey, model);
+    if (version === undefined) return index.embeddingCandidates(scopeKey, model, this.config.scanLimit);
+    const key = `${scopeKey}\u0000${model}`, held = this.held.get(key);
+    if (held?.version === version) return held.rows;
+    const rows = index.embeddingCandidates(scopeKey, model, this.config.scanLimit);
+    this.held.set(key, { version, rows });
+    if (this.held.size > 16) this.held.delete(this.held.keys().next().value!);
+    return rows;
+  }
+  private readonly held = new Map<string, { version: string; rows: readonly StoredEmbeddingCandidate[] }>();
+
+  private eligibleCandidates(input: Pick<SemanticRecallInput, 'scopeKey' | 'snapshot' | 'present' | 'excludeIds' | 'threadId' | 'isEligible'>,
+    model: string): StoredEmbeddingCandidate[] {
     const gate = new DisclosureGate(input.present, input.snapshot, conversationStoreOf(this.index), input.scopeKey);
-    return this.index!.embeddingCandidates(input.scopeKey, model, this.config.scanLimit).filter(candidate => {
+    return this.stored(input.scopeKey, model).filter(candidate => {
       if (input.excludeIds?.has(candidate.id)) return false;
       if (!gate.allowsRecallId(candidate.id)) return false;
       if (candidate.kind === 'thread' && candidate.threadId === input.threadId) return false;
@@ -191,6 +243,6 @@ export function configuredSemanticMemoryConfig(
     enabled: environment.SHANNON_MEMORY_SEMANTIC_ENABLED?.trim() !== 'false',
     maximumModelCallsPerTurn: integer(environment.SHANNON_MEMORY_MAX_MODEL_CALLS_PER_TURN, 4, 0, 4),
     timeoutMilliseconds: integer(environment.SHANNON_MEMORY_SEMANTIC_TIMEOUT_MS, 4_000, 200, 15_000),
-    scanLimit: integer(environment.SHANNON_MEMORY_SEMANTIC_SCAN_LIMIT, 5_000, 50, 50_000),
+    scanLimit: integer(environment.SHANNON_MEMORY_SEMANTIC_SCAN_LIMIT, 50_000, 50, 50_000),
   });
 }

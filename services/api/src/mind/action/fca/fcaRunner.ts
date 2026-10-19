@@ -6,7 +6,8 @@ import { currentActionExecution } from '../../../infra/context/actionExecution.j
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
-import type { TaskRecall } from '../../recall/taskRecallPorts.js';
+import type { BodyTaskRecall, TaskRecall } from '../../recall/taskRecallPorts.js';
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
@@ -41,6 +42,8 @@ export interface FcaStepPorts {
   /** `SHANNON_FCA_OBS_MODE` (`fcaCoreTools.ts`); a body task takes it only when it starts, never after. Absent: legacy. */
   obsMode?: FcaObsMode;
   recall?: TaskRecall;
+  /** A body task's recall (`bodyTaskRecall.ts`); the task recall above is never started for a body task. */
+  bodyRecall?: BodyTaskRecall;
   evidence?: FcaEvidence;
   observeMemory?(ids: readonly string[]): boolean;
   tools?: FcaExternalTools;
@@ -175,10 +178,6 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
   const waiting = waitGate.fact();
   await checked();
-  observerHandoff('context', 'native', provenance);
-  const execution = currentActionExecution();
-  if (execution) execution.decisionRequested = true;
-  progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
   const request: FcaModelInput = metrics.timedSync('contextMs', () => ({ ...input,
     ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
     ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
@@ -188,6 +187,20 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
       ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) }));
+  // A body task's recall (`bodyTaskRecall.ts`): a few memories for the situation the body was just read in (`recallCues`), none when
+  // nothing fits; its sources are pinned like the recall packet's before anything is sent.
+  if (bodyTask && ports.bodyRecall) {
+    const found = await metrics.timed('recallMs', () => ports.bodyRecall!.packet({ scopeKey: step.scopeKey, taskId: step.taskId,
+      goal: step.snapshot.task.goal, cues: ports.body?.recallCues?.() ?? { words: [], tags: [] }, present: OWNER_AUDIENCE, signal }));
+    metrics.bodyRecall(found.measure);
+    if (found.packet.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(found.packet.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
+    if (found.packet.items.length) request.recall = found.packet;
+    await checked();
+  }
+  observerHandoff('context', 'native', provenance);
+  const execution = currentActionExecution();
+  if (execution) execution.decisionRequested = true;
+  progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
   // A failed attempt that carried no decision leaves nothing to apply: its outcome is known, its spend was recorded by the adapter.
   const answeredNothing = () => { if (execution && execution.stepOutcome !== 'unknown') execution.modelOutcome = 'acknowledged'; };
   /**
@@ -380,7 +393,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   }
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.
   try { ports.evidence?.committed(step); } catch { /* Retried by the existing maintenance tick. */ }
-  if (saved.task.phase === 'completed' || saved.task.phase === 'failed') ports.recall?.cancel(step.scopeKey, step.taskId);
+  if (saved.task.phase === 'completed' || saved.task.phase === 'failed') {
+    ports.recall?.cancel(step.scopeKey, step.taskId);
+    ports.bodyRecall?.cancel(step.scopeKey, step.taskId);
+  }
   if (gated.stop && saved.task.phase === 'waiting') {
     runtime.stop(step.scopeKey, step.taskId, FCA_WAIT_WITHOUT_COUNTERPART);
     return runtime.snapshot(step.scopeKey, step.taskId)!;

@@ -54,7 +54,7 @@ export interface TaskRuntimeWiringOptions {
     now(): string; running(taskId: string): boolean }): FcaBodyRecovery;
   /** Tests: the wait between the rounds of a Minecraft request whose decision was unavailable (`taskRuntimeUnavailable.ts`). */
   bodyUnavailableCooldownMs?(cycles: number): number;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
     | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed'>>;
   /**
    * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run 15, 2026-10-19: 1.9 s

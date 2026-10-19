@@ -25,6 +25,7 @@ import { stepMetrics } from './minecraftTaskMetrics.js';
 import { createPaceLedger } from './minecraftPaceLedger.js';
 import { minecraftTransientBody } from './minecraftTransientBody.js';
 import { storedBodyResult } from './minecraftStoredResult.js';
+import { minecraftRecallCues } from './minecraftRecallCues.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
@@ -132,7 +133,8 @@ export function createMinecraftTaskBody(parts: {
   // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
   const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
     began: Date.parse(step.snapshot.task.createdAt), now });
-  let transientState: (() => Record<string, unknown>) | null = null;
+  /** What the last context() read, for the decision that follows: its transient live state and its recall cues (built only if asked). */
+  let latest: { transient(): Record<string, unknown>; cues(): ReturnType<typeof minecraftRecallCues> } | null = null;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
@@ -406,10 +408,12 @@ export function createMinecraftTaskBody(parts: {
       const summary = observation ? minecraftObservationSummary(observation) : null;
       measured(() => metrics.context(observation, summary, skills.fields));
       // Built only if the decision is transient (`transient()` below); the legacy decision reads the summary above, as before.
-      transientState = () => minecraftTransientBody({ observation, pace, fields: skills.fields, ledger: paceLedger });
+      latest = { transient: () => minecraftTransientBody({ observation, pace, fields: skills.fields, ledger: paceLedger }),
+        cues: () => minecraftRecallCues(observation, situation, recentResults) };
       return { revision, observation: summary, pace, ...skills.fields };
     },
-    transient: () => transientState?.() ?? {},
+    transient: () => latest?.transient() ?? {},
+    recallCues: () => latest?.cues() ?? { words: [], tags: [] },
     storedResult: (call, text) => storedBodyResult(call.name, text),
     async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
     toolSignal(name, parent) {

@@ -169,6 +169,11 @@ export const SWITCHES = [
     doc: 'Touch reflexes run under the FCA runtime.',
   },
   {
+    name: 'SHANNON_FCA_BODY_RECALL_JEV', default: 'off', kind: 'on_only', owner: 'fca', requires: [],
+    doc: '2026-10-19: a body task\'s recall asks Jev which of its best 24 memories help the decision now and keeps only those (none '
+      + 'is allowed); a timeout or failure keeps the situation order. Off until Jev\'s speed and price are measured (SHANNON_JEV_USD_PER_CALL).',
+  },
+  {
     name: 'SHANNON_FCA_SKILL_GIST', default: 'on', kind: 'default_on', owner: 'minecraft', requires: ['SHANNON_SKILLS'],
     doc: 'Owner 2026-10-15: a body task\'s skill pointer carries a gist of that skill\'s first steps (no skill.read needed); off, the pointer alone.',
   },

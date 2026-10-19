@@ -1,7 +1,7 @@
 import type { FcaWaitFact } from './fcaWaitGate.js';
 import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from './fcaEvidencePorts.js';
-import type { TaskRecallPacket } from '../../recall/taskRecallPorts.js';
+import type { BodyRecallCues, TaskRecallPacket } from '../../recall/taskRecallPorts.js';
 import type { FcaObservation } from './fcaObservation.js';
 import type { FcaProgress, FcaProgressHooks } from './fcaProgressPorts.js';
 import type { BodyObservation } from '../../../contracts/bodyControlContract.js';
@@ -63,6 +63,8 @@ export interface FcaBodyLifecycle {
   transient?(): Record<string, unknown>;
   /** What a transient task stores of one of this body's tool results (the cut text of a long one). Absent: the text as it is. */
   storedResult?(call: FcaToolCall, text: string): string;
+  /** What a body task's recall looks for now (`bodyTaskRecall.ts`), from the state `context()` last read. Absent: the goal alone. */
+  recallCues?(): BodyRecallCues;
   /** True while the body is in its first frames after a login or respawn: heavy local work (the recall) waits for the decision. */
   settling?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */

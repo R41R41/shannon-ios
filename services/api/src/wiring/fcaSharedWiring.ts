@@ -5,7 +5,8 @@ import type { CompanionStateStore } from '@shannon/cognition';
 import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
 import type { ConversationStore, MemoryProposals } from '../mind/memory/memoryPorts.js';
 import { createTaskMemory, taskExperienceDraft } from '../mind/memory/taskMemoryPorts.js';
-import { createTaskRecall } from '../mind/recall/taskRecallPorts.js';
+import { createBodyTaskRecall, createTaskRecall } from '../mind/recall/taskRecallPorts.js';
+import type { JevChooser } from '../infra/models/jev/jevChoice.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import type { TaskRuntime, TaskSource, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
@@ -24,11 +25,16 @@ export function createFcaSharedWiring(parts: {
   segmentStaleMinutes?: number;
   /** `SHANNON_FCA_PROVENANCE_REFS`: evidence rows store their sources by reference (`fcaProvenanceSets.ts`). */
   provenanceRefs?: boolean;
+  /** A body task's recall asks Jev which memories help now (`SHANNON_FCA_BODY_RECALL_JEV`, `bodyTaskRecall.ts`); absent or off: never. */
+  bodyRecallJev?: Pick<JevChooser, 'decide'> | null;
 }) {
   const now = parts.now ?? (() => new Date().toISOString());
   const leases = new ActionLeaseReader(parts.db);
   const memory = createTaskMemory({ ...parts, now });
   const recall = createTaskRecall({ ...parts, memory, enrich: parts.enrich ?? null, now });
+  const enrich = parts.enrich;
+  const bodyRecall = createBodyTaskRecall({ memory, state: parts.state, nearest: enrich?.nearest ? input => enrich.nearest!(input) : null,
+    jev: parts.bodyRecallJev ?? null, jevOn: !!parts.bodyRecallJev });
   const evidence = parts.affect ? new SQLiteFcaEvidenceStore({ db: parts.db, state: parts.affect, now,
     validStep: step => fcaStepIsLive(leases, step, now()),
     ...(parts.segmentStaleMinutes ? { segmentStaleMinutes: parts.segmentStaleMinutes } : {}),
@@ -65,7 +71,7 @@ export function createFcaSharedWiring(parts: {
       });
     } } : {}),
   }) : undefined;
-  return { memory, recall, evidence,
+  return { memory, recall, bodyRecall, evidence,
     observeMemory(step: TaskStep, ids: readonly string[]) {
       if (!parts.ownerAlone()) return false;
       const observationId = createHash('sha256').update(JSON.stringify([...new Set(ids)].sort())).digest('hex');

@@ -14,7 +14,7 @@ import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCoreTools.js';
-import { bodySharedContext, decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided }
+import { bodyRecallView, bodySharedContext, decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided }
   from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
@@ -107,7 +107,7 @@ const BODY_RULE = 'body.pace gives the minutes since this task began and its lat
   + 'progress, change the approach or the order of subgoals instead of repeating it. Never wait idle while nobody can answer; continue with the body. '
   + 'When the next body actions need no new result to choose them (planks, then a crafting table, then sticks; placing a block, then using it), '
   + 'return them in this one response, in order, up to 5. A body action after one that failed in the same response is not run, and its result says so; '
-  + 'reads still run. What earlier tasks did is not shown to a body task: memory.search finds it when it matters. '
+  + 'reads still run. recall holds at most three of her memories chosen for the present situation, or none; memory.search finds more. '
   + 'In sharedContext.recentOutcomes an outcome of this task carries no result text: its result is that call\'s tool result in this conversation.';
 /** Rich chat (owner decision 2026-10-13): a report is shown as a card in his Talk, its form chosen by its content. */
 const REPORT_FORM_RULE = [
@@ -424,7 +424,7 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
       .map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.body !== undefined ? bodySharedContext(input.sharedContext, input.task.id) : input.sharedContext,
       contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-    ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
+    ...(input.recall ? { recall: input.body !== undefined ? bodyRecallView(input.recall) : modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
 }
 

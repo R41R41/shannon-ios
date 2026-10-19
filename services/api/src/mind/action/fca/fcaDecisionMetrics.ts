@@ -1,5 +1,6 @@
 import { currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { eventLoopBlockedMilliseconds } from '../../../infra/observer/eventLoopWatch.js';
+import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
 
 /**
  * Observation redesign P1 (measurement only): one content-free journal line per committed FCA decision, `fca_decision_metrics`,
@@ -45,6 +46,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const committedBefore = typeof prior.fcaCommittedAt === 'number' && Number.isFinite(prior.fcaCommittedAt) ? prior.fcaCommittedAt : null;
   let toolMs = 0;
   const tools: string[] = [], skipped: string[] = [];
+  let recalled: BodyRecallMeasure | null = null;
   /** The time before this step, from the previous decision's commit (`gap` above). */
   const gap = () => {
     if (committedBefore === null) return null;
@@ -72,6 +74,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     },
     /** A body action of the response left unrun because an earlier one of it failed. */
     skipped(name: string): void { skipped.push(toolName(name)); },
+    /** What a body task's recall did (`bodyTaskRecall.ts`: pool, groups, shown, characters, cue tags, Jev). Content-free. */
+    bodyRecall(measure: BodyRecallMeasure): void { recalled = measure; },
     /** `fcaCommittedAt`: when this decision committed (epoch ms), the start of the next one's `gap`. */
     checkpoint: (): Record<string, unknown> => ({ fcaDecisionIndex: index, fcaCommittedAt: now() }),
     /** Writes the line (the decision has committed). Never throws. */
@@ -87,7 +91,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           in: metrics ? { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite } : null, out: metrics?.outputTokens ?? null,
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
           other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), gap: gap(),
-          ...(skipped.length ? { skipped } : {}),
+          ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
           ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
       } catch { /* measuring never fails a step */ }
     },

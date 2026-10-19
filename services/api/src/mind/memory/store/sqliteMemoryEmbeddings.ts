@@ -31,6 +31,11 @@ export interface MemoryEmbeddingIndex {
   /** Records that a hidden (forgotten/rejected) source was deliberately not sent to the provider. */
   withholdEmbedding(source: PendingEmbeddingSource, model: string, stateVersion: number, updatedAt: string): void;
   embeddingCandidates(scopeKey: string, model: string, limit: number): readonly StoredEmbeddingCandidate[];
+  /**
+   * What `embeddingCandidates` would return changes only when this does (a vector stored or withheld, a source rewritten or added, a
+   * thread archived): a few counts, no vector read. Absent: the candidates are read every time, as before.
+   */
+  embeddingVersion?(scopeKey: string, model: string): string;
 }
 
 const LANES = "'chat', 'sleep', 'voice', 'memory', 'memory_background'";
@@ -193,6 +198,15 @@ export class SQLiteMemoryEmbeddingIndex implements MemoryEmbeddingIndex {
         dimensions = excluded.dimensions, source_revision = excluded.source_revision, status = excluded.status,
         state_version = excluded.state_version, vector = excluded.vector, updated_at = excluded.updated_at
     `).run(source.kind, source.sourceId, source.scopeKey, model, dimensions, source.revision, status, stateVersion, vector, updatedAt);
+  }
+
+  embeddingVersion(scopeKey: string, model: string): string {
+    const row = this.database.prepare(`
+      SELECT (SELECT count(*) || ':' || coalesce(max(updated_at), '') FROM memory_embeddings WHERE scope_key = ? AND model = ?) AS embeddings,
+        (SELECT count(*) || ':' || total(revision) || ':' || coalesce(max(observed_at), '') FROM memory_search_documents WHERE scope_key = ?) AS documents,
+        (SELECT count(*) FROM conversation_threads WHERE archived_at IS NOT NULL) AS archived
+    `).get(scopeKey, model, scopeKey) as unknown as { embeddings: string; documents: string; archived: number };
+    return `${row.embeddings}|${row.documents}|${row.archived}`;
   }
 
   /** Only embeddings of the current source revision are returned; stale vectors are ignored. */

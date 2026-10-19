@@ -89,6 +89,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   difficulty: 'difficulty.v1',
   retry: 'retry_or_correction.v1',
   recallBeam: 'recall_beam.v1',
+  /** 2026-10-19 (`SHANNON_FCA_BODY_RECALL_JEV`): whether a memory helps a body task's next decision now (`bodyTaskRecall.ts`). */
+  fcaBodyRecall: 'fca_body_recall.v1',
   /** Whether she would want to say something at a moment she perceived (owner decision 2026-10-14, `proactiveMoments.ts`). */
   proactiveMoment: 'proactive_moment.v2',
   /** Syzygy ADR-0013 stage 1: her stance, its strength and her comeback drawer before a text reply (`mind/emotion/feelingTurn.ts`). */

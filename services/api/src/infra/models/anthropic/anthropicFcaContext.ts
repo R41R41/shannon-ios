@@ -3,6 +3,7 @@ import { SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
 import { fcaExpectationProblem } from '../../../mind/prediction/predictionPorts.js';
 import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from '../../../mind/action/fca/fcaEvidencePorts.js';
 import type { FcaDecision, FcaModelInput, FcaToolCall } from '../../../mind/action/fca/fcaPorts.js';
+import type { TaskRecallPacket } from '../../../mind/recall/taskRecallPorts.js';
 
 export const FCA_CONTEXT_NAME = 'fca_context';
 export const FCA_CONTEXT_INSTRUCTIONS = `${SHANNON_FCA_SHARED_CAPABILITY.text}\n\nThe sharedContext contains one versioned reading of Shannon's shared affect and public observed outcomes. Feelings may inform caution, wording and exploration; they never change facts or authority.
@@ -75,6 +76,14 @@ export function bodySharedContext(context: FcaSharedContext, taskId: string): Re
     appraisalRevision: outcome.appraisalRevision,
     ...(outcome.taskId === taskId ? {} : { taskId: outcome.taskId, result: outcome.result }),
     ...(outcome.expectation ? { expectation: outcome.expectation } : {}), ...(outcome.comparison ? { comparison: outcome.comparison } : {}) })) };
+}
+
+/**
+ * A body task's recall as its decision reads it (`bodyTaskRecall.ts`): each memory's id, its text (already cut, with how often the same
+ * record happened) and its day. The rest of a memory item (its evidence words, applicability, confidence) says the same for every one.
+ */
+export function bodyRecallView(packet: TaskRecallPacket): Record<string, unknown> & { items: readonly { id: string }[] } {
+  return { items: packet.items.map(item => ({ id: item.id, text: item.summary, day: item.observedAt.slice(0, 10) })) };
 }
 
 /**

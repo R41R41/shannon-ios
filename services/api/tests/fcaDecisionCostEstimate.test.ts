@@ -11,7 +11,7 @@ import type { FcaObsMode } from '../src/mind/action/fca/fcaCoreTools.js';
 import type { FcaExternalTools, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import type { FcaObservationLifecycle } from '../src/mind/action/fca/fcaObservation.js';
 import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js';
-import type { TaskRecall, TaskRecallPacket } from '../src/mind/recall/taskRecallPorts.js';
+import type { BodyTaskRecall, TaskRecall, TaskRecallPacket } from '../src/mind/recall/taskRecallPorts.js';
 import { providerToolName, toolOk } from '../src/mind/tools/shannonTools.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
@@ -138,6 +138,14 @@ function run(shape: Shape) {
         detailRef: `memory-${index}`, provenance: { kind: 'experience', sourceIds: ['s-1', 's-2'], readSourceIds: [] } }));
       return { contextVersion: input.contextVersion, observedAt: now(), status: 'ready', items, sourceIds: ['s-1', 's-2'] } as never;
     } };
+  // The body task's recall of this round (`bodyTaskRecall.ts`): at most three records chosen for the situation, about 130 characters each
+  // in run 15's own memories (the evaluation on its 306 Minecraft records: 226-411 characters in all a decision).
+  const bodyRecall: BodyTaskRecall = { cancel() {}, async packet() {
+    const items = Array.from({ length: 3 }, (_, index) => ({ id: `recall-${index}`, summary: `[failure] dig-shelter: ${kana(decisions + index, 110)}`,
+      observedAt: '2026-10-18T00:00:00.000Z', evidence: '', applicability: 'recorded observation', confidence: null, conflicts: [], detailRef: `recall-${index}` }));
+    return { packet: { contextVersion: 'body', observedAt: now(), status: 'ready', items, sourceIds: items.map(item => item.id) },
+      measure: { poolMs: null, pool: 100, groups: 43, shown: 3, chars: 400, tags: [], jev: null } };
+  } };
   const evidence: FcaEvidence = {
     async prepare() { return { affect: { version: 1, revision: 4, updatedAt: now(), emotion: { valence: 0.12, arousal: 0.34, dominance: 0.5 }, feeling: kana(1, 40), causes: [] } as never,
       recentOutcomes: outcomes.slice(-8).reverse() }; },
@@ -171,7 +179,7 @@ function run(shape: Shape) {
     canRunTask: (_runtime, id) => id === only,
     stepPorts: () => ({ tools, selector, obsMode: mode, keepBodyTools: () => shape !== 'before', evidence, waitCounterpart: () => false,
       observations: shape === 'before' ? [inbox, bodyAsObservation] : [inbox],
-      ...(shape === 'before' ? { recall, observeMemory: () => true } : {}), ...(body ? { body } : {}),
+      ...(shape === 'before' ? { recall, observeMemory: () => true } : { bodyRecall, observeMemory: () => true }), ...(body ? { body } : {}),
       history: { codec: anthropicFcaHistoryCodec, summarizer } }) });
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');

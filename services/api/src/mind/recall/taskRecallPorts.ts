@@ -25,3 +25,4 @@ export interface TaskRecall {
   cancel(scopeKey: string, taskId: string): void;
 }
 export { createTaskRecall } from './taskRecall.js';
+export { createBodyTaskRecall, type BodyRecallCues, type BodyRecallMeasure, type BodyTaskRecall } from './bodyTaskRecall.js';

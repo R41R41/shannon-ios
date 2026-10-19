@@ -336,6 +336,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   storeEmbedding(source: PendingEmbeddingSource, model: string, vector: Float32Array, stateVersion: number, updatedAt: string) { this.embeddings.storeEmbedding(source, model, vector, stateVersion, updatedAt); }
   withholdEmbedding(source: PendingEmbeddingSource, model: string, stateVersion: number, updatedAt: string) { this.embeddings.withholdEmbedding(source, model, stateVersion, updatedAt); }
   embeddingCandidates(scopeKey: string, model: string, limit: number) { return this.embeddings.embeddingCandidates(scopeKey, model, limit); }
+  embeddingVersion(scopeKey: string, model: string) { return this.embeddings.embeddingVersion(scopeKey, model); }
   listShannonKnowledge(scopeKey: string, options?: { includeRetired?: boolean }) { return this.shannonKnowledge.listShannonKnowledge(scopeKey, options); }
   readShannonKnowledgeRevisions(scopeKey: string, id: string, beforeVersion: number) { return this.shannonKnowledge.readShannonKnowledgeRevisions(scopeKey, id, beforeVersion); }
   createShannonKnowledge(scopeKey: string, draft: KnowledgeDraft, at: string, reason: string) { return this.shannonKnowledge.createShannonKnowledge(scopeKey, draft, at, reason); }
