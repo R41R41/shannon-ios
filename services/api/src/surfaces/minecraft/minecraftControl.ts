@@ -97,11 +97,14 @@ export class MinecraftControl {
       for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
     }
     let eventsThrough: number | undefined;
-    if (input.events) {
-      const log = this.workingLogs.get(bodyId) ?? new WorkingEventLog();
-      this.workingLogs.set(bodyId, log);
-      eventsThrough = log.take(input.connectionId, input.events).through;
-    }
+    try {
+      const log = this.workingLogs.get(bodyId) ?? (input.events ? new WorkingEventLog() : undefined);
+      if (log) {
+        this.workingLogs.set(bodyId, log);
+        log.connect(input.connectionId);
+        if (input.events) eventsThrough = log.take(input.connectionId, input.events).through;
+      }
+    } catch { /* what the body told while working never fails a poll */ }
     const acknowledged: string[] = [];
     for (const receipt of input.receipts) {
       const command = this.store.command(receipt.id);

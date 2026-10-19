@@ -43,7 +43,7 @@ export function checkedWorkingEvent(value: unknown): WorkingEvent | string {
   const unknown = Object.keys(row).find(key => !['seq', 'at', 'kind', 'subject', 'data'].includes(key));
   if (unknown) return `${unknown} is not allowed`;
   if (!Number.isSafeInteger(row.seq) || (row.seq as number) < 1) return 'seq is invalid';
-  if (typeof row.at !== 'string' || Number.isNaN(Date.parse(row.at))) return 'at is invalid';
+  if (typeof row.at !== 'string' || row.at.length > 40 || Number.isNaN(Date.parse(row.at))) return 'at is invalid';
   if (!(WORKING_EVENT_KINDS as readonly string[]).includes(String(row.kind))) return 'kind is invalid';
   if (typeof row.subject !== 'string' || row.subject.length > WORKING_EVENT_LIMITS.subject || !SUBJECT.test(row.subject)) return 'subject is invalid';
   const data = row.data;
@@ -75,14 +75,18 @@ export class WorkingEventLog {
 
   /** Takes a poll's events. A new connection starts the numbering and the needs afresh (the body forgot them too). */
   take(connection: string, raw: unknown): { through: number; accepted: number; rejected: number } {
-    if (connection !== this.connection) {
-      this.connection = connection; this.through = 0; this.needMap.clear(); this.progressMap.clear();
-    }
+    this.connect(connection);
     const list = Array.isArray(raw) ? raw.slice(0, WORKING_EVENT_LIMITS.perPoll) : [];
     let accepted = 0, rejected = 0;
     for (const item of list) {
       const event = checkedWorkingEvent(item);
-      if (typeof event === 'string') { rejected++; continue; }
+      if (typeof event === 'string') {
+        rejected++;
+        // Its number is still taken, so the body stops sending it (it would come back with every poll).
+        const seq = (item as { seq?: unknown } | null)?.seq;
+        if (Number.isSafeInteger(seq) && (seq as number) > this.through) this.through = seq as number;
+        continue;
+      }
       if (event.seq <= this.through) continue;
       this.through = event.seq;
       this.taken += 1;
@@ -98,6 +102,12 @@ export class WorkingEventLog {
   since(cursor: number): { events: readonly WorkingEvent[]; cursor: number } {
     const start = this.order.findIndex(count => count > cursor);
     return { events: start < 0 ? [] : this.events.slice(start), cursor: this.taken };
+  }
+
+  /** The body's connection now: a new one forgets the needs and the progress of the old (also when its first poll carries no events). */
+  connect(connection: string): void {
+    if (connection === this.connection) return;
+    this.connection = connection; this.through = 0; this.needMap.clear(); this.progressMap.clear();
   }
 
   cursor(): number { return this.taken; }

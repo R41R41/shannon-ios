@@ -46,6 +46,8 @@ export function arbitrate(input: {
   calm: boolean;
   recentCuts: readonly { at: number; subject: string }[];
   options?: Partial<typeof WORKING_ARBITER_V0>;
+  /** Which needs are worth ending a wait for (the surface's: a log in reach all morning is not); all when absent. */
+  cutFor?(need: WorkingNeed): boolean;
 }): ArbiterVerdict {
   const o = { ...WORKING_ARBITER_V0, ...input.options };
   const running = input.running;
@@ -57,7 +59,7 @@ export function arbitrate(input: {
     return { act: 'cut', rule: 'stalled', subject: running.subject, tool: running.tool, sinceProgressMs: progress.sinceProgressMs, distance: progress.distance };
   }
   if (running.waiting && input.calm && (running.remainingMs === null || running.remainingMs >= o.waitCutRemainingMs)) {
-    const need = input.needs.find(item => item.canReach && item.distance !== null && item.distance <= o.needCutDistance);
+    const need = input.needs.find(item => item.canReach && item.distance !== null && item.distance <= o.needCutDistance && (input.cutFor?.(item) ?? true));
     if (need) return { act: 'cut', rule: 'need_during_wait', subject: running.subject, tool: running.tool, need };
   }
   return { act: 'none' };
@@ -74,9 +76,19 @@ export function cutNote(verdict: Exclude<ArbiterVerdict, { act: 'none' }>): stri
   return `${verdict.tool} の待ちを切った: ${verdict.need.name}（${verdict.need.need}）が${metres(verdict.need.distance)}にある。取ってから、待っていた作業に戻る`;
 }
 
-/** The events worth a line in the next decision (needs coming and going, stalls), newest last, at most `limit`. Progress is not listed. */
+/**
+ * The events worth a line in the next decision, newest last, at most `limit`: every stall, and for each kind of need only its latest
+ * coming or going (the nearest logs change as she walks; they would push the stalls out). Progress is not listed.
+ */
 export function workingEventLines(events: readonly WorkingEvent[], limit: number = WORKING_ARBITER_V0.lines): string[] {
-  const lines = events.flatMap(event => {
+  const latestNeed = new Map<string, number>();
+  events.forEach((event, index) => { if (event.kind.startsWith('need.')) latestNeed.set(String(event.data.need), index); });
+  const kept = events.filter((event, index) => event.kind === 'action.stalled' || (event.kind.startsWith('need.') && latestNeed.get(String(event.data.need)) === index));
+  const stalls = kept.filter(event => event.kind === 'action.stalled').slice(-limit);
+  const room = limit - stalls.length;
+  const needs = room > 0 ? kept.filter(event => event.kind !== 'action.stalled').slice(-room) : [];
+  const chosen = kept.filter(event => stalls.includes(event) || needs.includes(event));
+  const lines = chosen.flatMap(event => {
     const d = event.data;
     const distance = typeof d.distance === 'number' ? d.distance : null;
     if (event.kind === 'need.appeared') return [`見えた: ${String(d.name)}（${String(d.need)}）${metres(distance)}${d.canReach === false ? '・届かない' : ''}`];

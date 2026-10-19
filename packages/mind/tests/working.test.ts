@@ -82,7 +82,11 @@ describe('working arbiter v0', () => {
       event(3, 'action.stalled', 'op', { skill: 'move-to', sinceProgressMs: 15_200, distance: 12.3 }),
       event(4, 'need.gone', 'e:7', { need: 'food', name: 'pig' }), event(5, 'need.appeared', 'b:2', { need: 'wood', name: 'oak_log', distance: 30, canReach: false })];
     expect(workingEventLines(events)).toEqual(['見えた: iron_ore（iron）16m', '進んでいない: move-to 15秒・残り12m', '見えなくなった: pig（food）', '見えた: oak_log（wood）30m・届かない']);
-    expect(workingEventLines(events, 2)).toHaveLength(2);
+    expect(workingEventLines(events, 2)).toEqual(['進んでいない: move-to 15秒・残り12m', '見えた: oak_log（wood）30m・届かない']);
+    // The nearest logs change as she walks: only the latest of a kind is said, and a stall is never pushed out by them.
+    const walk = [event(1, 'action.stalled', 'op', { skill: 'move-to', sinceProgressMs: 15_000 }),
+      ...Array.from({ length: 8 }, (_, i) => event(i + 2, i % 2 ? 'need.gone' : 'need.appeared', `wood:b:${i}`, { need: 'wood', name: 'oak_log', distance: 10 + i, canReach: true }))];
+    expect(workingEventLines(walk)).toEqual(['進んでいない: move-to 15秒', '見えなくなった: oak_log（wood）']);
     expect(runningLine(move, progress(20_000), NOW)).toBe('今の道具: mc.move-to・経過60秒・最後に進んだのは20秒前・残り30m');
     expect(runningLine(wait, null, NOW)).toBe('今の道具: mc.wait-time・経過5秒');
     expect(runningLine(null, null, NOW)).toBeNull();

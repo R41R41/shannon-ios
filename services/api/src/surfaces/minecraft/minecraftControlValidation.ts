@@ -64,8 +64,8 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
     || !timestamp(c.expiresAt) || !Number.isFinite(c.maxDurationMs) || Number(c.maxDurationMs) < 0 || Number(c.maxDurationMs) > 5000)) return false;
   if (value.skills !== undefined && !validSkills(value.skills)) return false;
   if (!Array.isArray(value.activeOperationIds) || value.activeOperationIds.length > 8 || value.activeOperationIds.some(id => !controlId(id))) return false;
-  // Each event is checked when it is taken (`WorkingEventLog`); a malformed one is skipped, never the whole poll.
-  if (value.events !== undefined && (!Array.isArray(value.events) || value.events.length > 32 || !boundedJSON(value.events, 32_000))) return false;
+  // Each event is checked when it is taken (`WorkingEventLog`, the first 32 only); a malformed one is skipped, never the whole poll.
+  if (value.events !== undefined && !Array.isArray(value.events)) return false;
   return Array.isArray(value.receipts) && value.receipts.length <= 16 && value.receipts.every(r => record(r) && controlId(r.id)
     && r.connectionId === value.connectionId && ['completed', 'failed', 'cancelled', 'unknown'].includes(String(r.outcome))
     && typeof r.inputsReleased === 'boolean' && timestamp(r.observedAt) && (r.result === undefined || typeof r.result === 'string' && r.result.length <= 16_000)

@@ -57,6 +57,39 @@ export function minecraftNeedsLine(needs: readonly WorkingNeed[]): string | null
   return `近くに要る物（届く）: ${seen.join('・')}。今の作業の区切りで寄って取れる: ${take.join('、')}`;
 }
 
+/** A wait is ended for these only: logs are in reach all morning, and a wait cut for each would never let one finish. */
+const WAIT_WORTH: ReadonlySet<string> = new Set(['iron', 'bed_wool', 'food']);
+const NAME = /^[a-z0-9_]{1,40}$/u;
+
+/**
+ * The needs in reach now, from the latest frame (`state.world.nearbyNeeds`, the body's own list): always current, also after an API
+ * restart or a new connection, and with whether each can still be got at. The events only say what changed, for the decision's lines.
+ */
+export function minecraftFrameNeeds(observation: BodyObservation | null): WorkingNeed[] {
+  const world = observation ? (observation.state as { world?: { nearbyNeeds?: unknown } }).world : undefined;
+  const list = Array.isArray(world?.nearbyNeeds) ? (world!.nearbyNeeds as unknown[]).slice(0, 16) : [];
+  return list.flatMap(item => {
+    const need = item && typeof item === 'object' ? item as Record<string, unknown> : null;
+    const distance = Number(need?.distance);
+    if (!need || !WHAT[String(need.need)] || typeof need.name !== 'string' || !NAME.test(need.name) || !Number.isFinite(distance) || distance < 0 || distance > 64) return [];
+    return [{ id: typeof need.id === 'string' ? need.id.slice(0, 160) : `${String(need.need)}:${need.name}:${distance}`, need: String(need.need), name: need.name,
+      distance, canReach: need.canReach === true, at: observation!.stateAt,
+      data: { ...(typeof need.color === 'string' && NAME.test(need.color) ? { color: need.color } : {}), ...(need.exposed === false ? { exposed: false } : {}) } }];
+  }).sort((a, b) => a.distance - b.distance);
+}
+
+/** Per task, across its steps (each step builds its own adapter): the cuts made (never the same command twice, two a minute) and how far its decisions have read the events. */
+const memories = new Map<string, { cuts: Array<{ at: number; subject: string }>; cursor: number | null }>();
+function taskMemory(taskId: string) {
+  let memory = memories.get(taskId);
+  if (!memory) {
+    memory = { cuts: [], cursor: null };
+    memories.set(taskId, memory);
+    if (memories.size > 32) memories.delete(memories.keys().next().value as string);
+  }
+  return memory;
+}
+
 export interface MinecraftWorkingArbiter {
   /** A call of hers begins (`noteCall`); only `mc.*` skills are followed. */
   begin(call: { name: string; input: unknown }, operationId: string): void;
@@ -65,7 +98,7 @@ export interface MinecraftWorkingArbiter {
   /** On the watch: the verdict for the running command now. A cut is told to the task and logged here; the caller ends the command. */
   check(observation: BodyObservation | null): ArbiterVerdict;
   /** For the next decision: what happened since the last one, what runs, and the needs in reach. Empty when nothing to say. */
-  fields(): { working?: { running?: string; events?: string[]; needs?: string } };
+  fields(observation: BodyObservation | null): { working?: { running?: string; events?: string[]; needs?: string } };
 }
 
 export function createMinecraftWorkingArbiter(parts: {
@@ -73,8 +106,9 @@ export function createMinecraftWorkingArbiter(parts: {
   send(text: string, id: string): void; line(text: string): void;
 }): MinecraftWorkingArbiter {
   let running: RunningWork | null = null;
-  const cuts: Array<{ at: number; subject: string }> = [];
-  let cursor = parts.log()?.cursor() ?? 0;
+  const memory = taskMemory(parts.taskId);
+  memory.cursor ??= parts.log()?.cursor() ?? 0;
+  const cuts = memory.cuts;
   return {
     begin(call, operationId) {
       if (!call.name.startsWith('mc.')) return;
@@ -88,7 +122,8 @@ export function createMinecraftWorkingArbiter(parts: {
       if (!log || !running) return { act: 'none' };
       const now = parts.now();
       const work = running.remainingMs === null ? running : { ...running, remainingMs: running.remainingMs - (now - running.startedAt) };
-      const verdict = arbitrate({ now, running: work, progress: log.progress(running.subject), needs: log.needs(), calm: minecraftCalm(observation), recentCuts: cuts });
+      const verdict = arbitrate({ now, running: work, progress: log.progress(running.subject), needs: minecraftFrameNeeds(observation), calm: minecraftCalm(observation),
+        recentCuts: cuts, cutFor: need => WAIT_WORTH.has(need.need) });
       if (verdict.act !== 'cut') return verdict;
       cuts.push({ at: now, subject: verdict.subject });
       if (cuts.length > 8) cuts.shift();
@@ -101,14 +136,14 @@ export function createMinecraftWorkingArbiter(parts: {
       } catch { /* logging never fails a step */ }
       return verdict;
     },
-    fields() {
+    fields(observation) {
       const log = parts.log();
       if (!log) return {};
-      const since = log.since(cursor);
-      cursor = since.cursor;
+      const since = log.since(memory.cursor ?? 0);
+      memory.cursor = since.cursor;
       const events = workingEventLines(since.events, WORKING_ARBITER_V0.lines);
       const line = runningLine(running, running ? log.progress(running.subject) : null, parts.now());
-      const needs = minecraftNeedsLine(log.needs());
+      const needs = minecraftNeedsLine(minecraftFrameNeeds(observation));
       if (!events.length && !line && !needs) return {};
       return { working: { ...(line ? { running: line } : {}), ...(events.length ? { events } : {}), ...(needs ? { needs } : {}) } };
     },
