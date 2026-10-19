@@ -1,11 +1,11 @@
 import { actionPermit } from '../../../infra/context/actionExecution.js';
-import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
+import { autonomyDayKey, reachOutPaceHold, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { reachOutSubject, storyNotes } from './autonomyLoopPlan.js';
 import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
   type PromptUpcoming, type ReachOutReason,
 } from './autonomyLoopPrompts.js';
-import { agenticLoop, observeReachOut, ownerRepliedAt } from './autonomyLoopObserve.js';
+import { agenticLoop, observeReachOut, ownerRepliedAt, ownerUnwell } from './autonomyLoopObserve.js';
 import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
@@ -17,14 +17,16 @@ import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../../contracts/wit
 import { generateModel } from './autonomyLoopCalls.js';
 import { OWN_MOMENT_SPEECH_V1, momentSpeechModel, momentSpeechPrompt, ownDayBlock, parsedMomentSpeech, type OwnDayFacts } from './ownMomentSpeech.js';
 import { ownerPrivateRule } from './autonomyLoopOwnerContext.js';
+import { withoutSilenceTally } from './ownWordsTally.js';
 
 /**
  * The step 「話しかける」 (owner decision 2026-10-02): from her own activity she may write one
  * short message to the owner, up to a few times a day, with a declared reason from a closed set.
  *
  * She does not speak up while a conversation is in progress, nor within the spacing after her
- * last such message; there are no quiet hours, by the owner's decision. The gate counts the
- * day's messages. The step makes one model call and hands the text to the same path every
+ * last such message. There are no quiet hours as such (owner decision 2026-10-02), but since
+ * 2026-10-19 one message at most through the night and fewer while he is unwell
+ * (`reachOutPace.ts`). The gate counts the day's messages. The step makes one model call and hands the text to the same path every
  * message she starts on her own takes: the owner's Talk, an initiative, a push. This file names
  * interfaces only: it opens no conversation, calendar or memory store.
  */
@@ -121,13 +123,19 @@ export function reachOutsRemaining(dependencies: StepDependencies, scopeKey: str
   const { reachOuts, config, loop } = dependencies;
   if (!reachOuts || config.maximumReachOutsPerDay < 1) return 0;
   try {
-    const remaining = config.maximumReachOutsPerDay - reachOuts.sentOn(scopeKey, autonomyDayKey(at, config));
+    const sentToday = reachOuts.sentOn(scopeKey, autonomyDayKey(at, config));
+    const remaining = config.maximumReachOutsPerDay - sentToday;
     if (remaining < 1) return 0;
     const last = reachOuts.lastSentAt(scopeKey);
     if (last && Date.parse(at) - Date.parse(last) < loop.reachOutSpacingMilliseconds) return 0;
+    // Owner 2026-10-19: one at most through the night, and fewer while he is unwell (`reachOutPace.ts`).
+    const unwell = ownerUnwell(dependencies, scopeKey, at);
+    if (reachOutPaceHold({ at, timeZone: config.timeZone, sentToday, maximumPerDay: config.maximumReachOutsPerDay, lastSentAt: last, unwell })) return 0;
     return conversationInProgress(dependencies, scopeKey, at) ? 0 : remaining;
   } catch { return 0; }
 }
+
+export { ownerUnwell };
 
 export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store, config, reachOuts, upcoming } = dependencies;
@@ -207,7 +215,8 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
         return { outcome: 'failed', summary: `話しかけようとしましたが、言葉になりませんでした（理由: ${label}）。`, reasonCode: 'model_failed', ...(usage ? { usage } : {}) };
       }
       if (!reply || typeof reply.message !== 'string') return { outcome: 'failed', summary: `話しかけようとしましたが、言葉になりませんでした（理由: ${label}）。`, reasonCode: 'model_failed', usage };
-      const text = reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS);
+      // Owner 2026-10-19: no tally of his quiet or of her unanswered messages reaches him (`ownWordsTally.ts`).
+      const text = withoutSilenceTally(reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS));
       // Where she wants it said, when she decided herself (her moment speech): `text` is shown and not said aloud.
       const where = self ? parsedMomentSpeech(reply)?.where ?? 'voice' : 'voice';
       // Silence is hers to choose.
@@ -286,7 +295,8 @@ function ownDay(dependencies: StepDependencies, scopeKey: string, at: string, sh
       .filter(entry => entry.kind === 'action' && entry.actor === 'shannon' && (entry.outcome === 'done' || entry.outcome === 'failed')
         && !OWN_DAY_LEFT_OUT.has(entry.tool ?? '') && entry.occurredAt <= at)
       .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
-      .slice(-OWN_MOMENT_SPEECH_V1.activities).map(entry => ({ at: entry.occurredAt, summary: entry.summary }));
+      // Whether he answered her messages is not part of her day as she reads it (owner 2026-10-19: it was told back to him as a tally).
+      .slice(-OWN_MOMENT_SPEECH_V1.activities).map(entry => ({ at: entry.occurredAt, summary: entry.summary.replace(REPLY_WAIT, '') }));
   } catch { activities = []; }
   let pieces: StudyPiece[] = [];
   try { pieces = store.study.list(scopeKey).filter(piece => piece.status !== 'put_away' && !piece.deletedAt && shown(piece)); } catch { pieces = []; }
@@ -305,6 +315,8 @@ function ownDay(dependencies: StepDependencies, scopeKey: string, at: string, sh
 
 /** Steps of hers that are not her day: a touch's line (its own record), and her own considering of a moment. */
 const OWN_DAY_LEFT_OUT = new Set(['body.reaction', REACH_OUT_HELD_TOOL]);
+/** The tail a reach-out's record adds about his answer (`prepareReachOut`): 「返事がありました。」「N分待ちましたが、返事はまだありません。」. */
+const REPLY_WAIT = /(?:返事がありました。|(?:\d+分待ちましたが、)?返事はまだありません。)$/u;
 
 function momentOf(dependencies: StepDependencies, scopeKey: string, key: string, at: string): AutonomyMoment | null {
   try { return dependencies.moments?.get(scopeKey, key, at) ?? null; } catch { return null; }

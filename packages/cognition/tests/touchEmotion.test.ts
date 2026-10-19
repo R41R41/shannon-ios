@@ -226,7 +226,7 @@ describe('a part where her body flinches first: the reflex alone (Syzygy ADR-000
     expect(touchCause(touch('pet', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
     expect(touchCause(touch('pet', 1, { resting: true }))).toBe('ライ氏に頭をなでてもらった');
     expect(touchCause(touch('tickle', 1, { reflexPart: '腰', ownerAlone: false }))).toBe('腰をくすぐられた');
-    expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライ氏に持ち上げて運ばれた');
+    expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライ氏に画面の上で運ばれた');
     // A hand resting on such a part is not hand-holding: no favour in the words.
     expect(touchCause(touch('holdHand', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
     expect(touchCause(touch('holdHand', 1, { reflexPart: '腰' }))).toBe('ライ氏に腰に触れられた');

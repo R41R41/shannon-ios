@@ -96,7 +96,9 @@ describe('a session that is not marked', () => {
       request: () => 'requested', outcome: () => null,
     };
     const model = new FakeModel();
-    const dependencies = { ...harness, loop: harness.loopConfig, model, reachOuts: voice.reachOuts, phone, now: () => harness.clock.at };
+    // Five messages worded in a row: without the day's count of three (owner 2026-10-19), which this test is not about.
+    const config = { ...harness.config, maximumReachOutsPerDay: Number.POSITIVE_INFINITY };
+    const dependencies = { ...harness, config, loop: harness.loopConfig, model, reachOuts: voice.reachOuts, phone, now: () => harness.clock.at };
     const cycle = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], harness.clock.at);
     const worded = async (prepare: typeof prepareReachOut) => {
       const prepared = prepare(dependencies, cycle, { kind: 'reach_out', reason: 'share', call: true }, harness.clock.at)!;

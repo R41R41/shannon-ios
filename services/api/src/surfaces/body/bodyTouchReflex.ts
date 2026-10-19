@@ -14,6 +14,13 @@ export const BODY_TOUCH_REFLEX_PARTS: readonly BodyTouchPart[] = Object.freeze([
 export const isReflexPart = (part: BodyTouchPart | undefined): part is BodyTouchPart =>
   part !== undefined && BODY_TOUCH_REFLEX_PARTS.includes(part);
 
+/**
+ * Owner 2026-10-19 (「windowsPC画面のシャノンアバターを動かすとムッとされる…動かすくらい許してほしい」): a `carry` is her body picked
+ * up and carried to another place on the screen (the Windows body moves its window only by this drag). It is being moved, not
+ * touched: no feeling, no stance, no boundary, no note; a light word only when it keeps happening (`bodyReactionPrompt`).
+ */
+export const isMovedTouch = (touch: { type: string }): boolean => touch.type === 'carry';
+
 /** The word of the part for the emotion state (首), or undefined when the table applies as before. */
 export const reflexPartWord = (part: BodyTouchPart | undefined): string | undefined =>
   isReflexPart(part) ? bodyTouchPartWord(part) : undefined;

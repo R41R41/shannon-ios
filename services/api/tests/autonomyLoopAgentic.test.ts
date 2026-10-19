@@ -152,12 +152,13 @@ describe('after a message of hers: observe, then think again', () => {
     expect(prompt).toContain('[さっきボクが言ったこと]\n- 「ライ氏、いま何をしていますか。ボクは少し気になりました。」');
     expect(prompt).not.toContain('さっき自分が何と言ったか');
     expect(w.speaker.text(scope, 'no-such-message')).toBeNull();
-    expect(w.messages().map(message => message.content)).toEqual(['ライ氏、いま何をしていますか。ボクは少し気になりました。', 'あれ、ライ氏、返事がないですね。席を外していますか。']);
+    // Owner 2026-10-19: what tallies his silence (「返事がないですね」) is left out of what she sends (`ownWordsTally.ts`).
+    expect(w.messages().map(message => message.content)).toEqual(['ライ氏、いま何をしていますか。ボクは少し気になりました。', '席を外していますか。']);
     expect(JSON.parse(w.messages()[1]!.metadata_json)).toMatchObject({ reachOut: { reason: 'follow_up' } });
     // It reaches the body and the phone the way the first one did.
     const unread = w.initiatives.unreadMessages(scope);
     expect(unread.map(message => [message.kind, message.reason, message.expression])).toEqual(expect.arrayContaining([['reach_out', 'wonder', 'curious'], ['reach_out', 'follow_up', 'curious']]));
-    expect(w.push.pending().map(item => item.content)).toContain('あれ、ライ氏、返事がないですね。席を外していますか。');
+    expect(w.push.pending().map(item => item.content)).toContain('席を外していますか。');
 
     // It is not one of the day's own messages, and has its own count.
     expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(1);

@@ -32,6 +32,10 @@ import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 import { innerNoteFaceOf, innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+/** What the block adds with her character core on (owner 2026-10-19): a touch that reached her body is felt, not a record read out. */
+export const BODY_FELT_NOTE = '。触れられたことは、記録の読み上げではなく自分の体で感じたこととして話す';
 export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 
 /**
@@ -93,7 +97,7 @@ export interface BodyIngestReceipt {
 /** Only these reach a conversation turn; the rest are stored and nothing more. */
 const CONTEXT_PHRASE: Partial<Record<BodyEventType, (event: StoredBodyEvent) => string>> = {
   pet: () => 'なでられた', tickle: () => 'くすぐられた', poke: () => 'つつかれた',
-  carry: () => '持ち上げて運ばれた', holdHand: () => '手をつないでもらった',
+  carry: () => '画面の上で運ばれた', holdHand: () => '手をつないでもらった',
   ownerReturned: event => `${SHANNON_OWNER_NAME}が${event.minutesAway ? `${awayPhrase(event.minutesAway)}ぶりに` : ''}席へ戻った`,
 };
 /** What a touch-only body may report besides a touch: the start and end of a call on that device (added 2026-10-05). */
@@ -337,7 +341,9 @@ export class ShannonBody {
         return `- ${minutes < 1 ? 'たったいま、' : `${minutes}分前に`}${phrase}${count > 1 ? `（${count}回）` : ''}${mixed && touch ? bodySurfaceMark(surfaceOf(latest)) : ''}`;
       });
       const place = mixed ? `${SHANNON_FIRST_PERSON}の体` : bodyPlace(surfaceOf(shown[0]!.latest));
-      return [`[体に起きたこと]（${place}に${SHANNON_OWNER_NAME}がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）`, ...lines].join('\n');
+      // Owner 2026-10-19: what reached her body is felt, with her character core (`SHANNON_INNER_NOTE`) on; off, as it was.
+      const felt = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? BODY_FELT_NOTE : '';
+      return [`[体に起きたこと]（${place}に${SHANNON_OWNER_NAME}がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい${felt}）`, ...lines].join('\n');
     } catch { return ''; }
   }
 

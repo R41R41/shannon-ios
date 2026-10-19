@@ -230,7 +230,7 @@ export class ShannonApiKernel {
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now, options.operationOutcomes); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
-    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); this.feeling = feelingText.attach(this.body, options.feeling); // Step 6: skill.read.
+    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); this.innerNote = innerNoteText.attach(this.body.reactions, options.innerNote); this.feeling = feelingText.attach(this.body, options.feeling, { state: this.stateStore, note: () => this.innerNote }); // Step 6: skill.read.
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.

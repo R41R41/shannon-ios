@@ -7,6 +7,9 @@ import { switchOn } from '@shannon/switches';
 import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/modelPricesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
+/** Her own messages a day when `SHANNON_AUTONOMY_MAX_REACH_OUTS` is unset (owner 2026-10-19: 「1日3通を目安」). */
+export const SHANNON_REACH_OUTS_PER_DAY = 3;
+
 /**
  * Server-side configuration of bounded autonomy. Nothing Shannon can write through
  * the autonomy service changes these values; they come from the deployment
@@ -74,7 +77,8 @@ export function configuredAutonomy(
     maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
     // No count a day for the looks of her own time either (owner decision 2026-10-03); 0 switches them off, a number is a cap.
     maximumRoomLooksPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS),
-    maximumReachOutsPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_REACH_OUTS),
+    // Owner 2026-10-19: about three a day when unset (a week of eight or nine was too many); `unlimited` is still no cap.
+    maximumReachOutsPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_REACH_OUTS, SHANNON_REACH_OUTS_PER_DAY),
     maximumReachOutFollowUpsPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_FOLLOW_UPS),
     maximumHostFolderWritesPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_HOST_FOLDER_WRITES, 0, 1_000, 10)),
     hostStepLeaseMilliseconds: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS, 30, 3_600, 300)) * 1_000,

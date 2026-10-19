@@ -76,6 +76,8 @@ export interface InnerNotePort {
   pending(scopeKey: string): readonly InnerNoteEvent[];
   /** After a reply: never waits, never throws. */
   turnEnded(turn: InnerNoteTurn): void;
+  /** Owner 2026-10-19: Jev read the turn's words as an apology or amends by meaning (never waits, never throws). */
+  turnAmended?(turn: InnerNoteTurn): void;
   /** After a touch: never waits, never throws. */
   touched(touch: InnerNoteTouch): void;
   /** A source known later by its stored id (a voice turn's utterance once the app stored the turn). */
@@ -186,6 +188,10 @@ export const innerNoteText = Object.freeze({
   ended: (port: InnerNotePort | null, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string, feeling: ShannonExpressiveEmotion,
     experienceId?: string) => port?.turnEnded({ scopeKey, surface: 'text', alone, at, userMessage, reply,
     feeling: { kind: feeling.primary, intensity: feeling.intensity }, ...(experienceId ? { sourceId: `experience:${experienceId}` } : {}) }),
+  /** Owner 2026-10-19: his words were an apology or amends by meaning (Jev); her note hears it as one. */
+  amended: (port: InnerNotePort | null, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string, experienceId?: string) =>
+    port?.turnAmended?.({ scopeKey, surface: 'text', alone, at, userMessage, reply, feeling: null,
+      ...(experienceId ? { sourceId: `experience:${experienceId}` } : {}) }),
   attach: (body: { useInnerNote(port: InnerNotePort | null): void }, port: InnerNotePort | undefined): InnerNotePort | null => {
     if (port) body.useInnerNote(port);
     return port ?? null;
@@ -210,4 +216,8 @@ export const innerNoteVoice = Object.freeze({
   ended: (port: InnerNotePort | null | undefined, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string,
     feeling: ShannonExpressiveEmotion, utteranceId?: string) => port?.turnEnded({ scopeKey, surface: 'voice', alone, at, userMessage, reply,
     feeling: { kind: feeling.primary, intensity: feeling.intensity }, ...(utteranceId ? { sourceId: `utterance:${utteranceId}` } : {}) }),
+  /** Owner 2026-10-19: his spoken words were an apology or amends by meaning (the router's Jev reading). */
+  amended: (port: InnerNotePort | null | undefined, scopeKey: string, alone: boolean, at: string, userMessage: string, reply: string,
+    utteranceId?: string) => port?.turnAmended?.({ scopeKey, surface: 'voice', alone, at, userMessage, reply, feeling: null,
+    ...(utteranceId ? { sourceId: `utterance:${utteranceId}` } : {}) }),
 });

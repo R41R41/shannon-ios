@@ -22,12 +22,15 @@ import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
  * a thinking prompt of the old loop prints: with the cap configured as it was (1,000) every prompt equals that commit's, and
  * with the new default the prompts equal that commit's with the default changed and nothing else. They are sha-256 prefixes of each prompt as sent (system, then prompt) with
  * random identifiers replaced. A changed byte in any prompt of the old loop changes a digest here.
+ *
+ * One change since, on purpose (owner 2026-10-19): the second call's rules no longer invite her to say that he did not answer, nor to
+ * count the wait (「返事がないことや待った時間は数えない」): the follow-up digests are those of the rules as they are now.
  */
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 const AGENTIC_DAY_AT_78C3493 = [
-  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '516aa0c49c1b329e'],
+  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '8a2e2fdfbfcb2498'],
   ['think', '2b3be94aa6101952'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '19bfd5c40ee0cad0'], ['think', '6dfe837ac4a0a529'],
   ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', 'b14ee2ccae29aacf'], ['think', 'c573f62e246587cd'], ['revise', '550384af7d8f856d'],
   ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '765457454c05b3f8'], ['reach_out', 'f675aa9fb5535f58'], ['think', '7fdb457bfea50eed'],
@@ -41,7 +44,7 @@ const AGENTIC_DAY_AT_78C3493 = [
  * the forbidden item are not part of any prompt of the loop.
  */
 const AGENTIC_DAY_AT_78C3493_WITH_2000_YEN = [
-  ['think', '0816a524af4da9aa'], ['reach_out', '0ee3d0600b349738'], ['think', 'e67e41543c170db5'], ['think', '13131a69ad57996f'], ['follow_up', '516aa0c49c1b329e'],
+  ['think', '0816a524af4da9aa'], ['reach_out', '0ee3d0600b349738'], ['think', 'e67e41543c170db5'], ['think', '13131a69ad57996f'], ['follow_up', '8a2e2fdfbfcb2498'],
   ['think', 'c649dcaa8616c3ff'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '4533092569973f86'], ['think', '6c4d45e8156c21e6'],
   ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', '6216c1acbc13f9f6'], ['think', '16392261e20ce824'], ['revise', '550384af7d8f856d'],
   ['reach_out', 'dc7ea65dbc2f2977'], ['think', 'e24c687f096fe8cb'], ['think', 'be27eb2d8bdcea40'], ['reach_out', 'f675aa9fb5535f58'], ['think', 'f966e2d0e0d1717a'],
@@ -67,7 +70,7 @@ const PLAIN_DAY_AT_78C3493 = [
 const BUILDERS_AT_78C3493 = {
   thinking: 'b2ca037238a693b6', thinkingBare: '9dc6b337f74dace9', thinkingNull: 'b2ca037238a693b6', thinkingAgain: '50799eeab2250749', note: 'b85e222e8406f5f2',
   draft: '92f52353f37aa157', draftBare: '91fe7ec8b8db78a2', revise: '7763f685ff1f0d26', look: '89979d30f67610b2', share: '6c457fd449ab31f6', wonder: '2c5172666ac8442e',
-  upcoming: '927e3a29ab3fc461', saw: '35587157e98838f5', followUp: '47c28ee18c48828a',
+  upcoming: '927e3a29ab3fc461', saw: '35587157e98838f5', followUp: '980721aceb3adfed',
 };
 
 /**
@@ -78,7 +81,7 @@ const BUILDERS_AT_78C3493 = {
  * differs only in the prompts after cycle 3 that gave that note or story.
  */
 const AGENTIC_DAY_WITH_THE_NOTION_MARK = [
-  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '516aa0c49c1b329e'],
+  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '8a2e2fdfbfcb2498'],
   ['think', '2b3be94aa6101952'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '19bfd5c40ee0cad0'], ['think', '6dfe837ac4a0a529'],
   ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', 'f3fc1a6f560856c6'], ['think', 'f3fc1a6f560856c6'], ['revise', '842015897394f7d8'],
   ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '7177e9609a8a1ac2'], ['reach_out', 'f675aa9fb5535f58'], ['think', '51262c09dc3eb5af'],

@@ -222,7 +222,8 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
   }, [
     { type: 'state-equals', path: 'state.lingering.0.span', value: 'lingering' },
     { type: 'state-equals', path: 'state.lingering.0.startedAt', value: night },
-    { type: 'text-includes', value: 'まだ残っている気持ち: 9時間前にライ氏との会話で傷ついたことを、まだ引きずっている（hurt / 強さ 0.88）。' },
+    // Owner 2026-10-19: the night she slept on it halves it (0.88 awake → 0.44).
+    { type: 'text-includes', value: 'まだ残っている気持ち: 9時間前にライ氏との会話で傷ついたことを、まだ少し引きずっている（hurt / 強さ 0.44）。' },
   ]),
   scenario('feeling-text-subtle-does-not-linger', 'prompt-projection', {
     now: night,
@@ -243,7 +244,8 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
   }, [
     { type: 'state-equals', path: 'state.lingering.0.span', value: 'mood' },
     { type: 'state-equals', path: 'state.lingering.0.strength', value: 0.52 },
-    { type: 'text-includes', value: 'まだ少し引きずっている（sulky / 強さ 0.47）' },
+    // Owner 2026-10-19: halved by the night (0.47 → 0.24), out of sight, and so not told.
+    { type: 'text-excludes', value: 'まだ残っている気持ち' },
   ]),
   scenario('feeling-text-undecided-without-cue-leaves-nothing', 'prompt-projection', {
     now: night,
@@ -260,9 +262,10 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
     later: { now: morning, events: [{ type: 'feeling-eased', by: 'apology' }] },
     prompt: { kind: 'state' },
   }, [
-    { type: 'number-in-range', path: 'state.lingering.0.strength', minimum: 0.34, maximum: 0.37 },
+    // Owner 2026-10-19: the night halved it before his apology took 60 % of what was left (0.44 → 0.18): out of sight.
+    { type: 'number-in-range', path: 'state.lingering.0.strength', minimum: 0.16, maximum: 0.19 },
     { type: 'state-equals', path: 'state.lingering.0.peak', value: 0.9 },
-    { type: 'text-includes', value: 'まだ少し引きずっている（hurt / 強さ 0.35）' },
+    { type: 'text-excludes', value: 'まだ残っている気持ち' },
   ]),
   // The same strong feeling decided again the next morning renews nothing: what is underneath is the entry from the night,
   // fading from where it was, and its four wall-clock days still count from that night.

@@ -96,7 +96,9 @@ export const NAME_PREFIX_LINE = `[呼びかけ] 返事を毎回「${SHANNON_OWNE
  * (a photo he shared): what it shows is in the context, and the line would contradict it (review L7).
  */
 export const PERCEPTION_HONESTY_LINE = '[知覚の正直さ] 見えた・聞こえた・感じたと言えるのは、この文脈に書かれていることだけ。'
-  + '声の調子や表情は文字起こしからは分からない。話に出ていない話題（ゲームなど）に結びつけない。';
+  + '声の調子や表情は文字起こしからは分からない。話に出ていない話題（ゲームなど）に結びつけない。'
+  // Owner 2026-10-19: her reflex felt a touch and her reply said 「感覚は分からない、記録はある」. A touch written here is her body's: felt.
+  + '体に触れられたことがこの文脈に書かれていれば、それは自分の体で感じたこととして話す（記録を読み上げる言い方にしない）。';
 
 /** A greeting, or a direct reply that needs no capability and no concrete answer. */
 const socialTurn = (turn: { conversationClass: string; selectedSkills: readonly string[]; solutionWantedProbability: number }) =>

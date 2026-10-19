@@ -26,6 +26,7 @@ import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js
 import { OWNER_PRIVATE_MARK, type FeelingDays } from './feelingDays.js';
 import type { StreamFeeling } from './streamFeeling.js';
 import { chooseFeelingTurn, feelingTurnState, feelingTurnWithin } from './feelingTurn.js';
+import { amendedIn, easeOnAmends, holdsAgainstOwner, useAmendsEase, type AmendsEase } from './feelingAmends.js';
 import { feelingSentenceWithin, startFeelingSentence } from './feelingSentence.js';
 import { textRegisterBefore, textRegisterLines, textRegisterOf, textRegisterReply } from './textRegisterTurn.js';
 import type { ChatTextRegister } from '../../contracts/contracts.js';
@@ -243,9 +244,12 @@ function faceState(port: FeelingPort, scopeKey: string, key: FeelingKey, at: str
 
 /** The text turn's hooks (`apiKernel.ts`), each the turn of before without a port. */
 export const feelingText = Object.freeze({
-  attach: (body: { useFeeling(port: FeelingPort | null): void }, port: FeelingPort | undefined): FeelingPort | null => {
-    if (port) body.useFeeling(port);
-    return port ?? null;
+  /** `ease` (owner 2026-10-19): where an apology read by its meaning is written (`feelingAmends.ts`); voice turns use the same port. */
+  attach: (body: { useFeeling(port: FeelingPort | null): void }, port: FeelingPort | undefined, ease?: AmendsEase): FeelingPort | null => {
+    if (!port) return null;
+    body.useFeeling(port);
+    useAmendsEase(port, ease);
+    return port;
   },
   /** Started right after the turn begins, beside recall and context: the Jev call runs while they do. */
   start: (port: FeelingPort | null, input: { scopeKey: string; alone: boolean; surface: boolean | { feelingSpeaker?: FeelingSpeaker } | undefined;
@@ -258,8 +262,9 @@ export const feelingText = Object.freeze({
       const key = feelingActor({ ownerAlone: input.alone && !surface, group: surface, ...(speaker ? { speaker } : {}) });
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
+      const amends = key.audience === 'owner_alone' && holdsAgainstOwner(snapshot, at) ? { amends: true } : {};
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
-        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion,
+        utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends,
         ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.meaning ? { reading: true } : {}) }) : null;
       handle.sentence = port.sentence && port.coreAffect && port.turn
         ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
@@ -314,6 +319,9 @@ export const feelingText = Object.freeze({
   ended: (handle: FeelingTurnHandle | null, input: { at: string; message: string; reply: string; experienceId?: string }) => {
     if (handle) safely(() => turnEnded(handle, { at: input.at, words: input.message, reply: input.reply, turnId: input.experienceId ?? input.at,
       sourceId: input.experienceId ?? null }), undefined);
+    // Owner 2026-10-19: an apology or amends read by its meaning eases what she holds against him (`feelingAmends.ts`).
+    if (handle?.key.audience === 'owner_alone') easeOnAmends(handle.port, amendedIn(handle), { scopeKey: handle.scopeKey, surface: 'text', at: input.at,
+      userMessage: input.message, reply: input.reply, ...(input.experienceId ? { sourceId: `experience:${input.experienceId}` } : {}) });
   },
   /** The voice turns' binder: her note's, and her feeling events' (a voice turn's events take the stored turn's id). */
   binder: <T extends { bind(scopeKey: string, from: string, to: string): void }>(note: T | null, port: FeelingPort | null): T | { bind: T['bind'] } | null => {
@@ -339,8 +347,9 @@ export const feelingVoice = Object.freeze({
   /** What the router is handed: the feeling turn's state, only while the turn is on. */
   route: (handle: FeelingTurnHandle | null, transcript: string, snapshot: CompanionStateSnapshot | null): { shannonFeeling?: Record<string, unknown> } => {
     if (!handle?.port.turn) return {};
+    const amends = handle.key.audience === 'owner_alone' && snapshot && holdsAgainstOwner(snapshot, handle.at) ? { amends: true } : {};
     return { shannonFeeling: feelingTurnState({ scopeKey: handle.scopeKey, surface: 'voice', audience: handle.key.audience, utterance: transcript,
-      lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 },
+      lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 }, ...amends,
       ...(handle.port.meaning ? { reading: true } : {}) }) };
   },
   /** The block after the router answered (its feeling, or 「ふつう」 when the router fell back). */
@@ -378,6 +387,10 @@ export const feelingVoice = Object.freeze({
   ended: (handle: FeelingTurnHandle | null, input: { at: string; transcript: string; reply: string; utteranceId?: string }) => {
     if (handle) safely(() => turnEnded(handle, { at: input.at, words: input.transcript, reply: input.reply, turnId: input.utteranceId ?? input.at,
       sourceId: input.utteranceId ? `utterance:${input.utteranceId}` : null }), undefined);
+    // Owner 2026-10-19: the router's Jev read his spoken words as an apology or amends (`feelingAmends.ts`).
+    const source = input.utteranceId ? { sourceId: `utterance:${input.utteranceId}` } : {};
+    if (handle?.key.audience === 'owner_alone') easeOnAmends(handle.port, amendedIn({ ...handle, pending: null }), { scopeKey: handle.scopeKey,
+      surface: 'voice', at: input.at, userMessage: input.transcript, reply: input.reply, ...source });
   },
 });
 
@@ -409,7 +422,8 @@ type BodyNoteFace = { shown?: ShannonEmotionKind; tell?: string; until?: string 
 /** Her body's hooks (`bodyReaction.ts`, `shannonBody.ts`). A touch with anyone else present is never the owner's. */
 export const feelingBody = Object.freeze({
   touched: (port: FeelingPort | null, scopeKey: string, touch: FeelingTouch, outcome: { stance?: string | null; said?: string | null; at?: string } = {}) => {
-    if (!port) return;
+    // Owner 2026-10-19: a `carry` is her body moved on the screen (`isMovedTouch`): no touch of the day's ledger, never after a no.
+    if (!port || touch.type === 'carry') return;
     safely(() => {
       const key = touchKeyIn(port, scopeKey, touch.audience, touch.occurredAt);
       const identity = touch.audience === 'owner' ? 'registered' as const : 'unknown' as const;

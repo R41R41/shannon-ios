@@ -146,7 +146,7 @@ describe('deciding and speaking', () => {
   it('words each touch, while it goes on and once it is over', () => {
     expect(bodyTouchLine({ type: 'pet', durationMs: 3_000, strength: 0.2, ongoing: true }, 'owner')).toBe('ライ氏に頭をなでられている（3秒ほど、やさしく）');
     expect(bodyTouchLine({ type: 'poke', durationMs: 120, ongoing: false }, 'owner')).toBe('ライ氏につつかれた（ほんの一瞬）');
-    expect(bodyTouchLine({ type: 'carry', durationMs: 8_400, strength: 0.9, ongoing: false }, 'owner')).toBe('ライ氏に持ち上げて運ばれて、下ろされた（8秒ほど、強めに）');
+    expect(bodyTouchLine({ type: 'carry', durationMs: 8_400, strength: 0.9, ongoing: false }, 'owner')).toBe('ライ氏に画面の上で運ばれて、下ろされた（8秒ほど、強めに）');
     expect(bodyTouchLine({ type: 'tickle', durationMs: 1_200, strength: 0.5, ongoing: true }, 'others')).toBe('ライ氏か、そばにいる誰かにくすぐられている（1秒ほど）');
     expect(bodyTouchLine({ type: 'holdHand', durationMs: 90_000, ongoing: true }, 'owner')).toBe('ライ氏に手をつないでもらっている（2分ほど）');
     expect(Object.keys(BODY_TOUCH_PHRASES).sort()).toEqual(['carry', 'holdHand', 'pet', 'poke', 'tickle']);
@@ -171,7 +171,12 @@ describe('deciding and speaking', () => {
     failing.speaker.decision = new Error('BODY_REACTION_UPSTREAM_500');
     expect(await failing.said()).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'joyful' } });
     const without = await reactionHarness({ speaker: null });
-    expect(await without.said({ type: 'carry' })).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'embarrassed', feeling: 'flustered' } });
+    expect(await without.said({ type: 'tickle' })).toMatchObject({ status: 'quiet', message: null });
+    expect(without.state().expressiveEmotion?.primary).not.toBe('neutral');
+    // Owner 2026-10-19: being carried on the screen moves no feeling (`isMovedTouch`).
+    const carried = await reactionHarness({ speaker: null });
+    expect(await carried.said({ type: 'carry' })).toMatchObject({ status: 'quiet', message: null });
+    expect(carried.state().expressiveEmotion?.primary ?? 'neutral').toBe('neutral');
     expect(createConfiguredBodyReactionSpeaker({})).toBeNull();
   });
 
@@ -310,13 +315,15 @@ describe('her feeling', () => {
     const { said, speaker, state, now } = await reactionHarness();
     // The model names one feeling; her words show another: the reply cue decides, as everywhere.
     speaker.decision = { say: true, text: 'もうっ、びっくりするじゃないですか。', feeling: 'happy' };
-    const answer = await said({ type: 'carry', durationMs: 4_000, ongoing: false });
+    const answer = await said({ type: 'tickle', durationMs: 4_000, ongoing: false });
     expect(answer.message).toMatchObject({ expression: 'annoyed' });
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'cuteAngry', cause: 'ライ氏に持ち上げて運ばれた' });
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'cuteAngry', cause: 'ライ氏にくすぐられた' });
     expect(answer.mood).toEqual({ expression: presentShannonMood(state(), now()).expression });
-    // A borrowed face carries its feeling name.
+    // A borrowed face carries its feeling name; a word about being carried leaves no feeling behind (owner 2026-10-19).
+    const before = state().expressiveEmotion;
     speaker.decision = { say: true, text: 'わわっ、お、落ちます！', feeling: 'flustered' };
     expect((await said({ type: 'carry', durationMs: 4_000, ongoing: false })).message).toMatchObject({ expression: 'embarrassed', feeling: 'flustered' });
+    expect(state().expressiveEmotion).toEqual(before);
   });
 
   it('leaves a stronger feeling from the conversation in place, for the touch and for her line about it', async () => {

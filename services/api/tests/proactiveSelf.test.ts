@@ -255,7 +255,9 @@ describe('she decides herself at a moment (SHANNON_PROACTIVE_SELF)', () => {
     await w.moments.consider(scope, w.now());
     await runUntilIdle(w.loop);
     expect(w.count('SELECT COUNT(*) AS n FROM initiative_messages')).toBe(1);
-    expect(w.holds()).toEqual([{ tool: 'owner.reach_out', reason: 'intent_repeat' }, { tool: 'owner.reach_out', reason: 'owner_active' }]);
+    // Owner 2026-10-19: the same kind of moment is taken once a day at most, so the second return never reaches the gate.
+    expect(w.holds()).toEqual([]);
+    expect(w.count("SELECT COUNT(*) AS n FROM proactive_moments WHERE reason = 'kind_today'")).toBe(2);
     w.close();
   });
 });

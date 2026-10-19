@@ -1,7 +1,7 @@
 import type { MindInboxDraft } from '../../contracts/mindInboxContract.js';
 import {
   MOMENT_MESSAGE_RULES, momentFactLine, momentFresh, momentIntent, momentWanted, perceiveMoments,
-  type InnerNoteReader, type ProactiveMomentFacts, type ProactiveMomentState,
+  type InnerNoteReader, type ProactiveMomentFacts, type ProactiveMomentKind, type ProactiveMomentState,
 } from './proactiveMoments.js';
 import type { ProactiveMomentDecision, SQLiteProactiveMoments, StoredProactiveMoment } from './store/proactiveMomentStore.js';
 
@@ -64,6 +64,9 @@ export interface TakenProactiveMoment {
 /** The codes after which a moment waits for the next poll (while fresh) rather than being dropped. */
 const WAIT_CODES = new Set(['owner_active', 'spacing', 'cycle_open', 'in_call', 'others_present']);
 const DAY = 24 * 60 * 60_000;
+/** Kinds that open with the same move each time (he came back; he has been quiet), and how long one taken keeps another away (owner 2026-10-19). */
+const ONCE_A_DAY: ReadonlySet<ProactiveMomentKind> = new Set<ProactiveMomentKind>(['owner_returned', 'long_quiet']);
+const ONCE_A_DAY_MS = 20 * 60 * 60_000;
 
 export class ProactiveMoments {
   constructor(private readonly ports: ProactiveMomentPorts) {}
@@ -108,7 +111,8 @@ export class ProactiveMoments {
     }
     if (blocked) return this.settle(scopeKey, moment, { status: 'skipped', reason: blocked }, at);
     const usage = store.usage(scopeKey, new Date(Date.parse(at) - DAY).toISOString());
-    if (usage.taken >= this.ports.maximumMessagesPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'message_cap' }, at);
+    const capped = this.capped(scopeKey, moment, usage.taken, at);
+    if (capped) return this.settle(scopeKey, moment, { status: 'skipped', reason: capped }, at);
     // She decides herself, when she writes (the decision's cap bounds her calls a day the same way).
     if (this.ports.self) {
       if (usage.decisions >= this.ports.maximumDecisionsPerDay) return this.settle(scopeKey, moment, { status: 'skipped', reason: 'decision_cap' }, at);
@@ -121,6 +125,17 @@ export class ProactiveMoments {
     const costUsd = this.ports.usdPerDecision;
     if (wanted === null) return this.settle(scopeKey, moment, { status: 'quiet', decider: 'jev', reason: 'jev_failed', costUsd }, at);
     return this.settle(scopeKey, moment, { status: wanted ? 'wanted' : 'quiet', decider: 'jev', costUsd }, at);
+  }
+
+  /**
+   * The day's caps of this path: the messages of the last day, and (owner 2026-10-19) the same kind of opening once a day at most
+   * (the same welcome back ten times in a week).
+   */
+  private capped(scopeKey: string, moment: StoredProactiveMoment, takenToday: number, at: string): string | null {
+    if (takenToday >= this.ports.maximumMessagesPerDay) return 'message_cap';
+    if (!ONCE_A_DAY.has(moment.kind)) return null;
+    const since = new Date(Date.parse(at) - ONCE_A_DAY_MS).toISOString();
+    return this.ports.store.takenOfKindSince(scopeKey, moment.kind, since) > 0 ? 'kind_today' : null;
   }
 
   /** The newest moment she wanted, for her loop: taken once, while fresh. */

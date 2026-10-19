@@ -48,6 +48,10 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * (`fixtures/stage3-switched-off-v1.json`) were recorded on afb38c28 itself, in a detached work tree, with the scenarios of
  * `support/stage3Scenarios.ts` (which use only APIs of that commit), and are never regenerated for a stage-3 change:
  * `SHANNON_WRITE_STAGE3_OFF=1` writes the file only where it does not exist.
+ *
+ * Two digests of `body-touch` were changed by hand on 2026-10-19 for a change that is not stage 3's (owner: a feeling that lingers is
+ * slept on, and told as an undertone): the chat prompt after the touches (its line of what still lingers) and `companion_states`
+ * (what lingers now carries when it was last noted, `notedAt`). Nothing else of afb38c28 changed.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

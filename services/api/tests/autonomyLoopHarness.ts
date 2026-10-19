@@ -173,6 +173,8 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   const store = new SQLiteAutonomyStore(options.path ?? ':memory:');
   const config: AutonomyConfig = configuredAutonomy({
     SHANNON_AUTONOMY_ENABLED: options.enabled === false ? 'false' : 'true', ...(options.agentic ? {} : { SHANNON_AUTONOMY_MAX_FOLLOW_UPS: '0' }),
+    // The harness's days were recorded with no count of her messages (owner 2026-10-03); since 2026-10-19 unset is three a day.
+    SHANNON_AUTONOMY_MAX_REACH_OUTS: 'unlimited',
     ...options.environment,
   });
   const loopConfig: AutonomyLoopConfig = {

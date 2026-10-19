@@ -13,9 +13,9 @@ import {
 } from '../../contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import {
-  BODY_TOUCH_PHRASES, BODY_TOUCH_STANCE_WORDS, asksStance, bodyReactionPrompt, bodyTouchLine, boundedReactionText, type BodyReactionDecision,
+  BODY_TOUCH_PHRASES, BODY_TOUCH_STANCE_WORDS, agreementBefore, asksStance, bodyReactionPrompt, bodyTouchLine, boundedReactionText, type BodyReactionDecision,
 } from './bodyReactionPrompt.js';
-import { reflexPartWord } from './bodyTouchReflex.js';
+import { isMovedTouch, reflexPartWord } from './bodyTouchReflex.js';
 import {
   bodyTouchPartWord, bodyTouchRegionWord, isBodyTouchPart, isBodyTouchRegion, touchDetailPhrase, touchPartPhrase, type BodySurface,
 } from './bodyTouchWords.js';
@@ -208,7 +208,9 @@ export class BodyReactions {
       const decision = felt && timely && request.reply !== 'none' ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);
-      if (felt) this.noteTouch(scopeKey, request, decision, at, felt);
+      // Owner 2026-10-19: being carried on the screen is no touch for her note (nor for the day's ledger: `feelingBody.touched`).
+      const moved = isMovedTouch(request.touch);
+      if (felt && !moved) this.noteTouch(scopeKey, request, decision, at, felt);
       if (felt) feelingBody.touched(this.feeling, scopeKey, { id: request.id, type: request.touch.type, ...partOf(request.touch), audience: request.audience,
         occurredAt: request.occurredAt, burstId: felt.burst.id, ...(request.reply === 'none' ? { wordless: true } : {}) },
       { stance: decision?.stance ?? null, said: decision?.say ? decision.text : null, at: this.dependencies.now() });
@@ -247,7 +249,8 @@ export class BodyReactions {
       });
       // A feeling from conversation that the touch did not replace is not replaced by her line about the touch either.
       const held = holdsFeelingThroughTouch(before, resolved.expressiveEmotion, saidAt, emotionTiming());
-      const after = resolved.expressiveEmotion.primary === 'neutral' || held ? before : stateStore.apply(scopeKey, {
+      // A word about being carried leaves no feeling behind it either.
+      const after = moved || resolved.expressiveEmotion.primary === 'neutral' || held ? before : stateStore.apply(scopeKey, {
         type: 'expressive-emotion-updated',
         emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
       });
@@ -312,10 +315,14 @@ export class BodyReactions {
       closeness: felt.snapshot.temperament.closeness,
       ...(part && partWord ? { part: partWord, stances: touches.stances(scopeKey, part, felt.snapshot, at) } : {}),
     } : undefined;
+    const conversation = this.conversation(scopeKey, request, felt.snapshot, at);
+    // Owner 2026-10-19: a touch she has just allowed, or that he has just announced, is no surprise (`touchAgreementIn`).
+    const agreement = request.audience === 'owner' ? agreementBefore(conversation) : null;
     const prompt = bodyReactionPrompt({
       ...(stage2 ? { asksStance: true } : {}), ...(history ? { history } : {}),
       touch: request.touch, audience: request.audience, feeling: presentShannonFeeling(felt.snapshot, at, emotionTiming()),
-      burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at, ...(surface ? { surface } : {}),
+      burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation, at, ...(surface ? { surface } : {}),
+      ...(agreement ? { agreement } : {}),
       ...(this.innerNote ? { inner: { block: [innerNoteTouchContext(this.innerNote, scopeKey, request.audience, at), // ADR-0013: the day's ledger, as facts.
         feelingBody.lines(this.feeling, scopeKey, request.audience, at, felt.snapshot)].filter(Boolean).join('\n') } } : {}),
     });

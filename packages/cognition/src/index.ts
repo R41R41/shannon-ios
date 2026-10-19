@@ -141,6 +141,8 @@ export {
   SHANNON_EMOTION_TIME,
   advanceEmotionClock,
   awakeTimeAt,
+  nightsBetween,
+  overnightRemaining,
   remainingShare,
   type ShannonEmotionClockMode,
   type ShannonEmotionTiming,
@@ -366,7 +368,7 @@ export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInt
 export {
   CHARACTER_CORE, CHARACTER_CORE_SPEECH, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock, characterCoreHashInput, shannonOneLineVoice, type CharacterCore,
 } from './characterCore.js';
-export { INNER_NOTE_UNPLEASANT_LINE } from './emotionContinuity.js';
+export { INNER_NOTE_UNPLEASANT_LINE, LINGERING_UNDERTONE_LINE } from './emotionContinuity.js';
 export {
   INNER_NOTE_DAY_REASONS, INNER_NOTE_INTENTS, INNER_NOTE_LIMITS, INNER_NOTE_SCALES, INNER_NOTE_SHOWN_KINDS, INNER_NOTE_TELLS, INNER_NOTE_TRIGGERS,
   asciiRouteSummary, boundedUntil, clippedNoteText, gatedIntent, innerNoteActive, innerNoteCurrent, innerNoteDay, innerNoteExpired,
@@ -379,7 +381,7 @@ export {
 } from './innerNote.js';
 export {
   ADDRESS_WHEN_NATURAL, FALSEHOOD_LINE, INNER_NOTE_ADDRESS_LINE, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
-  apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt, teasingIn, touchConsentIn, type TouchConsent,
+  apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt, teasingIn, touchAgreementIn, touchConsentIn, type TouchConsent,
 } from './innerNoteWords.js';
 export {
   INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,

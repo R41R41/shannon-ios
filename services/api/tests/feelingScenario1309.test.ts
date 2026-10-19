@@ -55,7 +55,10 @@ describe('the 13:09 replay (fake models)', () => {
     for (const request of chat.requests) expect(request.turnContext!.slice(request.turnContext!.lastIndexOf('\n\n') + 2)).toMatch(/^\[この番の気持ち\]/u);
     expect(JSON.stringify(jev.states.map(state => state.shannon_feeling))).not.toMatch(/[ぁ-んァ-ン一-龯]/u);
     expect(result.turns.every(turn => turn.block.startsWith(FEELING_TURN_HEADER))).toBe(true);
-    expect(jev.traces.every(trace => trace.decision === 'feeling_turn' && trace.answers.qv?.toString() === 'feeling_turn.v1')).toBe(true);
+    // Owner 2026-10-19: once she holds something against him, the same call also reads whether his words make amends.
+    expect(jev.traces.every(trace => trace.decision === 'feeling_turn'
+      && ['feeling_turn.v1', 'feeling_turn.v1,feeling_amends.v1'].includes(trace.answers.qv?.toString() ?? ''))).toBe(true);
+    expect(jev.traces.some(trace => trace.answers.qv?.toString() === 'feeling_turn.v1,feeling_amends.v1')).toBe(true);
   });
 
   it('meets the deterministic half of the acceptance: no joyful face on a refusal, orders declined, escalation, a drawer, the watch', async () => {

@@ -98,6 +98,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's call (text and voice). */
   feelingMeaning: 'feeling_meaning.v1',
   voiceRouteFeelingMeaning: 'voice_route.v5',
+  /** Owner 2026-10-19: whether his words apologise or make amends, by meaning, asked while she holds something against him (text and voice). */
+  feelingAmends: 'feeling_amends.v1',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';

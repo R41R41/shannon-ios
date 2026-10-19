@@ -124,6 +124,31 @@ export function touchConsentIn(message: string, reply: string, context: { recent
   return asked ? 'asked' : null;
 }
 
+/** His telling her he is about to touch her: 「よしよしするね」「手繋ぐね」「なでるよ」「触るからね」. */
+const TOUCH_ANNOUNCE = new RegExp(`(?:${TOUCH_VERB}|よしよし|ヨシヨシ|なでなで)[^。！？!?、]{0,6}?(?:するね|するよ|するから|しまーす|します|ぐね|ぐよ|るね|るよ|るから|ます)${TAIL}$`, 'u');
+const PETTING = /(?:よしよし|ヨシヨシ|なでなで)/u;
+
+/**
+ * What the last exchange agreed about touching her, for the reflex of a touch that follows (owner 2026-10-19: 「えっ、また！？」 right after
+ * her 「どうぞ」, and 「ひゃっ」 right after 「手繋ぐね」): she allowed it, or he said he was about to (and she did not refuse). Null otherwise,
+ * and whenever she refused. Read as narrowly as `touchConsentIn`.
+ */
+export function touchAgreementIn(message: string, reply: string): 'permitted' | 'announced' | null {
+  const words = message.trim().replace(OPENING, '');
+  const answer = reply.trim();
+  // A touch follows this exchange at once: the bare verb (「もうちょっと触ってもいい？」) is about her, as within minutes of a touch.
+  const consent = touchConsentIn(words, answer, { recentTouch: true });
+  if (consent === 'refused') return null;
+  if (consent === 'permitted') return 'permitted';
+  if (!short(words, 60) || NOT_HER.test(words) || !(TOUCH_TALK.test(words) || PETTING.test(words)) || TOUCH_REFUSE.test(answer)) return null;
+  if (PET_ASK.test(words)) return TOUCH_PERMIT.test(answer) ? 'permitted' : null;
+  return TOUCH_ANNOUNCE.test(words) ? 'announced' : null;
+}
+/** 「うーん、じゃあ」 before his words. */
+const OPENING = /^(?:(?:うーん|ううん|えーと|ええと|えっと|あのー?|ねえ|ねぇ|じゃあ|では|それじゃあ?)[、,\s]+)+/u;
+/** 「頭ヨシヨシしていいかな？」: asking to pet her, a word the touch verbs do not have. */
+const PET_ASK = /(?:よしよし|ヨシヨシ|なでなで)[^。！？!?、]{0,6}?(?:してもいい|していい|しても大丈夫|させて)/u;
+
 /** The line of the expressive-emotion block that kept every sulk and anger light (`buildExpressiveEmotionPrompt`). */
 export const LIGHT_SULKING_LINE = 'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, '
   + 'non-controlling, and never induce guilt.';

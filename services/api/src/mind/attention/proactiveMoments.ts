@@ -123,12 +123,15 @@ export function momentIntent(moment: Pick<ProactiveMoment, 'kind' | 'key'>): { r
   return { reason: 'wonder', subject: `moment:${moment.kind}` };
 }
 
-/** The one line her message's prompt is given of the moment: a fact, never a line to say. */
+/**
+ * The one line her message's prompt is given of the moment: a fact, never a line to say. No minutes and no hours (owner 2026-10-19:
+ * 「19分くらい静かだった」「2時間くらいそばにいたのに」 were counted back at him): a quiet is something she notices, not a tally.
+ */
 export function momentFactLine(moment: Pick<ProactiveMoment, 'kind' | 'minutes'>): string {
   const owner = SHANNON_OWNER_NAME;
   switch (moment.kind) {
-    case 'owner_returned': return `${owner}が、${moment.minutes ?? PROACTIVE_MOMENTS_V1.returnedAfterMinutes}分ほど席を外したあと、いま体のそばに戻ってきた。`;
-    case 'long_quiet': return `${owner}は${Math.round((moment.minutes ?? PROACTIVE_MOMENTS_V1.longQuietMinutes) / 60)}時間ほど、体のそばにいるけれど何も話していない。`;
+    case 'owner_returned': return `${owner}が、少し席を外したあと、いま体のそばに戻ってきた。`;
+    case 'long_quiet': return `${owner}は体のそばにいて、静かに過ごしている（何かに集中しているのかもしれない）。`;
     case 'morning': return `いまは朝で、${owner}が体のそばにいる。`;
     case 'late_night': return `夜が更けているが、${owner}はまだ体のそばにいる。`;
     default: return `書いた物語が、${owner}に読まれるのを待っている。`;

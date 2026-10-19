@@ -3,7 +3,7 @@ import { BODY_LIMITS } from '../../contracts/bodyContract.js';
 import { BODY_REACTION_LIMITS } from '../../contracts/bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchFact, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from '../memory/touchMemoryPorts.js';
-import { reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
+import { isMovedTouch, reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/predictionPorts.js';
 
 export { touchPredictionEnabled } from '../prediction/predictionPorts.js';
@@ -106,7 +106,11 @@ export class BodyTouches {
     let snapshot = before;
     const age = Date.parse(at) - Date.parse(touch.occurredAt);
     let prediction: TouchPrediction | undefined;
-    if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds && this.stage2) {
+    // Owner 2026-10-19 (「動かすくらい許してほしい」): being carried on the screen (the Windows body dragged to another place) is remembered
+    // as a carry and moves no feeling, no startle and no prediction: it is being moved, not touched (`isMovedTouch`).
+    const felt = receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds
+      && !isMovedTouch(touch);
+    if (felt && this.stage2) {
       // Syzygy ADR-0006 stage 2: no table for any part. The startle (how unsure she was of such a touch), and the stance she
       // took for the same key earlier in this episode when there is one and she is not about to be asked.
       prediction = this.predictions!.expect(scopeKey, touch, at, receipt.burst.id);
@@ -124,7 +128,7 @@ export class BodyTouches {
         appraisal: { startle: prediction.startle, ...(prediction.outcome ? { outcome: prediction.outcome } : {}) },
       } });
       this.predictions!.compared(scopeKey, snapshot, at);
-    } else if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds) {
+    } else if (felt) {
       // Syzygy ADR-0005 stage 1b: on a part where her body flinches first only the reflex moves her, not the table.
       const reflexPart = reflexPartWord(touch.part);
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {

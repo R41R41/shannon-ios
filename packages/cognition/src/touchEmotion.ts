@@ -52,7 +52,7 @@ export const SHANNON_TOUCH_FEELINGS: Readonly<Record<ShannonTouchKind, ShannonTo
   poke: Object.freeze({ done: 'つつかれた', steps: Object.freeze([
     step(1, 'surprised', 0.45, 0.05, 0.55, 0.40), step(2, 'cuteAngry', 0.52, -0.10, 0.60, 0.36), step(4, 'sulky', 0.62, -0.25, 0.45, 0.30),
   ]) }),
-  carry: Object.freeze({ done: '持ち上げて運ばれた', steps: Object.freeze([
+  carry: Object.freeze({ done: '画面の上で運ばれた', steps: Object.freeze([
     step(1, 'flustered', 0.60, 0.10, 0.72, 0.45), step(3, 'cuteAngry', 0.55, -0.05, 0.70, 0.40),
   ]) }),
   holdHand: Object.freeze({ done: '手をつないでもらった', steps: Object.freeze([

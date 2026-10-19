@@ -69,7 +69,7 @@ export function strongReplyDailyCap(environment: Readonly<Record<string, string 
 }
 
 /** A touch without a part is named by what was done (the ledger line's 「今日のつつかれた件」 reads 「今日の体（つつく）の件」). */
-const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({ pet: 'なでる', poke: 'つつく', tickle: 'くすぐる', carry: '持ち上げる', holdHand: '手をにぎる' });
+const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({ pet: 'なでる', poke: 'つつく', tickle: 'くすぐる', carry: '運ぶ', holdHand: '手をにぎる' });
 
 /** A subject of the ledger in her words: a part (胸), a region (頭), or the body with what was done. */
 export function feelingPartWord(subject: string): string {

@@ -231,7 +231,8 @@ describe('the decision', () => {
     expect(desk.status('returned:r1')).toBe('wanted');
     const taken = desk.moments.take(scope, new Date(Date.parse(START) + 2 * MINUTE).toISOString());
     expect(taken).toMatchObject({ key: 'returned:r1', reason: 'wonder', subject: 'moment:owner_returned', perceivedAt: START });
-    expect(taken!.line).toContain('40分ほど席を外したあと');
+    expect(taken!.line).toContain('少し席を外したあと'); // owner 2026-10-19: no minutes
+    expect(taken!.line).not.toMatch(/\d/u);
     // Taken once.
     expect(desk.moments.take(scope, new Date(Date.parse(START) + 2 * MINUTE).toISOString())).toBeNull();
     answer = new Error('JEV_TIMEOUT');
@@ -314,7 +315,7 @@ describe('speaking of a moment: her own words, through the proactive gate', () =
     expect(w.count(`SELECT COUNT(*) AS n FROM initiative_messages WHERE source_item_id LIKE 'reach-out:wonder:%'`)).toBe(1);
     const prompt = w.model.prompts('reach_out')[0]!;
     expect(prompt).toContain('[いま気づいたこと]');
-    expect(prompt).toContain('40分ほど席を外したあと、いま体のそばに戻ってきた');
+    expect(prompt).toContain('少し席を外したあと、いま体のそばに戻ってきた');
     for (const rule of MOMENT_MESSAGE_RULES) expect(prompt).toContain(rule);
     for (const canned of CANNED) expect(prompt).not.toContain(canned);
     expect(w.model.kinds()).toEqual(['reach_out']);
@@ -341,7 +342,9 @@ describe('speaking of a moment: her own words, through the proactive gate', () =
     await w.moments.consider(scope, w.now());
     await runUntilIdle(w.loop);
     expect(w.count('SELECT COUNT(*) AS n FROM initiative_messages')).toBe(1);
-    expect(w.holds()).toEqual([{ tool: 'owner.reach_out', reason: 'intent_repeat' }, { tool: 'owner.reach_out', reason: 'owner_active' }]);
+    // Owner 2026-10-19: the same kind of moment is taken once a day at most, so the second return never reaches the gate.
+    expect(w.holds()).toEqual([]);
+    expect(w.count("SELECT COUNT(*) AS n FROM proactive_moments WHERE reason = 'kind_today'")).toBe(2);
     w.close();
   });
 

@@ -260,7 +260,7 @@ function committedFeeling(
   // He eased this feeling a moment ago: unless the stimulus is above the height it had before, it shows no stronger than it is now.
   const easedEntry = (state.lingering ?? []).find(item => item.kind === incoming.primary && item.target === incoming.target && inEasedHold(item, awakeMs, timing));
   const held = easedEntry && !incoming.overrideReason && incoming.intensity <= (easedEntry.peak ?? 0)
-    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
+    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing, nowIso) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
   const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, intensity: held, awakeAt: awakeMs });
   return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing, event.decided === true) };
 }

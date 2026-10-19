@@ -8,6 +8,7 @@ import type { ConversationStore } from '../../memory/memoryPorts.js';
 import { replayWindow } from '../../recall/recallPorts.js';
 import type { DailyMindReader } from '../respond/respondPorts.js';
 import { DisclosureGate } from '../../inhibition/disclosurePorts.js';
+import { ownerSaysUnwell } from '../../inhibition/inhibitionPorts.js';
 import { visibleReplayMessages } from '../../memory/memoryPorts.js';
 import type { PeopleMemory } from '../../memory/memoryPorts.js';
 import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
@@ -108,6 +109,14 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
     forThinking: (scopeKey, at, topic) => build(scopeKey, at, topic, 'thinking'),
     forWriting: (scopeKey, at, topic) => build(scopeKey, at, topic, 'writing'),
     forMessage: (scopeKey, at, topic, others) => build(scopeKey, at, topic, others ? 'message_others' : 'message'),
+    unwell: (scopeKey, at, since) => guarded(() => {
+      const state = sources.snapshot(scopeKey, at);
+      if (!state) return [];
+      const said = sources.conversations.listThreads(scopeKey).slice(0, RECENT_THREADS)
+        .flatMap(thread => visibleReplayMessages(state, sources.conversations, scopeKey, thread.threadId, OWNER_AUDIENCE, 60).messages)
+        .filter(entry => entry.message.role === 'user' && entry.message.observedAt >= since).map(entry => entry.message.content);
+      return ownerSaysUnwell(said) ? ['unwell'] : [];
+    }).length > 0,
   };
 }
 

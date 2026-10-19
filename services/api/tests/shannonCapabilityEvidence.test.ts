@@ -222,7 +222,8 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   body_touch: () => exists(BodyTouches.prototype.observe, BodyReactions.prototype.react, OpenAIBodyReactionSpeaker.prototype.decide)
     && SHANNON_TOUCH_KINDS.every(kind => SHANNON_TOUCH_FEELINGS[kind].steps.length > 0),
   initiative: () => exists(SQLiteInitiativeStore, prepareReachOut, SQLiteReachOutSpeaker.prototype.say)
-    && configuredAutonomy({}).maximumReachOutsPerDay === Number.POSITIVE_INFINITY && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
+    // Owner 2026-10-19: about three a day unless the owner sets a count (`unlimited` is none).
+    && configuredAutonomy({}).maximumReachOutsPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
   // Her own step in her own time: the gated step, the request the API process sends, and the push that rings. Only while he switched it on.
   // Aether as her place (Syzygy ADR-0007 revised): the client, the gate that holds others-present reading to her folder, the
   // executors, her study in Aether, and the proposal inbox. Only while Aether is configured (the line is conditional).

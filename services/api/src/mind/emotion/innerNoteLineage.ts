@@ -118,6 +118,15 @@ export function lineage(own: readonly (string | undefined)[], previous: Pick<Sto
  * tease of the same turn as `consent`, and is its own event otherwise (owner decision 2026-10-14: such a turn, her own yes or no
  * included, makes her reflect at once).
  */
+/**
+ * Owner 2026-10-19: his apology or amends read by its meaning (Jev, `FeelingTurnDecision.amends`) when the narrow words of `turnEvent` did
+ * not see one (a long apology, 「どうやったら埋め合わせできる？」). Null when the turn was already an apology or a kind word.
+ */
+export function amendsEvent(turn: Pick<InnerNoteTurn, 'at' | 'userMessage' | 'reply'>): InnerNoteEvent | null {
+  if (soothingIn(turn.userMessage) || apologyIn(turn.userMessage)) return null;
+  return { kind: 'apology', at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200) };
+}
+
 export function turnEvent(turn: InnerNoteTurn, context: { recentTouch?: boolean } = {}): { event: InnerNoteEvent | null; goodnight: boolean } {
   const consent = touchConsentIn(turn.userMessage, turn.reply, context);
   const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200), ...(consent ? { consent } : {}) };

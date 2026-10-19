@@ -14,6 +14,7 @@ import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
  * - `SHANNON_EMOTION_IDLE_MINUTES`: the gap after which she counts as dormant.
  * - `SHANNON_EMOTION_*_HALF_LIFE_MINUTES` / `SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS`: one value of the table each.
  * - `SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS`: the wall-clock bound on anything kept underneath.
+ * - `SHANNON_EMOTION_OVERNIGHT_SHARE`: what is left of a lingering feeling after each night (3:00 in `SHANNON_AUTONOMY_TIMEZONE`).
  */
 const MINUTE = 60_000;
 let cached: { key: string; timing: ShannonEmotionTiming } | undefined;
@@ -23,7 +24,14 @@ const NAMES = [
   'SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES', 'SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES',
   'SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES', 'SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES',
   'SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS', 'SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS', 'SHANNON_EMOTION_EASED_HOLD_MINUTES',
+  'SHANNON_EMOTION_OVERNIGHT_SHARE', 'SHANNON_AUTONOMY_TIMEZONE',
 ] as const;
+
+/** `SHANNON_EMOTION_OVERNIGHT_SHARE`: the share of what lingers left after one night, 0–1; `1` turns the night off. Else the table's. */
+function overnight(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return value?.trim() && Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : SHANNON_EMOTION_TIME.overnightShare;
+}
 
 export function emotionTiming(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): ShannonEmotionTiming {
   const key = NAMES.map(name => environment[name] ?? '').join('\n');
@@ -48,6 +56,8 @@ export function emotionTiming(environment: Readonly<Record<string, string | unde
     lingeringHalfLifeMs: duration('SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS', 60 * MINUTE, SHANNON_EMOTION_TIME.lingeringHalfLifeMs, 168),
     lingeringMaxWallMs: duration('SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS', 24 * 60 * MINUTE, SHANNON_EMOTION_TIME.lingeringMaxWallMs, 60),
     easedHoldMs: duration('SHANNON_EMOTION_EASED_HOLD_MINUTES', MINUTE, SHANNON_EMOTION_TIME.easedHoldMs, 1_440),
+    overnightShare: overnight(environment.SHANNON_EMOTION_OVERNIGHT_SHARE),
+    timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || SHANNON_EMOTION_TIME.timeZone,
   });
   cached = { key, timing };
   return timing;

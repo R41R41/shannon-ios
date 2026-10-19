@@ -42,6 +42,11 @@ export interface AutonomyOwnerContext {
    * conversation with other people present uses.
    */
   forMessage(scopeKey: string, at: string, topic: string, others: boolean): OwnerContextBlock | null;
+  /**
+   * Owner 2026-10-19: whether he said since `since`, in his own Talk turns, that he is unwell (a cold, a fever: `ownerSaysUnwell`),
+   * read through the same replay as the rest. Only a yes or no leaves; fewer messages of hers then (`reachOutPace.ts`).
+   */
+  unwell?(scopeKey: string, at: string, since: string): boolean;
 }
 
 export const OWNER_CONTEXT_TITLE = `${SHANNON_OWNER_NAME}のこと・最近のふたりのこと`;

@@ -1,4 +1,4 @@
-import { autonomyDayKey } from '../../inhibition/inhibitionPorts.js';
+import { REACH_OUT_PACE_V1, autonomyDayKey, nightStartedAt } from '../../inhibition/inhibitionPorts.js';
 import { reachOutWait } from './autonomyLoopConfig.js';
 import type { ObservedReachOutReason, ReachOutAppSurface, ReachOutCallOutcome, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './store/autonomyLoopObservations.js';
 import { sessionOf } from './autonomyLoopPacing.js';
@@ -96,10 +96,20 @@ export async function observeReachOut(
   };
 }
 
+/** Whether he said lately that he is unwell (`REACH_OUT_PACE_V1.unwellLookbackHours`); no on any failure or without the port. */
+export function ownerUnwell(dependencies: Pick<StepDependencies, 'ownerContext'>, scopeKey: string, at: string): boolean {
+  try {
+    const since = new Date(Date.parse(at) - REACH_OUT_PACE_V1.unwellLookbackHours * 3_600_000).toISOString();
+    return dependencies.ownerContext?.unwell?.(scopeKey, at, since) ?? false;
+  } catch { return false; }
+}
+
 /** Second calls she may still make today, or 0 while they are switched off or used up. */
 export function followUpsRemaining(dependencies: StepDependencies, scopeKey: string, at: string): number {
   const { reachOuts, config } = dependencies;
   if (!reachOuts?.followUpsOn || !agenticLoop(dependencies)) return 0;
+  // Owner 2026-10-19: no second call through the night, nor while he is unwell (`reachOutPace.ts`).
+  if (nightStartedAt(at, config.timeZone) !== null || ownerUnwell(dependencies, scopeKey, at)) return 0;
   try { return Math.max(0, config.maximumReachOutFollowUpsPerDay - reachOuts.followUpsOn(scopeKey, autonomyDayKey(at, config))); } catch { return 0; }
 }
 

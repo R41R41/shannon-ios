@@ -34,6 +34,11 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * next morning is now that hurt going on, so the reaction is no longer stored anew
  * at 0.90 (its `updatedAt` and `awakeAt` stay those of the night). Its assertions,
  * which are about what is underneath, are unchanged and pass.
+ *
+ * 2026-10-19 (owner: a night she slept on what lingers halves it): four re-recorded by hand.
+ * Three assertions follow the night (`-lingers-into-next-day` 0.88 → 0.44; `-undecided-cue-stays-a-mood`
+ * and `-strong-eased-by-apology` now out of sight, so not told); `-again-renews-nothing` keeps its assertions
+ * (what is underneath is stored as before, with when it was noted). The scenario-set fingerprint changed with them.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '858b6d1a',
@@ -64,12 +69,12 @@ const resultFingerprints = {
   'affect-baseline-drift': '005850b0',
   'affect-returns-with-awake-time': '955c460e',
   'affect-stands-still-while-dormant': 'b9e9fbaf',
-  'feeling-text-strong-lingers-into-next-day': '20590f5e',
+  'feeling-text-strong-lingers-into-next-day': 'dccdee10',
   'feeling-text-subtle-does-not-linger': 'b5c2b163',
-  'feeling-text-undecided-cue-stays-a-mood': '152b2d1d',
+  'feeling-text-undecided-cue-stays-a-mood': '16c79e82',
   'feeling-text-undecided-without-cue-leaves-nothing': '29cbf07d',
-  'feeling-text-strong-eased-by-apology': 'bf8d27bd',
-  'feeling-text-strong-again-renews-nothing': '9d8a1563',
+  'feeling-text-strong-eased-by-apology': 'f4e18ac9',
+  'feeling-text-strong-again-renews-nothing': 'ad72e00c',
   'feeling-text-strong-sadness-is-not-kept': '74a8a052',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',
@@ -81,7 +86,7 @@ const resultFingerprints = {
 export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze({
   schemaVersion: 1,
   implementationRevision: 'ac7397cacd0f914bcda356f8bead2f5feedd9f4a',
-  scenarioSetFingerprint: '62c53250',
+  scenarioSetFingerprint: '5a5af27e',
   status: 'passed',
   generatedAt: '2026-09-26T00:00:00.000Z',
   results: Object.freeze(Object.entries(resultFingerprints).map(([scenarioId, fingerprint]) => Object.freeze({

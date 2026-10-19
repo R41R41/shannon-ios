@@ -77,7 +77,14 @@ export interface OperatorServerParts extends OperatorHostParts {
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
   /** The body re-check (`minecraftBodyRecheckWiring.ts`), when Minecraft is on: `minecraft release` asks it to check again now. */
   bodyRecheck?: Pick<MinecraftBodyRecheck, 'request'> | null;
+  /** `SHANNON_OPERATOR_TALK_NOTES` (`operatorTalkNotes`): whether an operator's action is also noted in the owner's Talk. */
+  talkNotes?: boolean;
   log(line: string): void;
+}
+
+/** Whether an operator's Minecraft action is also noted in the owner's Talk (owner 2026-10-19: off unless asked for). */
+export function operatorTalkNotes(values: Readonly<Record<string, string | undefined>>): boolean {
+  return switchOn(values, 'SHANNON_OPERATOR_TALK_NOTES');
 }
 
 /** Writes one operator event to the activity record: the owner's side of the record, named as the operator's in the sentence. */
@@ -107,6 +114,9 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
     lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false, skillImport: parts.skillImport ?? null,
     activity: recorder(parts),
     note: (id, text, at) => {
+      // Owner 2026-10-19: a quarter of her lines in a week were these notices. They stay in the audit and the activity record
+      // (自律活動 › 記録), and reach his Talk only with SHANNON_OPERATOR_TALK_NOTES=on.
+      if (!parts.talkNotes) return;
       try {
         const thread = parts.conversation.threadId(parts.scopeKey);
         parts.conversation.appendNoteOnce(parts.scopeKey, thread, id, text, at, OPERATOR_NOTE_KIND, parts.ownerAlone());

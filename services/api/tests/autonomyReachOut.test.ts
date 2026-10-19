@@ -109,8 +109,9 @@ describe('reach_out: one message of her own', () => {
     expect(autonomyDayPhrases(day)).toContain('自分から1回話しかけた');
   });
 
-  it('has no count of messages a day unless the owner sets one, and then says nothing of a count', async () => {
-    const w = world();
+  it('has no count of messages a day when the owner writes unlimited, and then says nothing of a count', async () => {
+    // Owner 2026-10-19: unset is three a day (below); `unlimited` keeps the owner decision of 2026-10-03.
+    const w = world({ environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: 'unlimited' } });
     for (let index = 0; index < 6; index += 1) await w.cycle(WONDER);
     expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(6);
     expect(w.messages()).toHaveLength(6);
@@ -118,7 +119,7 @@ describe('reach_out: one message of her own', () => {
       expect(prompt).toContain('reach_out（');
       expect(prompt).not.toMatch(/今日はあと\d+回/u);
     }
-    expect(configuredAutonomy({}).maximumReachOutsPerDay).toBe(Number.POSITIVE_INFINITY);
+    expect(configuredAutonomy({}).maximumReachOutsPerDay).toBe(3);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: 'unlimited' }).maximumReachOutsPerDay).toBe(Number.POSITIVE_INFINITY);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '25' }).maximumReachOutsPerDay).toBe(25);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay).toBe(0);

@@ -590,15 +590,20 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyActionAcknowledgements.ts',
       // Syzygy ADR-0008 §14: what a refusal of her gate is as a withheld action, and its closed vocabulary; no store.
       'withheldRules.ts', 'withheldActionContract.ts',
+      // Owner 2026-10-19: what her own message must not hold (a tally of his quiet), pure; no store.
+      'ownWordsTally.ts',
     ]);
     // Since Syzygy ADR-0008 stage 3 (S1) the window also re-exports types of the tool gate, the activity record and the day's log
     // (types only: nothing more of the inhibition part runs in her process through it). The disclosure gate and the
     // conversation's secrets are in `disclosurePorts.ts`, which no module of her loop imports.
-    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyDayLog.ts', 'autonomyPolicy.ts', 'shannonToolGate.ts', 'withheldRules.ts']);
+    // Owner 2026-10-19: also the pace of her own messages (`reachOutPace.ts`: pure, no store; whether he said he is unwell is read through the owner context).
+    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyDayLog.ts', 'autonomyPolicy.ts',
+      'reachOutPace.ts', 'shannonToolGate.ts', 'withheldRules.ts']);
     expect(imports('inhibitionStorePorts.ts').sort()).toEqual(['autonomyActivity.ts', 'ownerInformedMarks.ts', 'privateListeningStore.ts']);
     expect(read('inhibitionStorePorts.ts').split('\n').filter(line => /^export/u.test(line)).every(line => /^export type \{/u.test(line))).toBe(true);
     const window = read('inhibitionPorts.ts');
-    expect(window.match(/^export \* from '[^']+';$/gmu)).toEqual(["export * from './autonomyBudget.js';", "export * from './autonomyPolicy.js';", "export * from './withheldRules.js';"]);
+    expect(window.match(/^export \* from '[^']+';$/gmu)).toEqual(["export * from './autonomyBudget.js';", "export * from './autonomyPolicy.js';", "export * from './withheldRules.js';",
+      "export * from './reachOutPace.js';"]);
     for (const line of window.split('\n').filter(item => /^export \{/u.test(item))) expect(line, line).toMatch(/^export \{ (?:type \w+(?:, )?)+ \} from '/u);
     for (const name of loopSources) expect(imports(name), name).not.toContain('disclosurePorts.ts');
     expect(imports('withheldRules.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldActionContract.ts']);
@@ -625,7 +630,9 @@ describe('what reaches the prompts of her own activity', () => {
     // replay under forgetting and disclosure, the replay window, the deterministic recall of a turn, people memory, today's focus.
     const context = read('autonomyOwnerContext.ts');
     expect(imports('autonomyOwnerContext.ts').sort()).toEqual([
-      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'contextPorts.ts', 'disclosurePorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'recallPorts.ts', 'respondPorts.ts',
+      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'contextPorts.ts', 'disclosurePorts.ts',
+      // Owner 2026-10-19: whether he said he is unwell (`ownerSaysUnwell`, pure), read through the same replay.
+      'inhibitionPorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'recallPorts.ts', 'respondPorts.ts',
     ]);
     // Syzygy ADR-0008 stage 3 (S3): a turn's cognitive context moved into the workspace; this reader reaches it through a window
     // that re-exports that module alone.

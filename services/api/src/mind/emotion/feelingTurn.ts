@@ -36,6 +36,8 @@ export interface FeelingTurnInput {
   reading?: boolean;
   /** Whether Jev is handed the turn's words (`utterance`, at most 400 characters) or only the closed facts (`summary`). */
   jevInput?: FeelingTurnJevInput;
+  /** Owner 2026-10-19: she holds something against him, so Jev also reads whether his words apologise or make amends. */
+  amends?: boolean;
 }
 
 /** What the chooser is shown: closed numbers, the audience, the words of this turn. */
@@ -44,7 +46,7 @@ export function feelingTurnState(input: FeelingTurnInput): Record<string, unknow
   return {
     audience: input.audience, relationship: input.audience === 'owner_alone' ? 'her_creator' : 'others_present', register_hint: input.register,
     this_turn: { feeling_order: kind === 'feeling_order', apology: kind === 'apologized', kind_words: kind === 'praised' },
-    ...(input.reading ? { read_meaning: true } : {}),
+    ...(input.reading ? { read_meaning: true } : {}), ...(input.amends ? { read_amends: true } : {}),
     ledger: input.lines?.facts ?? {}, mood: { valence: round(input.mood.valence), arousal: round(input.mood.arousal) },
   };
 }
@@ -62,8 +64,9 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
     const state = { ...words, shannon_feeling: feelingTurnState(input) };
     const decided = await chooser.decide({
       scopeKey: input.scopeKey, surface: input.surface === 'voice' ? 'voice' : 'text', decision: 'feeling_turn',
-      sets: [JEV_QUESTION_SETS.feelingTurn, ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : [])],
-      state, questions: feelingTurnQuestions('', input.audience, input.reading === true),
+      sets: [JEV_QUESTION_SETS.feelingTurn, ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : []),
+        ...(input.amends && input.audience === 'owner_alone' ? [JEV_QUESTION_SETS.feelingAmends] : [])],
+      state, questions: feelingTurnQuestions('', input.audience, input.reading === true, input.amends === true),
       parse: answers => feelingTurnFromAnswers(answers, input.register, '', input.audience),
       fallback: () => neutralFeelingTurn(input.register),
       traceAnswers: value => ({ stance: value.stance, intensity: value.intensity, drawer: value.drawer, register: value.register, source: value.source }),
@@ -75,7 +78,7 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
 
 /** The decision, or 「ふつう」 if it is not there within the extra wait (measured from now, the moment the reply is otherwise ready). */
 export async function feelingTurnWithin(pending: Promise<FeelingTurnDecision>, register: FeelingRegister,
-  milliseconds = FEELING_TURN_LIMITS.extraWaitMilliseconds): Promise<FeelingTurnDecision> {
+  milliseconds: number = FEELING_TURN_LIMITS.extraWaitMilliseconds): Promise<FeelingTurnDecision> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<FeelingTurnDecision>(resolve => { timer = setTimeout(() => resolve(neutralFeelingTurn(register)), milliseconds); });
   try { return await Promise.race([pending, late]); } finally { clearTimeout(timer); }

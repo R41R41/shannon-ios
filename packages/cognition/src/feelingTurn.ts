@@ -31,7 +31,15 @@ export interface FeelingTurnDecision {
   source: 'jev' | 'fallback';
   /** Stage 2 (`SHANNON_CORE_AFFECT`): Jev's reading of the words' meaning for her appraisal: meant, and teasing (each 0..1). */
   meaning?: { deliberate: number; teasing: number };
+  /**
+   * Owner 2026-10-19: Jev's reading (0..1) of whether his words apologise to her or make amends, in any wording (a long apology,
+   * 「本当に勝手に触ったのはごめん」, 「どうやったら埋め合わせできる？」). Asked only while she holds something against him.
+   */
+  amends?: number;
 }
+
+/** From this reading on, his words are taken as an apology or amends (`FeelingTurnDecision.amends`). */
+export const FEELING_AMENDS_FROM = 0.6;
 
 /** The menu as the chooser reads it (English, a fixed question set: a change of wording is a new version). */
 export const FEELING_STANCE_CRITERIA: Readonly<Record<FeelingStance, string>> = Object.freeze({
@@ -74,7 +82,8 @@ export const FEELING_ORDER_LINE = '気持ちへの注文（「〜して見せて
 /** Facts are for her judgment (owner, 2026-10-14, after the live eval): never recited. */
 export const FEELING_FACTS_USE_LINE = '事実は判断の材料。数字や回数をそのまま口にしない。';
 /** Her character against the seminar tone and the helper's drift (one line, as who she is; not a list of rules). */
-export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。';
+export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。'
+  + 'でも、頼まれた調べものや手伝いは、むっとしていてもちゃんとやる（後回しにしない）。';
 export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写はしない。照れ・叱る・冷たくする・すねる・「えっち」のような言い方はしてよい。';
 
 /**
