@@ -7,6 +7,7 @@ import { WeatherError, fetchForecast, geocodePlace, localDateLabel, parseHomeLoc
 import { composeMorningBrief, todayLines, type MorningBriefHeadline } from '../integrations/weather/morningBrief.js';
 import type { CandidateRow } from '../mind/action/respond/initiativeSelection.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
+import { filterMeaningfulInterests } from '@shannon/cognition';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type ScheduleLines = (scopeKey: string, at: string) => readonly { when: string; title: string; kindLabel?: string; subject?: string }[];
@@ -53,6 +54,17 @@ export function freshHeadlines(items: readonly MorningBriefHeadline[], shown: Re
   }).slice(0, 3);
 }
 
+/**
+ * Owner 2026-10-19 (item 16, recommended choice taken): only the headlines that touch what he is into, and none on a day nothing
+ * does. A headline is his when its title holds one of his meaningful interests (NFKC, case folded, at least two characters).
+ */
+export function interestingHeadlines(items: readonly MorningBriefHeadline[], interests: readonly unknown[]): MorningBriefHeadline[] {
+  const fold = (text: string) => text.normalize('NFKC').toLowerCase();
+  const terms = filterMeaningfulInterests(interests).map(fold).filter(term => term.length >= 2);
+  if (!terms.length) return [];
+  return items.filter(item => { const title = fold(item.title); return terms.some(term => title.includes(term)); });
+}
+
 /** The owner-local hours in which the proactive brief may be written (the initiative loop wakes at 7 after quiet hours). */
 export const MORNING_BRIEF_HOURS = Object.freeze({ start: 7, end: 10, withoutWeatherFrom: 9 });
 
@@ -94,7 +106,10 @@ export function configuredMorningBrief(environment: Environment, parts: {
           let schedule: ReturnType<typeof todayLines> | null;
           try { schedule = todayLines(upcoming.upcoming.loopLines(scopeKey, at, 'owner')); } catch { schedule = null; }
           let headlines: readonly MorningBriefHeadline[] = [];
-          try { headlines = freshHeadlines(parts.headlines?.() ?? [], shown, at); } catch { headlines = []; }
+          try {
+            const interests = snapshot.read(scopeKey, at)?.interests ?? [];
+            headlines = freshHeadlines(interestingHeadlines(parts.headlines?.() ?? [], interests), shown, at);
+          } catch { headlines = []; }
           for (const item of headlines) shown.add(item.url || item.title);
           const brief = composeMorningBrief({ date, weather, schedule, headlines, voice: 'shannon' });
           cached = { date, candidate: {

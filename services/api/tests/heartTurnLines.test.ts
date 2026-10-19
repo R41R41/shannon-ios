@@ -5,7 +5,7 @@ import {
 import { VOICE_BACKGROUND_LINE, VOICE_FOREIGN_LINE, voiceHearingLines, voiceTranscriptInterpretationPrompt } from '../src/surfaces/voice/voiceTranscriptContext.js';
 import { clockContext } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { composeMorningBrief } from '../src/integrations/weather/morningBrief.js';
-import { freshHeadlines } from '../src/wiring/dailyReadWiring.js';
+import { freshHeadlines, interestingHeadlines } from '../src/wiring/dailyReadWiring.js';
 import { crossStreak, heartDayNumbers, heartDaysMarkdown } from '../src/mind/emotion/heartDaily.js';
 import { retiredTaskReport } from '../src/mind/action/taskRuntime/store/taskRuntimeRecovery.js';
 
@@ -69,6 +69,15 @@ describe('the morning brief in her words, with fresh news (owner 2026-10-19, ite
       { title: 'told yesterday', url: 'https://example.org/2', at: '2026-10-15T10:00:00.000Z' },
       { title: 'fresh', url: 'https://example.org/3', at: '2026-10-15T20:00:00.000Z' }];
     expect(freshHeadlines(items, new Set(['https://example.org/2']), at).map(item => item.title)).toEqual(['fresh']);
+  });
+
+  it('keeps only the headlines that touch his interests, and none when nothing does (owner 2026-10-19, item 16)', () => {
+    const items = [{ title: 'Effects of air pollution on rheumatoid arthritis' }, { title: 'Splatoon 3 の新シーズンが発表' },
+      { title: 'ＭＩＮＥＣＲＡＦＴ update notes' }];
+    expect(interestingHeadlines(items, ['スプラトゥーン', 'splatoon', 'minecraft']).map(item => item.title))
+      .toEqual(['Splatoon 3 の新シーズンが発表', 'ＭＩＮＥＣＲＡＦＴ update notes']);
+    expect(interestingHeadlines(items, [])).toEqual([]);
+    expect(interestingHeadlines(items, ['a'])).toEqual([]);
   });
 });
 
