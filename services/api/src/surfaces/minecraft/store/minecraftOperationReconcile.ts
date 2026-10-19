@@ -23,10 +23,20 @@ export function operationUnresolved(operation: BodyOperationState): boolean {
   return operation.phase !== 'settled' || operation.outcome === null || operation.outcome === 'unknown' || !operation.released;
 }
 
-const OPERATIONS = `SELECT id,json_extract(command_json,'$.kind') AS kind,json_extract(command_json,'$.skill') AS skill,
+/**
+ * With the task's id (every caller in the recovery has it) the rows are found by `task_id` (`fca_body_operations_task`) before the
+ * lease's JSON is read, not by reading the JSON of every operation the body ever ran (L-1).
+ */
+const operations = (byTask: boolean) => `SELECT id,json_extract(command_json,'$.kind') AS kind,json_extract(command_json,'$.skill') AS skill,
   json_extract(command_json,'$.connectionId') AS connection,phase,receipt_json FROM fca_body_operations
-  WHERE json_extract(command_json,'$.lease.id')=? AND json_extract(command_json,'$.lease.holder')=?
+  WHERE ${byTask ? 'task_id=? AND ' : ''}json_extract(command_json,'$.lease.id')=? AND json_extract(command_json,'$.lease.holder')=?
   AND json_extract(command_json,'$.lease.generation')=? AND json_extract(command_json,'$.context.scopeKey')=? ORDER BY rowid`;
+const OPERATIONS = operations(false), OPERATIONS_OF_TASK = operations(true);
+
+function rowsOf(db: DatabaseSync, lease: ActionLease, scopeKey: string, taskId?: string) {
+  return taskId === undefined ? db.prepare(OPERATIONS).all(lease.id, lease.holder, lease.generation, scopeKey)
+    : db.prepare(OPERATIONS_OF_TASK).all(taskId, lease.id, lease.holder, lease.generation, scopeKey);
+}
 
 function tablePresent(db: DatabaseSync): boolean {
   return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fca_body_operations'").get();
@@ -40,9 +50,9 @@ function stateOf(row: Record<string, unknown>): BodyOperationState & { connectio
 }
 
 /** Every body operation sent under this lease in this scope, oldest first. Read only; none when the table was never made. */
-export function bodyOperations(db: DatabaseSync, lease: ActionLease, scopeKey: string): BodyOperationState[] {
+export function bodyOperations(db: DatabaseSync, lease: ActionLease, scopeKey: string, taskId?: string): BodyOperationState[] {
   if (!tablePresent(db)) return [];
-  return db.prepare(OPERATIONS).all(lease.id, lease.holder, lease.generation, scopeKey).map(row => {
+  return rowsOf(db, lease, scopeKey, taskId).map(row => {
     const { connection: _connection, ...operation } = stateOf(row);
     return operation;
   });
@@ -53,10 +63,11 @@ export function bodyOperations(db: DatabaseSync, lease: ActionLease, scopeKey: s
  * proof (`evidenceId`: the re-check's command that the body answered `stopped`). The caller holds the transaction and has checked
  * that proof. Returns the operations it closed; resent: never.
  */
-export function reconcileOperations(db: DatabaseSync, lease: ActionLease, scopeKey: string, evidenceId: string, at: string): BodyOperationState[] {
+export function reconcileOperations(db: DatabaseSync, lease: ActionLease, scopeKey: string, evidenceId: string, at: string, taskId?: string):
+  BodyOperationState[] {
   if (!tablePresent(db)) return [];
   const closed: BodyOperationState[] = [];
-  for (const row of db.prepare(OPERATIONS).all(lease.id, lease.holder, lease.generation, scopeKey)) {
+  for (const row of rowsOf(db, lease, scopeKey, taskId)) {
     const { connection, ...operation } = stateOf(row);
     if (!operationUnresolved(operation)) continue;
     const receipt = { id: operation.id, connectionId: connection, outcome: 'cancelled', inputsReleased: true, observedAt: at,

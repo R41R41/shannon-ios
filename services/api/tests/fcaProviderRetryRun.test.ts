@@ -6,6 +6,7 @@ import { createFcaBodyRecovery } from '../src/wiring/fcaBodyRecovery.js';
 import { fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
 import { PROVIDER_UNAVAILABLE_SUMMARY } from '../src/wiring/taskRuntimeUnavailable.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
+import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 
@@ -53,12 +54,14 @@ function fixture(script: Answer[], options: { body?: boolean; cap?: number; sugg
   const rounds = () => (h.db.prepare('SELECT entries_json FROM fca_task_history WHERE task_id=? ORDER BY sequence').all(child.id) as Array<{ entries_json: string }>)
     .map(row => JSON.parse(row.entries_json) as unknown[]);
   const events = () => (h.db.prepare('SELECT event_type FROM agent_task_events WHERE task_id=? ORDER BY rowid').all(child.id) as Array<{ event_type: string }>).map(row => row.event_type);
+  const reports = () => (h.db.prepare("SELECT COUNT(*) AS n FROM agent_task_events WHERE task_id=? AND event_type='fca_progress_observed' AND json_extract(payload_json,'$.tool')='fca.result'")
+    .get(child.id) as { n: number }).n;
   const logs = () => vi.mocked(console.log).mock.calls.map(([line]) => String(line)).filter(line => line.startsWith('Shannon FCA step'));
   const warnings = () => vi.mocked(console.warn).mock.calls.map(([line]) => String(line)).filter(line => line.startsWith('Shannon FCA decision'));
   const run = async (until: () => boolean = () => ['completed', 'failed', 'unknown', 'stopped'].includes(phase() ?? '')) => {
     for (let i = 0; i < 80 && !until(); i++) { await driver.tick(); await driver.drain(); }
   };
-  return { h, driver, child, provider, usages, budgetStore, phase, rounds, events, logs, warnings, run };
+  return { h, driver, child, provider, usages, budgetStore, phase, rounds, events, reports, logs, warnings, run };
 }
 
 describe('a decision is asked again inside its step after a provider error (C-20)', () => {
@@ -154,7 +157,17 @@ describe('a decision is asked again inside its step after a provider error (C-20
     expect(paused.cappedAt).toBeNull();
     expect(paused.estimatedYen).toBeGreaterThanOrEqual(1);
     expect(paused.openEstimatedYen).toBe(0); // reviewed: the owner was asked
+    // M-2: the owner is told, as he was by the report of the failure this replaced: once, with the reason and that it can be resumed.
+    const notice = f.driver.runtime.progress!('owner', f.child.id)?.report;
+    expect(notice).toMatchObject({ text: f.driver.runtime.get('owner', f.child.id)!.summary });
+    expect(notice?.text).toContain('再開できます');
+    expect(notice?.id.startsWith('paused:')).toBe(true);
+    for (let i = 0; i < 4; i++) { await f.driver.tick(); await f.driver.drain(); }
+    expect(f.reports()).toBe(1);
     expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
+    // M-1: what the pause said is gone the moment the owner resumes it (summary and report).
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe('');
+    expect(f.driver.runtime.progress!('owner', f.child.id)).toBeNull();
     await f.run();
     // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one yen step then reaches the cap by confirmed spend,
     // and that is the cap's to end, as before.
@@ -188,6 +201,35 @@ describe('a Minecraft request goes on through an outage of the provider and is p
     expect(f.phase()).toBe('completed');
     expect(f.rounds()).toHaveLength(2);
     expect(f.driver.runtime.snapshot('owner', f.child.id)?.checkpoint).toMatchObject({ fcaProviderRetries: 0 });
+  });
+
+  it('tells the owner once that it was paused (M-2), and takes the summary and the notice away when he resumes it, so the result is reported (M-1)', async () => {
+    const f = fixture([...repeat(25, () => answered(503)), [call('task_list', 'list-1')]], { body: true });
+    await f.run();
+    expect(f.phase()).toBe('stopped');
+    const notice = f.driver.runtime.progress!('owner', f.child.id);
+    expect(notice).toMatchObject({ currentStep: 'fca.result', status: 'failed', report: { text: `「採掘」は、${PROVIDER_UNAVAILABLE_SUMMARY}` } });
+    expect(notice?.report?.id.startsWith('paused:')).toBe(true);
+    expect(notice?.report?.text).not.toContain('石を集める'); // the owner's title only, never his words
+    for (let i = 0; i < 4; i++) { await f.driver.tick(); await f.driver.drain(); }
+    expect(f.reports()).toBe(1); // once, however long it stays paused
+    expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe(''); // not "paused" any more, before any step runs
+    expect(f.driver.runtime.progress!('owner', f.child.id)).toBeNull();
+    await f.run();
+    expect(f.phase()).toBe('completed');
+    const result = f.driver.runtime.progress!('owner', f.child.id)?.report;
+    expect(result?.id.startsWith('paused:')).toBe(false);
+    expect(result?.text).toBe('終わり'); // the completion became the report: a pause report would have stood in for it
+  });
+
+  it('clears a pause summary left on a task that runs again at its next commit, even without a resume of the store (M-1)', async () => {
+    const f = fixture([[call('task_list', 'list-1')]], { body: true });
+    new SQLiteFcaTaskAuthority(f.h.db).event('owner', f.child.id, 'fca_note', '2026-10-19T09:00:00.000Z', { summary: PROVIDER_UNAVAILABLE_SUMMARY }, {});
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe(PROVIDER_UNAVAILABLE_SUMMARY);
+    await f.run(() => f.provider.bodies.length >= 1 && f.rounds().length === 1);
+    expect(f.phase()).not.toBe('completed');
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe(''); // the first step that committed
   });
 
   it('does not pause while the provider comes back within the rounds: the count of rounds is reset by the decision that returns', async () => {

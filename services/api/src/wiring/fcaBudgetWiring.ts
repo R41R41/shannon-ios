@@ -2,6 +2,7 @@ import type { ActionLease, ActionThreads } from '../contracts/actionThreadContra
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import type { TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudgetStore.js';
+import { estimatesPausedReport } from './taskPauseNotice.js';
 
 /**
  * One budget for FCA steps (Syzygy ADR-0009 stage 2, E3; owner answer 3):
@@ -69,8 +70,7 @@ interface Booked { confirmed: number; estimated: number; largest: number }
 const capped = (task: TaskView, cap: { yen: number; steps: number }) =>
   `「${task.title.slice(0, 60)}」は1件の上限（${cap.yen}円・${cap.steps}歩）に達したので、ここで止めました。`;
 
-const estimatesPaused = (task: TaskView, cap: { yen: number }) =>
-  `「${task.title.slice(0, 60)}」は、確定していない利用料の見積りを含めると上限（${cap.yen}円）に近づいたので、いったん止めました。再開できます。`;
+const estimatesPaused = (task: TaskView, cap: { yen: number }) => estimatesPausedReport(task.title, cap.yen);
 
 /** The cap of one task: her own time's, an admitted Minecraft request's (lowered by an operator's cap), or an owner task's. */
 function capOf(task: TaskView, options: { minecraftRequest?(task: TaskView): boolean; taskCapYen?(taskId: string): number | null }) {

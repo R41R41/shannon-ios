@@ -219,8 +219,9 @@ export class ActionLeaseReader {
    * The steps of nonterminal FCA tasks (in the scope) whose outcome was lost, oldest first, each as the lease it ran under: the
    * action is `unknown` (the attempt before the one that closed it), or still marked live though its lease ended before `at`
    * (a process that died cannot renew it; the sweep has not run yet). The Minecraft recovery closes them (`fcaBodyRecovery.ts`).
+   * `include` is asked per task before that step's detail is read: false leaves the step out.
    */
-  lostFcaSteps(scopeKey: string, at: string): LostFcaStep[] {
+  lostFcaSteps(scopeKey: string, at: string, include: (taskId: string) => boolean = () => true): LostFcaStep[] {
     const instant = Date.parse(at);
     return this.db.prepare(`SELECT a.id,a.source_id,a.state,a.generation,a.holder,a.last_holder,a.lease_until,a.updated_at FROM mind_actions a
       JOIN agent_tasks t ON t.task_id=substr(a.source_id,5,instr(substr(a.source_id,5),':')-1)
@@ -229,7 +230,8 @@ export class ActionLeaseReader {
       const taskId = fcaTaskIdOf(String(row.source_id)), unknown = row.state === 'unknown';
       const ended = row.lease_until === null || Date.parse(String(row.lease_until)) <= instant;
       const holder = unknown ? row.last_holder : row.holder;
-      if (!taskId || !(unknown || ended) || typeof holder !== 'string') return [];
+      // `include` first (L-1): a step of a task the caller does not want costs no per-step query.
+      if (!taskId || !(unknown || ended) || typeof holder !== 'string' || !include(taskId)) return [];
       const lease = { id: String(row.id), generation: Number(row.generation) - (unknown ? 1 : 0), holder };
       const started = this.db.prepare(`SELECT occurred_at FROM agent_task_events WHERE task_id=? AND event_type='fca_step_started'
         AND json_extract(payload_json,'$.actionId')=? AND json_extract(payload_json,'$.generation')=? ORDER BY sequence DESC LIMIT 1`)

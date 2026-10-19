@@ -3,6 +3,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskRecord, TaskStep } from '../taskRuntimePorts.js';
 import type { TaskProgress, TaskProgressEvent } from '../taskProgressPorts.js';
 
+/** The id prefix of a report that says the runtime paused the task (`TaskProgressStore.pauseNotice`). */
+export const PAUSE_NOTICE_PREFIX = 'paused:';
+
 /** Subordinate to the same task, step and action lease. No scheduler or alternate status authority. */
 export class TaskProgressStore {
   constructor(private readonly db: DatabaseSync, private readonly authority: TaskAuthority, private readonly now: () => string) {
@@ -37,6 +40,30 @@ export class TaskProgressStore {
     });
   }
   /**
+   * The report that the runtime paused a task by itself (resumable, not failed): the owner's activity and call hear of it as they hear
+   * of a failure. Written once per key (a report with the same id is left as it is). The caller may hold a transaction.
+   */
+  pauseNotice(scopeKey: string, taskId: string, key: string, text: string): boolean {
+    const operationId = `${PAUSE_NOTICE_PREFIX}${key}`;
+    return this.authority.transaction(() => {
+      if (!this.authority.get(scopeKey, taskId) || this.read(taskId)?.report?.id === operationId) return false;
+      this.notice(scopeKey, taskId, null, operationId, text);
+      return true;
+    });
+  }
+  /** The owner resumed the task: a pause report no longer describes it (and must not stand in for the result it will report). */
+  clearPauseNotice(taskId: string): void {
+    const prior = this.read(taskId);
+    if (!prior?.report?.id.startsWith(PAUSE_NOTICE_PREFIX)) return;
+    const { report: _report, ...rest } = prior;
+    if (!rest.findings.length && !rest.places?.length) {
+      this.db.prepare('DELETE FROM fca_task_progress WHERE task_id=?').run(taskId);
+      return;
+    }
+    const row = this.db.prepare('SELECT step_id,operation_id FROM fca_task_progress WHERE task_id=?').get(taskId)!;
+    this.write(taskId, String(row.step_id), String(row.operation_id), { ...rest, status: 'running' });
+  }
+  /**
    * A piece of work that finished without telling its parent anything (`fca_complete` with no `task.send`): its completion
    * summary becomes the report, so the owner's activity shows it and a call says it (2026-10-13: a finished weather search was
    * not said until he asked). A report already sent stays the report. The caller holds the committing transaction.
@@ -45,7 +72,7 @@ export class TaskProgressStore {
     // Work the owner asked for only: not the root, a conversation or a nightly sleep.
     if (task.origin !== 'owner_request' || !['research', 'generic'].includes(task.kind) || !text.trim()) return;
     const taskId = task.id, prior = this.read(taskId);
-    if (prior?.report) return;
+    if (prior?.report && !prior.report.id.startsWith(PAUSE_NOTICE_PREFIX)) return; // a pause report never stands in for the result
     const at = this.now(), operationId = `result:${stepId}`;
     const report = { id: operationId, text: text.slice(0, 2000), updatedAt: at };
     const value: TaskProgress = { currentStep: 'fca.result', status: 'received', startedAt: prior?.startedAt ?? at, updatedAt: at,

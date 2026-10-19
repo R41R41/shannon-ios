@@ -19,6 +19,7 @@ import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from 
 import type { FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
 import { settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
+import { pausedSummary } from './taskPauseNotice.js';
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
@@ -73,7 +74,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   /** Set below, once the runtime and the table of running tasks exist; `retireUnknown` asks it which unknown tasks to leave alone. */
   let recovery: FcaBodyRecovery | undefined;
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
-    holdUnknown: task => recovery?.holds(task) ?? false,
+    holdUnknown: task => recovery?.holds(task) ?? false, pausedSummary,
     ...(options.provenanceRefs ? { provenanceRefs: true } : {}),
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
@@ -98,6 +99,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     note: (taskId, summary) => {
       authority.transaction(() => authority.event(scopeKey, taskId, 'fca_note', now(), { summary }, {}));
     },
+    pauseNotice: (taskId, key, text) => { runtime.recordPauseNotice?.(scopeKey, taskId, key, text); },
     log: line => console.log(line) };
   let closing = false, ticking = false;
   /** The scheduling gate of the options, and no lost Minecraft step left to close (`fcaBodyRecovery.ts`). */
@@ -286,7 +288,12 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());
       }
       if (!runtime.recordStoppedStep(step)) throw new Error('FCA_BUDGET_STOP_UNRECORDED');
-      if (pausing) unavailable.note(step.taskId, report);
+      if (pausing) {
+        // The failure this replaced left a report (`fca.result`); the pause leaves its own, once (the step id is its key). `recordProgress`
+        // is not used: the task is stopping now, so no step may record.
+        unavailable.note(step.taskId, report);
+        try { unavailable.pauseNotice(step.taskId, step.id, report); } catch { /* the task is paused either way; its summary says so */ }
+      }
       return;
     }
     if (!runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] })) throw new Error('FCA_BUDGET_COMMIT_REFUSED');

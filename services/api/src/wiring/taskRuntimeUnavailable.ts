@@ -1,6 +1,7 @@
 import type { ActionExecution } from '../infra/context/actionExecution.js';
 import { FcaDecisionUnavailableError } from '../mind/action/fca/fcaProviderRetry.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import { PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } from './taskPauseNotice.js';
 
 /**
  * A step whose decision never came back (`FcaDecisionUnavailableError`: the retries of `decideWithRetry` ran out) ran nothing. It is
@@ -51,6 +52,8 @@ export interface UnavailableParts {
   fail(step: TaskStep): boolean;
   /** Writes the task's summary (what the owner and `task.get` read) without changing its state. */
   note(taskId: string, summary: string): void;
+  /** Tells the owner (the task's report) that the task was paused, once per `key`. */
+  pauseNotice(taskId: string, key: string, text: string): void;
   log(line: string): void;
 }
 
@@ -71,7 +74,7 @@ export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolea
   });
 }
 
-export const PROVIDER_UNAVAILABLE_SUMMARY = 'モデルの応答が続けて得られなかったため一時停止しています。応答が戻れば再開できます。';
+export { PROVIDER_UNAVAILABLE_SUMMARY };
 
 /**
  * Settles a step that threw `FcaDecisionUnavailableError`, logging the closed code. Null: this is not an unavailable decision (or a
@@ -113,6 +116,10 @@ function finish(parts: UnavailableParts, step: TaskStep, error: Error, body: boo
   if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
   parts.runtime.stop(parts.scopeKey, step.taskId, 'fca_provider_unavailable');
   parts.note(step.taskId, PROVIDER_UNAVAILABLE_SUMMARY);
+  // The owner hears of it as he heard of the failure this replaced; once, whatever the pause then does (the step id is its key).
+  try {
+    parts.pauseNotice(step.taskId, step.id, pausedReport(parts.runtime.get(parts.scopeKey, step.taskId)?.title ?? '', PROVIDER_UNAVAILABLE_SUMMARY));
+  } catch { /* the task is paused either way; its summary says so */ }
   parts.log(`Shannon FCA step paused task=${step.taskId} code=${error.message} reason=provider_unavailable`);
   return 'paused';
 }

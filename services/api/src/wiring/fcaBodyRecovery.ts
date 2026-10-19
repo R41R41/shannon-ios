@@ -8,6 +8,8 @@ import {
 } from '../surfaces/minecraft/store/minecraftOperationReconcile.js';
 import { fcaReleaseEvidence } from './configuredActionResourceProof.js';
 import type { BodyRecheckResult } from './minecraftBodyRecheckWiring.js';
+import { pausedReport } from './taskPauseNotice.js';
+import { storeNotice } from './fcaBodyRecoveryNotice.js';
 
 /**
  * A Minecraft request survives a step whose outcome was lost (Minebot parity audit C-20/C-21, 2026-10-19). The step is never replayed and
@@ -18,7 +20,7 @@ import type { BodyRecheckResult } from './minecraftBodyRecheckWiring.js';
  */
 export * from './fcaBodyRecoveryPolicy.js';
 import {
-  AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, BODY_HELD_HINT, BODY_RECOVERY_NOTICE, FCA_BODY_RECOVERY_CODE, FCA_BODY_RECOVERY_LIMIT,
+  AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, BODY_HELD_HINT, FCA_BODY_RECOVERY_CODE, FCA_BODY_RECOVERY_LIMIT,
   FCA_BODY_RELEASE_ATTEMPTS, FCA_BODY_RELEASE_UNPROVEN, FCA_BODY_RETURN_WINDOW_MS, FCA_PAUSED_RELEASE_ATTEMPTS, HOLD_GRACE_MS, heldBackoffMs,
   ownSummary, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
 } from './fcaBodyRecoveryPolicy.js';
@@ -79,6 +81,10 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
 
   const isBodyTask = (task: Pick<TaskRecord, 'id' | 'origin' | 'kind'>) => task.origin === 'owner_request'
     && (task.kind === 'research' || task.kind === 'generic') && parts.body.bound(task.id) !== null;
+  const isBodyTaskId = (taskId: string) => {
+    const task = authority.get(scopeKey, taskId);
+    return !!task && isBodyTask(task);
+  };
   /** Says a task's waiting reason once per change, not once per pass; an outcome is always said and starts the next wait afresh. */
   const say = (taskId: string, code: string, detail = '') => {
     const waiting = code === 'waiting';
@@ -102,10 +108,8 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
 
   /** The lost steps of Minecraft requests; the tasks they hold, and the ones that owe a notice, are not admitted until that is settled. */
   function refreshBlocked(): LostFcaStep[] {
-    const steps = leases.lostFcaSteps(scopeKey, parts.now()).filter(step => {
-      const task = authority.get(scopeKey, step.taskId);
-      return !!task && isBodyTask(task);
-    });
+    // Only a body task's steps are read in full (L-1): the filter runs before the per-step queries.
+    const steps = leases.lostFcaSteps(scopeKey, parts.now(), isBodyTaskId);
     blocked.clear();
     for (const step of steps) blocked.add(step.taskId);
     for (const id of checkpoints.owingTaskIds(scopeKey)) {
@@ -149,32 +153,43 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
   }
 
   /** The task's lost steps that are still open now (`lost` may be older than a step closed a moment ago in the same pass). */
-  const openStepsOf = (taskId: string) => leases.lostFcaSteps(scopeKey, parts.now()).filter(step => step.taskId === taskId);
+  const openStepsOf = (taskId: string) => leases.lostFcaSteps(scopeKey, parts.now(), id => id === taskId);
 
   /** The summary of a pause: with the hint while a lost step still holds the body. */
   const pausedSummary = (taskId: string, summary: string) => openStepsOf(taskId).length ? `${summary}${BODY_HELD_HINT}` : summary;
 
-  function pause(task: TaskRecord, reason: string, summary: string, detail = ''): void {
-    authority.transaction(() => {
+  /**
+   * Pauses an unknown task as stopped (resumable) and tells the owner once, in the same commit (M-2: the failure this replaced left a
+   * report). False, and nothing said or logged: the task was not unknown any more (another pass or the retirement got there first).
+   */
+  function pause(task: TaskRecord, reason: string, summary: string, detail = ''): boolean {
+    const paused = authority.transaction(() => {
       const current = authority.get(scopeKey, task.id);
-      if (!current || current.pauseReason !== 'fca_unknown') return;
+      if (!current || current.pauseReason !== 'fca_unknown') return false;
       // The notice the model is owed is remembered before the task lets go of its step: the action may be closed while it is paused.
       checkpoints.changeOwed(task.id, { add: owedMarkers(task.id) });
       checkpoints.releaseStep(task.id, { clearStop: true });
       const change = { status: 'paused' as const, pauseReason: 'fca_stopped', summary: pausedSummary(task.id, summary), proof: true };
-      authority.event(scopeKey, task.id, 'fca_body_paused', parts.now(), change, { reason });
+      const after = authority.event(scopeKey, task.id, 'fca_body_paused', parts.now(), change, { reason });
+      runtime.recordPauseNotice?.(scopeKey, task.id, `${reason}:${after.revision}`, pausedReport(current.title, summary));
+      return true;
     });
-    say(task.id, 'paused', `reason=${reason}${detail ? ` ${detail}` : ''}`);
+    if (paused) say(task.id, 'paused', `reason=${reason}${detail ? ` ${detail}` : ''}`);
+    return paused;
   }
 
   /** A task the owner resumed (or that never was unknown) is stopped, resumable: its lost step is still open, so it must not run. */
   function stopResumed(task: TaskRecord, reason: string, summary: string): boolean {
     try {
-      runtime.stop(scopeKey, task.id, reason);
+      const stopped = runtime.stop(scopeKey, task.id, reason).find(item => item.id === task.id);
       try {
         authority.transaction(() => checkpoints.changeOwed(task.id, { add: owedMarkers(task.id) }));
       } catch { /* the step is still open: the notice is sent when it is closed */ }
       annotate(task.id, pausedSummary(task.id, summary));
+      try {
+        // M-2: the owner hears of it once; the stop has taken, so a failure of the report does not undo it (the summary says so too).
+        runtime.recordPauseNotice?.(scopeKey, task.id, `${reason}:${stopped?.revision ?? 0}`, pausedReport(task.title, summary));
+      } catch { /* the summary above is what remains */ }
       say(task.id, 'paused', `reason=${reason}`);
       return true;
     } catch {
@@ -204,9 +219,19 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
     if (Number.isFinite(resumed) && instant() - resumed > windowMs && stopResumed(task, 'body_not_returned', BODY_ABSENT_SUMMARY)) awaiting.delete(id);
   }
 
+  /** One task's failure never stops the others (L-5): it is logged by task and code, and the next tick tries again. */
   function pauseExpired(): void {
-    for (const id of checkpoints.unknownTaskIds(scopeKey)) pauseExpiredUnknown(id);
-    for (const id of new Set(lost.map(step => step.taskId))) pauseExpiredResumed(id);
+    const each = (ids: Iterable<string>, work: (id: string) => void) => {
+      for (const id of ids) {
+        try {
+          work(id);
+        } catch {
+          log(`Shannon FCA body recovery task=${id} code=expire_failed`);
+        }
+      }
+    };
+    each(checkpoints.unknownTaskIds(scopeKey), pauseExpiredUnknown);
+    each(new Set(lost.map(step => step.taskId)), pauseExpiredResumed);
   }
 
   /**
@@ -241,34 +266,8 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
     return fcaReleaseEvidence(db, step.lease, scopeKey);
   }
 
-  /** The names of what the lost step sent the body, with how each stood: closed values, never arguments. */
-  function lostOperations(operations: readonly BodyOperationState[]) {
-    return operations.filter(operation => operation.kind === 'skill' || operation.kind === 'reflex').slice(0, 8)
-      .map(operation => ({ tool: operation.skill ? `mc.${operation.skill}` : 'minecraft.reflex',
-        outcome: operation.closedByApi ? 'no_receipt' : operation.outcome ?? 'no_receipt' }));
-  }
-
-  /**
-   * The model's notice about a lost step, stored in the task's inbox and verified there (`recovery:<actionId>`): sending is idempotent,
-   * so a later pass finds it. False: it is not in the inbox, and the caller does not go on without it.
-   */
-  function ensureNotice(taskId: string, step: Pick<LostFcaStep, 'actionId' | 'startedAt' | 'lostAt'>, operations: readonly BodyOperationState[]): boolean {
-    const id = `recovery:${step.actionId}`;
-    if (checkpoints.messageStored(scopeKey, taskId, id)) return true;
-    const lostAt = step.lostAt === null ? Number.NaN : Date.parse(step.lostAt);
-    const effects = checkpoints.effectsSince(scopeKey, taskId, step.startedAt);
-    const text = JSON.stringify({ kind: 'body.recovery', reason: 'step_interrupted',
-      ...(Number.isFinite(lostAt) ? { gapSeconds: Math.max(0, Math.round((instant() - lostAt) / 1000)) } : {}),
-      lostOperations: lostOperations(operations), existingChildren: effects.children, sentNotes: effects.notes, instruction: BODY_RECOVERY_NOTICE });
-    try {
-      runtime.send(scopeKey, taskId, taskId, text, id);
-    } catch { /* judged below by what the inbox holds, not by what this call said */ }
-    try {
-      return checkpoints.messageStored(scopeKey, taskId, id);
-    } catch {
-      return false;
-    }
-  }
+  const ensureNotice = (taskId: string, step: Pick<LostFcaStep, 'actionId' | 'startedAt' | 'lostAt'>, operations: readonly BodyOperationState[]) =>
+    storeNotice({ runtime, checkpoints, scopeKey, instant }, taskId, step, operations);
 
   /** The notice for this step is in the inbox: the task owes none for it any more. */
   function settleOwed(taskId: string, actionId: string): void {
@@ -285,12 +284,12 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
    * the task owes it (remembered first) and sends it when the owner resumes it, with the gap as it is then (L-5).
    */
   async function close(taskId: string, step: LostFcaStep, held = false): Promise<boolean> {
-    const open = bodyOperations(db, step.lease, scopeKey).filter(operationUnresolved);
+    const open = bodyOperations(db, step.lease, scopeKey, taskId).filter(operationUnresolved);
     const proof = open.length ? await releaseEvidence(taskId, step, held) : null;
     if (open.length && !proof) return false;
     if (held) authority.transaction(() => checkpoints.changeOwed(taskId, { add: [owedOf(step)] }));
-    if (proof) authority.transaction(() => reconcileOperations(db, step.lease, scopeKey, proof.id, parts.now()));
-    const operations = bodyOperations(db, step.lease, scopeKey);
+    if (proof) authority.transaction(() => reconcileOperations(db, step.lease, scopeKey, proof.id, parts.now(), taskId));
+    const operations = bodyOperations(db, step.lease, scopeKey, taskId);
     // The notice first: the action is closed only once the model's notice is in the inbox, so a failure leaves the step open to be tried
     // again (the notice and the closing are both idempotent). A task never goes on without having been told.
     if (!held) {
@@ -390,7 +389,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
   function payOwed(task: TaskRecord, openSteps: readonly LostFcaStep[]): boolean {
     for (const owed of checkpoints.owedNotices(task.id)) {
       if (openSteps.some(step => step.actionId === owed.actionId)) continue;
-      const operations = owed.lease ? bodyOperations(db, owed.lease, scopeKey) : [];
+      const operations = owed.lease ? bodyOperations(db, owed.lease, scopeKey, task.id) : [];
       if (!ensureNotice(task.id, owed, operations)) {
         say(task.id, 'waiting', 'for=notice');
         return false;
