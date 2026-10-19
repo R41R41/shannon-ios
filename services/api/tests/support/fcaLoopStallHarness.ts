@@ -57,6 +57,17 @@ export interface LoopStallOptions {
   observer?: boolean;
   /** Gives up after this long. */
   timeoutMilliseconds?: number;
+  /**
+   * As production wires it since 2026-10-19 (serverFcaWiring.ts): the observation mode (default transient), the body task's recall
+   * (odyTaskRecall.ts, default on) and the scheduler's next turn at once (continueAtOnce, default on). legacyShape gives all three as before.
+   */
+  legacyShape?: boolean;
+  /** Jev's tool selection takes this long (production: p50 209 ms, p90 455 ms); 0, instant. */
+  selectorMilliseconds?: number;
+  /** Every n-th body skill fails (ailureType change_situation); 0, none. Run 15: 3 of its first 24 decisions failed whole. */
+  failureEvery?: number;
+  /** Each ca_decision_metrics line, as the API writes it. */
+  metrics?(line: string): void;
   log?(line: string): void;
 }
 
@@ -143,8 +154,15 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
   };
   let visible!: ReturnType<typeof createFcaSourceGuard>;
   let shared!: ReturnType<typeof createFcaSharedWiring>;
-  const selector = { async select(request: { tools: ReadonlyArray<{ name: string }> }) { return { names: request.tools.map(tool => tool.name), source: 'catalog' as const }; } };
+  let selections = 0;
+  const selector = { async select(request: { tools: ReadonlyArray<{ name: string }> }) {
+    selections += 1;
+    if (options.selectorMilliseconds) await delay(options.selectorMilliseconds);
+    return { names: request.tools.map(tool => tool.name), source: 'jev' as const };
+  } };
+  const legacy = options.legacyShape === true;
   const driver = createTaskRuntimeWiring({ db: actions.db, actions: actions.actions, scopeKey: 'owner', ownerAlone, now: clock, model, provenanceRefs: true,
+    ...(legacy ? {} : { continueAtOnce: true }),
     ...taskGates({ ownerScope: 'owner', guard: () => visible, sleepVisible: () => false }),
     stepPorts: (runtime, step) => {
       const history = { codec: anthropicFcaHistoryCodec, summarizer };
@@ -163,6 +181,7 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
         if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
       };
       return { selector, observations, keepBodyTools: () => true, body: body.body, safeToAcknowledgeStop: body.safeToAcknowledgeStop,
+        obsMode: legacy ? 'legacy' as const : 'transient' as const, ...(legacy ? {} : { bodyRecall: shared.bodyRecall }),
         recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared.observeMemory(step, ids),
         sourcesVisible, taskVisible, observeTasks, history,
         tools: createFcaProgressTools(combineFcaTools(fcaMinecraftTools({ control, step, ownerAlone, sourcesVisible: () => check.whole('tool') ?? false }), body.tools),
@@ -180,14 +199,15 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
   const catalog = skillNames.map(name => ({ name, description: `身体のスキル${name}。${'指定した対象に近づき、条件を満たしたら操作する。'.repeat(8)}`, readOnly: false,
     inputSchema: { type: 'object', properties: { count: { type: 'integer', minimum: 1, maximum: 16, description: '回数' }, target: { type: 'string', description: `対象の名前${'（例: zombie, oak_log）'.repeat(5)}` } },
       required: ['count'], additionalProperties: false } }));
-  let sequence = 0, polls = 0, firstPoll = true;
-  const running = new Map<string, { until: number; text: string }>(), cancelled = new Set<string>();
+  let sequence = 0, polls = 0, firstPoll = true, skills = 0;
+  const running = new Map<string, { until: number; text: string; fails?: boolean }>(), cancelled = new Set<string>();
   const pollMs: number[] = [];
   const poll = () => {
     const now = Date.now(), receipts: MinecraftControlReceipt[] = [];
     for (const [id, work] of running) {
       if (work.until <= now || cancelled.has(id)) {
-        receipts.push({ id, connectionId: 'connection', outcome: cancelled.has(id) ? 'cancelled' : 'completed', inputsReleased: true, observedAt: new Date(now).toISOString(), result: work.text });
+        receipts.push({ id, connectionId: 'connection', outcome: cancelled.has(id) ? 'cancelled' : work.fails ? 'failed' : 'completed', inputsReleased: true,
+          observedAt: new Date(now).toISOString(), result: work.text, ...(work.fails ? { failureType: 'target_occupied' } : {}) } as MinecraftControlReceipt);
         running.delete(id); cancelled.delete(id);
         if (receipts.length >= 8) break;
       }
@@ -205,8 +225,9 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
       JSON.stringify(reply);
       for (const command of reply.commands) {
         const span = skillMin + random() * (skillMax - skillMin);
-        running.set(command.id, { until: Date.now() + (command.kind === 'skill' ? span : 50),
-          text: JSON.stringify({ ok: true, observation: 'x'.repeat(resultMin + Math.floor(random() * (resultMax - resultMin))) }) });
+        const fails = command.kind === 'skill' && !!options.failureEvery && ++skills % options.failureEvery === 0;
+        running.set(command.id, { until: Date.now() + (command.kind === 'skill' ? span : 50), fails,
+          text: JSON.stringify({ ok: !fails, observation: 'x'.repeat(resultMin + Math.floor(random() * (resultMax - resultMin))) }) });
       }
       for (const id of reply.cancel) if (running.has(id)) cancelled.add(id);
     } catch (error) { warnings.push(`poll failed: ${error instanceof Error ? error.message : String(error)}`); }
@@ -232,7 +253,7 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
   const originalWarn = console.warn, originalLog = console.log, originalInfo = console.info;
   console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
   console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
-  console.info = () => {};
+  console.info = (...args: unknown[]) => { const line = args.map(String).join(' '); if (line.includes('fca_decision_metrics')) options.metrics?.(line); };
   const watch: number[] = [];
   const stopWatch = startEventLoopWatch('bench', { log: line => { const m = /ms=(\d+)/u.exec(line); if (m) watch.push(Number(m[1])); } });
   const monitor = monitorLoop({ thresholdMs: 50 });

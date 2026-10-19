@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FcaModelOutput, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import type { FcaSharedContext } from '../src/mind/action/fca/fcaEvidencePorts.js';
 import { FCA_EARLIER_ACTION_FAILED } from '../src/mind/action/fca/fcaRunner.js';
+import { failureRefreshes } from '../src/mind/action/fca/fcaToolState.js';
 import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { bodySharedContext } from '../src/infra/models/anthropic/anthropicFcaContext.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
@@ -185,5 +186,14 @@ describe('the scheduler\'s next turn after a step', () => {
     await d.driver.tick(); await d.driver.drain(); await settle(); await d.driver.drain();
     expect(d.count()).toBe(0);
     expect(asked).toBe(1);
+  });
+});
+
+describe('the tool selection after a failed call', () => {
+  it('is asked again for a legacy menu and for a tool outside the transient core, never for a failed core tool', () => {
+    const core = { hash: 'h', anchor: null, steps: 0, tools: [tool('mc.craft-one', 'write')] };
+    expect(failureRefreshes({}, 'mc.craft-one')).toBe(true);
+    expect(failureRefreshes({ core }, 'mc.craft-one')).toBe(false);
+    expect(failureRefreshes({ core }, 'web.search')).toBe(true);
   });
 });

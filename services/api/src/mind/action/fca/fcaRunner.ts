@@ -13,7 +13,7 @@ import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
 import { decideWithRetry, FCA_RETRY_REFRESH_MS } from './fcaProviderRetry.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
-import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
+import { failureRefreshes, openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
@@ -340,7 +340,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       results.push({ id: call.id, text: stored, ok: result.ok });
       if (result.bodyReflex) reflexCuts.add(call.id);
       if (selection) {
-        if (!result.ok) selection.refresh = true;
+        if (!result.ok && failureRefreshes(selection, call.name)) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }

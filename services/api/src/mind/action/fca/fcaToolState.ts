@@ -130,6 +130,14 @@ export function selectedFcaTools(catalog: readonly ShannonToolDefinition[], stat
   return catalog.filter(tool => names.has(tool.name) || tool.domain === 'memory_read');
 }
 
+/**
+ * Whether a failed call asks the selector again (for another tool). A transient task's core tools are all declared already (the body's own
+ * among them), so a failed core call gains nothing from a new menu (run 15, 2026-10-19: Jev's 0.2-0.7 s on about a third of its decisions).
+ */
+export function failureRefreshes(state: Pick<FcaToolState, 'core'>, name: string): boolean {
+  return !state.core?.tools.some(tool => tool.name === name);
+}
+
 /** Opening adds visibility for the next model decision only; it never executes or authorizes a tool. */
 export function openFcaTool(input: unknown, catalog: readonly ShannonToolDefinition[], state: FcaToolState): ToolResult {
   const value = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : null;
