@@ -10,7 +10,7 @@ import type { TaskRecall } from '../../recall/taskRecallPorts.js';
 import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput } from './fcaPorts.js';
-import { decideWithRetry } from './fcaProviderRetry.js';
+import { decideWithRetry, FCA_RETRY_REFRESH_MS } from './fcaProviderRetry.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
@@ -196,11 +196,13 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       ...(ports.body ? { body: ports.body.context() } : {}),
       ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
   };
+  /** The request in hand (the one last sent, rebuilt by every `freshen`) and when it was built: a fallback starts from this, never from the first one. */
+  let latest = { asked: request, at: Date.now() };
   const decide = (asked: FcaModelInput) => {
-    let current = asked;
-    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(current, signal)), { signal, recheck: checked,
+    latest = { asked, at: Date.now() };
+    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, signal)), { signal, recheck: checked,
       delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
-      refresh: async () => { current = await freshen(current); },
+      refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; },
       log: line => console.warn(`${line} task=${step.taskId}`) });
   };
   const output = await decide(request).catch(async error => {
@@ -209,8 +211,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     console.warn(JSON.stringify({ event: 'fca_obs_mode_fallback', task: step.taskId, from: 'transient', to: 'legacy', reason: 'beta_rejected' }));
     selection = legacyToolState(selection);
     input.tools = selectedFcaTools(catalog, selection);
-    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = request;
-    return decide({ ...legacy, tools: input.tools });
+    // The legacy request is made from the request in hand (its observations, body and progress may have been rebuilt meanwhile, and
+    // `bodyRevision` and `observationRevisions` already name that observation), not from the first one (M-B). If that one has grown old
+    // while the attempts ran, it is rebuilt again, with the gate before and after as for every further request.
+    const { coreTools: _core, transient: _live, replayTokenLimit: _limit, ...legacy } = latest.asked;
+    let legacyRequest: FcaModelInput = { ...legacy, tools: input.tools };
+    if (Date.now() - latest.at >= FCA_RETRY_REFRESH_MS) {
+      await checked();
+      legacyRequest = await freshen(legacyRequest);
+      await checked();
+    }
+    return decide(legacyRequest);
   }).catch(error => {
     progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' });
     throw error;

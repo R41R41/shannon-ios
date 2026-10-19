@@ -175,6 +175,53 @@ describe('asking for a decision again', () => {
     expect(log.filter(line => line.includes('request refreshed'))).toHaveLength(1);
   });
 
+  it('runs the gate again after the rebuilding, immediately before the attempt: wait, gate, rebuilding, gate, attempt (M-A)', async () => {
+    let time = 0;
+    const order: string[] = [];
+    let calls = 0;
+    const slow = async () => {
+      calls += 1;
+      order.push(`attempt${calls}`);
+      time += 11_000;
+      if (calls === 1) throw new FcaProviderError(503);
+      return output;
+    };
+    await decideWithRetry(slow, parts({ now: () => time, delay: () => { order.push('wait'); return 0; },
+      recheck: async () => { order.push('gate'); }, refresh: async () => { order.push('rebuild'); } }));
+    expect(order).toEqual(['attempt1', 'wait', 'gate', 'rebuild', 'gate', 'attempt2']);
+    // A request that is not rebuilt (not old enough) is gated once, as before.
+    const young: string[] = [];
+    let n = 0;
+    await decideWithRetry(async () => { n += 1; young.push(`attempt${n}`); if (n === 1) throw new FcaProviderError(503); return output; },
+      parts({ now: () => 0, recheck: async () => { young.push('gate'); }, refresh: async () => { young.push('rebuild'); } }));
+    expect(young).toEqual(['attempt1', 'gate', 'attempt2']);
+  });
+
+  it('sends nothing when the gate refuses after the rebuilding, and the refusal is the gate\'s own (M-A)', async () => {
+    let time = 0, gates = 0, sent = 0;
+    const attempt = async () => {
+      sent += 1;
+      time += 11_000;
+      throw new FcaProviderError(503);
+    };
+    const refusal = decideWithRetry(attempt, parts({ now: () => time, refresh: async () => undefined,
+      recheck: async () => { gates += 1; if (gates === 2) throw new Error('FCA_EXECUTION_HELD'); } }));
+    await expect(refusal).rejects.toThrow('FCA_EXECUTION_HELD');
+    expect(sent).toBe(1); // the second request was never sent
+    expect(gates).toBe(2);
+  });
+
+  it('treats a stop that arrived while it was deciding to wait as a stop: no wait is taken, no gate is run, nothing is sent', async () => {
+    const controller = new AbortController();
+    const recheck = vi.fn(async () => undefined);
+    const run = script([new FcaProviderError(503), new FcaProviderError(503)]);
+    // The stop arrives after the failure was judged retryable and before the wait begins (here: while the wait is being worked out).
+    const outcome = decideWithRetry(run.attempt, parts({ signal: controller.signal, recheck, delay: () => { controller.abort(); return 60_000; } }));
+    await expect(outcome).rejects.toThrow('FCA_MODEL_ABORTED');
+    expect(run.calls()).toBe(1);
+    expect(recheck).not.toHaveBeenCalled();
+  });
+
   it('rebuilds a request again when the next one grows old as well, and ends the decision if the rebuilding itself fails', async () => {
     let time = 0;
     const attempt = async () => {

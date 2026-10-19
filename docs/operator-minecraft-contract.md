@@ -92,9 +92,13 @@ released. That original receipt, with nothing of the lease sent after it left un
 - The Minecraft recovery (`fcaBodyRecovery.ts`, 2026-10-19) uses the same command and proof for the lost step of a Minecraft request
   at once, without waiting for the unknown exit to record the body as retained (`releaseStep`, log `origin=recovery`), asking with a
   backoff of 10 s doubling to 5 min and at most ten unconfirmed times per lost step (then the task is paused with
-  `fca_body_release_unproven` and the step stays open, never closed without the proof), and then
+  `fca_body_release_unproven` and the step stays open, never closed without the proof; the count is kept across restarts), and then
   closes the step and returns the task to the queue with a notice (see the *Provider errors and lost Minecraft steps* section of
   [fca-runtime-contract.md](fca-runtime-contract.md)). `SHANNON_FCA_BODY_RETURN_MINUTES` (default 30) is how long it waits for the body.
+  A task that is paused meanwhile keeps its lost step open, so the body stays held for other requests; the recovery goes on asking
+  for the proof (a minute doubling to 30 minutes, at most 20 times per lost step) and, when the body proves it, closes the step and
+  frees the body while the task stays paused. If the proof never comes, the pause summary says the body stays held, and this
+  `release` (`opsCli.ts minecraft release --operator <label>`) is the way to ask the body again by hand.
 - `release` asks for a pass now, whatever those attempts. Codes: `released` (accepted), `not_retained`, `body_unavailable`,
   `not_confirmed` (the body could not confirm: still retained), `proof_refused`, `recheck_busy`. Audited as `invoked`, `accepted`
   and `settled` with the result code.

@@ -9,7 +9,8 @@ import type { DatabaseSync } from 'node:sqlite';
  * `fca_task_budget_estimates` (Minebot parity audit M-4, 2026-10-19) holds the charges nobody confirmed: a request that timed out or
  * lost its connection may or may not have been billed, and is booked at an upper bound. They are kept apart from `yen` (the confirmed
  * spend) so that estimates never end a task by themselves; `acknowledged_at` is set when the owner was asked (the task paused) and the
- * estimates then no longer count toward the pause. Also additive; an older build ignores it.
+ * estimates then no longer count toward the pause. `settled_at` and `actual_yen` (L-6) mark an estimate whose actual charge became known:
+ * the row stays on record, no longer counts as an estimate, and names what was actually charged. Also additive; an older build ignores it.
  */
 export function ensureTaskBudgetSchema(db: DatabaseSync): void {
   db.exec(`
@@ -23,4 +24,12 @@ export function ensureTaskBudgetSchema(db: DatabaseSync): void {
       PRIMARY KEY (task_id, request_key)
     );
   `);
+  // A table an earlier build made lacks the two columns of L-6: added once (a repeat finds the column and does nothing).
+  for (const column of ['settled_at TEXT', 'actual_yen REAL']) {
+    try {
+      db.exec(`ALTER TABLE fca_task_budget_estimates ADD COLUMN ${column}`);
+    } catch (error) {
+      if (!/duplicate column name/iu.test(error instanceof Error ? error.message : String(error))) throw error;
+    }
+  }
 }

@@ -73,7 +73,10 @@ export function retryWaitMs(failed: number, retryAfterMs: number | null, policy:
 
 export interface FcaRetryParts {
   signal: AbortSignal;
-  /** The caller's own gate (audience, sources, lease permit), run again before every further request exactly as before the first. */
+  /**
+   * The caller's own gate (audience, sources, lease permit), run again before every further request exactly as before the first: after
+   * the wait, and once more after a `refresh` (which can take time), so that the last thing before a request is the gate.
+   */
   recheck(): Promise<void>;
   /** The wait to take instead of the suggested one (tests: 0); `suggestedMs` already honours `retry-after`. */
   delay?(suggestedMs: number, failed: number): number;
@@ -152,6 +155,9 @@ export async function decideWithRetry(attempt: () => Promise<FcaModelOutput>, pa
         await parts.refresh();
         builtAt = now();
         parts.log?.('Shannon FCA decision request refreshed');
+        // The rebuilding may have waited for the body (a reflex session): who is present, which sources may be shown and whether the step
+        // may run at all can have changed meanwhile. The whole gate runs again, immediately before the request that is sent (M-A).
+        await parts.recheck();
       }
     }
   }

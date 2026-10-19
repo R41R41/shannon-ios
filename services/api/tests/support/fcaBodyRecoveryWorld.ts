@@ -43,7 +43,10 @@ export interface WorldApi {
 }
 
 export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyRecoveryParts['limit'];
-  budget?(parts: { db: DatabaseSync; actions: ActionThreads; now(): string }): FcaBudget } = {}) {
+  budget?(parts: { db: DatabaseSync; actions: ActionThreads; now(): string }): FcaBudget;
+  /** Stands in for the body's release when it answers something else than the real re-check would (`real` is the real one). */
+  release?(step: Parameters<FcaBodyRecoveryParts['body']['release']>[0], real: FcaBodyRecoveryParts['body']['release']): ReturnType<FcaBodyRecoveryParts['body']['release']>;
+} = {}) {
   let clock = Date.parse('2026-10-19T09:00:00.000Z');
   const now = () => new Date(clock).toISOString();
   const db = new DatabaseSync(':memory:');
@@ -89,7 +92,8 @@ export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyReco
       ...(budget ? { budget } : {}),
       bodyRecovery: parts => (recovery = createFcaBodyRecovery({ ...parts, passMs: 0, log: line => logs.push(line),
         ...(options.windowMs ? { windowMs: options.windowMs } : {}), ...(options.limit ? { limit: options.limit } : {}),
-        body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null, release: step => recheck.releaseStep(step) } })),
+        body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null,
+          release: step => options.release ? options.release(step, real => recheck.releaseStep(real)) : recheck.releaseStep(step) } })),
       stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }) }) });
     const api = { control, recheck, driver, recovery };
     apis.push(api);

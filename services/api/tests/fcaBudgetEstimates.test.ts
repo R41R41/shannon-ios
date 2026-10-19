@@ -54,6 +54,59 @@ describe('estimated charges are booked apart from the confirmed spend', () => {
   });
 });
 
+describe('the records of estimates remain (L-6)', () => {
+  const rows = (db: DatabaseSync) => db.prepare('SELECT request_key,yen,acknowledged_at,settled_at,actual_yen FROM fca_task_budget_estimates ORDER BY request_key').all();
+
+  it('keeps the settled estimate\'s row, marked settled with the actual charge, and no longer counts it as an estimate', async () => {
+    const { db, store, budget, step } = world(2000);
+    await step(() => { budget.recordUsage(usdOfYen(10)); budget.recordUsage(usdOfYen(40), true); });
+    expect(store.settleEstimate('t-mc', 'action-1:1', 12, '2026-10-19T10:00:00.000Z')).toBe(true);
+    expect(rows(db)).toEqual([expect.objectContaining({ request_key: 'action-1:1', yen: 40, settled_at: '2026-10-19T10:00:00.000Z', actual_yen: 12 })]);
+    expect(store.spent('t-mc')).toMatchObject({ yen: 22, estimatedYen: 0, openEstimatedYen: 0 });
+    expect(store.settleEstimate('t-mc', 'action-1:1', 99, at)).toBe(false); // once
+    expect(rows(db)[0]).toMatchObject({ actual_yen: 12 });
+    expect(store.spent('t-mc').yen).toBe(22);
+  });
+
+  it('does not add a new charge onto an estimate the owner was already asked about: it is a row of its own, open', async () => {
+    const { db, store } = world(100);
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 30, at);
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 5, at); // still open: added to
+    expect(store.spent('t-mc')).toMatchObject({ estimatedYen: 35, openEstimatedYen: 35 });
+    store.acknowledgeEstimates('t-mc', at);
+    expect(store.spent('t-mc')).toMatchObject({ estimatedYen: 35, openEstimatedYen: 0 });
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 7, at); // the same key, after the owner was asked
+    expect(store.spent('t-mc')).toMatchObject({ estimatedYen: 42, openEstimatedYen: 7 });
+    expect(rows(db).map(row => [row.request_key, row.yen, row.acknowledged_at])).toEqual([['k1', 35, at], ['k1+1', 7, null]]);
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 3, at);
+    expect(rows(db).map(row => [row.request_key, row.yen])).toEqual([['k1', 35], ['k1+1', 10]]);
+  });
+
+  it('does not add onto a settled estimate either, and settles each row by its own key', async () => {
+    const { db, store } = world(100);
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 30, at);
+    expect(store.settleEstimate('t-mc', 'k1', 4, at)).toBe(true);
+    store.addEstimate('t-mc', 'owner', 'owner_request', 'k1', 9, at);
+    expect(rows(db).map(row => [row.request_key, row.yen, row.actual_yen])).toEqual([['k1', 30, 4], ['k1+1', 9, null]]);
+    expect(store.spent('t-mc')).toMatchObject({ yen: 4, estimatedYen: 9, openEstimatedYen: 9 });
+    expect(store.settleEstimate('t-mc', 'k1+1', 2, at)).toBe(true);
+    expect(store.spent('t-mc')).toMatchObject({ yen: 6, estimatedYen: 0 });
+  });
+
+  it('adds the two columns to a table an earlier build made, keeping what it held', () => {
+    const db = new DatabaseSync(':memory:');
+    cleanups.push(() => db.close());
+    db.exec(`CREATE TABLE fca_task_budget_estimates (task_id TEXT NOT NULL, request_key TEXT NOT NULL, scope_key TEXT NOT NULL, origin TEXT NOT NULL,
+      yen REAL NOT NULL CHECK (yen >= 0), acknowledged_at TEXT, created_at TEXT NOT NULL, PRIMARY KEY (task_id, request_key));
+      INSERT INTO fca_task_budget_estimates VALUES ('t-mc','old','owner','owner_request',12,NULL,'${at}');`);
+    const store = new TaskBudgetStore(db);
+    expect(store.spent('t-mc')).toMatchObject({ estimatedYen: 12, openEstimatedYen: 12 });
+    expect(store.settleEstimate('t-mc', 'old', 3, at)).toBe(true);
+    new TaskBudgetStore(db); // opening it again changes nothing
+    expect(rows(db)).toEqual([expect.objectContaining({ request_key: 'old', settled_at: at, actual_yen: 3 })]);
+  });
+});
+
 describe('the cap check counts estimates up to a share of the cap, and pauses instead of failing', () => {
   it('lets a task whose estimates are all it has run, however large they are, while the confirmed spend is low', async () => {
     const { store, budget } = world(100);
