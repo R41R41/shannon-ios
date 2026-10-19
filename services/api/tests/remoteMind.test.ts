@@ -18,12 +18,14 @@ afterEach(async()=>{for(const close of cleanups.splice(0).reverse())await close(
 const at='2026-10-07T12:00:00.000Z',now=()=>at;
 const on={SHANNON_ADR8_STAGE3:'on',SHANNON_ADR8_STAGE4:'on'};
 function location(){const dir=mkdtempSync(join(tmpdir(),'shannon-ipc-'));cleanups.push(()=>rmSync(dir,{recursive:true,force:true}));return {dir,path:join(dir,'db.sqlite')};}
+/** The worker's calls as the test makes them: production's 1 s bound, but at least 10 s here (a whole suite on many workers starts the worker slowly). */
+const patient=(client:MindSocketClient)=>(<T>(method:string,args:unknown,timeoutMs?:number)=>client.call<T>(method,args,Math.max(timeoutMs??0,10_000)));
 function ownerHost(path:string){const mind=configuredMind(on,{role:'worker',databasePath:path,now,schedule:work=>work()})!;return {host:mind.host!,close:mind.close};}
 describe('one mind across the process boundary',()=>{
   it('admits the real foreground through one RPC and keeps a competing turn queued',async()=>{
     const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
     const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
-    const methods:string[]=[],actions=actionThreadsClient(async(method,args)=>{methods.push(method);return client.call(method,args);},'api');
+    const methods:string[]=[],actions=actionThreadsClient(async(method,args)=>{methods.push(method);return patient(client)(method,args);},'api');
     const draft={scopeKey:'owner',kind:'respond' as const,origin:'owner_request' as const,sourceId:'first'};
     const first=await acquireAction(actions,draft);expect(first).not.toBeNull();
     expect(methods).toEqual(['action.admitRespond']);
@@ -43,7 +45,7 @@ describe('one mind across the process boundary',()=>{
   it('reads an exact canonical receipt beyond the terminal presentation window and fences its scope',async()=>{
     const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
     const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
-    const actions=actionThreadsClient(client.call,'api');
+    const actions=actionThreadsClient(patient(client),'api');
     let original='';
     for(let index=0;index<41;index++){
       const action=worker.actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:`canonical-${index}`},
@@ -100,7 +102,7 @@ describe('one mind across the process boundary',()=>{
 it('records an unknown notice receipt through the single worker IPC without changing execution rows',async()=>{
   const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
   const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
-  const actions=actionThreadsClient(client.call,'api');
+  const actions=actionThreadsClient(patient(client),'api');
   const draft=await actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'maintenance',sourceId:'synthetic-maintenance'});
   const active=(await actions.claim(draft.id))!,lease={id:active.id,generation:active.generation,holder:active.holder!};
   await actions.dispatch(lease);const original=(await actions.finish(lease,'unknown','fca_result_unknown'))!;
