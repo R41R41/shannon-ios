@@ -110,6 +110,11 @@ export interface ShannonLingeringFeeling {
   /** Set when it was eased (his apology, a kind word, a strong opposite feeling): the height it had before, and her awake clock then. */
   peak?: number;
   easedAwakeAt?: number;
+  /**
+   * The wall-clock instant of `awakeAt` (when it was last noted or eased): the nights since then fade it (`overnightShare`). Absent on
+   * an entry stored before 2026-10-19: `startedAt` stands in.
+   */
+  notedAt?: string;
 }
 
 /** Who was present when something was said to Shannon. The owner is always part of it. */

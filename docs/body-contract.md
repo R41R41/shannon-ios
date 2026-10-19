@@ -645,7 +645,7 @@ What changes is only what she is told, in three places. The way of touching and 
 | `poke` | 頭をつつかれた | 頬をつつかれた | 脇をつつかれた | 手をつつかれた | 体をつつかれた | つつかれた |
 | `tickle` | 頭をくすぐられた | 頬をくすぐられた | 脇をくすぐられた | 手をくすぐられた | 体をくすぐられた | くすぐられた |
 | `holdHand` | 手をつないでもらった, whatever the region | | | | | 手をつないでもらった |
-| `carry` | 持ち上げて運ばれた, whatever the region | | | | | 持ち上げて運ばれた |
+| `carry` | 画面の上で運ばれた, whatever the region | | | | | 画面の上で運ばれた |
 
 While a touch is going on the reaction prompt says なでられている／つつかれている／くすぐられている; duration and strength are worded as before (`ライ氏に頬をつつかれた（ほんの一瞬）`, `ライ氏に頭をなでられている（3秒ほど、やさしく）`). A touch memory says 頭をなでてもらった／頬をつつかれた／脇をくすぐられた.
 

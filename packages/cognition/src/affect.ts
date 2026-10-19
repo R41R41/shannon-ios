@@ -98,7 +98,9 @@ export function deriveEmotionDelta(
       step * Math.min(1, Math.max(0, step > 0 ? (maximum - current) / (maximum - base) : (current - minimum) / (base - minimum)));
     return {
       valence: room(snapshot.emotion.valence, BASELINE.valence, -1, 1, positive * 0.14 - negative * 0.16),
-      arousal: room(snapshot.emotion.arousal, BASELINE.arousal, 0, 1, questionEnergy + exclamationEnergy + lengthEnergy
+      // Owner 2026-10-19 (item 15): a question is no excitement of hers (arousal stayed at 0.48–0.65 for days of questions); on the
+      // awake clock a 「？」 no longer raises it. The wall-clock law below keeps its words.
+      arousal: room(snapshot.emotion.arousal, BASELINE.arousal, 0, 1, exclamationEnergy + lengthEnergy
         + Math.min(0.12, (positive + negative + curious) * 0.035) - sleepy * 0.14 - calm * 0.07),
       openness: room(snapshot.emotion.openness, BASELINE.openness, 0, 1, personal * 0.05 + positive * 0.025 + curious * 0.015 - negative * 0.01),
     };

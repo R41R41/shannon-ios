@@ -119,8 +119,9 @@ describe('the owner\'s current goal with other people present', () => {
     // and on the Mac folder branch for the 33 of the `own_folder` line (bb34c77bdba7c1ca alone); 1732f2014cc3eeb7 before both.
     // On the S3 branch (A18 S3) that line drops its note that the Mac's folder is only read: eabeaf61971fc368 with the note.
     // On the stage-2 branch (owner decision "a") the body line gained her temperament (74a4ca961d8d1a66); with scope (a) it
-    // moved to her persona: 891f915e25710768 without it.
-    expect(fingerprint(alone)).toBe('a3209b96faf9eff5');
+    // moved to her persona: 891f915e25710768 without it. On the heart branch (owner 2026-10-19, item 15) her mood's numbers in the shared
+    // state moved (a 「？」 no longer raises her arousal): a3209b96faf9eff5 before.
+    expect(fingerprint(alone)).toBe('74cbeaca968fbfe8');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');

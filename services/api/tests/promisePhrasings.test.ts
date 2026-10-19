@@ -3,6 +3,7 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { commitmentDeadline } from '../src/mind/action/respond/commitmentTime.js';
 import {
   EXACT_TIME_NOTE,
+  exactTimeNote,
   extractPromiseCaptures,
   extractProspectiveMemories,
   requestsExactTimeAlert,
@@ -95,8 +96,10 @@ describe('exact-time requests (AB-06)', () => {
   it('stores a time-bound request with a plain limit instead of pretending to be an alarm', () => {
     const wake = promise('明日8時に起こして');
     expect(wake?.memory).toMatchObject({ dueDate: '2026-09-25', dueAt: '2026-09-24T23:00:00.000Z' });
-    expect(wake).toMatchObject({ topic: '起こして', note: EXACT_TIME_NOTE });
-    expect(promise('明日の10時に写真整理をリマインドして')).toMatchObject({ note: EXACT_TIME_NOTE });
+    expect(wake).toMatchObject({ topic: '起こして', note: exactTimeNote() });
+    expect(promise('明日の10時に写真整理をリマインドして')).toMatchObject({ note: exactTimeNote() });
+    expect(exactTimeNote(false)).toBe(EXACT_TIME_NOTE);
+    expect(exactTimeNote(true)).toContain('スマホの目覚まし');
     expect(promise('明日の朝起こして')?.note).toBeUndefined();
     expect(promise('明日プレゼンの練習しよう')?.note).toBeUndefined();
   });

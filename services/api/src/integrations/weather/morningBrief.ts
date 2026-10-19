@@ -1,3 +1,4 @@
+import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { localDateLabel, placeLabel, weatherLabel, type WeatherForecast } from './openMeteo.js';
 
 /**
@@ -6,7 +7,8 @@ import { localDateLabel, placeLabel, weatherLabel, type WeatherForecast } from '
  * `wiring/morningBriefWiring.ts` for the proactive message) and hands them in.
  */
 export interface MorningBriefSchedule { when: string; title: string; kindLabel?: string }
-export interface MorningBriefHeadline { title: string; url?: string }
+/** `at`: when it was published (or found), for the brief's freshness. */
+export interface MorningBriefHeadline { title: string; url?: string; at?: string }
 export interface MorningBriefParts {
   /** The owner-local date the brief is for (`YYYY-MM-DD`). */
   date: string;
@@ -14,6 +16,11 @@ export interface MorningBriefParts {
   /** Today's items; null when the schedule could not be read (then nothing is said of it). */
   schedule: readonly MorningBriefSchedule[] | null;
   headlines?: readonly MorningBriefHeadline[];
+  /**
+   * `shannon` (owner 2026-10-19, item 16: the brief read like a report): the spoken opening in her own words, to him, with the day's
+   * special item (a birthday) first. Absent: the plain sentences of before (the `brief.morning` tool keeps them).
+   */
+  voice?: 'shannon';
 }
 export interface MorningBrief { spoken: string; card: string }
 
@@ -70,8 +77,36 @@ function headlineCard(headlines: readonly MorningBriefHeadline[]): string[] {
   })];
 }
 
+/** A birthday or an anniversary among today's items: whose (「安東まゆり’s 32nd Birthday」, 「まゆりの誕生日」), or the item's title. */
+const SPECIAL_DAY = /(?:birthday|誕生日|記念日)/iu;
+function specialDayLine(items: readonly MorningBriefSchedule[] | null): string {
+  const item = items?.find(entry => SPECIAL_DAY.test(entry.title));
+  if (!item) return '';
+  const title = item.title.replace(/\s+/gu, ' ').trim();
+  const whose = /^(.{1,20}?)(?:[’']s\b|の誕生日)/u.exec(title)?.[1]?.trim();
+  if (whose === SHANNON_OWNER_NAME || whose === '僕' || whose === '自分') return `今日は${SHANNON_OWNER_NAME}の誕生日ですね。おめでとうございます。`;
+  const honored = whose && /(?:氏|さん|くん|ちゃん|様)$/u.test(whose) ? whose : whose ? `${whose}さん` : '';
+  if (honored && /birthday|誕生日/iu.test(title)) return `今日は${clip(honored, 22)}の誕生日ですね。何か送りますか？`;
+  return `今日は「${clip(title, 30)}」の日ですね。`;
+}
+
+/** The spoken opening in her own words (`voice: 'shannon'`): to him, the day's special item first, then the weather and the first item. */
+function shannonSpoken(weather: WeatherForecast | null, day: Day | null, items: readonly MorningBriefSchedule[] | null): string {
+  const special = specialDayLine(items);
+  const sky = !weather || !day ? '今日の天気は、まだ確かめられていません。'
+    : `今日の${weather.place.name}は${weatherLabel(day.code)}で、最高${Math.round(day.max)}度${rainChance(day) >= 50 ? '。傘を忘れないでくださいね' : 'です'}。`;
+  const plain = items?.filter(item => !SPECIAL_DAY.test(item.title)) ?? null;
+  const first = plain === null ? '' : plain.length
+    ? `最初の予定は${plain[0]!.when.replace(/（終日）/u, '終日')}の「${clip(plain[0]!.title, 30)}」です。` : special ? '' : '今日は予定がないので、ゆっくりできるといいですね。';
+  return `おはようございます、${SHANNON_OWNER_NAME}。${special}${sky}${first}`;
+}
+
 export function composeMorningBrief(parts: MorningBriefParts): MorningBrief {
   const day = parts.weather?.daily.find(item => item.date === parts.date) ?? null;
+  if (parts.voice === 'shannon') {
+    const { voice: _voice, ...plain } = parts;
+    return { spoken: shannonSpoken(parts.weather, day, parts.schedule), card: composeMorningBrief(plain).card };
+  }
   const card = [
     `### ${localDateLabel(parts.date)} 朝のまとめ`, '',
     ...weatherCard(parts.weather, day, parts.date), ...scheduleCard(parts.schedule), ...headlineCard(parts.headlines ?? []),

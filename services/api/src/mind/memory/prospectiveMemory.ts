@@ -1,12 +1,24 @@
 import type { ProspectiveMemory } from '@shannon/cognition';
+import { switchOn } from '@shannon/switches';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { commitmentDeadline } from '../action/respond/promisePorts.js';
 import { containsUnresolvedConversationReference } from '../action/respond/promisePorts.js';
 import { isExactTimeAlertRequest, matchPromise } from '../action/respond/promisePorts.js';
 import { classifyRememberRequest, isRememberRequest } from '../action/respond/promisePorts.js';
 import { extractExplicitUserIntent } from '../action/respond/promisePorts.js';
 
-/** Shannon speaks to the owner in a throttled daily slot; she has no clock alarm. */
+/** Without promises told at their time (`SHANNON_PROMISE_ON_TIME=off`) Shannon speaks in a throttled daily slot; she has no clock alarm. */
 export const EXACT_TIME_NOTE = '時刻ちょうどにはお知らせできません。1日1回の声かけの枠でお知らせします。';
+/**
+ * With them (the default; owner 2026-10-19: 「起こせない」 was said once and 「9時20分に起こす」 for days after): what she will do, said as
+ * what she will do. A word at that time, not an alarm.
+ */
+export const EXACT_TIME_ON_TIME_NOTE = 'その時刻にボクから一言お知らせします（23時〜7時は7時に）。目覚ましのように鳴り続けはしないので、起きる時刻はスマホの目覚ましもかけてね。';
+
+/** The note of a clock-time promise, by whether promises are told at their time. */
+export function exactTimeNote(onTime = switchOn(serverEnvironment(), 'SHANNON_PROMISE_ON_TIME')): string {
+  return onTime ? EXACT_TIME_ON_TIME_NOTE : EXACT_TIME_NOTE;
+}
 export const EXACT_TIME_DECLINED = '時刻ちょうどにお知らせすることは、まだできません。タイマーやアラームは時計アプリでお願いします。この依頼は約束として残していません。';
 
 export interface PromiseCapture {
@@ -77,7 +89,7 @@ export function extractPromiseCaptures(
         evidence: sentence,
       }),
       topic: promiseTopic(topic),
-      ...(exact ? { note: EXACT_TIME_NOTE } : {}),
+      ...(exact ? { note: exactTimeNote() } : {}),
     }));
   }
   return Object.freeze([...captures.values()].slice(0, 4));

@@ -23,6 +23,7 @@ import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import { configuredCommitmentLineWriter } from './mind/action/respond/commitmentLineModel.js';
+import { closeToldRequests } from './mind/action/respond/commitmentInitiative.js';
 import { switchOn } from '@shannon/switches';
 import { OWNER_CALL_LIMITS } from './mind/perception/ownerCallElsewhere.js';
 import { commitmentLinePreparer } from './wiring/commitmentLinesWiring.js';
@@ -73,7 +74,9 @@ const inCallWithHer = (scopeKey: string, at: string) => bodyStore.latestOfTypes(
 const pushStore = new SQLitePushNotificationStore(databasePath);
 // SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
 const morningBrief = configuredMorningBrief(process.env, { databasePath, now: nowISOString, log: line => console.log(line),
-  headlines: () => store.latestItems(12).filter(item => !/jma\.go\.jp/u.test(item.url)).slice(0, 3).map(item => ({ title: item.title, url: item.url })) });
+  // The brief keeps the fresh ones it has not told yet (`freshHeadlines`, owner 2026-10-19).
+  headlines: () => store.latestItems(30).filter(item => !/jma\.go\.jp/u.test(item.url))
+    .map(item => ({ title: item.title, url: item.url, at: item.publishedAt ?? item.discoveredAt })) });
 const pushSender = createConfiguredPushNotificationSender(process.env);
 const once = process.argv.includes('--once');
 let stopping = false;
@@ -97,6 +100,9 @@ try {
         // Never over him: while one of his devices reports a call with her, a promise is text only (`promiseNotices.ts`).
         const told = initiativeStore.deliverDuePromises(at, 'Asia/Tokyo', lines, inCallWithHer);
         if (told.sent > 0) console.log(`Shannon promise delivered: ${told.sent}`);
+        // Owner 2026-10-19: a wake-up or a reminder she told him at its time is kept, and closed.
+        const closed = closeToldRequests(stateStore, configuredOwnerScope(process.env), at, (scope, item) => initiativeSources.delivered(scope, item));
+        if (closed.length > 0) console.log(`Shannon promise closed after telling: ${closed.length}`);
       } catch (error) {
         if (stopping) break;
         console.log(`Shannon promise pass failed: ${error instanceof Error ? error.name : 'unknown'}`);

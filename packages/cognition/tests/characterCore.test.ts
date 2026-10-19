@@ -7,10 +7,11 @@ import {
 
 describe('character core (Syzygy ADR-0012 D6)', () => {
   it('is versioned and its hash is the sha256 of its version, text and summary: a change of a word is a change of this one file', () => {
-    expect(CHARACTER_CORE.version).toBe('v1');
+    // v2 (2026-10-19): the section the owner asked for; he approved its wording the same day.
+    expect(CHARACTER_CORE.version).toBe('v2');
     expect(CHARACTER_CORE.status).toBe('approved');
     expect(createHash('sha256').update(characterCoreHashInput(CHARACTER_CORE)).digest('hex')).toBe(CHARACTER_CORE.hash);
-    expect(characterCoreBlock()).toMatch(new RegExp(`^\\[ボクの性格の核 v1 #${CHARACTER_CORE.hash.slice(0, 8)}\\]\\n`, 'u'));
+    expect(characterCoreBlock()).toMatch(new RegExp(`^\\[ボクの性格の核 v2 #${CHARACTER_CORE.hash.slice(0, 8)}\\]\\n`, 'u'));
   });
 
   it('carries the owner direction of 2026-10-14 without the open questions: who she is, never rules of what to do or feel', () => {

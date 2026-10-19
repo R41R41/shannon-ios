@@ -1,5 +1,6 @@
 import type { ActiveMemory } from './types.js';
 import { isMeaningfulInterest } from './interests.js';
+import { isTopicWord } from './followUpTopics.js';
 import type { ContextualMemory, ShannonMemoryQuery, ShannonRecallReason } from './runtime.js';
 
 export interface RecallCandidate {
@@ -146,7 +147,8 @@ export function deriveResonantInterest(
     .replace(/[\p{P}\p{S}\s]+/gu, ' ')
     .split(/[のをにはがでともへや]|\s+/u)
     .map(value => value.trim())
-    .filter(value => value.length <= 24 && isMeaningfulInterest(value));
+    // Owner 2026-10-19 (item 11): a topic is a noun (福岡, スプラトゥーン), never 「よかった」「すごい」「かわいい」.
+    .filter(value => value.length <= 24 && isMeaningfulInterest(value) && isTopicWord(value));
   if (query.trim().length <= 24 && isMeaningfulInterest(query)
     && /^[a-z0-9][a-z0-9 .+#-]+$/iu.test(query.trim())) candidates.unshift(query.trim().toLowerCase());
   return candidates

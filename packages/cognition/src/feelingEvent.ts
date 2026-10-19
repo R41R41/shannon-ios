@@ -1,4 +1,5 @@
 import { soothingIn } from './affect.js';
+import { warmWordsIn } from './innerNoteWords.js';
 
 /**
  * One shape for everything that happens to her feeling (Syzygy ADR-0013 D2, stage 1): touched, spoken to, apologized to, praised,
@@ -147,7 +148,8 @@ export function utteranceKind(words: string): Extract<FeelingEventKind, 'spoke' 
   if (Array.from(text).length <= 120 && FEELING_ORDER.test(text)) return 'feeling_order';
   const soothing = soothingIn(text);
   if (soothing === 'apology') return 'apologized';
-  return soothing === 'kindness' ? 'praised' : 'spoke';
+  // Owner 2026-10-19: warm words (「かわいいね」「やさしいね」) are kind words too, not only an exact thanks.
+  return soothing === 'kindness' || warmWordsIn(text) ? 'praised' : 'spoke';
 }
 
 const OPENERS: readonly [ReplyOpener, RegExp][] = [

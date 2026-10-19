@@ -246,6 +246,7 @@ describe('reading the field', () => {
 
 describe('a text conversation may leave a feeling that lingers', () => {
   it('keeps a strong feeling for days of awake time: the next morning it is in the prompt, with its cause and for whom', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, prompt, underneath, model } = harness();
     const night = await chat(HARSH, QUIET, strong('hurt'));
     expect(model.requests.at(-1)!.offerReplyFeeling).toBe(true);
@@ -312,6 +313,7 @@ describe('a text conversation may leave a feeling that lingers', () => {
 
 describe('every existing rule applies to it unchanged', () => {
   it('cannot raise what lingers, keep it from fading, or keep the reaction up by choosing strong turn after turn', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const repeated = harness();
     const once = harness();
     await repeated.chat(HARSH, QUIET, strong('hurt'));
@@ -337,6 +339,7 @@ describe('every existing rule applies to it unchanged', () => {
   });
 
   it('does not outlive the four wall-clock days, however often she chooses it again', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, prompt } = harness();
     await chat(HARSH, QUIET, strong('hurt'));
     for (let day = 1; day <= 3; day += 1) {
@@ -366,6 +369,7 @@ describe('every existing rule applies to it unchanged', () => {
   });
 
   it('keeps an apology: for the hold after it, choosing strong again brings nothing back up', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, underneath, present } = harness();
     await chat(HARSH, QUIET, strong('hurt'));
     advance(9 * HOUR);
@@ -529,6 +533,7 @@ describe('a mood decided again under another feeling: the reply, its returned st
   };
 
   it('returns the hurt as the face of the reply and as the mood of that response, and stores nothing', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const h = await joyOverHurt();
     const stored = h.state().expressiveEmotion;
     const response = await h.chat(HARSH, QUIET, strong('hurt'));
@@ -637,6 +642,7 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
   });
 
   it('offers no field and derives the reply\'s feeling exactly as the base without this change, also from a model that returns one', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const script: Array<[string, string, ChatReplyFeeling | undefined]> = [
       [HARSH, QUIET, strong('hurt')],
       ['今日はもう別のAIと話すね', 'ボク、ちょっとすねちゃいます。', strong('seriousAnger')],
@@ -684,12 +690,18 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // only by the Claude text request); with it taken out as well, the trace is d1910d3c… and bafcae8b… as before.
     // On the ux-conversation-2 branch (2026-10-13, owner decision) each request also carries the owner's clock (`clock`, read only
     // by the Claude requests' `turnClockLine`): with it taken out, every digest below is what it was.
+    // Owner 2026-10-19: the line of what still lingers also says it is an undertone of her voice and apart from what he asks
+    // (`LINGERING_UNDERTONE_LINE`): bafcae8b… and d1910d3c… before; the digests below are with that line.
+    // Owner 2026-10-19 (promises): 「今日はもう別のAIと話すね」 is kept as a promise, and the shared state now tells an open promise with
+    // the date its day word meant (「10月…日はもう別のAIと話すね」) under a header that says when to mention it: 28e15c87…, 9af9ebe9… and
+    // 309217bf… before. And her numeric mood (item 15: a shown feeling of her own draws it; a 「？」 no longer raises arousal):
+    // ae4afc4e…, 0594d42c… and 461f17d7… before.
     const seen = { ...off.seen, requests: off.seen.requests.map(({ clock: _clock, ...rest }) => rest) };
     const withoutThread = { ...seen, requests: seen.requests.map(({ threadKey: _thread, richBlocks: _rich, ...rest }) => rest) };
     const withoutRich = { ...seen, requests: seen.requests.map(({ richBlocks: _rich, ...rest }) => rest) };
-    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('bafcae8be7946b5e8708b05e62aeb7f0643f08fc7f53d3827e07f978d53659d8');
-    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('d1910d3c4fcc2c6e73f11749baecee2e0f27f34fa9fefd46fb9a2bbc9ead151f');
-    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('08e050f883fc35819fe1238a473fb402638db80443f0a302b54e844c151e68bb');
+    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('6f49a12a5264297db119cd4fda677c732f1efecec9434a1ba9431dd6d0be5334');
+    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('b1c796c60b42a13cfadeb46b657322dc3f823dcc3a97f11aafc8e039ecbe074c');
+    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('913f7728f28761715ebdf88a90c2fa51822d503360be566c20c4ba0a809ee50c'); // 08e050f8… before 2026-10-19
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

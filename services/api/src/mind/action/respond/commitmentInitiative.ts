@@ -1,4 +1,4 @@
-import { restoreCompanionState, visibleMemoryText, type CompanionStateSnapshot, type ProspectiveMemory } from '@shannon/cognition';
+import { promiseStanding, restoreCompanionState, visibleMemoryText, type CompanionStateSnapshot, type ProspectiveMemory } from '@shannon/cognition';
 import type { CandidateRow } from './initiativeSelection.js';
 export { neutralCommitmentLine } from './commitmentLine.js';
 
@@ -29,6 +29,30 @@ function visiblePending(state: CompanionStateSnapshot): ProspectiveMemory[] {
 
 export function commitmentItemId(memory: ProspectiveMemory): string {
   return `commitment:${memory.id}:${memory.updatedAt}`;
+}
+
+/**
+ * A promise that asks her only to speak up at a time (to wake him, call him, remind him): kept by telling him. 「結果を教えて」「調べて
+ * 知らせて」 ask for something more than the notice of the time, and are never closed by it (review of the heart branch).
+ */
+const TELLING_REQUEST = /(?:起こして|声(?:を)?(?:かけて|掛けて)|リマインドして|思い出させて|呼んで)/u;
+
+/**
+ * Closes what she kept by telling him (owner 2026-10-19: a wake-up of 9:20 stayed an open promise for days): a pending request to be
+ * told something at a time, whose notice was delivered at its time, is completed. Anything else stays pending; once its time is long
+ * past it is no longer told as open (`promiseStanding`). Returns the ids it closed. Never throws.
+ */
+export function closeToldRequests(state: { snapshot(scopeKey: string): CompanionStateSnapshot; apply(scopeKey: string, event: {
+  type: 'prospective-memory-status-changed'; memoryId: string; status: 'completed' }): unknown }, scopeKey: string, at: string,
+  delivered: (scopeKey: string, itemId: string) => boolean): string[] {
+  try {
+    const told = visiblePending(state.snapshot(scopeKey))
+      // Hours past its time (`PROMISE_PAST_HOURS`), so a 「あとで」 to the notice still re-arms it in the meantime (`resolveReminderReply`).
+      .filter(memory => TELLING_REQUEST.test(memory.summary) && isDue(memory, at) && promiseStanding(memory, at) === 'past'
+        && delivered(scopeKey, commitmentItemId(memory)));
+    for (const memory of told) state.apply(scopeKey, { type: 'prospective-memory-status-changed', memoryId: memory.id, status: 'completed' });
+    return told.map(memory => memory.id);
+  } catch { return []; }
 }
 
 function isDue(memory: ProspectiveMemory, at: string): boolean {

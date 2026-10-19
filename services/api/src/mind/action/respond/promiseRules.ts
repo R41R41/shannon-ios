@@ -46,6 +46,11 @@ const DESIRE = /たい(?:です)?$/u;
 /** 冷たい is an adjective and 雨みたい is a guess; neither is the owner wanting to act. */
 const NOT_DESIRE = /(?:冷|重|眠|平|煙|めで|じれっ|ありが|なり|あり)たい(?:です)?$|(?<![をて])みたい(?:です)?$/u;
 const GREETING = /よろしく|ありがとう|おやすみ|お疲れ|おつかれ/u;
+/**
+ * His own plan for the talk itself is no promise (owner 2026-10-19: 「今日はそれで会話終わりにする」 came back as 「今日の約束：…」).
+ * 「会話は終わりにする」「それでおしまい」「もう寝る話はやめる」: the conversation, or 「それで」, ended or stopped.
+ */
+const CONVERSATION_PLAN = /(?:(?:会話|話|おしゃべり|やりとり|やり取り|通話|電話)(?:は|を|も)?|(?:それ|これ)で)(?:もう)?(?:終わり|おわり|おしまい|お終い|切り上げ|終了|ここまで)/u;
 const REQUEST = /(?:起こして|声(?:を)?(?:かけて|掛けて)|リマインドして|思い出させて|知らせて|教えて|呼んで)(?:ね|よ|ください|くれる|ほしい|欲しい)?$/u;
 const TIMER = /(?:タイマー|アラーム|目覚まし)(?:を)?(?:かけて|セットして|設定して|鳴らして|お願い)(?:ね|よ|ください)?$/u;
 
@@ -55,7 +60,7 @@ export function containsCommitmentTime(text: string): boolean {
 
 /** Quotes, hypotheticals, hearsay, other people's plans and greetings are never the owner's promise. */
 export function promiseGuarded(clause: string): boolean {
-  return QUOTED.test(clause) || HEDGE.test(clause) || OTHER_SUBJECT.test(clause) || GREETING.test(clause);
+  return QUOTED.test(clause) || HEDGE.test(clause) || OTHER_SUBJECT.test(clause) || GREETING.test(clause) || CONVERSATION_PLAN.test(clause);
 }
 
 /** "30分後に教えて" and timers need a clock alarm. They are answered, never stored. */

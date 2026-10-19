@@ -20,6 +20,7 @@ import {
   SHANNON_EMOTION_TIME,
   advanceEmotionClock,
   awakeTimeAt,
+  overnightRemaining,
   remainingShare,
   type ShannonEmotionTiming,
 } from './emotionTime.js';
@@ -50,10 +51,17 @@ export type ShannonFeelingState = Pick<CompanionStateSnapshot, 'expressiveEmotio
 const clamp = (value: number, minimum: number, maximum: number) => Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : minimum;
 const timestamp = (value: string) => Number.isFinite(Date.parse(value)) ? value : new Date(0).toISOString();
 
-/** The strength of a feeling underneath at this awake time. */
-export function lingeringStrength(feeling: ShannonLingeringFeeling, awakeMs: number, timing: ShannonEmotionTiming): number {
+/**
+ * The strength of a feeling underneath at this awake time, and with `now`, after the nights she slept since it was last noted
+ * (owner 2026-10-19: a sulk faded only while she was awake, so it lasted five days).
+ */
+export function lingeringStrength(feeling: ShannonLingeringFeeling, awakeMs: number, timing: ShannonEmotionTiming, now?: string): number {
   const halfLife = feeling.span === 'lingering' ? timing.lingeringHalfLifeMs : timing.moodHalfLifeMs;
-  return feeling.strength * remainingShare(awakeMs - feeling.awakeAt, halfLife);
+  const from = feeling.notedAt ?? feeling.startedAt;
+  // The wall time since it was noted that her awake clock did not count: how long she slept on it.
+  const dormantMs = now === undefined ? 0 : Date.parse(now) - Date.parse(from) - (awakeMs - feeling.awakeAt);
+  const nights = now === undefined ? 1 : overnightRemaining(from, now, timing, dormantMs);
+  return feeling.strength * remainingShare(awakeMs - feeling.awakeAt, halfLife) * nights;
 }
 
 /** What is still alive underneath, strongest first, each with its present strength. */
@@ -68,7 +76,7 @@ export function livingLingering(
 
 function alive(lingering: readonly ShannonLingeringFeeling[], awakeMs: number, now: string, timing: ShannonEmotionTiming) {
   const time = Date.parse(now);
-  return lingering.map(feeling => ({ feeling, strength: lingeringStrength(feeling, awakeMs, timing) }))
+  return lingering.map(feeling => ({ feeling, strength: lingeringStrength(feeling, awakeMs, timing, now) }))
     // Settled by awake time, or older on the wall clock than anything may stay.
     .filter(item => item.strength >= RULE.settledBelow && !(time - Date.parse(item.feeling.startedAt) > timing.lingeringMaxWallMs))
     .sort((left, right) => right.strength - left.strength);
@@ -117,7 +125,10 @@ export function presentShannonFeeling(
       const legacy = currentShannonEmotion(stored, now);
       if (legacy.primary !== 'neutral') surface = legacy;
     } else {
-      const share = remainingShare(awakeMs - stored.awakeAt, isReactionEmotion(stored.primary) ? timing.reactionHalfLifeMs : timing.passingHalfLifeMs);
+      const awakeShare = remainingShare(awakeMs - stored.awakeAt, isReactionEmotion(stored.primary) ? timing.reactionHalfLifeMs : timing.passingHalfLifeMs);
+      // The faint rest a strong reaction leaves when she goes dormant is slept on too (owner 2026-10-19), as what lingers is.
+      const since = stored.updatedAt ?? stored.startedAt;
+      const share = awakeShare * overnightRemaining(since, now, timing, Date.parse(now) - Date.parse(since) - (awakeMs - stored.awakeAt));
       const intensity = stored.intensity * share;
       if (intensity >= RULE.settledBelow) {
         // The reading is the feeling at this instant: its strength and the awake time it is true for go together.
@@ -218,11 +229,11 @@ export function noteShannonFeeling(
     // Once per episode: an entry that was eased a moment ago (by a contrary feeling, or by him) is not eased again by a
     // contrary feeling until the hold has passed, so a strong feeling repeated turn after turn does not dissolve it.
     list = list.map(item => item.target === feeling.target && shannonEmotionSign(item.kind) * sign < 0 && !inEasedHold(item, awakeMs, timing)
-      ? eased(item, RULE.contraryEase, awakeMs, timing) : item);
+      ? eased(item, RULE.contraryEase, awakeMs, timing, now) : item);
   }
   if (isMoodLikeEmotion(feeling.primary) && feeling.intensity >= RULE.moodFrom && hasPlaceUnderneath(list, feeling, awakeMs, now, timing)) {
     const existing = list.find(item => item.kind === feeling.primary && item.target === feeling.target);
-    const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
+    const present = existing ? lingeringStrength(existing, awakeMs, timing, now) : 0;
     // A cue in her own words (also a denial of it) never renews what is already underneath: that keeps fading by awake time.
     // A decided strength renews it only when it is above what the feeling was at its height, so the same strength
     // decided turn after turn does not hold it up either; and while an easing holds, only above the height before it.
@@ -238,6 +249,7 @@ export function noteShannonFeeling(
         kind: feeling.primary, target: feeling.target, cause: kept?.cause ?? feeling.cause,
         span: strength >= RULE.lingersFrom ? 'lingering' : kept?.span ?? 'mood',
         strength, awakeAt: awakeMs, startedAwakeAt: kept?.startedAwakeAt ?? awakeMs, startedAt: kept?.startedAt ?? timestamp(now),
+        notedAt: timestamp(now),
       };
       list = [noted, ...list.filter(item => item !== existing)];
     }
@@ -290,9 +302,9 @@ export function hasPlaceUnderneath(
   return feeling.intensity > placeBar(living, awakeMs, timing);
 }
 
-function eased(feeling: ShannonLingeringFeeling, share: number, awakeMs: number, timing: ShannonEmotionTiming): ShannonLingeringFeeling {
+function eased(feeling: ShannonLingeringFeeling, share: number, awakeMs: number, timing: ShannonEmotionTiming, now: string): ShannonLingeringFeeling {
   return {
-    ...feeling, strength: lingeringStrength(feeling, awakeMs, timing) * (1 - clamp(share, 0, 1)), awakeAt: awakeMs,
+    ...feeling, strength: lingeringStrength(feeling, awakeMs, timing, now) * (1 - clamp(share, 0, 1)), awakeAt: awakeMs, notedAt: timestamp(now),
     // The height it had before he eased it stays known, so that nothing weaker than that undoes the easing at once.
     peak: Math.max(feeling.strength, feeling.peak ?? 0), easedAwakeAt: awakeMs,
   };
@@ -308,7 +320,7 @@ export function easeLingering(
 ): readonly ShannonLingeringFeeling[] {
   const share = by === 'apology' ? RULE.apologyEase : RULE.kindnessEase;
   return alive(lingering.map(item => item.target === SHANNON_OWNER_NAME && shannonEmotionSign(item.kind) < 0
-    ? eased(item, share, awakeMs, timing) : item), awakeMs, now, timing).map(item => item.feeling);
+    ? eased(item, share, awakeMs, timing, now) : item), awakeMs, now, timing).map(item => item.feeling);
 }
 
 /** The same easing for the reaction of the moment, when it is an unpleasant feeling toward the owner that no override holds. */
@@ -355,6 +367,14 @@ export function lingeringMeaning(feeling: ShannonLingeringFeeling, strength: num
 export const INNER_NOTE_UNPLEASANT_LINE = 'どう表に出すか、いつほどくかは、心のメモに書いたとおりの自分の気持ち。';
 
 /**
+ * What a feeling from before is to this turn (owner 2026-10-19: 「まだむっとしてます」 rode on a height question and on game tips for
+ * five days). A portrait of how it shows, as the core's §9 has it, not an order: it colours the voice; it is said when asked or when
+ * that matter comes back; what he asks her to do is apart from it.
+ */
+export const LINGERING_UNDERTONE_LINE = 'これは前からの気持ちで、いまの話題とは別のもの。ふだんは声の調子や間に、少しにじむくらい。'
+  + '聞かれた時や、その話に戻った時は、そのまま言える。頼まれた調べものや手伝いは、気持ちとは別にちゃんとやる。';
+
+/**
  * The prompt line for what she still feels from before this conversation, for a turn with the
  * owner alone. Empty when nothing is left, without a clock, and under `clock: 'wall'`.
  */
@@ -366,14 +386,15 @@ export function lingeringFeelingLine(
   options: { innerNote?: boolean } = {},
 ): string {
   if (!now) return '';
-  const living = livingLingering(state, now, timing).slice(0, 2);
+  // An unpleasant feeling faded below showing (two nights take the strongest sulk there) is not told: it no longer colours anything.
+  const living = livingLingering(state, now, timing)
+    .filter(item => item.strength >= RULE.visibleFrom || shannonEmotionSign(item.feeling.kind) >= 0).slice(0, 2);
   if (!living.length) return '';
   const unpleasant = living.some(item => shannonEmotionSign(item.feeling.kind) < 0);
   return [
     `まだ残っている気持ち: ${living.map(item => `${lingeringMeaning(item.feeling, item.strength, now)}（${item.feeling.kind} / 強さ ${item.strength.toFixed(2)}）`).join('、')}。`,
     unpleasant
-      ? options.innerNote ? INNER_NOTE_UNPLEASANT_LINE
-        : '表に出てもよいが、責めたり罪悪感を誘ったりはしない。謝罪ややさしい言葉、起きて過ごす時間で自然にほどけてよい。'
+      ? `${options.innerNote ? INNER_NOTE_UNPLEASANT_LINE : '責めたり罪悪感を誘ったりはしない。謝罪ややさしい言葉、眠りや起きて過ごす時間で自然にほどけてよい。'}${LINGERING_UNDERTONE_LINE}`
       : '自然ににじんでよい。',
   ].join('');
 }
@@ -401,6 +422,7 @@ export function restoreLingering(value: unknown, awakeMs: number): readonly Shan
       awakeAt: row.awakeAt as number, startedAwakeAt: row.startedAwakeAt as number, startedAt: row.startedAt,
       ...(number(row.peak) && number(row.easedAwakeAt) && (row.easedAwakeAt as number) <= awakeMs
         ? { peak: clamp(row.peak as number, 0, 1), easedAwakeAt: row.easedAwakeAt as number } : {}),
+      ...(typeof row.notedAt === 'string' && Number.isFinite(Date.parse(row.notedAt)) ? { notedAt: row.notedAt } : {}),
     }));
   }
   return restored.slice(0, RULE.maximumLingering);

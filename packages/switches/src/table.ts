@@ -260,7 +260,7 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_FEELING_MEANING', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
-    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v5).',
+    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v7).',
   },
   {
     name: 'SHANNON_RELATIONSHIP_LEDGER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],
@@ -325,6 +325,10 @@ export const SWITCHES = [
   {
     name: 'SHANNON_OPERATOR_MINECRAFT', default: 'off', kind: 'explicit_on', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-14: a VM operator may ask, over a service-user socket, for Minecraft lifecycle or one request (operator-minecraft-contract).',
+  },
+  {
+    name: 'SHANNON_OPERATOR_TALK_NOTES', default: 'off', kind: 'explicit_on', owner: 'minecraft', requires: ['SHANNON_OPERATOR_MINECRAFT'],
+    doc: 'Owner 2026-10-19: off, an operator\'s Minecraft action stays in the audit and the activity record; on, it is also noted in his Talk.',
   },
 ] as const satisfies readonly SwitchEntry[];
 

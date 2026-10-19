@@ -39,7 +39,7 @@ describe('the fact sentence: fixed, neutral, always correct', () => {
     expect(commitmentFactSentence({ ...TIMED, when: '00:20' })).toBe('夜中の0時20分の約束：「起こして」');
     expect(commitmentFactSentence({ ...TIMED, title: '薬を飲む', when: '23:30', overdueMinutes: 450, quietHeld: true }))
       .toBe('夜の11時30分の約束：「薬を飲む」（夜のあいだは控えていたため、7時からのお知らせ・7時間30分遅れ）');
-    expect(commitmentFactSentence(ALONE)).toBe('今日の約束：「明日プレゼンの練習しよう」');
+    expect(commitmentFactSentence(ALONE)).toBe('今日の約束：「プレゼンの練習しよう」');
     // With anyone else there: the time, never the promise's words.
     expect(commitmentFactSentence({ ...TIMED, others: true })).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
     expect(neutralCommitmentLine({ ...ALONE, others: true })).not.toContain('プレゼン');
@@ -91,7 +91,7 @@ describe('the review of f23a3c94: late with others, 「あとで」, a date only
       snapshot: key => state.snapshot(key), delivered: (key, item) => sources.delivered(key, item), others: () => false });
     expect(initiatives.deliverDuePromises('2026-10-14T03:19:00.000Z', 'Asia/Tokyo', await lines('2026-10-14T03:19:00.000Z'))).toEqual({ due: 0, sent: 0 });
     initiatives.deliverDuePromises('2026-10-14T03:21:00.000Z', 'Asia/Tokyo', await lines('2026-10-14T03:21:00.000Z'));
-    expect(state.conversationHistory('owner', threadId).at(-1)?.content).toBe('9時20分の約束：「明日9:20に起こして」（あとで、と頼まれていた分）');
+    expect(state.conversationHistory('owner', threadId).at(-1)?.content).toBe('9時20分の約束：「起こして」（あとで、と頼まれていた分）');
     sources.close(); initiatives.close(); state.close();
   });
 
@@ -245,7 +245,7 @@ describe('every sentence states only what is literally true when it is told (rev
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false })(NINE);
     // `fixture()` builds the store without promisesOnTime: the switch off.
     expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束：「明日プレゼンの練習しよう」');
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束：「プレゼンの練習しよう」');
     f.close();
   });
 });
@@ -351,7 +351,7 @@ describe('at the moment it is due', () => {
     const prepared = await lines(NINE);
     expect(writer.asked).toEqual([expect.objectContaining({ title: '明日プレゼンの練習しよう', others: false })]);
     expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ふふん、ちゃんと覚えてましたよ。今日の約束：「明日プレゼンの練習しよう」');
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ふふん、ちゃんと覚えてましたよ。今日の約束：「プレゼンの練習しよう」');
     expect(await lines(NINE)).toEqual(new Map());
     expect(writer.asked).toHaveLength(1);
     f.close();
@@ -363,7 +363,7 @@ describe('at the moment it is due', () => {
       f.setNow(NINE);
       const prepared = await prepare(f, writer)(NINE);
       expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-      expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束：「明日プレゼンの練習しよう」');
+      expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('今日の約束：「プレゼンの練習しよう」');
       f.close();
     }
   });

@@ -8,7 +8,7 @@ import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SQLiteCognitiveIntentStore } from '../src/mind/action/respond/cognitiveIntent.js';
 import { conversationCapabilityPrompt } from '../src/mind/action/respond/conversationCapabilities.js';
-import { EXACT_TIME_DECLINED, EXACT_TIME_NOTE } from '../src/mind/memory/prospectiveMemory.js';
+import { EXACT_TIME_DECLINED, exactTimeNote } from '../src/mind/memory/prospectiveMemory.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import type { TurnCaptureView } from '../src/mind/memory/store/turnCaptures.js';
 
@@ -156,7 +156,7 @@ describe('what Shannon took in is visible per turn', () => {
     const kernel = createLocalApiKernel(() => at, { stateStore: store, conversationStore: store, cognitiveIntents: intents });
     expect(captured(await history(kernel, 'thread'))).toEqual([
       expect.objectContaining({ kind: 'knowledge', text: '紅茶が好き' }),
-      expect.objectContaining({ kind: 'commitment', text: '起こして', dueAt: '2026-09-24T23:00:00.000Z', note: EXACT_TIME_NOTE }),
+      expect.objectContaining({ kind: 'commitment', text: '起こして', dueAt: '2026-09-24T23:00:00.000Z', note: exactTimeNote() }),
     ]);
     intents.close();
     store.close();
@@ -185,7 +185,9 @@ describe('exact-time requests are answered honestly (AB-06)', () => {
     expect(declined).toContain('[Reminder capability]');
     expect(declined).toContain('nothing was stored');
     const stored = conversationCapabilityPrompt('owner', '明日8時に起こして', {}, { aetherNotes: false, voyagerTasks: false });
-    expect(stored).toContain('once-a-day message slot');
+    // Owner 2026-10-19: with promises told at their time (the default) she says what she will do: a word at that time, not an alarm.
+    expect(stored).toContain('sends him a short message of hers at that time');
+    expect(stored).not.toContain('once-a-day message slot');
     expect(conversationCapabilityPrompt('owner', '明日プレゼンの練習しよう', {}, { aetherNotes: false, voyagerTasks: false })).toBe('');
   });
 });

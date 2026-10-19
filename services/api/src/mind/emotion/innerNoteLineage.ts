@@ -1,5 +1,5 @@
 import {
-  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, touchConsentIn, visibleMemoryText,
+  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, touchConsentIn, visibleMemoryText, warmWordsIn,
   type CompanionStateSnapshot, type InnerNoteEvent,
 } from '@shannon/cognition';
 import type { InnerNoteTurn } from './innerNotePorts.js';
@@ -118,6 +118,15 @@ export function lineage(own: readonly (string | undefined)[], previous: Pick<Sto
  * tease of the same turn as `consent`, and is its own event otherwise (owner decision 2026-10-14: such a turn, her own yes or no
  * included, makes her reflect at once).
  */
+/**
+ * Owner 2026-10-19: his apology or amends read by its meaning (Jev, `FeelingTurnDecision.amends`) when the narrow words of `turnEvent` did
+ * not see one (a long apology, 「どうやったら埋め合わせできる？」). Null when the turn was already an apology or a kind word.
+ */
+export function amendsEvent(turn: Pick<InnerNoteTurn, 'at' | 'userMessage' | 'reply'>): InnerNoteEvent | null {
+  if (soothingIn(turn.userMessage) || apologyIn(turn.userMessage)) return null;
+  return { kind: 'apology', at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200) };
+}
+
 export function turnEvent(turn: InnerNoteTurn, context: { recentTouch?: boolean } = {}): { event: InnerNoteEvent | null; goodnight: boolean } {
   const consent = touchConsentIn(turn.userMessage, turn.reply, context);
   const base = { at: turn.at, words: turn.userMessage.slice(0, 200), reply: turn.reply.slice(0, 200), ...(consent ? { consent } : {}) };
@@ -126,6 +135,8 @@ export function turnEvent(turn: InnerNoteTurn, context: { recentTouch?: boolean 
   if (soothing) return { event: { kind: soothing, ...base }, goodnight };
   if (teasingIn(turn.userMessage)) return { event: { kind: 'teasing', ...base }, goodnight };
   if (consent) return { event: { kind: 'consent', ...base }, goodnight };
+  // Owner 2026-10-19: a warm word to her (「かわいいね」「やさしいね、いつもありがとう」) is a kind thing that happened, as an exact thanks is.
+  if (warmWordsIn(turn.userMessage)) return { event: { kind: 'kindness', ...base }, goodnight };
   const feeling = turn.feeling;
   if (feeling && feeling.kind !== 'neutral' && feeling.intensity >= 0.6) return { event: { kind: 'strong_reply', ...base, feeling }, goodnight };
   return { event: null, goodnight };

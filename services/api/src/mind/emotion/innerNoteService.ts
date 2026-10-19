@@ -9,7 +9,7 @@ import { INNER_NOTE_SERVICE_LIMITS } from '../../contracts/innerNoteContract.js'
 import { emotionTiming } from './emotionTiming.js';
 import type { InnerNoteReflector } from './innerNoteReflection.js';
 import type { InnerNoteBodyReader, InnerNotePort, InnerNoteTouch, InnerNoteTurn } from './innerNotePorts.js';
-import { eventVisible, forgetIndex, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
+import { amendsEvent, eventVisible, forgetIndex, lineage, noteForgotten, sourceVisible, turnEvent } from './innerNoteLineage.js';
 import { InnerNoteTouchSessions } from './innerNoteTouchSessions.js';
 import type { SQLiteInnerNoteStore, StoredInnerNote } from './store/innerNoteStore.js';
 
@@ -124,6 +124,15 @@ export class InnerNoteService implements InnerNotePort {
       const { event, goodnight } = turnEvent(turn, { recentTouch: since >= 0 && since <= this.limits.consentTouchMilliseconds });
       if (event) this.enqueue(turn.scopeKey, event, turn.sourceId);
       if (goodnight) void this.schedule(() => this.closeDay(turn.scopeKey, 'goodnight'));
+    } catch (error) { this.log('turn', error); }
+  }
+
+  /** Owner 2026-10-19: Jev read his words as an apology or amends that the narrow words missed: her note hears it as his apology. */
+  turnAmended(turn: InnerNoteTurn): void {
+    try {
+      if (turn.scopeKey !== this.dependencies.ownerScope || !turn.alone) return;
+      const event = amendsEvent(turn);
+      if (event) this.enqueue(turn.scopeKey, event, turn.sourceId);
     } catch (error) { this.log('turn', error); }
   }
 

@@ -8,6 +8,7 @@ import { REACH_OUT_HELD_TOOL, conversationInProgress, heldByGate, intentArisenAt
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL } from '../../inhibition/inhibitionPorts.js';
+import { withoutSilenceTally } from './ownWordsTally.js';
 
 /**
  * What she may do after a message of hers got no answer (owner decision 2026-10-02), besides looking
@@ -64,7 +65,8 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
       if (before) return before;
       const { reply, usage } = await callModel(adapters, call, signal);
       if (!reply || typeof reply.message !== 'string') return { outcome: 'failed', summary: 'もう一度声をかけようとしましたが、言葉になりませんでした。', reasonCode: 'model_failed', usage };
-      const text = reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS);
+      // Owner 2026-10-19: a second call does not count his quiet back at him (`ownWordsTally.ts`).
+      const text = withoutSilenceTally(reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS));
       // Letting it go is hers to choose.
       if (!text) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, summary: 'もう一度声をかけようかと思いましたが、そのままにしました。' };
       // The second call carries the time it is written, and is not made over a turn that arrived while the model was writing.

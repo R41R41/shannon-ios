@@ -116,6 +116,14 @@ export class SQLiteProactiveMoments {
     return { decisions: Number(row.decisions), taken: Number(row.taken), costUsd: Number(row.cost) };
   }
 
+  /** How many moments of this kind her loop took since `since` (spoken of or left in silence). */
+  takenOfKindSince(scopeKey: string, kind: ProactiveMomentKind, since: string): number {
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS taken FROM proactive_moments WHERE scope_key = ? AND kind = ? AND status = 'taken' AND perceived_at >= ?
+    `).get(scopeKey, kind, since) as unknown as { taken: number };
+    return Number(row.taken);
+  }
+
   /** Moments that waited too long are only things that happened; rows older than 30 days are dropped. */
   private expire(scopeKey: string, at: string): void {
     const rows = this.database.prepare(`

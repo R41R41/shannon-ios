@@ -90,6 +90,7 @@ afterEach(() => { vi.unstubAllEnvs(); });
 
 describe('(a) continuity across conversations, text', () => {
   it('carries a sulk from the night into the first turn of the next morning, with its cause and for whom', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, prompt } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     expect(state().expressiveEmotion).toMatchObject({ primary: 'sulky', awakeAt: expect.any(Number) });
@@ -101,13 +102,26 @@ describe('(a) continuity across conversations, text', () => {
     // The prompt of that first turn says what she still feels, why and for whom, and that it may show and resolve.
     expect(prompt()).toContain('いまの会話感情: sulky');
     expect(prompt()).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている（sulky \/ 強さ 0\.4\d）。/u);
-    expect(prompt()).toContain('謝罪ややさしい言葉、起きて過ごす時間で自然にほどけてよい。');
+    expect(prompt()).toContain('謝罪ややさしい言葉、眠りや起きて過ごす時間で自然にほどけてよい。');
+    // Owner 2026-10-19: it colours her voice; it is not added to whatever he asks.
+    expect(prompt()).toContain('ふだんは声の調子や間に、少しにじむくらい');
     // Her face for the reply and the state returned with it agree: still a little sulky.
     expect(morning.messageEmotion.expression).toBe('annoyed');
     expect(morning.state.presence.mood).toMatchObject({ expression: 'annoyed', fromConversation: true });
     // Nine hours of rest moved her clock by the idle cap only.
     expect(state().emotionClock!.awakeMs - awakeAtNight).toBe(SHANNON_EMOTION_TIME.idleCapMs);
     expect(state().expressiveEmotion!.primary).toBe('sulky');
+  });
+
+  it('halves it for the night she slept on it, so the next morning nothing of it is told to the model (owner 2026-10-19)', async () => {
+    const { chat, advance, state, prompt, now } = harness();
+    await chat('今日はもう別のAIと話すね', SULK);
+    advance(9 * HOUR);
+    await chat('おはよう', 'おはようございます、ライ氏。');
+    const left = livingLingering(state(), now(), emotionTiming()).find(item => item.feeling.kind === 'sulky')?.strength ?? 0;
+    expect(left).toBeGreaterThan(0.15);
+    expect(left).toBeLessThan(0.3);
+    expect(prompt()).not.toContain('まだ残っている気持ち');
   });
 
   it('(b) lets it fade over a few awake hours of conversation, a neutral reply counting as time awake', async () => {
@@ -131,6 +145,7 @@ describe('(a) continuity across conversations, text', () => {
   }, 30_000);
 
   it('resolves a hurt faster when the owner apologises: the refinement worker eases it, a new conversation alone does not', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, now, stateStore } = harness();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
       primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
@@ -150,6 +165,7 @@ describe('(a) continuity across conversations, text', () => {
 
 describe('(a) continuity across conversations, voice', () => {
   it('starts the next morning\'s call from what she still feels, through the same reading as text', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { api, chat, advance, state, model, now } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(9 * HOUR);
@@ -184,6 +200,7 @@ describe('(a) continuity across conversations, voice', () => {
 
 describe('nothing stays for weeks when she is rarely awake', () => {
   it('drops a sulk after four days on the wall clock: gone from the prompt, the app and the body', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, prompt, shown, body } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(3 * 24 * HOUR);
@@ -200,6 +217,7 @@ describe('nothing stays for weeks when she is rarely awake', () => {
 
 describe('(k) the app\'s 「いま」 and the body read the same continuous state', () => {
   it('shows the same feeling in GET /v1/state and GET /v1/body/presence the next morning', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, shown, body } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(9 * HOUR);
@@ -238,6 +256,7 @@ describe('(i) guests and (j) other people present', () => {
   });
 
   it('with others present shows the feeling, states no cause, and stores nothing', async () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, prompt, settle } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(9 * HOUR);
@@ -290,6 +309,7 @@ describe('(j) the owner\'s call while someone else can hear', () => {
 
 describe('(g) an activity session keeps her awake', () => {
   it('advances her clock from the loop\'s process through the state store, content-free, and never from a dormant gap', () => {
+    vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const path = databasePath();
     const clock = { at: NIGHT };
     const now = () => clock.at;
@@ -318,7 +338,7 @@ describe('(g) an activity session keeps her awake', () => {
     expect(after.expressiveEmotion).toEqual(before.expressiveEmotion);
     expect(api.events(scope)).toHaveLength(events);
     // The sulk faded by that awake time and no more.
-    const strength = livingLingering(after, clock.at)[0]!.strength;
+    const strength = livingLingering(after, clock.at, emotionTiming())[0]!.strength;
     expect(strength).toBeCloseTo(0.62 * 0.5 ** (52 / 90), 3);
 
     // A scope the API never created is not created by the loop.
@@ -591,11 +611,15 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
       SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: '120', SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES: '180',
       SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES: '20', SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS: '12',
       SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS: '2', SHANNON_EMOTION_EASED_HOLD_MINUTES: '45',
+      SHANNON_EMOTION_OVERNIGHT_SHARE: '0.3', SHANNON_AUTONOMY_TIMEZONE: 'Europe/Paris',
     })).toEqual({
       clock: 'awake', idleCapMs: 15 * MINUTE, reactionHalfLifeMs: 30_000, passingHalfLifeMs: 8 * MINUTE, moodHalfLifeMs: 120 * MINUTE,
       moodValueHalfLifeMs: 180 * MINUTE, arousalHalfLifeMs: 20 * MINUTE, lingeringHalfLifeMs: 12 * HOUR, lingeringMaxWallMs: 48 * HOUR,
-      easedHoldMs: 45 * MINUTE,
+      easedHoldMs: 45 * MINUTE, overnightShare: 0.3, timeZone: 'Europe/Paris',
     });
+    // Owner 2026-10-19: `1` (or more nonsense) for the night's share keeps what lingers through the night as before; nonsense is the table's.
+    expect(emotionTiming({ SHANNON_EMOTION_OVERNIGHT_SHARE: '1' }).overnightShare).toBe(1);
+    expect(emotionTiming({ SHANNON_EMOTION_OVERNIGHT_SHARE: 'half' }).overnightShare).toBe(SHANNON_EMOTION_TIME.overnightShare);
     // Nonsense, zero, negative and out-of-bound values leave the table's value.
     expect(emotionTiming({
       SHANNON_EMOTION_IDLE_MINUTES: '0', SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES: '-3', SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: 'soon',

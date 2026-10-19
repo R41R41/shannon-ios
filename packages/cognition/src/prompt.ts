@@ -6,6 +6,7 @@ import { shannonPersonaPrompt, shannonSuitePrompt, type ShannonAudience, type Sh
 import { shannonCapabilityPrompt } from './capabilities.js';
 import { lingeringFeelingLine, presentShannonFeeling } from './emotionContinuity.js';
 import type { ShannonEmotionTiming } from './emotionTime.js';
+import { promiseStanding, promiseWithDate } from './promiseWords.js';
 
 /**
  * Stable identity block: canonical persona, suite roles, and capabilities. It is the
@@ -71,16 +72,18 @@ export function buildCompanionStatePrompt(
     const text = visibleMemoryText(snapshot, memory.id, memory.summary);
     return text ? [{ ...memory, summary: text, pinned: memoryControlFor(snapshot, memory.id)?.pinned === true }] : [];
   }).sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.relevance - left.relevance);
+  // Owner 2026-10-19: a promise whose time is long past is no open promise to speak of (「9時20分に起こす約束も覚えていますよ」 days on).
   const prospectiveMemories = snapshot.prospectiveMemories
     .filter(memory => memory.status === 'pending'
       && visibleMemoryText(snapshot, memory.id, memory.summary)
-      && (!memory.sourceExperienceId || visibleMemoryText(snapshot, memory.sourceExperienceId, memory.summary)))
+      && (!memory.sourceExperienceId || visibleMemoryText(snapshot, memory.sourceExperienceId, memory.summary))
+      && (!options.now || promiseStanding(memory, options.now) !== 'past'))
     .sort((a, b) => (a.dueAt ?? a.dueDate ?? '9999').localeCompare(b.dueAt ?? b.dueDate ?? '9999'))
     .slice(0, 8);
   return fitSections([
     `[Shannon shared state v${snapshot.version}]`,
     fitSections([prospectiveMemories.length
-      ? `未完了の約束・未来記憶 (保存済み。外部実行の証拠ではない):\n${prospectiveMemories.map(memory => `- ${visibleMemoryText(snapshot, memory.id, memory.summary)} [発言=${memory.createdAt}; 期限=${memory.dueAt ?? memory.dueDate ?? memory.dueHint ?? '未定'}; TZ=${memory.timeZone ?? '不明'}]`).join('\n')}`
+      ? `未完了の約束・未来記憶 (保存済み。外部実行の証拠ではない。触れるのは、その話題になった時か、時刻が近い時だけ。挨拶のたびに言わない):\n${prospectiveMemories.map(memory => promiseLine(snapshot, memory, options.now)).join('\n')}`
       : '未完了の約束・未来記憶: なし'], Math.floor(maximumCharacters * 0.32)),
     // Traits that move with evidence (see temperament.ts) and fixed dispositions are labelled apart.
     `経験で育つ気質: 親密さ ${fixed(snapshot.temperament.closeness)} / 好奇心 ${fixed(snapshot.temperament.curiosity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
@@ -100,6 +103,16 @@ export function buildCompanionStatePrompt(
       ? `今、想起されている記憶:\n${activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
       : '今、想起されている記憶: なし'], Math.floor(maximumCharacters * 0.14)),
   ], maximumCharacters);
+}
+
+/**
+ * One open promise: its words with a relative day as the date it meant (「明日」 said yesterday is today), and, once its time has just
+ * passed, that it has (owner 2026-10-19). Without such words the line is as it was.
+ */
+function promiseLine(snapshot: CompanionStateSnapshot, memory: CompanionStateSnapshot['prospectiveMemories'][number], now: string | undefined): string {
+  const text = promiseWithDate(visibleMemoryText(snapshot, memory.id, memory.summary) ?? '', memory.dueDate);
+  const passed = now && promiseStanding(memory, now) === 'due' && memory.dueAt ? '（時刻は過ぎた。済んだかは分からない）' : '';
+  return `- ${text}${passed} [発言=${memory.createdAt}; 期限=${memory.dueAt ?? memory.dueDate ?? memory.dueHint ?? '未定'}; TZ=${memory.timeZone ?? '不明'}]`;
 }
 
 /**

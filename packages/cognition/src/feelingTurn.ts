@@ -31,7 +31,15 @@ export interface FeelingTurnDecision {
   source: 'jev' | 'fallback';
   /** Stage 2 (`SHANNON_CORE_AFFECT`): Jev's reading of the words' meaning for her appraisal: meant, and teasing (each 0..1). */
   meaning?: { deliberate: number; teasing: number };
+  /**
+   * Owner 2026-10-19: Jev's reading (0..1) of whether his words apologise to her or make amends, in any wording (a long apology,
+   * 「本当に勝手に触ったのはごめん」, 「どうやったら埋め合わせできる？」). Asked only while she holds something against him.
+   */
+  amends?: number;
 }
+
+/** From this reading on, his words are taken as an apology or amends (`FeelingTurnDecision.amends`). */
+export const FEELING_AMENDS_FROM = 0.6;
 
 /** The menu as the chooser reads it (English, a fixed question set: a change of wording is a new version). */
 export const FEELING_STANCE_CRITERIA: Readonly<Record<FeelingStance, string>> = Object.freeze({
@@ -74,7 +82,11 @@ export const FEELING_ORDER_LINE = '気持ちへの注文（「〜して見せて
 /** Facts are for her judgment (owner, 2026-10-14, after the live eval): never recited. */
 export const FEELING_FACTS_USE_LINE = '事実は判断の材料。数字や回数をそのまま口にしない。';
 /** Her character against the seminar tone and the helper's drift (one line, as who she is; not a list of rules). */
-export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。';
+export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。'
+  + 'でも、頼まれた調べものや手伝いは、むっとしていてもちゃんとやる（後回しにしない）。'
+  // Owner 2026-10-19 (item 7): 「先走ったのはボクの悪いところ」 and then 「いまのはライ氏が悪いです」 in one reply; the same telling-off
+  // (「生みの親が…娘は」) four times in an evening.
+  + '自分の間違いを認めたら、その返事で相手を責め返さない（「でも」「それとこれは別」で戻さない）。同じ注意やお小言は、一度言ったらその日はもう繰り返さない（嫌なことをされた時の「いや」「やめて」は別。何度でも言ってよい）。';
 export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写はしない。照れ・叱る・冷たくする・すねる・「えっち」のような言い方はしてよい。';
 
 /**
@@ -174,6 +186,48 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
     input.ledgerLine || input.carried?.length ? FEELING_FACTS_USE_LINE : '',
     input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Her stances of the day and how they lean (owner 2026-10-19: in a week, からかう 26, すねる 18, 言い返す 9, 乗らない 7, and 受け入れる,
+ * 心配する, 甘える 0 times). The warm side is the dere of her tsundere; the cool side her tsun. Counted from the stances her own replies
+ * were given today (closed facts, never her words), for the chooser to read.
+ */
+export const WARM_STANCES: readonly FeelingStance[] = Object.freeze(['accept', 'worry', 'affectionate', 'shy']);
+// Refusing (突っぱねる・叱る・体で拒む) is her boundary, not her tsun: it is in neither side, and it ends a cool run (review of the heart
+// branch: four real refusals in a row must never come back as 「warm is due」).
+const COOL_STANCES: ReadonlySet<FeelingStance> = new Set(['tease', 'sulk', 'sulky', 'talk_back', 'not_play_along', 'exasperated', 'snipe', 'cold',
+  'cover_up']);
+
+/**
+ * From this many cool stances in a row (no warm one between), her softer side is due (`warm_due`): measured on the week of 2026-10-12, at
+ * most about one in five of her stances is nudged toward warmth, and none while she is warm now and then by herself.
+ */
+export const STANCE_LEAN_LIMITS = Object.freeze({ coolRun: 4 });
+
+export interface StanceBalance {
+  counts: Partial<Record<FeelingStance, number>>;
+  warm: number;
+  cool: number;
+  /** Cool stances in a row, newest first (replies without a stance are passed over). */
+  coolRun: number;
+}
+
+export function stanceBalance(replies: readonly { facts: { turnStance?: string }; occurredAt: string }[]): StanceBalance {
+  const stances = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+    .map(reply => reply.facts.turnStance).filter(isFeelingStance);
+  const counts: Partial<Record<FeelingStance, number>> = {};
+  for (const stance of stances) counts[stance] = (counts[stance] ?? 0) + 1;
+  const run = stances.findIndex(stance => !COOL_STANCES.has(stance));
+  return { counts, warm: stances.filter(stance => WARM_STANCES.includes(stance)).length, cool: stances.filter(stance => COOL_STANCES.has(stance)).length,
+    coolRun: run === -1 ? stances.length : run };
+}
+
+/** The balance as closed facts for the chooser: the day's stances, the warm count, the cool run, and whether the warm side is due. */
+export function stanceFacts(balance: StanceBalance): Record<string, number | string> {
+  const day = (Object.entries(balance.counts) as [FeelingStance, number][]).sort((a, b) => b[1] - a[1]).map(([stance, count]) => `${stance}:${count}`);
+  return { stances_today: day.length ? day.join(',') : 'none', warm_stances_today: balance.warm, cool_stance_run: balance.coolRun,
+    warm_due: balance.coolRun >= STANCE_LEAN_LIMITS.coolRun ? 1 : 0 };
 }
 
 /** A stance's word, for the Observer and the eval report. */

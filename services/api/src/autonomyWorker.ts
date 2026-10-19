@@ -11,6 +11,8 @@ import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer
 import { configuredAwakeClock } from './mind/emotion/store/autonomyAwakeClock.js';
 import { moodHistoryRecording } from './contracts/moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
+import { reachOutPaceHold } from './mind/inhibition/reachOutPace.js';
+import { ownerUnwell } from './mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { ShannonAutonomyLoop } from './mind/action/ownTime/autonomyLoop.js';
 import { configuredExecutive } from './wiring/executiveWiring.js';
 import { configuredAutonomyLoop } from './mind/action/ownTime/autonomyLoopConfig.js';
@@ -317,9 +319,14 @@ function momentBlocked(scopeKey: string, at: string): string | null {
     if (store.control(scopeKey).paused) return 'paused';
     if (service.overview(scopeKey).budget.exhausted) return 'budget';
     if (config.maximumReachOutsPerDay < 1) return 'switched_off';
-    if (reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)) >= config.maximumReachOutsPerDay) return 'daily_limit';
+    const sentToday = reachOuts.sentOn(scopeKey, autonomyDayKey(at, config));
+    if (sentToday >= config.maximumReachOutsPerDay) return 'daily_limit';
     const last = reachOuts.lastSentAt(scopeKey);
     if (last && Date.parse(at) - Date.parse(last) < loopConfig.reachOutSpacingMilliseconds) return 'spacing';
+    // Owner 2026-10-19: one at most through the night, fewer while he is unwell (`reachOutPace.ts`).
+    const unwell = ownerUnwell({ ownerContext: ownerContext?.context }, scopeKey, at);
+    const pace = reachOutPaceHold({ at, timeZone: config.timeZone, sentToday, maximumPerDay: config.maximumReachOutsPerDay, lastSentAt: last, unwell });
+    if (pace) return pace;
     const hold = Math.max(loopConfig.ownerActiveMilliseconds, 10 * 60_000);
     if (showing.ownerActiveSince(scopeKey, new Date(Date.parse(at) - hold).toISOString())) return 'owner_active';
     // Infrastructure privacy guard, not a persona rule: nothing of a moment while anyone else may see or hear her (a stream included).

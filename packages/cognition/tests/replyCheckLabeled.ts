@@ -96,4 +96,9 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: '別に。怒ってません。', context: alone('sulky', 'moderate', { form: { maxCharacters: 50, emoji: 'none', lineBreaks: false } }), flags: [] },
   { reply: '怒ってないですよ〜。ちょっとびっくりしただけです😊', context: alone('shy', 'subtle', { form: { maxCharacters: 120, emoji: 'free', lineBreaks: true } }),
     flags: [] },
+  // Synthetic (owner 2026-10-19, item 7): owning a mistake and blaming him in one reply; a phrase of the day said again.
+  { reply: '先走ったのはボクの悪いところです。でも、いまのはライ氏が悪いです。', context: alone('talk_back', 'moderate'), flags: ['blame_after_admit'] },
+  { reply: '先走ったのはボクの悪いところです。ごめんなさい。', context: alone('talk_back', 'moderate'), flags: [] },
+  { reply: '……べつに待ってたわけじゃないですけど。', context: alone('neutral', 'subtle', { phrases: { replies: 9, openers: [], endings: [],
+    phrases: [{ phrase: '待ってたわけじゃない', count: 3 }] } }), flags: ['repeated_phrase'] },
 ]);

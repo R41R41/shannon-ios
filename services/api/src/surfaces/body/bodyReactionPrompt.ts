@@ -1,13 +1,13 @@
 import {
   CHARACTER_CORE_SPEECH, SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_ONE_LINE_VOICE_INNER, SHANNON_OWNER_NAME,
   isShannonEmotionKind,
-  shannonTemperament,
+  shannonTemperament, touchAgreementIn,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
 import type { BodyAudience } from '../../contracts/bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionTouch } from '../../contracts/bodyReactionContract.js';
 import type { StoredTouchBurst } from './store/bodyReactionStore.js';
-import { BODY_TOUCH_STANCES, type BodyTouchStance, isBodyTouchStance } from './bodyTouchReflex.js';
+import { BODY_TOUCH_STANCES, type BodyTouchStance, isBodyTouchStance, isMovedTouch } from './bodyTouchReflex.js';
 import { bodyPlace, burstTouchPhrase, touchDetailPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 
 /**
@@ -60,6 +60,8 @@ export interface BodyReactionPromptInput {
    * and the shape of 2026-10-14 (`innerBodyReactionPrompt`). Absent: as before, byte for byte.
    */
   inner?: { block: string };
+  /** Owner 2026-10-19: the exchange right before the touch allowed it, or he said he was about to (`touchAgreementIn`); absent: neither. */
+  agreement?: 'permitted' | 'announced';
 }
 
 /** A touch while it is going on, and once it is over. */
@@ -67,7 +69,7 @@ export const BODY_TOUCH_PHRASES: Readonly<Record<ShannonTouchKind, { ongoing: st
   pet: { ongoing: '頭をなでられている', done: '頭をなでられた' },
   tickle: { ongoing: 'くすぐられている', done: 'くすぐられた' },
   poke: { ongoing: 'つつかれている', done: 'つつかれた' },
-  carry: { ongoing: '持ち上げて運ばれている', done: '持ち上げて運ばれて、下ろされた' },
+  carry: { ongoing: '画面の上で運ばれている', done: '画面の上で運ばれて、下ろされた' },
   holdHand: { ongoing: '手をつないでもらっている', done: '手をつないでもらった' },
 });
 
@@ -103,8 +105,52 @@ export function stanceHistoryLine(part: string, stances: readonly BodyTouchStanc
   return `これまで${part}に触れられた時の${SHANNON_FIRST_PERSON}の受け取り: ${counts.map(([stance, count]) => `${BODY_TOUCH_STANCE_WORDS[stance]} ${count}回`).join('、')}（新しい順に ${stances.slice(0, 3).map(stance => BODY_TOUCH_STANCE_WORDS[stance]).join('・')}）`;
 }
 
-/** Whether a touch names its part (touch vocabulary 2): only then is she asked how she took it. A touch in the old shape is asked as before. */
-export const asksStance = (touch: Pick<BodyReactionTouch, 'part'>): boolean => touch.part !== undefined;
+/**
+ * Whether a touch names its part (touch vocabulary 2): only then is she asked how she took it. A touch in the old shape is asked as
+ * before. Being carried on the screen is never asked (owner 2026-10-19, `isMovedTouch`): it is being moved, not a touch to take.
+ */
+export const asksStance = (touch: Pick<BodyReactionTouch, 'part' | 'type'>): boolean => touch.part !== undefined && !isMovedTouch(touch);
+
+/**
+ * Owner 2026-10-19: what being carried on the screen is (the Windows body is dragged to another place), told instead of how she takes a
+ * touch. A light word only when it keeps happening (his own example: 「酔っちゃうよ」くらい); never startled, never a grievance.
+ */
+export function bodyMovedLine(count: number): string {
+  const often = count >= MOVED_OFTEN;
+  return `これは、画面の上で体ごと別の場所へ運ばれただけ（${SHANNON_OWNER_NAME}がボクの位置を動かした）。触られたのとは違い、驚くことでも嫌がることでもない。`
+    + (often ? 'この数分で何度も運ばれているので、目が回りそう、くらいの軽い一言なら言ってもいい。' : 'ふつうは何も言わずにそのまま運ばれる。');
+}
+/** From this many carries in one burst she may say a light word about it. */
+const MOVED_OFTEN = 3;
+
+/**
+ * Owner 2026-10-19: what the exchange right before the touch agreed (`touchAgreementIn`), told to the reflex, which used to answer a touch
+ * she had just allowed with 「えっ、また！？」. A fact of the scene, not a line to say.
+ */
+export const BODY_AGREEMENT_LINES = Object.freeze({
+  permitted: `直前の会話で、${SHANNON_OWNER_NAME}が触れていいか聞き、${SHANNON_FIRST_PERSON}は許した。いまの触れ方がその話のとおりなら、不意打ちではない。許したことを受け止める場面。`,
+  announced: `直前の会話で、${SHANNON_OWNER_NAME}はこれから触れると先に言っていた。いまの触れ方がその話のとおりなら、不意打ちではない。予告されたことを受け止める場面。`,
+});
+
+/**
+ * The agreement of the last exchange before a touch: his words and her answer to them (`touchAgreementIn`), or null. Owner 2026-10-19:
+ * 「もちろんいいですよ、どうぞ」 was followed by the reflex 「えっ、また！？」, 「手繋ぐね」 by 「ひゃっ、また！？」.
+ */
+export function agreementBefore(conversation: readonly { role: 'user' | 'assistant'; content: string }[]): 'permitted' | 'announced' | null {
+  const last = conversation.slice(-4);
+  for (let index = last.length - 1; index >= 0; index -= 1) {
+    if (last[index]!.role !== 'user') continue;
+    const reply = last.slice(index + 1).find(item => item.role === 'assistant')?.content ?? '';
+    return touchAgreementIn(last[index]!.content, reply);
+  }
+  return null;
+}
+
+/** The touch's own lines of the [体に触れられた] block: being carried, or the agreement of the exchange before it. */
+function agreementLines(input: BodyReactionPromptInput): string[] {
+  if (isMovedTouch(input.touch)) return [`- ${bodyMovedLine(input.burst.count)}`];
+  return input.agreement ? [`- ${BODY_AGREEMENT_LINES[input.agreement]}`] : [];
+}
 
 function sittingLine(burst: StoredTouchBurst, current: boolean, at: string): string {
   const phrase = burstTouchPhrase(burst.type, burst, 'done', BODY_TOUCH_PHRASES[burst.type].done);
@@ -179,6 +225,7 @@ function innerBodyReactionPrompt(input: BodyReactionPromptInput, block: string):
       `${bodyPlace(input.surface)}に、いま触れられた。`,
       `- いま: ${bodyTouchLine(input.touch, input.audience)}`,
       ...(input.touch.reflex === 'flinch' || input.touch.reflex === 'avoid' ? [`- 体: ${REFLEX_LINES[input.touch.reflex]}`] : []),
+      ...agreementLines(input),
       // The count is told once, as a plain fact below: not again as 「（続けて2回目）」 in the cause of her feeling.
       `- ${feelingLine(input).replace(/（続けて\d+回目）/gu, '')}`,
       `- この場: ${input.audience === 'owner' ? `${SHANNON_OWNER_NAME}と二人だけ` : 'ほかの人もいる'}`,
@@ -211,6 +258,7 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
       `${bodyPlace(input.surface)}に、いま触れられた。`,
       `- いま: ${bodyTouchLine(input.touch, input.audience)}`,
       ...(input.touch.reflex === 'flinch' || input.touch.reflex === 'avoid' ? [`- 体: ${REFLEX_LINES[input.touch.reflex]}`] : []),
+      ...agreementLines(input),
       `- ${feeling}`,
       `- この場: ${input.audience === 'owner' ? `${SHANNON_OWNER_NAME}と二人だけ` : 'ほかの人もいる'}`,
       // Stage 2, the owner alone only: facts of the relationship and of her own past, no rule of how to take them.

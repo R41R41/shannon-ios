@@ -8,6 +8,7 @@
 export * from './autonomyBudget.js';
 export * from './autonomyPolicy.js';
 export * from './withheldRules.js';
+export * from './reachOutPace.js';
 export { type ToolCallContext } from './shannonToolGate.js';
 export { type AutonomyActivityDay, type AutonomyActivityEntry } from './store/autonomyActivity.js';
 export { type AutonomyLoopStatus } from './autonomyDayLog.js';

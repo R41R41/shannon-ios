@@ -138,8 +138,9 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
           },
         }],
         ...jevWaitingQuestions,
-        // Syzygy ADR-0013: the feeling turn rides on this one call (`voice_route.v4`); absent, the questions of before.
-        ...(input.shannonFeeling ? Object.entries(feelingTurnQuestions('feeling_', feelingAudienceOf(input), input.shannonFeeling.read_meaning === true)) : []),
+        // Syzygy ADR-0013: the feeling turn rides on this one call (`voice_route.v6`); absent, the questions of before.
+        ...(input.shannonFeeling ? Object.entries(feelingTurnQuestions('feeling_', feelingAudienceOf(input), input.shannonFeeling.read_meaning === true,
+          input.shannonFeeling.read_amends === true)) : []),
       ]);
       const body = await this.client.ask({
         utterance: input.transcript.slice(0, 8_000),

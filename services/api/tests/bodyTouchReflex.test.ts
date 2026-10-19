@@ -76,20 +76,25 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // prompt carries her temperament (`SHANNON_TEMPERAMENT`, one line in its rules, outside the stage-2 switch). Re-recorded for
     // that line alone: taken out of each prompt, the day is f8a35ecb… again, so nothing else changed.
     const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: call.prompt.replace(`\n- ${SHANNON_TEMPERAMENT}`, '').replace(`\n- ${shannonTemperament('others')}`, '') })) };
-    expect(digest(without)).toBe('f8a35ecb23a99642f2beae03d12ac9c0fd3f268a3ece4a64df9e99c938391601');
+    // Owner 2026-10-19: the day's carry is being moved, not touched (no feeling, a line saying so, no stance): 804fe1a5… since.
+    expect(digest(without)).toBe('804fe1a53b0e3fd0d9b2dbf1468688596b52a0faaaa005c58c516df6bb92a101');
     // 466fd4ef… with the owner's wording in every prompt; with scope (a) a touch while others are present says 「相手に」.
-    expect(digest(day)).toBe('fdb92212832ddbdbea036c03ae65fc70e28ffca5c835b97558c8ee4321bdaf3d');
+    expect(digest(day)).toBe('5b3049e830353c3c4e2213a4ca565f38260ae335c23b95fc74a0b00e27a946a1'); // fdb92212… before 2026-10-19 (the carry)
   });
 
   it('under stage 2 (ADR-0006, on by default) is asked her stance and moved by it instead of the table: the same day, recorded', async () => {
     const day = await oldShapeDay(true);
-    expect(day.calls.every(call => call.stance === true)).toBe(true);
+    // Owner 2026-10-19: being carried on the screen is never asked (`isMovedTouch`); every touch is.
+    const carried = (call: { prompt: string }) => call.prompt.includes('画面の上で体ごと別の場所へ運ばれただけ');
+    expect(day.calls.filter(call => !carried(call)).every(call => call.stance === true)).toBe(true);
+    expect(day.calls.filter(carried).map(call => 'stance' in call)).toEqual([false]);
     // Recorded on the stage-2 branch (2026-10-06) for the owner's approval of stage 2: no table, the startle, and her stance as the
     // outcome (none here: the script's answers carry no stance, so only the startle and the feeling she chose move her).
     // a722223c… at bec4ad1b, recorded without a prediction record; re-recorded after review items 4 and 5: stage 2 now needs
     // the record (here an in-memory one), and an old-shape touch whose stance is not welcome or fine is told without favour.
     // 8606cfd2… before scope (a): the touch while others are present now says 「相手に」 in her temperament.
-    expect(digest(day)).toBe('da6bf62333d94554f4a418ecbd5441943485ff18a824c111ebcb24ddaea62de1');
+    // Owner 2026-10-19: the carry is not asked and moves nothing (da6bf623… before).
+    expect(digest(day)).toBe('f7f52842eeda550fa377f5a4afdcbfcb20801fb73bfd4efee369295b8c44def5');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {

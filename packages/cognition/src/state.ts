@@ -15,6 +15,7 @@ import {
   normalizeShannonExpressiveEmotion,
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
+import { moodWithFeeling } from './feelingMood.js';
 import {
   easeLingering, easeShannonFeeling, hasPlaceUnderneath, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
@@ -260,7 +261,7 @@ function committedFeeling(
   // He eased this feeling a moment ago: unless the stimulus is above the height it had before, it shows no stronger than it is now.
   const easedEntry = (state.lingering ?? []).find(item => item.kind === incoming.primary && item.target === incoming.target && inEasedHold(item, awakeMs, timing));
   const held = easedEntry && !incoming.overrideReason && incoming.intensity <= (easedEntry.peak ?? 0)
-    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
+    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing, nowIso) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
   const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, intensity: held, awakeAt: awakeMs });
   return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing, event.decided === true) };
 }
@@ -304,7 +305,7 @@ export function reduceCompanionState(
         if (!committed) return state === current ? current : freezeSnapshot(state);
         if (state === current && current.expressiveEmotion && sameShannonExpressiveEmotion(committed.expressiveEmotion!, current.expressiveEmotion)
           && sameLingering(committed.lingering ?? [], current.lingering ?? [])) return current;
-        next = { ...state, ...committed };
+        next = { ...state, ...committed, emotion: moodWithFeeling(state.emotion, committed.expressiveEmotion) }; // Owner 2026-10-19, item 15.
         break;
       }
       const expressiveEmotion = normalizeShannonExpressiveEmotion(event.emotion);

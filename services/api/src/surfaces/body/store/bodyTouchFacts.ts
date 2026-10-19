@@ -55,10 +55,11 @@ export function recentTouchFacts(database: DatabaseSync, scopeKey: string, audie
 }
 
 /** How often each part was touched with this audience between two instants, by burst. */
+/** Owner 2026-10-19: being carried on the screen (`carry`) is no touch of a part: it is not counted here (`isMovedTouch`). */
 export function partCounts(database: DatabaseSync, scopeKey: string, audience: BodyAudience, since: string, until: string): PartCount[] {
   return (database.prepare(`
     SELECT burst_id, COALESCE(part, region) AS part, COUNT(*) AS count FROM body_touches
-    WHERE scope_key = ? AND audience = ? AND occurred_at >= ? AND occurred_at <= ? GROUP BY burst_id, COALESCE(part, region)
+    WHERE scope_key = ? AND audience = ? AND occurred_at >= ? AND occurred_at <= ? AND touch_type <> 'carry' GROUP BY burst_id, COALESCE(part, region)
   `).all(scopeKey, audience, since, until) as unknown as Array<{ burst_id: string; part: string | null; count: number }>)
     .map(row => ({ burstId: row.burst_id, part: row.part, count: Number(row.count) }));
 }

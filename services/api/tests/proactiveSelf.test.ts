@@ -255,7 +255,9 @@ describe('she decides herself at a moment (SHANNON_PROACTIVE_SELF)', () => {
     await w.moments.consider(scope, w.now());
     await runUntilIdle(w.loop);
     expect(w.count('SELECT COUNT(*) AS n FROM initiative_messages')).toBe(1);
-    expect(w.holds()).toEqual([{ tool: 'owner.reach_out', reason: 'intent_repeat' }, { tool: 'owner.reach_out', reason: 'owner_active' }]);
+    // Owner 2026-10-19: the same kind of moment is taken once a day at most, so the second return never reaches the gate.
+    expect(w.holds()).toEqual([]);
+    expect(w.count("SELECT COUNT(*) AS n FROM proactive_moments WHERE reason = 'kind_today'")).toBe(2);
     w.close();
   });
 });
@@ -411,7 +413,7 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false, log: line => logs.push(line) });
     f.initiatives.deliverDuePromises(DUE, 'Asia/Tokyo', await lines(DUE));
     expect(asked).toEqual([{ title: '明日9:20に起こして', when: '09:20', overdueMinutes: 0, others: false }]);
-    expect(f.last()?.content).toBe('起きてー！9時20分の約束：「明日9:20に起こして」');
+    expect(f.last()?.content).toBe('起きてー！9時20分の約束：「起こして」');
     expect(logs).toEqual(['Shannon promise line: phrase']);
     f.close();
 
@@ -420,7 +422,7 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     const quiet = commitmentLinePreparer({ writer: { write: async () => null }, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => none.state.snapshot(key),
       delivered: (key, item) => none.sources.delivered(key, item), others: () => false, log: line => noneLogs.push(line) });
     none.initiatives.deliverDuePromises(later(DUE, 47), 'Asia/Tokyo', await quiet(later(DUE, 47)));
-    expect(none.last()?.content).toBe('9時20分の約束：「明日9:20に起こして」（47分遅れのお知らせ）');
+    expect(none.last()?.content).toBe('9時20分の約束：「起こして」（47分遅れのお知らせ）');
     expect(noneLogs).toEqual(['Shannon promise line: fact_only:none']);
     none.close();
   });
@@ -431,8 +433,8 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
     const writer: CommitmentLineWriter = { write: async (_scopeKey, facts) => { n += 1; return promisePhraseChoice({ phrase: 'ライ氏、', position: 'before' }, facts); } };
     const lines = commitmentLinePreparer({ writer, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => f.state.snapshot(key),
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false });
-    expect([...(await lines(DUE)).values()]).toEqual(['ライ氏、9時20分の約束：「明日9:20に起こして」']);
-    expect([...(await lines(later(DUE, 5))).values()]).toEqual(['ライ氏、9時20分の約束：「明日9:20に起こして」（5分遅れのお知らせ）']);
+    expect([...(await lines(DUE)).values()]).toEqual(['ライ氏、9時20分の約束：「起こして」']);
+    expect([...(await lines(later(DUE, 5))).values()]).toEqual(['ライ氏、9時20分の約束：「起こして」（5分遅れのお知らせ）']);
     expect(n).toBe(1);
     await lines(later(DUE, 11));
     expect(n).toBe(2);

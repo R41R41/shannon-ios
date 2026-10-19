@@ -94,12 +94,16 @@ export const JEV_QUESTION_SETS = Object.freeze({
   /** Whether she would want to say something at a moment she perceived (owner decision 2026-10-14, `proactiveMoments.ts`). */
   proactiveMoment: 'proactive_moment.v2',
   /** Syzygy ADR-0013 stage 1: her stance, its strength and her comeback drawer before a text reply (`mind/emotion/feelingTurn.ts`). */
-  feelingTurn: 'feeling_turn.v1',
-  /** The voice route that also asks the feeling turn's questions (either route set above, plus those). */
-  voiceRouteFeeling: 'voice_route.v4',
+  /** v2 (owner 2026-10-19): the stance's instructions name her dere side and when it is due (`warm_due`, `this_turn.tender`). */
+  feelingTurn: 'feeling_turn.v2',
+  /** The voice route that also asks the feeling turn's questions (either route set above, plus those); v6 with the stance's v2 wording. */
+  voiceRouteFeeling: 'voice_route.v6',
   /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's call (text and voice). */
   feelingMeaning: 'feeling_meaning.v1',
-  voiceRouteFeelingMeaning: 'voice_route.v5',
+  /** v7: v5 with the stance's v2 wording. */
+  voiceRouteFeelingMeaning: 'voice_route.v7',
+  /** Owner 2026-10-19: whether his words apologise or make amends, by meaning, asked while she holds something against him (text and voice). */
+  feelingAmends: 'feeling_amends.v1',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';

@@ -123,7 +123,8 @@ Who handed a request over is never written as the owner's words. It is marked in
 
 1. the task title starts with 「（運用者経由）」;
 2. its first inbox line: 「この依頼は運用者（label）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。」;
-3. a note in the owner's Talk (note kind `operator-note`) when a request starts, is cancelled or reaches its time limit, and when a
+3. only with `SHANNON_OPERATOR_TALK_NOTES=on` (off by default since 2026-10-19: these notices were a quarter of her lines in a week),
+   a note in the owner's Talk (note kind `operator-note`) when a request starts, is cancelled or reaches its time limit, and when a
    lifecycle operation is asked. The conversation store keeps only `user` and `assistant` messages (a CHECK of
    `conversation_messages`), so the note is stored as `assistant`; its words are therefore a marked, neutral notice in the third
    person (「［運用者の操作のお知らせ］運用者がライ氏の代わりに…」), never her voice and never his request;

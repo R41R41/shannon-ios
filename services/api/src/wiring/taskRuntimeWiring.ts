@@ -465,6 +465,7 @@ export function heldBeforeAnyEffect(code: string,
     && execution.modelOutcome !== 'unknown' && execution.writeInFlight !== true;
 }
 
+/** Owner 2026-10-19 (item 10): a failure says why, and what comes next. */
 export function rejectedTaskReport(title: string): string {
-  return `「${title.slice(0, 80)}」は処理中にエラーが起きて、最後まで進められませんでした。`;
+  return `「${title.slice(0, 80)}」は処理中にエラーが起きて、最後まで進められませんでした。もう一度頼んでもらえたら、最初からやり直します。`;
 }

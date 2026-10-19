@@ -45,7 +45,7 @@ const MOMENT_WORD: Readonly<Record<string, string | undefined>> = Object.freeze(
   late_night: '夜更けに、ライ氏がまだそばにいる', awaiting_reaction: 'ボクの物語が、ライ氏に読まれるのを待っている',
 });
 const TOUCH_WORD: Readonly<Record<string, string>> = Object.freeze({
-  pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '持ち上げられた', holdHand: '手をにぎられた',
+  pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '画面の上で運ばれた', holdHand: '手をにぎられた',
 });
 const TASK_WORD: Readonly<Record<string, string>> = Object.freeze({ done: '終わった', failed: 'うまくいかずに終わった', cancelled: '取りやめになった' });
 /** Why an accepted Minecraft lifecycle operation never started (`lifecycle_not_started.<reason>`). */

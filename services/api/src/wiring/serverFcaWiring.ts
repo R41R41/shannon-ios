@@ -65,7 +65,7 @@ import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/act
 import { createSpokenReports, progressWithSpokenReports } from '../mind/action/fca/fcaSpokenReport.js';
 import { createConfiguredSpokenReportModel } from '../infra/models/spokenReportModel.js';
 import { ownerLocalClock, ownerTimeZone } from '../infra/time/localDate.js';
-import { configuredOperatorAudit, operatorRequester, startOperatorMinecraft, type OperatorHostParts } from './operatorServerWiring.js';
+import { configuredOperatorAudit, operatorRequester, operatorTalkNotes, startOperatorMinecraft, type OperatorHostParts } from './operatorServerWiring.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 /** How long an FCA decision already sent may finish after its step is stopped (`stopGraceMilliseconds`, Minecraft run 10). */
@@ -234,7 +234,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const timer = setInterval(() => timedTick('fca_wake', wake), 1000); timer.unref();
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),
-      requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck: minecraft?.recheck ?? null }) : null;
+      requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck: minecraft?.recheck ?? null,
+      talkNotes: operatorTalkNotes(values) }) : null;
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone), requester: operatorRequester(operatorAudit, parts.ownerScope),
       record: (scope, id, reportId, text) => runtime.runtime.recordSpokenReport?.(scope, id, reportId, text) ?? false });
