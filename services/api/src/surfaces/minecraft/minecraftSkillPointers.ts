@@ -70,14 +70,14 @@ const POINTERS: readonly Pointer[] = Object.freeze([
   { skills: ['mc-stronghold'], when: 'エンダーアイがあり要塞を探す前', applies: s => s.strongholdWanted },
   { skills: ['mc-ender-eyes'], when: 'ブレイズロッドがありエンダーアイが12個に足りない', applies: s => s.eyesWanted },
   // Diamonds, obsidian and the portal (draft-6) from the bucket on; the old Nether skill until then, from the same moment.
-  { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシ・バケツ・胸当てがありネザーへ向かう前', applies: s => s.readyForNether },
+  { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシ・バケツ・全身の防具がありネザーへ向かう前', applies: s => s.readyForNether },
   { skills: ['mc-food-and-pace'], when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
   // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
   // path is stage 5's and 6's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
   { skills: ['mc-first-day', 'mc-early-toolchain'], when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
   { skills: [FOOD_BED, 'mc-opening-scout'], when: '石のツルハシがあり食料かベッドが無い昼', applies: s => s.calm && s.stage === 2 && !(s.bedGivenUp && s.fed) },
   // Iron from stage 3, and at stage 2 once the day's sheep search found none (with the food pointer beside it while food is short).
-  { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシ・バケツ・鉄の胸当てのどれかが無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
+  { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシ・バケツ・鉄の全身の防具のどれかが無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
   { skills: ['mc-travel-kit'], when: '弓・矢・くり抜いたカボチャが足りない', applies: s => s.calm && s.kitMissing },
 ]);
 /** The note beside the pointers: fixed words. */

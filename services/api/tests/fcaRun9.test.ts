@@ -65,11 +65,11 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     expect(at({}, { failedStepsInARow: 0, recentIdleWaits: 1 })).toEqual([]);
     // The portal from the bucket on (2026-10-19: obsidian wants a diamond pickaxe, and water to cast it).
     expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)'] })).toEqual([]);
-    // And the chestplate before diamonds (run 16): the bucket alone is not enough.
+    // And the whole armour before diamonds (run 16): the bucket alone is not enough.
     expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)', 'bucket×1'] })).toEqual([]);
-    expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)', 'bucket×1'], worn: '頭: なし、胴: iron_chestplate(残り240/240)、脚: なし、足: なし、左手: なし' }))
-      .toEqual(['mc-nether-portal（鉄のツルハシ・バケツ・胸当てがありネザーへ向かう前）']);
-    expect(at({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1'] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
+    expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)', 'bucket×1'], worn: '頭: iron_helmet(残り165/165)、胴: iron_chestplate(残り240/240)、脚: iron_leggings(残り225/225)、足: iron_boots(残り195/195)、左手: なし' }))
+      .toEqual(['mc-nether-portal（鉄のツルハシ・バケツ・全身の防具がありネザーへ向かう前）']);
+    expect(at({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
     expect(minecraftSkillPointers(minecraftSituation(observation({ dimension: 'the_nether', nearbyEntities: [{ name: 'blaze', distance: 20 }] },
       { dimension: 'the_nether' }), calm), LEGACY)).toEqual(['mc-nether-travel（ネザーにいる）', 'mc-blaze-rods（ネザーでブレイズが近い）']);
     expect(minecraftSituation(null, calm).night).toBe(false);
@@ -93,7 +93,7 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     const nether = observation({ dimension: 'the_nether', health: 6, food: 3, nearbyEntities: [{ name: 'blaze', distance: 10 }] }, { dimension: 'the_nether' });
     expect(minecraftSkillPointers(minecraftSituation(nether, { failedStepsInARow: 4, recentIdleWaits: 3 }), LEGACY))
       .toEqual(['mc-low-health（体力が半分以下）', 'mc-nether-travel（ネザーにいる）', 'mc-blaze-rods（ネザーでブレイズが近い）']);
-    expect(minecraftSkillPointers(minecraftSituation(observation({ food: 3, inventory: ['iron_pickaxe×1', 'water_bucket×1', 'iron_chestplate×1'] }), calm), LEGACY))
-      .toEqual(['mc-nether-portal（鉄のツルハシ・バケツ・胸当てがありネザーへ向かう前）', 'mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
+    expect(minecraftSkillPointers(minecraftSituation(observation({ food: 3, inventory: ['iron_pickaxe×1', 'water_bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'] }), calm), LEGACY))
+      .toEqual(['mc-nether-portal（鉄のツルハシ・バケツ・全身の防具がありネザーへ向かう前）', 'mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
   });
 });

@@ -85,10 +85,10 @@ describe('the stage pointers, in the calm slots after the safety ones', () => {
     // A bed and no food is still stage 2: the bed pointer is none (she has one), the scout (food) is.
     expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM] })).toEqual([SCOUT]);
     expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', BED_ITEM] })).toEqual([IRON]);
-    // Run 16: the chestplate before diamonds; the bucket alone stays with iron.
+    // Run 16: the whole armour before diamonds; the bucket alone stays with iron.
     expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'bucket×1', BED_ITEM] })).toEqual([IRON]);
-    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1', BED_ITEM] })).toEqual([PORTAL]);
-    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'water_bucket×1', 'iron_chestplate×1', BED_ITEM] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
+    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1', BED_ITEM] })).toEqual([PORTAL]);
+    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'water_bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1', BED_ITEM] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
   });
 
   it('offers the bed at stage 2 by day with no window: the whole day, from the first minute, not only the last ten', () => {
@@ -225,7 +225,7 @@ describe('the body task logs an adoption line while a stage skill is pointed (to
     await inActionExecution({ lease, signal: abort.signal, permit: async () => true } as never, async () => {
       made.body.start(abort.signal);
       const context = made.body.context() as { skillPointers?: string[] };
-      expect(context.skillPointers).toEqual([`${IRON}（鉄のツルハシ・バケツ・鉄の胸当てのどれかが無い）`]);
+      expect(context.skillPointers).toEqual([`${IRON}（鉄のツルハシ・バケツ・鉄の全身の防具のどれかが無い）`]);
       made.body.noteCall!({ id: 'a', name: 'mc.mine-block', input: { blockName: 'iron_ore', count: 3 } }, 'op-a');
       made.body.noteCall!({ id: 'b', name: 'mc.mine-block', input: { blockName: 'dirt' } }, 'op-b');
       made.body.noteCall!({ id: 'c', name: 'mc.find-blocks', input: { blockName: 'iron_ore' } }, 'op-c');

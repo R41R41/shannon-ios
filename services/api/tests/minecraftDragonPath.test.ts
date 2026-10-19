@@ -41,10 +41,11 @@ const pointers = (world: Record<string, unknown>, names: ReadonlySet<string> = A
 describe('the stages after iron (diamonds before obsidian), from what she carries', () => {
   it('is 4 with an iron pickaxe and no bucket, 5 with a bucket, 6 with a diamond pickaxe; below 4 as before, with food at stage 3', () => {
     expect(minecraftStage(counts('iron_pickaxe×1'))).toBe(4);
-    for (const bucket of ['bucket×1', 'water_bucket×1', 'lava_bucket×1']) expect(minecraftStage(counts('iron_pickaxe×1', bucket, 'iron_chestplate×1'))).toBe(5);
-    // Run 16: the chestplate before diamonds; the bucket alone is stage 4.
+    for (const bucket of ['bucket×1', 'water_bucket×1', 'lava_bucket×1']) expect(minecraftStage(counts('iron_pickaxe×1', bucket, 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'))).toBe(5);
+    // Run 16: the whole armour before diamonds; the bucket alone, or the chestplate alone, is stage 4.
     expect(minecraftStage(counts('iron_pickaxe×1', 'bucket×1'))).toBe(4);
-    expect(minecraftStage(counts('iron_pickaxe×1', 'iron_chestplate×1'))).toBe(4);
+    expect(minecraftStage(counts('iron_pickaxe×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'))).toBe(4);
+    expect(minecraftStage(counts('iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1', 'iron_helmet×1'))).toBe(4);
     expect(minecraftStage(counts('diamond_pickaxe×1'))).toBe(6);
     expect(minecraftStage(counts('netherite_pickaxe×1', 'blue_bed×1'))).toBe(6);
     // Stage 3 wants food enough beside the bed: six things she can eat, raw or cooked.
@@ -56,9 +57,9 @@ describe('the stages after iron (diamonds before obsidian), from what she carrie
     expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'bread×3', 'raw_iron×2'))).toBe(3);
     expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'bread×3'))).toBe(2);
     expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'bread×2', 'iron_ingot×2'))).toBe(2);
-    expect(minecraftStage(counts('iron_pickaxe×1', 'milk_bucket×1', 'chainmail_chestplate×1'))).toBe(5);
+    expect(minecraftStage(counts('iron_pickaxe×1', 'milk_bucket×1', 'chainmail_helmet×1', 'chainmail_chestplate×1', 'chainmail_leggings×1', 'chainmail_boots×1'))).toBe(5);
     // Food is not what an iron pickaxe waits for: the stages from 4 never go back below it.
-    expect(minecraftStage(counts('iron_pickaxe×1', 'bucket×1', 'diamond_chestplate×1'))).toBe(5);
+    expect(minecraftStage(counts('iron_pickaxe×1', 'bucket×1', 'diamond_helmet×1', 'diamond_chestplate×1', 'iron_leggings×1', 'netherite_boots×1'))).toBe(5);
     expect(minecraftStage(counts('bucket×1', 'diamond×3'))).toBe(1);
   });
 });
@@ -73,7 +74,7 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
     expect(pointers({ inventory: ['stone_pickaxe×1', 'white_bed×1', FED] })).toEqual(['mc-iron-and-bucket']);
     expect(pointers({ inventory: ['iron_pickaxe×1', FED] })).toEqual(['mc-iron-and-bucket']);
     expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1'] })).toEqual(['mc-iron-and-bucket']);
-    expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1'] })).toEqual([DIAMOND]);
+    expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'] })).toEqual([DIAMOND]);
     // Stage 6 (diamond pickaxe): obsidian and the portal, and the kit while a bow, arrows or a carved pumpkin are missing.
     expect(pointers({ inventory: ['diamond_pickaxe×1'] })).toEqual([DIAMOND, KIT]);
     expect(pointers({ inventory: ['diamond_pickaxe×1', 'bow×1', 'arrow×32', 'carved_pumpkin×1'] })).toEqual([DIAMOND]);
@@ -85,7 +86,7 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
   it('is the old skill before draft-6 is imported (the order of code and import does not matter)', () => {
     expect(pointers({ inventory: ['oak_log×3'] }, BEFORE)).toEqual(['mc-early-toolchain']);
     expect(pointers({ inventory: ['stone_pickaxe×1'] }, BEFORE)).toEqual(['mc-bed-before-night', 'mc-opening-scout']);
-    expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1'] }, BEFORE)).toEqual(['mc-nether-portal']);
+    expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'] }, BEFORE)).toEqual(['mc-nether-portal']);
     expect(pointers({ inventory: ['diamond_pickaxe×1'] }, BEFORE)).toEqual(['mc-nether-portal']);
     expect(pointers({ dimension: 'the_end' }, BEFORE)).toEqual([]);
     // A skill she cannot read is never named, old or new.
@@ -135,7 +136,7 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
   const step = (items: string[], dimension?: string, netherReached?: boolean) => { const { now, next } = at(items, dimension, netherReached); return [now.name, next?.name]; };
 
   it('lists the owner\'s order from the spawn to the dragon', () => {
-    expect(MILESTONES.map(milestone => milestone.name)).toEqual(['スポーン', '木', '木と石のツルハシ', '石の斧', '木材', '食料と羊とベッド', '村の回収', '鉄', 'バケツ', '鉄の防具',
+    expect(MILESTONES.map(milestone => milestone.name)).toEqual(['スポーン', '木', '木と石のツルハシ', '石の斧', '木材', '食料と羊とベッド', '村の回収', '鉄', 'バケツ', '鉄の全身の防具',
       'ダイヤ', '黒曜石', 'ゲート', 'ネザー', 'ネザー要塞', 'ブレイズ', 'パール', 'アイ', 'エンド要塞', 'ベッドで地点', 'カボチャ', 'エンド', 'クリスタル', 'ドラゴン']);
     expect(MILESTONES.every(milestone => milestone.condition && milestone.why)).toBe(true);
   });
@@ -148,11 +149,11 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
     // The village is optional (not seen from what she carries): the bed and the food lead to iron.
     expect(step(['stone_pickaxe×1', 'stone_axe×1', 'oak_planks×12', 'white_bed×1', FED])).toEqual(['鉄', 'バケツ']);
     // An iron pickaxe passes everything before it, the bed too (the dusk pointer looks after the bed from here).
-    expect(step(['iron_pickaxe×1'])).toEqual(['バケツ', '鉄の防具']);
-    expect(step(['iron_pickaxe×1', 'bucket×1'])).toEqual(['鉄の防具', 'ダイヤ']);
-    // A chestplate made before the bucket passes no bucket.
-    expect(step(['iron_pickaxe×1', 'iron_chestplate×1'])).toEqual(['バケツ', '鉄の防具']);
-    expect(step(['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1'])).toEqual(['ダイヤ', '黒曜石']);
+    expect(step(['iron_pickaxe×1'])).toEqual(['バケツ', '鉄の全身の防具']);
+    expect(step(['iron_pickaxe×1', 'bucket×1'])).toEqual(['鉄の全身の防具', 'ダイヤ']);
+    // Armour made before the bucket passes no bucket.
+    expect(step(['iron_pickaxe×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'])).toEqual(['バケツ', '鉄の全身の防具']);
+    expect(step(['iron_pickaxe×1', 'bucket×1', 'iron_helmet×1', 'iron_chestplate×1', 'iron_leggings×1', 'iron_boots×1'])).toEqual(['ダイヤ', '黒曜石']);
     expect(step(['diamond_pickaxe×1'])).toEqual(['黒曜石', 'ゲート']);
     expect(step(['diamond_pickaxe×1', 'obsidian×10'])).toEqual(['ゲート', 'ネザー']);
     // A carved pumpkin made early is no step ahead: the order holds.
@@ -187,7 +188,7 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
   });
 
   it('rides on every decision with an observation, a skill pointed or not, and none without one', () => {
-    const calm = minecraftSkillContext(minecraftSituation(observation({ inventory: ['iron_pickaxe×1', 'bucket×1'], worn: '頭: なし、胴: iron_chestplate(残り240/240)' }), { failedStepsInARow: 0 }), new Set());
+    const calm = minecraftSkillContext(minecraftSituation(observation({ inventory: ['iron_pickaxe×1', 'bucket×1'], worn: '頭: iron_helmet(残り165/165)、胴: iron_chestplate(残り240/240)、脚: iron_leggings(残り225/225)、足: iron_boots(残り195/195)、左手: なし' }), { failedStepsInARow: 0 }), new Set());
     expect(calm.fields).toEqual({ milestone: ['今の節目: ダイヤ（条件: diamond_pickaxe を持つ。なぜ: 黒曜石はこれでしか掘れない）', '次の節目: 黒曜石（条件: obsidian を10個）'] });
     const pointed = minecraftSkillContext(minecraftSituation(observation({ inventory: ['oak_log×1'] }), { failedStepsInARow: 0 }), ALL);
     expect(pointed.fields.milestone?.[0]).toMatch(/^今の節目: 木と石のツルハシ/u);

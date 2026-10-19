@@ -9,14 +9,14 @@ import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { gistToolNames, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
 import { minecraftStage } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
-import { NIGHT_GATE_FAILURE, minecraftRetryHint, minecraftSkillResult, nightGateNeeds } from '../src/surfaces/minecraft/minecraftOutcome.js';
+import { BED_WOOL_FAILURE, NIGHT_GATE_FAILURE, bedWoolShort, minecraftRetryHint, minecraftSkillResult, nightGateNeeds } from '../src/surfaces/minecraft/minecraftOutcome.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { createMinecraftTaskMetrics } from '../src/surfaces/minecraft/minecraftTaskMetrics.js';
 
 /**
  * Minecraft run 16 (2026-10-19, task 20467761, Sonnet, 20 minutes): she reached diamonds with no armour, no cooked food and no bed,
- * went down at night and died to a zombie at y=-7. The head's side of the fixes: the chestplate before diamonds, the body's night
- * gate as the model reads it, legacy-minecraft draft-8 (six revisions), the gist follow measure and the death count.
+ * went down at night and died to a zombie at y=-7. The head's side of the fixes: the whole iron armour before diamonds, the body's night
+ * gate and a bed of mixed wool as the model reads them, legacy-minecraft draft-8 (six revisions), the gist follow measure and the deaths.
  */
 const at = '2026-10-19T00:00:00.000Z';
 const later = (minutes: number) => new Date(Date.parse(at) + minutes * 60_000).toISOString();
@@ -32,9 +32,9 @@ const gistOf = (name: string) => skillGist(body(name), observeOnlyStep);
 const REAL_TOOLS = new Set(['mc.mine-block', 'mc.craft-one', 'mc.find-nearest-entity', 'mc.attack-continuously', 'mc.start-smelting', 'mc.sleep-in-bed',
   'mc.find-structure', 'mc.find-blocks', 'mc.check-container', 'mc.withdraw-from-container', 'mc.harvest-crop', 'mc.stair-mine', 'mc.use-item-on-block',
   'mc.build-structure', 'mc.enter-portal', 'mc.recall-places', 'mc.place-block-at', 'mc.equip-item', 'mc.use-item', 'mc.withdraw-from-furnace',
-  'mc.list-nearby-entities', 'mc.dig-shelter', 'mc.leave-water', 'mc.build-around-self']);
+  'mc.list-nearby-entities', 'mc.dig-shelter', 'mc.leave-water', 'mc.build-around-self', 'mc.explore-for-structure']);
 
-describe('the chestplate before diamonds, counted when worn', () => {
+describe('the whole iron armour before diamonds, counted when worn', () => {
   const counts = (inventory: string[], worn?: string) => carriedItemCounts({ inventory: inventory.map(item => {
     const [name, count] = item.split('×'); return { name: name!, count: Number(count ?? 1) };
   }), ...(worn ? { worn } : {}) }, {});
@@ -44,7 +44,9 @@ describe('the chestplate before diamonds, counted when worn', () => {
     expect([...counts([], '頭: なし、胴: なし')]).toEqual([]);
     // Run 16's eleven iron made the pickaxe and the bucket: stage 4 (iron), not diamonds.
     expect(minecraftStage(counts(['iron_pickaxe', 'bucket']))).toBe(4);
-    expect(minecraftStage(counts(['iron_pickaxe', 'bucket'], '胴: iron_chestplate(残り240/240)'))).toBe(5);
+    // The owner (2026-10-19): the whole set, not the chestplate alone.
+    expect(minecraftStage(counts(['iron_pickaxe', 'bucket'], '胴: iron_chestplate(残り240/240)'))).toBe(4);
+    expect(minecraftStage(counts(['iron_pickaxe', 'bucket', 'iron_leggings'], '頭: iron_helmet(残り165/165)、胴: iron_chestplate(残り240/240)、足: iron_boots(残り195/195)'))).toBe(5);
   });
 });
 
@@ -87,14 +89,15 @@ describe('legacy-minecraft draft-8: six revisions, no new skill', () => {
     }
   });
 
-  it.each(REVISED)('%s: the gist is how to go on (no tool), its first move concrete; the tools apart below', name => {
+  it.each(REVISED)('%s: the gist is how to go on, its first move a tool and its arguments; the tools apart below', name => {
     const gist = gistOf(name), text = body(name);
     expect(gist).toHaveLength(SKILL_GIST.lines);
     expect(gist.map(line => line.slice(0, 2))).toEqual(['2.', '3.', '4.']);
     expect(gist.every(line => [...line].length >= 40 && [...line].length <= SKILL_GIST.width && !line.endsWith('…'))).toBe(true);
-    expect(gistToolNames(gist).size).toBe(0);
+    // The owner (2026-10-19): the first move names the tool and its arguments; the lines after it say how to go on.
+    expect(gist[0]).toMatch(/mc\.[a-z][a-z-]*(?:（[a-zA-Z]+=| で)/u);
+    expect(gist.slice(1).every(line => !/mc\.[a-z]/u.test(line) || name === 'mc-food-and-bed' || name === 'mc-night-retreat')).toBe(true);
     const steps = text.split('## 手順')[1]!.split('## 補助')[0]!;
-    expect(steps.split('\n').filter(line => /^\d+\./u.test(line) && !line.includes('minecraft.observe')).filter(line => /mc\.[a-z]/u.test(line))).toEqual([]);
     expect(steps.indexOf('\n使う道具')).toBeGreaterThan(0);
     expect([...text.matchAll(/mc\.[a-z][a-z-]*/gu)].map(match => match[0]).filter(tool => !REAL_TOOLS.has(tool))).toEqual([]);
     expect(text).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
@@ -106,16 +109,22 @@ describe('legacy-minecraft draft-8: six revisions, no new skill', () => {
   });
 
   it('says what run 16 got wrong, first', () => {
-    expect(gistOf('mc-first-day')[0]).toMatch(/原木を12〜16本/u);
+    // Logs as blocks, never "本" (the owner: 12-16 logs read as trees).
+    expect(gistOf('mc-first-day')[0]).toMatch(/原木（丸太のブロック）を12〜16個.*mc\.mine-block（blockName=oak_log/u);
+    for (const name of REVISED) expect(body(name)).not.toMatch(/原木[^。]{0,8}本/u);
     expect(body('mc-first-day')).toMatch(/「,」で並べない/u);
-    expect(gistOf('mc-food-and-bed').join('')).toMatch(/同じ色の羊を3頭.*色違いではベッドにならない.*生肉は食べる前にかまどで焼く.*待たず/u);
-    expect(gistOf('mc-iron-and-bucket').join('')).toMatch(/14個.*ツルハシ3・バケツ3・胸当て8.*炉の前で待たない.*胸当てを着てから深い層やダイヤへ/u);
-    expect(gistOf('mc-diamond-obsidian')[0]).toMatch(/^2\. 胸当てを着て、焼いた食料とベッドを持ってから、昼のうちに/u);
+    expect(body('mc-first-day')).toMatch(/まず村を探し/u);
+    // A village first (run 16 never looked), then the bed made as soon as three wool are in, so that a mixed colour shows itself.
+    expect(gistOf('mc-food-and-bed').join('')).toMatch(/mc\.explore-for-structure（structureType=village、maxDistance=160）.*2回まで.*羊毛が3個たまったらすぐ.*mc\.craft-one（itemName=white_bed.*色違い.*生肉が3個たまったら、食べる前に.*焼く.*待たず/u);
+    expect(body('mc-food-and-bed')).toMatch(/体力が少し減っただけでは食べない/u);
+    expect(gistOf('mc-iron-and-bucket').join('')).toMatch(/30個.*ツルハシ3・バケツ3・全身の防具24.*かまどを2個.*鉄.*肉.*炉の前で待たず、近くの鉄・石炭を掘る.*全身を着てから深い層やダイヤへ/u);
+    expect(body('mc-iron-and-bucket')).toMatch(/兜5・胸当て8・レギンス7・ブーツ4で24.*予備の鉄のツルハシ（鉄3）.*鉄30〜33個/u);
+    expect(gistOf('mc-diamond-obsidian')[0]).toMatch(/^2\. 鉄の全身の防具を着て、焼いた食料とベッドを持ち、昼のうちに mc\.stair-mine（targetY=-54）/u);
     // The old night retreat sent her down to mine at night ("余裕があれば地下へ下り"): no more.
     expect(gistOf('mc-night-retreat').join('')).toMatch(/夜は高さ16より下へ降りない.*防具・焼いた食料・ベッド/u);
     expect(body('mc-night-retreat')).not.toMatch(/余裕があれば、穴から階段を掘って地下へ下り/u);
     expect(body('mc-night-retreat')).toMatch(/mc\.build-around-self（structureName=slit_shelter）.*cobblestone_slab/su);
-    expect(gistOf('mc-food-and-pace')[0]).toMatch(/^2\. 生肉はかまどで焼いてから食べる/u);
+    expect(gistOf('mc-food-and-pace').join('')).toMatch(/^2\. 生肉が3個たまったら mc\.start-smelting.*待たない.*近くの鉄・石炭を掘る.*昼で危険が無い時は、体力が少し減っただけでは食べない/u);
   });
 
   it('applies as six revisions on top of production (capacity unchanged), only while each is unused', () => {
@@ -212,5 +221,23 @@ describe('the gist follow measure counts what a shown skill is about (tool and a
     quiet.noteCall('mc.mine-block', { blockName: 'stone', count: 3 }, new Map([['mc-diamond-obsidian', new Set(['mc.stair-mine'])]]));
     quiet.flush();
     expect(other.some(line => line.includes('followedWithinN=yes'))).toBe(false);
+  });
+});
+
+describe('a bed of mixed wool, as the model reads the body\'s refusal (run 16: white 2 and light grey 1, never noticed)', () => {
+  const refused = (result: string) => minecraftSkillResult({ id: 'op', outcome: 'failed', failureType: BED_WOOL_FAILURE, result, inputsReleased: true } as never);
+  it('names the sheep of the colour of which most is carried, and how many more; not retryable (the body lane\'s form)', () => {
+    expect(minecraftRetryHint(BED_WOOL_FAILURE)).toBe('need_material');
+    const text = 'ベッドには同じ色の羊毛が3個要る（今: white 2・light_gray 1）→ white の羊をもう1匹（attack-continuously color=white）。足りない: white_wool×1';
+    expect(bedWoolShort(text)).toEqual({ color: 'white', count: 1 });
+    const result = refused(text);
+    expect(result).toMatchObject({ ok: false, retryable: false });
+    expect(result.text).toMatch(/［再試行の目安: need_material｜ベッドには同じ色の羊毛が3個要る → white の羊をあと1匹（attack-continuously の color=white）］$/u);
+    expect(bedWoolShort('ベッドには羊毛が要る。足りない: wool×3')).toEqual({ color: null, count: 3 });
+    expect(refused('ベッドには羊毛が要る。足りない: wool×3').text).toMatch(/羊を探して同じ色を3匹倒し、3個たまったらすぐベッドを作る］$/u);
+    expect(bedWoolShort('足りない: light_gray_wool×2')).toEqual({ color: 'light_gray', count: 2 });
+    const tail = /｜([^］]*)］$/u.exec(refused('足りない: light_blue_wool×2').text)![1]!;
+    expect([...tail].length).toBeLessThanOrEqual(120);
+    expect(storedBodyResult('mc.craft-one', refused(text).text)).toContain('need_material');
   });
 });
