@@ -41,7 +41,8 @@ describe('the value and its stage', () => {
     const hurt = foldAffection(talkedFor(10).map((item, index) => (index === 2 ? { ...item, hurtfulWords: 1 } : item)), after(10)).value;
     // The day itself loses 6 and gains half, and the seven days after gain half.
     expect(calm - hurt).toBeCloseTo(6 + 0.5 + 7 * 0.5, 5);
-    expect(foldAffection([day(0, { hurtfulWords: 9, violations: 9 })], after(1)).value).toBe(AFFECTION_PARAMETERS.start - 18 - 12 + 0.5);
+    // Hurtful words count once a day (review 7: the tags are coarse), touches after her no up to four times.
+    expect(foldAffection([day(0, { hurtfulWords: 9, violations: 9 })], after(1)).value).toBe(AFFECTION_PARAMETERS.start - 6 - 12 + 0.5);
   });
 
   it('never falls below zero', () => {
@@ -80,6 +81,16 @@ describe('the days it is folded from', () => {
     expect(days[3]).toMatchObject({ talked: false, missedPromises: 1 });
   });
 
+  it('does not hold against him the words Jev read as not meant, and takes a promise\'s day as her day', () => {
+    const at = `${after(1)}T01:00:00.000Z`;
+    const closed = [{ dayKey: after(1), events: [event('spoke', at, { tags: ['insult'], meaning: { deliberate: 0.2, teasing: 0.9 } })] }];
+    expect(affectionDays({ days: closed, sharedDays: [], promises: [], today: after(3) })[0]).toMatchObject({ talked: true, hurtfulWords: 0 });
+    // 05:00 JST on the day after is still the day before (her day turns at 3:00 owner time).
+    const promise = { status: 'completed' as const, updatedAt: `${after(2)}T20:00:00.000Z` };
+    const dayOf = (instant: string) => (instant === promise.updatedAt ? after(2) : instant.slice(0, 10));
+    expect(affectionDays({ days: [], sharedDays: [], promises: [promise], today: after(5), dayOf })[0]).toMatchObject({ dayKey: after(2), keptPromises: 1 });
+  });
+
   it('leaves out anyone else\'s events and other audiences', () => {
     const someone = { ...event('praised', `${after(1)}T01:00:00.000Z`), personKey: 'person:a' };
     const group = { ...event('praised', `${after(1)}T02:00:00.000Z`), audience: 'group' as const };
@@ -110,7 +121,9 @@ describe('the facts of the two of them', () => {
   });
 
   it('reads another AI he talks with, never the coding tools he works with', () => {
-    for (const words of ['ChatGPTにも相談してた', '昨日、別のAIと話してたんだ', 'Geminiってどう思う？', 'ほかの AI に聞いたら']) expect(otherAiIn(words)).toBe(true);
-    for (const words of ['Claude Codeで直した', 'Codexに頼んだ', 'AIってすごいね', 'シャノンはAGIだよね']) expect(otherAiIn(words)).toBe(false);
+    for (const words of ['ChatGPTにも相談してた', '昨日、別のAIと話してたんだ', 'Grokってどう思う？', 'ほかの AI に聞いたら']) expect(otherAiIn(words)).toBe(true);
+    for (const words of ['Claude Codeで直した', 'Codexに頼んだ', 'Geminiの声を試した', 'Copilotで補完した', 'AIってすごいね', 'シャノンはAGIだよね']) {
+      expect(otherAiIn(words)).toBe(false);
+    }
   });
 });

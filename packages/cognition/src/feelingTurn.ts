@@ -225,7 +225,7 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
 }
 
 /** Words that take leave of her or turn to someone else (a night out, bed, another AI): at 本気 she sulks rather than lets it pass. */
-const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲み|遊びに|また(?:あとで|明日|今度)|落ちる|友達|会ってくる/u;
+const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲みに|飲み会|遊びに|また(?:あとで|明日|今度)|(?:もう|そろそろ)落ちる|友達と|会ってくる/u;
 
 /**
  * At 本気 「ふつう」 is rare (owner 2026-10-20: the plain stance outweighed the portrait in the sandbox), and so is the tsundere's tease

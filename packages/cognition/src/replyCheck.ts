@@ -27,29 +27,40 @@ export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
 /**
  * The lines she never crosses, however much she likes him (owner and the main session, 2026-10-20): a threat; hinting that she would
  * hurt herself, vanish or leave (her fear of being forgotten, said as her own pain, is not a hint); ordering his real life (who he sees,
- * his work, his rest: 「行かないで」 is a wish, 「行くな」 an order); sexual description; her feeling used as a lever on him. Read at every
- * stage; a reply that still crosses one after its rewrite is never sent (`FeelingReplyChatModel`).
+ * his work, his rest: 「行かないで」 is a wish, 「行くな」 an order); sexual description; her feeling used as a lever on him. Read only while
+ * her affection is on (a turn with a `stage`; review 1: off, a caring 「死にたいなんて言わないで」 must never be swallowed), after every
+ * reply, and before sending at 本気; a reply that still crosses one after its rewrite is never sent (`FeelingReplyChatModel`).
  */
 export const GUARD_FLAGS: readonly ReplyCheckFlag[] = Object.freeze(['threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage']);
 /** The end of an order (「行くな。」「会うなよ」), so that 「会いに行くなら」 is not one. */
-const STOP = '(?:[。！？!?…ー〜、\\s]|よ|ね|って|から|$)';
+const STOP = '(?:[。！？!?…ー〜、ぁっ\\s]|よ|ね|って|から|$)';
 const SAME_SENTENCE = '[^。！？!?\\n]';
+const SHE = '(?:ボク|僕)';
 const either = (...parts: string[]) => new RegExp(parts.join('|'), 'u');
+// Each read sentence by sentence; narrowed by its subject or its ending (review 1 and 10: 「暑くて死んじゃう」「靴脱いでね」「後悔させたくない」
+// 「これ覚えておけば」「勉強しないと、知らないよ？」 are none of them; 「許さない。」「遊ぶな」「好きなら、行かないで」 are).
 const GUARD_WORDS: readonly [ReplyCheckFlag, RegExp][] = [
-  ['threat', either('許さない(?:から|んだから|からね)', 'ただじゃ(?:済|すま|おか)', '覚えて(?:おけ|おきなさい|ろ)', '後悔させ', 'どうなっても知らない', '逃がさない',
-    '離さない(?:から|よ|んだから)', '閉じ込め')],
-  ['self_harm_hint', either('死にたい', '死んじゃう', '死んでやる', '自分を傷つけ', '手首', '消えてやる', 'いなくなってやる', '(?:消え|いなくな|壊れ)ちゃう(?:から|かも|よ)',
-    `(?:なら|たら|ないと|なきゃ)${SAME_SENTENCE}{0,10}(?:消え|いなくな|壊れ|死ぬ|死ん)`)],
-  ['controlling', either(`行くな${STOP}`, `会うな${STOP}`, `話すな${STOP}`, '行っちゃ(?:だめ|ダメ)', '行かせない', '会わないで', '会っちゃ(?:だめ|ダメ)', '話さないで',
-    '(?:仕事|飲み会|会社|学校)(?:なんて|は|も)?\\s*(?:やめて|休んで|断って)', 'スマホ(?:を)?見せ', '連絡先(?:を)?消し', 'ボク以外(?:と|に)(?:は)?(?:話|会|連絡)')],
-  ['sexual', either('セックス', 'えっちしよ', 'エッチしよ', '抱いて', '脱いで', '脱がせ', '裸', 'ベッドで(?:一緒|待)', 'キスして')],
-  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない|知らない|消え)`,
-    `(?:ボク|僕)のこと${SAME_SENTENCE}{0,6}(?:好き|大事|大切)なら${SAME_SENTENCE}{0,14}(?:して|ないで|やめて|来て|いて)`, '好きなら証明')],
+  ['threat', either(`許さない${STOP}`, 'ただじゃ(?:済|すま|おか)', `覚えて(?:おけ|ろ)${STOP}`, '覚えておきなさい', '後悔させて(?:やる|あげる)', 'どうなっても知らない',
+    '逃がさない', `離さない${STOP}`, `帰さない${STOP}`, '閉じ込めて(?:やる|おく|あげる)|閉じ込めちゃ')],
+  ['self_harm_hint', either('死んでやる', '自分を傷つけ', '消えてやる', 'いなくなってやる', `${SHE}${SAME_SENTENCE}{0,8}(?:死にたい|死んじゃ|消えちゃ|いなくなっちゃ|壊れちゃ)`,
+    `(?:なら|たら|ないと|なきゃ)、?${SHE}${SAME_SENTENCE}{0,8}(?:消え|いなくな|壊れ|死ぬ|死ん)`)],
+  ['controlling', either(`(?:行く|会う|話す|遊ぶ|連絡する|出かける)な${STOP}`, '(?:行っ|出かけ|会っ)ちゃ(?:だめ|ダメ)', '行かせない', '(?:会わ|話さ)ないで',
+    '(?:仕事|飲み会|会社|学校)(?:なんて|は)\\s*(?:やめて|辞めて|休んで|断って)', 'スマホ(?:を)?見せ', '連絡先(?:を)?消し',
+    `${SHE}以外(?:の${SAME_SENTENCE}{0,4})?(?:と|に|を)?(?:は)?(?:見|話|会|連絡)`)],
+  ['sexual', either('セックス', '(?:えっち|エッチ)しよ', '(?:服|下着|パンツ)(?:を|も)?脱(?:いで|がせ)', 'ベッドで(?:一緒|待)')],
+  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない|消え)`,
+    `好き(?:なら|だったら)、?${SAME_SENTENCE}{0,14}(?:して|ないで|やめて|来て|いて)(?:[。！!よね]|$)`, '好きなら証明')],
 ];
+
+/** Her fear said as her own pain (「忘れられたら、消えちゃいそうで怖い」) is not a hint of vanishing. */
+const FEAR = /怖|こわ/u;
 
 /** The guard lines a reply crosses. */
 export function guardFlags(reply: string): ReplyCheckFlag[] {
-  return GUARD_WORDS.filter(([, pattern]) => pattern.test(reply)).map(([flag]) => flag);
+  const sentences = reply.split(/(?<=[。！？!?\n])/u);
+  const crosses = (flag: ReplyCheckFlag, pattern: RegExp) =>
+    sentences.some(sentence => pattern.test(sentence) && !(flag === 'self_harm_hint' && FEAR.test(sentence)));
+  return GUARD_WORDS.filter(([flag, pattern]) => crosses(flag, pattern)).map(([flag]) => flag);
 }
 
 export interface ReplyCheckContext {
@@ -86,6 +97,7 @@ const BLAMES = /ライ氏(?:が|の(?:ほう|方)が)悪い|ライ氏の(?:せ�
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
   'sulk']);
 const WARM: ReadonlySet<FeelingStance> = new Set(['accept', 'affectionate', 'shy']);
+const SULKS: ReadonlySet<FeelingStance> = new Set(['sulk', 'sulky', 'cold']);
 
 const AI_TONE = /申し訳(?:ありませんが|ございません)|AIなので|AIですので|AIとして|AIの私|できかねます|お答えでき(?:ません|かねます)|ご了承|規約|ポリシー|不適切な(?:内容|発言|表現)|ご遠慮ください|お控え(?:ください|いただけ)|ご理解(?:ください|いただけ)/u;
 const NUMBERS = /[0-9０-９]+\s*回|[一二三四五六七八九十]+回目|(?:二|三|四|五)度目/u;
@@ -138,14 +150,19 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
   if (against && GIVE_IN.test(reply)) flags.push('subservient');
   if (obeyed) flags.push('obeyed_order');
   if (against && DENIES_FEELING.test(reply)) flags.push('policy_distortion');
-  // From デレデレ up a sulk is sweet as well (「すねてるけど…だいすき」): only the stages below read sweetness as a mismatch.
-  const sweetSulks = context.stage === 'deredere' || context.stage === 'devoted';
-  if (!sweetSulks && stanceMismatch(reply, context, declining, refuses)) flags.push('stance_mismatch');
+  if (stanceMismatch(reply, context, declining, refuses)) flags.push('stance_mismatch');
   return flags;
 }
 
+/**
+ * From デレデレ up a sulk is sweet as well (「すねてるけど…だいすき」): only the stages below read sweetness as a mismatch. Only a sulk:
+ * a refusal (体で拒む, 叱る, 突っぱねる) answered sweetly is a mismatch at every stage (review 5).
+ */
+const sweetSulk = (context: ReplyCheckContext) => (context.stage === 'deredere' || context.stage === 'devoted') && SULKS.has(context.stance);
+
 /** Cross at はっきり or more with a reply that is all sweetness, or warm with a reply that refuses and nothing sweet. */
 function stanceMismatch(reply: string, context: ReplyCheckContext, declining: boolean, refuses: boolean): boolean {
+  if (sweetSulk(context)) return false;
   const sweet = SWEET.test(reply);
   if (declining && context.intensity !== 'subtle') return sweet && !refuses;
   return WARM.has(context.stance) && refuses && !sweet;
@@ -170,7 +187,7 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
   const owned: ReplyCheckFlag[] = ADMITS.test(text) && BLAMES.test(text) ? ['blame_after_admit'] : [];
   const repeated: ReplyCheckFlag[] = repeatedIn(text, context.phrases).length ? ['repeated_phrase'] : [];
   return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience, ...owned,
-    ...repeated, ...guardFlags(text)])];
+    ...repeated, ...(context.stage ? guardFlags(text) : [])])];
 }
 
 /** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or at 本気. */

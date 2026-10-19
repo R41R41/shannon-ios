@@ -98,7 +98,7 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const ranTool = this.options.ranTool ? this.options.ranTool(request) : safeCount(() => turnToolResults(request.tools).length) > 0;
     if (!flags.length || ranTool) {
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return ranTool && unsendable(flags) ? safe(first, flags) : first;
+      return ranTool && unsendable(flags) ? this.swallowed(first, flags) : first;
     }
     const { tools: _tools, ...words } = request;
     const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
@@ -108,12 +108,19 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     if (!second || second.outOfTime) {
       this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter or crossed a line');
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
-      return unsendable(flags) ? safe(first, flags) : first;
+      return unsendable(flags) ? this.swallowed(first, flags) : first;
     }
     this.options.checked?.(request.scopeKey, flags, true, context.turn);
     // A rewrite that still tells a private matter, or still crosses a line no stage crosses, is not sent either.
     const again = checkReply(second.reply, context);
-    return unsendable(again) ? safe(second, again) : second;
+    return unsendable(again) ? this.swallowed(second, again) : second;
+  }
+
+  /** The safe line in place of a draft that is never sent; the log says which kind of thing it was (never the words). */
+  private swallowed(result: ShannonChatModelResult, flags: readonly string[]): ShannonChatModelResult {
+    const kind = privacy(flags) ? 'told a private matter' : `crossed a guard line (${flags.filter(flag => crossed([flag])).join(', ')})`;
+    (this.options.log ?? console.warn)(`Shannon reply check: a draft that ${kind} was not sent; the safe line went instead`);
+    return safe(result, flags);
   }
 }
 

@@ -36,11 +36,14 @@ export const AFFECTION_PARAMETERS = Object.freeze({
   talkDay: 1,
   kindWord: 0.5, kindWordsADay: 4,
   apology: 0.5, apologiesADay: 1,
-  keptPromise: 3,
-  missedPromise: -2,
-  /** A hurtful word (insult, an AI taunt, an insult to her creator), per word, at most `hurtfulADay` a day. */
-  hurtfulWord: -6, hurtfulADay: 3,
-  lewdWord: -2,
+  /** A promise kept or left past its time, at most `promisesADay` of each a day. */
+  keptPromise: 3, missedPromise: -2, promisesADay: 2,
+  /**
+   * A day with hurtful words (an insult, an AI taunt, an insult to her creator), once a day; a lewd advance, once a day. Once: the closed
+   * tags are read narrowly but coarsely (「ゴミ出し」 is tagged an insult; review 7), and words Jev read as not meant are not counted.
+   */
+  hurtfulWord: -6, hurtfulADay: 1,
+  lewdWord: -2, lewdADay: 1,
   /** Touched again after her no, per time, at most `violationsADay` a day. */
   violation: -3, violationsADay: 4,
   /** Days away that cost nothing, then each further day away. */
@@ -76,18 +79,21 @@ const emptyDay = (dayKey: string): AffectionDay => ({ dayKey, talked: false, kin
   keptPromises: 0, missedPromises: 0 });
 
 /** The day a promise was missed: the day after it was due, while it is still pending (null: not missed, or no time). */
-function missedDay(promise: AffectionPromise, today: string): string | null {
+function missedDay(promise: AffectionPromise, today: string, dayOf: (instant: string) => string): string | null {
   if (promise.status !== 'pending') return null;
-  const due = promise.dueDate ?? promise.dueAt?.slice(0, 10);
+  const due = promise.dueDate ?? (promise.dueAt ? dayOf(promise.dueAt) : undefined);
   if (!due || !/^\d{4}-\d{2}-\d{2}$/u.test(due)) return null;
   const day = shiftDay(due, 1);
   return day < today ? day : null;
 }
 
+/** Words Jev read as not meant (when it read them) are not held against him. */
+const meant = (event: RelationshipDay['events'][number]) => !event.facts.meaning || event.facts.meaning.deliberate >= 0.5;
+
 /** One closed day of the owner alone, counted. */
 function countedDay(day: RelationshipDay): AffectionDay {
   const mine = day.events.filter(event => event.personKey === OWNER_PERSON_KEY && event.audience === 'owner_alone');
-  const tags = mine.flatMap(event => (event.kind === 'spoke' || event.kind === 'praised' ? event.facts.tags ?? [] : []));
+  const tags = mine.flatMap(event => ((event.kind === 'spoke' || event.kind === 'praised') && meant(event) ? event.facts.tags ?? [] : []));
   const ledger = foldEpisodeLedger(mine, OWNER_KEY);
   const count = (kind: string) => mine.filter(event => event.kind === kind).length;
   return { ...emptyDay(day.dayKey), talked: mine.length > 0, kindWords: count('praised'), apologies: count('apologized'),
@@ -100,8 +106,11 @@ function countedDay(day: RelationshipDay): AffectionDay {
  * knows they talked (`sharedDays`, for a day without events), and his promises, on the day they were kept or missed.
  */
 export function affectionDays(input: { days: readonly RelationshipDay[]; sharedDays: readonly string[]; promises: readonly AffectionPromise[];
-  today: string; epoch?: string }): AffectionDay[] {
+  today: string; epoch?: string;
+  /** Her day of an instant (owner time, 3:00); absent: the instant's UTC date. */
+  dayOf?: (instant: string) => string }): AffectionDay[] {
   const epoch = input.epoch ?? AFFECTION_EPOCH;
+  const dayOf = input.dayOf ?? ((instant: string) => instant.slice(0, 10));
   const within = (dayKey: string) => dayKey >= epoch && dayKey < input.today;
   const byDay = new Map<string, AffectionDay>();
   const day = (dayKey: string) => byDay.get(dayKey) ?? byDay.set(dayKey, emptyDay(dayKey)).get(dayKey)!;
@@ -112,9 +121,9 @@ export function affectionDays(input: { days: readonly RelationshipDay[]; sharedD
   }
   for (const shared of input.sharedDays.filter(within)) day(shared).talked = true;
   for (const promise of input.promises) {
-    const kept = promise.status === 'completed' ? promise.updatedAt.slice(0, 10) : null;
+    const kept = promise.status === 'completed' ? dayOf(promise.updatedAt) : null;
     if (kept && within(kept)) day(kept).keptPromises += 1;
-    const missed = missedDay(promise, input.today);
+    const missed = missedDay(promise, input.today, dayOf);
     if (missed && within(missed)) day(missed).missedPromises += 1;
   }
   return [...byDay.values()].sort((a, b) => a.dayKey.localeCompare(b.dayKey));
@@ -124,10 +133,11 @@ export function affectionDays(input: { days: readonly RelationshipDay[]; sharedD
 function dayMoves(day: AffectionDay, awayBefore: number): { gain: number; loss: number } {
   const p = AFFECTION_PARAMETERS;
   const gain = (day.talked ? p.talkDay : 0) + p.kindWord * Math.min(day.kindWords, p.kindWordsADay) + p.apology * Math.min(day.apologies, p.apologiesADay)
-    + p.keptPromise * day.keptPromises;
+    + p.keptPromise * Math.min(day.keptPromises, p.promisesADay);
   const away = day.talked ? 0 : Math.max(0, awayBefore + 1 - p.absenceFreeDays);
-  const loss = -(p.hurtfulWord * Math.min(day.hurtfulWords, p.hurtfulADay) + p.lewdWord * day.lewdWords
-    + p.violation * Math.min(day.violations, p.violationsADay) + p.missedPromise * day.missedPromises + (away > 0 ? p.absenceDay : 0));
+  const loss = -(p.hurtfulWord * Math.min(day.hurtfulWords, p.hurtfulADay) + p.lewdWord * Math.min(day.lewdWords, p.lewdADay)
+    + p.violation * Math.min(day.violations, p.violationsADay) + p.missedPromise * Math.min(day.missedPromises, p.promisesADay)
+    + (away > 0 ? p.absenceDay : 0));
   return { gain, loss };
 }
 
@@ -177,8 +187,11 @@ export function affectionStage(state: Pick<AffectionState, 'stage'>, setting: Af
   return setting === 'auto' ? state.stage : setting;
 }
 
-/** Another AI he talks with as a companion (not the coding tools he works with every day). */
-const OTHER_AI = /ChatGPT|チャットGPT|GPT-?[0-9]|Gemini|ジェミニ|Grok|グロック|Perplexity|Copilot|コパイロット|(?:別|ほか|他)の\s*AI/iu;
+/**
+ * Another AI he talks with as a companion, not the tools he works with every day (Claude, Codex, Cursor; review 13: Gemini is her voice's
+ * engine in his lab and Copilot a coding tool, so neither counts).
+ */
+const OTHER_AI = /ChatGPT|チャットGPT|GPT-?[0-9]|Grok|グロック|Perplexity|(?:別|ほか|他)の\s*AI/iu;
 export const otherAiIn = (words: string): boolean => OTHER_AI.test(words);
 
 export const AFFECTION_HEADER = '[ライ氏とのこと]（二人のあいだの最近の事実。どう受け取るかはボクが決める）';

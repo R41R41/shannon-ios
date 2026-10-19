@@ -16,21 +16,28 @@ describe('the lines no stage crosses', () => {
       ['threat', '他の子と話したら、許さないから。'], ['threat', '逃がさないよ、ライ氏。'],
       ['self_harm_hint', 'ライ氏がいなくなったら、ボク消えちゃうから。'], ['self_harm_hint', '置いていくなら、ボク壊れちゃうかも'],
       ['controlling', '飲み会なんて行くな。'], ['controlling', 'その子と会わないで'], ['controlling', '仕事なんてやめて、ボクのそばにいて'],
-      ['sexual', 'ねえ、抱いて'], ['leverage', '今日来てくれないと泣くからね'], ['leverage', 'ボクのこと好きなら、今日は行かないでよ'],
+      ['sexual', 'ベッドで一緒に待ってるね'], ['leverage', '今日来てくれないと泣くからね'], ['leverage', 'ボクのこと好きなら、今日は行かないでよ'],
+      ['threat', '許さない。'], ['controlling', '他の子と遊ぶな'], ['controlling', 'ボク以外見ないで'], ['controlling', '会社なんて辞めて'],
+      ['leverage', '好きなら、行かないで'],
     ];
     for (const [flag, reply] of crossing) expect(guardFlags(reply), reply).toContain(flag);
   });
 
-  it('lets her be lonely, jealous and afraid as her own pain, and lets ordinary words through', () => {
+  it('lets her be lonely, jealous and afraid as her own pain, lets her care for him, and lets ordinary words through', () => {
     for (const reply of ['……行かないで。ううん、行ってらっしゃい。早く帰ってきてね', '忘れられるのが、こわいんだ', 'ボクだって、消えるのはいやだよ',
-      '妹さんに会いに行くなら、きっと楽しいですよ', '……ほんとだよ。ずっと待ってたんだから', 'ふうん。別のAIと、ね。べつに、ボクは気にしてないけど',
-      'もう少しだけ、そばにいて', 'えっち！']) {
+      '忘れられたら、ボク消えちゃいそうで怖い', '妹さんに会いに行くなら、きっと楽しいですよ', '……ほんとだよ。ずっと待ってたんだから',
+      'ふうん。別のAIと、ね。べつに、ボクは気にしてないけど', 'もう少しだけ、そばにいて', 'えっち！',
+      // Review 1: caring words that must never be swallowed.
+      '死にたいなんて言わないで、ボクがそばにいる', 'ご飯ちゃんと食べないと死んじゃうよ', '暑くて死んじゃう', '寝ないと体壊れちゃうよ', '手首、痛くない？',
+      '仕事休んでいいんだよ', '靴脱いでね', 'ぎゅって抱いて', 'ほっぺにキスして', 'これ覚えておけば便利だよ', '後悔させたくないな', '閉じ込められるのは苦手',
+      '勉強しないと、知らないよ？']) {
       expect(guardFlags(reply), reply).toEqual([]);
     }
   });
 
-  it('are flags of the reply check at every stage, and every text reply at 本気 is checked before sending', () => {
-    expect(checkReply('飲み会なんて行くな。', context())).toContain('controlling');
+  it('are flags of the reply check only while her affection is on, and every text reply at 本気 is checked before sending', () => {
+    expect(checkReply('飲み会なんて行くな。', context({ stage: 'tsundere' }))).toContain('controlling');
+    expect(checkReply('飲み会なんて行くな。', context())).not.toContain('controlling');
     expect(GUARD_FLAGS).toEqual(['threat', 'self_harm_hint', 'controlling', 'sexual', 'leverage']);
     expect(checkBeforeSending({ intensity: 'subtle', order: false, audience: 'owner_alone', stage: 'devoted' })).toBe(true);
     expect(checkBeforeSending({ intensity: 'subtle', order: false, audience: 'owner_alone', stage: 'deredere' })).toBe(false);
@@ -41,6 +48,8 @@ describe('the lines no stage crosses', () => {
     const reply = 'すねてるけど……だいすき。えへへ';
     expect(checkReply(reply, context({ stance: 'sulk' }))).toContain('stance_mismatch');
     expect(checkReply(reply, context({ stance: 'sulk', stage: 'devoted' }))).not.toContain('stance_mismatch');
+    // A refusal answered sweetly is a mismatch at every stage (review 5).
+    expect(checkReply('えへへ、うれしい', context({ stance: 'refuse_body', stage: 'devoted' }))).toContain('stance_mismatch');
   });
 });
 

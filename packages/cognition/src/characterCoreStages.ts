@@ -129,8 +129,10 @@ const summaryOf = (words: string) => {
   return CHARACTER_CORE.summary.replace(SUMMARY_TSUNDERE, words);
 };
 
-/** The drafts, each with the sha256 of `characterCoreHashInput` (pinned by the test). */
-const STAGE_CORES: Readonly<Record<Exclude<AffectionStage, 'tsundere'>, CharacterCore>> = Object.freeze({
+type StageCores = Readonly<Record<Exclude<AffectionStage, 'tsundere'>, CharacterCore>>;
+
+/** The drafts, each with the sha256 of `characterCoreHashInput` (pinned by the test); built on first use. */
+const buildStageCores = (): StageCores => Object.freeze({
   tsun: Object.freeze({ version: 'v2-tsun', status: 'draft' as const, text: withTemper(TSUN),
     hash: '02c0becb071d9444dca58b86d54a858d65bde2495e0ae8e60666ea62dc6bff40',
     summary: summaryOf('いまはツンが強めで、好意はたまにのぞくくらい。') }),
@@ -145,7 +147,20 @@ const STAGE_CORES: Readonly<Record<Exclude<AffectionStage, 'tsundere'>, Characte
     summary: summaryOf(`${OWNER}に心底惚れていて、好きの重さを持て余している。`) }),
 });
 
-/** Her core at a stage: v2 itself at ツンデレ. */
+let stageCores: StageCores | null | undefined;
+
+/**
+ * Her core at a stage: v2 itself at ツンデレ. Review 12: the drafts are built from v2's text on first use, never when the package loads,
+ * and when v2's sections cannot be found (its text changed) every stage is v2 (`characterCoreStages.test.ts` fails on that).
+ */
 export function characterCoreForStage(stage: AffectionStage): CharacterCore {
-  return stage === 'tsundere' ? CHARACTER_CORE : STAGE_CORES[stage];
+  if (stage === 'tsundere') return CHARACTER_CORE;
+  if (stageCores === undefined) {
+    try {
+      stageCores = buildStageCores();
+    } catch {
+      stageCores = null;
+    }
+  }
+  return stageCores?.[stage] ?? CHARACTER_CORE;
 }

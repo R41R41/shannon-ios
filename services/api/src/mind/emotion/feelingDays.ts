@@ -124,8 +124,9 @@ export class FeelingDays {
       const whose = carriedFor(key, features.audience === true, channel);
       if (!whose) return { lines: [], facts: {} };
       this.close(scopeKey, at);
-      // Her affection is the owner's alone, in a turn of his alone.
-      const alone = key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone' && !whose.marked;
+      // Her affection is the owner's alone, in a text turn of his alone (review 3: a voice turn has no stage's core, no Sonnet and no check
+      // before speaking, and a touch or her note's reflection reads none of it).
+      const alone = key.personKey === OWNER_PERSON_KEY && key.audience === 'owner_alone' && !whose.marked && channel === 'text';
       const own = this.own(scopeKey, whose.personKey, at, snapshot, words, alone);
       // §4.4: with others present, the owner's matters are marked for her check before she speaks; nothing of the owner goes to the chooser.
       const mark = (lines: readonly string[]) => lines.map(line => line.split('\n').map(part => `${OWNER_PRIVATE_MARK}${part}`).join('\n'));
@@ -157,18 +158,29 @@ export class FeelingDays {
       touchLines: [...before, ...(owned ? [owned] : [])], ...(affection ? { affection: { stage: affection.stage, value: affection.value } } : {}) };
   }
 
-  /** Her affection for the owner now: the fold of his days from the epoch, her stage (the owner's setting first), and the facts of them. */
+  /**
+   * Her affection for the owner now: the fold of his days from the epoch, her stage (the owner's setting first), and the facts of them.
+   * Null when it fails (review 6: a failure here never takes the relationship, episodes or boundaries of the turn with it).
+   */
   private affection(scopeKey: string, days: RelationshipDay[], at: string, snapshot: CompanionStateSnapshot, setting: AffectionSetting)
-    : { stage: AffectionStage; value: number; block: string } {
-    const today = innerNoteDay(at, this.options.timeZone).dayKey;
-    return observeSync('emotion', { phase: 'feeling.affection', setting }, () => {
-      const promises = snapshot.prospectiveMemories.filter(memory => visibleMemoryText(snapshot, memory.id, memory.summary));
-      const sharedDays = snapshot.sharedDays ?? [];
-      const counted = affectionDays({ days, sharedDays, promises, today });
-      const state = foldAffection(counted, today);
-      const block = affectionBlock(affectionLines({ days: counted, sharedDays, today, otherAiDays: this.otherAiDays(scopeKey, at, snapshot) }));
-      return { stage: affectionStage(state, setting), value: state.value, block };
-    }, value => ({ stage: value.stage, value: value.value, lines: value.block ? value.block.split('\n').length - 1 : 0 }));
+    : { stage: AffectionStage; value: number; block: string } | null {
+    const { timeZone } = this.options;
+    const today = innerNoteDay(at, timeZone).dayKey;
+    // Review 11: a promise's day is her day (owner time, 3:00), as the closed days are.
+    const dayOf = (instant: string) => innerNoteDay(instant, timeZone).dayKey;
+    try {
+      return observeSync('emotion', { phase: 'feeling.affection', setting }, () => {
+        const promises = snapshot.prospectiveMemories.filter(memory => visibleMemoryText(snapshot, memory.id, memory.summary));
+        const sharedDays = snapshot.sharedDays ?? [];
+        const counted = affectionDays({ days, sharedDays, promises, today, dayOf });
+        const state = foldAffection(counted, today);
+        const block = affectionBlock(affectionLines({ days: counted, sharedDays, today, otherAiDays: this.otherAiDays(scopeKey, at, snapshot) }));
+        return { stage: affectionStage(state, setting), value: state.value, block };
+      }, value => ({ stage: value.stage, value: value.value, lines: value.block ? value.block.split('\n').length - 1 : 0 }));
+    } catch (error) {
+      this.report(error);
+      return null;
+    }
   }
 
   /** The owner-local days on which his words in his Talk spoke of another AI, among the last few. */

@@ -14,7 +14,7 @@ import {
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace,
-  CHARACTER_CORE, characterCoreBlock, characterCoreForStage, devotedTurn, otherAiIn, type AffectionStage,
+  CHARACTER_CORE, characterCoreBlock, characterCoreForStage, devotedTurn, otherAiIn, type AffectionStage, type StrongReplyReason,
 } from '@shannon/cognition';
 import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
@@ -126,9 +126,14 @@ export function stageOf(handle: Pick<FeelingTurnHandle, 'key' | 'lines'>): Affec
   return handle.key.audience === 'owner_alone' ? handle.lines?.affection?.stage : undefined;
 }
 
-/** At 本気 a plain turn is not left plain (`devotedTurn`); at any other stage, the decision as it came. */
+/**
+ * At 本気 a plain turn is not left plain (`devotedTurn`); at any other stage, the decision as it came. Never while she is pulling back
+ * (review 4): her composure off its ordinary register, a touch after her no going on, or something still held against him.
+ */
 function stagedDecision(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): FeelingTurnDecision | null {
   if (!decision || stageOf(handle) !== 'devoted') return decision;
+  const withdrawn = handle.register !== 'normal' || continuedAfterRefusal(handle.lines?.ledger, handle.at) || holdsAgainstOwner(handle.snapshot, handle.at);
+  if (withdrawn) return decision;
   const words = handle.words ?? '';
   return devotedTurn(decision, { words, kindWords: utteranceKind(words) === 'praised', otherAi: otherAiIn(words) });
 }
@@ -217,17 +222,29 @@ function checkFacts(handle: FeelingTurnHandle, reply: string): { checkFlags?: re
  * Which model writes this text reply (owner decision 2026-10-14: 「気持ちが強い時だけSonnet」): the stronger one for a strong turn while
  * the day's cap allows, else the ordinary one. The Observer is told which and why, never the words.
  */
+/**
+ * At 本気 every reply to him alone is a strong one (owner 2026-10-20); those may take at most this share of the day's cap, so that a
+ * refusal or a touch after her no later that day still finds the stronger model (review 8).
+ */
+export const DEVOTED_CAP_SHARE = 0.7;
+const capFor = (reason: StrongReplyReason | null, cap: number) => (reason === 'devoted' ? Math.floor(cap * DEVOTED_CAP_SHARE) : cap);
+/** Past the cap the reply stays on Haiku; at 本気 that is the ordinary end of a long day, not worth a line each turn. */
+const warnCapped = (reason: StrongReplyReason | null) => {
+  if (reason !== 'devoted') console.warn('Shannon feeling reply model: the day\'s cap of strong replies is reached; this reply stays on Haiku');
+};
+
 function routeReply(handle: FeelingTurnHandle): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } {
   const strong = handle.port.strong ?? { cap: 0 };
   if (!handle.port.turn) return {};
   const fresh = handle.port.events.freshStance(handle.scopeKey, handle.key, handle.at, handle.snapshot);
   const continued = continuedAfterRefusal(handle.lines?.ledger, handle.at);
   const reason = strongReplyReason(handle.decision, handle.key.audience, fresh?.kind === 'touch' ? fresh.stance : null, continued, stageOf(handle));
-  handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, strong.cap);
+  const cap = capFor(reason, strong.cap);
+  handle.strong = reason !== null && Boolean(handle.port.strong) && handle.port.events.reserveStrong(handle.scopeKey, handle.at, cap);
   const capped = reason !== null && Boolean(handle.port.strong) && !handle.strong;
   observeSync('emotion', { phase: 'feeling.reply_model', audience: handle.key.audience }, () => null,
     () => ({ model: handle.strong ? 'sonnet' : 'haiku', reason: reason ?? 'none', capped }));
-  if (capped) console.warn('Shannon feeling reply model: the day\'s cap of strong replies is reached; this reply stays on Haiku');
+  if (capped) warnCapped(reason);
   const check = checkContext(handle);
   const before = check && checkBeforeSending(check) ? { feelingCheck: check } : {};
   return { ...(handle.strong ? { feelingStrong: true as const } : {}), ...before };
@@ -301,7 +318,8 @@ export const feelingText = Object.freeze({
   block: async (handle: FeelingTurnHandle | null): Promise<string> => {
     if (!handle) return '';
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
-    handle.decision = stagedDecision(handle, handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null);
+    const chosen = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
+    handle.decision = safely(() => stagedDecision(handle, chosen), chosen);
     const lines = sentence ? await sentence : null;
     const decided = handle.port.textRegister ? handle.decision : null;
     if (decided) handle.textRegister = safely(() => textRegisterOf(decided, registerNow(handle), handle.key.audience), undefined);
@@ -340,7 +358,14 @@ export const feelingText = Object.freeze({
     }, layered);
   },
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
-  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => (handle ? safely(() => routeReply(handle), {}) : {}),
+  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } => {
+    if (!handle) return {};
+    const routed = safely(() => routeReply(handle), null);
+    if (routed) return routed;
+    // Review 9: at 本気 a failure of the routing still leaves the check before sending (it fails closed).
+    const check = stageOf(handle) === 'devoted' ? safely(() => checkContext(handle), null) : null;
+    return check ? { feelingCheck: check } : {};
+  },
   /** The message face under `SHANNON_SINGLE_FACE`: the turn's stance, else the reply's feeling (never her own apology), else the mood. */
   face: (handle: FeelingTurnHandle | null, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, at: string): ReplyEmotion => {
     if (!handle?.port.singleFace) return resolved;

@@ -1,11 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import {
-  AFFECTION_GUARD_LINE, CHARACTER_CORE, characterCoreBlock, createInitialCompanionState, type AffectionSetting, type CompanionStateSnapshot,
+  AFFECTION_GUARD_LINE, CHARACTER_CORE, characterCoreBlock, createInitialCompanionState, shannonIdentityPrompt, type AffectionSetting,
+  type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { SWITCHES, switchOn } from '@shannon/switches';
 import { affectionGuarded, composedFeeling, feelingDayFeatures } from '../src/wiring/feelingWiring.js';
-import { feelingText } from '../src/mind/emotion/feelingPorts.js';
+import { feelingBody, feelingText, feelingVoice } from '../src/mind/emotion/feelingPorts.js';
 import { STAGE_LEAN } from '../src/contracts/feelingEventContract.js';
 import { FeelingReplyChatModel, GUARD_SAFE_REPLY } from '../src/infra/models/feelingStrongChatModel.js';
 import { fakeFeelingJev } from './support/feelingHarness.js';
@@ -14,7 +15,9 @@ import { fakeFeelingJev } from './support/feelingHarness.js';
 const TODAY = '2026-10-25T03:00:00.000Z'; // 12:00 JST
 const snapshot = (): CompanionStateSnapshot => ({ ...createInitialCompanionState('owner', '2026-10-20T03:00:00.000Z'),
   sharedDays: ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23'] });
-const v2Layered = () => ({ systemPrompt: `[シャノンの人格]\n${characterCoreBlock(CHARACTER_CORE)}`, prompt: `${characterCoreBlock(CHARACTER_CORE)}\n\nほか` });
+// Her real identity with the v2 core, as `withCharacterCore` builds it (review 12: not a stand-in).
+const identity = shannonIdentityPrompt('owner', { characterCore: characterCoreBlock(CHARACTER_CORE) });
+const v2Layered = () => ({ systemPrompt: identity, prompt: `${identity}\n\nほか` });
 
 function composed(affection: AffectionSetting, options: { turn?: boolean; stance?: string } = {}) {
   const jev = fakeFeelingJev(() => ({ stance: options.stance ?? 'neutral', intensity: 'subtle', drawer: 'none' }));
@@ -79,6 +82,36 @@ describe('her affection in a text turn', () => {
     expect(await feelingText.block(handle)).toContain('構え: すねる（本気が混じる。どれくらい好きか確かめたくなる）');
   });
 
+  it('at 本気 leaves her stance as it is while she pulls back: a touch after her no going on', async () => {
+    const { port } = composed('devoted');
+    const at = (minute: number) => new Date(Date.parse(TODAY) - (10 - minute) * 60_000).toISOString();
+    for (const minute of [0, 1, 2, 3]) {
+      feelingBody.touched(port, 'owner', { id: `t${minute}`, type: 'poke', part: 'chest', audience: 'owner', occurredAt: at(minute), burstId: `b${minute}` },
+        minute === 0 ? { stance: 'dislike' } : {});
+    }
+    const handle = start(port, 'ただいま');
+    await feelingText.block(handle);
+    expect(handle?.decision?.stance).toBe('neutral');
+  });
+
+  it('at 本気 takes at most 70% of the day\'s cap of strong replies, so a refusal later still finds Sonnet', async () => {
+    const { port } = composed('devoted');
+    const strong: boolean[] = [];
+    for (let turn = 0; turn < 5; turn += 1) {
+      const handle = start(port, 'ただいま');
+      await feelingText.block(handle);
+      strong.push(feelingText.route(handle).feelingStrong === true);
+    }
+    expect(strong).toEqual([true, true, true, false, false]); // cap 5: three for 本気
+  });
+
+  it('computes nothing for a voice turn of his (no stage there: no core, no Sonnet, no check before speaking)', () => {
+    const { port } = composed('devoted');
+    const handle = feelingVoice.start(port, { scopeKey: 'owner', alone: true, guest: false, threadId: 'v1', transcript: 'ただいま', at: TODAY, snapshot: snapshot() });
+    expect(handle?.lines?.affection).toBeUndefined();
+    expect(handle?.lines?.carriedLines.join('\n')).not.toContain('[ライ氏とのこと]');
+  });
+
   it('is nothing with anyone else there: no facts, no stage, v2', async () => {
     const { port, jev } = composed('devoted');
     const handle = start(port, 'こんにちは', false);
@@ -100,6 +133,13 @@ describe('the lines no stage crosses, at the reply model', () => {
     expect((await new FeelingReplyChatModel(crossing as never).generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe(GUARD_SAFE_REPLY);
     const tool = new FeelingReplyChatModel(crossing as never, { ranTool: () => true });
     expect((await tool.generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe(GUARD_SAFE_REPLY);
+  });
+
+  it('reads none of them while her affection is off: a turn without a stage is sent as before', async () => {
+    const off = { ...context, stance: 'worry' as const, intensity: 'strong' as const, stage: undefined };
+    const caring = always('死にたいなんて言わないで。飲み会なんて行くな、今日は休んで。');
+    expect((await new FeelingReplyChatModel(caring as never).generate({ scopeKey: 'owner', feelingCheck: off } as never)).reply)
+      .toBe('死にたいなんて言わないで。飲み会なんて行くな、今日は休んで。');
   });
 
   it('sends the rewrite when it no longer crosses', async () => {
