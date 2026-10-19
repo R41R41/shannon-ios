@@ -13,12 +13,22 @@ import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { OperatorAuditStore } from '../src/infra/ops/store/operatorAuditStore.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
 import { OpsWorldPolicyStore } from '../src/infra/ops/store/opsWorldPolicyStore.js';
+import { OpsCommandStore } from '../src/infra/ops/store/opsCommandStore.js';
 import { createOpsRoute, isOpsPath, OPS_READ_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 import { OPS_SETTINGS_PATH, validatedOpsSettingsRequest } from '../src/contracts/opsSettingsContract.js';
 import { validatedOpsSnapshot } from '../src/contracts/opsContract.js';
+import { parseOperatorEnvelope } from '../src/contracts/operatorContract.js';
+import { operatorEnvelope } from '../src/infra/ops/operatorCli.js';
 import {
-  createFreshWorldAdmission, freshWorldDecision, freshWorldSettingRecorder, FRESH_WORLD_SERVER, type FreshWorldFacts, type FreshWorldRecord,
+  createFreshWorldAdmission, freshWorldDecision, freshWorldIssuance, freshWorldOfReceipt, freshWorldResultSummary, freshWorldSettingRecorder,
+  freshWorldSummary, freshWorldViaOfOperation, FRESH_WORLD_REASONS, FRESH_WORLD_SERVER, type FreshWorldFacts, type FreshWorldRecord,
 } from '../src/wiring/freshWorldWiring.js';
+import { MinecraftLifecycle } from '../src/surfaces/minecraft/minecraftLifecycle.js';
+import { MinecraftLifecycleStore } from '../src/surfaces/minecraft/store/minecraftLifecycleStore.js';
+import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
+import { lifecycleCapabilities, validLifecyclePoll } from '../src/contracts/minecraftLifecycleContract.js';
+import { neutralLifecycleOutcomeLine } from '../src/mind/action/respond/lifecycleOutcomeLine.js';
+import type { LifecycleOutcomeReport } from '../src/wiring/lifecycleOutcomeTellingWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 import { leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -85,6 +95,46 @@ describe('the stored switch', () => {
   });
 });
 
+describe('the result of a start that made a new world, on its Ops command', () => {
+  const OLD_TABLE = `CREATE TABLE ops_commands (
+    command_id TEXT NOT NULL PRIMARY KEY, scope_key TEXT NOT NULL, idempotency_key TEXT NOT NULL, type TEXT NOT NULL, target TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'claimed', 'done', 'failed', 'refused', 'expired')), created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL, claimed_at TEXT, report_by TEXT, finished_at TEXT, code TEXT, requested_by_device_id TEXT NOT NULL,
+    UNIQUE (scope_key, idempotency_key))`;
+  const T0 = '2026-10-19T00:00:00.000Z', T1 = '2026-10-19T00:01:00.000Z';
+  function claimed(database: DatabaseSync, key: string) {
+    const store = new OpsCommandStore(database);
+    const created = store.create('owner', { idempotencyKey: key, type: 'service.start', target: 'twitter' }, 'desktop-1', T0);
+    if (typeof created === 'string') throw new Error(created);
+    store.claim('owner', T0);
+    return { store, id: created.command.id };
+  }
+  it('adds its column to a table made before it, and keeps old rows as they were', () => {
+    const database = new DatabaseSync(':memory:'); close.push(() => database.close());
+    database.exec(OLD_TABLE);
+    database.prepare("INSERT INTO ops_commands VALUES ('old','owner','k-old-0001','service.start','twitter','done',?,?,?,NULL,?,NULL,'desktop-1')").run(T0, T0, T0, T0);
+    const store = new OpsCommandStore(database);
+    expect(database.prepare('PRAGMA table_info(ops_commands)').all().some(row => row.name === 'fresh_world_json')).toBe(true);
+    expect(store.recent('owner', T1).map(command => ({ id: command.id, status: command.status }))).toEqual([{ id: 'old', status: 'done' }]);
+    expect(store.recent('owner', T1)[0]).not.toHaveProperty('freshWorld');
+    new OpsCommandStore(database); // a second start finds the column and adds nothing
+  });
+  it('stores where the old world is kept for a done command only, and shows nothing otherwise', () => {
+    const database = new DatabaseSync(':memory:'); close.push(() => database.close());
+    const { store, id } = claimed(database, 'k-fresh-0001');
+    expect(store.reportLifecycle('owner', id, 'done', undefined, T1, { movedTo: 'shannon_home.before-regen-20261019T1204' })).toMatchObject({ status: 'done' });
+    expect(store.recent('owner', T1)[0]).toMatchObject({ id, status: 'done', freshWorld: { movedTo: 'shannon_home.before-regen-20261019T1204' } });
+    // No previous world: the key is there with null.
+    const none = claimed(new DatabaseSync(':memory:'), 'k-fresh-0002');
+    none.store.reportLifecycle('owner', none.id, 'done', undefined, T1, { movedTo: null });
+    expect(none.store.recent('owner', T1)[0]!.freshWorld).toEqual({ movedTo: null });
+    // A failed or refused command never says a new world was made, whatever was passed.
+    const failed = claimed(new DatabaseSync(':memory:'), 'k-fresh-0003');
+    failed.store.reportLifecycle('owner', failed.id, 'failed', 'error', T1, { movedTo: 'x' });
+    expect(failed.store.recent('owner', T1)[0]).not.toHaveProperty('freshWorld');
+  });
+});
+
 describe('GET /v1/ops and POST /v1/ops/settings', () => {
   const DEVICE = 'device-token-of-the-owner';
   async function harness(options: { fixedToken?: boolean; failRecord?: 'on' | 'off' | 'any' } = {}) {
@@ -130,7 +180,7 @@ describe('GET /v1/ops and POST /v1/ops/settings', () => {
     expect(h.store.worldPolicy.freshWorld('owner')).toBe(true);
     // The same value again changes nothing and records nothing.
     expect(await h.write({ freshWorld: true })).toEqual({ status: 200, body: { settings: { freshWorld: true } } });
-    expect(h.recorded).toEqual([{ scopeKey: 'owner', setting: 'freshWorld', value: true, at: '2026-10-19T03:00:00.000Z' }]);
+    expect(h.recorded).toEqual([{ scopeKey: 'owner', setting: 'freshWorld', value: true, at: '2026-10-19T03:00:00.000Z', deviceId: 'desktop-1' }]);
     h.clock.at = '2026-10-19T03:05:00.000Z';
     expect(await h.write({ freshWorld: false })).toEqual({ status: 200, body: { settings: { freshWorld: false } } });
     expect((await h.read()).body.settings).toEqual({ freshWorld: false });
@@ -176,8 +226,8 @@ describe('GET /v1/ops and POST /v1/ops/settings', () => {
 });
 
 describe('the decision, as a truth table', () => {
-  const all: FreshWorldFacts = { action: 'start', serverId: SERVER, origin: 'owner_request', via: 'ops', existing: null, switchedOn: true,
-    state: { running: 'stopped' }, bodyTasksOpen: false, unresolved: false };
+  const all: FreshWorldFacts = { action: 'start', serverId: SERVER, origin: 'owner_request', via: 'ops', existing: null, switchedOn: true, keepWorld: false,
+    state: { running: 'stopped' }, bodySupports: true, bodyTasksOpen: false, unresolved: false };
   const decide = (patch: Partial<FreshWorldFacts>) => freshWorldDecision({ ...all, ...patch });
 
   it('applies only when every condition holds, for each of the three ways the owner asks', () => {
@@ -192,14 +242,23 @@ describe('the decision, as a truth table', () => {
       ['set_day', { action: 'set_day' }, 'not_start'],
       ['another server', { serverId: 'other' }, 'other_server'],
       ['switch off', { switchedOn: false }, 'switch_off'],
+      ['the operator keeps the world (--keep-world)', { keepWorld: true }, 'keep_world'],
       ['no fresh state', { state: undefined }, 'server_not_stopped'],
       ['server running', { state: { running: 'running' } }, 'server_not_stopped'],
       ['server unknown', { state: { running: 'unknown' } }, 'server_not_stopped'],
+      ['a body that does not advertise the capability', { bodySupports: false }, 'unsupported'],
       ['an open task', { bodyTasksOpen: true }, 'tasks_open'],
       ['tasks cannot be read', { bodyTasksOpen: null }, 'tasks_unknown'],
       ['an unresolved lifecycle command', { unresolved: true }, 'unresolved_operation'],
     ];
     for (const [name, patch, reason] of cases) expect(decide(patch), name).toEqual({ reason });
+  });
+
+  it('puts the switch before the operator\'s opt-out, and says "unsupported" only for a start that would otherwise have been applied', () => {
+    // With the switch off nothing is recorded, whatever else is true.
+    expect(decide({ switchedOn: false, keepWorld: true, bodySupports: false })).toEqual({ reason: 'switch_off' });
+    expect(decide({ keepWorld: true, bodySupports: false, state: { running: 'running' } })).toEqual({ reason: 'keep_world' });
+    expect(decide({ bodySupports: false, bodyTasksOpen: true })).toEqual({ reason: 'unsupported' });
   });
 
   it('never decides again for a command that exists: it keeps what it was issued with', () => {
@@ -211,11 +270,12 @@ describe('the decision, as a truth table', () => {
 
 describe('the shared admission', () => {
   function admission(patch: { on?: boolean; running?: 'stopped' | 'running'; tasks?: boolean | null; unresolved?: boolean; existing?: { options?: { freshWorld?: true } } | null;
-    record?: (record: FreshWorldRecord) => void; policy?: null; status?: () => never } = {}) {
+    record?: (record: FreshWorldRecord) => void; policy?: null; status?: () => never; supports?: boolean } = {}) {
     const records: FreshWorldRecord[] = [];
     const decide = createFreshWorldAdmission({
       scopeKey: 'owner', policy: patch.policy === null ? null : { freshWorld: () => patch.on ?? true },
       status: patch.status ?? ((): readonly MinecraftLifecycleState[] => [{ serverId: SERVER, observedAt: 'x', running: patch.running ?? 'stopped', bot: 'absent', otherPlayers: 0 }]),
+      supports: () => patch.supports ?? true,
       command: () => (patch.existing === undefined ? null : patch.existing), unresolved: () => patch.unresolved ?? false,
       bodyTasksOpen: () => patch.tasks === undefined ? false : patch.tasks, now: () => '2026-10-19T00:00:00.000Z',
       record: patch.record ?? (record => { records.push(record); }),
@@ -224,11 +284,21 @@ describe('the shared admission', () => {
   }
   const request = { id: 'ops-lifecycle:one', serverId: SERVER, action: 'start' as const, origin: 'owner_request' as const, via: 'ops' as const };
 
-  it('answers the options and writes a content-free record of the decision', () => {
+  it('answers the options and records nothing yet: an applied decision is written when the command is stored', () => {
     const { decide, records } = admission();
     expect(decide(request)).toEqual({ freshWorld: true });
-    expect(records).toEqual([{ at: '2026-10-19T00:00:00.000Z', applied: true, reason: 'applied', via: 'ops', operationId: 'ops-lifecycle:one', serverId: SERVER }]);
-    expect(Object.keys(records[0]!).sort()).toEqual(['applied', 'at', 'operationId', 'reason', 'serverId', 'via']);
+    expect(records).toEqual([]);
+  });
+
+  it('records why a body that cannot do it, or an operator\'s --keep-world, kept the world', () => {
+    const old = admission({ supports: false });
+    expect(old.decide(request)).toBeUndefined();
+    expect(old.records).toMatchObject([{ applied: false, reason: 'unsupported', via: 'ops' }]);
+    expect(freshWorldSummary(old.records[0]!)).toBe('「新しいワールドで始める」はオンですが、マイクラの体がまだ新しいワールドに対応していないので、今のワールドのまま始めます。');
+    const keep = admission();
+    expect(keep.decide({ ...request, via: 'operator', keepWorld: true })).toBeUndefined();
+    expect(keep.records).toMatchObject([{ applied: false, reason: 'keep_world', via: 'operator' }]);
+    expect(admission({ on: false }).decide({ ...request, keepWorld: true })).toBeUndefined();
   });
 
   it('records why a start the owner newly asked for kept its world, but nothing while the switch is off or for other starts', () => {
@@ -243,13 +313,13 @@ describe('the shared admission', () => {
     expect(other.records).toEqual([]);
   });
 
-  it('is "no" on any doubt: no policy, an unreadable status, or a record that cannot be written', () => {
+  it('is "no" on any doubt: no policy, an unreadable status, or no way to record', () => {
     expect(admission({ policy: null }).decide(request)).toBeUndefined();
     expect(admission({ status: () => { throw new Error('unreadable'); } }).decide(request)).toBeUndefined();
-    expect(admission({ record: () => { throw new Error('activity unavailable'); } }).decide(request)).toBeUndefined();
+    // A kept-world line that cannot be written changes nothing about the (ordinary) start.
     expect(admission({ record: () => { throw new Error('activity unavailable'); }, running: 'running' }).decide(request)).toBeUndefined();
     const withoutRecord = createFreshWorldAdmission({ scopeKey: 'owner', policy: { freshWorld: () => true }, status: () => [{ serverId: SERVER, observedAt: 'x',
-      running: 'stopped', bot: 'absent', otherPlayers: 0 }], command: () => null, unresolved: () => false, bodyTasksOpen: () => false, now: () => 'x' });
+      running: 'stopped', bot: 'absent', otherPlayers: 0 }], supports: () => true, command: () => null, unresolved: () => false, bodyTasksOpen: () => false, now: () => 'x' });
     expect(withoutRecord(request)).toBeUndefined();
   });
 
@@ -263,12 +333,159 @@ describe('the shared admission', () => {
   });
 });
 
+describe('the poll capabilities and the receipt fields', () => {
+  const state = (at: string) => ({ serverId: SERVER, observedAt: at, running: 'running', bot: 'absent', otherPlayers: 0 });
+  it('accepts a poll with or without capabilities, and counts only well-formed names', () => {
+    const at = new Date().toISOString(), now = Date.parse(at);
+    const poll = (patch: object = {}) => ({ schemaVersion: 1, connectionId: 'c', sequence: 0, states: [state(at)], receipts: [], ...patch });
+    expect(validLifecyclePoll(poll(), now)).toBe(true);
+    expect(validLifecyclePoll(poll({ capabilities: ['freshWorld'] }), now)).toBe(true);
+    // An odd list is not a reason to lose the channel (the old API ignores the key; this one ignores what it cannot read).
+    expect(validLifecyclePoll(poll({ capabilities: [1, 'has space', 'freshWorld'] }), now)).toBe(true);
+    for (const bad of ['freshWorld', {}, null, Array.from({ length: 65 }, (_, i) => `c${i}`)]) expect(validLifecyclePoll(poll({ capabilities: bad }), now), JSON.stringify(bad)).toBe(false);
+    expect([...lifecycleCapabilities({ capabilities: [1 as never, 'has space', 'freshWorld', 'x_y'] })]).toEqual(['freshWorld']);
+    expect([...lifecycleCapabilities(undefined)]).toEqual([]);
+  });
+  it('validates worldId and movedTo on a receipt, and accepts a receipt without them', () => {
+    const at = new Date().toISOString(), now = Date.parse(at);
+    const receipt = { id: 'a', connectionId: 'c', serverId: SERVER, action: 'start', outcome: 'completed', code: 'changed', observedAt: at, inputsReleased: true, state: state(at) };
+    const poll = (patch: object = {}) => ({ schemaVersion: 1, connectionId: 'c', sequence: 0, states: [state(at)], receipts: [{ ...receipt, ...patch }] });
+    expect(validLifecyclePoll(poll(), now)).toBe(true);
+    expect(validLifecyclePoll(poll({ worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' }), now)).toBe(true);
+    expect(validLifecyclePoll(poll({ worldId: 'shannon-home-20261019T1204', movedTo: null }), now)).toBe(true);
+    for (const bad of [{ worldId: 5 }, { worldId: '../x' }, { worldId: '' }, { movedTo: 5 }, { movedTo: '../x' }, { movedTo: 'a/b' }, { movedTo: '' }]) {
+      expect(validLifecyclePoll(poll(bad), now), JSON.stringify(bad)).toBe(false);
+    }
+  });
+  it('tells a new world from the accepted receipt only', () => {
+    const base = { action: 'start' as const, outcome: 'completed' as const };
+    expect(freshWorldOfReceipt({ ...base, worldId: 'w', movedTo: 'old' })).toEqual({ worldId: 'w', movedTo: 'old' });
+    expect(freshWorldOfReceipt({ ...base, worldId: 'w' })).toEqual({ worldId: 'w', movedTo: null });
+    expect(freshWorldOfReceipt({ ...base })).toBeUndefined();
+    expect(freshWorldOfReceipt({ ...base, outcome: 'unknown', worldId: 'w', movedTo: 'old' })).toBeUndefined();
+    expect(freshWorldOfReceipt({ ...base, action: 'login', worldId: 'w', movedTo: 'old' })).toBeUndefined();
+    expect(freshWorldOfReceipt(null)).toBeUndefined();
+  });
+  it('words the outcome line with where the old world is kept, and leaves the parenthesis out when there was none', () => {
+    const line = (freshWorld?: { movedTo: string | null }, patch: object = {}) => neutralLifecycleOutcomeLine({ action: 'start', outcome: 'completed', others: false, ...(freshWorld ? { freshWorld } : {}), ...patch });
+    expect(line()).toBe('マイクラのサーバーを起動しました。');
+    expect(line({ movedTo: 'shannon_home.before-regen-20261019T1204' })).toBe(
+      'マイクラのサーバーを起動しました。新しいワールドで始めました（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）。');
+    expect(line({ movedTo: null })).toBe('マイクラのサーバーを起動しました。新しいワールドで始めました。');
+    // Never beside anyone else, and never for another action or end.
+    expect(line({ movedTo: 'x' }, { others: true })).toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
+    expect(line({ movedTo: 'x' }, { outcome: 'refused' })).toBe('マイクラのサーバーの起動は、体に断られてできませんでした。');
+    expect(line({ movedTo: 'x' }, { action: 'login' })).toBe('マイクラにログインしました。');
+  });
+  it('words the activity lines with the old world kept, never deleted', () => {
+    expect(freshWorldSummary({ applied: true, reason: 'applied', via: 'ops' })).toBe('ライ氏の運用ページからの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。');
+    expect(freshWorldResultSummary({ result: 'started', movedTo: 'old' })).toBe('新しいワールドで始めました（前のワールドは old として残しています）。');
+    for (const reason of FRESH_WORLD_REASONS) expect(freshWorldSummary({ applied: reason === 'applied', reason, via: 'conversation' }), reason).not.toMatch(/消えます|削除|元に戻せ/u);
+    expect(freshWorldViaOfOperation(`lifecycle:${'a'.repeat(64)}`)).toBe('conversation');
+    expect(freshWorldViaOfOperation(`ops-lifecycle:${randomUUID()}`)).toBe('ops');
+    expect(freshWorldViaOfOperation(`operator:${randomUUID()}`)).toBe('operator');
+    for (const other of ['lifecycle:abc', 'x', 'operator:abc', `ops:${randomUUID()}`, '']) expect(freshWorldViaOfOperation(other), other).toBeNull();
+  });
+});
+
+describe('the lifecycle service and the new-world command', () => {
+  const at = '2026-10-19T00:00:00.000Z';
+  const OPS = () => `ops-lifecycle:${randomUUID()}`;
+  function service(hooks: Parameters<typeof freshWorldIssuance>[0] | 'none' = undefined) {
+    const database = new DatabaseSync(':memory:'); close.push(() => database.close());
+    const configuration = configuredMinecraftBody(environment)!;
+    const records: Array<{ reasonCode?: string; detail?: string }> = [];
+    const ports = hooks === 'none' ? undefined : hooks ?? { policy: { freshWorld: () => true }, activity: { append: ((...args: unknown[]) => { records.push(args[3] as never); }) as never },
+      config: { timeZone: 'Asia/Tokyo' } as never, bodyTasksOpen: () => false };
+    const lifecycle = new MinecraftLifecycle(new MinecraftLifecycleStore(database), configuration, { now: () => Date.parse(at), allowed: () => true,
+      servers: new Set([SERVER]), pollMilliseconds: 1, cancelWaitMilliseconds: 5, freshWorld: freshWorldIssuance(ports, { scopeKey: 'owner', now: () => at }) });
+    let sequence = 0;
+    const body: { capabilities: unknown } = { capabilities: ['freshWorld'] };
+    const poll = (receipts: MinecraftLifecycleReceipt[] = []) => lifecycle.poll({ scopeKey: 'owner', deviceId: 'operator' },
+      { schemaVersion: 1, connectionId: 'connection', sequence: sequence++, receipts, ...(body.capabilities === undefined ? {} : { capabilities: body.capabilities }),
+        states: [{ serverId: SERVER, observedAt: at, running: 'stopped', bot: 'absent', otherPlayers: 0 }] });
+    const authority = { scopeKey: 'owner', origin: 'owner_request' as const, executionId: 'execution', lease: { id: 'execution', holder: 'h', generation: 1 }, sourceIds: ['s'] };
+    const receiptFor = (command: MinecraftLifecycleCommand, patch: object = {}): MinecraftLifecycleReceipt => ({ id: command.id, connectionId: command.connectionId, serverId: SERVER,
+      action: 'start', outcome: 'completed', code: 'changed', observedAt: at, inputsReleased: true,
+      state: { serverId: SERVER, observedAt: at, running: 'running', bot: 'absent', otherPlayers: 0 }, ...patch } as MinecraftLifecycleReceipt);
+    /** One start from request to accepted receipt, as the operator would have it: stored, delivered, then settled. */
+    const start = async (id: string, options?: { freshWorld: true }, patch?: object) => {
+      const done = lifecycle.execute({ id, serverId: SERVER, action: 'start', authority, ...(options ? { options } : {}) }).catch(() => undefined);
+      await until(() => lifecycle.store.command(id) !== null);
+      const command = lifecycle.store.command(id)!;
+      poll();
+      poll([receiptFor(command, patch)]);
+      await done;
+      return command;
+    };
+    return { lifecycle, poll, start, records, body, receiptFor };
+  }
+
+  it('knows what the connected body can do from its latest fresh frame only', () => {
+    const f = service();
+    expect(f.lifecycle.supports('owner', 'freshWorld')).toBe(false); // no frame yet
+    f.body.capabilities = undefined; f.poll(); expect(f.lifecycle.supports('owner', 'freshWorld')).toBe(false); // a body that predates the field
+    f.body.capabilities = ['freshWorld']; f.poll(); expect(f.lifecycle.supports('owner', 'freshWorld')).toBe(true);
+    expect(f.lifecycle.supports('someone-else', 'freshWorld')).toBe(false);
+    f.body.capabilities = ['somethingElse']; f.poll(); expect(f.lifecycle.supports('owner', 'freshWorld')).toBe(false); // an older build took over
+  });
+
+  it('stores the option and records the decision only when the connected body says it can, and drops it otherwise', async () => {
+    const f = service();
+    f.poll();
+    const withOption = await f.start(OPS(), { freshWorld: true });
+    expect(withOption.options).toEqual({ freshWorld: true });
+    expect(f.records.map(r => r.reasonCode)).toContain('fresh_world_applied');
+    // The body no longer advertises it by the time the command is stored: an ordinary start, nothing claimed.
+    const g = service(); g.body.capabilities = ['somethingElse']; g.poll();
+    const dropped = await g.start(OPS(), { freshWorld: true });
+    expect('options' in dropped).toBe(false); expect(g.records).toEqual([]);
+  });
+
+  it('sends an ordinary start when the decision cannot be written down, and without ports', async () => {
+    const failing = service({ policy: { freshWorld: () => true }, activity: { append: (() => { throw new Error('activity unavailable'); }) as never }, config: { timeZone: 'Asia/Tokyo' } as never, bodyTasksOpen: () => false });
+    failing.poll();
+    expect('options' in await failing.start(OPS(), { freshWorld: true })).toBe(false);
+    const bare = service('none'); bare.poll();
+    expect('options' in await bare.start(OPS(), { freshWorld: true })).toBe(false);
+    // An operation id that is not one of the three ways of asking never carries it.
+    const other = service(); other.poll();
+    expect('options' in await other.start('agent-task:step', { freshWorld: true })).toBe(false); expect(other.records).toEqual([]);
+  });
+
+  it('records the result when the receipt is accepted: the new world and where the old one is kept', async () => {
+    const f = service(); f.poll();
+    const id = OPS();
+    await f.start(id, { freshWorld: true }, { worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' });
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_started']);
+    expect(f.records[1]!.detail).toBe(`operation=${id} server=${SERVER} via=ops world=shannon-home-20261019T1204 movedTo=shannon_home.before-regen-20261019T1204`);
+    // A refused one says nothing was changed.
+    const h = service(); h.poll();
+    await h.start(OPS(), { freshWorld: true }, { outcome: 'refused', code: 'error', state: { serverId: SERVER, observedAt: at, running: 'stopped', bot: 'absent', otherPlayers: 0 } });
+    expect(h.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_refused']);
+    // A start that did not ask for a new world records nothing, even when its receipt names none.
+    const plain = service(); plain.poll(); await plain.start(OPS());
+    expect(plain.records).toEqual([]);
+  });
+
+  it('writes a compensating line when a command that was recorded as applied could not be stored', () => {
+    const records: string[] = [];
+    const hooks = freshWorldIssuance({ policy: { freshWorld: () => true }, activity: { append: ((...args: unknown[]) => { records.push((args[3] as { reasonCode: string }).reasonCode); }) as never },
+      config: { timeZone: 'Asia/Tokyo' } as never, bodyTasksOpen: () => false }, { scopeKey: 'owner', now: () => at })!;
+    const command = { id: OPS(), serverId: SERVER, action: 'start' } as MinecraftLifecycleCommand;
+    expect(hooks.issue(command)).toBe(true); hooks.aborted(command);
+    expect(records).toEqual(['fresh_world_applied', 'fresh_world_not_issued']);
+    expect(freshWorldResultSummary({ result: 'not_issued' })).toContain('今のワールドのまま');
+  });
+});
+
 describe('the lifecycle command, from each way of asking', () => {
   function fixture() {
     const directory = mkdtempSync(join(tmpdir(), 'fresh-world-')), path = join(directory, 'store.sqlite');
     close.push(() => rmSync(directory, { recursive: true, force: true }));
     let at = '2026-10-19T00:00:00.000Z', sequence = 0, alone = true, running: 'running' | 'stopped' | 'unknown' = 'stopped';
-    let tasksOpen: boolean | null = false, recordFails = false, taskAllowed = true;
+    let tasksOpen: boolean | null = false, recordFails = false, taskAllowed = true, advertise = true;
+    const reports: LifecycleOutcomeReport[] = [];
     const opsStore = new SQLiteOpsStore(path); close.push(() => opsStore.close());
     const autonomyStore = new SQLiteAutonomyStore(path); close.push(() => autonomyStore.close());
     const config = configuredAutonomy({ SHANNON_AUTONOMY_ENABLED: 'true' });
@@ -282,13 +499,14 @@ describe('the lifecycle command, from each way of asking', () => {
     }) as typeof autonomyStore.activity.append };
     const configured = configuredMinecraftLifecycle(environment, { path, autonomy, actions: h.actions, now: () => at, ownerAlone: () => alone,
       taskAllowed: () => taskAllowed, taskSources: () => [], ops: { commands: opsStore.commands, actions: h.actions, enabled: () => true },
+      told: async report => { reports.push(report); },
       freshWorld: { policy: opsStore.worldPolicy, activity, config, bodyTasksOpen: () => tasksOpen } })!;
     close.push(async () => { const ticking = setInterval(() => { at = new Date(Date.parse(at) + 1000).toISOString(); }, 20);
       try { await configured.close(); } finally { clearInterval(ticking); } });
     const principal = { scopeKey: 'owner', deviceId: 'operator' };
     const state = (patch: Partial<MinecraftLifecycleState> = {}): MinecraftLifecycleState => ({ serverId: SERVER, observedAt: at, running, bot: 'absent', otherPlayers: 0, ...patch });
     const poll = (receipts: MinecraftLifecycleReceipt[] = []) => configured.service.poll(principal,
-      { schemaVersion: 1, connectionId: 'operator-connection', sequence: sequence++, states: [state()], receipts });
+      { schemaVersion: 1, connectionId: 'operator-connection', sequence: sequence++, states: [state()], receipts, ...(advertise ? { capabilities: ['freshWorld'] } : {}) });
     poll();
     const snapshot = validatedOpsSnapshot({ scopeKey: 'owner', reportedAt: at, runtime: { release: 'test', startedAt: at },
       services: ['minecraft', 'minebot', 'minebot:bot', `minecraft:${SERVER}`].map(id => ({ id, label: id, category: 'platform', status: 'running' })),
@@ -310,15 +528,17 @@ describe('the lifecycle command, from each way of asking', () => {
     let key = 0;
     const send = (type: string, target: string) => post('/v1/ops/commands', { type, target, idempotencyKey: `command-${++key}-${randomUUID()}` });
     const setSwitch = (freshWorld: boolean) => post(OPS_SETTINGS_PATH, { freshWorld });
-    const receipt = (command: MinecraftLifecycleCommand): MinecraftLifecycleReceipt => ({ id: command.id, connectionId: command.connectionId, serverId: command.serverId,
+    const receipt = (command: MinecraftLifecycleCommand, extra: object = {}): MinecraftLifecycleReceipt => ({ id: command.id, connectionId: command.connectionId, serverId: command.serverId,
       action: command.action, outcome: 'completed', code: 'changed', observedAt: at, inputsReleased: true,
       state: state({ running: command.action === 'stop' ? 'stopped' : 'running', bot: command.action === 'login' ? 'joined' : 'absent' }),
-      ...(command.action === 'stop' ? { stopGuard: { admissionClosed: true as const, otherPlayers: 0 as const, checkedAt: at } } : {}) });
-    /** The one command the operator receives next; the native acknowledgement then ends it. */
-    const issued = async (): Promise<MinecraftLifecycleCommand> => {
+      ...(command.action === 'stop' ? { stopGuard: { admissionClosed: true as const, otherPlayers: 0 as const, checkedAt: at } } : {}),
+      // A body that made the new world says so in its receipt (pass worldId: undefined to leave it out).
+      ...(command.options?.freshWorld ? { worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' } : {}), ...extra });
+    /** The one command the operator receives next; the native acknowledgement (with `extra` fields, e.g. the new world) then ends it. */
+    const issued = async (extra: object = {}): Promise<MinecraftLifecycleCommand> => {
       await until(() => configured.service.store.pending().length === 1);
       const command = poll().commands[0]!;
-      expect(poll([receipt(command)]).acknowledged).toEqual([command.id]);
+      expect(poll([receipt(command, extra)]).acknowledged).toEqual([command.id]);
       await until(() => h.store.get(command.authority.executionId)?.state !== 'running');
       return command;
     };
@@ -345,16 +565,17 @@ describe('the lifecycle command, from each way of asking', () => {
         memory: { ...toolSessionMemory(), turnKey: `${name}-${sequence}` }, acknowledgementOwner: 'fca' }, execution.signal));
       return { result, execution };
     };
-    const operatorStart = async (action: 'start' | 'login') => {
+    const operatorStart = async (action: 'start' | 'login', keepWorld = false) => {
       const id = `operator:${randomUUID()}`;
       audit.append({ operationId: id, scopeKey: 'owner', at, operator: 'ops', command: 'lifecycle', event: 'invoked', code: 'invoked', argsJson: '{}', action, serverId: SERVER });
       const settled: unknown[] = [];
-      const admission = await configured.operator.execute({ id, serverId: SERVER, action }, value => settled.push(value));
+      const admission = await configured.operator.execute({ id, serverId: SERVER, action, ...(keepWorld ? { keepWorld: true } : {}) }, value => settled.push(value));
       return { id, admission };
     };
     const records = () => autonomyStore.activity.days('owner', { sinceDayKey: '' }).flatMap(day => day.entries).filter(entry => entry.tool === 'minecraft.fresh_world');
     const settings = () => autonomyStore.activity.days('owner', { sinceDayKey: '' }).flatMap(day => day.entries).filter(entry => entry.tool === 'ops.settings.freshWorld');
-    return { ...h, opsStore, configured, poll, state, send, setSwitch, issued, converse, step, operatorStart, records, settings, receipt,
+    return { ...h, opsStore, configured, poll, state, send, setSwitch, issued, converse, step, operatorStart, records, settings, receipt, reports,
+      advertise(value: boolean) { advertise = value; poll(); },
       running(value: typeof running) { running = value; poll(); }, tasksOpen(value: boolean | null) { tasksOpen = value; },
       recordFails(value: boolean) { recordFails = value; }, alone(value: boolean) { alone = value; }, taskAllowed(value: boolean) { taskAllowed = value; } };
   }
@@ -364,15 +585,61 @@ describe('the lifecycle command, from each way of asking', () => {
       const f = fixture();
       expect((await f.setSwitch(true)).body).toEqual({ settings: { freshWorld: true } });
       expect(f.settings().map(entry => entry.reasonCode)).toEqual(['fresh_world_on']);
+      // The paired device that made the change is named, and the sentence says the old world is kept, not deleted.
+      expect(f.settings()[0]).toMatchObject({ detail: 'device=desktop-1', summary: expect.stringContaining('別の名前で残して') });
+      expect(f.settings()[0]!.summary).not.toMatch(/消します|削除/u);
       const sent = await f.send('minecraft.start', SERVER);
       expect(sent.status).toBe(201);
       const command = await f.issued();
       expect(command).toMatchObject({ id: `ops-lifecycle:${sent.body.command.id}`, serverId: SERVER, action: 'start', options: { freshWorld: true } });
       expect(f.configured.service.store.command(command.id)?.options).toEqual({ freshWorld: true });
-      const entries = f.records();
+      const entries = f.records().filter(entry => entry.reasonCode === 'fresh_world_applied');
       expect(entries).toHaveLength(1);
       expect(entries[0]).toMatchObject({ reasonCode: 'fresh_world_applied', outcome: 'done', actor: 'owner' });
+      expect(f.records().map(entry => entry.reasonCode).sort()).toEqual(['fresh_world_applied', 'fresh_world_started']);
       expect(entries[0]!.detail).toBe(`operation=${command.id} server=${SERVER} via=ops`);
+    });
+
+    it('starts normally and records why, without saying a new world was made, when the connected body does not advertise the capability', async () => {
+      const f = fixture();
+      await f.setSwitch(true); f.advertise(false);
+      await f.send('minecraft.start', SERVER);
+      const command = await f.issued();
+      expect('options' in command).toBe(false);
+      expect(f.records().map(entry => entry.reasonCode)).toEqual(['fresh_world_unsupported']);
+      expect(f.records()[0]).toMatchObject({ outcome: 'recorded', summary: expect.stringContaining('対応していない') });
+      // The finished Ops command carries no new-world result.
+      await until(() => f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]?.status === 'done');
+      expect(f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]).not.toHaveProperty('freshWorld');
+      // The same body, once it says it can, gets the option.
+      f.advertise(true); f.running('stopped');
+      await f.send('minecraft.start', SERVER);
+      expect((await f.issued()).options).toEqual({ freshWorld: true });
+    });
+
+    it('records the decision when the command is stored and its result when the receipt arrives; the finished Ops command says where the old world is kept', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      await f.send('minecraft.start', SERVER);
+      const MOVED = 'shannon_home.before-regen-20261019T1204';
+      const command = await f.issued({ worldId: 'shannon-home-20261019T1204', movedTo: MOVED });
+      expect(f.records().map(entry => entry.reasonCode).sort()).toEqual(['fresh_world_applied', 'fresh_world_started']);
+      expect(f.records().find(entry => entry.reasonCode === 'fresh_world_started')).toMatchObject({ outcome: 'done', summary: `新しいワールドで始めました（前のワールドは ${MOVED} として残しています）。` });
+      expect(f.records().find(entry => entry.reasonCode === 'fresh_world_started')!.detail).toBe(`operation=${command.id} server=${SERVER} via=ops world=shannon-home-20261019T1204 movedTo=${MOVED}`);
+      await until(() => f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]?.status === 'done');
+      const finished = f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]!;
+      expect(finished.freshWorld).toEqual({ movedTo: MOVED });
+      expect(JSON.parse(JSON.stringify(finished)).freshWorld).toEqual({ movedTo: MOVED });
+    });
+
+    it('says nothing of a new world for a finished Ops start whose receipt names none', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      await f.send('minecraft.start', SERVER);
+      await f.issued({ worldId: undefined, movedTo: undefined });
+      await until(() => f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]?.status === 'done');
+      expect(f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]).not.toHaveProperty('freshWorld');
+      expect(f.records().map(entry => entry.reasonCode).sort()).toEqual(['fresh_world_applied', 'fresh_world_unknown']);
     });
 
     it('is the legacy command when the switch is off: no options key at all, and nothing recorded', async () => {
@@ -404,7 +671,7 @@ describe('the lifecycle command, from each way of asking', () => {
       expect(f.records()[0]).toMatchObject({ outcome: 'recorded' });
     });
 
-    it('does not delete a world it could not record: a failing activity record leaves the legacy command', async () => {
+    it('does not make a new world it could not record: a failing activity record leaves the legacy command', async () => {
       const f = fixture();
       await f.setSwitch(true); f.recordFails(true);
       await f.send('minecraft.start', SERVER);
@@ -426,6 +693,39 @@ describe('the lifecycle command, from each way of asking', () => {
   });
 
   describe('the operator CLI', () => {
+    it('follows the switch by default, and --keep-world opts out of a new world for that one start', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      const kept = await f.operatorStart('start', true);
+      expect(kept.admission).toMatchObject({ ok: true });
+      const command = await f.issued();
+      expect('options' in command).toBe(false);
+      expect(f.records().map(entry => entry.reasonCode)).toEqual(['fresh_world_keep_world']);
+      expect(f.records()[0]!.detail).toBe(`operation=${kept.id} server=${SERVER} via=operator`);
+      // Without the flag the same switch gives a new world.
+      f.running('stopped');
+      const followed = await f.operatorStart('start');
+      expect(followed.admission).toMatchObject({ ok: true });
+      expect((await f.issued()).options).toEqual({ freshWorld: true });
+    });
+
+    it('parses --keep-world for start only, from the command line to the envelope', () => {
+      const env = { SHANNON_OPERATOR: 'ryo' };
+      expect(operatorEnvelope(['minecraft', 'start', '--server', SERVER, '--keep-world'], env)).toMatchObject({ op: 'start', args: { serverId: SERVER, keepWorld: true } });
+      expect(operatorEnvelope(['minecraft', 'start'], env).args).toEqual({});
+      expect(() => operatorEnvelope(['minecraft', 'login', '--keep-world'], env)).toThrow('--keep-world is not an option of this command');
+      expect(parseOperatorEnvelope({ v: 1, operator: 'ryo', domain: 'minecraft', op: 'start', args: { keepWorld: true } }))
+        .toMatchObject({ ok: true, input: { command: 'lifecycle', action: 'start', keepWorld: true } });
+      expect(parseOperatorEnvelope({ v: 1, operator: 'ryo', domain: 'minecraft', op: 'start', args: {} }))
+        .toMatchObject({ ok: true, input: { command: 'lifecycle', action: 'start', keepWorld: false } });
+      for (const bad of [{ keepWorld: 'yes' }, { keepWorld: 1 }, { keepWorld: null }]) {
+        expect(parseOperatorEnvelope({ v: 1, operator: 'ryo', domain: 'minecraft', op: 'start', args: bad }), JSON.stringify(bad)).toMatchObject({ ok: false, code: 'invalid_input' });
+      }
+      for (const op of ['stop', 'login', 'logout', 'set_day', 'release']) {
+        expect(parseOperatorEnvelope({ v: 1, operator: 'ryo', domain: 'minecraft', op, args: { keepWorld: true } }), op).toMatchObject({ ok: false, code: 'invalid_input' });
+      }
+    });
+
     it('adds it to a start, not to a login, and only with the switch on', async () => {
       const f = fixture();
       const off = await f.operatorStart('start');
@@ -436,7 +736,7 @@ describe('the lifecycle command, from each way of asking', () => {
       expect(on.admission).toMatchObject({ ok: true });
       const command = await f.issued();
       expect(command).toMatchObject({ id: on.id, action: 'start', options: { freshWorld: true } });
-      expect(f.records().map(entry => entry.detail)).toEqual([`operation=${on.id} server=${SERVER} via=operator`]);
+      expect(f.records().filter(entry => entry.reasonCode === 'fresh_world_applied').map(entry => entry.detail)).toEqual([`operation=${on.id} server=${SERVER} via=operator`]);
       f.running('stopped');
       const login = await f.operatorStart('login');
       expect(login.admission).toMatchObject({ ok: true });
@@ -452,10 +752,29 @@ describe('the lifecycle command, from each way of asking', () => {
       expect(asked).toMatchObject({ ok: true, evidence: { outcome: 'queued', action: 'start' } });
       const command = await f.issued();
       expect(command).toMatchObject({ action: 'start', serverId: SERVER, options: { freshWorld: true }, authority: { origin: 'owner_request' } });
-      expect(f.records().map(entry => entry.detail)).toEqual([`operation=${command.id} server=${SERVER} via=conversation`]);
+      expect(f.records().filter(entry => entry.reasonCode === 'fresh_world_applied').map(entry => entry.detail)).toEqual([`operation=${command.id} server=${SERVER} via=conversation`]);
       f.running('stopped');
       await f.converse('minecraft.login', 'login-1');
       expect('options' in await f.issued()).toBe(false);
+    });
+
+    it('tells him a new world was made, and where the old one is kept, when the start ends', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      await f.converse('minecraft.start', 'start-told');
+      await f.issued({ worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' });
+      await until(() => f.reports.length === 1);
+      expect(f.reports[0]).toMatchObject({ action: 'start', outcome: 'completed', freshWorld: { movedTo: 'shannon_home.before-regen-20261019T1204' } });
+    });
+
+    it('does not tell him of a new world when the start made none', async () => {
+      const f = fixture();
+      await f.setSwitch(true); f.advertise(false);
+      await f.converse('minecraft.start', 'start-unsupported');
+      await f.issued();
+      await until(() => f.reports.length === 1);
+      expect(f.reports[0]).toMatchObject({ action: 'start', outcome: 'completed' });
+      expect(f.reports[0]).not.toHaveProperty('freshWorld');
     });
 
     it('is the legacy command when the switch is off', async () => {

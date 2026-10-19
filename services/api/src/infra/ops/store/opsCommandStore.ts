@@ -20,6 +20,12 @@ export interface OpsCommand {
   finishedAt?: string;
   code?: OpsCommandCode;
   requestedByDeviceId: string;
+  /**
+   * Only on a finished Minecraft start that made a new world (「新しいワールドで始める」): where the previous world is kept (a name in
+   * the server directory; null when there was none). Absent everywhere else; a client that predates it ignores it and shows the plain
+   * result, one that knows it says 「新しいワールドで始めました（前のワールドは … として残しています）」.
+   */
+  freshWorld?: { movedTo: string | null };
 }
 
 /** A command as the runtime receives it. `expiresAt` is the time by which it must have reported. */
@@ -42,7 +48,7 @@ export type OpsCommandReceipt =
 interface Row {
   command_id: string; scope_key: string; idempotency_key: string; type: string; target: string; status: string;
   created_at: string; expires_at: string; claimed_at: string | null; report_by: string | null; finished_at: string | null;
-  code: string | null; requested_by_device_id: string;
+  code: string | null; requested_by_device_id: string; fresh_world_json?: string | null;
 }
 
 const after = (at: string, seconds: number): string => new Date(Date.parse(at) + seconds * 1000).toISOString();
@@ -87,6 +93,10 @@ export class OpsCommandStore {
       if (!this.database.prepare('PRAGMA table_info(ops_lifecycle_dispatches)').all().some(row => row.name === 'execution_kind')) {
         // Preserve old pending/unknown identities; deployment cannot turn an old request into new foreground work.
         this.database.exec("ALTER TABLE ops_lifecycle_dispatches ADD COLUMN execution_kind TEXT NOT NULL DEFAULT 'minecraft' CHECK(execution_kind IN ('minecraft','respond'))");
+      }
+      if (!this.database.prepare('PRAGMA table_info(ops_commands)').all().some(row => row.name === 'fresh_world_json')) {
+        // Additive: the result of a start that made a new world (null on every other row, and on every row written before).
+        this.database.exec('ALTER TABLE ops_commands ADD COLUMN fresh_world_json TEXT');
       }
       this.database.exec(`CREATE TRIGGER IF NOT EXISTS ops_lifecycle_execution_kind_immutable
         BEFORE UPDATE OF execution_kind ON ops_lifecycle_dispatches WHEN NEW.execution_kind != OLD.execution_kind
@@ -178,7 +188,8 @@ export class OpsCommandStore {
     if (this.database.prepare('SELECT 1 FROM ops_lifecycle_dispatches WHERE command_id=?').get(id)) return 'OPS_COMMAND_FINISHED';
     return this.reportLifecycle(scopeKey,id,outcome,code,at);
   }
-  reportLifecycle(scopeKey: string, id: string, outcome: OpsCommandOutcome, code: OpsCommandCode | undefined, at: string): OpsCommandReceipt {
+  reportLifecycle(scopeKey: string, id: string, outcome: OpsCommandOutcome, code: OpsCommandCode | undefined, at: string,
+    freshWorld?: { movedTo: string | null }): OpsCommandReceipt {
     return this.transaction(() => {
       this.settle(scopeKey, at);
       const row = this.row(scopeKey, id);
@@ -189,8 +200,8 @@ export class OpsCommandStore {
         if (row.status === outcome && (row.code ?? undefined) === code) return { ...receipt(row), duplicate: true };
         return 'OPS_COMMAND_FINISHED';
       }
-      this.database.prepare('UPDATE ops_commands SET status = ?, finished_at = ?, code = ? WHERE command_id = ?')
-        .run(outcome, at, code ?? null, id);
+      this.database.prepare('UPDATE ops_commands SET status = ?, finished_at = ?, code = ?, fresh_world_json = ? WHERE command_id = ?')
+        .run(outcome, at, code ?? null, outcome === 'done' && freshWorld ? JSON.stringify({ movedTo: freshWorld.movedTo }) : null, id);
       return { ...receipt(this.row(scopeKey, id)!), duplicate: false };
     });
   }
@@ -266,5 +277,15 @@ function command(row: Row): OpsCommand {
     ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
     ...(row.code ? { code: row.code as OpsCommandCode } : {}),
     requestedByDeviceId: row.requested_by_device_id,
+    ...freshWorldOf(row),
   };
+}
+
+/** The stored result of a start that made a new world, or nothing. */
+function freshWorldOf(row: Row): { freshWorld?: { movedTo: string | null } } {
+  if (!row.fresh_world_json) return {};
+  try {
+    const value = JSON.parse(row.fresh_world_json) as { movedTo?: unknown };
+    return { freshWorld: { movedTo: typeof value.movedTo === 'string' ? value.movedTo : null } };
+  } catch { return {}; }
 }

@@ -38,7 +38,8 @@ Envelope: `{ "v": 1, "operator": "<label>", "domain": "minecraft", "op": "<op>",
 | --- | --- |
 | `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000) |
 | `cancel` | `taskId` (a task UUID) or `latest: true` |
-| `start`, `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
+| `start` | `serverId` (optional when one server is registered), `keepWorld` (optional boolean; `true` only) |
+| `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
 | `release` | none (`serverId` accepted and ignored: there is one configured body) |
 
 The reply is `{ operationId, outcome: accepted|refused, code, message, taskId?, lifecycleId?, actionId?, deadlineAt?, budgetYen? }`:
@@ -169,8 +170,11 @@ $N --import tsx services/api/src/opsCli.ts minecraft status
 $N --import tsx services/api/src/opsCli.ts minecraft request --operator ryo --max-minutes 20 --budget-yen 500 石を16個集めて
 $N --import tsx services/api/src/opsCli.ts minecraft cancel --operator ryo --latest
 $N --import tsx services/api/src/opsCli.ts minecraft login --operator ryo --server shannon-home
+$N --import tsx services/api/src/opsCli.ts minecraft start --operator ryo --server shannon-home --keep-world
 $N --import tsx services/api/src/opsCli.ts minecraft release --operator ryo
 ```
+
+**`start` follows the owner's 「新しいワールドで始める」 switch** ([ops-contract.md](ops-contract.md#fresh-world-switch)): with the switch on, the server stopped and the body able to do it, an operator's `start` also makes a new world (the previous one is kept under another name, never deleted), because it is the owner's own request made through the operator. `--keep-world` (`keepWorld: true`, `start` only; any other operation refuses it as `invalid_input`) opts out for that one start: the current world is kept and the activity record says `fresh_world_keep_world`. The audit's `settled` row names the new world (`worldId=…  movedTo=…`) when one was made.
 
 `status` opens the database read-only (socket present or not, step 012 applied / missing / changed, open operator requests (an accepted request
 not stopped, not timed out, and whose task has not ended by any path: completed, failed, retired, cancelled or stopped, read from

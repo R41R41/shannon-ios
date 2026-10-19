@@ -7,7 +7,8 @@ export const OPS_SETTINGS_PATH = '/v1/ops/settings';
 export interface OpsSettings {
   /**
    * 「新しいワールドで始める」. On: a Minecraft server start the owner newly asks for, while the server is stopped and no
-   * Minecraft work is open, asks the body to delete the current world and start a new one. Off by default; unreadable is off.
+   * Minecraft work is open, asks the body to keep the current world under another name (it is not deleted) and start a new
+   * one. Off by default; unreadable is off.
    */
   freshWorld: boolean;
 }

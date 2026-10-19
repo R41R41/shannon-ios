@@ -25,6 +25,11 @@ export interface LifecycleOutcomeFacts {
   outcome: LifecycleOutcomeKind;
   /** Someone other than the owner may see or hear her body now. */
   others: boolean;
+  /**
+   * Only for a done `start` that made a new world (`options.freshWorld`, the receipt's `worldId`): the name the previous world is kept
+   * under, or null when there was none. The line then says so (the old world was kept, not deleted).
+   */
+  freshWorld?: { movedTo: string | null };
 }
 
 /** The operation as the neutral line names it. */
@@ -38,12 +43,21 @@ const DONE: Readonly<Record<MinecraftLifecycleAction, string>> = Object.freeze({
   logout: 'マイクラからログアウトしました。', set_day: 'マイクラの時刻を昼にしました。',
 });
 
+/** 「新しいワールドで始めました（前のワールドは <名前> として残しています）」: what a fresh-world start says beside the plain start. */
+function freshWorldSentence(movedTo: string | null): string {
+  return movedTo ? `新しいワールドで始めました（前のワールドは ${movedTo} として残しています）。` : '新しいワールドで始めました。';
+}
+
 /** The neutral factual sentence: the fact part of every message, and the whole message with anyone else there. */
 export function neutralLifecycleOutcomeLine(facts: LifecycleOutcomeFacts): string {
   if (facts.others) return '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。';
   const label = LABEL[facts.action];
   switch (facts.outcome) {
-    case 'completed': return DONE[facts.action];
+    case 'completed':
+      if (facts.action === 'start' && facts.freshWorld) {
+        return `${DONE.start}${freshWorldSentence(facts.freshWorld.movedTo)}`;
+      }
+      return DONE[facts.action];
     case 'refused': return `マイクラの${label}は、体に断られてできませんでした。`;
     case 'cancelled': return `マイクラの${label}は取りやめになりました。`;
     case 'not_started': return `マイクラの${label}は始められませんでした。`;

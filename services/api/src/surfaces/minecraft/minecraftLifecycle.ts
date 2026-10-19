@@ -1,14 +1,23 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
-import { validLifecyclePoll, type MinecraftLifecycleAuthority, type MinecraftLifecycleCommand, type MinecraftLifecyclePoll,
-  type MinecraftLifecycleReceipt, type MinecraftLifecycleReply, type MinecraftLifecycleRequest, type MinecraftLifecycleState } from '../../contracts/minecraftLifecycleContract.js';
+import { LIFECYCLE_CAPABILITY_FRESH_WORLD, lifecycleCapabilities, validLifecyclePoll, type MinecraftLifecycleAuthority, type MinecraftLifecycleCommand,
+  type MinecraftLifecyclePoll, type MinecraftLifecycleReceipt, type MinecraftLifecycleReply, type MinecraftLifecycleRequest, type MinecraftLifecycleState }
+  from '../../contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycleStore } from './store/minecraftLifecycleStore.js';
 
 /** No process execution here: the configured, paired operator owns native state and commands. */
 export class MinecraftLifecycle {
   constructor(readonly store: MinecraftLifecycleStore, readonly configuration: MinecraftBodyConfiguration,
     private readonly options: { now(): number; allowed(authority: MinecraftLifecycleAuthority, command?: MinecraftLifecycleCommand): boolean;
-      servers?: ReadonlySet<string>; pollMilliseconds?: number; waitMilliseconds?: number; cancelWaitMilliseconds?: number }) {}
+      servers?: ReadonlySet<string>; pollMilliseconds?: number; waitMilliseconds?: number; cancelWaitMilliseconds?: number;
+      /**
+       * 「新しいワールドで始める」 (`wiring/freshWorldWiring.ts`), asked only for a NEW command that carries `options.freshWorld`, just
+       * before it is stored: write the decision to the activity record and answer whether the command may carry the option. False
+       * (or a throw) sends an ordinary start instead; nothing about the world is claimed. `aborted` follows when the command then
+       * could not be stored, `settled` when its receipt is accepted (best effort, never throws into the poll).
+       */
+      freshWorld?: { issue(command: MinecraftLifecycleCommand): boolean; aborted(command: MinecraftLifecycleCommand): void;
+        settled(command: MinecraftLifecycleCommand, receipt: MinecraftLifecycleReceipt): void } }) {}
   private state(serverId: string): MinecraftLifecycleState | null {
     const frame = this.store.frame();
     if (!frame || this.options.now() - frame.receivedAt > 3000) return null;
@@ -16,6 +25,13 @@ export class MinecraftLifecycle {
   }
   available(scopeKey: string): boolean { const frame = this.store.frame(); return scopeKey === this.configuration.ownerScopeKey && !!frame && this.options.now() - frame.receivedAt <= 3000; }
   status(scopeKey: string): readonly MinecraftLifecycleState[] { return this.available(scopeKey) ? this.store.frame()!.poll.states : []; }
+  /**
+   * Whether the body that sent the latest fresh frame advertised the capability. The frame is replaced by every poll, so a body that
+   * was replaced by an older build, or that went away, stops counting at once (a frame older than 3 s counts for nothing).
+   */
+  supports(scopeKey: string, capability: string): boolean {
+    return this.available(scopeKey) && lifecycleCapabilities(this.store.frame()!.poll).has(capability);
+  }
   private permittedServer(serverId: string): boolean { return this.configuration.servers.has(serverId) && (!this.options.servers || this.options.servers.has(serverId)); }
   private allowed(command: MinecraftLifecycleCommand): boolean {
     return command.authority.scopeKey === this.configuration.ownerScopeKey && this.permittedServer(command.serverId)
@@ -33,7 +49,10 @@ export class MinecraftLifecycle {
       // Receipt delivery may recover across operator restart; identity remains its original connection and command.
       if (!c || receipt.connectionId !== c.connectionId || receipt.serverId !== c.serverId || receipt.action !== c.action
         || !this.store.delivered(c.id) || receipt.state.serverId !== c.serverId || !this.validReceipt(c, receipt)) continue;
-      if (this.store.settle(receipt)) acknowledged.push(receipt.id);
+      if (this.store.settle(receipt)) {
+        acknowledged.push(receipt.id);
+        if (c.options?.freshWorld) { try { this.options.freshWorld?.settled(c, receipt); } catch { /* the record of the result never fails a poll */ } }
+      }
     }
     for (const row of this.store.pending()) {
       const c = row.command;
@@ -75,6 +94,27 @@ export class MinecraftLifecycle {
         observedAt: new Date(this.options.now()).toISOString(), state });
     }
   }
+  /**
+   * A fresh-world start keeps its option only if the body connected right now says it can do it and the decision could be written
+   * down; otherwise it is the ordinary start (the caller decided on an earlier frame, and a new world is never claimed on a doubt).
+   */
+  private decidedFreshWorld(command: MinecraftLifecycleCommand): { command: MinecraftLifecycleCommand; issuedFreshWorld: boolean } {
+    if (!command.options?.freshWorld) return { command, issuedFreshWorld: false };
+    let ok = false;
+    try {
+      ok = this.supports(command.authority.scopeKey, LIFECYCLE_CAPABILITY_FRESH_WORLD) && !!this.options.freshWorld?.issue(command);
+    } catch {
+      ok = false;
+    }
+    if (ok) return { command, issuedFreshWorld: true };
+    const { options: _dropped, ...ordinary } = command;
+    return { command: ordinary, issuedFreshWorld: false };
+  }
+  private abortedFreshWorld(command: MinecraftLifecycleCommand): void {
+    try {
+      this.options.freshWorld?.aborted(command);
+    } catch { /* best effort: the line is a compensation for a record, not part of the command */ }
+  }
   async execute(request: MinecraftLifecycleRequest, signal?: AbortSignal): Promise<MinecraftLifecycleReceipt> {
     const previous = this.store.command(request.id);
     if (previous) {
@@ -86,13 +126,19 @@ export class MinecraftLifecycle {
     }
     signal?.throwIfAborted();
     if (!this.available(request.authority.scopeKey) || !this.state(request.serverId)) throw new Error('MINECRAFT_LIFECYCLE_UNAVAILABLE');
-    const command: MinecraftLifecycleCommand = { ...request, schemaVersion: 1, connectionId: this.store.frame()!.poll.connectionId,
+    const asked: MinecraftLifecycleCommand = { ...request, schemaVersion: 1, connectionId: this.store.frame()!.poll.connectionId,
       issuedAt: new Date(this.options.now()).toISOString(),
       deadlineAt: new Date(this.options.now() + (this.options.waitMilliseconds ?? 120_000)).toISOString() };
-    if (!this.allowed(command)) throw new Error('MINECRAFT_LIFECYCLE_AUTHORITY_DENIED');
+    if (!this.allowed(asked)) throw new Error('MINECRAFT_LIFECYCLE_AUTHORITY_DENIED');
     // A new ID is not a retry path around an unresolved physical operation.
     if (this.store.unresolved()) throw new Error('MINECRAFT_LIFECYCLE_BUSY');
-    this.store.insert(command);
+    const { command, issuedFreshWorld } = this.decidedFreshWorld(asked);
+    try {
+      this.store.insert(command);
+    } catch (error) {
+      if (issuedFreshWorld) this.abortedFreshWorld(command);
+      throw error;
+    }
     let cancellingAt: number | null = null;
     for (;;) {
       const receipt = this.store.receipt(command.id);

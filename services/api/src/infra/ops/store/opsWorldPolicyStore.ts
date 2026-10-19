@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 /**
  * The owner's 「新しいワールドで始める」 switch, one row per scope (`docs/ops-contract.md`). A scope with no row is off, and so is
- * a row that cannot be read: the switch asks for a world to be deleted, so every doubt is "off" (fail closed). The table is
+ * a row that cannot be read: the switch asks for a new world (the old one is kept under another name), so every doubt is "off" (fail closed). The table is
  * additive and shares the connection of the ops snapshot store, which creates it. Only the ops route writes it; the lifecycle admission only reads it.
  */
 export class OpsWorldPolicyStore {

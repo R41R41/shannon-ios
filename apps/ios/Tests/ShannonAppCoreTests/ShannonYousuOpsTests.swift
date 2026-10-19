@@ -538,6 +538,21 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertNil(try withSettings("7").settings)
     }
 
+    func testAFinishedStartThatMadeANewWorldSaysWhereTheOldOneIsKept() throws {
+        func command(_ extra: String, status: String = "done") throws -> ShannonOpsCommandDTO {
+            let json = #"{ "id": "c1", "type": "minecraft.start", "target": "minecraft:shannon-home", "status": "\#(status)", "createdAt": "2026-10-19T00:00:00.000Z", \#(extra) "expiresAt": "2026-10-19T00:05:00.000Z" }"#
+            return try JSONDecoder().decode(ShannonOpsCommandDTO.self, from: Data(json.utf8))
+        }
+        let kept = try command(#""freshWorld": { "movedTo": "shannon_home.before-regen-20261019T1204" },"#)
+        XCTAssertEqual(kept.freshWorld, ShannonOpsFreshWorldResultDTO(movedTo: "shannon_home.before-regen-20261019T1204"))
+        XCTAssertEqual(ShannonOpsText.commandReason(kept), "新しいワールドで始めました（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）")
+        XCTAssertEqual(ShannonOpsText.commandReason(try command(#""freshWorld": { "movedTo": null },"#)), "新しいワールドで始めました")
+        // A server that predates it, or a command that did not finish, claims no new world.
+        XCTAssertNil(try command("").freshWorld)
+        XCTAssertNil(ShannonOpsText.commandReason(try command("")))
+        XCTAssertNotEqual(ShannonOpsText.commandReason(try command(#""freshWorld": { "movedTo": "x" },"#, status: "failed")), "新しいワールドで始めました（前のワールドは x として残しています）")
+    }
+
     @MainActor
     func testTheFreshWorldSwitchChangesOnlyAfterTheServerStoredIt() async throws {
         let (model, client, _) = await loaded(try withSettings(#"{ "freshWorld": false }"#))

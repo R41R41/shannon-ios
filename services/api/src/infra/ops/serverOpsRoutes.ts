@@ -37,7 +37,7 @@ export interface OpsRouteDependencies {
    * a change is stored without a record, which only a test does. Throwing refuses turning a setting ON (it is stored after
    * the record); turning it OFF is stored first and a failing record does not undo it.
    */
-  recordSetting?: (scopeKey: string, change: { setting: 'freshWorld'; value: boolean; at: string }) => void;
+  recordSetting?: (scopeKey: string, change: { setting: 'freshWorld'; value: boolean; at: string; deviceId?: string }) => void;
 }
 
 export interface OpsReadResponse {
@@ -143,9 +143,9 @@ export function createOpsRoute(dependencies: OpsRouteDependencies) {
 
     const at = new Date(Date.parse(dependencies.now())).toISOString();
     if (requested.freshWorld !== dependencies.store.worldPolicy.freshWorld(scopeKey)) {
-      const change = { setting: 'freshWorld' as const, value: requested.freshWorld, at };
+      const change = { setting: 'freshWorld' as const, value: requested.freshWorld, at, ...(device.deviceId ? { deviceId: device.deviceId } : {}) };
       if (requested.freshWorld) {
-        // Turning it on asks for a world to be deleted later: no record, no switch.
+        // Turning it on asks for a new world later (the old one is kept under another name): no record, no switch.
         dependencies.recordSetting?.(scopeKey, change);
         dependencies.store.worldPolicy.set(scopeKey, true, at);
       } else {

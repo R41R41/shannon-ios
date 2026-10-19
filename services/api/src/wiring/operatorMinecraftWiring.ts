@@ -136,14 +136,17 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!serverId) return c.refuse('invalid_input', '登録されたサーバーIDを指定してください（--server）。');
     const settled = (settlement: LifecycleSettlement) => {
       const code = settlement.receipt?.code ?? (settlement.issued ? 'unknown' : 'not_started');
+      // A start that made a new world says which one, and where the old one is kept, in the audit line too.
+      const world = settlement.receipt?.worldId ? `  worldId=${settlement.receipt.worldId} movedTo=${settlement.receipt.movedTo ?? 'none'}` : '';
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code, argsJson: c.argsJson,
-        action: input.action, serverId, lifecycleId: c.operationId, detail: settlement.receipt?.outcome ?? null });
+        action: input.action, serverId, lifecycleId: c.operationId, detail: settlement.receipt ? `${settlement.receipt.outcome}${world}` : null });
     };
-    const admission = await parts.lifecycle.execute({ id: c.operationId, serverId, action: input.action }, settled);
+    const asked = { id: c.operationId, serverId, action: input.action, ...(input.keepWorld ? { keepWorld: true } : {}) };
+    const admission = await parts.lifecycle.execute(asked, settled);
     if (!admission.ok) return c.refuse(admission.code, admission.message, { action: input.action, serverId });
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted',
       argsJson: c.argsJson, action: input.action, serverId, lifecycleId: admission.lifecycleId, actionId: admission.actionId });
-    parts.activity(c.at, { summary: `運用者（${c.operator}）がライ氏の代わりにマイクラの ${input.action} を頼みました。`,
+    parts.activity(c.at, { summary: `運用者（${c.operator}）がライ氏の代わりにマイクラの ${input.action} を頼みました${input.keepWorld ? '（今のワールドのまま始めるよう指定）' : ''}。`,
       tool: `operator.minecraft.${input.action}`, outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} server=${serverId}` });
     parts.note(`${c.operationId}:lifecycle`, operatorTalkNote('lifecycle', `${input.action}・${serverId}`), c.at);
     return c.reply('accepted', 'accepted', '受け付けました。結果は監査記録に settled として残ります。', { lifecycleId: admission.lifecycleId, actionId: admission.actionId });

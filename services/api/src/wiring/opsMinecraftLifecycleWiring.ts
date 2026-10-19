@@ -5,7 +5,7 @@ import type { OpsCommandCode, OpsCommandOutcome, OpsCommandRequest } from '../co
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
-import type { FreshWorldAdmission } from './freshWorldWiring.js';
+import { freshWorldOfReceipt, type FreshWorldAdmission } from './freshWorldWiring.js';
 
 /** The native window an Ops operation needs inside its claim window: the operator's deadline and the cancellation drain. */
 const OPS_LIFECYCLE_LEASE_MS = 130_000;
@@ -21,6 +21,12 @@ function outcome(receipt: MinecraftLifecycleReceipt): { outcome: OpsCommandOutco
     code: receipt.code === 'error' ? 'error' : receipt.code === 'deadline' ? 'timeout' : 'not_allowed' };
 }
 
+/** A done start that made a new world says where the old one is kept (the command's `freshWorld`); anything else says nothing. */
+function worldOf(receipt: MinecraftLifecycleReceipt | null): { movedTo: string | null } | undefined {
+  const made = freshWorldOfReceipt(receipt);
+  return made ? { movedTo: made.movedTo } : undefined;
+}
+
 /** No model and no legacy retry: one original owner command, action lease and native operation. */
 export function createOpsMinecraftLifecycle(parts: {
   commands: OpsCommandStore; actions: ActionThreads; service: MinecraftLifecycle; scopeKey: string; deviceId: string;
@@ -34,7 +40,7 @@ export function createOpsMinecraftLifecycle(parts: {
   const projectReceipts = () => {
     for (const row of parts.commands.lifecycleAwaiting(parts.scopeKey, parts.now())) {
       const receipt = parts.service.receipt(row.lifecycleId), report = receipt && outcome(receipt);
-      if (report) parts.commands.reportLifecycle(parts.scopeKey, row.commandId, report.outcome, report.code, parts.now());
+      if (report) parts.commands.reportLifecycle(parts.scopeKey, row.commandId, report.outcome, report.code, parts.now(), worldOf(receipt));
     }
   };
   // 2026-10-13: an Ops login that spawned the bot was revoked half way (`ops_native_result_unknown`). The operation now holds
@@ -43,7 +49,7 @@ export function createOpsMinecraftLifecycle(parts: {
   const execute = async (row: ReturnType<OpsCommandStore['lifecyclePending']>[number]) => {
     const report = (receipt: MinecraftLifecycleReceipt | null, issued: boolean) => {
       const known = receipt && outcome(receipt);
-      if (known) parts.commands.reportLifecycle(parts.scopeKey, row.command.id, known.outcome, known.code, parts.now());
+      if (known) parts.commands.reportLifecycle(parts.scopeKey, row.command.id, known.outcome, known.code, parts.now(), worldOf(receipt));
       else parts.commands.reportLifecycle(parts.scopeKey, row.command.id, issued ? 'failed' : 'refused', issued ? 'no_report' : 'not_allowed', parts.now());
     };
     // A claim the slot refused stays queued (never withdrawn): the next wake claims it, until the Ops claim window ends.

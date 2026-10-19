@@ -158,7 +158,7 @@ If the API itself is unreachable (the same VM), the request fails at the network
 <a id="fresh-world-switch"></a>
 ## `POST /v1/ops/settings` and 「新しいワールドで始める」
 
-The owner's 運用 page has one switch that is not a command: **「新しいワールドで始める」**. On, a start of the home Minecraft server that the owner newly asks for, while the server is stopped and nothing else is open, asks the body to **delete the current world and start a new one** (it cannot be undone). Off, every start is exactly what it was before. It is off by default, and any doubt is off.
+The owner's 運用 page has one switch that is not a command: **「新しいワールドで始める」**. On, a start of the home Minecraft server that the owner newly asks for, while the server is stopped and nothing else is open, asks the body to **keep the current world under another name (it is not deleted) and start a new one**. Off, every start is exactly what it was before. It is off by default, and any doubt is off. The switch stays on until the owner turns it off: a start asked for while it is on makes a new world each time.
 
 - `Authorization: Bearer <device token>` — a paired device; the scope is the device's own, as on every device route (a server run locally with a fixed token requires `scopeKey` in the body). The bridge credential is refused. At most 30 writes a minute per scope.
 - Body: `{ "freshWorld": boolean }`. Nothing else is accepted (`scopeKey` only for a fixed local token). Anything but a boolean, a non-JSON body, or another field is `400 INVALID_REQUEST`.
@@ -172,7 +172,7 @@ The owner's 運用 page has one switch that is not a command: **「新しいワ�
 | `413` | `REQUEST_TOO_LARGE` | Over 1 KiB. |
 | `429` | `RATE_LIMITED` | More than 30 writes in a minute. |
 
-The client changes what it shows only after the `200` (the switch is a real server state, not a local choice), and shows its footnote: 「オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）」.
+The client changes what it shows only after the `200` (the switch is a real server state, not a local choice), and shows its footnote: 「オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを別の名前で残して、新しいワールドで始めます。」. Each change is written to the activity record with the paired device that made it (`device=<id>`) when the route knows it.
 
 ### Record
 
@@ -183,12 +183,23 @@ The client changes what it shows only after the `200` (the switch is a real serv
 The API puts `options: { "freshWorld": true }` on a Minecraft lifecycle `start` command (`MinecraftLifecycleCommand.options`, optional; absent on every other command, so a body that predates it sees exactly the old command) only when **all** of these hold at the moment the start is admitted (`wiring/freshWorldWiring.ts`, one decision used by all three ways in):
 
 1. The switch is on (read from the table at that moment).
-2. The owner newly asked for it: a conversation's `minecraft.start` (the `respond` turn), the Ops `minecraft.start` for `minecraft:shannon-home`, or the operator CLI's `lifecycle start`. Never an FCA task step (`agentTask`), her own time, a recovery or a resend (a command that already exists keeps exactly what it was issued with; `options` is part of the command's identity and a different one is `MINECRAFT_LIFECYCLE_OPERATION_CONFLICT`).
+2. The owner newly asked for it: a conversation's `minecraft.start` (the `respond` turn), the Ops `minecraft.start` for `minecraft:shannon-home` (not `minebot.start`, which is a login and never asks), or the operator CLI's `lifecycle start`, unless the operator passed `--keep-world` (see [operator-minecraft-contract.md](operator-minecraft-contract.md)): the CLI follows the switch by default, and `--keep-world` keeps the current world for that one start (recorded as `fresh_world_keep_world`). Never an FCA task step (`agentTask`), her own time, a recovery or a resend (a command that already exists keeps exactly what it was issued with; `options` is part of the command's identity and a different one is `MINECRAFT_LIFECYCLE_OPERATION_CONFLICT`).
 3. The server is `shannon-home` and its state, from a fresh frame of the paired operator, is `stopped`.
-4. No Minecraft-bound task is open: none running, stopping or unknown (any phase but `stopped`, `completed`, `failed`), and the tasks can be read.
-5. No earlier lifecycle command is unresolved.
+4. The connected body can do it: the latest fresh poll frame lists `freshWorld` in `capabilities` ([minecraft-lifecycle-contract.md](minecraft-lifecycle-contract.md#optional-command-options-freshworld)). A body that predates it never does; then the start is the ordinary one, `fresh_world_unsupported` is recorded, and no one is told that a new world was made.
+5. No Minecraft-bound task is open: none running, stopping or unknown (any phase but `stopped`, `completed`, `failed`), and the tasks can be read.
+6. No earlier lifecycle command is unresolved.
 
-The decision is written to the activity record without content (tool `minecraft.fresh_world`, reason `fresh_world_applied`, or `fresh_world_server_not_stopped` / `_tasks_open` / `_tasks_unknown` / `_unresolved_operation` when the switch was on and the world was kept; operation id, server and how it was asked only). A decision that cannot be recorded is "no". With the switch off nothing is recorded. The body (not this API, which cannot touch the world files) reads `options.freshWorld` on `start` and deletes and recreates the world; the API only asks.
+The activity record (tool `minecraft.fresh_world`, no words of the owner's) holds, for a start the owner newly asked for while the switch was on:
+
+- **why the world was kept**: `fresh_world_server_not_stopped` / `_unsupported` / `_tasks_open` / `_tasks_unknown` / `_unresolved_operation` / `_keep_world`;
+- **the decision**, `fresh_world_applied`, written when the command is about to be stored (not when it was decided): a command that could not be stored is followed by `fresh_world_not_issued`, and a decision that cannot be recorded is "no" (the ordinary start goes out instead);
+- **the result**, when the body's receipt is accepted: `fresh_world_started` (with the new `world` id and `movedTo`, the name the previous world is kept under), `fresh_world_refused` (the body changed nothing and did not start), `fresh_world_cancelled`, or `fresh_world_unknown` (the world name has to be checked).
+
+Each line carries the operation id, the server and how it was asked. With the switch off nothing is recorded. The body (not this API, which cannot touch the world files) reads `options.freshWorld` on `start`, **keeps the current world under another name (`<level-name>.before-regen-<JST stamp>`) and starts a new one**; the API only asks. The body does it only for a start whose authority origin is `owner_request` (the origin all three ways in use; her own time uses `own_time`).
+
+### What the owner is told
+
+When the accepted receipt of a start says a new world was made (`worldId`, `movedTo`), the same sentence goes everywhere the end of that start is told: the conversation's end-of-work line (「マイクラのサーバーを起動しました。新しいワールドで始めました（前のワールドは <movedTo> として残しています）。」), the finished Ops command (`freshWorld.movedTo`, see the command fields above), the activity record, and the operator audit's `settled` row. When there was no previous world the parenthesis is left out. A start that did not make a new world (unsupported body, switch off, any kept-world reason) never says so.
 
 ## Model and cache operations
 
@@ -348,6 +359,7 @@ Answer: `201` for a new command, `200` for a replay.
 | `finishedAt` | ISO 8601, absent while `pending` or `claimed` | |
 | `code` | absent, or one of the [codes](#codes) | |
 | `requestedByDeviceId` | string | The paired device that asked (`local` for a fixed local token). |
+| `freshWorld` | absent, or `{ "movedTo": string \| null }` | Only on a `done` Minecraft start that made a new world (「新しいワールドで始める」): the name, in the server folder, the previous world is kept under (`null` when there was none). Optional and additive: a client that predates it ignores it and shows the plain result; one that knows it shows 「新しいワールドで始めました（前のワールドは <movedTo> として残しています）」 (`null`: 「新しいワールドで始めました」). Never present on a failed, refused or unknown command, or when the body did not report a new world. |
 
 Checks, in this order; a refused request records nothing:
 

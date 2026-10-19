@@ -51,7 +51,8 @@ export const OPERATOR_CODES = [
 export type OperatorCode = typeof OPERATOR_CODES[number];
 
 export type OperatorInput =
-  | { command: 'lifecycle'; action: MinecraftLifecycleAction; serverId: string | null }
+  /** keepWorld (--keep-world, start only): this start keeps the current world even while 「新しいワールドで始める」 is on. */
+  | { command: 'lifecycle'; action: MinecraftLifecycleAction; serverId: string | null; keepWorld: boolean }
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number }
   | { command: 'cancel'; taskId: string | null }
   /** A request to check the Minecraft body again and release what it proves released (never a force release). */
@@ -88,7 +89,10 @@ function lifecycle(operator: string, op: string, args: Record<string, unknown>):
   if (!action) return refuse(operator, 'out_of_scope', `minecraft ${op.slice(0, 40)} is not an operator operation`);
   const serverId = args.serverId ?? null;
   if (serverId !== null && (typeof serverId !== 'string' || !SERVER_ID.test(serverId))) return refuse(operator, 'invalid_input', 'serverId is invalid');
-  return { ok: true, operator, input: { command: 'lifecycle', action, serverId } };
+  const keepWorld = args.keepWorld === undefined ? false : args.keepWorld;
+  if (keepWorld !== true && keepWorld !== false) return refuse(operator, 'invalid_input', 'keepWorld must be true or false');
+  if (keepWorld && action !== 'start') return refuse(operator, 'invalid_input', '--keep-world is an option of start only');
+  return { ok: true, operator, input: { command: 'lifecycle', action, serverId, keepWorld } };
 }
 
 function request(operator: string, args: Record<string, unknown>): OperatorParse {
@@ -159,7 +163,9 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
     return refuse(operator, 'invalid_input', 'domain, op and args are required');
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
-  const allowed: Record<string, readonly string[]> = { request: ['goal', 'maxMinutes', 'budgetYen'], cancel: ['taskId', 'latest'] };
+  const allowed: Record<string, readonly string[]> = {
+    request: ['goal', 'maxMinutes', 'budgetYen'], cancel: ['taskId', 'latest'], start: ['serverId', 'keepWorld'],
+  };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
   if (extra !== undefined) {
     return refuse(operator, 'invalid_input', `${extra.slice(0, 40).replace(/[^\x20-\x7e]/gu, '?')} is not an argument of this operation`);

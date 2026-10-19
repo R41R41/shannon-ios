@@ -25,9 +25,10 @@ export interface MinecraftLifecycleAuthority {
 /**
  * What a command may additionally ask of the body. Optional and absent on every command that does not ask: a body that predates it
  * ignores it, and an API that predates it never sends it. `freshWorld: true` is only ever on a `start` of `shannon-home` that the
- * owner newly asked for while the server was stopped and nothing else was open (`wiring/freshWorldWiring.ts`); the body then
- * deletes the current world and starts a new one. It is part of the command's identity: it is never added to, or taken from, a
- * command that already exists.
+ * owner newly asked for while the server was stopped and nothing else was open, and only for a body whose polls advertise the
+ * `freshWorld` capability (`wiring/freshWorldWiring.ts`); the body then keeps the current world under another name (it is not
+ * deleted) and starts a new one. It is part of the command's identity: it is never added to, or taken from, a command that
+ * already exists.
  */
 export interface MinecraftLifecycleOptions { freshWorld?: true }
 export interface MinecraftLifecycleCommand {
@@ -43,10 +44,22 @@ export interface MinecraftLifecycleReceipt {
   observedAt: string; inputsReleased: boolean; state: MinecraftLifecycleState;
   /** Successful stop must be one atomic runtime decision under a join barrier, including a fresh player check. */
   stopGuard?: { admissionClosed: true; otherPlayers: 0; checkedAt: string };
+  /**
+   * Only on a `start` whose world the body really prepared (`options.freshWorld`): the new world's id, and the name (in the server
+   * directory) the previous world is kept under, or null when there was no world directory. A body that predates them sends neither.
+   */
+  worldId?: string; movedTo?: string | null;
 }
+/** The one poll capability the API acts on: the body can prepare a fresh world (`options.freshWorld`). */
+export const LIFECYCLE_CAPABILITY_FRESH_WORLD = 'freshWorld';
 export interface MinecraftLifecyclePoll {
   schemaVersion: 1; connectionId: string; sequence: number;
   states: readonly MinecraftLifecycleState[]; receipts: readonly MinecraftLifecycleReceipt[];
+  /**
+   * Optional (absent from a body that predates it, which then has none). Sent in every poll, so the latest frame always tells what
+   * the connected body can do; names the API does not know are ignored.
+   */
+  capabilities?: readonly string[];
 }
 export interface MinecraftLifecycleReply {
   schemaVersion: 1; commands: readonly MinecraftLifecycleCommand[]; cancel: readonly string[]; acknowledged: readonly string[];
@@ -64,16 +77,41 @@ export function validLifecycleState(v: unknown, now: number, historical = false)
     && ['joined', 'absent', 'unknown'].includes(String(v.bot))
     && (v.otherPlayers === null || Number.isSafeInteger(v.otherPlayers) && Number(v.otherPlayers) >= 0 && Number(v.otherPlayers) <= 10000);
 }
+const WORLD_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const MOVED_TO = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/u;
+const RECEIPT_OUTCOMES = ['completed', 'refused', 'cancelled', 'unknown'];
+const RECEIPT_CODES = ['changed', 'already_running', 'already_stopped', 'already_joined', 'already_absent', 'players_present', 'state_unknown',
+  'authority_revoked', 'deadline', 'error'];
+function validReceiptIdentity(r: Record<string, unknown>): boolean {
+  return id(r.id) && id(r.connectionId) && id(r.serverId) && MINECRAFT_LIFECYCLE_ACTIONS.includes(r.action as MinecraftLifecycleAction)
+    && RECEIPT_OUTCOMES.includes(String(r.outcome)) && RECEIPT_CODES.includes(String(r.code));
+}
+function validReceiptEvidence(r: Record<string, unknown>, now: number): boolean {
+  return typeof r.inputsReleased === 'boolean' && recorded(r.observedAt, now) && validLifecycleState(r.state, now, true)
+    && (r.stopGuard === undefined || record(r.stopGuard) && r.stopGuard.admissionClosed === true && r.stopGuard.otherPlayers === 0 && recorded(r.stopGuard.checkedAt, now));
+}
+/** `worldId` and `movedTo` are optional (a body that predates them sends neither); when present they must be what the body writes. */
+function validReceiptWorld(r: Record<string, unknown>): boolean {
+  return (r.worldId === undefined || typeof r.worldId === 'string' && WORLD_ID.test(r.worldId))
+    && (r.movedTo === undefined || r.movedTo === null || typeof r.movedTo === 'string' && MOVED_TO.test(r.movedTo));
+}
+function validStates(states: unknown, now: number): boolean {
+  return Array.isArray(states) && states.length >= 1 && states.length <= 16 && states.every(s => validLifecycleState(s, now))
+    && new Set(states.map(s => s.serverId)).size === states.length;
+}
+function validReceipts(receipts: unknown, now: number): boolean {
+  return Array.isArray(receipts) && receipts.length <= 16
+    && receipts.every(r => record(r) && validReceiptIdentity(r) && validReceiptEvidence(r, now) && validReceiptWorld(r));
+}
 export function validLifecyclePoll(v: unknown, now: number): v is MinecraftLifecyclePoll {
   return record(v) && v.schemaVersion === 1 && id(v.connectionId) && Number.isSafeInteger(v.sequence) && Number(v.sequence) >= 0
-    && Array.isArray(v.states) && v.states.length >= 1 && v.states.length <= 16 && v.states.every(s => validLifecycleState(s, now))
-    && new Set(v.states.map(s => s.serverId)).size === v.states.length
-    && Array.isArray(v.receipts) && v.receipts.length <= 16 && v.receipts.every(r => record(r) && id(r.id) && id(r.connectionId)
-      && id(r.serverId) && MINECRAFT_LIFECYCLE_ACTIONS.includes(r.action as MinecraftLifecycleAction)
-      && ['completed', 'refused', 'cancelled', 'unknown'].includes(String(r.outcome))
-      && ['changed', 'already_running', 'already_stopped', 'already_joined', 'already_absent', 'players_present', 'state_unknown', 'authority_revoked', 'deadline', 'error'].includes(String(r.code))
-      && typeof r.inputsReleased === 'boolean' && recorded(r.observedAt, now) && validLifecycleState(r.state, now, true)
-      && (r.stopGuard === undefined || record(r.stopGuard) && r.stopGuard.admissionClosed === true && r.stopGuard.otherPlayers === 0 && recorded(r.stopGuard.checkedAt, now)));
+    && validStates(v.states, now) && validReceipts(v.receipts, now)
+    && (v.capabilities === undefined || Array.isArray(v.capabilities) && v.capabilities.length <= 64);
+}
+/** The capability names a poll advertises: only well-formed strings count, anything else is ignored (never a reason to refuse the poll). */
+export function lifecycleCapabilities(poll: Pick<MinecraftLifecyclePoll, 'capabilities'> | null | undefined): ReadonlySet<string> {
+  const names = Array.isArray(poll?.capabilities) ? poll.capabilities : [];
+  return new Set(names.filter((name): name is string => typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,31}$/.test(name)));
 }
 
 /**

@@ -112,6 +112,11 @@ public enum ShannonOpsText {
 
     /// The reason shown beside a finished command: its code, or what an expiry means.
     public static func commandReason(_ command: ShannonOpsCommandDTO) -> String? {
+        // A start that made a new world says so, and where the previous world is kept (it is not deleted).
+        if command.status == .done, let world = command.freshWorld {
+            guard let moved = world.movedTo, !moved.isEmpty else { return ShannonGeneratedStrings.opsFreshWorldStartedNoPrevious }
+            return ShannonGeneratedStrings.opsFreshWorldStarted(moved: moved)
+        }
         if let code = command.code { return commandCodeLabel(code, type: command.type) }
         return command.status == .expired ? ShannonGeneratedStrings.opsCodeExpired : nil
     }

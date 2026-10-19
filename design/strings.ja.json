@@ -684,10 +684,24 @@
     },
     {
       "key": "ops.freshWorld.footnote",
-      "text": "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）",
+      "text": "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを別の名前で残して、新しいワールドで始めます。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "only": "apple",
-      "note": "「新しいワールドで始める」のスイッチの注記。消えるものを先に言う。"
+      "note": "「新しいワールドで始める」のスイッチの注記。今のワールドは消えず、別の名前で残ることを言う。"
+    },
+    {
+      "key": "ops.freshWorld.started",
+      "text": "新しいワールドで始めました（前のワールドは {moved} として残しています）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "only": "apple",
+      "note": "新しいワールドで始まったマイクラの開始の、結果の理由欄（コマンドの freshWorld.movedTo が名前）。Windows の運用画面は、同じ API（docs/ops-contract.md）でこの文言に合わせて作る。"
+    },
+    {
+      "key": "ops.freshWorld.startedNoPrevious",
+      "text": "新しいワールドで始めました",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "only": "apple",
+      "note": "前のワールドが無かったとき（freshWorld.movedTo が null）。"
     },
     {
       "key": "ops.freshWorld.saveFailed",

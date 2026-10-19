@@ -253,7 +253,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null,
       // Whether a Minecraft-bound task is running, stopping or unknown (the phases that are not final); null when that cannot be read.
-      // 「新しいワールドで始める」 (`freshWorldWiring.ts`) deletes a world only when this is exactly false.
+      // 「新しいワールドで始める」 (`freshWorldWiring.ts`) makes a new world only when this is exactly false.
       minecraftTasksOpen: (): boolean | null => { try { return requests ? requests.operator.open().length > 0 : null; } catch { return null; } },
       async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }

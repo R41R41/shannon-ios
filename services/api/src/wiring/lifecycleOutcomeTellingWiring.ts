@@ -14,6 +14,8 @@ export interface LifecycleOutcomeReport {
   operationId: string;
   action: MinecraftLifecycleAction;
   outcome: LifecycleOutcomeKind;
+  /** The accepted receipt of a start named a new world: where the previous one is kept (null: there was none). */
+  freshWorld?: { movedTo: string | null };
 }
 export type LifecycleOutcomeTeller = (report: LifecycleOutcomeReport) => Promise<void>;
 
@@ -48,7 +50,8 @@ export function lifecycleOutcomeTeller(parts: LifecycleOutcomeTellingParts): Lif
     try {
       // A shutdown under way: an end it interrupted is not what he asked about, and the one message is not spent on it.
       if (parts.signal?.aborted || parts.speaker.told(report.scopeKey, report.operationId)) return;
-      const facts: LifecycleOutcomeFacts = { action: report.action, outcome: report.outcome, others: others(report.scopeKey) };
+      const facts: LifecycleOutcomeFacts = { action: report.action, outcome: report.outcome, others: others(report.scopeKey),
+        ...(report.freshWorld ? { freshWorld: report.freshWorld } : {}) };
       // With anyone else there the model is never asked: the private-safe neutral line, always.
       let line = facts.others ? null : await parts.writer?.write(report.scopeKey, facts, parts.signal).catch(() => null) ?? null;
       // Someone came while it was written: the line for him alone is not said in front of them.

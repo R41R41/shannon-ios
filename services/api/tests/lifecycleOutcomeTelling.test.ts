@@ -153,6 +153,23 @@ describe('telling him how it ended', () => {
       at, { timeZone: 'Asia/Tokyo', morningHours: { start: 6, end: 10 } })).toBe('unjudged');
   });
 
+  it('says a new world was made, and where the old one is kept, when the start\'s receipt named one', async () => {
+    const d = database();
+    const written: LifecycleOutcomeFacts[] = [];
+    const tell = lifecycleOutcomeTeller({ speaker: d.speaker, others: () => false, now: () => at,
+      writer: { write: async (_scope, facts) => { written.push(facts); return lifecycleOutcomeMessage({ phrase: 'やったね！', position: 'after' }, facts); } } });
+    await tell(report({ action: 'start', freshWorld: { movedTo: 'shannon_home.before-regen-20261019T1204' } }));
+    expect(written).toEqual([{ action: 'start', outcome: 'completed', others: false, freshWorld: { movedTo: 'shannon_home.before-regen-20261019T1204' } }]);
+    expect(d.messages().map(row => row.content)).toEqual([
+      'マイクラのサーバーを起動しました。新しいワールドで始めました（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）。やったね！']);
+    // With nothing named, and with anyone else there, nothing about a new world is said.
+    const plain = database();
+    await lifecycleOutcomeTeller({ speaker: plain.speaker, others: () => false, now: () => at, writer: null })(report({ action: 'start' }));
+    await lifecycleOutcomeTeller({ speaker: plain.speaker, others: () => true, now: () => at, writer: null })(
+      report({ action: 'start', operationId: `lifecycle:${'e'.repeat(64)}`, freshWorld: { movedTo: 'x' } }));
+    expect(plain.messages().map(row => row.content)).toEqual(['マイクラのサーバーを起動しました。', '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。']);
+  });
+
   it('says the neutral line when no line can be written, and the private-safe one with anyone else there', async () => {
     const d = database();
     await lifecycleOutcomeTeller({ speaker: d.speaker, others: () => false, now: () => at, writer: null })(report({ outcome: 'unknown', action: 'stop' }));

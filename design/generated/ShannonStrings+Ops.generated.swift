@@ -121,7 +121,11 @@ extension ShannonGeneratedStrings {
     /// `ops.freshWorld.title`
     public static let opsFreshWorldTitle = "新しいワールドで始める"
     /// `ops.freshWorld.footnote`
-    public static let opsFreshWorldFootnote = "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを消して新しいワールドで始めます（元に戻せません）"
+    public static let opsFreshWorldFootnote = "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを別の名前で残して、新しいワールドで始めます。"
+    /// `ops.freshWorld.started`
+    public static func opsFreshWorldStarted(moved: String) -> String { "新しいワールドで始めました（前のワールドは \(moved) として残しています）" }
+    /// `ops.freshWorld.startedNoPrevious`
+    public static let opsFreshWorldStartedNoPrevious = "新しいワールドで始めました"
     /// `ops.freshWorld.saveFailed`
     public static let opsFreshWorldSaveFailed = "「新しいワールドで始める」を保存できませんでした。設定は今のままです。もう一度お試しください。"
     /// `ops.minebot.needServer`

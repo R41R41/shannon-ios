@@ -242,6 +242,16 @@ public struct ShannonOpsSnapshotDTO: Decodable, Equatable, Sendable {
     }
 }
 
+/// Only on a finished Minecraft start that made a new world (「新しいワールドで始める」): where the previous world is kept
+/// (a name in the server folder; nil when there was none). A server that predates it sends none, and nothing is claimed then.
+public struct ShannonOpsFreshWorldResultDTO: Decodable, Equatable, Sendable {
+    public let movedTo: String?
+
+    public init(movedTo: String?) {
+        self.movedTo = movedTo
+    }
+}
+
 public struct ShannonOpsCommandDTO: Decodable, Equatable, Identifiable, Sendable {
     public let id: String
     public let type: ShannonOpsCommandType
@@ -252,10 +262,13 @@ public struct ShannonOpsCommandDTO: Decodable, Equatable, Identifiable, Sendable
     public let finishedAt: String?
     /// The closed reason vocabulary of the contract; an unknown word is shown as it is.
     public let code: String?
+    /// Set only when this start made a new world; the previous world is kept under `movedTo`, not deleted.
+    public let freshWorld: ShannonOpsFreshWorldResultDTO?
 
     public init(
         id: String, type: ShannonOpsCommandType, target: String, status: ShannonOpsCommandStatus,
-        createdAt: String, expiresAt: String = "", finishedAt: String? = nil, code: String? = nil
+        createdAt: String, expiresAt: String = "", finishedAt: String? = nil, code: String? = nil,
+        freshWorld: ShannonOpsFreshWorldResultDTO? = nil
     ) {
         self.id = id
         self.type = type
@@ -265,9 +278,10 @@ public struct ShannonOpsCommandDTO: Decodable, Equatable, Identifiable, Sendable
         self.expiresAt = expiresAt
         self.finishedAt = finishedAt
         self.code = code
+        self.freshWorld = freshWorld
     }
 
-    private enum CodingKeys: String, CodingKey { case id, type, target, status, createdAt, expiresAt, finishedAt, code }
+    private enum CodingKeys: String, CodingKey { case id, type, target, status, createdAt, expiresAt, finishedAt, code, freshWorld }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -283,6 +297,7 @@ public struct ShannonOpsCommandDTO: Decodable, Equatable, Identifiable, Sendable
         finishedAt = try? container.decodeIfPresent(String.self, forKey: .finishedAt)
         let code = try? container.decodeIfPresent(String.self, forKey: .code)
         self.code = code.flatMap { $0.isEmpty ? nil : $0 }
+        freshWorld = try? container.decodeIfPresent(ShannonOpsFreshWorldResultDTO.self, forKey: .freshWorld)
     }
 }
 

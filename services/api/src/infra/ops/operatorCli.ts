@@ -15,6 +15,8 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] <goal...>',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft <start|stop|login|logout|set_day> --operator <label> [--server <id>]',
+  '  opsCli.ts minecraft start --operator <label> [--server <id>] [--keep-world]',
+  '      (--keep-world: keep the current world even while the owner\'s 新しいワールドで始める switch is on)',
   '  opsCli.ts minecraft release --operator <label>   (ask the body again whether it is stopped; releases only what it proves)',
   '  opsCli.ts skills import dry-run --operator <label> --pack <id> --revision <rev>',
   '  opsCli.ts skills import apply --operator <label> --pack <id> --revision <rev> --plan-hash <hash> --approval-reference <ref>',
@@ -48,7 +50,7 @@ interface Parsed { flags: Map<string, string | true>; positional: string[] }
 /** `--name value`, `--name=value`, a bare `--latest`; everything after `--` is positional. */
 function parseArguments(argv: readonly string[]): Parsed {
   const flags = new Map<string, string | true>(), positional: string[] = [];
-  const bare = new Set(['--latest']);
+  const bare = new Set(['--latest', '--keep-world']);
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index]!;
     if (item === '--') {
@@ -99,10 +101,12 @@ function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
 }
 
 function lifecycleEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
-  knownFlags(parsed, ['--operator', '--server']);
+  knownFlags(parsed, base.op === 'start' ? ['--operator', '--server', '--keep-world'] : ['--operator', '--server']);
   if (parsed.positional.length) throw new UsageError(`${base.op} takes no words, only --server`);
   const server = parsed.flags.get('--server');
-  return { ...base, args: typeof server === 'string' ? { serverId: server } : {} };
+  // Following the owner's switch is the default; --keep-world opts out of a new world for this one start.
+  const keepWorld = parsed.flags.get('--keep-world') === true;
+  return { ...base, args: { ...(typeof server === 'string' ? { serverId: server } : {}), ...(keepWorld ? { keepWorld: true } : {}) } };
 }
 
 /** `skills import <dry-run|apply>`: the owner's skill-pack import, run by the API with the paired route's own importer. */

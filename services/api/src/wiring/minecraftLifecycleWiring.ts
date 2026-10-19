@@ -8,7 +8,7 @@ import { createLifecycleRunner, type LifecycleSettlement } from './minecraftLife
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { LifecycleOutcomeKind } from '../mind/action/respond/lifecycleOutcomeLine.js';
 import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE, setDayReadiness } from './operatorLifecycleWiring.js';
-import { freshWorldAdmissionOf, type FreshWorldPorts } from './freshWorldWiring.js';
+import { freshWorldAdmissionOf, freshWorldIssuance, freshWorldOfReceipt, type FreshWorldPorts } from './freshWorldWiring.js';
 import { operatorLifecycleAllowed } from '../infra/ops/store/operatorAuditStore.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
@@ -119,7 +119,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       && operatorLifecycleAllowed(db, authority.scopeKey, row.sourceId, command);
   }
   const lifecycleStore = new MinecraftLifecycleStore(db, id => leases.unknownExited(id));
-  const service = new MinecraftLifecycle(lifecycleStore, configuration, { now: () => Date.parse(now()), allowed, servers: new Set(serverIds) });
+  const service = new MinecraftLifecycle(lifecycleStore, configuration, { now: () => Date.parse(now()), allowed, servers: new Set(serverIds),
+    freshWorld: freshWorldIssuance(parts.freshWorld, { scopeKey: configuration.ownerScopeKey, now }) });
   const runner = createLifecycleRunner({ actions: parts.actions, service, deviceId: configuration.deviceId });
   // One decision for the three ways the owner newly asks for a start (a conversation, the Ops page, the operator CLI).
   const freshWorld = freshWorldAdmissionOf(parts.freshWorld, { scopeKey: configuration.ownerScopeKey, service, now });
@@ -154,8 +155,9 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     const options = freshWorld({ ...request, origin: 'owner_request', via: 'conversation' });
     const operation = { id: request.id, serverId: request.serverId, action: request.action, authority, ...(options ? { options } : {}) };
     void runner!.detach(own, operation, settlement => {
+      const made = freshWorldOfReceipt(settlement.receipt);
       void parts.told?.({ scopeKey: configuration.ownerScopeKey, threadId: request.threadId, operationId: request.id, action: request.action,
-        outcome: settledOutcome(settlement) });
+        outcome: settledOutcome(settlement), ...(made ? { freshWorld: { movedTo: made.movedTo } } : {}) });
     });
     const accepted = toolOk(`受け付けました。まだ終わっていません（${request.action} を実行中）。終わったら知らせます。`);
     const target = { kind: 'minecraft_server' as const, id: request.serverId };

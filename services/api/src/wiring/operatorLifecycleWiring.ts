@@ -66,7 +66,7 @@ export function createOperatorLifecycle(parts: {
       if (requested) return parts.serverIds.includes(requested) ? requested : null;
       return parts.serverIds.length === 1 ? parts.serverIds[0]! : null;
     },
-    async execute(request: { id: string; serverId: string; action: MinecraftLifecycleAction },
+    async execute(request: { id: string; serverId: string; action: MinecraftLifecycleAction; keepWorld?: boolean },
       settled: (settlement: LifecycleSettlement) => void): Promise<OperatorLifecycleAdmission> {
       if (!OPERATOR_LIFECYCLE_SOURCE.test(request.id) || !parts.serverIds.includes(request.serverId)) return refused('invalid_input', '登録されたサーバーではありません。');
       if (!parts.runner || !parts.service.available(parts.scopeKey)) return refused('lifecycle_unavailable', 'マイクラ管理の新しい状態が届いていません。');
@@ -86,8 +86,10 @@ export function createOperatorLifecycle(parts: {
         return refused('refused', '実行権・停止設定・現在の入力条件を確認できません。');
       }
       if (!await parts.runner.takeBody(own)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
-      const options = parts.freshWorld?.({ ...request, origin: 'owner_request', via: 'operator' });
-      void parts.runner.detach(own, { ...request, authority, ...(options ? { options } : {}) }, settled);
+      // `--keep-world` is the operator's opt-out; the switch is followed by default.
+      const { keepWorld, ...operation } = request;
+      const options = parts.freshWorld?.({ ...operation, origin: 'owner_request', via: 'operator', keepWorld: keepWorld === true });
+      void parts.runner.detach(own, { ...operation, authority, ...(options ? { options } : {}) }, settled);
       return { ok: true, lifecycleId: request.id, actionId: own.execution.lease.id };
     },
   };
