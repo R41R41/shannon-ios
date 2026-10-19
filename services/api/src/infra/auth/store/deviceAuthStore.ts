@@ -1,9 +1,12 @@
 /** Paired devices and pairing codes, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `deviceAuth.ts` and the pairing code's normal form, moved unchanged into the auth store folder; the pepper stays there). */
 import { DatabaseSync } from 'node:sqlite';
-import type { IssuedPairingCode, PepperMigrationStatus, ShannonDevicePrincipal, ShannonDeviceRecord, ShannonPairingResult, SQLiteDeviceAuthOptions } from '../deviceAuth.js';
+import type {
+  IssuedPairingCode, PepperMigrationStatus, ShannonDevicePrincipal, ShannonDeviceRecord, ShannonPairingResult, SQLiteDeviceAuthOptions,
+} from '../deviceAuth.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { dirname } from 'node:path';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
+import { ensureColumns } from '../../sqlite/schemaColumns.js';
 
 const PAIRING_LIFETIME_MS = 30 * 60_000;
 
@@ -88,10 +91,7 @@ export class SQLiteDeviceAuthStore {
         ON device_tokens (revoked_at, expires_at);
     `);
     // Added only (pepper rotation): a row from before it has no pepper_id and counts as not yet on the current pepper.
-    this.transaction(() => {
-      const columns = this.database.prepare('PRAGMA table_info(device_tokens)').all() as unknown as { name: string }[];
-      if (!columns.some(column => column.name === 'pepper_id')) this.database.exec('ALTER TABLE device_tokens ADD COLUMN pepper_id TEXT');
-    });
+    ensureColumns(this.database, 'device_tokens', { pepper_id: 'TEXT' });
     secureDatabaseFiles(options.path);
   }
 
@@ -270,6 +270,8 @@ export class SQLiteDeviceAuthStore {
   /** A token keyed by the previous pepper: in one transaction, found still active and its digest replaced by the current pepper's. */
   private rekeyFromPreviousPepper(token: string, previousPepper: string, authenticatedAt: number): ShannonDevicePrincipal | null {
     const previousHash = this.digest(token, previousPepper);
+    // A read first: a token matching neither pepper never takes the write lock (bearer requests are not rate limited).
+    if (!this.activeTokenRow(previousHash, authenticatedAt)) return null;
     let principal: ShannonDevicePrincipal | null = null;
     this.transaction(() => {
       const row = this.activeTokenRow(previousHash, authenticatedAt);
@@ -304,8 +306,9 @@ function devicePrincipal(row: DeviceRow): ShannonDevicePrincipal {
   });
 }
 
+/** 32 bits only: enough to tell two random peppers apart, too few to confirm a guessed pepper offline from the database. */
 function pepperIdentifier(pepper: string): string {
-  return createHmac('sha256', pepper).update('shannon-auth-pepper-id/v1').digest('hex').slice(0, 16);
+  return createHmac('sha256', pepper).update('shannon-auth-pepper-id/v1').digest('hex').slice(0, 8);
 }
 
 function deviceRecord(row: DeviceRow): Readonly<ShannonDeviceRecord> {

@@ -197,6 +197,21 @@ describe('pepper rotation (SHANNON_AUTH_PEPPER_PREVIOUS)', () => {
     reopened.close();
   });
 
+  it('does not take the write lock for a token that matches neither pepper', () => {
+    const path = databasePath();
+    pairedUnder(path, ['iPhone']);
+    const auth = new SQLiteDeviceAuthStore({ path, pepper: newPepper, previousPepper: oldPepper, now: () => start });
+    const writer = new DatabaseSync(path);
+    writer.exec('BEGIN IMMEDIATE');
+    try {
+      expect(auth.authenticate(`Bearer ${'x'.repeat(43)}`)).toBeNull();
+    } finally {
+      writer.exec('ROLLBACK');
+      writer.close();
+      auth.close();
+    }
+  });
+
   it('never lets the previous pepper pass a revoked or expired token, and does not rekey it', () => {
     const path = databasePath();
     const [revoked, expiring] = pairedUnder(path, ['Revoked', 'Expiring']);
@@ -252,7 +267,7 @@ describe('authCli pepper-status', () => {
     const newPepper = 'new-pepper-that-is-longer-than-thirty-two-characters';
     const old = new SQLiteDeviceAuthStore({ path, pepper: oldPepper });
     const iphone = old.pair(old.issuePairingCode('owner').code, 'RyoのiPhone');
-    old.pair(old.issuePairingCode('owner').code, 'Minecraft の体');
+    old.pair(old.issuePairingCode('owner').code, 'Minecraft の体\nremaining=0\u001b[2J');
     old.close();
     const environment = { ...process.env, SHANNON_AUTH_MODE: 'paired', SHANNON_DATABASE_PATH: path, SHANNON_AUTH_PEPPER: newPepper, SHANNON_AUTH_PEPPER_PREVIOUS: oldPepper };
     const run = () => execFileSync(process.execPath, ['--import', 'tsx', 'src/authCli.ts', 'pepper-status'], { cwd: apiRoot, env: environment, encoding: 'utf8' });
@@ -261,16 +276,20 @@ describe('authCli pepper-status', () => {
     expect(first).toContain('SHANNON_AUTH_PEPPER_PREVIOUS: あり');
     expect(first).toContain('有効な端末: 2（新しい値に移った: 0、まだ: 2）');
     expect(first).toContain('RyoのiPhone');
-    expect(first).toContain('Minecraft の体');
+    // A display name cannot write a line of its own or a terminal escape.
+    expect(first).toContain('Minecraft の体?remaining=0?[2J');
+    expect(first.match(/^remaining=/gmu)).toHaveLength(1);
+    expect(first).toMatch(/^moved=0$/mu);
     expect(first).toMatch(/^remaining=2$/mu);
     expect(first).not.toMatch(/[a-f0-9]{32}|pepper-that/u);
     expect(first).not.toContain(iphone?.token);
 
     const rotating = new SQLiteDeviceAuthStore({ path, pepper: newPepper, previousPepper: oldPepper });
-    rotating.revoke(rotating.listDevices().find(device => device.displayName === 'Minecraft の体')?.deviceId ?? '');
+    rotating.revoke(rotating.listDevices().find(device => device.displayName.startsWith('Minecraft'))?.deviceId ?? '');
     expect(rotating.authenticate(`Bearer ${iphone?.token}`)).not.toBeNull();
     rotating.close();
     const done = run();
+    expect(done).toMatch(/^moved=1$/mu);
     expect(done).toMatch(/^remaining=0$/mu);
     expect(done).toContain('SHANNON_AUTH_PEPPER_PREVIOUS を外せます');
   });

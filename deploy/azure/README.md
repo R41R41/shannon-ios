@@ -115,18 +115,27 @@ every paired device's token stop matching. Rotate it side by side instead:
    tokens are never accepted under either pepper.
 2. `authCli.ts pepper-status` prints how many active devices have moved and the
    display names of those that have not (never a value or digest), ending with
-   `remaining=N`.
-3. At `remaining=0`, remove `SHANNON_AUTH_PEPPER_PREVIOUS`. A device still left at
-   that point has to pair again.
+   `moved=N` and `remaining=N`.
+3. At `remaining=0`, remove `SHANNON_AUTH_PEPPER_PREVIOUS`. A device given up on
+   before that is revoked (`finish --force`), so it stops counting toward the
+   eight active devices and can pair again.
 
 Without `SHANNON_AUTH_PEPPER_PREVIOUS` (or with it empty) authentication is
 unchanged. The API refuses to start when it equals `SHANNON_AUTH_PEPPER` or is
-shorter than 32 characters. `rotate-auth-pepper.sh` runs the whole procedure on
-the VM (`check`, `rotate`, `status`, `rollback`, `rollback-exact`, `finish`); feed
-it through `ssh -o BatchMode=yes azure-constant-server bash -s -- <mode> < rotate-auth-pepper.sh`
-from a LF file. It edits `api.env` with Python only, keeps mode `0600`, backs the
-file up under `~/.config/shannon-ios/backups/` before every change, and never prints a value.
-The backups hold the old pepper; delete them once the rotation is finished.
+shorter than 32 characters. Do not roll the code back to a release without
+`SHANNON_AUTH_PEPPER_PREVIOUS` while a rotation is under way: devices not yet
+moved would stop matching.
+
+`rotate-auth-pepper.sh` runs the whole procedure on the VM: `check`, `rotate`,
+`status`, `rollback` (the old pepper current again, the new one kept as PREVIOUS so
+moved devices still match), `rollback-exact` (refused while any device has moved),
+`finish [--force]` and `clean-backups`. Feed it from a LF file:
+`ssh -o BatchMode=yes azure-constant-server bash -s -- <mode> < rotate-auth-pepper.sh`.
+It edits `api.env` with Python only (only the two pepper lines change), keeps mode
+`0600`, backs the file up under `~/.config/shannon-ios/backups/` before every
+change, and never prints a value. If the API does not come back after `rotate`, it
+swaps the peppers back by itself. The backups hold old peppers: `clean-backups`
+shreds them once the rotation is finished.
 
 The API and worker deliberately share only the SQLite file. Install and enable
 both unit templates together at the eventual reviewed release; do not run the

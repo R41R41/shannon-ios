@@ -24,7 +24,7 @@ try {
     for (const device of devices) {
       console.log([
         device.deviceId,
-        device.displayName,
+        printable(device.displayName),
         `scope=${device.scopeKey}`,
         `expires=${device.expiresAt}`,
         `lastUsed=${device.lastUsedAt ?? '-'}`,
@@ -40,17 +40,23 @@ try {
     console.log(`SHANNON_AUTH_PEPPER_PREVIOUS: ${status.previousPepperConfigured ? 'あり' : 'なし'}`);
     console.log(`有効な端末: ${status.activeDevices}（新しい値に移った: ${status.onCurrentPepper}、まだ: ${status.remaining.length}）`);
     for (const device of status.remaining) {
-      console.log(['まだ', device.deviceId, device.displayName, `lastUsed=${device.lastUsedAt ?? '-'}`].join('  '));
+      console.log(['まだ', device.deviceId, printable(device.displayName), `lastUsed=${device.lastUsedAt ?? '-'}`].join('  '));
     }
     if (!status.remaining.length && status.previousPepperConfigured) {
       console.log('有効な端末はすべて新しい値に移りました。SHANNON_AUTH_PEPPER_PREVIOUS を外せます。');
     } else if (status.remaining.length && !status.previousPepperConfigured) {
       console.log('「まだ」の端末は、今の値で一度も確かめられていません。前の値で作られたものなら、ペアリングのやり直しが要ります。');
     }
+    console.log(`moved=${status.onCurrentPepper}`);
     console.log(`remaining=${status.remaining.length}`);
   } else {
     throw new Error('Usage: authCli.ts issue-code [scopeKey] | list | revoke <device-id> | pepper-status');
   }
 } finally {
   auth.close();
+}
+
+/** A display name is chosen by whoever holds a pairing code: no control character reaches the operator's terminal or a script reading lines. */
+function printable(name: string): string {
+  return name.replace(/[\u0000-\u001f\u007f-\u009f]/gu, '?');
 }
