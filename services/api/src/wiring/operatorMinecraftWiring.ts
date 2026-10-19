@@ -7,6 +7,7 @@ import type { OperatorAuditDraft, OperatorAuditRow, OperatorAuditStore } from '.
 import type { TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { observeSync, withObserverRunSync } from '../infra/observer/observerContext.js';
 import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
+import { preparedWorldOfReceipt } from './freshWorldWiring.js';
 import type { OperatorSocketRefusal } from '../infra/ops/operatorSocket.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
@@ -136,10 +137,13 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!serverId) return c.refuse('invalid_input', '登録されたサーバーIDを指定してください（--server）。');
     const settled = (settlement: LifecycleSettlement) => {
       const code = settlement.receipt?.code ?? (settlement.issued ? 'unknown' : 'not_started');
-      // A start that made a new world says which one, and where the old one is kept, in the audit line too.
-      const world = settlement.receipt?.worldId ? `  worldId=${settlement.receipt.worldId} movedTo=${settlement.receipt.movedTo ?? 'none'}` : '';
+      // A start that made a new world says which one, and where the old one is kept, in the audit line too (only when the command
+      // asked for one); so does one whose world moved while the start could not be confirmed.
+      const seen = preparedWorldOfReceipt(settlement.receipt ?? settlement.unconfirmed, settlement.command);
+      const world = seen ? `  worldId=${seen.worldId ?? 'none'} movedTo=${seen.movedTo ?? 'none'}${seen.started ? '' : '  start_unconfirmed'}` : '';
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code, argsJson: c.argsJson,
-        action: input.action, serverId, lifecycleId: c.operationId, detail: settlement.receipt ? `${settlement.receipt.outcome}${world}` : null });
+        action: input.action, serverId, lifecycleId: c.operationId,
+        detail: settlement.receipt ? `${settlement.receipt.outcome}${world}` : seen ? `unknown${world}` : null });
     };
     const asked = { id: c.operationId, serverId, action: input.action, ...(input.keepWorld ? { keepWorld: true } : {}) };
     const admission = await parts.lifecycle.execute(asked, settled);

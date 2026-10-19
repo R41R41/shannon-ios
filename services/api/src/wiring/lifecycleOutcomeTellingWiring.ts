@@ -14,8 +14,11 @@ export interface LifecycleOutcomeReport {
   operationId: string;
   action: MinecraftLifecycleAction;
   outcome: LifecycleOutcomeKind;
-  /** The accepted receipt of a start named a new world: where the previous one is kept (null: there was none). */
-  freshWorld?: { movedTo: string | null };
+  /**
+   * A start named a new world: where the previous one is kept (null: there was none). `started: false` is a world that moved while
+   * the start could not be confirmed (the end is `unknown`).
+   */
+  freshWorld?: { movedTo: string | null; started?: false };
 }
 export type LifecycleOutcomeTeller = (report: LifecycleOutcomeReport) => Promise<void>;
 

@@ -47,7 +47,11 @@ class UsageError extends Error {}
 
 interface Parsed { flags: Map<string, string | true>; positional: string[] }
 
-/** `--name value`, `--name=value`, a bare `--latest`; everything after `--` is positional. */
+/**
+ * `--name value`, `--name=value`, a bare `--latest` or `--keep-world`; everything after `--` is positional. A bare flag takes no value
+ * at all: `--keep-world=false` (or `=0`, `=`) is a usage error, never read as "not given", so a start cannot keep the world by a flag
+ * that looks like it says the opposite.
+ */
 function parseArguments(argv: readonly string[]): Parsed {
   const flags = new Map<string, string | true>(), positional: string[] = [];
   const bare = new Set(['--latest', '--keep-world']);
@@ -62,8 +66,10 @@ function parseArguments(argv: readonly string[]): Parsed {
       continue;
     }
     const [name, inline] = item.split(/=(.*)/su, 2) as [string, string | undefined];
-    if (bare.has(name)) flags.set(name, true);
-    else if (inline !== undefined) flags.set(name, inline);
+    if (bare.has(name)) {
+      if (inline !== undefined) throw new UsageError(`${name} takes no value (give the bare flag, or leave it out)`);
+      flags.set(name, true);
+    } else if (inline !== undefined) flags.set(name, inline);
     else if (index + 1 < argv.length) flags.set(name, argv[(index += 1)]!);
     else throw new UsageError(`${name} needs a value`);
   }

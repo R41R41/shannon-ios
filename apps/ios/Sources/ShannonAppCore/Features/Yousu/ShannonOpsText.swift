@@ -117,6 +117,11 @@ public enum ShannonOpsText {
             guard let moved = world.movedTo, !moved.isEmpty else { return ShannonGeneratedStrings.opsFreshWorldStartedNoPrevious }
             return ShannonGeneratedStrings.opsFreshWorldStarted(moved: moved)
         }
+        // A failed start whose new world was prepared (the old one moved aside) but whose start could not be confirmed.
+        if command.status == .failed, let world = command.freshWorld, world.started == false {
+            guard let moved = world.movedTo, !moved.isEmpty else { return ShannonGeneratedStrings.opsFreshWorldMovedUnconfirmedNoPrevious }
+            return ShannonGeneratedStrings.opsFreshWorldMovedUnconfirmed(moved: moved)
+        }
         if let code = command.code { return commandCodeLabel(code, type: command.type) }
         return command.status == .expired ? ShannonGeneratedStrings.opsCodeExpired : nil
     }

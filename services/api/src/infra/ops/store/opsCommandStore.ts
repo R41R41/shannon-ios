@@ -24,8 +24,10 @@ export interface OpsCommand {
    * Only on a finished Minecraft start that made a new world (「新しいワールドで始める」): where the previous world is kept (a name in
    * the server directory; null when there was none). Absent everywhere else; a client that predates it ignores it and shows the plain
    * result, one that knows it says 「新しいワールドで始めました（前のワールドは … として残しています）」.
+   * `started: false` (a failed start only): the world was moved aside and the new one prepared, but the start could not be
+   * confirmed (「新しいワールドを用意しましたが、起動を確かめられませんでした」). A client that predates it shows the plain failure.
    */
-  freshWorld?: { movedTo: string | null };
+  freshWorld?: { movedTo: string | null; started?: false };
 }
 
 /** A command as the runtime receives it. `expiresAt` is the time by which it must have reported. */
@@ -189,7 +191,7 @@ export class OpsCommandStore {
     return this.reportLifecycle(scopeKey,id,outcome,code,at);
   }
   reportLifecycle(scopeKey: string, id: string, outcome: OpsCommandOutcome, code: OpsCommandCode | undefined, at: string,
-    freshWorld?: { movedTo: string | null }): OpsCommandReceipt {
+    freshWorld?: { movedTo: string | null; started?: false }): OpsCommandReceipt {
     return this.transaction(() => {
       this.settle(scopeKey, at);
       const row = this.row(scopeKey, id);
@@ -201,7 +203,7 @@ export class OpsCommandStore {
         return 'OPS_COMMAND_FINISHED';
       }
       this.database.prepare('UPDATE ops_commands SET status = ?, finished_at = ?, code = ?, fresh_world_json = ? WHERE command_id = ?')
-        .run(outcome, at, code ?? null, outcome === 'done' && freshWorld ? JSON.stringify({ movedTo: freshWorld.movedTo }) : null, id);
+        .run(outcome, at, code ?? null, storedFreshWorld(outcome, freshWorld), id);
       return { ...receipt(this.row(scopeKey, id)!), duplicate: false };
     });
   }
@@ -281,11 +283,22 @@ function command(row: Row): OpsCommand {
   };
 }
 
-/** The stored result of a start that made a new world, or nothing. */
-function freshWorldOf(row: Row): { freshWorld?: { movedTo: string | null } } {
+/**
+ * What is kept of the world of a finished start: where the old world is kept for a done one; for a failed one only a world that moved
+ * while the start could not be confirmed (`started: false`). Anything else keeps nothing, whatever was passed.
+ */
+function storedFreshWorld(outcome: OpsCommandOutcome, freshWorld: { movedTo: string | null; started?: false } | undefined): string | null {
+  if (!freshWorld) return null;
+  if (outcome === 'done') return JSON.stringify({ movedTo: freshWorld.movedTo });
+  return outcome === 'failed' && freshWorld.started === false ? JSON.stringify({ movedTo: freshWorld.movedTo, started: false }) : null;
+}
+
+/** The stored result of a start that made a new world (or moved one without a confirmed start), or nothing. */
+function freshWorldOf(row: Row): { freshWorld?: { movedTo: string | null; started?: false } } {
   if (!row.fresh_world_json) return {};
   try {
-    const value = JSON.parse(row.fresh_world_json) as { movedTo?: unknown };
-    return { freshWorld: { movedTo: typeof value.movedTo === 'string' ? value.movedTo : null } };
+    const value = JSON.parse(row.fresh_world_json) as { movedTo?: unknown; started?: unknown };
+    const unconfirmed = value.started === false && row.status === 'failed';
+    return { freshWorld: { movedTo: typeof value.movedTo === 'string' ? value.movedTo : null, ...(unconfirmed ? { started: false as const } : {}) } };
   } catch { return {}; }
 }

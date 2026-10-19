@@ -553,6 +553,24 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertNotEqual(ShannonOpsText.commandReason(try command(#""freshWorld": { "movedTo": "x" },"#, status: "failed")), "新しいワールドで始めました（前のワールドは x として残しています）")
     }
 
+    func testAFailedStartWhoseNewWorldWasPreparedSaysSoAndWhereTheOldOneIsKept() throws {
+        func command(_ extra: String, status: String = "failed") throws -> ShannonOpsCommandDTO {
+            let json = #"{ "id": "c1", "type": "minecraft.start", "target": "minecraft:shannon-home", "status": "\#(status)", "createdAt": "2026-10-19T00:00:00.000Z", \#(extra) "expiresAt": "2026-10-19T00:05:00.000Z" }"#
+            return try JSONDecoder().decode(ShannonOpsCommandDTO.self, from: Data(json.utf8))
+        }
+        let moved = try command(#""code": "no_report", "freshWorld": { "movedTo": "shannon_home.before-regen-20261019T1204", "started": false },"#)
+        XCTAssertEqual(moved.freshWorld, ShannonOpsFreshWorldResultDTO(movedTo: "shannon_home.before-regen-20261019T1204", started: false))
+        XCTAssertEqual(ShannonOpsText.commandReason(moved), "新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）")
+        XCTAssertEqual(ShannonOpsText.commandReason(try command(#""code": "no_report", "freshWorld": { "movedTo": null, "started": false },"#)),
+                       "新しいワールドを用意しましたが、起動を確かめられませんでした")
+        // Without `started: false` a failed command keeps the plain reason, and a done one is the ordinary new-world result.
+        XCTAssertEqual(ShannonOpsText.commandReason(try command(#""code": "no_report", "freshWorld": { "movedTo": "x" },"#)), ShannonOpsText.commandCodeLabel("no_report", type: .minecraftStart))
+        XCTAssertEqual(ShannonOpsText.commandReason(try command(#""freshWorld": { "movedTo": "x" },"#, status: "done")), "新しいワールドで始めました（前のワールドは x として残しています）")
+        // `started: false` on anything but a failed command is not worded as an unconfirmed start.
+        XCTAssertNotEqual(ShannonOpsText.commandReason(try command(#""freshWorld": { "movedTo": "x", "started": false },"#, status: "done")),
+                          "新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは x として残しています）")
+    }
+
     @MainActor
     func testTheFreshWorldSwitchChangesOnlyAfterTheServerStoredIt() async throws {
         let (model, client, _) = await loaded(try withSettings(#"{ "freshWorld": false }"#))

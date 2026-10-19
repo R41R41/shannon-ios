@@ -27,9 +27,10 @@ export interface LifecycleOutcomeFacts {
   others: boolean;
   /**
    * Only for a done `start` that made a new world (`options.freshWorld`, the receipt's `worldId`): the name the previous world is kept
-   * under, or null when there was none. The line then says so (the old world was kept, not deleted).
+   * under, or null when there was none. The line then says so (the old world was kept, not deleted). `started: false` is the same
+   * world moved aside while the start itself could not be confirmed (the end is `unknown`): the line says exactly that.
    */
-  freshWorld?: { movedTo: string | null };
+  freshWorld?: { movedTo: string | null; started?: false };
 }
 
 /** The operation as the neutral line names it. */
@@ -48,20 +49,32 @@ function freshWorldSentence(movedTo: string | null): string {
   return movedTo ? `新しいワールドで始めました（前のワールドは ${movedTo} として残しています）。` : '新しいワールドで始めました。';
 }
 
+/** The world was prepared but the start could not be confirmed: said as it is, and the old world is kept either way. */
+function freshWorldUnconfirmedLine(movedTo: string | null): string {
+  return movedTo
+    ? `新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは ${movedTo} として残しています）。`
+    : '新しいワールドを用意しましたが、起動を確かめられませんでした。サーバーの状態を確かめてください。';
+}
+
 /** The neutral factual sentence: the fact part of every message, and the whole message with anyone else there. */
 export function neutralLifecycleOutcomeLine(facts: LifecycleOutcomeFacts): string {
   if (facts.others) return '頼まれていた作業の結果が出ました（内容はアプリで確認できます）。';
   const label = LABEL[facts.action];
   switch (facts.outcome) {
     case 'completed':
-      if (facts.action === 'start' && facts.freshWorld) {
+      if (facts.action === 'start' && facts.freshWorld && facts.freshWorld.started !== false) {
         return `${DONE.start}${freshWorldSentence(facts.freshWorld.movedTo)}`;
       }
       return DONE[facts.action];
     case 'refused': return `マイクラの${label}は、体に断られてできませんでした。`;
     case 'cancelled': return `マイクラの${label}は取りやめになりました。`;
     case 'not_started': return `マイクラの${label}は始められませんでした。`;
-    default: return `マイクラの${label}は、結果を確かめられませんでした。`;
+    default:
+      // An unknown end of a start whose new world did move: the owner must know the world changed even though the start is unconfirmed.
+      if (facts.action === 'start' && facts.outcome === 'unknown' && facts.freshWorld?.started === false) {
+        return freshWorldUnconfirmedLine(facts.freshWorld.movedTo);
+      }
+      return `マイクラの${label}は、結果を確かめられませんでした。`;
   }
 }
 

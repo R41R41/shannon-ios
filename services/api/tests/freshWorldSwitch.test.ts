@@ -20,13 +20,13 @@ import { validatedOpsSnapshot } from '../src/contracts/opsContract.js';
 import { parseOperatorEnvelope } from '../src/contracts/operatorContract.js';
 import { operatorEnvelope } from '../src/infra/ops/operatorCli.js';
 import {
-  createFreshWorldAdmission, freshWorldDecision, freshWorldIssuance, freshWorldOfReceipt, freshWorldResultSummary, freshWorldSettingRecorder,
-  freshWorldSummary, freshWorldViaOfOperation, FRESH_WORLD_REASONS, FRESH_WORLD_SERVER, type FreshWorldFacts, type FreshWorldRecord,
+  createFreshWorldAdmission, freshWorldDecision, freshWorldIssuance, freshWorldOfReceipt, freshWorldOfSettlement, freshWorldReportOf, freshWorldResultSummary,
+  freshWorldSettingRecorder, freshWorldSummary, freshWorldViaOfOperation, preparedWorldOfReceipt, FRESH_WORLD_REASONS, FRESH_WORLD_SERVER, type FreshWorldFacts, type FreshWorldRecord,
 } from '../src/wiring/freshWorldWiring.js';
 import { MinecraftLifecycle } from '../src/surfaces/minecraft/minecraftLifecycle.js';
 import { MinecraftLifecycleStore } from '../src/surfaces/minecraft/store/minecraftLifecycleStore.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
-import { lifecycleCapabilities, validLifecyclePoll } from '../src/contracts/minecraftLifecycleContract.js';
+import { lifecycleCapabilities, validLifecyclePoll, withoutMalformedReceiptWorlds } from '../src/contracts/minecraftLifecycleContract.js';
 import { neutralLifecycleOutcomeLine } from '../src/mind/action/respond/lifecycleOutcomeLine.js';
 import type { LifecycleOutcomeReport } from '../src/wiring/lifecycleOutcomeTellingWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -357,14 +357,63 @@ describe('the poll capabilities and the receipt fields', () => {
       expect(validLifecyclePoll(poll(bad), now), JSON.stringify(bad)).toBe(false);
     }
   });
-  it('tells a new world from the accepted receipt only', () => {
+  it('drops a malformed worldId or movedTo from one receipt and keeps the receipt, so the poll itself stays valid', () => {
+    const at = new Date().toISOString(), now = Date.parse(at);
+    const receipt = (id: string, patch: object = {}) => ({ id, connectionId: 'c', serverId: SERVER, action: 'start', outcome: 'completed', code: 'changed', observedAt: at, inputsReleased: true, state: state(at), ...patch });
+    const poll = (...receipts: object[]) => ({ schemaVersion: 1, connectionId: 'c', sequence: 0, states: [state(at)], receipts });
+    // Strictly: a bad value still makes `validLifecyclePoll` say no, which is why the poll is cleaned first.
+    expect(validLifecyclePoll(poll(receipt('a', { movedTo: '../x' })), now)).toBe(false);
+    const cleaned = withoutMalformedReceiptWorlds(poll(receipt('a', { worldId: 'w-1', movedTo: '../x' }), receipt('b', { worldId: 'bad id!', movedTo: 'ok 1' }),
+      receipt('c', { worldId: 5, movedTo: 5 }), receipt('d', { worldId: 'w-2', movedTo: null }), receipt('e')));
+    expect(validLifecyclePoll(cleaned.poll, now)).toBe(true);
+    const receipts = (cleaned.poll as { receipts: Array<Record<string, unknown>> }).receipts;
+    expect(receipts.map(r => r.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    // Only the bad field is dropped; a good one next to it stays, and a good receipt is untouched.
+    expect(receipts[0]).toMatchObject({ worldId: 'w-1' }); expect(receipts[0]).not.toHaveProperty('movedTo');
+    expect(receipts[1]).toMatchObject({ movedTo: 'ok 1' }); expect(receipts[1]).not.toHaveProperty('worldId');
+    expect(receipts[2]).not.toHaveProperty('worldId'); expect(receipts[2]).not.toHaveProperty('movedTo');
+    expect(receipts[3]).toMatchObject({ worldId: 'w-2', movedTo: null });
+    expect([...cleaned.dropped].sort()).toEqual(['a', 'b', 'c']);
+    // A clean poll comes back as the very same object; things that are not polls are left for validLifecyclePoll to refuse.
+    const clean = poll(receipt('a', { worldId: 'w', movedTo: 'old' }));
+    expect(withoutMalformedReceiptWorlds(clean)).toEqual({ poll: clean, dropped: new Set() }); expect(withoutMalformedReceiptWorlds(clean).poll).toBe(clean);
+    for (const odd of [null, 'x', 5, [], {}, { receipts: 'no' }, { receipts: Array.from({ length: 17 }, () => receipt('z', { worldId: '../x' })) }]) {
+      expect(withoutMalformedReceiptWorlds(odd).poll, JSON.stringify(odd)?.slice(0, 40)).toBe(odd);
+      expect(validLifecyclePoll(withoutMalformedReceiptWorlds(odd).poll, now)).toBe(false);
+    }
+  });
+  it('tells a new world from the accepted receipt only, and only for a command that asked for one', () => {
     const base = { action: 'start' as const, outcome: 'completed' as const };
-    expect(freshWorldOfReceipt({ ...base, worldId: 'w', movedTo: 'old' })).toEqual({ worldId: 'w', movedTo: 'old' });
-    expect(freshWorldOfReceipt({ ...base, worldId: 'w' })).toEqual({ worldId: 'w', movedTo: null });
-    expect(freshWorldOfReceipt({ ...base })).toBeUndefined();
-    expect(freshWorldOfReceipt({ ...base, outcome: 'unknown', worldId: 'w', movedTo: 'old' })).toBeUndefined();
-    expect(freshWorldOfReceipt({ ...base, action: 'login', worldId: 'w', movedTo: 'old' })).toBeUndefined();
-    expect(freshWorldOfReceipt(null)).toBeUndefined();
+    const asked = { options: { freshWorld: true as const } };
+    expect(freshWorldOfReceipt({ ...base, worldId: 'w', movedTo: 'old' }, asked)).toEqual({ worldId: 'w', movedTo: 'old' });
+    expect(freshWorldOfReceipt({ ...base, worldId: 'w' }, asked)).toEqual({ worldId: 'w', movedTo: null });
+    expect(freshWorldOfReceipt({ ...base }, asked)).toBeUndefined();
+    expect(freshWorldOfReceipt({ ...base, outcome: 'unknown', worldId: 'w', movedTo: 'old' }, asked)).toBeUndefined();
+    expect(freshWorldOfReceipt({ ...base, action: 'login', worldId: 'w', movedTo: 'old' }, asked)).toBeUndefined();
+    expect(freshWorldOfReceipt(null, asked)).toBeUndefined();
+    // A receipt that names a world for a command that did not ask for one (an ordinary start; the option was dropped) claims nothing.
+    for (const command of [{}, { options: {} }, null, undefined]) expect(freshWorldOfReceipt({ ...base, worldId: 'w', movedTo: 'old' }, command as never), JSON.stringify(command)).toBeUndefined();
+  });
+  it('tells a world that moved while the start could not be confirmed, from an unknown receipt that names it', () => {
+    const asked = { options: { freshWorld: true as const } };
+    const unknown = { action: 'start' as const, outcome: 'unknown' as const };
+    expect(preparedWorldOfReceipt({ ...unknown, worldId: 'w', movedTo: 'old' }, asked)).toEqual({ worldId: 'w', movedTo: 'old', started: false });
+    expect(preparedWorldOfReceipt({ ...unknown, worldId: 'w', movedTo: null }, asked)).toEqual({ worldId: 'w', movedTo: null, started: false });
+    // The ids that survived a malformed sibling are enough: a moved name alone still says the world moved.
+    expect(preparedWorldOfReceipt({ ...unknown, movedTo: 'old' }, asked)).toEqual({ movedTo: 'old', started: false });
+    // A value left out is not "there was no old world": the key is absent, not null.
+    expect(preparedWorldOfReceipt({ ...unknown, worldId: 'w' }, asked)).toEqual({ worldId: 'w', started: false });
+    expect(preparedWorldOfReceipt({ ...unknown }, asked)).toBeUndefined();
+    expect(preparedWorldOfReceipt({ ...unknown, outcome: 'refused', worldId: 'w' }, asked)).toBeUndefined();
+    expect(preparedWorldOfReceipt({ ...unknown, outcome: 'cancelled', worldId: 'w' }, asked)).toBeUndefined();
+    expect(preparedWorldOfReceipt({ ...unknown, worldId: 'w', movedTo: 'old' }, {})).toBeUndefined();
+    expect(freshWorldReportOf({ ...unknown, worldId: 'w', movedTo: 'old' }, asked)).toEqual({ movedTo: 'old', started: false });
+    expect(freshWorldReportOf({ ...unknown, outcome: 'completed', worldId: 'w', movedTo: 'old' }, asked)).toEqual({ movedTo: 'old' });
+    // A settlement reads the accepted receipt first, else the unconfirmed one.
+    const receipt = { id: 'a', connectionId: 'c', serverId: SERVER, action: 'start', outcome: 'unknown', code: 'error', observedAt: 'x', inputsReleased: false, worldId: 'w', movedTo: 'old' } as never;
+    expect(freshWorldOfSettlement({ receipt: null, unconfirmed: receipt, command: asked as never })).toEqual({ movedTo: 'old', started: false });
+    expect(freshWorldOfSettlement({ receipt: null, unconfirmed: receipt, command: null })).toBeUndefined();
+    expect(freshWorldOfSettlement({ receipt: null })).toBeUndefined();
   });
   it('words the outcome line with where the old world is kept, and leaves the parenthesis out when there was none', () => {
     const line = (freshWorld?: { movedTo: string | null }, patch: object = {}) => neutralLifecycleOutcomeLine({ action: 'start', outcome: 'completed', others: false, ...(freshWorld ? { freshWorld } : {}), ...patch });
@@ -376,6 +425,21 @@ describe('the poll capabilities and the receipt fields', () => {
     expect(line({ movedTo: 'x' }, { others: true })).toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
     expect(line({ movedTo: 'x' }, { outcome: 'refused' })).toBe('マイクラのサーバーの起動は、体に断られてできませんでした。');
     expect(line({ movedTo: 'x' }, { action: 'login' })).toBe('マイクラにログインしました。');
+  });
+  it('words a start whose world moved but could not be confirmed: the new world was prepared, the old one is kept, the start is unknown', () => {
+    const line = (freshWorld?: { movedTo: string | null; started?: false }, patch: object = {}) =>
+      neutralLifecycleOutcomeLine({ action: 'start', outcome: 'unknown', others: false, ...(freshWorld ? { freshWorld } : {}), ...patch });
+    expect(line()).toBe('マイクラのサーバーの起動は、結果を確かめられませんでした。');
+    expect(line({ movedTo: 'shannon_home.before-regen-20261019T1204', started: false })).toBe(
+      '新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）。');
+    expect(line({ movedTo: null, started: false })).toBe('新しいワールドを用意しましたが、起動を確かめられませんでした。サーバーの状態を確かめてください。');
+    // Never beside anyone else, never for another end or action, and a started world is not worded as unconfirmed.
+    expect(line({ movedTo: 'x', started: false }, { others: true })).toBe('頼まれていた作業の結果が出ました（内容はアプリで確認できます）。');
+    expect(line({ movedTo: 'x', started: false }, { action: 'login' })).toBe('マイクラのログインは、結果を確かめられませんでした。');
+    expect(line({ movedTo: 'x', started: false }, { outcome: 'refused' })).toBe('マイクラのサーバーの起動は、体に断られてできませんでした。');
+    expect(line({ movedTo: 'x' })).toBe('マイクラのサーバーの起動は、結果を確かめられませんでした。');
+    expect(neutralLifecycleOutcomeLine({ action: 'start', outcome: 'completed', others: false, freshWorld: { movedTo: 'x', started: false } })).toBe('マイクラのサーバーを起動しました。');
+    expect(freshWorldResultSummary({ result: 'moved_unconfirmed', movedTo: 'old' })).toBe('新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは old として残しています）。');
   });
   it('words the activity lines with the old world kept, never deleted', () => {
     expect(freshWorldSummary({ applied: true, reason: 'applied', via: 'ops' })).toBe('ライ氏の運用ページからの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。');
@@ -397,13 +461,16 @@ describe('the lifecycle service and the new-world command', () => {
     const records: Array<{ reasonCode?: string; detail?: string }> = [];
     const ports = hooks === 'none' ? undefined : hooks ?? { policy: { freshWorld: () => true }, activity: { append: ((...args: unknown[]) => { records.push(args[3] as never); }) as never },
       config: { timeZone: 'Asia/Tokyo' } as never, bodyTasksOpen: () => false };
-    const lifecycle = new MinecraftLifecycle(new MinecraftLifecycleStore(database), configuration, { now: () => Date.parse(at), allowed: () => true,
+    let nowMs = Date.parse(at);
+    const lifecycle = new MinecraftLifecycle(new MinecraftLifecycleStore(database), configuration, { now: () => nowMs, allowed: () => true,
       servers: new Set([SERVER]), pollMilliseconds: 1, cancelWaitMilliseconds: 5, freshWorld: freshWorldIssuance(ports, { scopeKey: 'owner', now: () => at }) });
     let sequence = 0;
     const body: { capabilities: unknown } = { capabilities: ['freshWorld'] };
-    const poll = (receipts: MinecraftLifecycleReceipt[] = []) => lifecycle.poll({ scopeKey: 'owner', deviceId: 'operator' },
+    const poll = (receipts: unknown[] = []) => lifecycle.poll({ scopeKey: 'owner', deviceId: 'operator' },
       { schemaVersion: 1, connectionId: 'connection', sequence: sequence++, receipts, ...(body.capabilities === undefined ? {} : { capabilities: body.capabilities }),
-        states: [{ serverId: SERVER, observedAt: at, running: 'stopped', bot: 'absent', otherPlayers: 0 }] });
+        states: [{ serverId: SERVER, observedAt: new Date(nowMs).toISOString(), running: 'stopped', bot: 'absent', otherPlayers: 0 }] });
+    /** Time moves on (the clock the service reads), as it does between a receipt and the one that later replaces it. */
+    const advance = (milliseconds: number) => { nowMs += milliseconds; return new Date(nowMs).toISOString(); };
     const authority = { scopeKey: 'owner', origin: 'owner_request' as const, executionId: 'execution', lease: { id: 'execution', holder: 'h', generation: 1 }, sourceIds: ['s'] };
     const receiptFor = (command: MinecraftLifecycleCommand, patch: object = {}): MinecraftLifecycleReceipt => ({ id: command.id, connectionId: command.connectionId, serverId: SERVER,
       action: 'start', outcome: 'completed', code: 'changed', observedAt: at, inputsReleased: true,
@@ -418,7 +485,7 @@ describe('the lifecycle service and the new-world command', () => {
       await done;
       return command;
     };
-    return { lifecycle, poll, start, records, body, receiptFor };
+    return { lifecycle, poll, start, records, body, receiptFor, advance };
   }
 
   it('knows what the connected body can do from its latest fresh frame only', () => {
@@ -466,6 +533,60 @@ describe('the lifecycle service and the new-world command', () => {
     // A start that did not ask for a new world records nothing, even when its receipt names none.
     const plain = service(); plain.poll(); await plain.start(OPS());
     expect(plain.records).toEqual([]);
+  });
+
+  it('records the result once: the same receipt sent again (a lost acknowledgement, a restarted operator) is only acknowledged again', async () => {
+    const f = service(); f.poll();
+    const id = OPS(), world = { worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' };
+    const command = await f.start(id, { freshWorld: true }, world);
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_started']);
+    const again = f.receiptFor(command, world);
+    for (let index = 0; index < 3; index += 1) expect(f.poll([again]).acknowledged, String(index)).toEqual([id]);
+    // Several receipts in one poll, the same one twice, count once too.
+    expect(f.poll([again, again]).acknowledged).toEqual([id, id]);
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_started']);
+    expect(f.lifecycle.store.receipt(id)).toMatchObject({ outcome: 'completed', ...world });
+  });
+
+  it('records a world that moved while the start could not be confirmed, with both names; the confirmed start is recorded once, later', async () => {
+    const f = service(); f.poll();
+    const id = OPS(), world = { worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' };
+    const command = await f.start(id, { freshWorld: true }, { outcome: 'unknown', code: 'error', inputsReleased: false, ...world,
+      state: { serverId: SERVER, observedAt: at, running: 'unknown', bot: 'unknown', otherPlayers: null } });
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_moved_unconfirmed']);
+    expect(f.records[1]).toMatchObject({ outcome: 'recorded', summary: '新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは shannon_home.before-regen-20261019T1204 として残しています）。',
+      detail: `operation=${id} server=${SERVER} via=ops world=shannon-home-20261019T1204 movedTo=shannon_home.before-regen-20261019T1204` });
+    // The same unknown receipt sent again records nothing more.
+    f.poll([f.receiptFor(command, { outcome: 'unknown', code: 'error', inputsReleased: false, ...world, state: { serverId: SERVER, observedAt: at, running: 'unknown', bot: 'unknown', otherPlayers: null } })]);
+    expect(f.records).toHaveLength(2);
+    // The operator later proves the original start completed: that replaces the unknown receipt and is recorded once.
+    const later = f.advance(2000), confirmed = f.receiptFor(command, { observedAt: later, ...world });
+    expect(f.poll([confirmed]).acknowledged).toEqual([id]); f.poll([confirmed]);
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_moved_unconfirmed', 'fresh_world_started']);
+    // And the older unknown receipt arriving again changes nothing and is not told again.
+    f.poll([f.receiptFor(command, { outcome: 'unknown', code: 'error', inputsReleased: false, ...world, state: { serverId: SERVER, observedAt: at, running: 'unknown', bot: 'unknown', otherPlayers: null } })]);
+    expect(f.records).toHaveLength(3); expect(f.lifecycle.store.receipt(id)?.outcome).toBe('completed');
+  });
+
+  it('keeps a receipt whose world name is malformed: the poll stands, the bad value is left out, and a warning without the value is recorded once', async () => {
+    const f = service(); f.poll();
+    const id = OPS(), good = 'shannon-home-20261019T1204';
+    const command = await f.start(id, { freshWorld: true }, { worldId: good, movedTo: '../escape/old' });
+    expect(f.lifecycle.store.receipt(id)).toMatchObject({ outcome: 'completed', worldId: good }); expect(f.lifecycle.store.receipt(id)).not.toHaveProperty('movedTo');
+    expect(f.records.map(r => r.reasonCode)).toEqual(['fresh_world_applied', 'fresh_world_started', 'fresh_world_receipt_world_dropped']);
+    expect(f.records[2]).toMatchObject({ outcome: 'recorded', detail: `operation=${id} server=${SERVER} via=ops` });
+    // The result does not say there was no old world: the name was left out, not absent.
+    expect(f.records[1]).toMatchObject({ outcome: 'done', detail: `operation=${id} server=${SERVER} via=ops world=${good} movedTo=unknown`,
+      summary: expect.stringContaining('前のワールドの名前は確かめられませんでした') });
+    expect(JSON.stringify(f.records)).not.toContain('escape');
+    // Sent again with the bad value: acknowledged, and neither told nor warned a second time.
+    expect(f.poll([f.receiptFor(command, { worldId: good, movedTo: '../escape/old' })]).acknowledged).toEqual([id]);
+    expect(f.records).toHaveLength(3);
+    // A bad name on a receipt nobody asked for does not stop the channel either (it is just not adopted).
+    expect(() => f.poll([f.receiptFor({ ...command, id: 'ops-lifecycle:unknown-command' }, { worldId: '../x' })])).not.toThrow();
+    expect(f.poll([f.receiptFor({ ...command, id: 'ops-lifecycle:unknown-command' }, { worldId: '../x' })]).acknowledged).toEqual([]);
+    // What is not a receipt list is still refused.
+    expect(() => f.lifecycle.poll({ scopeKey: 'owner', deviceId: 'operator' }, { schemaVersion: 1, connectionId: 'connection', sequence: 99, receipts: 'no', states: [] })).toThrow('MINECRAFT_LIFECYCLE_POLL_INVALID');
   });
 
   it('writes a compensating line when a command that was recorded as applied could not be stored', () => {
@@ -570,12 +691,14 @@ describe('the lifecycle command, from each way of asking', () => {
       audit.append({ operationId: id, scopeKey: 'owner', at, operator: 'ops', command: 'lifecycle', event: 'invoked', code: 'invoked', argsJson: '{}', action, serverId: SERVER });
       const settled: unknown[] = [];
       const admission = await configured.operator.execute({ id, serverId: SERVER, action, ...(keepWorld ? { keepWorld: true } : {}) }, value => settled.push(value));
-      return { id, admission };
+      return { id, admission, settled };
     };
     const records = () => autonomyStore.activity.days('owner', { sinceDayKey: '' }).flatMap(day => day.entries).filter(entry => entry.tool === 'minecraft.fresh_world');
     const settings = () => autonomyStore.activity.days('owner', { sinceDayKey: '' }).flatMap(day => day.entries).filter(entry => entry.tool === 'ops.settings.freshWorld');
     return { ...h, opsStore, configured, poll, state, send, setSwitch, issued, converse, step, operatorStart, records, settings, receipt, reports,
       advertise(value: boolean) { advertise = value; poll(); },
+      /** Time moves on, as between an unknown receipt and the one that later replaces it. */
+      tick(milliseconds: number) { at = new Date(Date.parse(at) + milliseconds).toISOString(); },
       running(value: typeof running) { running = value; poll(); }, tasksOpen(value: boolean | null) { tasksOpen = value; },
       recordFails(value: boolean) { recordFails = value; }, alone(value: boolean) { alone = value; }, taskAllowed(value: boolean) { taskAllowed = value; } };
   }
@@ -630,6 +753,40 @@ describe('the lifecycle command, from each way of asking', () => {
       const finished = f.opsStore.commands.recent('owner', '2999-01-01T00:00:00.000Z')[0]!;
       expect(finished.freshWorld).toEqual({ movedTo: MOVED });
       expect(JSON.parse(JSON.stringify(finished)).freshWorld).toEqual({ movedTo: MOVED });
+    });
+
+    const FAR = '2999-01-01T00:00:00.000Z', MOVED = 'shannon_home.before-regen-20261019T1204';
+    const UNKNOWN = { outcome: 'unknown', code: 'error', inputsReleased: false, worldId: 'shannon-home-20261019T1204', movedTo: MOVED };
+
+    it('says on the finished Ops command that the new world was prepared but the start could not be confirmed; a later proof replaces it', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      await f.send('minecraft.start', SERVER);
+      const command = await f.issued(UNKNOWN);
+      await until(() => f.opsStore.commands.recent('owner', FAR)[0]?.status === 'failed');
+      expect(f.opsStore.commands.recent('owner', FAR)[0]).toMatchObject({ status: 'failed', code: 'no_report', freshWorld: { movedTo: MOVED, started: false } });
+      expect(JSON.parse(JSON.stringify(f.opsStore.commands.recent('owner', FAR)[0])).freshWorld).toEqual({ movedTo: MOVED, started: false });
+      expect(f.records().map(entry => entry.reasonCode).sort()).toEqual(['fresh_world_applied', 'fresh_world_moved_unconfirmed']);
+      expect(f.records().find(entry => entry.reasonCode === 'fresh_world_moved_unconfirmed')).toMatchObject({ outcome: 'recorded',
+        summary: `新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは ${MOVED} として残しています）。` });
+      // The operator later proves the original start completed: the same command becomes done, and says the world started.
+      f.tick(2000);
+      expect(f.poll([f.receipt(command)]).acknowledged).toEqual([command.id]);
+      f.configured.ops!.wake();
+      await until(() => f.opsStore.commands.recent('owner', FAR)[0]?.status === 'done');
+      expect(f.opsStore.commands.recent('owner', FAR)[0]!.freshWorld).toEqual({ movedTo: MOVED });
+      expect(f.records().map(entry => entry.reasonCode).sort()).toEqual(['fresh_world_applied', 'fresh_world_moved_unconfirmed', 'fresh_world_started']);
+    });
+
+    it('does not claim a new world on an Ops start that did not ask for one, whatever its receipt names', async () => {
+      const f = fixture();
+      await f.setSwitch(true); f.advertise(false);
+      await f.send('minecraft.start', SERVER);
+      const command = await f.issued({ worldId: 'shannon-home-20261019T1204', movedTo: MOVED });
+      expect('options' in command).toBe(false);
+      await until(() => f.opsStore.commands.recent('owner', FAR)[0]?.status === 'done');
+      expect(f.opsStore.commands.recent('owner', FAR)[0]).not.toHaveProperty('freshWorld');
+      expect(f.records().map(entry => entry.reasonCode)).toEqual(['fresh_world_unsupported']);
     });
 
     it('says nothing of a new world for a finished Ops start whose receipt names none', async () => {
@@ -709,6 +866,31 @@ describe('the lifecycle command, from each way of asking', () => {
       expect((await f.issued()).options).toEqual({ freshWorld: true });
     });
 
+    it('knows from the settlement that a new world moved even when its start could not be confirmed', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      const started = await f.operatorStart('start');
+      await f.issued({ outcome: 'unknown', code: 'error', inputsReleased: false, worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' });
+      await until(() => started.settled.length === 1);
+      const settlement = started.settled[0] as Parameters<typeof freshWorldOfSettlement>[0] & { receipt: unknown; issued: boolean };
+      expect(settlement).toMatchObject({ receipt: null, issued: true });
+      expect(freshWorldOfSettlement(settlement)).toEqual({ movedTo: 'shannon_home.before-regen-20261019T1204', started: false });
+    });
+
+    it('takes --keep-world as a bare flag only: any value, even false, is a usage error and never "not given"', () => {
+      const env = { SHANNON_OPERATOR: 'ryo' };
+      for (const bad of ['--keep-world=false', '--keep-world=true', '--keep-world=0', '--keep-world=']) {
+        expect(() => operatorEnvelope(['minecraft', 'start', bad], env), bad).toThrow('--keep-world takes no value');
+      }
+      // Separated by a space, the word is a stray word, which a start never takes.
+      expect(() => operatorEnvelope(['minecraft', 'start', '--keep-world', 'false'], env)).toThrow('start takes no words');
+      expect(() => operatorEnvelope(['minecraft', 'cancel', '--latest=true'], env)).toThrow('--latest takes no value');
+      expect(operatorEnvelope(['minecraft', 'start', '--keep-world'], env).args).toEqual({ keepWorld: true });
+      expect(operatorEnvelope(['minecraft', 'cancel', '--latest'], env).args).toEqual({ latest: true });
+      // A flag that takes a value still takes it either way.
+      expect(operatorEnvelope(['minecraft', 'start', '--server=shannon-home'], env).args).toEqual({ serverId: 'shannon-home' });
+    });
+
     it('parses --keep-world for start only, from the command line to the envelope', () => {
       const env = { SHANNON_OPERATOR: 'ryo' };
       expect(operatorEnvelope(['minecraft', 'start', '--server', SERVER, '--keep-world'], env)).toMatchObject({ op: 'start', args: { serverId: SERVER, keepWorld: true } });
@@ -765,6 +947,29 @@ describe('the lifecycle command, from each way of asking', () => {
       await f.issued({ worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' });
       await until(() => f.reports.length === 1);
       expect(f.reports[0]).toMatchObject({ action: 'start', outcome: 'completed', freshWorld: { movedTo: 'shannon_home.before-regen-20261019T1204' } });
+    });
+
+    it('tells him the new world was prepared, and where the old one is kept, even though the start could not be confirmed', async () => {
+      const f = fixture();
+      await f.setSwitch(true);
+      await f.converse('minecraft.start', 'start-unconfirmed');
+      const MOVED = 'shannon_home.before-regen-20261019T1204';
+      await f.issued({ outcome: 'unknown', code: 'error', inputsReleased: false, worldId: 'shannon-home-20261019T1204', movedTo: MOVED });
+      await until(() => f.reports.length === 1);
+      expect(f.reports[0]).toMatchObject({ action: 'start', outcome: 'unknown', freshWorld: { movedTo: MOVED, started: false } });
+      expect(neutralLifecycleOutcomeLine({ action: 'start', outcome: f.reports[0]!.outcome, others: false, freshWorld: f.reports[0]!.freshWorld })).toBe(
+        `新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは ${MOVED} として残しています）。`);
+    });
+
+    it('does not tell him of a new world on a start that did not ask for one, even if the receipt names a world', async () => {
+      const f = fixture();
+      await f.setSwitch(true); f.advertise(false);
+      await f.converse('minecraft.start', 'start-plain-with-names');
+      const command = await f.issued({ worldId: 'shannon-home-20261019T1204', movedTo: 'shannon_home.before-regen-20261019T1204' });
+      expect('options' in command).toBe(false);
+      await until(() => f.reports.length === 1);
+      expect(f.reports[0]).toMatchObject({ action: 'start', outcome: 'completed' });
+      expect(f.reports[0]).not.toHaveProperty('freshWorld');
     });
 
     it('does not tell him of a new world when the start made none', async () => {

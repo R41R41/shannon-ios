@@ -1,5 +1,5 @@
 import { actionResource, type ActionDraft, type ActionThreads, type RunningAction } from '../contracts/actionThreadContract.js';
-import type { MinecraftLifecycleReceipt, MinecraftLifecycleRequest } from '../contracts/minecraftLifecycleContract.js';
+import type { MinecraftLifecycleCommand, MinecraftLifecycleReceipt, MinecraftLifecycleRequest } from '../contracts/minecraftLifecycleContract.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { acquireAction } from './actionExecutionWiring.js';
@@ -9,6 +9,13 @@ export interface LifecycleSettlement {
   receipt: MinecraftLifecycleReceipt | null;
   /** The original command was written (it may have reached the operator); without a receipt its outcome is unknown. */
   issued: boolean;
+  /** The command as stored (null when it never was): what it asked for, e.g. a new world (options.freshWorld). */
+  command?: MinecraftLifecycleCommand | null;
+  /**
+   * The receipt the operator left unknown when none was accepted. Nothing is claimed from it as an outcome, but a world it names did
+   * move (a fresh-world start that could not be confirmed), and the owner is told so.
+   */
+  unconfirmed?: MinecraftLifecycleReceipt | null;
 }
 
 /**
@@ -58,7 +65,10 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
         } finally {
           active.stop();
         }
-        const settlement = { receipt, issued: !!parts.service.store.command(request.id) };
+        const command = parts.service.store.command(request.id);
+        const unconfirmed = receipt ? null : parts.service.receipt(request.id);
+        // The extra facts are present only when there is something to say (a settlement that never started keeps its two fields).
+        const settlement: LifecycleSettlement = { receipt, issued: !!command, ...(command ? { command } : {}), ...(unconfirmed ? { unconfirmed } : {}) };
         await (async () => settled(settlement))().catch(() => { /* reporting never fails the operation */ });
       })();
       running.add(job);

@@ -88,7 +88,7 @@ export function createOperatorLifecycle(parts: {
       if (!await parts.runner.takeBody(own)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
       // `--keep-world` is the operator's opt-out; the switch is followed by default.
       const { keepWorld, ...operation } = request;
-      const options = parts.freshWorld?.({ ...operation, origin: 'owner_request', via: 'operator', keepWorld: keepWorld === true });
+      const options = parts.freshWorld?.({ ...operation, origin: authority.origin, via: 'operator', keepWorld: keepWorld === true });
       void parts.runner.detach(own, { ...operation, authority, ...(options ? { options } : {}) }, settled);
       return { ok: true, lifecycleId: request.id, actionId: own.execution.lease.id };
     },

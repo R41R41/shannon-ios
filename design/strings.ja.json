@@ -684,7 +684,7 @@
     },
     {
       "key": "ops.freshWorld.footnote",
-      "text": "オンのとき、サーバーが止まっている間に新しく頼むと、今のワールドを別の名前で残して、新しいワールドで始めます。",
+      "text": "オンのとき、サーバーが止まっている間に新しく頼むと、そのたびに今のワールドを別の名前で残して、新しいワールドで始めます。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "only": "apple",
       "note": "「新しいワールドで始める」のスイッチの注記。今のワールドは消えず、別の名前で残ることを言う。"
@@ -702,6 +702,20 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "only": "apple",
       "note": "前のワールドが無かったとき（freshWorld.movedTo が null）。"
+    },
+    {
+      "key": "ops.freshWorld.movedUnconfirmed",
+      "text": "新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは {moved} として残しています）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "only": "apple",
+      "note": "失敗した開始の理由欄。ワールドは移したが起動を確かめられなかったとき（コマンドの freshWorld.started が false、freshWorld.movedTo が名前）。Windows の運用画面は、同じ API（docs/ops-contract.md）でこの文言に合わせて作る。"
+    },
+    {
+      "key": "ops.freshWorld.movedUnconfirmedNoPrevious",
+      "text": "新しいワールドを用意しましたが、起動を確かめられませんでした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "only": "apple",
+      "note": "上と同じで、前のワールドが無かった（またはその名前が分からない）とき（freshWorld.movedTo が null）。"
     },
     {
       "key": "ops.freshWorld.saveFailed",

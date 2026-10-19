@@ -1,6 +1,7 @@
 import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyActivity.js';
 import { autonomyDayKey, type AutonomyConfig } from '../mind/inhibition/autonomyBudget.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
+import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import { LIFECYCLE_CAPABILITY_FRESH_WORLD } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycleAction, MinecraftLifecycleCommand, MinecraftLifecycleOptions, MinecraftLifecycleReceipt, MinecraftLifecycleState }
   from '../contracts/minecraftLifecycleContract.js';
@@ -75,9 +76,12 @@ export type FreshWorldAdmission = (request: FreshWorldRequest) => MinecraftLifec
 export interface FreshWorldRecord { at: string; applied: boolean; reason: FreshWorldReason; via: FreshWorldVia; operationId: string; serverId: string }
 
 /** How a start that carried the option ended, as far as the API can tell from the accepted receipt. */
-export const FRESH_WORLD_RESULTS = ['started', 'refused', 'cancelled', 'unknown', 'not_issued'] as const;
+export const FRESH_WORLD_RESULTS = ['started', 'moved_unconfirmed', 'refused', 'cancelled', 'unknown', 'not_issued'] as const;
 export type FreshWorldResult = typeof FRESH_WORLD_RESULTS[number];
-/** The result record: closed codes, the operation's id, and (a started world only) the new id and where the old world was kept. */
+/**
+ * The result record: closed codes, the operation's id, and (a world the body prepared: started, or moved but the start not
+ * confirmed) the new id and where the old world was kept.
+ */
 export interface FreshWorldResultRecord {
   at: string; result: FreshWorldResult; via: FreshWorldVia; operationId: string; serverId: string; worldId?: string; movedTo?: string | null;
 }
@@ -180,12 +184,25 @@ export function freshWorldSummary(record: Pick<FreshWorldRecord, 'applied' | 're
   return `「新しいワールドで始める」はオンですが、${why}ので、今のワールドのまま始めます。`;
 }
 
+/**
+ * 「新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは <名前> として残しています）」: the world was moved
+ * aside and the new one prepared, but the body could not confirm that the server came up. The old world is kept either way.
+ */
+export function freshWorldUnconfirmedSentence(movedTo: string | null): string {
+  return movedTo
+    ? `新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは ${movedTo} として残しています）。`
+    : '新しいワールドを用意しましたが、起動を確かめられませんでした。サーバーの状態を確かめてください。';
+}
+
 /** The activity record's sentence for how a start that asked for a new world ended. */
 export function freshWorldResultSummary(record: Pick<FreshWorldResultRecord, 'result' | 'movedTo'>): string {
   switch (record.result) {
-    case 'started': return record.movedTo
-      ? `新しいワールドで始めました（前のワールドは ${record.movedTo} として残しています）。`
-      : '新しいワールドで始めました（前のワールドはありませんでした）。';
+    case 'started':
+      if (record.movedTo) return `新しいワールドで始めました（前のワールドは ${record.movedTo} として残しています）。`;
+      // Absent is not "there was none": the receipt's value was malformed and left out, so the name is not known.
+      return record.movedTo === undefined ? '新しいワールドで始めました（前のワールドの名前は確かめられませんでした。サーバーのフォルダーを確かめてください）。'
+        : '新しいワールドで始めました（前のワールドはありませんでした）。';
+    case 'moved_unconfirmed': return freshWorldUnconfirmedSentence(record.movedTo ?? null);
     case 'refused': return '新しいワールドを用意できなかったので、体は何も変えず、サーバーも始めていません（今のワールドのままです）。';
     case 'cancelled': return '新しいワールドで始める前に取りやめになったので、ワールドは今のままです。';
     case 'not_issued': return '開始の指示を保存できなかったので、新しいワールドは用意していません（今のワールドのままです）。';
@@ -207,11 +224,27 @@ export function freshWorldRecorder(activity: Pick<AutonomyActivityRecord, 'appen
 /** Writes how a start that asked for a new world ended (the receipt's `worldId` and `movedTo`) to the activity record. */
 export function freshWorldResultRecorder(activity: Pick<AutonomyActivityRecord, 'append'>, scopeKey: string, config: Pick<AutonomyConfig, 'timeZone'>) {
   return (record: FreshWorldResultRecord): void => {
-    const world = record.worldId ? ` world=${record.worldId} movedTo=${record.movedTo ?? 'none'}` : '';
+    const moved = record.movedTo === undefined ? 'unknown' : record.movedTo ?? 'none';
+    const world = record.worldId !== undefined || record.movedTo ? ` world=${record.worldId ?? 'none'} movedTo=${moved}` : '';
     activity.append(scopeKey, autonomyDayKey(record.at, config), record.at, {
       kind: 'control', actor: 'owner', domain: 'minecraft_lifecycle', approval: 'not_needed', outcome: record.result === 'started' ? 'done' : 'recorded',
       tool: 'minecraft.fresh_world', reasonCode: `fresh_world_${record.result}`, summary: freshWorldResultSummary(record),
       detail: `operation=${record.operationId} server=${record.serverId} via=${record.via}${world}`,
+    });
+  };
+}
+
+/**
+ * A warning for the activity record: the body's receipt named the new world in a form this API does not accept, so that value was
+ * left out (the receipt itself was kept). Content-free: the value is never written, only which operation it was.
+ */
+export function freshWorldWarningRecorder(activity: Pick<AutonomyActivityRecord, 'append'>, scopeKey: string, config: Pick<AutonomyConfig, 'timeZone'>) {
+  return (record: { at: string; via: FreshWorldVia; operationId: string; serverId: string }): void => {
+    activity.append(scopeKey, autonomyDayKey(record.at, config), record.at, {
+      kind: 'control', actor: 'owner', domain: 'minecraft_lifecycle', approval: 'not_needed', outcome: 'recorded',
+      tool: 'minecraft.fresh_world', reasonCode: 'fresh_world_receipt_world_dropped',
+      summary: '体の返事にあった新しいワールドの名前が決まった形ではなかったので、その名前だけ使いませんでした（返事そのものは受け取っています）。',
+      detail: `operation=${record.operationId} server=${record.serverId} via=${record.via}`,
     });
   };
 }
@@ -224,12 +257,56 @@ export function freshWorldViaOfOperation(id: string): FreshWorldVia | null {
   return null;
 }
 
-/** The part of a settled receipt the owner is told about a new world: undefined unless a fresh world was really made. */
+/** A world the body prepared for a start: `started` is whether the start was confirmed (false: the world moved, the start is unknown). */
+export interface FreshWorldPrepared {
+  worldId?: string;
+  /** The name the old world was moved to; null: there was none; absent: the receipt did not carry it (a malformed value was left out). */
+  movedTo?: string | null;
+  started: boolean;
+}
+
+/**
+ * Whether a receipt tells of a world the body prepared, and how the start ended. Only when the COMMAND asked for it
+ * (`options.freshWorld`): a receipt that names a world for a command that never asked (the option was dropped, or it is some other
+ * start) claims nothing. A completed start with the ids is `started`; an `unknown` one with the ids is a world that moved while the
+ * start could not be confirmed. Any other outcome (refused, cancelled) did not move the world, whatever the receipt carries.
+ */
+export function preparedWorldOfReceipt(
+  receipt: Pick<MinecraftLifecycleReceipt, 'outcome' | 'action' | 'worldId' | 'movedTo'> | null | undefined,
+  command: Pick<MinecraftLifecycleCommand, 'options'> | null | undefined,
+): FreshWorldPrepared | undefined {
+  if (!receipt || receipt.action !== 'start' || command?.options?.freshWorld !== true) return undefined;
+  if (typeof receipt.worldId !== 'string' && typeof receipt.movedTo !== 'string') return undefined;
+  if (receipt.outcome !== 'completed' && receipt.outcome !== 'unknown') return undefined;
+  return { ...(typeof receipt.worldId === 'string' ? { worldId: receipt.worldId } : {}), ...(receipt.movedTo !== undefined ? { movedTo: receipt.movedTo } : {}),
+    started: receipt.outcome === 'completed' };
+}
+
+/** The part of a settled receipt the owner is told about a new world: undefined unless a fresh world was really started. */
 export function freshWorldOfReceipt(
   receipt: Pick<MinecraftLifecycleReceipt, 'outcome' | 'action' | 'worldId' | 'movedTo'> | null | undefined,
-): { worldId: string; movedTo: string | null } | undefined {
-  if (!receipt || receipt.action !== 'start' || receipt.outcome !== 'completed' || !receipt.worldId) return undefined;
-  return { worldId: receipt.worldId, movedTo: receipt.movedTo ?? null };
+  command: Pick<MinecraftLifecycleCommand, 'options'> | null | undefined,
+): { worldId?: string; movedTo: string | null } | undefined {
+  const made = preparedWorldOfReceipt(receipt, command);
+  if (!made?.started) return undefined;
+  return { ...(made.worldId !== undefined ? { worldId: made.worldId } : {}), movedTo: made.movedTo ?? null };
+}
+
+/**
+ * What the owner is told of the world of a start: `{ movedTo }` for a world that started, `{ movedTo, started: false }` for one that
+ * moved while the start could not be confirmed, nothing otherwise. Read from the accepted receipt, else from the one the operator
+ * left unknown (the settlement's `unconfirmed`), and only for a command that asked for a new world.
+ */
+export interface FreshWorldReport { movedTo: string | null; started?: false }
+export function freshWorldReportOf(
+  receipt: Pick<MinecraftLifecycleReceipt, 'outcome' | 'action' | 'worldId' | 'movedTo'> | null | undefined,
+  command: Pick<MinecraftLifecycleCommand, 'options'> | null | undefined,
+): FreshWorldReport | undefined {
+  const made = preparedWorldOfReceipt(receipt, command);
+  return made ? { movedTo: made.movedTo ?? null, ...(made.started ? {} : { started: false as const }) } : undefined;
+}
+export function freshWorldOfSettlement(settlement: Pick<LifecycleSettlement, 'receipt' | 'unconfirmed' | 'command'>): FreshWorldReport | undefined {
+  return freshWorldReportOf(settlement.receipt ?? settlement.unconfirmed ?? null, settlement.command ?? null);
 }
 
 /**
@@ -240,6 +317,7 @@ export function freshWorldOfReceipt(
 export function freshWorldIssuance(ports: FreshWorldPorts | undefined, own: { scopeKey: string; now(): string }) {
   if (!ports) return undefined;
   const decide = freshWorldRecorder(ports.activity, own.scopeKey, ports.config), result = freshWorldResultRecorder(ports.activity, own.scopeKey, ports.config);
+  const warned = freshWorldWarningRecorder(ports.activity, own.scopeKey, ports.config);
   const base = (command: MinecraftLifecycleCommand) => ({
     at: own.now(), via: freshWorldViaOfOperation(command.id), operationId: command.id, serverId: command.serverId,
   });
@@ -257,9 +335,16 @@ export function freshWorldIssuance(ports: FreshWorldPorts | undefined, own: { sc
     settled(command: MinecraftLifecycleCommand, receipt: MinecraftLifecycleReceipt): void {
       const { via, ...rest } = base(command);
       if (!via || receipt.action !== 'start') return;
-      const made = freshWorldOfReceipt(receipt);
-      const kind: FreshWorldResult = made ? 'started' : receipt.outcome === 'refused' ? 'refused' : receipt.outcome === 'cancelled' ? 'cancelled' : 'unknown';
-      result({ ...rest, via, result: kind, ...(made ? made : {}) });
+      const made = preparedWorldOfReceipt(receipt, command);
+      const kind: FreshWorldResult = made ? made.started ? 'started' : 'moved_unconfirmed'
+        : receipt.outcome === 'refused' ? 'refused' : receipt.outcome === 'cancelled' ? 'cancelled' : 'unknown';
+      result({ ...rest, via, result: kind, ...(made ? { ...(made.worldId !== undefined ? { worldId: made.worldId } : {}),
+        ...(made.movedTo !== undefined ? { movedTo: made.movedTo } : {}) } : {}) });
+    },
+    /** A receipt's world value was malformed and left out: noted once, without the value. */
+    worldDropped(command: MinecraftLifecycleCommand): void {
+      const { via, ...rest } = base(command);
+      if (via) warned({ ...rest, via });
     },
   };
 }

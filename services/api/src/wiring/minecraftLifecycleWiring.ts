@@ -8,7 +8,7 @@ import { createLifecycleRunner, type LifecycleSettlement } from './minecraftLife
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { LifecycleOutcomeKind } from '../mind/action/respond/lifecycleOutcomeLine.js';
 import { createOperatorLifecycle, OPERATOR_LIFECYCLE_SOURCE, setDayReadiness } from './operatorLifecycleWiring.js';
-import { freshWorldAdmissionOf, freshWorldIssuance, freshWorldOfReceipt, type FreshWorldPorts } from './freshWorldWiring.js';
+import { freshWorldAdmissionOf, freshWorldIssuance, freshWorldOfSettlement, type FreshWorldPorts } from './freshWorldWiring.js';
 import { operatorLifecycleAllowed } from '../infra/ops/store/operatorAuditStore.js';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
@@ -152,12 +152,14 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     // Its end is told to him in her words when it settles (`lifecycleOutcomeTellingWiring.ts`); the notice tells her either way. Not
     // awaited: writing the line (up to 20 s) never holds the operation's close or a shutdown.
     // Decided last, with the body taken: the state it reads is the freshest, and nothing after it can refuse the start.
-    const options = freshWorld({ ...request, origin: 'owner_request', via: 'conversation' });
+    const options = freshWorld({ ...request, origin: authority.origin, via: 'conversation' });
     const operation = { id: request.id, serverId: request.serverId, action: request.action, authority, ...(options ? { options } : {}) };
     void runner!.detach(own, operation, settlement => {
-      const made = freshWorldOfReceipt(settlement.receipt);
+      // A new world is told only when the stored command asked for it (the service may have sent an ordinary start instead), from the
+      // accepted receipt or, when the start could not be confirmed, from the unknown one that names the world that moved.
+      const made = freshWorldOfSettlement(settlement);
       void parts.told?.({ scopeKey: configuration.ownerScopeKey, threadId: request.threadId, operationId: request.id, action: request.action,
-        outcome: settledOutcome(settlement), ...(made ? { freshWorld: { movedTo: made.movedTo } } : {}) });
+        outcome: settledOutcome(settlement), ...(made ? { freshWorld: made } : {}) });
     });
     const accepted = toolOk(`受け付けました。まだ終わっていません（${request.action} を実行中）。終わったら知らせます。`);
     const target = { kind: 'minecraft_server' as const, id: request.serverId };

@@ -246,9 +246,13 @@ public struct ShannonOpsSnapshotDTO: Decodable, Equatable, Sendable {
 /// (a name in the server folder; nil when there was none). A server that predates it sends none, and nothing is claimed then.
 public struct ShannonOpsFreshWorldResultDTO: Decodable, Equatable, Sendable {
     public let movedTo: String?
+    /// `false` only on a failed start: the new world was prepared and the old one moved aside, but the start could not be confirmed.
+    /// Absent (nil) on a start that made the new world; a server that predates it sends none.
+    public let started: Bool?
 
-    public init(movedTo: String?) {
+    public init(movedTo: String?, started: Bool? = nil) {
         self.movedTo = movedTo
+        self.started = started
     }
 }
 

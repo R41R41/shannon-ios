@@ -1,11 +1,11 @@
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
-import type { MinecraftLifecycleReceipt } from '../contracts/minecraftLifecycleContract.js';
+import type { MinecraftLifecycleAuthority, MinecraftLifecycleReceipt } from '../contracts/minecraftLifecycleContract.js';
 import { opsLifecycleMapping, type OpsLifecycleMapping } from '../contracts/opsMinecraftLifecycleContract.js';
 import type { OpsCommandCode, OpsCommandOutcome, OpsCommandRequest } from '../contracts/opsCommandContract.js';
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { createLifecycleRunner } from './minecraftLifecycleRunner.js';
-import { freshWorldOfReceipt, type FreshWorldAdmission } from './freshWorldWiring.js';
+import { freshWorldOfSettlement, freshWorldReportOf, type FreshWorldAdmission, type FreshWorldReport } from './freshWorldWiring.js';
 
 /** The native window an Ops operation needs inside its claim window: the operator's deadline and the cancellation drain. */
 const OPS_LIFECYCLE_LEASE_MS = 130_000;
@@ -21,12 +21,6 @@ function outcome(receipt: MinecraftLifecycleReceipt): { outcome: OpsCommandOutco
     code: receipt.code === 'error' ? 'error' : receipt.code === 'deadline' ? 'timeout' : 'not_allowed' };
 }
 
-/** A done start that made a new world says where the old one is kept (the command's `freshWorld`); anything else says nothing. */
-function worldOf(receipt: MinecraftLifecycleReceipt | null): { movedTo: string | null } | undefined {
-  const made = freshWorldOfReceipt(receipt);
-  return made ? { movedTo: made.movedTo } : undefined;
-}
-
 /** No model and no legacy retry: one original owner command, action lease and native operation. */
 export function createOpsMinecraftLifecycle(parts: {
   commands: OpsCommandStore; actions: ActionThreads; service: MinecraftLifecycle; scopeKey: string; deviceId: string;
@@ -40,17 +34,22 @@ export function createOpsMinecraftLifecycle(parts: {
   const projectReceipts = () => {
     for (const row of parts.commands.lifecycleAwaiting(parts.scopeKey, parts.now())) {
       const receipt = parts.service.receipt(row.lifecycleId), report = receipt && outcome(receipt);
-      if (report) parts.commands.reportLifecycle(parts.scopeKey, row.commandId, report.outcome, report.code, parts.now(), worldOf(receipt));
+      // A done start that made a new world says where the old one is kept; only when the stored command asked for one.
+      if (report) parts.commands.reportLifecycle(parts.scopeKey, row.commandId, report.outcome, report.code, parts.now(),
+        freshWorldReportOf(receipt, parts.service.store.command(row.lifecycleId)));
     }
   };
   // 2026-10-13: an Ops login that spawned the bot was revoked half way (`ops_native_result_unknown`). The operation now holds
   // its own action of kind `minecraft` (the Minecraft slot, never the conversation's foreground slot) for the whole native
   // operation; the Ops report window bounds only the desktop's wait, and a later receipt still reports (`reportLifecycle`).
   const execute = async (row: ReturnType<OpsCommandStore['lifecyclePending']>[number]) => {
-    const report = (receipt: MinecraftLifecycleReceipt | null, issued: boolean) => {
+    const report = (receipt: MinecraftLifecycleReceipt | null, issued: boolean, world?: FreshWorldReport) => {
       const known = receipt && outcome(receipt);
-      if (known) parts.commands.reportLifecycle(parts.scopeKey, row.command.id, known.outcome, known.code, parts.now(), worldOf(receipt));
-      else parts.commands.reportLifecycle(parts.scopeKey, row.command.id, issued ? 'failed' : 'refused', issued ? 'no_report' : 'not_allowed', parts.now());
+      if (known) parts.commands.reportLifecycle(parts.scopeKey, row.command.id, known.outcome, known.code, parts.now(), world);
+      // No accepted receipt: failed, "no report". A new world that moved while the start could not be confirmed is still said
+      // (`started: false`): the owner must know the world changed and where the old one is kept.
+      else parts.commands.reportLifecycle(parts.scopeKey, row.command.id, issued ? 'failed' : 'refused', issued ? 'no_report' : 'not_allowed', parts.now(),
+        issued && world?.started === false ? world : undefined);
     };
     // A claim the slot refused stays queued (never withdrawn): the next wake claims it, until the Ops claim window ends.
     const active = await runner.admit({ scopeKey: parts.scopeKey, kind: 'minecraft', origin: 'owner_request', sourceId: `ops:${row.command.id}`,
@@ -67,11 +66,12 @@ export function createOpsMinecraftLifecycle(parts: {
       }
       // One atomic permit attempt. An unknown/live body conflict is refused at once, never waited for.
       if (!await runner.takeBody(active)) return report(null, false);
+      const authority: MinecraftLifecycleAuthority = { scopeKey: parts.scopeKey, origin: 'owner_request', executionId: active.execution.lease.id,
+        lease: active.execution.lease, sourceIds: [`ops-command:${row.command.id}`] };
       // A start newly asked for on this page; decided last, with the body taken (a claim the slot refused never reaches here).
-      const options = parts.freshWorld?.({ id: row.lifecycleId, ...row.mapping, origin: 'owner_request', via: 'ops' });
-      await runner.detach(active, { id: row.lifecycleId, ...row.mapping, ...(options ? { options } : {}), authority: { scopeKey: parts.scopeKey,
-        origin: 'owner_request', executionId: active.execution.lease.id, lease: active.execution.lease, sourceIds: [`ops-command:${row.command.id}`] } },
-      settlement => report(settlement.receipt, settlement.issued));
+      const options = parts.freshWorld?.({ id: row.lifecycleId, ...row.mapping, origin: authority.origin, via: 'ops' });
+      await runner.detach(active, { id: row.lifecycleId, ...row.mapping, ...(options ? { options } : {}), authority },
+        settlement => report(settlement.receipt, settlement.issued, freshWorldOfSettlement(settlement)));
     } catch {
       await active.finish('failed', 'ops_native_not_started').catch(() => {});
     }

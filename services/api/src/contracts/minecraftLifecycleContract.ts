@@ -19,7 +19,11 @@ export interface MinecraftLifecycleState {
 }
 export interface MinecraftLifecycleAuthority {
   scopeKey: string; origin: 'owner_request' | 'own_time';
-  /** Original execution and provenance; operator never manufactures an owner request. */
+  /**
+   * Original execution and provenance. The operator never makes up an authority: an operator-CLI command runs as an `owner_request`
+   * that the API admitted under its own `minecraft` action and audit row (as a conversation's or the Ops page's does), and a start
+   * follows the owner's 「新しいワールドで始める」 switch unless `--keep-world` opts out; her own time is `own_time`.
+   */
   executionId: string; lease: ActionLease; sourceIds: readonly string[];
 }
 /**
@@ -47,6 +51,8 @@ export interface MinecraftLifecycleReceipt {
   /**
    * Only on a `start` whose world the body really prepared (`options.freshWorld`): the new world's id, and the name (in the server
    * directory) the previous world is kept under, or null when there was no world directory. A body that predates them sends neither.
+   * They are on every receipt of that command: a completed one, and an `unknown` one when the world had moved but the start could
+   * not be confirmed (the world did move; whether the server came up is not known).
    */
   worldId?: string; movedTo?: string | null;
 }
@@ -90,10 +96,31 @@ function validReceiptEvidence(r: Record<string, unknown>, now: number): boolean 
   return typeof r.inputsReleased === 'boolean' && recorded(r.observedAt, now) && validLifecycleState(r.state, now, true)
     && (r.stopGuard === undefined || record(r.stopGuard) && r.stopGuard.admissionClosed === true && r.stopGuard.otherPlayers === 0 && recorded(r.stopGuard.checkedAt, now));
 }
+const validWorldId = (v: unknown): boolean => typeof v === 'string' && WORLD_ID.test(v);
+const validMovedTo = (v: unknown): boolean => v === null || typeof v === 'string' && MOVED_TO.test(v);
 /** `worldId` and `movedTo` are optional (a body that predates them sends neither); when present they must be what the body writes. */
 function validReceiptWorld(r: Record<string, unknown>): boolean {
-  return (r.worldId === undefined || typeof r.worldId === 'string' && WORLD_ID.test(r.worldId))
-    && (r.movedTo === undefined || r.movedTo === null || typeof r.movedTo === 'string' && MOVED_TO.test(r.movedTo));
+  return (r.worldId === undefined || validWorldId(r.worldId)) && (r.movedTo === undefined || validMovedTo(r.movedTo));
+}
+/**
+ * The poll with every receipt's malformed OPTIONAL world fields (`worldId`, `movedTo`) left out; the receipt itself stays. One odd
+ * value in one receipt would otherwise make the whole poll invalid, and with the receipt resent in every poll, for ever (the channel
+ * would be lost for the sake of a name). `dropped` holds the ids of the receipts that lost a field, so the caller can note it once
+ * (content-free: never the value). Anything that is not a poll with a receipts list, or a list longer than a poll may hold, is
+ * returned as it is for `validLifecyclePoll` to refuse.
+ */
+export function withoutMalformedReceiptWorlds(v: unknown): { poll: unknown; dropped: ReadonlySet<string> } {
+  const dropped = new Set<string>();
+  if (!record(v) || !Array.isArray(v.receipts) || v.receipts.length > 16) return { poll: v, dropped };
+  let changed = false;
+  const receipts = v.receipts.map(r => {
+    if (!record(r) || validReceiptWorld(r)) return r;
+    changed = true;
+    if (typeof r.id === 'string') dropped.add(r.id);
+    const { worldId, movedTo, ...rest } = r;
+    return { ...rest, ...(worldId !== undefined && validWorldId(worldId) ? { worldId } : {}), ...(movedTo !== undefined && validMovedTo(movedTo) ? { movedTo } : {}) };
+  });
+  return { poll: changed ? { ...v, receipts } : v, dropped };
 }
 function validStates(states: unknown, now: number): boolean {
   return Array.isArray(states) && states.length >= 1 && states.length <= 16 && states.every(s => validLifecycleState(s, now))

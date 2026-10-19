@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
-import { LIFECYCLE_CAPABILITY_FRESH_WORLD, lifecycleCapabilities, validLifecyclePoll, type MinecraftLifecycleAuthority, type MinecraftLifecycleCommand,
+import { LIFECYCLE_CAPABILITY_FRESH_WORLD, lifecycleCapabilities, validLifecyclePoll, withoutMalformedReceiptWorlds, type MinecraftLifecycleAuthority, type MinecraftLifecycleCommand,
   type MinecraftLifecyclePoll, type MinecraftLifecycleReceipt, type MinecraftLifecycleReply, type MinecraftLifecycleRequest, type MinecraftLifecycleState }
   from '../../contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycleStore } from './store/minecraftLifecycleStore.js';
@@ -14,10 +14,13 @@ export class MinecraftLifecycle {
        * 「新しいワールドで始める」 (`wiring/freshWorldWiring.ts`), asked only for a NEW command that carries `options.freshWorld`, just
        * before it is stored: write the decision to the activity record and answer whether the command may carry the option. False
        * (or a throw) sends an ordinary start instead; nothing about the world is claimed. `aborted` follows when the command then
-       * could not be stored, `settled` when its receipt is accepted (best effort, never throws into the poll).
+       * could not be stored, `settled` when its receipt is first accepted (once per adopted receipt, never for a resend of it; best
+       * effort, never throws into the poll), and `worldDropped` after it when that receipt's `worldId` or `movedTo` was malformed and
+       * left out (content-free).
        */
       freshWorld?: { issue(command: MinecraftLifecycleCommand): boolean; aborted(command: MinecraftLifecycleCommand): void;
-        settled(command: MinecraftLifecycleCommand, receipt: MinecraftLifecycleReceipt): void } }) {}
+        settled(command: MinecraftLifecycleCommand, receipt: MinecraftLifecycleReceipt): void;
+        worldDropped?(command: MinecraftLifecycleCommand): void } }) {}
   private state(serverId: string): MinecraftLifecycleState | null {
     const frame = this.store.frame();
     if (!frame || this.options.now() - frame.receivedAt > 3000) return null;
@@ -37,8 +40,10 @@ export class MinecraftLifecycle {
     return command.authority.scopeKey === this.configuration.ownerScopeKey && this.permittedServer(command.serverId)
       && Date.parse(command.deadlineAt) > this.options.now() && this.options.allowed(command.authority, command);
   }
-  poll(principal: { scopeKey: string; deviceId: string }, input: unknown): MinecraftLifecycleReply {
+  poll(principal: { scopeKey: string; deviceId: string }, raw: unknown): MinecraftLifecycleReply {
     if (principal.scopeKey !== this.configuration.ownerScopeKey || principal.deviceId !== this.configuration.deviceId) throw new Error('MINECRAFT_LIFECYCLE_DEVICE_DENIED');
+    // A malformed optional world value on one receipt is dropped (the receipt stays); it never makes the whole poll invalid.
+    const { poll: input, dropped } = withoutMalformedReceiptWorlds(raw);
     if (!validLifecyclePoll(input, this.options.now()) || input.states.some(s => !this.permittedServer(s.serverId))) throw new Error('MINECRAFT_LIFECYCLE_POLL_INVALID');
     const frame = this.store.frame();
     if (frame?.poll.connectionId === input.connectionId && input.sequence <= frame.poll.sequence) throw new Error('MINECRAFT_LIFECYCLE_STALE_FRAME');
@@ -49,9 +54,16 @@ export class MinecraftLifecycle {
       // Receipt delivery may recover across operator restart; identity remains its original connection and command.
       if (!c || receipt.connectionId !== c.connectionId || receipt.serverId !== c.serverId || receipt.action !== c.action
         || !this.store.delivered(c.id) || receipt.state.serverId !== c.serverId || !this.validReceipt(c, receipt)) continue;
+      const before = JSON.stringify(this.store.receipt(receipt.id));
       if (this.store.settle(receipt)) {
         acknowledged.push(receipt.id);
-        if (c.options?.freshWorld) { try { this.options.freshWorld?.settled(c, receipt); } catch { /* the record of the result never fails a poll */ } }
+        // The same receipt sent again (the acknowledgement was lost, or the operator restarted and resent its journal) is only
+        // acknowledged again: what is told and recorded is the first adoption of a receipt, or a recovery that replaced an unknown one.
+        const stored = this.store.receipt(receipt.id);
+        if (stored && JSON.stringify(stored) !== before && c.options?.freshWorld) {
+          try { this.options.freshWorld?.settled(c, stored); } catch { /* the record of the result never fails a poll */ }
+          if (dropped.has(receipt.id)) { try { this.options.freshWorld?.worldDropped?.(c); } catch { /* nor does its warning */ } }
+        }
       }
     }
     for (const row of this.store.pending()) {
