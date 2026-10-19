@@ -30,8 +30,12 @@ export interface MinecraftControlPoll {
   /** Whole catalog on initial connection and changes. Not selected by a second game planner. */
   skills?: readonly MinecraftSkillDefinition[];
   receipts: readonly MinecraftControlReceipt[]; activeOperationIds: readonly string[];
+  /** What changed while the body works (`@shannon/mind` WorkingEvent), oldest first, at most 32; a body before mb-arch sends none. */
+  events?: readonly unknown[];
 }
 export interface MinecraftControlReply {
   schemaVersion: 1; mode: 'common-fca';
   commands: readonly MinecraftControlCommand[]; cancel: readonly string[]; acknowledged: readonly string[];
+  /** The highest event `seq` taken from this connection; sent only when the poll carried events (the body drops those). */
+  eventsThrough?: number;
 }

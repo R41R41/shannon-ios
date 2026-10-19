@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
-import type { ActionLease } from '@shannon/mind';
+import { WorkingEventLog, type ActionLease } from '@shannon/mind';
 import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply } from '../../contracts/minecraftControlContract.js';
@@ -31,6 +31,11 @@ export class MinecraftControl {
   /** The commands this process waits for, and when each was last handed to the body (`command`). */
   private readonly waiting = new Map<string, Waiting>();
   private readonly deliveries = new Map<string, number>();
+  /**
+   * What each body told while it worked (session mb-arch, stage 1): needs in reach, each command's progress, stalls. Kept here, in
+   * memory, per body; the task's arbiter reads it (working). Taking them costs nothing when no one reads them.
+   */
+  private readonly workingLogs = new Map<string, WorkingEventLog>();
   constructor(readonly store: MinecraftControlStore, readonly configuration: MinecraftBodyConfiguration,
     private readonly options: { now(): number; leaseValid(lease: ActionLease, taskId: string): boolean; ownerAlone(): boolean; leaseKnown?(lease: ActionLease, taskId: string): boolean; pollMilliseconds?: number; cancelWaitMilliseconds?: number;
       /** How long a frame stays current (3 s); tests shorten it. */
@@ -51,6 +56,8 @@ export class MinecraftControl {
   }
   /** When this body last arrived (login, new connection, respawn), or null (`fastJudgment.ts`: a death changes it). */
   arrivedAt(bodyId: string): number | null { return this.arrivals.get(bodyId) ?? null; }
+  /** The events this body told while it worked, or null before its first poll that carried any. */
+  working(bodyId: string): WorkingEventLog | null { return this.workingLogs.get(bodyId) ?? null; }
   available(): string[] { return [...this.frames.keys()].filter(id => this.frame(id)); }
   observe(bodyId: string): BodyObservation | null { return this.frame(bodyId)?.poll.observation ?? null; }
   /**
@@ -88,6 +95,12 @@ export class MinecraftControl {
       || (old.poll.observation.facts.alive === false && input.observation.facts.alive !== false)) this.arrivals.set(bodyId, this.options.now());
     if (old?.poll.connectionId === input.connectionId && old.poll.observation.facts.alive !== false && input.observation.facts.alive === false) {
       for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
+    }
+    let eventsThrough: number | undefined;
+    if (input.events) {
+      const log = this.workingLogs.get(bodyId) ?? new WorkingEventLog();
+      this.workingLogs.set(bodyId, log);
+      eventsThrough = log.take(input.connectionId, input.events).through;
     }
     const acknowledged: string[] = [];
     for (const receipt of input.receipts) {
@@ -140,7 +153,7 @@ export class MinecraftControl {
         this.deliveries.set(c.id, this.options.now());
       }
     }
-    return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged };
+    return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}) };
   }
   /** A command this process waits for expires when its wait says so (time counted from delivery, without stalls); another by its deadline. */
   private expired(command: MinecraftControlCommand): boolean {

@@ -38,6 +38,20 @@ describe('Minecraft common FCA body protocol', () => {
     expect(await f.control.command(f.command)).toEqual(receipt);
     await expect(f.control.command({ ...f.command, arguments: { count: 2 } })).rejects.toThrow('CONFLICT');
   });
+  it('takes the body events once, says how far it took them, and skips a malformed one (mb-arch stage 1)', () => {
+    const f = fixture();
+    const at = new Date().toISOString();
+    const iron = { seq: 1, at, kind: 'need.appeared', subject: 'b:16,43,0', data: { need: 'iron', name: 'iron_ore', distance: 16, canReach: true } };
+    expect(f.control.poll(f.scope, f.poll()).eventsThrough).toBeUndefined();
+    expect(f.control.working('minecraft:world')).toBeNull();
+    const reply = f.control.poll(f.scope, f.poll({ events: [iron, { seq: 2, at, kind: 'bogus', subject: 'x', data: {} }] }));
+    expect(reply.eventsThrough).toBe(1);
+    expect(f.control.working('minecraft:world')?.needs().map(need => need.name)).toEqual(['iron_ore']);
+    expect(f.control.poll(f.scope, f.poll({ events: [iron] })).eventsThrough).toBe(1);
+    expect(f.control.working('minecraft:world')?.cursor()).toBe(1);
+    expect(validControlPoll(f.poll({ events: Array.from({ length: 33 }, () => iron) }), Date.now())).toBe(false);
+    expect(validControlPoll(f.poll({ events: 'no' as never }), Date.now())).toBe(false);
+  });
   it('unknown delivery survives service restart and can never be replayed', async () => {
     const f = fixture(), abort = new AbortController();
     const outcome = f.control.command(f.command, abort.signal).catch(error => error.message);

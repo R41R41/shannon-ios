@@ -58,3 +58,5 @@ export * from './taskMachine.js';
 export * from './capabilities.js';
 export * from './goals.js';
 export * from './deliberation.js';
+export * from './workingEvents.js';
+export * from './workingArbiter.js';
