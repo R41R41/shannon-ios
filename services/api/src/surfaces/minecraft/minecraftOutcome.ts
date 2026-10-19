@@ -1,4 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { RANGED_ENEMIES } from '../../mind/action/reflex/fastJudgment.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import { toolFailure, toolOk, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 
@@ -94,8 +95,11 @@ export const CREEPER_FIGHT_REFUSAL = 'クリーパーとは戦わない（近く
   + '逃げ道が無い時は tower-up（height=3）で柱に上る。爆発の後は落とし物を拾う。';
 export function creeperFightRefusal(name: string, input: unknown): ToolResult | null {
   const key = FIGHTS[name], value = key && input && typeof input === 'object' ? (input as Record<string, unknown>)[key] : undefined;
-  return typeof value === 'string' && /creeper/iu.test(value) ? toolFailure('refused', CREEPER_FIGHT_REFUSAL, { retryable: false }) : null;
+  const creeper = typeof value === 'string' && /creeper/iu.test(value) && !holdingPosition(input);
+  return creeper ? toolFailure('refused', CREEPER_FIGHT_REFUSAL, { retryable: false }) : null;
 }
+/** A fight from inside her cage (`holdPosition=true`: hitting through the gap, never stepping out), which the body lane lets through too. */
+const holdingPosition = (input: unknown) => !!input && typeof input === 'object' && (input as Record<string, unknown>).holdPosition === true;
 export const ONE_HIT_WAIT_REFUSAL = 'あと1撃で倒れる時に、敵の近くで待たない。離れる（flee-from、minDistance=16）・3段上る（tower-up、height=3）・'
   + '囲う（build-around-self、structureName=slit_shelter）のどれかを先にする。';
 /**
@@ -105,32 +109,44 @@ export const ONE_HIT_WAIT_REFUSAL = 'あと1撃で倒れる時に、敵の近く
 function oneHitWaitRefusal(observation: BodyObservation | null): ToolResult | null {
   const world = observation?.state.world as { margin?: { hitsLeft?: { hits?: unknown } }; nearbyThreats?: unknown } | undefined;
   const hits = world?.margin?.hitsLeft?.hits;
-  const near = Array.isArray(world?.nearbyThreats) && world.nearbyThreats.some(threat => Number((threat as { distance?: unknown })?.distance) <= 16);
+  // A threat that can reach her: one outside her sealed hole cannot, and a wait inside it is the night shelter's own step.
+  const near = reaching(world?.nearbyThreats).some(threat => threat.name !== 'enderman' && threat.name !== 'ender_dragon');
   return typeof hits === 'number' && hits <= 1 && near ? toolFailure('refused', ONE_HIT_WAIT_REFUSAL, { retryable: false }) : null;
 }
-/** Enemies that shoot from afar: a fight against one at half health or less is lost before it is reached. */
-const RANGED = /^(?:skeleton|stray|bogged|pillager|witch|blaze|ghast)$/u;
+/** The threats within 16 m that can reach her (`canReachMe` not false), as the fast judgment reads them. */
+function reaching(threats: unknown): Array<{ name: string; distance: number }> {
+  return (Array.isArray(threats) ? threats : []).flatMap(threat => {
+    const item = threat as { name?: unknown; distance?: unknown; canReachMe?: unknown };
+    return typeof item?.name === 'string' && typeof item.distance === 'number' && item.distance <= 16 && item.canReachMe !== false
+      ? [{ name: item.name, distance: item.distance }] : [];
+  });
+}
 export const FLOOR_FIGHT_REFUSAL = '体の反射が退避中（体を使用中）。終わるまで戦いの道具を出さない: 退避を取り消すことになる。少し待ってから、新しい観測で決める。';
 export const RANGED_FIGHT_REFUSAL = '体力が半分以下で、遠くから撃つ敵がいる時は戦わない。離れて壁や木の陰へ（flee-from、target=その敵、minDistance=16）、'
   + 'または縦穴（dig-shelter）。夜は外へ出ない。';
 /**
  * The fights she asks for that are refused before they are sent: against a creeper (`creeperFightRefusal`); any fight while the body's
  * floor holds the body (its retreat would be cancelled: Minecraft run 17, D14, she called `combat` at 11 health against a skeleton at
- * night, cancelled the floor's retreat and died); and any fight at half health or less with a ranged enemy within 16 m.
+ * night, cancelled the floor's retreat and died); and, at half health or less with a ranged enemy within 16 m that can reach her, a
+ * fight against it or against any hostile (a zombie named at her side is still hers to fight).
  */
-export function fightRefusal(name: string, input: unknown, observation: BodyObservation | null): ToolResult | null {
-  if (name === 'mc.wait-time') return oneHitWaitRefusal(observation);
+export function fightRefusal(name: string, input: unknown, observe: () => BodyObservation | null): ToolResult | null {
+  if (name === 'mc.wait-time') return oneHitWaitRefusal(observe());
   if (!FIGHTS[name]) return null;
-  const creeper = creeperFightRefusal(name, input);
+  const creeper = creeperFightRefusal(name, input), observation = creeper ? null : observe();
   if (creeper || !observation) return creeper;
   if (observation.facts.floorActive === true) return toolFailure('refused', FLOOR_FIGHT_REFUSAL, { retryable: true });
+  return rangedFightRefusal(name, input, observation);
+}
+/** At half health or less with a ranged enemy that can reach her, a fight against it or against any hostile (not from her cage). */
+function rangedFightRefusal(name: string, input: unknown, observation: BodyObservation): ToolResult | null {
   const world = observation.state.world as { health?: unknown; nearbyThreats?: unknown } | undefined;
   const health = typeof world?.health === 'number' ? world.health : null;
-  const ranged = Array.isArray(world?.nearbyThreats) && world.nearbyThreats.some(threat => {
-    const item = threat as { name?: unknown; distance?: unknown };
-    return typeof item?.name === 'string' && RANGED.test(item.name) && typeof item.distance === 'number' && item.distance <= 16;
-  });
-  return health !== null && health <= 10 && ranged ? toolFailure('refused', RANGED_FIGHT_REFUSAL, { retryable: false }) : null;
+  if (health === null || health > 10 || holdingPosition(input)) return null;
+  const ranged = reaching(world?.nearbyThreats).some(threat => RANGED_ENEMIES.has(threat.name));
+  const target = String((input as Record<string, unknown> | null)?.[FIGHTS[name]!] ?? 'hostile').toLowerCase();
+  const atRanged = RANGED_ENEMIES.has(target) || target === 'hostile' || target === '';
+  return ranged && atRanged ? toolFailure('refused', RANGED_FIGHT_REFUSAL, { retryable: false }) : null;
 }
 
 /**

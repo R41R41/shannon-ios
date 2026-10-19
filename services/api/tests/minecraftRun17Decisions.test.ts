@@ -35,25 +35,37 @@ describe('a completion turned back is remembered as not achieved', () => {
     expect(fcaOutcomeEpisode(outcome('queued'))).toMatchObject({ status: 'failure', interpretation: UNVERIFIED_COMPLETION });
     expect(fcaOutcomeEpisode(outcome('completed'))).toMatchObject({ status: 'success' });
     expect(fcaOutcomeEpisode(outcome('completed'))!.interpretation).not.toBe(UNVERIFIED_COMPLETION);
+    // A completion held for children (a wait) or a task that failed at it: not this.
+    expect(fcaOutcomeEpisode(outcome('running'))!.interpretation).not.toBe(UNVERIFIED_COMPLETION);
+    expect(fcaOutcomeEpisode(outcome('failed'))).toMatchObject({ status: 'failure' });
+    expect(fcaOutcomeEpisode(outcome('failed'))!.interpretation).not.toBe(UNVERIFIED_COMPLETION);
   });
 });
 
 describe('fights and waits refused before they are sent', () => {
   it('refuses a fight while the floor retreats, and at half health with a ranged enemy near (run 17, D14)', () => {
-    expect(fightRefusal('mc.combat', { target: 'skeleton' }, observation({ health: 11 }, { floorActive: true })))
+    expect(fightRefusal('mc.combat', { target: 'skeleton' }, () => observation({ health: 11 }, { floorActive: true })))
       .toMatchObject({ failure: 'refused', retryable: true, text: FLOOR_FIGHT_REFUSAL });
-    expect(fightRefusal('mc.combat', { target: 'skeleton' }, observation({ health: 10, nearbyThreats: [skeleton(12)] }))).toMatchObject({ text: RANGED_FIGHT_REFUSAL });
-    expect(fightRefusal('mc.attack-continuously', { entityName: 'hostile' }, observation({ health: 6, nearbyThreats: [skeleton(8)] }))).toMatchObject({ text: RANGED_FIGHT_REFUSAL });
-    expect(fightRefusal('mc.combat', { target: 'skeleton' }, observation({ health: 15, nearbyThreats: [skeleton(12)] }))).toBeNull();
-    expect(fightRefusal('mc.combat', { target: 'zombie' }, observation({ health: 8, nearbyThreats: [{ name: 'zombie', distance: 3 }] }))).toBeNull();
-    expect(fightRefusal('mc.mine-block', { blockName: 'stone' }, observation({ health: 5, nearbyThreats: [skeleton(5)] }, { floorActive: true }))).toBeNull();
+    expect(fightRefusal('mc.combat', { target: 'skeleton' }, () => observation({ health: 10, nearbyThreats: [skeleton(12)] }))).toMatchObject({ text: RANGED_FIGHT_REFUSAL });
+    expect(fightRefusal('mc.attack-continuously', { entityName: 'hostile' }, () => observation({ health: 6, nearbyThreats: [skeleton(8)] }))).toMatchObject({ text: RANGED_FIGHT_REFUSAL });
+    expect(fightRefusal('mc.combat', { target: 'skeleton' }, () => observation({ health: 15, nearbyThreats: [skeleton(12)] }))).toBeNull();
+    // From inside her cage (holdPosition), as the body lane lets it through: a creeper or an archer at the gap.
+    expect(fightRefusal('mc.attack-continuously', { entityName: 'creeper', holdPosition: true }, () => observation({ health: 20 }))).toBeNull();
+    expect(fightRefusal('mc.attack-continuously', { entityName: 'skeleton', holdPosition: true }, () => observation({ health: 8, nearbyThreats: [skeleton(3)] }))).toBeNull();
+    expect(fightRefusal('mc.combat', { target: 'zombie' }, () => observation({ health: 8, nearbyThreats: [{ name: 'zombie', distance: 3 }] }))).toBeNull();
+    // A zombie named at her side is hers to fight, a skeleton behind a wall (cannot reach her) is no reason.
+    expect(fightRefusal('mc.combat', { target: 'zombie' }, () => observation({ health: 8, nearbyThreats: [{ name: 'zombie', distance: 2 }, skeleton(15)] }))).toBeNull();
+    expect(fightRefusal('mc.combat', { target: 'skeleton' }, () => observation({ health: 8, nearbyThreats: [{ ...skeleton(10), canReachMe: false }] }))).toBeNull();
+    expect(fightRefusal('mc.mine-block', { blockName: 'stone' }, () => observation({ health: 5, nearbyThreats: [skeleton(5)] }, { floorActive: true }))).toBeNull();
   });
   it('refuses a wait with one hit left and a threat near (run 17, D25-D35), and lets other waits through', () => {
     const oneHit = { margin: { darkInSeconds: 645, hitsLeft: { from: 'creeper', hits: 1 } } };
-    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, observation({ ...oneHit, nearbyThreats: [{ name: 'creeper', distance: 9 }] })))
+    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, () => observation({ ...oneHit, nearbyThreats: [{ name: 'creeper', distance: 9 }] })))
       .toMatchObject({ failure: 'refused', text: ONE_HIT_WAIT_REFUSAL });
-    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, observation({ ...oneHit, nearbyThreats: [] }))).toBeNull();
-    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, observation({ margin: { hitsLeft: { from: 'zombie', hits: 4 } }, nearbyThreats: [{ name: 'zombie', distance: 5 }] }))).toBeNull();
+    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, () => observation({ ...oneHit, nearbyThreats: [] }))).toBeNull();
+    // Sealed in her hole (the zombie outside cannot reach her): the night shelter's own wait.
+    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, () => observation({ ...oneHit, nearbyThreats: [{ name: 'zombie', distance: 3, canReachMe: false }] }))).toBeNull();
+    expect(fightRefusal('mc.wait-time', { milliseconds: 50_000 }, () => observation({ margin: { hitsLeft: { from: 'zombie', hits: 4 } }, nearbyThreats: [{ name: 'zombie', distance: 5 }] }))).toBeNull();
   });
   it('says a body tool absent from the menu is the reflex or the catalog, not "no tool of this task"', () => {
     expect(FCA_BODY_TOOL_ABSENT).toMatch(/体の反射が体を使用中/u);
@@ -65,7 +77,7 @@ describe('the lines beside the milestone, and the milestone itself', () => {
   const context = (world: Record<string, unknown>) => minecraftSkillContext(minecraftSituation(observation(world), { failedStepsInARow: 0 }), ALL);
   it('reminds of a furnace left with its time up, and of one hit left with a threat near', () => {
     const jobs = [{ input: 'porkchop', count: 7, status: 'verification_due', remainingEstimateMs: 0, position: { x: 12, y: 84, z: 119 } }];
-    expect(context({ jobs }).fields.reminders).toEqual(['かまどのporkchop×7（12,84,119）は焼き上がっている。離れる前に withdraw-from-furnace で取り出す']);
+    expect(context({ jobs }).fields.reminders).toEqual(['かまどのporkchop×7（12,84,119）は焼き上がりの時刻を過ぎた。離れる前に withdraw-from-furnace で取り出す']);
     expect(context({ jobs: [{ ...jobs[0], status: 'waiting_external' }] }).fields.reminders).toBeUndefined();
     const oneHit = context({ margin: { darkInSeconds: 645, hitsLeft: { from: 'creeper', hits: 1 } }, nearbyThreats: [{ name: 'creeper', distance: 9 }] });
     expect(oneHit.fields.reminders?.[0]).toMatch(/^あと1撃で倒れる（creeper）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）/u);
@@ -77,8 +89,9 @@ describe('the lines beside the milestone, and the milestone itself', () => {
         dimension: 'overworld', netherReached: false, ...extra });
       return [now.name, next?.name];
     };
-    expect(at(['iron_pickaxe×1', 'bucket×1'])).toEqual(['食料と羊とベッド', '鉄']);
-    expect(at(['iron_pickaxe×1', 'bucket×1', 'white_bed×1', 'bread×2'])).toEqual(['食料と羊とベッド', '鉄']);
+    // Its next is the step it came back from (review: not the iron already in hand).
+    expect(at(['iron_pickaxe×1', 'bucket×1'])).toEqual(['食料と羊とベッド', '鉄の全身の防具']);
+    expect(at(['iron_pickaxe×1', 'bucket×1', 'white_bed×1', 'bread×2'])).toEqual(['食料と羊とベッド', '鉄の全身の防具']);
     // A meal or two eaten after leaving it does not bring it back: three are enough to stay away.
     expect(at(['iron_pickaxe×1', 'bucket×1', 'white_bed×1', 'bread×3'])).toEqual(['鉄の全身の防具', 'ダイヤ']);
     // A respawn bed set at her base counts as her bed.
@@ -94,6 +107,11 @@ describe('the lines beside the milestone, and the milestone itself', () => {
     expect(counts.get('cobblestone')).toBe(134);
     expect(withRecoverableDrops(new Map(), { ...world, lastDeath: '3分前 … 落とした物: iron_pickaxe×1 は、戻った時にはもう無かった' }).size).toBe(0);
     expect(withRecoverableDrops(new Map(), { deaths: world.deaths }).size).toBe(0);
+    // Picked up again: counted once (the larger), and dropped in the Nether: none in the overworld.
+    expect(withRecoverableDrops(new Map([['cobblestone', 134]]), world).get('cobblestone')).toBe(134);
+    expect(withRecoverableDrops(new Map(), { ...world, dimension: 'overworld', deaths: [{ ...world.deaths[0], dimension: 'the_nether' }] }).size).toBe(0);
+    expect(minecraftSkillContext(minecraftSituation(observation({ inventory: [], ...world }), { failedStepsInARow: 0 }), ALL).fields.reminders?.[0])
+      .toMatch(/^死んだ所に落とし物が残っている（iron_pickaxe×1・cobblestone×134・white_bed×1）。消える前に拾いに戻る/u);
     const situation = minecraftSituation(observation({ inventory: [], ...world }), { failedStepsInARow: 0 });
     expect(situation.stage).toBe(4);
     expect(minecraftSkillPointers(situation, ALL)).not.toContain('mc-first-day（石のツルハシがまだ無い）');

@@ -41,6 +41,8 @@ export interface MinecraftSituation {
   villageUnsearched?: boolean;
   /** A furnace job of hers whose time is up and that was not taken out (`world.jobs`, `verification_due`): what and where, or null. */
   furnaceDue?: string | null;
+  /** What she dropped at her latest death and can still pick up (`recoverableDrops`), the first few as `name×n`, or null. */
+  dropsLeft?: string | null;
   /** One more hit of a threat near takes her down (`world.margin.hitsLeft` at most 1): who hits that hard, or null. */
   oneHitFrom?: string | null;
   /** Food enough for iron (`fed`, `minecraftStage.ts`). */
@@ -216,7 +218,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   return {
     ...dark,
     threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
-    oneHitFrom: threatNear ? oneHitFrom(world.margin) : null,
+    oneHitFrom: threatNear ? oneHitFrom(world.margin) : null, dropsLeft: dropsLine(world),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
     inNether: nether, inEnd: dimension === 'the_end',
@@ -258,9 +260,14 @@ function laterPath(items: ItemCounts, dimension: string, stage: MinecraftStage |
  * job left uncollected.
  */
 function reminders(situation: MinecraftSituation): { reminders?: string[] } {
-  const lines = [...(situation.oneHitFrom ? [`あと1撃で倒れる（${situation.oneHitFrom}）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）のどれか`] : []),
-    ...(situation.furnaceDue ? [`かまどの${situation.furnaceDue}は焼き上がっている。離れる前に withdraw-from-furnace で取り出す`] : [])];
+  const lines = [...(situation.dropsLeft ? [`死んだ所に落とし物が残っている（${situation.dropsLeft}）。消える前に拾いに戻る（recall-places の死亡地点、pickup-nearest-item）`] : []),
+    ...(situation.oneHitFrom ? [`あと1撃で倒れる（${situation.oneHitFrom}）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）のどれか`] : []),
+    ...(situation.furnaceDue ? [`かまどの${situation.furnaceDue}は焼き上がりの時刻を過ぎた。離れる前に withdraw-from-furnace で取り出す`] : [])];
   return lines.length ? { reminders: lines } : {};
+}
+function dropsLine(world: Record<string, unknown>): string | null {
+  const drops = recoverableDrops(world);
+  return drops ? [...drops].slice(0, 4).map(([name, count]) => `${name}×${count}`).join('・') : null;
 }
 /** Who takes her down with one more hit (`margin.hitsLeft`: `{from, hits}`), or null. */
 export function oneHitFrom(margin: unknown): string | null {
@@ -285,14 +292,23 @@ function furnaceDue(jobs: unknown): string | null {
  * `world.lastDeath` is said while the drops last; it says when they are gone or none were dropped. `world.deaths` lists `name×n`.
  */
 export function withRecoverableDrops(items: ItemCounts, world: Record<string, unknown>): ItemCounts {
-  const said = typeof world.lastDeath === 'string' ? world.lastDeath : '';
-  const deaths = Array.isArray(world.deaths) ? world.deaths : [];
-  const lost = record(deaths.at(-1))?.lostItems;
-  if (!said || /もう無かった|消えた見込み|何も落としていない/u.test(said) || !Array.isArray(lost) || !lost.length) return items;
-  const dropped = carriedItemCounts({ inventory: lost.filter(item => typeof item === 'string').slice(0, 64) }, {});
+  const dropped = recoverableDrops(world);
+  if (!dropped) return items;
+  // The larger of what she carries and what she dropped: once she picks it up it is counted once, not twice.
   const merged = new Map(items);
-  for (const [name, count] of dropped) merged.set(name, (merged.get(name) ?? 0) + count);
+  for (const [name, count] of dropped) merged.set(name, Math.max(merged.get(name) ?? 0, count));
   return merged;
+}
+/**
+ * The drops of her latest death while the body says they can still be picked up (`lastDeath` ends `拾いに戻れる`) in this dimension,
+ * or null. Anything else (gone, despawned, none dropped, another dimension, an older wording) is no drop.
+ */
+function recoverableDrops(world: Record<string, unknown>): ItemCounts | null {
+  const said = typeof world.lastDeath === 'string' ? world.lastDeath : '';
+  const death = record((Array.isArray(world.deaths) ? world.deaths : []).at(-1)), lost = death?.lostItems;
+  if (!/拾いに戻れる/u.test(said) || !Array.isArray(lost) || !lost.length) return null;
+  if (typeof death?.dimension === 'string' && typeof world.dimension === 'string' && death.dimension !== world.dimension) return null;
+  return carriedItemCounts({ inventory: lost.filter(item => typeof item === 'string').slice(0, 64) }, {});
 }
 function dimensionOf(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string {
   return typeof world.dimension === 'string' ? world.dimension : typeof facts.dimension === 'string' ? facts.dimension : '';

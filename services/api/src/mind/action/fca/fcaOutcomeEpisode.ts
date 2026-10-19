@@ -3,8 +3,8 @@ import type { TaskExperienceRecord } from '../../memory/taskMemoryPorts.js';
 
 /** The fixed words of a completion that was not verified and went back to work: not achieved. */
 export const UNVERIFIED_COMPLETION = '未達: 完了にしようとしたが、達成を新しい観測で確かめられず、続きに戻った。目的はまだ果たしていない。';
-const unverifiedCompletion = (outcome: FcaDurableOutcome) => outcome.action.name === 'fca.complete' && outcome.actualTaskStatus !== undefined
-  && outcome.actualTaskStatus !== 'completed';
+/** Turned back: the completion went back to work (queued), not a wait for children (unning/waiting) nor an end of the task. */
+const unverifiedCompletion = (outcome: FcaDurableOutcome) => outcome.action.name === 'fca.complete' && outcome.actualTaskStatus === 'queued';
 /** Pure lookup/open operations are working history, not another independent life episode. */
 const LOOKUPS = ['tool.open', 'task.list', 'task.get', 'memory.search', 'memory.read'];
 

@@ -132,7 +132,8 @@ export function milestoneNow(facts: MilestoneFacts): { now: Milestone; next: Mil
   // A kept step passed by a later anchor and still open comes first (the bed and the food before the bucket and the armour).
   const kept = facts.dimension === 'overworld' && !nether(facts)
     ? MILESTONES.findIndex((milestone, index) => milestone.kept && index < now && !milestone.kept(facts)) : -1;
-  if (kept >= 0) now = kept;
+  // Its next is the step it came back from, not one already behind her.
+  if (kept >= 0) return { now: MILESTONES[kept]!, next: MILESTONES[now]! };
   const next = MILESTONES.findIndex((milestone, index) => index > now && !milestone.optional);
   return { now: MILESTONES[now]!, next: next < 0 ? null : MILESTONES[next]! };
 }

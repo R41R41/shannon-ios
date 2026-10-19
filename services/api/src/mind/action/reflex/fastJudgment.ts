@@ -44,7 +44,9 @@ const CAGE = Object.freeze({ skill: 'build-around-self', structureName: 'slit_sh
 const BUILDING_BLOCKS: ReadonlySet<string> = new Set(['cobblestone', 'cobbled_deepslate', 'stone', 'deepslate', 'andesite', 'diorite', 'granite',
   'blackstone', 'tuff', 'basalt', 'nether_bricks', 'stone_bricks', 'end_stone', 'dirt', 'netherrack']);
 
-const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'blaze', 'ghast', 'drowned_trident']);
+/** Enemies that shoot from afar (shared with the refusal of her fights, minecraftOutcome.ts). */
+export const RANGED_ENEMIES: ReadonlySet<string> = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'blaze', 'ghast', 'drowned_trident']);
+const RANGED = RANGED_ENEMIES;
 const WEAPON = /(_sword|_axe|^trident|^mace)$/u;
 /** Skills that already defend her: a fast judgment never cuts one off (run 11: a danger reflex stopped her fight and she died). */
 export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set(['attack-continuously', 'attack-nearest', 'retreat-attack', 'flee-from',
