@@ -27,7 +27,7 @@ const BOUNDS: Record<string, number> = { withholdsReply: 72_000, recalledWithhel
 describe('a Minecraft body task on production-dense memory asks the recall graph a bounded number of questions', () => {
   it('asks and compiles no more than the bounds below over its first steps, and every step is decided', async () => {
     const { value: run, counts } = await countingAsync(WITHHOLDING_QUESTIONS, () =>
-      runLoopStall({ steps: 3, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 }), { statements: true });
+      runLoopStall({ steps: 3, legacyShape: true, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 }), { statements: true });
     try {
       expect(run.decisions).toBeGreaterThanOrEqual(4);
       expect(run.warnings.filter(line => /FCA_SOURCE_WITHHELD|poll failed|capped/u.test(line))).toEqual([]);

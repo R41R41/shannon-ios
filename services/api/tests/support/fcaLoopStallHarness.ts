@@ -53,20 +53,20 @@ export interface LoopStallOptions {
   seedProvenance?: { rows: number; pool?: number; perRow?: number };
   /** Every source-guard check above this many milliseconds is recorded in walks (the guard's own line is 100). */
   walkLogMilliseconds?: number;
-  /** The Observer's sidecar as the API installs it (every span and handoff of the task is written to its SQLite file); on unless alse. */
+  /** The Observer's sidecar as the API installs it (every span and handoff of the task is written to its SQLite file); on unless false. */
   observer?: boolean;
   /** Gives up after this long. */
   timeoutMilliseconds?: number;
   /**
    * As production wires it since 2026-10-19 (serverFcaWiring.ts): the observation mode (default transient), the body task's recall
-   * (odyTaskRecall.ts, default on) and the scheduler's next turn at once (continueAtOnce, default on). legacyShape gives all three as before.
+   * (bodyTaskRecall.ts, default on) and the scheduler's next turn at once (continueAtOnce, default on). legacyShape gives all three as before
    */
   legacyShape?: boolean;
   /** Jev's tool selection takes this long (production: p50 209 ms, p90 455 ms); 0, instant. */
   selectorMilliseconds?: number;
-  /** Every n-th body skill fails (ailureType change_situation); 0, none. Run 15: 3 of its first 24 decisions failed whole. */
+  /** Every n-th body skill fails (failureType target_occupied, a hint to change the situation); 0, none. Run 15: 3 of its first 24 decisions failed whole. */
   failureEvery?: number;
-  /** Each ca_decision_metrics line, as the API writes it. */
+  /** Each fca_decision_metrics line, as the API writes it. */
   metrics?(line: string): void;
   log?(line: string): void;
 }
@@ -154,9 +154,7 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
   };
   let visible!: ReturnType<typeof createFcaSourceGuard>;
   let shared!: ReturnType<typeof createFcaSharedWiring>;
-  let selections = 0;
   const selector = { async select(request: { tools: ReadonlyArray<{ name: string }> }) {
-    selections += 1;
     if (options.selectorMilliseconds) await delay(options.selectorMilliseconds);
     return { names: request.tools.map(tool => tool.name), source: 'jev' as const };
   } };

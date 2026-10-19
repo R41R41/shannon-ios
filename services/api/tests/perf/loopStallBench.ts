@@ -4,7 +4,7 @@ import { printProfile, startCpuProfile } from '../support/perfMeasure.js';
 
 const steps = Number(process.env.STEPS ?? 30), variant = (process.env.VARIANT ?? 'current') as 'current' | 'run14';
 const profiling = process.env.PROFILE ? await startCpuProfile() : null;
-const result = await runLoopStall({ steps, variant, ...(process.env.WALK_LOG ? { walkLogMilliseconds: Number(process.env.WALK_LOG) } : {}), log: line => console.log(line), ...(process.env.OBSERVER === '0' ? { observer: false } : {}),
+const result = await runLoopStall({ steps, variant, legacyShape: process.env.PRODUCTION !== '1', ...(process.env.WALK_LOG ? { walkLogMilliseconds: Number(process.env.WALK_LOG) } : {}), log: line => console.log(line), ...(process.env.OBSERVER === '0' ? { observer: false } : {}),
   ...(process.env.SEED_ROWS ? { seedProvenance: { rows: Number(process.env.SEED_ROWS), pool: Number(process.env.POOL ?? 190) } } : {}),
   ...(process.env.SKILL_MS ? { skillMilliseconds: [Number(process.env.SKILL_MS), Number(process.env.SKILL_MS) * 2] as [number, number] } : {}),
   ...(process.env.MODEL_MS ? { modelMilliseconds: Number(process.env.MODEL_MS) } : {}) });

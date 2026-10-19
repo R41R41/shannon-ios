@@ -6,7 +6,7 @@
 import { runLoopStall } from '../support/fcaLoopStallHarness.js';
 
 const scale = Number(process.env.BUDGET_SCALE ?? 1);
-const run = await runLoopStall({ steps: 3, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 });
+const run = await runLoopStall({ steps: 3, legacyShape: true, seedProvenance: { rows: 100 }, walkLogMilliseconds: 50, skillMilliseconds: [300, 900], modelMilliseconds: 500 });
 const failures: string[] = [];
 const longestCheck = Math.max(0, ...run.walks.map(walk => walk.total));
 if (run.decisions < 4) failures.push(`only ${run.decisions} decisions`);

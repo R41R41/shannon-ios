@@ -13,7 +13,7 @@ const steps = Number(process.env.STEPS ?? 20), modelMs = Number(process.env.MODE
 const lines: Array<Record<string, unknown>> = [];
 const profiling = process.env.PROFILE ? await startCpuProfile() : null;
 const result = await runLoopStall({ steps, modelMilliseconds: modelMs, skillMilliseconds: [skillMs, skillMs], legacyShape: process.env.LEGACY === '1',
-  selectorMilliseconds: Number(process.env.SELECTOR_MS ?? 400), resultCharacters: [50, 400], failureEvery: Number(process.env.FAIL_EVERY ?? 8), log: line => console.log(line),
+  selectorMilliseconds: Number(process.env.SELECTOR_MS ?? 400), resultCharacters: [50, 400], failureEvery: Number(process.env.FAIL_EVERY ?? 4), log: line => console.log(line),
   ...(process.env.SEED_ROWS ? { seedProvenance: { rows: Number(process.env.SEED_ROWS), pool: Number(process.env.POOL ?? 190) } } : {}),
   metrics: line => { try { lines.push(JSON.parse(line.slice(line.indexOf('{'))) as Record<string, unknown>); } catch { /* not a line */ } } });
 const profile = profiling ? await profiling() : null;
@@ -21,14 +21,19 @@ const number = (value: unknown) => typeof value === 'number' && Number.isFinite(
 const decided = lines.filter(line => Array.isArray(line.tools) && (line.tools as unknown[]).length);
 const parts = ['llmMs', 'toolMs', 'summaryMs', 'recallMs', 'recallStartMs', 'selectorMs', 'evidenceMs'] as const;
 const others = ['startMs', 'permitMs', 'guardMs', 'contextMs', 'verifyMs', 'closeMs', 'commitMs'] as const;
+// What `rest` subtracts: the parts inside stepMs that do not overlap (permitMs runs inside the summary, the selection and the check; startMs is
+// before stepMs begins).
+const disjoint = ['guardMs', 'contextMs', 'closeMs', 'commitMs'] as const;
 const mean = (pick: (line: Record<string, unknown>) => number) => decided.reduce((sum, line) => sum + pick(line), 0) / Math.max(1, decided.length);
 const named = (line: Record<string, unknown>) => parts.reduce((sum, key) => sum + (key === 'recallStartMs' ? 0 : number(line[key])), 0)
-  + others.reduce((sum, key) => sum + number((line.other as Record<string, unknown> | undefined)?.[key]), 0);
-const gap = (key: string) => mean(line => number((line.gap as Record<string, unknown> | null)?.[key]));
+  + disjoint.reduce((sum, key) => sum + number((line.other as Record<string, unknown> | undefined)?.[key]), 0);
+// The first decision has no gap (no commit before it): the gap is the mean of the others.
+const gapped = decided.filter(line => line.gap);
+const gap = (key: string) => gapped.reduce((sum, line) => sum + number((line.gap as Record<string, unknown>)[key]), 0) / Math.max(1, gapped.length);
 console.log(`shape=${process.env.LEGACY === '1' ? 'legacy' : 'production'} decisions=${decided.length}/${result.decisions} summaries=${result.summaries} model=${modelMs}ms skill=${skillMs}ms`);
 console.log(`step=${mean(line => number(line.stepMs)).toFixed(0)}ms ${parts.map(key => `${key}=${mean(line => number(line[key])).toFixed(0)}`).join(' ')}`);
 console.log(`other: ${others.map(key => `${key}=${mean(line => number((line.other as Record<string, unknown> | undefined)?.[key])).toFixed(0)}`).join(' ')}`);
-console.log(`rest (step - named parts)=${mean(line => number(line.stepMs) - named(line)).toFixed(0)}ms loopBlocked=${mean(line => number(line.loopBlockedMs)).toFixed(0)}ms`);
+console.log(`rest (step - the parts that do not overlap; permit and its checks stay in it)=${mean(line => number(line.stepMs) - named(line)).toFixed(0)}ms loopBlocked=${mean(line => number(line.loopBlockedMs)).toFixed(0)}ms`);
 console.log(`gap: sinceCommit=${gap('sinceCommitMs').toFixed(0)}ms after=${gap('afterMs').toFixed(0)} wait=${gap('waitMs').toFixed(0)} admit=${gap('admitMs').toFixed(0)} start=${gap('startMs').toFixed(0)}`);
 const fixed = mean(line => number(line.stepMs) - number(line.llmMs) - number(line.toolMs)) + gap('sinceCommitMs');
 console.log(`fixed beside model and body: ${fixed.toFixed(0)}ms a decision (step - llm - tool + gap)`);
