@@ -16,7 +16,7 @@ const frame = (sequence: number, at: number, world: Record<string, unknown>, fac
   state: { world: { time: NIGHT, inventory: [{ name: 'stone_pickaxe', count: 1 }], ...world } }, facts: { alive: true, ...facts },
 } as unknown as BodyObservation);
 const state = (overrides: Partial<FastBodyState>): FastBodyState => ({ health: 20, threats: [], night: true, respawnedRecently: false,
-  healthDropped: false, hasWeapon: false, floorActive: false, floorKnown: true, shelterFailed: false, ...overrides });
+  healthDropped: false, hasWeapon: false, floorActive: false, floorKnown: true, shelterFailed: false, resting: new Set(), canCage: false, ...overrides });
 const kind = (verdict: ReturnType<typeof fastJudgment>) => 'decision' in verdict ? `${verdict.decision.kind}:${verdict.decision.rule}` : `hold:${verdict.hold}`;
 
 describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
@@ -47,7 +47,7 @@ describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
 
 /** A body as the fast judgment sees it: frames, arrivals, pending skill rows and the commands it was sent. */
 function fakeBody() {
-  let clock = 1_000_000, skills = ['attack-continuously', 'dig-shelter', 'flee-from'], current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0;
+  let clock = 1_000_000, skills = ['attack-continuously', 'dig-shelter', 'flee-from', 'build-around-self'], current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0, runMs = 0;
   const outcomes: string[] = [];
   const commands: Array<{ skill?: string; arguments?: unknown }> = [], lines: string[] = [], holds: string[] = [];
   const control = {
@@ -58,6 +58,7 @@ function fakeBody() {
     /** An outcome may carry the body's failure type after a colon: `failed:interrupted_by_reflex`. */
     async command(input: { id: string; skill?: string; arguments?: unknown }) {
       commands.push(input);
+      clock += runMs;
       const [outcome, failureType] = (outcomes.shift() ?? 'completed').split(':');
       return { id: input.id, outcome, ...(failureType ? { failureType } : {}), inputsReleased: true };
     },
@@ -81,6 +82,8 @@ function fakeBody() {
     arrive(world: Record<string, unknown>, facts: Record<string, unknown> = {}) { current = frame(++sequence, clock, world, facts); },
     judge, outcomes,
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
+    /** How long each command the body is sent runs (the clock moves on while it does). */
+    runFor(ms: number) { runMs = ms; },
     respawn() { arrived = clock; }, lose() { current = null; }, without(name: string) { skills = skills.filter(skill => skill !== name); },
     /** A frame the judgment is asked about while the latest one already differs (a newer frame arrived meanwhile). */
     seeWhileNewer(shown: Record<string, unknown>, latest: Record<string, unknown>) {
@@ -107,7 +110,7 @@ describe('a deterministic replay of Minecraft run 11\'s death loop (task 7e4c437
     await body.see({ health: 5, nearbyThreats: [zombie(1.2)] });
     expect(body.interrupted).toBe(1);
     expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter']);
-    expect(body.lines.some(line => /kind=shelter rule=low_health_shelter skill=dig-shelter entryToDispatchMs=\d+ outcome=completed/u.test(line))).toBe(true);
+    expect(body.lines.some(line => /kind=shelter rule=low_health_shelter skill=dig-shelter entryToDispatchMs=\d+ runMs=\d+ outcome=completed/u.test(line))).toBe(true);
   });
 
   it('takes shelter first after each respawn, before any decision of hers, inside the spawn grace', async () => {
@@ -308,10 +311,14 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     expect(failed.commands.length).toBe(1);
   });
 
-  it('F4: after her shelter failed, the next choice of the same danger episode is to flee, and a new episode starts fresh', async () => {
+  it('F4: after her shelter failed, the next choice is to flee (or the cage), and the shelter rests 60 s whatever the frames between', async () => {
     expect(kind(fastJudgment(state({ shelterFailed: true, respawnedRecently: true, threats: [{ ...zombie(8), ...calm }] })))).toBe('flee:shelter_failed_flee');
     expect(kind(fastJudgment(state({ shelterFailed: true, threats: [0, 1, 2].map(i => ({ ...zombie(3 + i), ...calm })) })))).toBe('flee:shelter_failed_flee');
     expect(kind(fastJudgment(state({ shelterFailed: true, threats: [{ ...zombie(3), ...calm }] })))).toBe('fight:melee_fight');
+    // With the cage's blocks carried, the cage where she stands instead of running.
+    const three = [0, 1, 2].map(i => ({ ...zombie(3 + i), ...calm }));
+    expect(kind(fastJudgment(state({ resting: new Set(['dig-shelter']), canCage: true, threats: three })))).toBe('shelter:shelter_failed_cage');
+    expect(kind(fastJudgment(state({ resting: new Set(['dig-shelter', 'build-around-self']), canCage: true, threats: three })))).toBe('flee:shelter_failed_flee');
     const body = fakeBody();
     body.advance(60_000);
     body.outcomes.push('failed');
@@ -320,11 +327,15 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     body.advance(6_000); // past the danger cooldown; the zombie is still there
     body.see(hurt); await body.see(hurt);
     expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from']);
-    // The danger passes, then comes back: a new episode, shelter again.
+    // The danger passes, then comes back within the rest: run 16's flicker no longer digs on the same air again.
     body.see({ health: 10, nearbyThreats: [] });
     body.advance(6_000);
     body.see(hurt); await body.see(hurt);
-    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'dig-shelter']);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'flee-from']);
+    // Once the rest is over, the shelter again.
+    body.advance(60_000);
+    body.see(hurt); await body.see(hurt);
+    expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'flee-from', 'dig-shelter']);
   });
 
   it('re-review 2: a choice that flickers between kinds never reaches an interrupt; two frames of the same kind do', async () => {
@@ -361,7 +372,7 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     body.see(hurt); await body.see(hurt);
     expect(body.commands.map(command => command.skill)).toEqual(['dig-shelter', 'dig-shelter']);
     expect(body.holds).not.toContain('reflex_cooldown');
-    expect(body.lines.some(line => line.includes('outcome=failed reflexCut=true'))).toBe(true);
+    expect(body.lines.some(line => line.includes('outcome=failed failure=interrupted_by_reflex reflexCut=true'))).toBe(true);
   });
 
   it('P8: any other failure type still fails the shelter and arms the cooldown', async () => {
@@ -403,5 +414,79 @@ describe('review findings on the fast judgment (F2, F3, F4, unknown floor)', () 
     expect(kind(fastJudgment(state({ floorKnown: true, threats: [{ name: 'skeleton', distance: 7, canReachMe: true, ignited: false }] })))).toBe('shelter:ranged_shelter');
     expect(fastBodyState(frame(1, 0, { health: 20 }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: false, floorActive: false });
     expect(fastBodyState(frame(1, 0, { health: 20 }, { floorActive: false }), { earlierHealth: null, sinceArrivalMs: null })).toMatchObject({ floorKnown: true });
+  });
+});
+
+describe('a replay of Minecraft run 16 (task 20467761, 2026-10-19 22:59–23:01 JST)', () => {
+  // 22:59:26–22:59:57: a zombie 6–8 m off at night in a cave, health 19; dig-shelter failed six times on "the floor of the hole is
+  // air", each 6 s apart (the danger cooldown), and four of them cut off her mine-block.
+  const zombieNear = { health: 19, nearbyThreats: [zombie(7)], inventory: [{ name: 'stone_sword', count: 1 }] };
+  const failSix = (body: ReturnType<typeof fakeBody>) => { for (let i = 0; i < 6; i++) body.outcomes.push('failed:invalid_location'); };
+  const sixRounds = async (body: ReturnType<typeof fakeBody>, world: Record<string, unknown>) => {
+    for (let round = 0; round < 6; round++) {
+      body.running('mc.mine-block');
+      body.see(world); await body.see(world);
+      // The zombie steps out of range for a frame between rounds (the flicker that reset the failed shelter before).
+      body.see({ ...world, nearbyThreats: [] });
+      body.advance(6_000);
+    }
+  };
+
+  it('digs once; the same air is not dug again for 60 s, and her mine-block is cut off at most twice for nothing', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    failSix(body);
+    await sixRounds(body, zombieNear);
+    const skills = body.commands.map(command => command.skill);
+    expect(skills.filter(skill => skill === 'dig-shelter')).toHaveLength(1);
+    // Before: six dig-shelters, four mine-blocks cut off. Now: the dig, one flee, then her mine-block is left alone.
+    expect(skills).toEqual(['dig-shelter', 'flee-from']);
+    expect(body.interrupted).toBe(2);
+    expect(body.holds).toContain('fast_interrupts_spent');
+    expect(body.lines.some(line => /skill=dig-shelter .*outcome=failed failure=invalid_location restMs=60000 cut=true/u.test(line))).toBe(true);
+  });
+
+  it('builds the cage where she stands when she carries its blocks', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    failSix(body);
+    const carrying = { ...zombieNear, inventory: [{ name: 'stone_sword', count: 1 }, { name: 'cobblestone', count: 24 }, { name: 'cobblestone_slab', count: 6 }] };
+    await sixRounds(body, carrying);
+    expect(body.commands.slice(0, 2).map(command => [command.skill, command.arguments])).toEqual([['dig-shelter', {}],
+      ['build-around-self', { structureName: 'slit_shelter' }]]);
+  });
+
+  it('still cuts her tool off when her health falls, whatever was spent', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    failSix(body);
+    await sixRounds(body, zombieNear);
+    const before = body.interrupted;
+    body.running('mc.mine-block');
+    body.see({ ...zombieNear, health: 19 });
+    await body.see({ ...zombieNear, health: 12 });
+    expect(body.interrupted).toBe(before + 1);
+  });
+
+  it('logs the time from the entry to the command apart from the time the skill ran', async () => {
+    const body = fakeBody();
+    body.advance(60_000);
+    body.runFor(15_000);
+    body.outcomes.push('cancelled');
+    const fight = { health: 20, nearbyThreats: [zombie(3)] };
+    body.see(fight); await body.see(fight);
+    // Run 16 logged 15115 ms "to dispatch" for a fight that was sent at once and ran to its 15 s deadline.
+    const line = body.lines.find(text => text.includes('kind=fight'))!;
+    expect(Number(/entryToDispatchMs=(\d+)/u.exec(line)![1])).toBeLessThan(2_000);
+    expect(Number(/runMs=(\d+)/u.exec(line)![1])).toBe(15_000);
+    // A fight that ran to its deadline (it was still hitting) does not rest; one that failed does, and the next answer is to flee.
+    expect(line).not.toContain('restMs');
+    body.runFor(0);
+    body.advance(6_000);
+    body.outcomes.push('failed:no_target');
+    body.see(fight); await body.see(fight);
+    body.advance(6_000);
+    body.see(fight); await body.see(fight);
+    expect(body.commands.map(command => command.skill)).toEqual(['attack-continuously', 'attack-continuously', 'flee-from']);
   });
 });

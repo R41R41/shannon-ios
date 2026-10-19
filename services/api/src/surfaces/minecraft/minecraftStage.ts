@@ -16,6 +16,12 @@ const DIAMOND_TIER_PICKAXE = /^(?:diamond|netherite)_pickaxe$/u;
 /** An empty bucket or a full one: the cast of obsidian needs water, and a lava or milk bucket was an empty one. */
 export const BUCKET_ITEM = /^(?:bucket|water_bucket|lava_bucket|milk_bucket)$/u;
 /**
+ * A chestplate of iron or better, carried or worn (`carriedItemCounts` reads `world.worn`): the armour before diamonds (owner
+ * 2026-10-19, Minecraft run 16: with eleven iron she made the pickaxe and the bucket only, went down for diamonds at night with no
+ * armour and a zombie took her from 15.7 to 0.7 health in 16 s). Chainmail is found, never made, and nearly as good (5 points to 6).
+ */
+export const CHESTPLATE = /^(?:chainmail|iron|diamond|netherite)_chestplate$/u;
+/**
  * Food enough to go on to iron (owner 2026-10-19, Minecraft run 15: at night with no food and no bed she died four times to zombies):
  * six items she can eat, raw or cooked. Below it the opening stays at stage 2, the food and the bed, whatever else she carries.
  * Once iron is in hand (ore or ingots, before the pickaxe) `FOOD_KEPT` is enough, so that one meal in the mine does not send her back
@@ -26,14 +32,15 @@ const IRON_IN_HAND = /^(?:raw_iron|iron_ingot|(?:deepslate_)?iron_ore)$/u;
 
 /**
  * 1: no stone pickaxe (the first day). 2: a stone pickaxe (or better) and no bed or less than `FOOD_STOCK` food. 3: a bed and food,
- * no iron pickaxe. 4: an iron pickaxe and no bucket. 5: a bucket and no diamond pickaxe (diamonds). 6: a diamond pickaxe or better
+ * no iron pickaxe. 4: an iron pickaxe and no bucket or no chestplate (`CHESTPLATE`, run 16). 5: a bucket and a chestplate and no
+ * diamond pickaxe (diamonds). 6: a diamond pickaxe or better
  * (obsidian and the portal; obsidian is mined with nothing less). An iron pickaxe is stage 4 or more whatever else is missing: the
  * stage never goes back past it, and the stages below 4 keep their meaning (before iron) for the measurement logs. A golden pickaxe
  * counts for nothing. The pointers read it in the overworld only (null elsewhere); the logs may log the dimension apart.
  */
 export function minecraftStage(counts: ItemCounts): MinecraftStage {
   if (countMatching(counts, DIAMOND_TIER_PICKAXE) > 0) return 6;
-  if (countMatching(counts, IRON_TIER_PICKAXE) > 0) return countMatching(counts, BUCKET_ITEM) > 0 ? 5 : 4;
+  if (countMatching(counts, IRON_TIER_PICKAXE) > 0) return countMatching(counts, BUCKET_ITEM) > 0 && countMatching(counts, CHESTPLATE) > 0 ? 5 : 4;
   if (countMatching(counts, STONE_TIER_PICKAXE) === 0) return 1;
   return countMatching(counts, BED_ITEM) > 0 && fed(counts) ? 3 : 2;
 }
@@ -73,6 +80,9 @@ export const MILESTONES: readonly Milestone[] = Object.freeze([
   { name: '村の回収', condition: '持ち物では見えない', why: '村があればベッド・食料・鉄が早い', done: null, optional: true },
   { name: '鉄', condition: 'iron_pickaxe を持つ', why: 'バケツ・防具・ダイヤの採掘に要る', done: facts => has(facts, IRON_TIER_PICKAXE), anchor: true },
   { name: 'バケツ', condition: 'bucket を持つ', why: '黒曜石を作る水を運ぶ', done: facts => has(facts, IRON_TIER_PICKAXE) && has(facts, BUCKET_ITEM), anchor: true },
+  // Run 16: down for diamonds at night with no armour. The bucket is part of it, or a chestplate made first would pass the bucket.
+  { name: '鉄の防具', condition: 'iron_chestplate を着る（鉄8）', why: '深い層と夜で受ける傷が約4分の1減る（鉄は計14個）',
+    done: facts => has(facts, IRON_TIER_PICKAXE) && has(facts, BUCKET_ITEM) && has(facts, CHESTPLATE), anchor: true },
   { name: 'ダイヤ', condition: 'diamond_pickaxe を持つ', why: '黒曜石はこれでしか掘れない', done: facts => has(facts, DIAMOND_TIER_PICKAXE), anchor: true },
   // The frame takes the obsidian: with the flint and steel (made to light it) the obsidian step stays behind her.
   { name: '黒曜石', condition: 'obsidian を10個', why: 'ゲートの枠に最小10個', anchor: true,

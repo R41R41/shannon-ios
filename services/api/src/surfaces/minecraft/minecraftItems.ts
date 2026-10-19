@@ -45,7 +45,18 @@ export function carriedItemCounts(world: Frame, facts: Frame): Map<string, numbe
     const pair = entry(value);
     if (pair && !counts.has(pair[0])) counts.set(pair[0], pair[1]);
   }
+  for (const name of wornItems(world?.worn)) add([name, 1]);
   return counts;
+}
+
+/**
+ * What she wears and holds in the off hand (`state.world.worn`, the body's one line `頭: iron_helmet(残り…)、胴: なし、…`): the
+ * pack lists slots 9-44 only, so a chestplate put on (the body's armour reflex wears what she carries) left every count at once.
+ * Registry-shaped ids after a label only; `なし` and the wear are not items.
+ */
+function wornItems(worn: unknown): string[] {
+  if (typeof worn !== 'string') return [];
+  return [...worn.slice(0, 400).matchAll(/:\s*(?:minecraft:)?([a-z][a-z0-9_]{0,63})/gu)].map(match => match[1]!).slice(0, 5);
 }
 
 /** The total count of the carried items whose id passes `pattern`. */

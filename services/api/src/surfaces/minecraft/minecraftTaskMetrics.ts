@@ -7,6 +7,7 @@ import { BED_ITEM, carriedItemCounts, COOKED_FOOD, countMatching, EDIBLE_FOOD, t
 import { milestoneLine, milestonesShown, minecraftStage, newlyReached, stageLine } from './minecraftMilestoneLog.js';
 import { count, finite, readMetricsState, record, type MetricsState } from './minecraftMetricsState.js';
 import { followedGists } from './minecraftSkillPointers.js';
+import { adoptionTags } from './minecraftStage.js';
 
 /**
  * Observation redesign P1: content-free measurement of one Minecraft task across its decisions (milestone first-reach, stage,
@@ -16,6 +17,8 @@ import { followedGists } from './minecraftSkillPointers.js';
  * by the caller: measuring never fails a step.
  */
 const HUNGRY = 6;
+/** A death a frame showed and the body's list entry for it, by the two clocks (the body's may differ from the API's by 30 s). */
+const SAME_DEATH_MS = 60_000;
 
 export interface MinecraftTaskMetricsParts { taskId: string; createdAt: string; kept: unknown; now(): number; log(line: string): void }
 export interface MinecraftDecisionFields { skillPointers?: readonly string[]; skillGists?: ReadonlyArray<{ skill: string }> }
@@ -80,16 +83,42 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
     state.bed = countMatching(counts, BED_ITEM) > 0;
   }
 
-  /** The cheap, frequent part (the monitor's poll): her lowest health, and deaths. */
+  /**
+   * The cheap, frequent part (the monitor's poll): her lowest health, and deaths. A death is a frame that shows her dead, or a new
+   * entry of the body's own list (`world.deaths`, `{at}` newest last): run 16's body came back at once, no polled frame ever showed
+   * her dead, and the count stayed 0 after she died. A frame's death and the list's entry for it (within `SAME_DEATH_MS`, the two
+   * clocks may differ) are one death; entries from before the task are none.
+   */
   function sample(observation: BodyObservation): void {
+    const world = record(observation.state.world);
+    countListedDeaths(world?.deaths);
     if (observation.facts.alive === false) {
-      if (state.alive !== false) state.deaths = Math.min(state.deaths + 1, 999);
+      if (state.alive !== false) {
+        state.deaths = Math.min(state.deaths + 1, 999);
+        state.deathAt = parts.now();
+        state.deathByFrame = true;
+      }
       state.alive = false;
       return;
     }
     if (observation.facts.alive === true) state.alive = true;
-    const health = finite(record(observation.state.world)?.health);
+    const health = finite(world?.health);
     if (health !== null && health > 0 && (state.hpMin === null || health < state.hpMin)) state.hpMin = health;
+  }
+  function countListedDeaths(list: unknown): void {
+    if (!Array.isArray(list)) return;
+    const times = list.slice(-8).map(entry => Date.parse(String(record(entry)?.at ?? ''))).filter(Number.isFinite).sort((a, b) => a - b);
+    for (const at of times) {
+      const last = state.deathAt ?? (Number.isFinite(began) ? began : -Infinity);
+      if (state.deathByFrame && state.deathAt !== null && Math.abs(at - state.deathAt) <= SAME_DEATH_MS) {
+        state.deathByFrame = false;
+        state.deathAt = Math.max(state.deathAt, at);
+      } else if (at > last && (!state.deathByFrame || at > state.deathAt! + SAME_DEATH_MS)) {
+        state.deaths = Math.min(state.deaths + 1, 999);
+        state.deathAt = at;
+        state.deathByFrame = false;
+      }
+    }
   }
 
   /** One body call of the decision, by name and arguments only. `shown` is the gists' tool names by skill (`minecraftSkillContext`). */
@@ -110,7 +139,11 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
       if (iron.food) tag('food_before_iron');
       if (iron.bed) tag('bed_before_iron');
     }
-    const attributed = new Set([...followedGists(shown, name), ...predicateSkills(name, input).filter(skill => shown.has(skill))]);
+    // And a call that does what a shown skill is about, by tool and argument (`adoptionTags`): run 16 counted 1 follow in 27, for
+    // 10 by this measure, because the draft-6 gists name no tool and their first moves are generic tools (mine-block, craft-one).
+    // Measuring only: the skill's use (`gistFollowed`, which would hold its next revision as `on_trial`) is recorded as before.
+    const attributed = new Set([...followedGists(shown, name), ...predicateSkills(name, input).filter(skill => shown.has(skill)),
+      ...adoptionTags([...shown.keys()], { name, input }).map(adoption => adoption.skill)]);
     noteGistCall(state.gist, d, [...attributed]);
   }
 

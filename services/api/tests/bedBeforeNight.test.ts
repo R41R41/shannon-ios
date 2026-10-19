@@ -77,8 +77,8 @@ describe('the bed pointer (when dusk is near and she carries no bed)', () => {
 
   it('comes after low health and before the Nether path, and is named only when she can read it (before the import: no pointer)', () => {
     const dusk = { time: '9000', margin: { darkInSeconds: 200 } };
-    expect(pointers({ ...dusk, health: 6, inventory: ['iron_pickaxe×1', 'bucket×1'] })).toEqual(['mc-low-health（体力が半分以下）', ...BED_POINTER,
-      'mc-nether-portal（鉄のツルハシとバケツがありネザーへ向かう前）']);
+    expect(pointers({ ...dusk, health: 6, inventory: ['iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1'] })).toEqual(['mc-low-health（体力が半分以下）', ...BED_POINTER,
+      'mc-nether-portal（鉄のツルハシ・バケツ・胸当てがありネザーへ向かう前）']);
     expect(pointers(dusk, {}, new Set(['mc-night-retreat', 'mc-low-health']))).toEqual([]);
   });
 });

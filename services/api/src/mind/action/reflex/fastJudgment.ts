@@ -23,7 +23,19 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
   maxStateAgeMs: 3_000,
   /** At or below this health the rules shelter or flee before anything else (an unknown health counts as 0). */
   lowHealth: 6,
+  /**
+   * A fast skill that failed rests this long (Minecraft run 16, 2026-10-19: `dig-shelter` failed six times in 30 s on the same
+   * "the floor of the hole is air", and each cut off her `mine-block`): within it the rules choose the next move instead.
+   */
+  restMs: 60_000,
 });
+/**
+ * The cage the body builds where it stands (`build-around-self`, `slit_shelter`: about ten building blocks and four slabs, a few
+ * seconds, no digging): the shelter once `dig-shelter` rests. The body's own list of building blocks (Minebot `buildAroundSelf.ts`).
+ */
+const CAGE = Object.freeze({ skill: 'build-around-self', structureName: 'slit_shelter', blocks: 10, slabs: 4 });
+const BUILDING_BLOCKS: ReadonlySet<string> = new Set(['cobblestone', 'cobbled_deepslate', 'stone', 'deepslate', 'andesite', 'diorite', 'granite',
+  'blackstone', 'tuff', 'basalt', 'nether_bricks', 'stone_bricks', 'end_stone', 'dirt', 'netherrack']);
 
 const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'blaze', 'ghast', 'drowned_trident']);
 const WEAPON = /(_sword|_axe|^trident|^mace)$/u;
@@ -40,8 +52,12 @@ export interface FastBodyState {
    * (see `floorMayRun`).
    */
   floorActive: boolean; floorKnown: boolean;
-  /** Her `dig-shelter` already failed in this danger episode: the next move is to flee, not to dig again. */
+  /** Her `dig-shelter` failed within `restMs` (it rests): the next move is the cage, or to flee, not to dig again. */
   shelterFailed: boolean;
+  /** The fast skills that failed within `restMs` and rest: none of them is chosen again until it is over. */
+  resting: ReadonlySet<string>;
+  /** She carries what the cage takes (`CAGE`: building blocks and slabs). */
+  canCage: boolean;
 }
 export type FastKind = 'fight' | 'flee' | 'shelter';
 export type FastEntry = 'close' | 'damage' | 'respawn';
@@ -49,7 +65,7 @@ export interface FastDecision {
   kind: FastKind; skill: string; arguments: Record<string, string | number | boolean>;
   /** The closed rule that chose it; `ambiguous` when only the default decided (an image-free arbiter may later choose). */
   rule: 'respawn_shelter' | 'low_health_shelter' | 'low_health_flee' | 'creeper_flee' | 'outnumbered_shelter' | 'ranged_shelter'
-    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee';
+    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee';
   ambiguous: boolean;
 }
 export type FastHold = 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper';
@@ -63,7 +79,7 @@ const record = (value: unknown) => value && typeof value === 'object' && !Array.
  * ago and the time since the body last arrived. Unknown values read as the safer side (no weapon, health unknown).
  */
 export function fastBodyState(observation: { facts: Readonly<Record<string, unknown>>; state: unknown },
-  memory: { earlierHealth: number | null; sinceArrivalMs: number | null; shelterFailed?: boolean }): FastBodyState {
+  memory: { earlierHealth: number | null; sinceArrivalMs: number | null; shelterFailed?: boolean; resting?: ReadonlySet<string> }): FastBodyState {
   const world = record(record(observation.state)?.world) ?? {};
   const health = finite(world.health) && world.health > 0 ? world.health : null;
   const threats = (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(item => {
@@ -74,12 +90,22 @@ export function fastBodyState(observation: { facts: Readonly<Record<string, unkn
   const tick = Number(world.time);
   const night = Number.isFinite(tick) && ((tick % 24000) + 24000) % 24000 >= 13_000 && ((tick % 24000) + 24000) % 24000 < 23_000;
   const inventory = Array.isArray(world.inventory) ? world.inventory : [];
+  const resting = memory.resting ?? new Set<string>();
   return { health, threats, night,
     respawnedRecently: memory.sinceArrivalMs !== null && memory.sinceArrivalMs < FAST_JUDGMENT_LIMITS.respawnWindowMs,
     healthDropped: health !== null && memory.earlierHealth !== null && health < memory.earlierHealth,
     hasWeapon: inventory.some(item => typeof record(item)?.name === 'string' && WEAPON.test(String(record(item)!.name))),
     floorActive: observation.facts.floorActive === true, floorKnown: typeof observation.facts.floorActive === 'boolean',
-    shelterFailed: memory.shelterFailed === true };
+    shelterFailed: memory.shelterFailed === true || resting.has('dig-shelter'), resting,
+    canCage: carried(inventory, name => BUILDING_BLOCKS.has(name)) >= CAGE.blocks && carried(inventory, name => name.endsWith('_slab')) >= CAGE.slabs };
+}
+/** How many of the items she carries pass `test` (`{name, count}` stacks; a stack without a count is one). */
+function carried(inventory: readonly unknown[], test: (name: string) => boolean): number {
+  return inventory.reduce<number>((total, item) => {
+    const stack = record(item), name = typeof stack?.name === 'string' ? stack.name.replace(/^minecraft:/u, '') : '';
+    const count = finite(stack?.count) ? stack!.count as number : 1;
+    return name && test(name) ? total + Math.max(0, count) : total;
+  }, 0);
 }
 
 /** Why the judgment opens for this state, or null. */
@@ -95,7 +121,8 @@ const decision = (kind: FastKind, rule: FastDecision['rule'], target = 'hostile'
   kind, rule, ambiguous: rule === 'ambiguous_shelter',
   ...(kind === 'fight' ? { skill: 'attack-continuously', arguments: { entityName: 'hostile', maxAttacks: 12 } }
     : kind === 'flee' ? { skill: 'flee-from', arguments: { target, minDistance: 16, timeout: 6000 } }
-      : { skill: 'dig-shelter', arguments: {} }),
+      : rule === 'shelter_failed_cage' ? { skill: CAGE.skill, arguments: { structureName: CAGE.structureName } }
+        : { skill: 'dig-shelter', arguments: {} }),
 });
 
 /** The deterministic rules, in order (the design's table). Never eats: the floor does (`eat`, priority 200). */
@@ -141,10 +168,16 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   return decision('shelter', 'ambiguous_shelter');
 }
 
-/** Hiding failed in this danger episode: flee instead (the design's "if hiding failed, flee next"). */
+/**
+ * A chosen skill that rests (it failed within `restMs`) is not sent again. Hiding failed: the cage where she stands when she carries
+ * its blocks and it does not rest itself, else flee (the design's "if hiding failed, flee next"; run 16: the hole's floor was air six
+ * times running). A fight that failed: flee. A flee that rests is still sent: nothing else is left.
+ */
 function afterFailedShelter(state: FastBodyState, chosen: FastDecision): FastDecision {
-  if (!state.shelterFailed || chosen.kind !== 'shelter') return chosen;
   const creeper = state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= 6);
+  if (chosen.kind === 'fight' && state.resting.has(chosen.skill)) return decision('flee', 'fight_resting_flee', creeper ? 'creeper' : 'hostile');
+  if (chosen.kind !== 'shelter' || !(state.shelterFailed || state.resting.has(chosen.skill))) return chosen;
+  if (state.canCage && !state.resting.has(CAGE.skill)) return decision('shelter', 'shelter_failed_cage');
   return decision('flee', 'shelter_failed_flee', creeper ? 'creeper' : 'hostile');
 }
 

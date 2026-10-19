@@ -17,6 +17,13 @@ export interface MetricsState {
   ironDone: boolean; gist: GistAdoptionState;
   /** Lowest health seen while alive, deaths, decisions hungry with food carried and none eaten. */
   hpMin: number | null; deaths: number; hungryNoEat: number; alive: boolean | null;
+  /**
+   * The time (epoch ms) of the last death counted: the newest entry of the body's `world.deaths` taken, or when a frame first showed
+   * her dead. Entries at or before it are not counted again.
+   */
+  deathAt: number | null;
+  /** The last death counted was a frame's, and the body's list has not shown its entry yet. */
+  deathByFrame: boolean;
   /** The nearest village's distance at the last decision, and whether that decision moved (`mc.move-to`). */
   village: number | null; moved: boolean;
   /** Cooked food items and whether a bed was carried at the last observation. */
@@ -58,6 +65,7 @@ export function readMetricsState(kept: unknown): MetricsState {
   const value = record(kept) ?? {};
   return { d: count(value.d, 1e6), reached: only(value.reached, MILESTONE_NAMES), tags: only(value.tags, ADOPTION_TAGS), made: only(value.made, TOOLS_MADE),
     ironDone: value.ironDone === true, gist: readGist(value.gist), hpMin: finite(value.hpMin), deaths: count(value.deaths),
-    hungryNoEat: count(value.hungryNoEat), alive: typeof value.alive === 'boolean' ? value.alive : null, village: finite(value.village),
+    hungryNoEat: count(value.hungryNoEat), alive: typeof value.alive === 'boolean' ? value.alive : null, deathAt: finite(value.deathAt),
+    deathByFrame: value.deathByFrame === true, village: finite(value.village),
     moved: value.moved === true, food: count(value.food, 9_999), bed: value.bed === true };
 }

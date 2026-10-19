@@ -1,5 +1,5 @@
 import {
-  bedSearchMemory, followedGists, GENERIC_BODY_TOOLS, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+  bedSearchMemory, followedGists, gistFollowLine, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
 } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
@@ -361,16 +361,13 @@ export function createMinecraftTaskBody(parts: {
   };
   const safe = () => !unknown && control.store.safe(step.taskId);
   // A body tool that changes something (not read-only), named by a gist the deciding step was shown; learning never fails a step.
-  const noteGistFollowed = (name: string) => {
+  const noteGistFollowed = (name: string, input: unknown) => {
     const id = availableBody();
     const skill = id ? control.frame(id)?.poll.skills?.find(item => `mc.${item.name}` === name) : undefined;
     const followed = parts.gistFollowed && skill && !skill.readOnly ? followedGists(gistTools, name) : [];
     // Content-free: which branch applied to a call made while a gist was shown (a tool name and skill names, never a gist).
     if (gistTools.size) {
-      const branch = !parts.gistFollowed ? 'no_port' : !skill ? 'not_legacy_pack' : skill.readOnly ? 'read_only' : followed.length ? 'recorded'
-        : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
-      const skills = followed.length ? followed.join(',') : '-';
-      const line = `Shannon Minecraft gist follow task=${step.taskId} tool=${name} branch=${branch} skills=${skills}`;
+      const line = gistFollowLine(step.taskId, { name, input }, gistTools, { port: !!parts.gistFollowed, skill, followed });
       try { log(line); } catch { /* logging never fails a step */ }
     }
     for (const gist of followed) {
@@ -433,7 +430,7 @@ export function createMinecraftTaskBody(parts: {
       measured(() => metrics.noteCall(call.name, call.input, gistTools));
       if (!call.name.startsWith('mc.')) return;
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
-      if (!active && !closed) noteGistFollowed(call.name);
+      if (!active && !closed) noteGistFollowed(call.name, call.input);
       if (!active && !closed) noteStageAdoption(call);
       // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
       const encoded = JSON.stringify(call.input);

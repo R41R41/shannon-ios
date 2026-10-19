@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
-import { adoptionTools, fed, milestoneLines, minecraftStage, type MinecraftStage } from './minecraftStage.js';
+import { adoptionTags, adoptionTools, fed, milestoneLines, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -70,14 +70,14 @@ const POINTERS: readonly Pointer[] = Object.freeze([
   { skills: ['mc-stronghold'], when: 'エンダーアイがあり要塞を探す前', applies: s => s.strongholdWanted },
   { skills: ['mc-ender-eyes'], when: 'ブレイズロッドがありエンダーアイが12個に足りない', applies: s => s.eyesWanted },
   // Diamonds, obsidian and the portal (draft-6) from the bucket on; the old Nether skill until then, from the same moment.
-  { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシとバケツがありネザーへ向かう前', applies: s => s.readyForNether },
+  { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシ・バケツ・胸当てがありネザーへ向かう前', applies: s => s.readyForNether },
   { skills: ['mc-food-and-pace'], when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
   // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
   // path is stage 5's and 6's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
   { skills: ['mc-first-day', 'mc-early-toolchain'], when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
   { skills: [FOOD_BED, 'mc-opening-scout'], when: '石のツルハシがあり食料かベッドが無い昼', applies: s => s.calm && s.stage === 2 && !(s.bedGivenUp && s.fed) },
   // Iron from stage 3, and at stage 2 once the day's sheep search found none (with the food pointer beside it while food is short).
-  { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシかバケツがまだ無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
+  { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシ・バケツ・鉄の胸当てのどれかが無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
   { skills: ['mc-travel-kit'], when: '弓・矢・くり抜いたカボチャが足りない', applies: s => s.calm && s.kitMissing },
 ]);
 /** The note beside the pointers: fixed words. */
@@ -341,6 +341,21 @@ export function gistToolNames(steps: readonly string[]): Set<string> {
 /** The skills whose shown gist names this called tool. */
 export function followedGists(gistTools: ReadonlyMap<string, ReadonlySet<string>>, callName: string): string[] {
   return [...gistTools].filter(([, tools]) => tools.has(callName)).map(([skill]) => skill);
+}
+
+/**
+ * `Shannon Minecraft gist follow task=<id> tool=<name> branch=<branch> skills=<skills|->`: which branch applied to a call made while a
+ * gist was shown. `adopted`: no tool of the gist, but a call that does what a shown skill is about (tool and argument, `adoptionTags`),
+ * counted as followed by the measurement and not recorded as a use (a use would hold the skill's next revision as `on_trial`).
+ */
+export function gistFollowLine(taskId: string, call: { name: string; input: unknown }, gistTools: ReadonlyMap<string, ReadonlySet<string>>,
+  facts: { port: boolean; skill: { readOnly?: boolean } | undefined; followed: readonly string[] }): string {
+  const { skill, followed } = facts, { name } = call;
+  const adopted = followed.length ? [] : [...new Set(adoptionTags([...gistTools.keys()], call).map(item => item.skill))];
+  const branch = !facts.port ? 'no_port' : !skill ? 'not_legacy_pack' : skill.readOnly ? 'read_only' : followed.length ? 'recorded'
+    : adopted.length ? 'adopted' : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
+  const skills = followed.length ? followed.join(',') : adopted.length ? adopted.join(',') : '-';
+  return `Shannon Minecraft gist follow task=${taskId} tool=${name} branch=${branch} skills=${skills}`;
 }
 
 /** Skill names from her skill index (`- name（…`), as `skillIndex` writes it. */

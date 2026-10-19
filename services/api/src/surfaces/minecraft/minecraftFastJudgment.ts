@@ -10,6 +10,8 @@ import type { MinecraftControl } from './minecraftControl.js';
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 /** How long a cut-off FCA skill may take to settle before the fast skill is sent (the body runs one skill at a time). */
 const SETTLE_MILLISECONDS = 2_000;
+/** Fast skills that cut off her tool and did nothing, within `restMs`, after which a judgment that may wait leaves her tool alone. */
+const INTERRUPT_BUDGET = 2;
 
 /**
  * One step's image-free fast judgment (Syzygy ADR-0011 stage 2, `fastJudgment.ts`): on each new frame it may start one bounded body
@@ -36,19 +38,37 @@ export function createMinecraftFastJudgment(parts: {
 }) {
   const { control, step, governor, now } = parts;
   const healths: Array<{ at: number; health: number }> = [];
-  let frames = 0, lastKind: FastDecision['kind'] | null = null, count = 0, shelterFailed = false, episodeArrival: number | null = null;
+  let frames = 0, lastKind: FastDecision['kind'] | null = null, count = 0, episodeArrival: number | null = null;
+  /**
+   * A fast skill that failed rests until this time (`FAST_JUDGMENT_LIMITS.restMs`). Before run 16 a failed shelter was forgotten as
+   * soon as one frame showed no danger: the zombie at the edge of the range came and went, and the same `dig-shelter` failed six
+   * times in 30 s on the same air under the hole. A new arrival (a respawn elsewhere) ends every rest.
+   */
+  const rests = new Map<string, number>();
+  /** When a fast skill that cut off one of her tools did nothing (not `completed`): at most `INTERRUPT_BUDGET` within `restMs`. */
+  const spentInterrupts: number[] = [];
   /** Dropped answers by reason (`stale`, `busy`, `not_sent`, `not_permitted`); also named in every hold's detail. */
   const discards = { stale: 0, busy: 0, not_sent: 0, not_permitted: 0 };
+  const resting = (at: number) => new Set([...rests].filter(([, until]) => until > at).map(([skill]) => skill));
+  const rest = (skill: string) => rests.set(skill, now() + FAST_JUDGMENT_LIMITS.restMs);
   const stateOf = (bodyId: string, observation: BodyObservation) => {
     const at = now(), arrived = control.arrivedAt(bodyId);
     const earlier = healths.filter(entry => entry.at < at && at - entry.at <= FAST_JUDGMENT_LIMITS.healthWindowMs).map(entry => entry.health);
-    // A failed shelter belongs to one danger episode of one life: a new arrival ends it (`consider` ends it when the danger passes).
     if (episodeArrival !== arrived) {
-      shelterFailed = false;
+      rests.clear();
       episodeArrival = arrived;
     }
     return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
-      shelterFailed });
+      resting: resting(at) });
+  };
+  /**
+   * Her tool is not cut off again for a judgment that may wait: run 16's six failed shelters cut off four `mine-block`s. Health at
+   * the floor of the rules, or falling, always may.
+   */
+  const interruptsSpent = (state: ReturnType<typeof stateOf>) => {
+    const at = now();
+    while (spentInterrupts.length && at - spentInterrupts[0]! > FAST_JUDGMENT_LIMITS.restMs) spentInterrupts.shift();
+    return spentInterrupts.length >= INTERRUPT_BUDGET && !state.healthDropped && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth;
   };
   const remember = (observation: BodyObservation) => {
     const health = (observation.state.world as { health?: unknown } | undefined)?.health;
@@ -81,7 +101,7 @@ export function createMinecraftFastJudgment(parts: {
     if (!latest || control.arrivedAt(bodyId) !== arrived || now() - Date.parse(latest.receivedAt) > FAST_JUDGMENT_LIMITS.maxStateAgeMs) return null;
     const state = stateOf(bodyId, latest), again = fastJudgment(state);
     if (!('decision' in again)) return null;
-    if (again.decision.kind === decision.kind) return again.decision;
+    if (again.decision.kind === decision.kind && again.decision.skill === decision.skill) return again.decision;
     // A new kind skips what `consider` checked for the first kind: its skill must exist on the body (else nothing is sent), and it
     // must not cut off a defensive skill of hers either.
     return hasSkill(bodyId, again.decision.skill) && !defending(state.health, again.decision) ? again.decision : null;
@@ -95,13 +115,32 @@ export function createMinecraftFastJudgment(parts: {
     if (!running || !DEFENSIVE_SKILLS.has(running)) return null;
     return (health ?? 0) <= 6 && decision.kind !== 'fight' && running.startsWith('attack') ? null : running;
   };
+  /**
+   * The end of a sent fast skill: its rest, the interrupt it spent, and its line. A skill cut off before its time was up (the FCA's own
+   * interrupt cancels the command) did not fail: only a refusal, a failure or a run to its deadline does. The design only says "if
+   * hiding failed, flee next" and does not cover interrupts. So is one the body's own reflex took the body from (a meal, a step back
+   * from a creeper: `interrupted_by_reflex`, whatever the time): the body defended itself, and the skill did not fail. No cooldown
+   * either (the caller's): the reflex answered the danger, and the judgment is free to look at it again once the body's floor lets go
+   * (`floor_active` holds it until then). A shelter that ran to its deadline rests too; a fight that did (it was still hitting) does
+   * not: only its refusal or failure.
+   */
+  const settled = (decision: FastDecision, sent: { outcome: string; failureType: string; byReflex: boolean; interrupted: boolean; sentAt: number;
+    judgedAt: number }) => {
+    const { outcome, byReflex, sentAt } = sent, effective = outcome === 'completed';
+    if (sent.interrupted && !effective) spentInterrupts.push(now());
+    const cutOff = isCutOff(outcome, byReflex, now() - sentAt, decision.skill);
+    const failed = decision.kind === 'shelter' ? !effective && !cutOff : outcome === 'failed' && !byReflex;
+    if (failed) rest(decision.skill);
+    parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
+      + ` entryToDispatchMs=${Math.max(0, sentAt - sent.judgedAt)} runMs=${Math.max(0, now() - sentAt)} outcome=${outcome}`
+      + ` failure=${sent.failureType}${failed ? ` restMs=${FAST_JUDGMENT_LIMITS.restMs}` : ''}${sent.interrupted ? ' cut=true' : ''}${reflexTag(byReflex)}`);
+  };
   const run = async (bodyId: string, first: FastDecision, entry: ReflexEntryFacts, judged: { arrived: number | null; at: number },
     signal: AbortSignal) => {
     count += 1;
     const sessionId = `${step.id}:fast:${count}`, id = `fast:${hash(sessionId)}`;
     governor.began(step.taskId, now(), entry);
-    let effective = false, decision = first, cooldown = true;
-    const sentAt = now();
+    let effective = false, decision = first, cooldown = true, interrupted = false, sentAt = now();
     /** A dropped answer did not do what a cooldown would be for in the success case: it waits `dangerCooldownMs` like any ineffective session. */
     const discard = (reason: keyof typeof discards, hold: string, detail: Record<string, string | number | boolean | null>) => {
       discards[reason] += 1;
@@ -119,6 +158,7 @@ export function createMinecraftFastJudgment(parts: {
       }
       decision = before;
       if (parts.activeAction()) {
+        interrupted = true;
         parts.interrupt();
         if (!await settle(bodyId, id, signal)) return discard('busy', 'fast_skill_busy', { skill: decision.skill });
         // Her tool was cut off by now: a drop here keeps the full cooldown (the flicker guard above), or the next frames would cut off
@@ -133,31 +173,26 @@ export function createMinecraftFastJudgment(parts: {
       }
       parts.touched();
       parts.stepOutcome('unknown');
-      let outcome: string, byReflex = false;
+      let outcome: string, byReflex = false, failureType = '-';
+      // The entry's time to the command (run 16 logged it after the skill had run, so a 15 s fight read as a 15 s wait to start).
+      sentAt = now();
       try {
         const receipt = await control.command({ id, context: parts.context(bodyId, sessionId), lease: step.lease, kind: 'skill',
           skill: decision.skill, arguments: decision.arguments, milliseconds: fastSkillMilliseconds(decision.skill) }, signal);
         outcome = receipt.outcome;
         byReflex = receipt.failureType === 'interrupted_by_reflex';
+        if (typeof receipt.failureType === 'string' && /^[a-z_]{1,40}$/u.test(receipt.failureType)) failureType = receipt.failureType;
         parts.stepOutcome('acknowledged');
       } catch (error) {
         // Never sent (the body went away, the lease moved): nothing happened. Sent and lost: unknown, as any body command.
         if (!control.store.command(id)) return discard('not_sent', 'fast_not_sent', { skill: decision.skill });
-        if (decision.kind === 'shelter') shelterFailed = true;
+        if (decision.kind === 'shelter') rest(decision.skill);
         parts.unknown();
         throw error;
       }
       effective = outcome === 'completed';
-      // A shelter cut off before its time was up (the FCA's own interrupt cancels the command) did not fail: only a refusal, a failure
-      // or a run to its deadline does. The design only says "if hiding failed, flee next" and does not cover interrupts.
-      // So is one the body's own reflex took the body from (a meal, a step back from a creeper: `interrupted_by_reflex`, whatever the
-      // time): the body defended itself, and the shelter did not fail. No cooldown either: the reflex answered the danger, and
-      // the judgment is free to look at it again once the body's floor lets go (`floor_active` holds it until then).
-      const cutOff = isCutOff(outcome, byReflex, now() - sentAt, decision.skill);
       cooldown = !byReflex;
-      if (decision.kind === 'shelter') shelterFailed = !effective && !cutOff;
-      parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
-        + ` entryToDispatchMs=${Math.max(0, now() - judged.at)} outcome=${outcome}${reflexTag(byReflex)}`);
+      settled(decision, { outcome, failureType, byReflex, interrupted, sentAt, judgedAt: judged.at });
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
         skill: decision.skill, outcome }), sessionId);
     } finally { governor.ended(step.taskId, now(), entry, effective, cooldown); }
@@ -177,8 +212,8 @@ export function createMinecraftFastJudgment(parts: {
       if (!('decision' in verdict)) {
         frames = 0;
         lastKind = null;
+        // A frame with no danger does not end a rest (`rests`): the same air is under the same hole a frame later.
         if (verdict.entry) parts.hold(verdict.hold);
-        else shelterFailed = false; // The danger passed: the next one is a new episode.
         return null;
       }
       // Consecutive frames of the same choice: a kind that changes (shelter, then fight) is a flicker and starts the count again.
@@ -190,6 +225,9 @@ export function createMinecraftFastJudgment(parts: {
       if (running) return parts.hold('fca_defending', { skill: running }), null;
       if (!hasSkill(bodyId, decision.skill)) {
         return parts.hold('fast_skill_missing', { skill: decision.skill }), null;
+      }
+      if (parts.activeAction() && interruptsSpent(state)) {
+        return parts.hold('fast_interrupts_spent', { skill: decision.skill, spent: spentInterrupts.length }), null;
       }
       const nearest = Math.min(...state.threats.map(threat => threat.distance));
       const entry: ReflexEntryFacts = { mode: 'danger', danger: state.healthDropped && state.health !== null
