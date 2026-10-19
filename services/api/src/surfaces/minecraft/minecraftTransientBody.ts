@@ -3,7 +3,8 @@ import { villageDistance } from './minecraftAdoptionTags.js';
 import { BED_ITEM, carriedItemCounts, COOKED_FOOD, countMatching, EDIBLE_FOOD } from './minecraftItems.js';
 import type { createPaceLedger } from './minecraftPaceLedger.js';
 import { minecraftStage } from './minecraftStage.js';
-import { cleanDeep, cleanText, minecraftTransientObservation } from './minecraftTransientObservation.js';
+import { jobsLine } from './minecraftObservationReflexes.js';
+import { clean, cleanDeep, cleanText, minecraftTransientObservation } from './minecraftTransientObservation.js';
 
 /**
  * The body part of a transient decision's live state (observation redesign P3, `SHANNON_FCA_OBS_MODE=transient`): what changes from
@@ -22,10 +23,15 @@ const FOODS = 8, JOBS = 800, SURFACE_Y = 55;
  * The external jobs the world frame reports (a furnace and when it finishes): absent unless the body gives them. Like every string the world
  * supplies they are cleaned (review 5, L-2): control and hidden characters out, keys and texts alike.
  */
-function jobsOf(world: Record<string, unknown>): BodyValue | undefined {
+function jobsOf(world: Record<string, unknown>): { key: string; value: BodyValue } | undefined {
   const present = (item: unknown) => Array.isArray(item) ? item.length > 0 : !!record(item) && Object.keys(item as object).length > 0;
-  const value = [world.jobs, world.activeFurnaces, world.backgroundJobs].find(present);
-  return value !== undefined && JSON.stringify(value).length <= JOBS ? cleanDeep(value as BodyValue) : undefined;
+  const key = ['jobs', 'activeFurnaces', 'backgroundJobs'].find(name => present(world[name]));
+  if (key === undefined) return undefined;
+  const value = world[key];
+  if (JSON.stringify(value).length <= JOBS) return { key, value: cleanDeep(value as BodyValue) };
+  // Too long to copy (review 6, L-3): the one-line form the legacy summary gives (`minecraftObservationReflexes.ts`), when the shape is known.
+  const line = jobsLine(value as BodyValue);
+  return line ? { key, value: clean(line) } : undefined;
 }
 
 /** What phase she is in, from what she carries and where she is: the shared `minecraftStage` and `carriedItemCounts`. */
@@ -50,9 +56,10 @@ export function minecraftTransientBody(parts: { observation: BodyObservation | n
   if (observation) ledger.observe(carriedItemCounts(world, observation.facts));
   const { sameFailure, ...snapshot } = ledger.snapshot();
   const jobs = observation ? jobsOf(world) : undefined;
-  return { ...(observation ? { observation: minecraftTransientObservation(observation) } : {}),
+  // The jobs are said once, here (L-3): the observation leaves out the world part they came from.
+  return { ...(observation ? { observation: minecraftTransientObservation(observation, jobs ? { leave: [jobs.key] } : {}) } : {}),
     pace: { ...pace, ...snapshot },
     ...(observation ? { phaseFacts: minecraftPhaseFacts(observation, pace.elapsedMinutes) } : {}),
-    ...(jobs !== undefined ? { jobs } : {}), ...fields,
+    ...(jobs !== undefined ? { jobs: jobs.value } : {}), ...fields,
     ...(sameFailure ? { sameFailure: { ...sameFailure, note: `同じ失敗が${sameFailure.times}回続いています。場所・対象・周りを変えてから試す。` } } : {}) };
 }

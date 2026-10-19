@@ -437,7 +437,8 @@ export function createMinecraftTaskBody(parts: {
       pendingWaitMs = call.name === 'mc.wait-time' ? waitTimeMilliseconds(call.input) : 0;
     },
     noteResult(call, result, durationMilliseconds) {
-      measured(() => paceLedger.note(call, { ok: result.ok, failure: result.failure ?? null }, durationMilliseconds ?? 0));
+      measured(() => paceLedger.note(call, { ok: result.ok, failure: result.failure ?? null, bodyReflex: result.bodyReflex === true },
+        durationMilliseconds ?? 0));
       if (activeAction?.name === call.name) activeAction = undefined;
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
