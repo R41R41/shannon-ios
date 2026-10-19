@@ -47,7 +47,8 @@ function memoryOf(items: readonly TaskMemoryItem[], forgotten = new Set<string>(
 const state = { snapshot: () => ({}) as never };
 type JevAsked = { questions: object; parse(answers: Record<string, unknown>): unknown; fallback(): unknown };
 const situation = (overrides: Partial<ReturnType<typeof minecraftSituation>>) => ({ night: false, darkSoon: false, threatNear: false, lowHealth: false,
-  hungry: false, stalled: false, idleWaiting: false, readyForNether: false, inNether: false, blazeNear: false, bedWanted: false, stage: 3 as const, calm: true, ...overrides });
+  hungry: false, stalled: false, idleWaiting: false, readyForNether: false, inNether: false, blazeNear: false, bedWanted: false, stage: 3 as const, calm: true,
+  inEnd: false, milestone: [] as string[], bedGivenUp: false, fed: true, eyesWanted: false, strongholdWanted: false, kitMissing: false, ...overrides });
 const input = (cues: ReturnType<typeof minecraftRecallCues>) => ({ scopeKey: 'owner', taskId: 't1', goal: 'エンドラを討伐してください', cues, present: OWNER_AUDIENCE });
 
 describe('a body task\'s recall: the pool once a task, the situation each decision', () => {
