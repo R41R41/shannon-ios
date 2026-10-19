@@ -14,7 +14,8 @@ import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCoreTools.js';
-import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided } from './anthropicFcaContext.js';
+import { bodySharedContext, decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided }
+  from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
 import { reportDispatchFailure, reportRejection } from './anthropicRejection.js';
@@ -95,9 +96,19 @@ const WAIT_RULE = 'Nobody can send this task a message or answer a question: it 
 /**
  * With a body (`body`, its `pace` from `minecraftPace`): the L101–L103 lessons of the Minebot campaign (a run of steps without progress,
  * and idle waits while nobody could answer, used up the run). Restated only when it changed, as the other elided parts are.
+ *
+ * Its batch rule goes with the runner's guard (`FCA_EARLIER_ACTION_FAILED`, `fcaRunner.ts`), never without it: the old Minebot said
+ * "body actions can be called in order in the same response" (ShannonExecutor.ts:757) and stopped the rest after a failure; L104 made 1.38
+ * calls a response (52 of its 66 multi-call responses body after body) and reached an iron pickaxe in 16 decisions; production run 15
+ * (2026-10-19) made 1.13 and took 24, 21 of them a single call (a craft or a place the decision before could have sent among them). The lines on recall
+ * and the shared context say what a body decision no longer carries (`fcaRunner.ts`, `bodySharedContext`).
  */
 const BODY_RULE = 'body.pace gives the minutes since this task began and its latest tool results. Time is limited: when steps bring no '
-  + 'progress, change the approach or the order of subgoals instead of repeating it. Never wait idle while nobody can answer; continue with the body.';
+  + 'progress, change the approach or the order of subgoals instead of repeating it. Never wait idle while nobody can answer; continue with the body. '
+  + 'When the next body actions need no new result to choose them (planks, then a crafting table, then sticks; placing a block, then using it), '
+  + 'return them in this one response, in order, up to 5. A body action after one that failed in the same response is not run, and its result says so; '
+  + 'reads still run. What earlier tasks did is not shown to a body task: memory.search finds it when it matters. '
+  + 'In sharedContext.recentOutcomes an outcome of this task carries no result text: its result is that call\'s tool result in this conversation.';
 /** Rich chat (owner decision 2026-10-13): a report is shown as a card in his Talk, its form chosen by its content. */
 const REPORT_FORM_RULE = [
   'A report for the owner (a task.send to your parent, or the fca_complete summary when you send none) is shown in his app as Markdown,',
@@ -411,7 +422,8 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
   return { ...(ownerClock ? { ownerClock } : {}), task: input.task, children: input.children ?? [], messages: input.messages,
     ...(input.catalog ? { catalog: input.catalog.filter(tool => !core.has(tool.name) && !core.has(providerToolName(tool.name)))
       .map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
-    ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
+    ...(input.sharedContext ? { sharedContext: input.body !== undefined ? bodySharedContext(input.sharedContext, input.task.id) : input.sharedContext,
+      contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
     ...(input.recall ? { recall: modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
 }

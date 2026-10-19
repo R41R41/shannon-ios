@@ -4,13 +4,18 @@ import type { FcaToolDefinition } from './fcaPorts.js';
 import type { FcaToolState } from './fcaToolState.js';
 
 /**
- * `SHANNON_FCA_OBS_MODE` (Minecraft observation redesign, P2). `legacy` is the production behaviour, byte for byte. `transient`
- * applies to a body task only: its core tools are declared at the top level and stay byte-identical for a whole epoch, and every
- * other tool is only ever appended (`anthropicFcaCoreTools.ts`). A task keeps the mode it started with (`FcaToolState.obsMode`).
+ * `SHANNON_FCA_OBS_MODE` (Minecraft observation redesign, P2/P3). `transient` applies to a body task only: its core tools are declared at
+ * the top level and stay byte-identical for a whole epoch, every other tool is only ever appended (`anthropicFcaCoreTools.ts`), and what
+ * changes each turn is a live state the provider bills once (`anthropicFcaTransient.ts`). Every other task is the same in both modes.
+ * A task keeps the mode it started with (`FcaToolState.obsMode`).
+ *
+ * The default is `transient` (2026-10-19, after the L-1 to L-4 fixes of 85339a3; the estimate on production run 15's requests is in
+ * `tests/fcaDecisionCostEstimate.test.ts`: a body decision's input from about 65k tokens, a third of them written, to a few thousand new
+ * ones). `legacy` (the shape before, byte for byte) is the way back; anything else unknown is read as the default.
  */
 export type FcaObsMode = 'legacy' | 'transient';
 export function fcaObsMode(value: string | undefined): FcaObsMode {
-  return value?.trim().toLowerCase() === 'transient' ? 'transient' : 'legacy';
+  return value?.trim().toLowerCase() === 'legacy' ? 'legacy' : 'transient';
 }
 
 /**

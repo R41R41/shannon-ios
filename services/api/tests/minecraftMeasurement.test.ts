@@ -166,11 +166,39 @@ describe('the decision metrics line', () => {
     await metrics.timed('llmMs', async () => 1);
     metrics.tool('mc.craft-one', 7);
     metrics.tool('bad name with spaces', 3);
-    expect(metrics.checkpoint()).toEqual({ fcaDecisionIndex: 5 });
+    expect(metrics.checkpoint()).toEqual({ fcaDecisionIndex: 5, fcaCommittedAt: Date.parse('2026-10-17T00:01:00.000Z') });
     await inActionExecution({ modelMetrics: { storedTokens: 100, tailTokens: 20, inputNew: 5, inputRead: 90, inputWrite: 10, outputTokens: 30, inputTransformations: 2 } } as never,
       async () => metrics.emit());
     expect(JSON.parse(lines[0]!)).toEqual({ event: 'fca_decision_metrics', task: 'task-1', d: 5, t: 60, obsMode: 'legacy', llmMs: 10, stepMs: 30, selectorMs: 0,
       recallMs: 0, recallStartMs: 0, evidenceMs: 0, summaryMs: 0, tools: ['mc.craft-one', 'other'], toolMs: 10, storedTokens: 100, tailTokens: 20, in: { new: 5, read: 90, write: 10 }, out: 30,
-      loopBlockedMs: 0, inputTransformations: 2 });
+      loopBlockedMs: 0, other: { startMs: 0, permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0 }, gap: null, inputTransformations: 2 });
+  });
+  it('names the rest of a step and the time from the previous commit, split by what the scheduler said', async () => {
+    const lines: string[] = [];
+    let tick = 100;
+    const committed = Date.parse('2026-10-17T00:00:50.000Z');
+    const admission = { previousEndAt: committed + 300, startedAt: committed + 900, acquireMs: 40, beginMs: 5, budgetMs: 3, portsMs: 2 };
+    await inActionExecution({ admission } as never, async () => {
+      const metrics = fcaDecisionMetrics('task-1', '2026-10-17T00:00:00.000Z', { fcaDecisionIndex: 4, fcaCommittedAt: committed },
+        { clock: () => (tick += 10), now: () => committed + 1_000, log: line => lines.push(line), enteredAt: 60 });
+      await metrics.timed('permitMs', async () => 1);
+      metrics.timedSync('contextMs', () => 1);
+      await metrics.timed('guardMs', async () => 1);
+      metrics.skipped('mc.place-block-at');
+      metrics.emit();
+    });
+    const line = JSON.parse(lines[0]!);
+    // The clock read 110 when the step's metrics began, 50 after the step was entered at 60.
+    expect(line.other).toEqual({ startMs: 50, permitMs: 10, guardMs: 10, contextMs: 10, verifyMs: 0, closeMs: 0, commitMs: 0 });
+    expect(line.gap).toEqual({ sinceCommitMs: 1_000, afterMs: 300, waitMs: 600, admitMs: 50, startMs: 50 });
+    expect(line.skipped).toEqual(['mc.place-block-at']);
+    // Without the scheduler's word only the whole is known; a first decision has no gap at all.
+    const bare: string[] = [];
+    const alone = fcaDecisionMetrics('task-1', '2026-10-17T00:00:00.000Z', { fcaCommittedAt: committed }, { now: () => committed + 1_000, log: line => bare.push(line) });
+    alone.emit();
+    expect(JSON.parse(bare[0]!).gap).toEqual({ sinceCommitMs: 1_000, afterMs: null, waitMs: null, admitMs: null, startMs: 0 });
+    const first: string[] = [];
+    fcaDecisionMetrics('task-1', '2026-10-17T00:00:00.000Z', {}, { log: line => first.push(line) }).emit();
+    expect(JSON.parse(first[0]!).gap).toBeNull();
   });
 });

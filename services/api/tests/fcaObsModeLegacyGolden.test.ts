@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { requestDigest, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
 
 /**
- * `SHANNON_FCA_OBS_MODE=legacy` (the default) is production's request, byte for byte: the digests below were taken from the code of
+ * `SHANNON_FCA_OBS_MODE=legacy` (the default until 2026-10-19, now the way back) is that request, byte for byte: the digests below were taken from the code of
  * origin/main 4f75c89, before the switch existed, over three scripted body-shaped tasks (ids and clock readings replaced). A change
  * that moves one is a change of the legacy request, and of its cache.
  */

@@ -230,7 +230,8 @@ describe('common FCA runner with the real action authority', () => {
     expect(failedRead.checkpoint).toMatchObject({ consecutiveToolFailures: 1, consecutiveReflexCuts: 2, reflexCutToolRun: 2 });
     const write = await stepRounds([...Array.from({ length: 2 }, () => cutStep()), [['move', 'ok']], ...Array.from({ length: 2 }, () => cutStep())]);
     expect(write.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 2, reflexCutToolRun: 2 });
-    const mixed = await stepRounds([...Array.from({ length: 2 }, () => cutStep()), [['mine', 'reflex'], ['move', 'ok']], cutStep()]);
+    // The write first: after a cut, a later body action of the same response is not run (the earlier-failure guard, `fcaRunner.ts`).
+    const mixed = await stepRounds([...Array.from({ length: 2 }, () => cutStep()), [['move', 'ok'], ['mine', 'reflex']], cutStep()]);
     expect(mixed.checkpoint).toMatchObject({ consecutiveToolFailures: 0, consecutiveReflexCuts: 1, reflexCutToolRun: 1 });
   });
   it('a step that only reads does not clear the failures a run of cuts has counted, and one with no run still clears them as before (M2)', async () => {

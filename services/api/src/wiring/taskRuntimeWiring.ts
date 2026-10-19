@@ -56,6 +56,13 @@ export interface TaskRuntimeWiringOptions {
   bodyUnavailableCooldownMs?(cycles: number): number;
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
     | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed'>>;
+  /**
+   * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run 15, 2026-10-19: 1.9 s
+   * between one decision's commit and the next one's start, half a second of it this wait on average). Only a step that ran: an
+   * execution that returned before its step (not ready, not admitted) never asks, so a task that cannot run never spins the loop.
+   * Absent (tests that tick by hand): the interval alone.
+   */
+  continueAtOnce?: boolean;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
@@ -142,31 +149,41 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       return task;
     });
   }
-  async function execute(taskId: string, controller: AbortController): Promise<void> {
+  /** When each task's last step here finished (epoch ms): the start of the next one's wait, `ActionExecution.admission`. Read once. */
+  const finishedAt = new Map<string, number>();
+  /** Whether `execute` ran a step (`continueAtOnce`). */
+  async function execute(taskId: string, controller: AbortController): Promise<boolean> {
+    const startedAt = Date.now(), previousEndAt = finishedAt.get(taskId) ?? null;
+    finishedAt.delete(taskId);
     const task = recoverAdmission(taskId);
-    if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false || recovery?.blocks(taskId)) return;
+    if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false || recovery?.blocks(taskId)) return false;
     return withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others', taskId, parentTaskId: task.parentId }, async () => {
     observerHandoff('taskHub', 'queue', { phase: 'admission' });
+    let mark = performance.now();
+    const lap = () => { const at = performance.now(), spent = at - mark; mark = at; return spent; };
     const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
       sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal), value => ({ admitted: value !== null }));
-    if (!active) return;
+    if (!active) return false;
+    const acquireMs = lap();
     const job = running.get(taskId);
     if (job) job.claimed = true;
     let step: TaskStep | null = null;
     let stepPorts: ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
     try {
       step = observeSync('taskHub', { phase: 'begin_step', actionId: active.execution.lease.id }, () => runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision), value => ({ admitted: value !== null, stepId: value?.id ?? null }));
-      if (!step) { await active.finish('cancelled', 'fca_not_ready'); return; }
-      const admitted = step;
+      if (!step) { await active.finish('cancelled', 'fca_not_ready'); return false; }
+      const admitted = step, beginMs = lap();
       const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
       if (!budgeted.ok) {
         // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to settleFailedStep.
         await stopForBudget(admitted, budgeted.report, budgeted.code === 'task_estimates');
         await flushReceipts();
-        return;
+        return false;
       }
+      const budgetMs = lap();
       try {
         stepPorts = options.stepPorts?.(runtime, admitted);
+        active.execution.admission = { previousEndAt, startedAt, acquireMs, beginMs, budgetMs, portsMs: lap() };
         if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
         observerHandoff('queue', 'fca', { stepId: admitted.id });
         await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
@@ -180,9 +197,14 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       }
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
+      return true;
     } catch (error) {
       await settleFailedStep(error, taskId, step, stepPorts, active.execution);
-    } finally { active.stop(); }
+      return false;
+    } finally {
+      active.stop();
+      if (step) finishedAt.set(taskId, Date.now());
+    }
     });
   }
   type StepPorts = ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
@@ -360,7 +382,10 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         starting.push(slotClass);
         const controller = new AbortController();
         running.set(task.id, { controller, done: Promise.resolve(), slotClass, claimed: false });
-        running.get(task.id)!.done = execute(task.id, controller).catch(() => {}).finally(() => running.delete(task.id));
+        running.get(task.id)!.done = execute(task.id, controller).catch(() => false).then(ran => {
+          running.delete(task.id);
+          if (ran && options.continueAtOnce && !closing) setImmediate(() => { void tick().catch(() => {}); });
+        });
       }
     } finally { ticking = false; }
   }

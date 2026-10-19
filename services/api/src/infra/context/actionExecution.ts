@@ -16,6 +16,11 @@ export interface ActionExecution {
    * whose results it keeps (recall, tool selection, history summaries): a hold there may be retried (`heldBeforeAnyEffect`).
    */
   decisionRequested?:boolean;
+  /**
+   * When the FCA scheduler took this step up and what its admission spent before the step ran (`taskRuntimeWiring.ts`, measurement only,
+   * read by `fca_decision_metrics`): `previousEndAt` is when the task's previous step finished (epoch ms; null for its first step here).
+   */
+  admission?:{previousEndAt:number|null;startedAt:number;acquireMs:number;beginMs:number;budgetMs:number;portsMs:number};
   /** A bounded executor's acknowledgement, separate from a model call nested inside that step. */
   stepOutcome?:'unknown'|'acknowledged';
   /** A write tool of a conversation turn ran and has not returned an acknowledged result: an interruption leaves its outcome unknown. */

@@ -5,7 +5,8 @@ import { estimatedAnthropicTokens } from './anthropicFcaHistory.js';
 import { HAIKU_PROTOCOL_PREFIX } from './haikuCache.js';
 import { cutToFit, LIVE_TYPICAL_TOKENS, type CutResult } from './anthropicFcaStateCut.js';
 import { stateMessage, storedState } from './anthropicFcaStoredState.js';
-import { clearAtMessage, FCA_TRANSIENT_THINKING, isFcaClearAtMessage, liveObject, liveSkillCounts, renderedRequest } from './anthropicFcaTransient.js';
+import { clearAtMessage, FCA_TRANSIENT_THINKING, isFcaClearAtMessage, liveObject, liveSkillCounts, renderedRequest, storedFields }
+  from './anthropicFcaTransient.js';
 
 /** The room (estimated tokens) one more round takes in the replay: its calls, their stored results and the answer's blocks. */
 export const FCA_TRANSIENT_ROUND_TOKENS = 4_000;
@@ -82,14 +83,14 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   const wholeFits = (full: boolean) => (row: Record<string, unknown>, live: Record<string, unknown>) =>
     requestFits(full)(row, live) && (limit === undefined || continuedTokens(row, full) <= limit);
 
-  const live = liveObject(supplied, input.transient);
-  let stored = storedState(supplied, history);
+  const live = liveObject(supplied, input.transient), kept = storedFields(supplied);
+  let stored = storedState(kept, history);
   let deferred = false;
   if (stored.hasCut) {
     // A part cut earlier is stated whole again as soon as the request fits with it, and the replay with it can take another step. While the
     // cut copy is in the replay the whole one may not fit beside it: that is reported like a cut (`stateCut`), so that the next epoch
     // (whose first state is whole) starts sooner.
-    const whole = storedState(supplied, history, true);
+    const whole = storedState(kept, history, true);
     if (wholeFits(whole.full)(whole.row, live)) stored = whole;
     else deferred = true;
   }
@@ -101,10 +102,10 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   // A summary starts a new epoch whose first state is whole: worth forcing only if (L3) a whole state fits one with its bootstrap and a
   // typical live state, and (L2) the next step could not state it whole in place, beside this epoch's replay.
   const restorable = (storedCut || deferred) && (() => {
-    const fresh = storedState(supplied, []).row;
+    const fresh = storedState(kept, []).row;
     if (emptyBase + FCA_TRANSIENT_BOOTSTRAP_TOKENS + estimatedAnthropicTokens(turnOf(fresh, null, true)) + FCA_TRANSIENT_LIVE_TOKENS > maximum
       || (limit !== undefined && replayTokens(fresh, true) > limit)) return false;
-    const sent = turnOf(fitted.row, null, stored.full), next = storedState(supplied, [...history, ...sent], true);
+    const sent = turnOf(fitted.row, null, stored.full), next = storedState(kept, [...history, ...sent], true);
     const nextTurn = estimatedAnthropicTokens(turnOf(next.row, null, next.full)), sentTokens = estimatedAnthropicTokens(sent);
     const inPlace = requestBase + sentTokens + FCA_TRANSIENT_ROUND_TOKENS + nextTurn + FCA_TRANSIENT_LIVE_TOKENS <= maximum
       && (limit === undefined || replayNow + sentTokens + 2 * FCA_TRANSIENT_ROUND_TOKENS + nextTurn <= limit);

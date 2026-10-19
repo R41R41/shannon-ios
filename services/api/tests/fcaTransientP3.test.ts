@@ -270,16 +270,20 @@ describe('review follow-ups: removed parts, public projection, cap, recall', () 
     expect(publicState(text)).not.toContain('"name":"a"');
   });
 
-  it('does not start, fetch or record any recall for a transient body task, and still does for a legacy one', async () => {
+  it('does not start, fetch or record any recall for a body task in either shape, and still does for any other task', async () => {
     quiet();
-    const transient: string[] = [], legacy: string[] = [];
+    const transient: string[] = [], legacyBody: string[] = [], other: string[] = [];
     const a = scenario({ mode: () => 'transient', policy: WIDE_POLICY, body: live, steps: 5, recallLog: transient });
     await a.settle();
     expect(transient).toEqual([]);
-    const b = scenario({ mode: () => 'legacy', policy: WIDE_POLICY, steps: 5, recallLog: legacy });
+    // A legacy body task too (2026-10-19): memory.search reads what earlier tasks did when it matters.
+    const b = scenario({ mode: () => 'legacy', policy: WIDE_POLICY, steps: 5, recallLog: legacyBody });
     await b.settle();
-    expect(legacy).toContain('packet');
-    expect(legacy).toContain('observeMemory');
+    expect(legacyBody).toEqual([]);
+    const c = scenario({ mode: () => 'legacy', policy: WIDE_POLICY, steps: 5, recallLog: other, keepBody: false });
+    await c.settle();
+    expect(other).toContain('packet');
+    expect(other).toContain('observeMemory');
   }, 120_000);
 });
 

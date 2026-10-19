@@ -63,6 +63,21 @@ export function decodeFcaContext(content: Anthropic.ContentBlock[], decision: Fc
 }
 
 /**
+ * The shared context as a body task's decision reads it (run 15, 2026-10-19: 3.3–3.8k characters in every stored decision, eight
+ * outcomes of her own calls whose result texts, ids and operation ids repeat what the conversation's tool results and the progress
+ * failures already say). The affect is whole; an outcome keeps what an appraisal names and checks (`decodeFcaContext`: its event id,
+ * observation and appraisal revision), its call's name, whether it worked, and an expectation and comparison when it has them. Only an
+ * outcome of another task (a child) keeps its task and its result, which this conversation does not show.
+ */
+export function bodySharedContext(context: FcaSharedContext, taskId: string): Record<string, unknown> {
+  return { affect: context.affect, recentOutcomes: context.recentOutcomes.map(outcome => ({
+    eventId: outcome.eventId, name: outcome.name, observation: outcome.observation, ok: outcome.result?.ok ?? null,
+    appraisalRevision: outcome.appraisalRevision,
+    ...(outcome.taskId === taskId ? {} : { taskId: outcome.taskId, result: outcome.result }),
+    ...(outcome.expectation ? { expectation: outcome.expectation } : {}), ...(outcome.comparison ? { comparison: outcome.comparison } : {}) })) };
+}
+
+/**
  * A transient body task declares `fca_context` at the top level at every decision, shared context or not. Without one the call is
  * answered here as not provided, and records nothing; the actions beside it are unaffected.
  */

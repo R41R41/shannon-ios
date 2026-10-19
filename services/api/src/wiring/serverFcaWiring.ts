@@ -131,7 +131,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
-    const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'),
+    const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'), continueAtOnce: true,
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
       // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release (`fcaBodyRecovery.ts`).
       ...(minecraft ? { bodyRecovery: recoveryParts => createFcaBodyRecovery({ ...recoveryParts,

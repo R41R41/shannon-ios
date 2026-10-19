@@ -85,7 +85,7 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
  * fixed instructions. Minebot lane run 2 (2026-10-14): of a first round's 97,282 characters, 47,487 were its decision message, the
  * catalog 19,803 and the recall packet 21,230 of them; the summary input (32,000) was spent on them, cut, before the round's calls.
  */
-const RESTATED_EACH_DECISION = ['catalog', 'recall', 'skillIndex', 'contextInstructions', 'progressInstructions'] as const;
+const RESTATED_EACH_DECISION = ['catalog', 'recall', 'skillIndex', 'contextInstructions', 'progressInstructions', 'bodyInstructions'] as const;
 const RULE_HOLDERS = ['ownerClock', 'waiting'] as const;
 /**
  * The public projection of a decision message keeps what the step was given to work on (task, messages, children, progress, the

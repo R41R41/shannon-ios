@@ -21,9 +21,9 @@ function epochs(bodies: Body[]): Body[][] {
 const CORE_PROVIDER = [...BODY_TOOLS.map(tool => tool.name), 'skill.read', 'memory.search', 'task.create', 'task.get', 'task.list', 'task.send'].map(name => name.replace(/\./gu, '_'));
 
 describe('SHANNON_FCA_OBS_MODE reader and the core set', () => {
-  it('reads only transient as transient', () => {
-    expect([undefined, '', 'legacy', 'x', 'on'].map(fcaObsMode)).toEqual(Array(5).fill('legacy'));
-    expect([' Transient ', 'transient'].map(fcaObsMode)).toEqual(['transient', 'transient']);
+  it('reads transient by default and only legacy as legacy (the default since 2026-10-19)', () => {
+    expect([undefined, '', 'x', 'on', ' Transient ', 'transient'].map(fcaObsMode)).toEqual(Array(6).fill('transient'));
+    expect(['legacy', ' Legacy '].map(fcaObsMode)).toEqual(['legacy', 'legacy']);
   });
   it('takes the body tools, task and goal tools, skill.read and the memory read tools as core, not minecraft.reflex or others', () => {
     const core = (name: string, domain: Parameters<typeof definition>[1]) => isFcaCoreTool({ name, domain });
