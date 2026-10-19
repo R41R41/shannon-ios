@@ -204,8 +204,8 @@ export class SQLiteMemoryEmbeddingIndex implements MemoryEmbeddingIndex {
     const row = this.database.prepare(`
       SELECT (SELECT count(*) || ':' || coalesce(max(updated_at), '') FROM memory_embeddings WHERE scope_key = ? AND model = ?) AS embeddings,
         (SELECT count(*) || ':' || total(revision) || ':' || coalesce(max(observed_at), '') FROM memory_search_documents WHERE scope_key = ?) AS documents,
-        (SELECT count(*) FROM conversation_threads WHERE archived_at IS NOT NULL) AS archived
-    `).get(scopeKey, model, scopeKey) as unknown as { embeddings: string; documents: string; archived: number };
+        (SELECT count(*) || ':' || coalesce(max(archived_at), '') || ':' || total(rowid) FROM conversation_threads WHERE archived_at IS NOT NULL) AS archived
+    `).get(scopeKey, model, scopeKey) as unknown as { embeddings: string; documents: string; archived: string };
     return `${row.embeddings}|${row.documents}|${row.archived}`;
   }
 

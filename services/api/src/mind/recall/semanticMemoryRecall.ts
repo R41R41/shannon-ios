@@ -186,7 +186,8 @@ export class SemanticMemoryRecall {
     if (held?.version === version) return held.rows;
     const rows = index.embeddingCandidates(scopeKey, model, this.config.scanLimit);
     this.held.set(key, { version, rows });
-    if (this.held.size > 16) this.held.delete(this.held.keys().next().value!);
+    // One set a scope and model (the owner's, at most a second): each holds every vector of its scope (about 2 KB each at 512 dimensions).
+    if (this.held.size > 2) this.held.delete(this.held.keys().next().value!);
     return rows;
   }
   private readonly held = new Map<string, { version: string; rows: readonly StoredEmbeddingCandidate[] }>();

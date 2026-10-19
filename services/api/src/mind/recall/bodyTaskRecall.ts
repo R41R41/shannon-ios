@@ -44,10 +44,12 @@ export interface BodyTaskRecall {
 }
 
 interface Group { id: string; ids: string[]; text: string; observedAt: string; count: number; death: boolean; base: number; success: boolean }
-interface Pool { groups: Group[]; size: number; builtAt: number; decisions: number; nearest: Promise<void> | null; capped: boolean }
+interface Pool { groups: Group[]; size: number; builtAt: number; decisions: number; capped: boolean }
 type Search = { scopeKey: string; goal: string; present: MemoryAudience; signal?: AbortSignal };
+const emptyPool = (builtAt: number): Pool => ({ groups: [], size: 0, builtAt, decisions: 0, capped: false });
 
-const DEATH = /死んだ|死亡|倒された|died|was slain/u;
+/** Her own death, as the game's records say it (a task experience that mentions a death is its own record, not hers). */
+const DEATH = /マイクラで死んだ|死んでしまった|^死んだ|died\b/u;
 /** Records that say nothing to learn from: a call cut off because the body moved on. */
 const EMPTY = /身体の状態が変わりました/u;
 const DATE = /\d+月\d+日の?(?:朝|昼|午前|午後|夕方|夜|深夜)?/gu;
@@ -72,7 +74,8 @@ function actionOf(action: string): { name: string; target: string; said: string;
     return { name: text(call?.name), target: text(target), said: text(input.summary),
       segment: /注目/u.test(segment) ? segment.replace(/^.*?注目: /u, '').replace(/ 区切り.*$/u, '') : '' };
   } catch {
-    return { name: action.slice(0, 40), target: '', said: '', segment: '' };
+    // A cut action (the record keeps its first characters): its tool's name, when the cut left it.
+    return { name: /"name":"([^"]{1,80})"/u.exec(action)?.[1] ?? '', target: '', said: '', segment: '' };
   }
 }
 
@@ -94,7 +97,7 @@ export function recordEssence(summary: string): { text: string; value: boolean }
 
 /** The same record, dates, ids and numbers aside: the call and the start of its result (the same failure elsewhere is one record). */
 function groupKey(essence: string): string {
-  if (DEATH.test(essence)) return 'death';
+  if (!essence.startsWith('[') && DEATH.test(essence)) return 'death';
   return VOLATILE.reduce((value, pattern) => value.replace(pattern, ' '), essence).trim().slice(0, 72);
 }
 
@@ -114,6 +117,15 @@ function scored(groups: readonly Group[], cues: BodyRecallCues): Array<{ group: 
   }).sort((left, right) => right.score - left.score || right.group.observedAt.localeCompare(left.group.observedAt));
 }
 
+/** A full pool gives up its lowest group to a better one (the memories nearest the goal come after the searches). */
+function evictBelow(groups: Map<string, Group>, base: number): boolean {
+  let lowest: [string, Group] | null = null;
+  for (const entry of groups) if (!lowest || entry[1].base < lowest[1].base) lowest = entry;
+  if (!lowest || lowest[1].base >= base) return false;
+  groups.delete(lowest[0]);
+  return true;
+}
+
 /** Into the pool's groups: a record that teaches nothing is left out, the same one is counted, the best base of a group stands. */
 function addToPool(pool: Pool, found: ReadonlyArray<{ item: TaskMemoryItem; base: number }>): void {
   const groups = new Map(pool.groups.map(group => [groupKey(group.text), group]));
@@ -129,7 +141,7 @@ function addToPool(pool: Pool, found: ReadonlyArray<{ item: TaskMemoryItem; base
       group.count += 1;
       group.base = Math.max(group.base, base);
       if (item.observedAt > group.observedAt) Object.assign(group, { id: item.id, text: essence.text, observedAt: item.observedAt });
-    } else if (groups.size < BODY_RECALL.poolGroups) {
+    } else if (groups.size < BODY_RECALL.poolGroups || evictBelow(groups, base)) {
       groups.set(key, { id: item.id, ids: [item.id], text: essence.text, observedAt: item.observedAt, count: 1, death: key === 'death', base,
         success: /\[success\]/u.test(essence.text) });
     }
@@ -171,16 +183,18 @@ export function createBodyTaskRecall(parts: {
     const work = () => [search(input.goal), search(`マイクラ ${input.goal}`), search('ゲームの記憶 マイクラ')];
     const lists = shared ? shared.withholding.withReadSnapshot(work) : work();
     // A search that came back full may have left more of the same record out: its counts are lower bounds ("×N+").
-    const pool: Pool = { groups: [], size: 0, builtAt: clock(), decisions: 0, nearest: null,
+    const pool: Pool = { groups: [], size: 0, builtAt: clock(), decisions: 0,
       capped: lists.some(list => list.length >= BODY_RECALL.poolSearch) };
     addToPool(pool, lists.flat().map(item => ({ item, base: 0.3 })));
-    if (parts.nearest) pool.nearest = nearest(pool, input, shared?.state ?? parts.state.snapshot(input.scopeKey));
+    if (parts.nearest) void nearest(pool, input, shared?.state ?? parts.state.snapshot(input.scopeKey));
     return pool;
   }
 
   /** The memories nearest the goal join the pool when they come (the next decisions read them); the deterministic pool stands meanwhile. */
   function nearest(pool: Pool, input: Search, snapshot: ReturnType<Pick<CompanionStateStore, 'snapshot'>['snapshot']>): Promise<void> {
+    // Experiences only, as the searches: a conversation's summary or a note is not a body task's record.
     return parts.nearest!({ scopeKey: input.scopeKey, query: input.goal, snapshot, present: input.present, limit: BODY_RECALL.poolNearest,
+      isEligible: candidate => candidate.kind === 'experience',
       ...(input.signal ? { signal: input.signal } : {}) }).then(result => {
       if (!result.hits.length) return;
       const similarity = new Map(result.hits.map(hit => [hit.id, hit.similarity]));
@@ -202,28 +216,38 @@ export function createBodyTaskRecall(parts: {
     return pool;
   }
 
-  async function judged(scopeKey: string, goal: string, cues: BodyRecallCues, ranked: ReadonlyArray<{ group: Group }>, signal?: AbortSignal):
-    Promise<{ groups: Group[]; jev: NonNullable<BodyRecallMeasure['jev']> }> {
-    const candidates = ranked.slice(0, BODY_RECALL.jevCandidates).map(item => item.group);
-    const started = clock();
-    const keys = candidates.map((_, index) => `m${index}`);
-    const decision = await parts.jev!.decide<Map<string, number> | null>({ scopeKey, surface: 'text', decision: 'recall_beam',
-      sets: [JEV_QUESTION_SETS.fcaBodyRecall],
-      state: { goal: goal.slice(0, 400), situation: [...cues.urgent ?? [], ...cues.words].slice(0, 40).join(' '),
-        memories: Object.fromEntries(candidates.map((group, index) => [keys[index], viewText(group).slice(0, 200)])) },
-      questions: Object.fromEntries(keys.map(key => [key, helps(key)])),
-      parse: answers => new Map(candidates.map((group, index) => [group.id, jevNoul(answers, keys[index]!)])),
-      fallback: () => null,
-      traceAnswers: (value, source) => ({ phase: 'fca_body_recall', scored: candidates.length, stop: source === 'fallback' ? 'failed' : 'exhausted',
-        kept: value ? [...value.values()].filter(score => score >= BODY_RECALL.jevKeep).length : 0 }),
-      ...(signal ? { signal } : {}) });
-    const ms = Math.round(clock() - started), scores = decision.value;
-    if (!scores) return { groups: [], jev: { ms, source: 'fallback', kept: 0 } };
-    const kept = candidates.filter(group => (scores.get(group.id) ?? 0) >= BODY_RECALL.jevKeep)
-      .sort((left, right) => (scores.get(right.id) ?? 0) - (scores.get(left.id) ?? 0));
-    return { groups: kept.slice(0, BODY_RECALL.items), jev: { ms, source: decision.source, kept: kept.length } };
+  /** The texts of these groups as memory's gate reads them now: a memory forgotten or withheld since the pool was made has none. */
+  function gated(input: Search, groups: readonly Group[]): Map<Group, string> {
+    const shared = parts.memory.readSnapshot?.(input.scopeKey);
+    const read = () => parts.memory.read(input.scopeKey, groups.map(group => group.id), input.present, shared, { provenance: false });
+    const items = new Map((shared ? shared.withholding.withReadSnapshot(read) : read()).map(item => [item.id, item.summary]));
+    return new Map(groups.flatMap(group => items.has(group.id) ? [[group, recordEssence(items.get(group.id)!).text] as const] : []));
   }
 
+  /** Jev's judgement of the best candidates, each read through the gate first (Jev never sees what she may no longer recall). */
+  async function judged(input: Search, cues: BodyRecallCues, ranked: ReadonlyArray<{ group: Group }>):
+    Promise<{ groups: Group[]; jev: NonNullable<BodyRecallMeasure['jev']> }> {
+    const readable = gated(input, ranked.slice(0, BODY_RECALL.jevCandidates).map(item => item.group));
+    const candidates = [...readable.keys()];
+    const started = clock();
+    const keys = candidates.map((_, index) => `m${index}`);
+    const decision = await parts.jev!.decide<number[] | null>({ scopeKey: input.scopeKey, surface: 'text', decision: 'recall_beam',
+      sets: [JEV_QUESTION_SETS.fcaBodyRecall],
+      state: { goal: input.goal.slice(0, 400), situation: [...cues.urgent ?? [], ...cues.words].slice(0, 40).join(' '),
+        memories: Object.fromEntries(candidates.map((group, index) => [keys[index], viewText({ ...group, text: readable.get(group)! }).slice(0, 200)])) },
+      questions: Object.fromEntries(keys.map(key => [key, helps(key)])),
+      // By position: a group's id may change while Jev answers (a newer copy of the same record joins the pool).
+      parse: answers => keys.map(key => jevNoul(answers, key)),
+      fallback: () => null,
+      traceAnswers: (value, source) => ({ phase: 'fca_body_recall', scored: candidates.length, stop: source === 'fallback' ? 'failed' : 'exhausted',
+        kept: value ? value.filter(score => score >= BODY_RECALL.jevKeep).length : 0 }),
+      ...(input.signal ? { signal: input.signal } : {}) });
+    const ms = Math.round(clock() - started), scores = decision.value;
+    if (!scores) return { groups: [], jev: { ms, source: 'fallback', kept: 0 } };
+    const kept = candidates.map((group, index) => ({ group, score: scores[index] ?? 0 })).filter(item => item.score >= BODY_RECALL.jevKeep)
+      .sort((left, right) => right.score - left.score).map(item => item.group);
+    return { groups: kept.slice(0, BODY_RECALL.items), jev: { ms, source: decision.source, kept: kept.length } };
+  }
   /** What the decision shows, read again through memory's own gate: what was forgotten or withheld since the pool was made is not shown. */
   function shownOf(input: Search, chosen: readonly Group[], capped: boolean): { items: TaskMemoryItem[]; sources: readonly string[] } {
     const shared = parts.memory.readSnapshot?.(input.scopeKey);
@@ -248,17 +272,27 @@ export function createBodyTaskRecall(parts: {
         cancel(input.scopeKey, input.taskId);
         return { packet: empty('withheld'), measure };
       }
-      const pool = poolFor(input, measure);
-      pool.decisions += 1;
-      Object.assign(measure, { pool: pool.size, groups: pool.groups.length });
-      const ranked = scored(pool.groups, input.cues);
-      let chosen = ranked.filter(item => item.fits).slice(0, BODY_RECALL.items).map(item => item.group);
-      if (parts.jevOn && parts.jev && ranked.length) {
-        const judgedBy = await judged(input.scopeKey, input.goal, input.cues, ranked, input.signal);
-        measure.jev = judgedBy.jev;
-        if (judgedBy.jev.source === 'jev') chosen = judgedBy.groups;
+      let items: TaskMemoryItem[], sources: readonly string[];
+      try {
+        const pool = poolFor(input, measure);
+        pool.decisions += 1;
+        Object.assign(measure, { pool: pool.size, groups: pool.groups.length });
+        const ranked = scored(pool.groups, input.cues);
+        let chosen = ranked.filter(item => item.fits).slice(0, BODY_RECALL.items).map(item => item.group);
+        if (parts.jevOn && parts.jev && ranked.length) {
+          const judgedBy = await judged(input, input.cues, ranked);
+          measure.jev = judgedBy.jev;
+          if (judgedBy.jev.source === 'jev') chosen = judgedBy.groups;
+        }
+        ({ items, sources } = shownOf(input, chosen, pool.capped));
+      } catch (error) {
+        // Recall never stops a decision: a read that failed (a lineage past its bound, a store error) gives none this time. A pool that could
+        // not be made is held empty, so that the next decisions do not make it again at once.
+        if (input.signal?.aborted) return { packet: empty('cancelled'), measure };
+        if (!pools.has(keyOf(input.scopeKey, input.taskId))) pools.set(keyOf(input.scopeKey, input.taskId), emptyPool(clock()));
+        console.warn(`Shannon body recall failed code=${error instanceof Error && /^[A-Z_]{3,80}$/u.test(error.message) ? error.message : 'error'}`);
+        return { packet: empty('failed'), measure };
       }
-      const { items, sources } = shownOf(input, chosen, pool.capped);
       Object.assign(measure, { shown: items.length, chars: items.reduce((sum, item) => sum + item.summary.length, 0) });
       return { packet: Object.freeze({ contextVersion: 'body', observedAt: at, status: items.length ? 'ready' : 'no_match',
         items: Object.freeze(items), sourceIds: Object.freeze([...sources]) }), measure };

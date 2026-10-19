@@ -113,6 +113,45 @@ describe('a body task\'s recall: the pool once a task, the situation each decisi
   });
 });
 
+describe('a body task\'s recall after review', () => {
+  it('never puts a memory forgotten since the pool was made to Jev', async () => {
+    const m = memoryOf(ALL);
+    const sent: string[] = [];
+    const recall = createBodyTaskRecall({ memory: m.memory, state, jevOn: true, jev: { async decide(request: JevAsked & { state: { memories: Record<string, string> } }) {
+      sent.push(...Object.values(request.state.memories));
+      return { value: request.fallback(), source: 'fallback' };
+    } } as never });
+    const cues = minecraftRecallCues(null, situation({ night: true, calm: false }), []);
+    await recall.packet(input(cues));
+    expect(sent.some(text => text.includes('縦穴'))).toBe(true);
+    sent.length = 0;
+    m.forgotten.add('night');
+    await recall.packet(input(cues));
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.some(text => text.includes('縦穴'))).toBe(false);
+  });
+  it('gives no recall, never an error, when a read fails, and does not make the pool again at once', async () => {
+    const m = memoryOf(ALL);
+    let fail = true;
+    const memory = { ...m.memory, search: (...args: Parameters<TaskMemory['search']>) => { if (fail) throw new Error('TASK_MEMORY_LINEAGE_LIMIT'); return m.memory.search(...args); } };
+    const recall = createBodyTaskRecall({ memory, state });
+    const cues = minecraftRecallCues(null, situation({}), []);
+    const first = await recall.packet(input(cues));
+    expect(first.packet).toMatchObject({ status: 'failed', items: [], sourceIds: [] });
+    fail = false;
+    const second = await recall.packet(input(cues));
+    expect(second.packet.items).toEqual([]);
+    expect(m.calls.search).toBe(0);
+  });
+  it('counts only her own deaths as deaths, not a task record that mentions one', async () => {
+    const own = item('own', 'ゲームの記憶: 10月19日の夜、マイクラで死んだ（モンスター）。', '2026-10-19T12:00:00.000Z');
+    const task = item('task', 'タスク経験 [success] 目的: x\n行動: {"name":"mc.attack-continuously","input":{"entityName":"zombie"}}\n観測結果: zombieは死んだ。\n解釈: y', '2026-10-19T12:01:00.000Z');
+    const recall = createBodyTaskRecall({ memory: memoryOf([own, task]).memory, state });
+    const { packet } = await recall.packet(input(minecraftRecallCues(null, situation({ lowHealth: true, calm: false }), [])));
+    expect(packet.items.map(entry => entry.id).sort()).toEqual(['own', 'task']);
+    expect(packet.items.find(entry => entry.id === 'task')!.summary).toBe('[success] attack-continuously(zombie): zombieは死んだ。');
+  });
+});
 describe('the recall cues of a Minecraft body', () => {
   it('name the night, the threats in Japanese and by id, the stage, a recent failure and a death the body reports', () => {
     const observation = { state: { world: { nearbyThreats: [{ name: 'zombie', distance: 4 }], dimension: 'overworld', deaths: [{ cause: 'zombie' }] } }, facts: {} } as never;
