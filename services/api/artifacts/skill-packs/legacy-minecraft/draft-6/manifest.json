@@ -10,7 +10,7 @@
     {
       "name": "mc-first-day",
       "path": "mc-first-day/SKILL.md",
-      "sha256": "47c6521e7ca1d331436f2b02a83d839b2678bd4506c85edc530a8b5f2c8af90e",
+      "sha256": "be57486d6b4d0a672449aa9a1b3ddb9c6f833e6d42d25332a5c4faf31a0f346d",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -20,7 +20,7 @@
     {
       "name": "mc-food-and-bed",
       "path": "mc-food-and-bed/SKILL.md",
-      "sha256": "a26d8fc30563365b8a995c8c88b7e90372eb7a9d07bf9d76bcbf4eb346f5ad24",
+      "sha256": "ad38a8c87c3dd56ac0a6cdf1b9fd1b7f384114c4090da41427ca9b2c4d94e5c6",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -30,7 +30,7 @@
     {
       "name": "mc-diamond-obsidian",
       "path": "mc-diamond-obsidian/SKILL.md",
-      "sha256": "83d0692b6ef711f4db1fc222087c95c3e63fda65fa4e4593e6434839bf696064",
+      "sha256": "2ea9d8eed9013d03f387ae0c4c0b0db00515ec88ed173ce48db85942b2b98d43",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -40,7 +40,7 @@
     {
       "name": "mc-travel-kit",
       "path": "mc-travel-kit/SKILL.md",
-      "sha256": "4eed991d19c8208f62c12e4c7650054fe722340040c5cebed47b3689a2378d53",
+      "sha256": "b1513bc12abfcb527bf250172308ad2256e689e84efaeca1d1d0666c73ca094b",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -50,7 +50,7 @@
     {
       "name": "mc-ender-eyes",
       "path": "mc-ender-eyes/SKILL.md",
-      "sha256": "f78b1b1bc3ef718ed4139dd7d1e75e2c065b86dc8ff2e9387fe05d0f4e6d1b53",
+      "sha256": "dbc5b8d0c8a338efed21793e3f8600196ed8dadc2be905c807345da6fe0ee001",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -60,7 +60,7 @@
     {
       "name": "mc-stronghold",
       "path": "mc-stronghold/SKILL.md",
-      "sha256": "48cef21aebbcb72e55f2dea15b458a54e6f5c9fc7d583eace6c6c28ce5018e93",
+      "sha256": "e499a6f673b6c65923fd518a2a69633dc3bc4686f37195636774f7b98b7cab96",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"
@@ -70,7 +70,7 @@
     {
       "name": "mc-end-fight",
       "path": "mc-end-fight/SKILL.md",
-      "sha256": "2c2da0a48fbb98de3bd85185b149506d9d49bedb8bb732f46dccbe984c65615b",
+      "sha256": "98d46fe477a725d4677bca8f2760a8139d971ab44b07fd6a76a03b6fe2c58085",
       "tools": [],
       "conditionalTools": [
         "minecraft.observe"

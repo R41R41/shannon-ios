@@ -7,7 +7,7 @@ import type { SkillPack } from '../src/mind/memory/skillImportContract.js';
 import { SKILL_CAPACITY, SKILL_GIST, SKILL_INDEX_WIDTH, skillGist, skillLint } from '../src/mind/memory/skillDocument.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';
 import { gistToolNames, minecraftSituation, minecraftSkillContext, minecraftSkillPointers, observeOnlyStep } from '../src/surfaces/minecraft/minecraftSkillPointers.js';
-import { FOOD_STOCK, adoptionTags, minecraftStage } from '../src/surfaces/minecraft/minecraftStage.js';
+import { FOOD_STOCK, MILESTONES, adoptionTags, adoptionTools, milestoneLines, milestoneNow, minecraftStage } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 
 /**
@@ -126,6 +126,69 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
   });
 });
 
+describe('the owner\'s order to the dragon, as the step now and the next', () => {
+  const at = (items: string[], dimension = 'overworld', netherReached = false) => milestoneNow({ counts: counts(...items), dimension, netherReached });
+  const step = (items: string[], dimension?: string, netherReached?: boolean) => { const { now, next } = at(items, dimension, netherReached); return [now.name, next?.name]; };
+
+  it('lists the owner\'s order from the spawn to the dragon', () => {
+    expect(MILESTONES.map(milestone => milestone.name)).toEqual(['スポーン', '木', '木と石のツルハシ', '石の斧', '木材', '食料と羊とベッド', '村の回収', '鉄', 'バケツ',
+      'ダイヤ', '黒曜石', 'ゲート', 'ネザー', 'ネザー要塞', 'ブレイズ', 'パール', 'アイ', 'エンド要塞', 'ベッドで地点', 'カボチャ', 'エンド', 'クリスタル', 'ドラゴン']);
+    expect(MILESTONES.every(milestone => milestone.condition && milestone.why)).toBe(true);
+  });
+
+  it('reads the step from what she carries and where she is', () => {
+    expect(step([])).toEqual(['木', '木と石のツルハシ']);
+    expect(step(['oak_log×3'])).toEqual(['木と石のツルハシ', '石の斧']);
+    expect(step(['stone_pickaxe×1'])).toEqual(['石の斧', '木材']);
+    expect(step(['stone_pickaxe×1', 'stone_axe×1', 'oak_log×3'])).toEqual(['食料と羊とベッド', '鉄']);
+    // The village is optional (not seen from what she carries): the bed and the food lead to iron.
+    expect(step(['stone_pickaxe×1', 'stone_axe×1', 'oak_planks×12', 'white_bed×1', FED])).toEqual(['鉄', 'バケツ']);
+    // An iron pickaxe passes everything before it, the bed too (the dusk pointer looks after the bed from here).
+    expect(step(['iron_pickaxe×1'])).toEqual(['バケツ', 'ダイヤ']);
+    expect(step(['iron_pickaxe×1', 'bucket×1'])).toEqual(['ダイヤ', '黒曜石']);
+    expect(step(['diamond_pickaxe×1'])).toEqual(['黒曜石', 'ゲート']);
+    expect(step(['diamond_pickaxe×1', 'obsidian×10'])).toEqual(['ゲート', 'ネザー']);
+    // A carved pumpkin made early is no step ahead: the order holds.
+    expect(step(['diamond_pickaxe×1', 'carved_pumpkin×1'])).toEqual(['黒曜石', 'ゲート']);
+    expect(step([], 'the_nether', true)).toEqual(['ネザー要塞', 'ブレイズ']);
+    expect(step(['blaze_rod×3'], 'the_nether', true)).toEqual(['ブレイズ', 'パール']);
+    expect(step(['blaze_rod×6'], 'the_nether', true)).toEqual(['パール', 'アイ']);
+    expect(step(['blaze_rod×6', 'ender_pearl×12'], 'overworld', true)).toEqual(['アイ', 'エンド要塞']);
+    expect(step(['ender_eye×12'], 'overworld', true)).toEqual(['エンド要塞', 'ベッドで地点']);
+    expect(step([], 'the_end', true)).toEqual(['クリスタル', 'ドラゴン']);
+  });
+
+  it('does not step back as things are used up, and pearls gathered first pass no blaze rods', () => {
+    // The obsidian went into the frame; the flint and steel made to light it keeps the step at the gate.
+    expect(step(['diamond_pickaxe×1', 'flint_and_steel×1'])).toEqual(['ゲート', 'ネザー']);
+    // Eyes thrown or placed: the rods and pearls they took stay behind her (back in the overworld, the pace's milestone unset).
+    expect(step(['ender_eye×5'])).toEqual(['アイ', 'エンド要塞']);
+    expect(step(['ender_eye×8'])).toEqual(['エンド要塞', 'ベッドで地点']);
+    // Twelve pearls from endermen before any rod: the Nether fortress and the rods are still to come.
+    expect(step(['ender_pearl×12'], 'the_nether', true)).toEqual(['ネザー要塞', 'ブレイズ']);
+    // Rods carried show the Nether was reached, even when the pace has not said so.
+    expect(step(['diamond_pickaxe×1', 'blaze_rod×2'])).toEqual(['ブレイズ', 'パール']);
+  });
+
+  it('is two lines of fixed words: the step now with its condition and reason, and the next with its condition', () => {
+    const lines = milestoneLines({ counts: counts('diamond_pickaxe×1'), dimension: 'overworld', netherReached: false });
+    expect(lines).toEqual(['今の節目: 黒曜石（条件: obsidian を10個。なぜ: ゲートの枠に最小10個）', '次の節目: ゲート（条件: 枠を建てて火をつけ、入る）']);
+    for (const facts of [[], ['stone_pickaxe×1'], ['iron_pickaxe×1'], ['ender_eye×12']]) {
+      expect(milestoneLines({ counts: counts(...facts), dimension: 'overworld', netherReached: false }).every(line => [...line].length <= 70)).toBe(true);
+    }
+    expect(milestoneLines({ counts: counts(), dimension: 'the_end', netherReached: true })).toHaveLength(2);
+  });
+
+  it('rides on every decision with an observation, a skill pointed or not, and none without one', () => {
+    const calm = minecraftSkillContext(minecraftSituation(observation({ inventory: ['iron_pickaxe×1', 'bucket×1'] }), { failedStepsInARow: 0 }), new Set());
+    expect(calm.fields).toEqual({ milestone: ['今の節目: ダイヤ（条件: diamond_pickaxe を持つ。なぜ: 黒曜石はこれでしか掘れない）', '次の節目: 黒曜石（条件: obsidian を10個）'] });
+    const pointed = minecraftSkillContext(minecraftSituation(observation({ inventory: ['oak_log×1'] }), { failedStepsInARow: 0 }), ALL);
+    expect(pointed.fields.milestone?.[0]).toMatch(/^今の節目: 木と石のツルハシ/u);
+    expect(pointed.fields.skillPointers).toHaveLength(1);
+    expect(minecraftSkillContext(minecraftSituation(null, { failedStepsInARow: 0 }), ALL).fields).toEqual({});
+  });
+});
+
 describe('what counts as acting on a draft-6 skill (tool and argument)', () => {
   const tags = (pointed: string[], name: string, input: unknown) => adoptionTags(pointed, { name, input }).map(item => `${item.skill}:${item.tag}`);
   it('matches the first moves of each new skill, only while it is pointed', () => {
@@ -177,18 +240,31 @@ describe('the draft-6 and draft-7 skills, as the import and the gist read them',
     expect(skillArtifactSha256(pack7().skills[0]!.body)).toBe(pack7().skills[0]!.sha256);
   });
 
-  it.each([...NEW, RETREAT])('%s: a gist of three whole lines within 90 characters whose first line names a body tool with its arguments', name => {
+  it.each([...NEW, RETREAT])('%s: how to go on in the numbered steps (the gist, no tool names), the tools apart below them', name => {
     const gist = gistOf(name), text = body(name);
     expect(gist).toHaveLength(SKILL_GIST.lines);
     expect(gist.map(line => line.slice(0, 2))).toEqual(['2.', '3.', '4.']);
     expect(gist.every(line => [...line].length <= SKILL_GIST.width && !line.endsWith('…'))).toBe(true);
-    expect(gist.join('')).not.toContain('minecraft.observe');
-    // The first move is a tool and its arguments (run 14: a gist shown 13 times, the skill never opened): in the first two lines.
-    // A tool that takes no argument (the bed, the shelter) is named alone.
-    expect(gist.slice(0, 2).join('')).toMatch(/mc\.[a-z-]+（[^）]+）|mc\.(?:sleep-in-bed|dig-shelter)\b/u);
-    // A followed gist is recorded by a tool only it names; the first day's are all generic (wood, crafting), measured by its adoption tags.
-    if (name === FIRST) expect(gistToolNames(gist).size).toBe(0);
-    else expect(gistToolNames(gist).size).toBeGreaterThan(0);
+    // Short knowledge, as the old notes were (60-120 characters each, 0.7% of them naming a tool): what, in what order, why.
+    expect(gist.every(line => [...line].length >= 40)).toBe(true);
+    expect(gist.join('')).not.toMatch(/mc\.[a-z]|minecraft\.observe/u);
+    expect(gistToolNames(gist).size).toBe(0);
+    // Every numbered step says how to go on: no tool name in any of them (the observe step aside).
+    const steps = text.split('## 手順')[1]!.split('## 補助')[0]!;
+    expect(steps.split('\n').filter(line => /^\d+\./u.test(line) && !line.includes('minecraft.observe')).filter(line => /mc\.[a-z]/u.test(line))).toEqual([]);
+    // The tools are named apart, after the steps, as bullets the gist never takes.
+    const tools = steps.slice(Math.max(0, steps.indexOf('\n使う道具')));
+    expect(steps.indexOf('\n使う道具')).toBeGreaterThan(0);
+    expect(tools).toMatch(/mc\.[a-z]/u);
+    expect(tools.split('\n').filter(line => /^\d+\./u.test(line))).toEqual([]);
+    // A followed gist is recorded by its skill's specific adoption tools (the first day's are all generic: measured by its adoption tags).
+    const followed = minecraftSkillContext({ ...minecraftSituation(null, { failedStepsInARow: 0 }), night: true }, new Set([name]),
+      names => new Map(names.map(skill => [skill, gistOf(skill)] as const))).gistTools;
+    if (name === RETREAT) expect([...followed.get(name)!].sort()).toEqual(['mc.build-around-self', 'mc.dig-shelter', 'mc.leave-water', 'mc.sleep-in-bed', 'mc.stair-mine']);
+    // Only tools that say the skill by name alone (no argument read, or no other skill's): the first day's are all shared and generic.
+    if (name === FIRST) expect([...adoptionTools(name)]).toEqual([]);
+    else expect([...adoptionTools(name)].length).toBeGreaterThan(0);
+    for (const shared of ['mc.use-item-on-block', 'mc.find-nearest-entity', 'mc.start-smelting', 'mc.equip-item']) expect(adoptionTools(name).has(shared)).toBe(false);
     expect([...text.matchAll(/mc\.[a-z][a-z-]*/gu)].map(match => match[0]).filter(tool => !REAL_TOOLS.has(tool))).toEqual([]);
     expect(text).not.toMatch(/-?\d+\s*,\s*-?\d+\s*,\s*-?\d+/u);
     expect(text).toContain('旧Minebot実験');
@@ -200,36 +276,35 @@ describe('the draft-6 and draft-7 skills, as the import and the gist read them',
   });
 
   it('says what the old knowledge got wrong or lacked, by the owner\'s order of things', () => {
-    // Before night: food and a bed, the sheep first, food animals, the village taken from without breaking chests or hurting villagers.
-    expect(gistOf(FOOD_BED).join('')).toMatch(/mc\.find-nearest-entity（entityType=sheep）.*maxKills=3.*white_bed.*food_animals/u);
-    expect(body(FOOD_BED)).toMatch(/チェストは壊さず.*mc\.check-container.*mc\.withdraw-from-container.*hay_block.*mc\.harvest-crop.*村人とアイアンゴーレムは攻撃しない/su);
+    // Before night: food and a bed before iron, the sheep first (their meat too), food animals cooked without waiting.
+    expect(gistOf(FOOD_BED).join('')).toMatch(/鉄より先に.*食料6個とベッド.*羊3頭.*羊毛3個＋板材3枚.*まとめて狩り.*焼く/u);
+    expect(body(FOOD_BED)).toMatch(/チェストは壊さず.*干し草の俵.*小麦9個.*村人とアイアンゴーレムは攻撃しない/u);
+    expect(body(FOOD_BED)).toMatch(/mc\.find-nearest-entity（entityType=sheep）.*food_animals.*white_bed.*mc\.check-container → mc\.withdraw-from-container.*hay_block.*mc\.harvest-crop/su);
     // The first day: wood, wooden and stone tools, the stone axe, how much wood.
-    expect(gistOf(FIRST).join('')).toMatch(/mc\.mine-block（blockName=.*oak_log.*wooden_pickaxe.*stone_pickaxe と stone_axe/u);
+    expect(gistOf(FIRST).join('')).toMatch(/最初は木.*原木を6本.*木のツルハシ（板3＋棒2）.*石のツルハシと石の斧/u);
     expect(body(FIRST)).toMatch(/原木1本で板4枚.*作業台に板4.*ベッドに板3.*チェストに板8/u);
     // Obsidian: a diamond pickaxe only, at least ten, water on a lava source; diamonds before it.
-    expect(gistOf(DIAMOND).join('')).toMatch(/diamond_ore.*黒曜石は diamond_pickaxe（ダイヤ3＋棒2）でしか掘れない.*water_bucket.*obsidian、count=10.*nether_portal/u);
-    expect(body(DIAMOND)).toMatch(/ゲートは最小10個/u);
-    expect(body(DIAMOND)).toMatch(/溶岩源.*water_bucket.*黒曜石に変える/su);
+    expect(gistOf(DIAMOND).join('')).toMatch(/次はダイヤ.*高さ -54.*鉄のツルハシで掘る.*黒曜石はダイヤのツルハシでしか掘れない.*最小10個.*溶岩源.*水をかけて/u);
+    expect(body(DIAMOND)).toMatch(/mc\.stair-mine（targetY=-54）.*obsidian、count=10.*itemName=water_bucket.*structureName=nether_portal/su);
     expect(body(DIAMOND)).toMatch(/8マス/u);
     // The kit: bow from string, arrows from flint, feather and stick, a carved pumpkin with shears, inventory and a spare pickaxe.
-    expect(body(KIT)).toMatch(/糸3＋棒3.*火打石＋棒＋羽根.*shears.*mc\.deposit-to-container.*予備のツルハシ/su);
+    expect(body(KIT)).toMatch(/矢32本以上.*糸3＋棒3.*火打石・棒・羽根.*ハサミ.*チェストへ預ける.*予備のツルハシ/su);
+    expect(body(KIT)).toMatch(/itemName=shears.*mc\.deposit-to-container/su);
     // Pearls: piglins for gold with gold armour on, or endermen; no boat; the Nether's eighth and its beds.
-    expect(gistOf(EYES).join('')).toMatch(/golden_boots、destination=feet.*gold_ingot、entityName=piglin/u);
-    expect(body(EYES)).toMatch(/entityName=enderman/u);
-    expect(body(EYES)).toContain('ボートは使わない');
+    expect(gistOf(EYES).join('')).toMatch(/12＋投げる分で15.*ピグリン.*金の防具を1つ着けてから金インゴット.*エンダーマン.*ボートは使わない/u);
+    expect(body(EYES)).toMatch(/golden_boots、destination=feet.*gold_ingot、entityName=piglin.*entityName=enderman/su);
     expect(body(EYES)).toMatch(/ネザーの1マスはオーバーワールドの8マス.*ベッドを使うと爆発する/u);
-    // Triangulation: two throws 50-100 m apart, the eye's position read by find-nearest-entity, 400-500 m legs, find-structure within 64 m.
-    expect(gistOf(STRONGHOLD).join('')).toMatch(/ender_eye.*mc\.find-nearest-entity（eye_of_ender）.*50〜100m.*400〜500m.*64m以内.*stronghold/u);
-    expect(body(STRONGHOLD)).toMatch(/結果に方角があればそれ/u);
-    expect(body(STRONGHOLD)).toMatch(/spawner.*end_portal_frame.*mc\.use-item-on-block（itemName=ender_eye）/su);
-    expect(body(STRONGHOLD)).toMatch(/mc\.activate-block.*昼でも地点が決まり/su);
-    // The End: pumpkin on the head, crystals from afar, caged ones climbed, the dragon in melee, the void.
-    expect(gistOf(END).join('')).toMatch(/carved_pumpkin、destination=head.*end_crystal.*近くで叩くと爆発.*mc\.tower-up.*iron_bars/u);
-    expect(body(END)).toMatch(/ender_dragon.*最後は近接で叩く.*虚空に落ちない.*ベッドを使うと爆発/su);
-    // The dragon perches now and then, crystals or not: they heal it, so they go first (not "all crystals, then it lands").
-    expect(body(END)).toMatch(/回復の元なので先に壊す.*時々中央の台/u);
-    // The night: the bed if she has one, else the shelter at once.
-    expect(gistOf(RETREAT).join('')).toMatch(/mc\.sleep-in-bed.*ベッドが無ければ.*mc\.dig-shelter.*mc\.stair-mine/u);
+    // Triangulation: two throws 50-100 m apart, 400-500 m legs, a search within 64 m; the eye read by find-nearest-entity.
+    expect(gistOf(STRONGHOLD).join('')).toMatch(/50〜100m離れた2地点.*交わる所.*400〜500m.*64m以内.*スポナー/u);
+    expect(body(STRONGHOLD)).toMatch(/mc\.find-nearest-entity（entityType=eye_of_ender）.*結果に方角があればそれを使う/su);
+    expect(body(STRONGHOLD)).toMatch(/end_portal_frame.*mc\.use-item-on-block（枠の座標、itemName=ender_eye）/su);
+    expect(body(STRONGHOLD)).toMatch(/昼でも決まり.*mc\.activate-block/su);
+    // The End: pumpkin on the head, crystals first (they heal it) from afar, caged ones climbed; the dragon perches now and then.
+    expect(gistOf(END).join('')).toMatch(/くり抜いたカボチャを頭.*回復の元なので先に壊す.*近くで叩くと爆発.*檻つき.*時々中央の台.*近接で叩く.*最後は近接/u);
+    expect(body(END)).toMatch(/虚空に落ちない.*ベッドを使うと爆発/su);
+    expect(body(END)).toMatch(/carved_pumpkin、destination=head.*targetName=end_crystal.*mc\.tower-up.*entityName=ender_dragon/su);
+    // The night: the bed if she has one, else the shelter at once, then down to mine.
+    expect(gistOf(RETREAT).join('')).toMatch(/ベッドがあり.*寝て夜を飛ばす.*ベッドが無ければ.*すぐ縦穴.*地下へ下り/u);
   });
 });
 

@@ -10,7 +10,7 @@
     {
       "name": "mc-night-retreat",
       "path": "mc-night-retreat/SKILL.md",
-      "sha256": "d6259d92b6826a11b32e45215b955cf17aca68479f635a816aba0d6f39ced99d",
+      "sha256": "8fb02f7b2fe4c30464306d8acfd34810ff317ef342912df4bcebbbc7f5d340b1",
       "revises": {
         "bodySha256": "9b374b07e77c6c9e3497beff138fd41541c39a6904ecb158d16ebeade44a2aa3"
       },

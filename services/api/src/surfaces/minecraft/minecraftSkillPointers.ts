@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
-import { fed, minecraftStage, type MinecraftStage } from './minecraftStage.js';
+import { adoptionTools, fed, milestoneLines, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -13,6 +13,11 @@ import { fed, minecraftStage, type MinecraftStage } from './minecraftStage.js';
  * wiring could open and pin as a read source, the first steps of its own procedure (`skillGist`, by code), so that she can act
  * without opening it. A call of a body tool a shown gist names is reported as that gist followed (`followedGists`), a use of
  * kind `gist` that the task's outcome settles (`fcaSkillOutcomes.ts`).
+ *
+ * legacy-minecraft draft-6 (2026-10-19, Minecraft runs 14 and 15: `skill_read` was never called): a skill's numbered steps say how to
+ * go on and why, without tool names, and its tools are named apart below them, so that the gist is the knowledge itself. A gist that
+ * names no tool is followed by the tools of its skill's adoption calls (`adoptionTools`). Every decision also carries the owner's
+ * order to the dragon as two lines, the step now and the next (`milestone`, `milestoneLines`), whether a skill is pointed or not.
  */
 export interface MinecraftSituation {
   night: boolean; darkSoon: boolean; threatNear: boolean; lowHealth: boolean; hungry: boolean; stalled: boolean; idleWaiting: boolean;
@@ -28,6 +33,8 @@ export interface MinecraftSituation {
   calm: boolean;
   /** In the End (`the_end`). */
   inEnd: boolean;
+  /** The owner's order to the dragon: the step now and the next, in fixed words (`milestoneLines`); none without an observation. */
+  milestone: string[];
   /** Stage 2 with no bed and the day's sheep search already given up (`noSheepDarkIn`): the bed waits, iron may go on. */
   bedGivenUp: boolean;
   /** Food enough for iron (`fed`, `minecraftStage.ts`). */
@@ -183,6 +190,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
     ...openingPath(items, stage, darkIn, day, pace),
     ...laterPath(items, dimension, stage),
+    milestone: observation ? milestoneLines({ counts: items, dimension, netherReached: pace.milestones?.netherReached === true }) : [],
   };
 }
 
@@ -265,9 +273,12 @@ export interface MinecraftSkillGist { skill: string; steps: readonly string[] }
 /** The gists of the named skills, by name (the wiring's `fcaSkillGists`): only those it could open and pin now. */
 export type SkillGistsPort = (names: readonly string[]) => ReadonlyMap<string, readonly string[]>;
 export interface MinecraftSkillContext {
-  /** The body's pointer fields: none on a calm moment; with no gist shown, `skillPointers` and `skillPointerNote` as before. */
-  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string };
-  /** The body tools each shown gist names, by skill (`gistToolNames`). */
+  /**
+   * The body's pointer fields: none on a calm moment but the milestone; with no gist shown, `skillPointers` and `skillPointerNote` as
+   * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
+   */
+  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[] };
+  /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
   pointed: readonly string[];
@@ -278,12 +289,18 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const matched = matching(situation, skillNames);
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
   const pointed = matched.map(pointer => pointer.skill);
-  if (!matched.length) return { fields: {}, gistTools: new Map(), pointed };
+  const milestone = situation.milestone.length ? { milestone: [...situation.milestone] } : {};
+  if (!matched.length) return { fields: milestone, gistTools: new Map(), pointed };
   const shown = gists?.(pointed) ?? new Map<string, readonly string[]>();
   const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);
-  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE }, gistTools: new Map(), pointed };
-  const gistTools = new Map(skillGists.map(gist => [gist.skill, gistToolNames(gist.steps)] as const));
-  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE }, gistTools, pointed };
+  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE, ...milestone }, gistTools: new Map(), pointed };
+  const gistTools = new Map(skillGists.map(gist => [gist.skill, followedBy(gist)] as const));
+  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE, ...milestone }, gistTools, pointed };
+}
+/** The tools a shown gist is followed by: those it names, else (a gist of how to go on, draft-6) its skill's specific adoption tools. */
+function followedBy(gist: MinecraftSkillGist): Set<string> {
+  const named = gistToolNames(gist.steps);
+  return named.size ? named : new Set([...adoptionTools(gist.skill)].filter(name => !GENERIC_BODY_TOOLS.has(name)));
 }
 
 /** The shared observe-first step of a procedure (each decision already carries the body's observation): `minecraft.observe`, no `mc.*` tool. */

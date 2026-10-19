@@ -42,9 +42,81 @@ export function fed(counts: ItemCounts): boolean {
   const food = countMatching(counts, EDIBLE_FOOD);
   return food >= FOOD_STOCK || (food >= FOOD_KEPT && countMatching(counts, IRON_IN_HAND) > 0);
 }
+/** What a milestone is read from: what she carries, where she is, and whether she has been to the Nether (the pace's milestone). */
+export interface MilestoneFacts { counts: ItemCounts; dimension: string; netherReached: boolean }
+/**
+ * One step of the owner's order to the dragon (owner 2026-10-19): its name, when it is reached (`done`, from `MilestoneFacts`), the
+ * condition and the reason in fixed words. `anchor`: a step that cannot be reached early by chance (it holds what comes before it),
+ * so every step before it counts as passed. `done` null: not seen from what she carries; `optional` ones are skipped, the others
+ * stay the step until a later anchor is reached.
+ */
+export interface Milestone {
+  name: string; condition: string; why: string; done: ((facts: MilestoneFacts) => boolean) | null; anchor?: boolean; optional?: boolean;
+}
+const has = (facts: MilestoneFacts, pattern: RegExp, least = 1) => countMatching(facts.counts, pattern) >= least;
+const sum = (facts: MilestoneFacts, ...weighted: Array<[RegExp, number]>) =>
+  weighted.reduce((total, [pattern, weight]) => total + countMatching(facts.counts, pattern) * weight, 0);
+const EYE = /^ender_eye$/u, BLAZE = /^blaze_(?:rod|powder)$/u;
+/** Been to the Nether: the pace's milestone (set by `mc.goal-evidence`), being there or past it, or carrying what only it gives. */
+const nether = (facts: MilestoneFacts) => facts.netherReached || facts.dimension === 'the_nether' || facts.dimension === 'the_end'
+  || has(facts, BLAZE) || has(facts, EYE);
+/** An eye made: the rods and pearls it took are behind her even once she throws or places most of them. */
+const eyeMade = (facts: MilestoneFacts) => has(facts, EYE);
+export const MILESTONES: readonly Milestone[] = Object.freeze([
+  { name: 'スポーン', condition: '始めから', why: '周りの木・動物・村を見る', done: () => true },
+  { name: '木', condition: '原木か板材を持つ', why: '作業台と道具はすべて木から', done: facts => has(facts, /_(?:log|planks)$/u) || has(facts, /^crafting_table$/u) },
+  { name: '木と石のツルハシ', condition: 'stone_pickaxe を持つ', why: '石が掘れ、丸石で道具とかまどが作れる', done: facts => has(facts, STONE_TIER_PICKAXE), anchor: true },
+  { name: '石の斧', condition: 'stone_axe 以上を持つ', why: '木を早く集められる', done: facts => has(facts, /^(?:stone|iron|diamond|netherite)_axe$/u) },
+  { name: '木材', condition: '板材にして12枚分以上', why: '作業台・棒・ベッド・チェストに要る', done: facts => sum(facts, [/_log$/u, 4], [/_planks$/u, 1]) >= 12 },
+  { name: '食料と羊とベッド', condition: 'ベッドと食べ物6個', why: '夜を飛ばせ、空腹で回復が止まらない（鉄より先）',
+    done: facts => has(facts, STONE_TIER_PICKAXE) && has(facts, BED_ITEM) && fed(facts.counts), anchor: true },
+  { name: '村の回収', condition: '持ち物では見えない', why: '村があればベッド・食料・鉄が早い', done: null, optional: true },
+  { name: '鉄', condition: 'iron_pickaxe を持つ', why: 'バケツ・防具・ダイヤの採掘に要る', done: facts => has(facts, IRON_TIER_PICKAXE), anchor: true },
+  { name: 'バケツ', condition: 'bucket を持つ', why: '黒曜石を作る水を運ぶ', done: facts => has(facts, IRON_TIER_PICKAXE) && has(facts, BUCKET_ITEM), anchor: true },
+  { name: 'ダイヤ', condition: 'diamond_pickaxe を持つ', why: '黒曜石はこれでしか掘れない', done: facts => has(facts, DIAMOND_TIER_PICKAXE), anchor: true },
+  // The frame takes the obsidian: with the flint and steel (made to light it) the obsidian step stays behind her.
+  { name: '黒曜石', condition: 'obsidian を10個', why: 'ゲートの枠に最小10個', anchor: true,
+    done: facts => has(facts, DIAMOND_TIER_PICKAXE) && (has(facts, /^obsidian$/u, 10) || has(facts, /^flint_and_steel$/u)) },
+  { name: 'ゲート', condition: '枠を建てて火をつけ、入る', why: 'ネザーへの入口', done: nether, anchor: true },
+  { name: 'ネザー', condition: 'ネザーに入った', why: '要塞とブレイズはネザーにだけある', done: nether, anchor: true },
+  { name: 'ネザー要塞', condition: 'ブレイズロッドを持つ', why: 'ブレイズは要塞にだけ湧く', done: facts => has(facts, BLAZE) || eyeMade(facts), anchor: true },
+  { name: 'ブレイズ', condition: 'ロッド6本分（パウダー12、目安は8本）', why: 'アイ12個にパウダーが12要る', anchor: true,
+    done: facts => sum(facts, [/^blaze_rod$/u, 2], [/^blaze_powder$/u, 1], [EYE, 1]) >= 12 || eyeMade(facts) },
+  // Not an anchor: pearls gathered first (endermen) must not pass the blaze rods still missing.
+  { name: 'パール', condition: 'パール12個分', why: 'アイの材料', done: facts => sum(facts, [/^ender_pearl$/u, 1], [EYE, 1]) >= 12 || eyeMade(facts) },
+  // Eyes break as they are thrown and go into the frames: eight are enough to call this step passed (`EYES_TO_SEARCH`).
+  { name: 'アイ', condition: 'ender_eye を12個', why: '要塞を探し、ポータルの枠を埋める', done: facts => has(facts, EYE, 8), anchor: true },
+  { name: 'エンド要塞', condition: '持ち物では見えない', why: 'エンドへのポータルがある', done: null },
+  { name: 'ベッドで地点', condition: '持ち物では見えない', why: 'エンドで死んでも要塞の近くから戻れる', done: null },
+  { name: 'カボチャ', condition: 'carved_pumpkin を持つ', why: '頭に着けるとエンダーマンが怒らない', done: facts => has(facts, /^carved_pumpkin$/u) },
+  { name: 'エンド', condition: 'エンドに入った', why: 'ドラゴンがいる', done: facts => facts.dimension === 'the_end', anchor: true },
+  { name: 'クリスタル', condition: '持ち物では見えない', why: 'ドラゴンの回復の元', done: null },
+  { name: 'ドラゴン', condition: '討伐の確かめ（goal-evidence）', why: '頼まれた目標', done: null },
+]);
+
+/**
+ * Where she is in the owner's order: the step after the last anchor reached (every step before it passed), skipping the steps
+ * reached by chance on the way and the optional ones, and the step after it. Stateless, from the facts alone.
+ */
+export function milestoneNow(facts: MilestoneFacts): { now: Milestone; next: Milestone | null } {
+  const lastAnchor = MILESTONES.reduce((last, milestone, index) => milestone.anchor && milestone.done?.(facts) ? index : last, -1);
+  const open = (index: number) => !MILESTONES[index]!.optional && !MILESTONES[index]!.done?.(facts);
+  let now = MILESTONES.findIndex((_, index) => index > lastAnchor && open(index));
+  if (now < 0) now = MILESTONES.length - 1;
+  const next = MILESTONES.findIndex((milestone, index) => index > now && !milestone.optional);
+  return { now: MILESTONES[now]!, next: next < 0 ? null : MILESTONES[next]! };
+}
+/** The two lines a decision carries (`milestone`): the step now with its condition and reason, and the next one. Fixed words only. */
+export function milestoneLines(facts: MilestoneFacts): string[] {
+  const { now, next } = milestoneNow(facts);
+  return [`今の節目: ${now.name}（条件: ${now.condition}。なぜ: ${now.why}）`, ...(next ? [`次の節目: ${next.name}（条件: ${next.condition}）`] : [])];
+}
+
 /** A finished call of hers: the tool and its arguments as she gave them. */
 export interface AdoptionCall { name: string; input: unknown }
-interface Adoption { tag: string; skills: readonly string[]; matches(call: AdoptionCall): boolean }
+/** A test of a call, with the body tools it can match and whether it reads no argument (`adoptionTools`). */
+type Matcher = ((call: AdoptionCall) => boolean) & { tools: readonly string[]; anyArgument: boolean };
+interface Adoption { tag: string; skills: readonly string[]; matches: Matcher }
 
 const BED = 'mc-bed-before-night', SCOUT = 'mc-opening-scout', IRON = 'mc-iron-and-bucket', TOOLCHAIN = 'mc-early-toolchain', PORTAL = 'mc-nether-portal';
 // legacy-minecraft draft-6 (2026-10-19): the successors of the four above and the path from diamonds to the dragon.
@@ -56,13 +128,16 @@ function argument(call: AdoptionCall, key: string): string | undefined {
   const value = input?.[key];
   return typeof value === 'string' ? value.toLowerCase() : undefined;
 }
-const tool = (name: string, key: string, test: RegExp) => (call: AdoptionCall) => call.name === name && test.test(argument(call, key) ?? '');
-const anyOf = (...tests: Array<(call: AdoptionCall) => boolean>) => (call: AdoptionCall) => tests.some(test => test(call));
+const matcher = (tools: readonly string[], anyArgument: boolean, test: (call: AdoptionCall) => boolean): Matcher => Object.assign(test, { tools, anyArgument });
+const tool = (name: string, key: string, test: RegExp) => matcher([name], false, call => call.name === name && test.test(argument(call, key) ?? ''));
+const anyOf = (...tests: Matcher[]) =>
+  matcher(tests.flatMap(test => test.tools), tests.every(test => test.anyArgument), call => tests.some(test => test(call)));
 const VILLAGE = /village/u, TOOLCHAIN_ITEMS = /^(?:[a-z_]+_planks|stick|crafting_table|wooden_pickaxe|stone_pickaxe|wooden_axe|stone_axe|stone_sword)$/u;
 const villageCheck = anyOf(tool('mc.recall-places', 'kind', VILLAGE), tool('mc.find-structure', 'structureType', VILLAGE),
   tool('mc.explore-for-structure', 'structureType', VILLAGE));
 const STRONGHOLD_TYPE = /^stronghold$/u, RAW_FOOD = /^(?:beef|porkchop|mutton|chicken|rabbit|cod|salmon|potato)$/u;
-const named = (name: string) => (call: AdoptionCall) => call.name === name;
+const named = (name: string) => matcher([name], true, call => call.name === name);
+const RETREAT = 'mc-night-retreat';
 
 /**
  * The calls that count as acting on a skill (a tool and an argument), beyond the tools only it names. Used for the content-free
@@ -75,7 +150,10 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'village_check', skills: [BED, SCOUT, FOOD_BED, FIRST_DAY], matches: villageCheck },
   { tag: 'sheep_hunt', skills: [BED, FOOD_BED], matches: tool('mc.attack-continuously', 'entityName', /^sheep$/u) },
   { tag: 'bed_craft', skills: [BED, FOOD_BED], matches: tool('mc.craft-one', 'itemName', /^[a-z_]*_bed$/u) },
-  { tag: 'bed_sleep', skills: [BED, FOOD_BED], matches: named('mc.sleep-in-bed') },
+  { tag: 'bed_sleep', skills: [BED, FOOD_BED, RETREAT], matches: named('mc.sleep-in-bed') },
+  { tag: 'shelter_dig', skills: [RETREAT], matches: named('mc.dig-shelter') },
+  { tag: 'shelter_build', skills: [RETREAT], matches: tool('mc.build-around-self', 'structureName', /^slit_shelter$/u) },
+  { tag: 'water_leave', skills: [RETREAT], matches: named('mc.leave-water') },
   { tag: 'food_hunt', skills: [SCOUT, FOOD_BED], matches: tool('mc.attack-continuously', 'entityName', /^(?:cow|pig|chicken|sheep|rabbit|food_animals)$/u) },
   { tag: 'food_cook', skills: [FOOD_BED], matches: tool('mc.start-smelting', 'inputItem', RAW_FOOD) },
   { tag: 'village_loot', skills: [FOOD_BED], matches: anyOf(named('mc.check-container'), named('mc.withdraw-from-container')) },
@@ -88,7 +166,7 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'wood_gather', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.mine-block', 'blockName', /_log$/u) },
   { tag: 'tool_craft', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.craft-one', 'itemName', TOOLCHAIN_ITEMS) },
   { tag: 'stone_mine', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.mine-block', 'blockName', /^(?:stone|cobblestone)$/u) },
-  { tag: 'diamond_descend', skills: [DIAMOND], matches: named('mc.stair-mine') },
+  { tag: 'descend', skills: [DIAMOND, RETREAT], matches: named('mc.stair-mine') },
   { tag: 'diamond_find', skills: [DIAMOND], matches: tool('mc.find-blocks', 'blockName', /diamond/u) },
   { tag: 'diamond_mine', skills: [DIAMOND], matches: tool('mc.mine-block', 'blockName', /diamond_ore$/u) },
   { tag: 'diamond_tool_craft', skills: [DIAMOND], matches: tool('mc.craft-one', 'itemName', /^(?:diamond_pickaxe|flint_and_steel)$/u) },
@@ -118,6 +196,19 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'pillar_climb', skills: [END], matches: named('mc.tower-up') },
   { tag: 'dragon_attack', skills: [END], matches: tool('mc.attack-continuously', 'entityName', /^ender_dragon$/u) },
 ]);
+
+/**
+ * The body tools a skill's adoption calls use (`ADOPTIONS`) that say it by their name alone: what a gist that names no tool is followed
+ * by (`minecraftSkillContext`; the follow is counted by the tool's name, its arguments unseen). A tool whose adoption reads an argument
+ * counts only when no other skill's adoption uses it (`use-item-on-entity` is the eyes' alone; `use-item-on-block` is water, shears and
+ * eyes, so none of them).
+ */
+export function adoptionTools(skill: string): Set<string> {
+  const own = ADOPTIONS.filter(adoption => adoption.skills.includes(skill));
+  const alone = (name: string) => ADOPTIONS.every(adoption =>
+    !adoption.matches.tools.includes(name) || (adoption.skills.length === 1 && adoption.skills[0] === skill));
+  return new Set(own.flatMap(adoption => adoption.matches.tools.filter(name => adoption.matches.anyArgument || alone(name))));
+}
 
 /** For a call made while the named skills were pointed: each pointed skill and the tag the call matched (none when it matched nothing). */
 export function adoptionTags(pointed: readonly string[], call: AdoptionCall): Array<{ skill: string; tag: string }> {

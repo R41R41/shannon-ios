@@ -8,11 +8,14 @@ import { skillGist, skillIndex } from '../../src/mind/memory/skillDocument.js';
 import { standardSkillPack } from '../../src/infra/config/standardSkillPack.js';
 import { minecraftSituation, minecraftSkillContext, observeOnlyStep } from '../../src/surfaces/minecraft/minecraftSkillPointers.js';
 
-const packs = ['draft-1', 'draft-2', 'draft-3', 'draft-4', 'draft-5', 'draft-6'].map(revision => standardSkillPack('legacy-minecraft', revision)!);
-const bodies = new Map<string, string>();
-for (const pack of packs) for (const skill of pack.skills) if (pack.revision !== 'draft-5') bodies.set(skill.name, skill.body);
-const oldNames = new Set([...bodies.keys()].filter(name => !packs[5]!.skills.some(skill => skill.name === name)));
-const allNames = new Set(bodies.keys());
+// Production today: draft-1..4 (draft-5 is on trial, so mc-nether-portal is draft-2's). After: draft-6 and draft-7 on top.
+const pack = (revision: string) => standardSkillPack('legacy-minecraft', revision)!;
+const before = new Map<string, string>();
+for (const revision of ['draft-1', 'draft-2', 'draft-3', 'draft-4']) for (const skill of pack(revision).skills) before.set(skill.name, skill.body);
+const after = new Map(before);
+for (const revision of ['draft-6', 'draft-7']) for (const skill of pack(revision).skills) after.set(skill.name, skill.body);
+const oldNames = new Set(before.keys()), allNames = new Set(after.keys());
+let bodies = before;
 const gists = (names: readonly string[]) => new Map(names.map(name => [name, skillGist(bodies.get(name)!, observeOnlyStep)] as const));
 const observation = (world: Record<string, unknown>): BodyObservation => {
   const dimension = (world.dimension as string | undefined) ?? 'overworld';
@@ -31,17 +34,21 @@ const cases: Array<[string, Record<string, unknown>]> = [
   ['nether + rods', { dimension: 'the_nether', inventory: ['blaze_rod×7'] }],
   ['end', { dimension: 'the_end' }],
 ];
-const size = (names: ReadonlySet<string>, world: Record<string, unknown>) => {
-  const context = minecraftSkillContext(minecraftSituation(observation(world), { failedStepsInARow: 0 }), names, gists);
-  return { chars: context.fields.skillPointers ? JSON.stringify(context.fields).length : 0, pointed: context.pointed.join(',') || '-' };
+// Before: the old skills' pointers and gists alone (no milestone then). After: draft-6 beside them, with the milestone lines.
+const size = (names: ReadonlySet<string>, world: Record<string, unknown>, withMilestone: boolean) => {
+  const { milestone, ...fields } = minecraftSkillContext(minecraftSituation(observation(world), { failedStepsInARow: 0 }), names, gists).fields;
+  const shown = withMilestone && milestone ? { ...fields, milestone } : fields;
+  return { chars: Object.keys(shown).length ? JSON.stringify(shown).length : 0, milestone: milestone ? JSON.stringify({ milestone }).length : 0,
+    pointed: minecraftSkillContext(minecraftSituation(observation(world), { failedStepsInARow: 0 }), names, gists).pointed.join(',') || '-' };
 };
-console.log('| case | before (chars, skills) | after (chars, skills) |\n|---|---|---|');
+console.log('| case | before (chars, skills) | after (chars, skills) | of which milestone |\n|---|---|---|---|');
 for (const [label, world] of cases) {
-  const before = size(oldNames, world), after = size(allNames, world);
-  console.log(`| ${label} | ${before.chars} (${before.pointed}) | ${after.chars} (${after.pointed}) |`);
+  bodies = before; const old = size(oldNames, world, false);
+  bodies = after; const now = size(allNames, world, true);
+  console.log(`| ${label} | ${old.chars} (${old.pointed}) | ${now.chars} (${now.pointed}) | ${now.milestone} |`);
 }
-const entries = (names: readonly string[]) => names.map((name, index) => ({ name, description: /description: (.*)/u.exec(bodies.get(name)!)![1]!, status: 'trial' as const,
+const entries = (names: readonly string[]) => names.map((name, index) => ({ name, description: /description: (.*)/u.exec(after.get(name)!)![1]!, status: 'trial' as const,
   createdAt: String(index).padStart(3, '0'), origin: 'operator_authored' as const }));
 const filler = Array.from({ length: 12 }, (_, index) => ({ name: `standard-${index}`, description: 'ほかのスキルの説明（平均的な長さの一行）', status: 'active' as const, createdAt: '000' }));
-const before = skillIndex([...filler, ...entries([...oldNames])]), after = skillIndex([...filler, ...entries([...allNames])]);
-console.log(`index: ${oldNames.size + 12} skills ${before.length} chars → ${allNames.size + 12} skills ${after.length} chars (+${after.length - before.length})`);
+const indexBefore = skillIndex([...filler, ...entries([...oldNames])]), indexAfter = skillIndex([...filler, ...entries([...allNames])]);
+console.log(`index: ${oldNames.size + 12} skills ${indexBefore.length} chars → ${allNames.size + 12} skills ${indexAfter.length} chars (+${indexAfter.length - indexBefore.length})`);
