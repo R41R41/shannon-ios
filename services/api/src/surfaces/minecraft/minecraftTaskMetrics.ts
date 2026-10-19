@@ -91,16 +91,20 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
    */
   function sample(observation: BodyObservation): void {
     const world = record(observation.state.world);
-    countListedDeaths(world?.deaths);
     if (observation.facts.alive === false) {
-      if (state.alive !== false) {
+      // The frame first, then the list in the same frame (its entry for this death is absorbed); a death the list already gave is
+      // not counted again by the frame that shows it.
+      const listed = state.deathAt !== null && !state.deathByFrame && Math.abs(parts.now() - state.deathAt) <= SAME_DEATH_MS;
+      if (state.alive !== false && !listed) {
         state.deaths = Math.min(state.deaths + 1, 999);
         state.deathAt = parts.now();
         state.deathByFrame = true;
       }
       state.alive = false;
+      countListedDeaths(world?.deaths);
       return;
     }
+    countListedDeaths(world?.deaths);
     if (observation.facts.alive === true) state.alive = true;
     const health = finite(world?.health);
     if (health !== null && health > 0 && (state.hpMin === null || health < state.hpMin)) state.hpMin = health;

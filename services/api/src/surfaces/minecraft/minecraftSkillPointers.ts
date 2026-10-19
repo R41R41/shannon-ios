@@ -352,8 +352,9 @@ export function gistFollowLine(taskId: string, call: { name: string; input: unkn
   facts: { port: boolean; skill: { readOnly?: boolean } | undefined; followed: readonly string[] }): string {
   const { skill, followed } = facts, { name } = call;
   const adopted = followed.length ? [] : [...new Set(adoptionTags([...gistTools.keys()], call).map(item => item.skill))];
-  const branch = !facts.port ? 'no_port' : !skill ? 'not_legacy_pack' : skill.readOnly ? 'read_only' : followed.length ? 'recorded'
-    : adopted.length ? 'adopted' : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
+  // `adopted` before `read_only`: the measurement counts a search for sheep or iron as a follow too, and the line says the same.
+  const branch = !facts.port ? 'no_port' : !skill ? 'not_legacy_pack' : followed.length ? 'recorded' : adopted.length ? 'adopted'
+    : skill.readOnly ? 'read_only' : GENERIC_BODY_TOOLS.has(name) ? 'generic_tool' : 'not_named_by_gist';
   const skills = followed.length ? followed.join(',') : adopted.length ? adopted.join(',') : '-';
   return `Shannon Minecraft gist follow task=${taskId} tool=${name} branch=${branch} skills=${skills}`;
 }

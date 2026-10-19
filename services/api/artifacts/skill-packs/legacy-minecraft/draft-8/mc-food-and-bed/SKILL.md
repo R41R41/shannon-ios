@@ -18,7 +18,7 @@ description: 鉄より先、夜の前に食料とベッド（羊3頭）をそろ
 
 使う道具（名前と引数。身体の catalog が正）:
 - 羊を探す: mc.find-nearest-entity（entityType=sheep）
-- 狩る: mc.attack-continuously（entityName=sheep か food_animals、maxKills=3 や 4）。剣を持つ: mc.equip-item（itemName=stone_sword、destination=hand）
+- 狩る: mc.attack-continuously（entityName=sheep か food_animals、maxKills=3 や 4。羊は color=white など持っている羊毛の色）。剣を持つ: mc.equip-item（itemName=stone_sword、destination=hand）
 - ベッド: mc.craft-one（itemName=white_bed など、3個そろった羊毛の色の _bed）。寝る: mc.sleep-in-bed
 - 焼く: mc.start-smelting（かまどの座標、inputItem=beef など、fuelItem=coal か oak_planks）。取り出す: mc.withdraw-from-furnace
 - 村: mc.find-structure（structureType=village）。チェスト: mc.find-blocks（blockName=chest,barrel、count=48）→ mc.check-container → mc.withdraw-from-container。干し草: mc.mine-block（blockName=hay_block）。作物: mc.harvest-crop

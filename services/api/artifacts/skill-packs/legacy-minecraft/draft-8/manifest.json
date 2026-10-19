@@ -23,7 +23,7 @@
     {
       "name": "mc-food-and-bed",
       "path": "mc-food-and-bed/SKILL.md",
-      "sha256": "41ed9d3319eaeca1bb5cddc4a13f35332143d1626927a9a8eabddbd515e2aeed",
+      "sha256": "f92cbd2042c597cef54ba63d509c45a77c6c252058b35f2e0b04b38299bf617a",
       "revises": {
         "bodySha256": "ad38a8c87c3dd56ac0a6cdf1b9fd1b7f384114c4090da41427ca9b2c4d94e5c6"
       },

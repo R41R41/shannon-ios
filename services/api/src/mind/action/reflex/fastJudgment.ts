@@ -177,7 +177,8 @@ function afterFailedShelter(state: FastBodyState, chosen: FastDecision): FastDec
   const creeper = state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= 6);
   if (chosen.kind === 'fight' && state.resting.has(chosen.skill)) return decision('flee', 'fight_resting_flee', creeper ? 'creeper' : 'hostile');
   if (chosen.kind !== 'shelter' || !(state.shelterFailed || state.resting.has(chosen.skill))) return chosen;
-  if (state.canCage && !state.resting.has(CAGE.skill)) return decision('shelter', 'shelter_failed_cage');
+  // Not beside a creeper: the cage takes seconds to build, and its blast would open it.
+  if (state.canCage && !state.resting.has(CAGE.skill) && !creeper) return decision('shelter', 'shelter_failed_cage');
   return decision('flee', 'shelter_failed_flee', creeper ? 'creeper' : 'hostile');
 }
 

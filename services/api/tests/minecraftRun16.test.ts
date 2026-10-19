@@ -165,6 +165,19 @@ describe('the death count of the measurement', () => {
     metrics.sample(frame({ health: 20, deaths: [dead('2026-10-19T14:00:59.000Z'), dead('2026-10-19T14:05:00.000Z')] }));
     expect(deaths()).toBe(2);
   });
+  it('counts once a frame that shows her dead with the list\'s entry already in it, in either order', () => {
+    const clock = { now: Date.parse('2026-10-19T14:01:00.000Z') };
+    const same = metricsAt(clock);
+    same.metrics.context(frame({ inventory: [] }), null, {});
+    same.metrics.sample(frame({ health: 0, deaths: [dead('2026-10-19T14:00:59.000Z')] }, { alive: false }));
+    same.metrics.sample(frame({ health: 20, deaths: [dead('2026-10-19T14:00:59.000Z')] }));
+    expect(same.deaths()).toBe(1);
+    const listFirst = metricsAt(clock);
+    listFirst.metrics.context(frame({ inventory: [] }), null, {});
+    listFirst.metrics.sample(frame({ health: 20, deaths: [dead('2026-10-19T14:00:59.000Z')] }));
+    listFirst.metrics.sample(frame({ health: 0 }, { alive: false }));
+    expect(listFirst.deaths()).toBe(1);
+  });
   it('counts a frame\'s death and the list\'s entry for it once, even across steps and clocks 20 s apart', () => {
     const clock = { now: Date.parse('2026-10-19T14:01:00.000Z') };
     const first = metricsAt(clock);

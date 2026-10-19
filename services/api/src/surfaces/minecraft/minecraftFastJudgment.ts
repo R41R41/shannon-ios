@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
-import type { ReflexEntryFacts, ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
+import { createFastJudgmentMemory, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import {
   DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, fastBodyState, fastJudgment, fastSkillMilliseconds, type FastDecision,
 } from '../../mind/action/reflex/fastJudgment.js';
@@ -12,6 +12,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const SETTLE_MILLISECONDS = 2_000;
 /** Fast skills that cut off her tool and did nothing, within `restMs`, after which a judgment that may wait leaves her tool alone. */
 const INTERRUPT_BUDGET = 2;
+const CAGE_SKILL = 'build-around-self';
 
 /**
  * One step's image-free fast judgment (Syzygy ADR-0011 stage 2, `fastJudgment.ts`): on each new frame it may start one bounded body
@@ -38,38 +39,34 @@ export function createMinecraftFastJudgment(parts: {
 }) {
   const { control, step, governor, now } = parts;
   const healths: Array<{ at: number; health: number }> = [];
-  let frames = 0, lastKind: FastDecision['kind'] | null = null, count = 0, episodeArrival: number | null = null;
+  let frames = 0, lastKind: FastDecision['kind'] | null = null, count = 0;
   /**
-   * A fast skill that failed rests until this time (`FAST_JUDGMENT_LIMITS.restMs`). Before run 16 a failed shelter was forgotten as
-   * soon as one frame showed no danger: the zombie at the edge of the range came and went, and the same `dig-shelter` failed six
-   * times in 30 s on the same air under the hole. A new arrival (a respawn elsewhere) ends every rest.
+   * The task's memory across its steps (the governor's, `FastJudgmentMemory`): a fast skill that failed rests `restMs`, and the
+   * interrupts of her tools spent for nothing. Before run 16 a failed shelter was forgotten as soon as one frame showed no danger (the
+   * zombie at the edge of the range came and went), and at every new step: the same `dig-shelter` failed six times in 30 s on the
+   * same air under the hole. A new arrival (a respawn elsewhere) ends both.
    */
-  const rests = new Map<string, number>();
-  /** When a fast skill that cut off one of her tools did nothing (not `completed`): at most `INTERRUPT_BUDGET` within `restMs`. */
-  const spentInterrupts: number[] = [];
+  const memory = governor.fast ?? createFastJudgmentMemory();
   /** Dropped answers by reason (`stale`, `busy`, `not_sent`, `not_permitted`); also named in every hold's detail. */
   const discards = { stale: 0, busy: 0, not_sent: 0, not_permitted: 0 };
-  const resting = (at: number) => new Set([...rests].filter(([, until]) => until > at).map(([skill]) => skill));
-  const rest = (skill: string) => rests.set(skill, now() + FAST_JUDGMENT_LIMITS.restMs);
+  const rest = (skill: string) => memory.rest(step.taskId, skill, now() + FAST_JUDGMENT_LIMITS.restMs);
+  const spend = () => memory.spend(step.taskId, now());
   const stateOf = (bodyId: string, observation: BodyObservation) => {
     const at = now(), arrived = control.arrivedAt(bodyId);
     const earlier = healths.filter(entry => entry.at < at && at - entry.at <= FAST_JUDGMENT_LIMITS.healthWindowMs).map(entry => entry.health);
-    if (episodeArrival !== arrived) {
-      rests.clear();
-      episodeArrival = arrived;
-    }
+    memory.arrival(step.taskId, arrived);
+    // A skill the body does not offer now is never chosen as the next move (the cage of a resting shelter, on an older body).
+    const resting = memory.resting(step.taskId, at);
+    if (!hasSkill(bodyId, CAGE_SKILL)) resting.add(CAGE_SKILL);
     return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
-      resting: resting(at) });
+      resting });
   };
   /**
    * Her tool is not cut off again for a judgment that may wait: run 16's six failed shelters cut off four `mine-block`s. Health at
    * the floor of the rules, or falling, always may.
    */
-  const interruptsSpent = (state: ReturnType<typeof stateOf>) => {
-    const at = now();
-    while (spentInterrupts.length && at - spentInterrupts[0]! > FAST_JUDGMENT_LIMITS.restMs) spentInterrupts.shift();
-    return spentInterrupts.length >= INTERRUPT_BUDGET && !state.healthDropped && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth;
-  };
+  const interruptsSpent = (state: ReturnType<typeof stateOf>) => memory.spent(step.taskId, now(), FAST_JUDGMENT_LIMITS.restMs) >= INTERRUPT_BUDGET
+    && !state.healthDropped && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth;
   const remember = (observation: BodyObservation) => {
     const health = (observation.state.world as { health?: unknown } | undefined)?.health;
     const at = now();
@@ -127,8 +124,10 @@ export function createMinecraftFastJudgment(parts: {
   const settled = (decision: FastDecision, sent: { outcome: string; failureType: string; byReflex: boolean; interrupted: boolean; sentAt: number;
     judgedAt: number }) => {
     const { outcome, byReflex, sentAt } = sent, effective = outcome === 'completed';
-    if (sent.interrupted && !effective) spentInterrupts.push(now());
     const cutOff = isCutOff(outcome, byReflex, now() - sentAt, decision.skill);
+    // Spent for nothing: not done, not a fight that hit until its deadline, not the body's own reflex taking over.
+    const fought = decision.kind === 'fight' && outcome === 'cancelled' && !cutOff;
+    if (sent.interrupted && !effective && !fought && !byReflex) spend();
     const failed = decision.kind === 'shelter' ? !effective && !cutOff : outcome === 'failed' && !byReflex;
     if (failed) rest(decision.skill);
     parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
@@ -160,11 +159,11 @@ export function createMinecraftFastJudgment(parts: {
       if (parts.activeAction()) {
         interrupted = true;
         parts.interrupt();
-        if (!await settle(bodyId, id, signal)) return discard('busy', 'fast_skill_busy', { skill: decision.skill });
         // Her tool was cut off by now: a drop here keeps the full cooldown (the flicker guard above), or the next frames would cut off
-        // another one.
+        // another one; and the interrupt was spent for nothing.
+        if (!await settle(bodyId, id, signal)) return spend(), discard('busy', 'fast_skill_busy', { skill: decision.skill });
         const after = rejudged(bodyId, decision, judged.arrived);
-        if (!after) return discard('stale', 'fast_stale', { kind: decision.kind });
+        if (!after) return spend(), discard('stale', 'fast_stale', { kind: decision.kind });
         decision = after;
       }
       if (signal.aborted || !await parts.permit(signal).catch(() => false)) {
@@ -187,6 +186,7 @@ export function createMinecraftFastJudgment(parts: {
         // Never sent (the body went away, the lease moved): nothing happened. Sent and lost: unknown, as any body command.
         if (!control.store.command(id)) return discard('not_sent', 'fast_not_sent', { skill: decision.skill });
         if (decision.kind === 'shelter') rest(decision.skill);
+        if (interrupted) spend();
         parts.unknown();
         throw error;
       }
@@ -227,7 +227,7 @@ export function createMinecraftFastJudgment(parts: {
         return parts.hold('fast_skill_missing', { skill: decision.skill }), null;
       }
       if (parts.activeAction() && interruptsSpent(state)) {
-        return parts.hold('fast_interrupts_spent', { skill: decision.skill, spent: spentInterrupts.length }), null;
+        return parts.hold('fast_interrupts_spent', { skill: decision.skill }), null;
       }
       const nearest = Math.min(...state.threats.map(threat => threat.distance));
       const entry: ReflexEntryFacts = { mode: 'danger', danger: state.healthDropped && state.health !== null

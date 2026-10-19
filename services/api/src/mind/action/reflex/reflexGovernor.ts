@@ -31,6 +31,54 @@ export interface ReflexGovernor {
   ended(taskId: string, at: number, entry: ReflexEntryFacts, effective: boolean, cooldown?: boolean): void;
   /** The FCA decided again for this task (a tool call): a stuck body may be helped once more. */
   decided(taskId: string, at: number): void;
+  /** The fast judgment's memory of the task across its steps (`createFastJudgmentMemory`); absent on a governor made without it. */
+  fast?: FastJudgmentMemory;
+}
+
+/**
+ * What the image-free fast judgment remembers of a task across its steps (Minecraft run 16, 2026-10-19): each decision is a new step
+ * with a new judgment, so a skill that failed and the interrupts spent for nothing are kept here, beside the governor's cooldowns.
+ * Both belong to one life: a new arrival of the body (a respawn) clears them.
+ */
+export interface FastJudgmentMemory {
+  /** The body's arrival as the step sees it: a different one than before clears the task's rests and spent interrupts. */
+  arrival(taskId: string, arrived: number | null): void;
+  /** The skills resting at `at`. */
+  resting(taskId: string, at: number): Set<string>;
+  rest(taskId: string, skill: string, until: number): void;
+  /** One of her tools cut off for nothing at `at`. */
+  spend(taskId: string, at: number): void;
+  /** Those within `windowMs` before `at`. */
+  spent(taskId: string, at: number, windowMs: number): number;
+}
+interface FastTaskMemory { arrived: number | null | undefined; rests: Map<string, number>; spent: number[] }
+
+export function createFastJudgmentMemory(): FastJudgmentMemory {
+  const tasks = new Map<string, FastTaskMemory>();
+  const of = (taskId: string) => {
+    const memory = tasks.get(taskId) ?? { arrived: undefined, rests: new Map<string, number>(), spent: [] };
+    tasks.delete(taskId);
+    tasks.set(taskId, memory);
+    if (tasks.size > REMEMBERED_TASKS) tasks.delete(tasks.keys().next().value!);
+    return memory;
+  };
+  return {
+    arrival(taskId, arrived) {
+      const memory = of(taskId);
+      if (memory.arrived !== undefined && memory.arrived !== arrived) {
+        memory.rests.clear();
+        memory.spent = [];
+      }
+      memory.arrived = arrived;
+    },
+    resting: (taskId, at) => new Set([...of(taskId).rests].filter(([, until]) => until > at).map(([skill]) => skill)),
+    rest(taskId, skill, until) { of(taskId).rests.set(skill, until); },
+    spend(taskId, at) {
+      const memory = of(taskId);
+      memory.spent = [...memory.spent, at].slice(-16);
+    },
+    spent: (taskId, at, windowMs) => of(taskId).spent.filter(time => at - time <= windowMs).length,
+  };
 }
 
 interface TaskReflexState {
@@ -65,6 +113,7 @@ export function createReflexGovernor(overrides: Partial<ReflexGovernorLimits> = 
     return !!last && (last.kind === 'threat' || (last.kind === danger.kind && danger.value < last.value));
   };
   return {
+    fast: createFastJudgmentMemory(),
     admit(taskId, at, entry) {
       const state = stateOf(taskId);
       if (entry.mode === 'danger' && escalated(state, entry.danger)) return { admit: true, escalated: true };

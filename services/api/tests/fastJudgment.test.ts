@@ -65,12 +65,14 @@ function fakeBody() {
   } as unknown as MinecraftControl;
   let active: string | undefined, interrupted = 0, touched = 0;
   const governor = createReflexGovernor();
-  const step = { id: 'step', taskId: 'task', lease: { id: 'lease', holder: 'runner', generation: 1 } } as unknown as TaskStep;
-  const judge = createMinecraftFastJudgment({ control, step, governor, now: () => clock,
+  let steps = 0;
+  // Each decision is a new step with a new judgment; the governor is the task's, across its steps.
+  const make = () => createMinecraftFastJudgment({ control, step: { id: `step-${++steps}`, taskId: 'task', lease: { id: 'lease', holder: 'runner', generation: 1 } } as unknown as TaskStep, governor, now: () => clock,
     context: (bodyId, sessionId) => ({ scopeKey: 'owner', taskId: 'task', taskRevision: 1, bodyId, sessionId, generation: 1 }) as never,
     permit: async () => true, activeAction: () => active ? { name: active } : undefined, interrupt: () => { interrupted += 1; active = undefined; },
     touched: () => { touched += 1; }, stepOutcome: () => {}, unknown: () => {}, send: () => {}, hold: reason => { holds.push(reason); },
     log: line => { lines.push(line); } });
+  let judge = make();
   const signal = new AbortController().signal;
   return { commands, lines, holds, get interrupted() { return interrupted; }, get touched() { return touched; },
     see(world: Record<string, unknown>, facts: Record<string, unknown> = {}, clocks: { skew?: number; receivedAgo?: number } = {}) {
@@ -80,7 +82,9 @@ function fakeBody() {
     },
     /** A newer frame that arrives while a job is in flight (nobody considers it yet). */
     arrive(world: Record<string, unknown>, facts: Record<string, unknown> = {}) { current = frame(++sequence, clock, world, facts); },
-    judge, outcomes,
+    get judge() { return judge; }, outcomes,
+    /** The next decision: a new step, a new judgment, the same task (and governor). */
+    nextStep() { judge = make(); },
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
     /** How long each command the body is sent runs (the clock moves on while it does). */
     runFor(ms: number) { runMs = ms; },
@@ -426,8 +430,10 @@ describe('a replay of Minecraft run 16 (task 20467761, 2026-10-19 22:59–23:01 
     for (let round = 0; round < 6; round++) {
       body.running('mc.mine-block');
       body.see(world); await body.see(world);
-      // The zombie steps out of range for a frame between rounds (the flicker that reset the failed shelter before).
+      // The zombie steps out of range for a frame between rounds (the flicker that reset the failed shelter before), and her next
+      // decision is a new step with a new judgment (which forgot it too).
       body.see({ ...world, nearbyThreats: [] });
+      body.nextStep();
       body.advance(6_000);
     }
   };
@@ -454,6 +460,34 @@ describe('a replay of Minecraft run 16 (task 20467761, 2026-10-19 22:59–23:01 
     await sixRounds(body, carrying);
     expect(body.commands.slice(0, 2).map(command => [command.skill, command.arguments])).toEqual([['dig-shelter', {}],
       ['build-around-self', { structureName: 'slit_shelter' }]]);
+  });
+
+  it('does not build the cage beside a creeper, nor when the body offers no cage; a respawn ends the rests', async () => {
+    const cage = [{ name: 'cobblestone', count: 24 }, { name: 'cobblestone_slab', count: 6 }];
+    const three = [zombie(3), zombie(4), zombie(5)];
+    const creeperNear = fakeBody();
+    creeperNear.advance(60_000);
+    creeperNear.outcomes.push('failed:invalid_location');
+    creeperNear.see({ health: 20, nearbyThreats: three, inventory: cage }); await creeperNear.see({ health: 20, nearbyThreats: three, inventory: cage });
+    creeperNear.advance(6_000);
+    // Low health with a zombie at her side is a shelter (the dig rests); the creeper 5 m off makes it a flee, not the cage.
+    const withCreeper = { health: 5, nearbyThreats: [zombie(2), { name: 'creeper', distance: 5, canReachMe: true }], inventory: cage };
+    creeperNear.see(withCreeper); await creeperNear.see(withCreeper);
+    expect(creeperNear.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from']);
+    const older = fakeBody();
+    older.without('build-around-self');
+    older.advance(60_000);
+    older.outcomes.push('failed:invalid_location');
+    older.see({ health: 20, nearbyThreats: three, inventory: cage }); await older.see({ health: 20, nearbyThreats: three, inventory: cage });
+    older.advance(6_000);
+    older.see({ health: 20, nearbyThreats: three, inventory: cage }); await older.see({ health: 20, nearbyThreats: three, inventory: cage });
+    expect(older.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from']);
+    // Back at the spawn (a new arrival) the hole is somewhere else: dig again, in a new step as well.
+    older.advance(6_000);
+    older.respawn();
+    older.nextStep();
+    older.see({ health: 20, nearbyThreats: three }); await older.see({ health: 20, nearbyThreats: three });
+    expect(older.commands.map(command => command.skill)).toEqual(['dig-shelter', 'flee-from', 'dig-shelter']);
   });
 
   it('still cuts her tool off when her health falls, whatever was spent', async () => {
