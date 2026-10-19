@@ -47,7 +47,7 @@ describe('the no-sheep mark through the runner\'s checkpoint merge', () => {
       actions.finish(begun.lease, 'completed', 'yielded', at); runtime.acknowledgeReceipt('owner', begun.id);
       return (runtime.snapshot('owner', task.id)!.checkpoint as { minecraftNoSheepDarkIn?: unknown }).minecraftNoSheepDarkIn;
     }
-    const pointer = [`${BED}（日暮れが近いのにベッドが無い）`];
+    const pointer = [`${BED}（日暮れまでにベッドが要る）`];
     // Day 1: offered at 500 s, she looks for sheep and finds none (200 s to dark), and the mark is saved.
     expect(await step(500)).toBeNull();
     expect(await step(200, true)).toBe(200);

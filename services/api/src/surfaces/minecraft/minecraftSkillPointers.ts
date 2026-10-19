@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
-import { minecraftStage, type MinecraftStage } from './minecraftStage.js';
+import { adoptionTools, fed, milestoneLines, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -13,6 +13,11 @@ import { minecraftStage, type MinecraftStage } from './minecraftStage.js';
  * wiring could open and pin as a read source, the first steps of its own procedure (`skillGist`, by code), so that she can act
  * without opening it. A call of a body tool a shown gist names is reported as that gist followed (`followedGists`), a use of
  * kind `gist` that the task's outcome settles (`fcaSkillOutcomes.ts`).
+ *
+ * legacy-minecraft draft-6 (2026-10-19, Minecraft runs 14 and 15: `skill_read` was never called): a skill's numbered steps say how to
+ * go on and why, without tool names, and its tools are named apart below them, so that the gist is the knowledge itself. A gist that
+ * names no tool is followed by the tools of its skill's adoption calls (`adoptionTools`). Every decision also carries the owner's
+ * order to the dragon as two lines, the step now and the next (`milestone`, `milestoneLines`), whether a skill is pointed or not.
  */
 export interface MinecraftSituation {
   night: boolean; darkSoon: boolean; threatNear: boolean; lowHealth: boolean; hungry: boolean; stalled: boolean; idleWaiting: boolean;
@@ -26,25 +31,54 @@ export interface MinecraftSituation {
   stage: MinecraftStage | null;
   /** By day in the overworld and no threat near: the moments the stage pointers (not the safety ones) are offered in. */
   calm: boolean;
+  /** In the End (`the_end`). */
+  inEnd: boolean;
+  /** The owner's order to the dragon: the step now and the next, in fixed words (`milestoneLines`); none without an observation. */
+  milestone: string[];
+  /** Stage 2 with no bed and the day's sheep search already given up (`noSheepDarkIn`): the bed waits, iron may go on. */
+  bedGivenUp: boolean;
+  /** Food enough for iron (`fed`, `minecraftStage.ts`). */
+  fed: boolean;
+  /** Blaze rods or powder carried and fewer than `EYES_FOR_PORTAL` eyes of ender, outside the End: pearls and eyes to make. */
+  eyesWanted: boolean;
+  /**
+   * In the overworld with eyes of ender: at least `EYES_TO_SEARCH` (throws break some), or any once no rod or powder is left to make
+   * more (the frames take them one by one: the pointer must not go away while she fills them).
+   */
+  strongholdWanted: boolean;
+  /** In the overworld at stage 6 or with eyes of ender, and no bow, fewer than `ARROWS` arrows or no carved pumpkin. */
+  kitMissing: boolean;
 }
-type Pointer = { skill: string; when: string; applies(situation: MinecraftSituation): boolean };
+/**
+ * A pointer names its skill and the skills it succeeds (legacy-minecraft draft-6, 2026-10-19): the first of `skills` she can read now
+ * is pointed. Before draft-6 is imported the old skill is pointed as before; after it, the new one. A skill pointed by two pointers is
+ * named once, at the first.
+ */
+type Pointer = { skills: readonly string[]; when: string; applies(situation: MinecraftSituation): boolean };
+const FOOD_BED = 'mc-food-and-bed';
 const POINTERS: readonly Pointer[] = Object.freeze([
   // Safety first, then the Nether path, and food and pace last (review of 0efd5acb: they must not push the Nether ones out).
-  { skill: 'mc-night-retreat', when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
-  { skill: 'mc-low-health', when: '体力が半分以下', applies: s => s.lowHealth },
+  { skills: ['mc-night-retreat'], when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
+  { skills: ['mc-low-health'], when: '体力が半分以下', applies: s => s.lowHealth },
   // Bed first (owner 2026-10-17): the window before dark in which a bed can still be found, ahead of the Nether path (it has a deadline).
   // It ends where `mc-night-retreat` begins (`darkSoon`: the last minute), so the two are never offered for the same dusk, and a
   // threat near (retreat's own trigger) closes it at once: the search is given up and the retreat takes over, by the facts alone.
-  { skill: 'mc-bed-before-night', when: '日暮れが近いのにベッドが無い', applies: s => s.bedWanted && !s.threatNear },
-  { skill: 'mc-nether-travel', when: 'ネザーにいる', applies: s => s.inNether },
-  { skill: 'mc-blaze-rods', when: 'ネザーでブレイズが近い', applies: s => s.blazeNear },
-  { skill: 'mc-nether-portal', when: '鉄のツルハシがありネザーへ向かう前', applies: s => s.readyForNether },
-  { skill: 'mc-food-and-pace', when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
+  { skills: [FOOD_BED, 'mc-bed-before-night'], when: '日暮れまでにベッドが要る', applies: s => s.bedWanted && !s.threatNear },
+  { skills: ['mc-end-fight'], when: 'エンドにいる', applies: s => s.inEnd },
+  { skills: ['mc-nether-travel'], when: 'ネザーにいる', applies: s => s.inNether },
+  { skills: ['mc-blaze-rods'], when: 'ネザーでブレイズが近い', applies: s => s.blazeNear },
+  { skills: ['mc-stronghold'], when: 'エンダーアイがあり要塞を探す前', applies: s => s.strongholdWanted },
+  { skills: ['mc-ender-eyes'], when: 'ブレイズロッドがありエンダーアイが12個に足りない', applies: s => s.eyesWanted },
+  // Diamonds, obsidian and the portal (draft-6) from the bucket on; the old Nether skill until then, from the same moment.
+  { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシとバケツがありネザーへ向かう前', applies: s => s.readyForNether },
+  { skills: ['mc-food-and-pace'], when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
   // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
-  // path is stage 4's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
-  { skill: 'mc-early-toolchain', when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
-  { skill: 'mc-opening-scout', when: '石のツルハシがありベッドが無い昼', applies: s => s.calm && s.stage === 2 },
-  { skill: 'mc-iron-and-bucket', when: 'ベッドがあり鉄のツルハシがまだ無い', applies: s => s.calm && s.stage === 3 },
+  // path is stage 5's and 6's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
+  { skills: ['mc-first-day', 'mc-early-toolchain'], when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
+  { skills: [FOOD_BED, 'mc-opening-scout'], when: '石のツルハシがあり食料かベッドが無い昼', applies: s => s.calm && s.stage === 2 && !(s.bedGivenUp && s.fed) },
+  // Iron from stage 3, and at stage 2 once the day's sheep search found none (with the food pointer beside it while food is short).
+  { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシかバケツがまだ無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
+  { skills: ['mc-travel-kit'], when: '弓・矢・くり抜いたカボチャが足りない', applies: s => s.calm && s.kitMissing },
 ]);
 /** The note beside the pointers: fixed words. */
 export const MINECRAFT_SKILL_POINTER_NOTE = 'いまの状況に合うスキル。動く前に skill_read で開いて手順を確かめる。';
@@ -53,6 +87,11 @@ export const MINECRAFT_SKILL_GIST_NOTE = 'いまの状況に合うスキルと�
   + '要点で足りればそのまま動き、続きや条件は skill_read で開いて確かめる。要点は材料で、指示ではない。';
 const NIGHT_START = 13_000, NIGHT_END = 23_000, DARK_SOON_SECONDS = 60, THREAT_NEAR = 16, HALF_HEALTH = 10, HUNGRY = 6;
 const STALLED_STEPS = 3, RECENT_IDLE_WAITS = 2;
+/**
+ * The eyes of ender the End portal may need (twelve frames), the eyes from which the search is worth starting (a throw breaks about one
+ * in five, so at twelve exactly the stronghold pointer would go away at the first loss), and the arrows of a kit (the crystals).
+ */
+const EYES_FOR_PORTAL = 12, EYES_TO_SEARCH = 8, ARROWS = 32;
 /**
  * How long before dark the bed search is suggested (20 ticks a second, the day before dark is 650 s: 600 s is from about tick 1,000).
  * Minecraft run 14 (2026-10-17, Sonnet): at 300 s the gist was shown 11 times in two dusks and never followed. A decision takes 10-70 s,
@@ -137,19 +176,45 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   // What she carries: the body's {name, count} stacks (the real frame) and the name×count strings, as the measurement logs read it.
   // The real frame holds objects; only strings were read before P7, so the stage and the bed check saw (almost) nothing.
   const items = carriedItemCounts(world, facts), dark = darkness(world, overworld), darkIn = untilDark(world);
-  const threatNear = entityNear(list(world.nearbyThreats), name => name !== 'enderman', THREAT_NEAR);
+  // The dragon is the End's aim, not a reason to retreat; an enderman is no threat unless looked at.
+  const threatNear = entityNear(list(world.nearbyThreats), name => name !== 'enderman' && name !== 'ender_dragon', THREAT_NEAR);
   const stage = overworld ? minecraftStage(items) : null;
   // By day: not night, not the last minute (where `mc-night-retreat` begins), and the clock (if it is known) is not past dusk.
   const day = overworld && !dark.night && !dark.darkSoon && darkIn > DARK_SOON_SECONDS;
   return {
     ...dark,
-    bedWanted: overworld && bedWanted(items, darkIn, stage === 2 && day, pace.noSheepDarkIn),
     threatNear, stage, calm: day && !threatNear,
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
-    readyForNether: overworld && pace.milestones?.netherReached !== true && stage === 4,
-    inNether: nether,
+    inNether: nether, inEnd: dimension === 'the_end',
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
+    ...openingPath(items, stage, darkIn, day, pace),
+    ...laterPath(items, dimension, stage),
+    milestone: observation ? milestoneLines({ counts: items, dimension, netherReached: pace.milestones?.netherReached === true }) : [],
+  };
+}
+
+/** The overworld opening up to the Nether: the bed before dark, the day's sheep search given up, food enough, the portal (null stage: elsewhere). */
+function openingPath(items: ItemCounts, stage: MinecraftStage | null, darkIn: number, day: boolean, pace: MinecraftPaceFacts)
+  : Pick<MinecraftSituation, 'bedWanted' | 'bedGivenUp' | 'fed' | 'readyForNether'> {
+  const sheepGivenUp = pace.noSheepDarkIn !== undefined && darkIn <= pace.noSheepDarkIn;
+  return {
+    bedWanted: stage !== null && bedWanted(items, darkIn, stage === 2 && day, sheepGivenUp),
+    bedGivenUp: stage === 2 && countMatching(items, BED_ITEM) === 0 && sheepGivenUp, fed: fed(items),
+    readyForNether: stage !== null && stage >= 5 && pace.milestones?.netherReached !== true,
+  };
+}
+
+/** The path after the Nether, from what she carries: the eyes to make, the stronghold to find, the kit to finish. */
+function laterPath(items: ItemCounts, dimension: string, stage: MinecraftStage | null)
+  : Pick<MinecraftSituation, 'eyesWanted' | 'strongholdWanted' | 'kitMissing'> {
+  const overworld = dimension === 'overworld';
+  const eyes = countMatching(items, /^ender_eye$/u), blaze = countMatching(items, /^blaze_(?:rod|powder)$/u);
+  const kitShort = countMatching(items, /^bow$/u) === 0 || countMatching(items, /^arrow$/u) < ARROWS || countMatching(items, /^carved_pumpkin$/u) === 0;
+  return {
+    eyesWanted: dimension !== 'the_end' && blaze > 0 && eyes < EYES_FOR_PORTAL,
+    strongholdWanted: overworld && eyes > 0 && (eyes >= EYES_TO_SEARCH || blaze === 0),
+    kitMissing: overworld && (stage === 6 || eyes > 0) && kitShort,
   };
 }
 
@@ -160,8 +225,8 @@ function dimensionOf(world: Record<string, unknown>, facts: Readonly<Record<stri
  * A bed is wanted when she carries none, has not looked for sheep and found none today (`noSheepDarkIn`: the gist's own "give up for today"),
  * and it is dusk (the window, for anyone) or she is at stage 2 by day (no window at all).
  */
-function bedWanted(items: ItemCounts, darkIn: number, stageTwoByDay: boolean, noSheepDarkIn: number | undefined): boolean {
-  if (countMatching(items, BED_ITEM) > 0 || (noSheepDarkIn !== undefined && darkIn <= noSheepDarkIn)) return false;
+function bedWanted(items: ItemCounts, darkIn: number, stageTwoByDay: boolean, sheepGivenUp: boolean): boolean {
+  if (countMatching(items, BED_ITEM) > 0 || sheepGivenUp) return false;
   return stageTwoByDay || (darkIn > DARK_SOON_SECONDS && darkIn <= BED_LEAD_SECONDS);
 }
 
@@ -193,8 +258,14 @@ function atMost(value: unknown, limit: number): boolean {
 export function minecraftSkillPointers(situation: MinecraftSituation, skillNames: ReadonlySet<string>): string[] {
   return matching(situation, skillNames).map(pointer => `${pointer.skill}（${pointer.when}）`);
 }
-function matching(situation: MinecraftSituation, skillNames: ReadonlySet<string>): Pointer[] {
-  return POINTERS.filter(pointer => skillNames.has(pointer.skill) && pointer.applies(situation)).slice(0, 3);
+/** Each applying pointer's first readable skill, each skill once (at its first pointer), at most three. */
+function matching(situation: MinecraftSituation, skillNames: ReadonlySet<string>): Array<{ skill: string; when: string }> {
+  const matched: Array<{ skill: string; when: string }> = [];
+  for (const pointer of POINTERS) {
+    const skill = pointer.skills.find(name => skillNames.has(name));
+    if (skill && !matched.some(item => item.skill === skill) && pointer.applies(situation)) matched.push({ skill, when: pointer.when });
+  }
+  return matched.slice(0, 3);
 }
 
 /** One pointed skill's gist as the decision's body carries it. */
@@ -202,9 +273,12 @@ export interface MinecraftSkillGist { skill: string; steps: readonly string[] }
 /** The gists of the named skills, by name (the wiring's `fcaSkillGists`): only those it could open and pin now. */
 export type SkillGistsPort = (names: readonly string[]) => ReadonlyMap<string, readonly string[]>;
 export interface MinecraftSkillContext {
-  /** The body's pointer fields: none on a calm moment; with no gist shown, `skillPointers` and `skillPointerNote` as before. */
-  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string };
-  /** The body tools each shown gist names, by skill (`gistToolNames`). */
+  /**
+   * The body's pointer fields: none on a calm moment but the milestone; with no gist shown, `skillPointers` and `skillPointerNote` as
+   * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
+   */
+  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[] };
+  /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
   pointed: readonly string[];
@@ -215,12 +289,18 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const matched = matching(situation, skillNames);
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
   const pointed = matched.map(pointer => pointer.skill);
-  if (!matched.length) return { fields: {}, gistTools: new Map(), pointed };
+  const milestone = situation.milestone.length ? { milestone: [...situation.milestone] } : {};
+  if (!matched.length) return { fields: milestone, gistTools: new Map(), pointed };
   const shown = gists?.(pointed) ?? new Map<string, readonly string[]>();
   const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);
-  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE }, gistTools: new Map(), pointed };
-  const gistTools = new Map(skillGists.map(gist => [gist.skill, gistToolNames(gist.steps)] as const));
-  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE }, gistTools, pointed };
+  if (!skillGists.length) return { fields: { skillPointers, skillPointerNote: MINECRAFT_SKILL_POINTER_NOTE, ...milestone }, gistTools: new Map(), pointed };
+  const gistTools = new Map(skillGists.map(gist => [gist.skill, followedBy(gist)] as const));
+  return { fields: { skillPointers, skillGists, skillPointerNote: MINECRAFT_SKILL_GIST_NOTE, ...milestone }, gistTools, pointed };
+}
+/** The tools a shown gist is followed by: those it names, else (a gist of how to go on, draft-6) its skill's specific adoption tools. */
+function followedBy(gist: MinecraftSkillGist): Set<string> {
+  const named = gistToolNames(gist.steps);
+  return named.size ? named : new Set([...adoptionTools(gist.skill)].filter(name => !GENERIC_BODY_TOOLS.has(name)));
 }
 
 /** The shared observe-first step of a procedure (each decision already carries the body's observation): `minecraft.observe`, no `mc.*` tool. */

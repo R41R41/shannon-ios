@@ -63,8 +63,10 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     expect(at({}, { failedStepsInARow: 0, recentIdleWaits: 2 })).toEqual(['mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
     // One recent wait, or many long ago (no longer among the latest results), names nothing.
     expect(at({}, { failedStepsInARow: 0, recentIdleWaits: 1 })).toEqual([]);
-    expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)'] })).toEqual(['mc-nether-portal（鉄のツルハシがありネザーへ向かう前）']);
-    expect(at({ inventory: ['iron_pickaxe×1'] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
+    // The portal from the bucket on (2026-10-19: obsidian wants a diamond pickaxe, and water to cast it).
+    expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)'] })).toEqual([]);
+    expect(at({ inventory: ['iron_pickaxe×1(耐久250/250)', 'bucket×1'] })).toEqual(['mc-nether-portal（鉄のツルハシとバケツがありネザーへ向かう前）']);
+    expect(at({ inventory: ['iron_pickaxe×1', 'bucket×1'] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
     expect(minecraftSkillPointers(minecraftSituation(observation({ dimension: 'the_nether', nearbyEntities: [{ name: 'blaze', distance: 20 }] },
       { dimension: 'the_nether' }), calm), LEGACY)).toEqual(['mc-nether-travel（ネザーにいる）', 'mc-blaze-rods（ネザーでブレイズが近い）']);
     expect(minecraftSituation(null, calm).night).toBe(false);
@@ -88,7 +90,7 @@ describe('situational pointers to her skills (run 9, items 1 and 3)', () => {
     const nether = observation({ dimension: 'the_nether', health: 6, food: 3, nearbyEntities: [{ name: 'blaze', distance: 10 }] }, { dimension: 'the_nether' });
     expect(minecraftSkillPointers(minecraftSituation(nether, { failedStepsInARow: 4, recentIdleWaits: 3 }), LEGACY))
       .toEqual(['mc-low-health（体力が半分以下）', 'mc-nether-travel（ネザーにいる）', 'mc-blaze-rods（ネザーでブレイズが近い）']);
-    expect(minecraftSkillPointers(minecraftSituation(observation({ food: 3, inventory: ['iron_pickaxe×1'] }), calm), LEGACY))
-      .toEqual(['mc-nether-portal（鉄のツルハシがありネザーへ向かう前）', 'mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
+    expect(minecraftSkillPointers(minecraftSituation(observation({ food: 3, inventory: ['iron_pickaxe×1', 'water_bucket×1'] }), calm), LEGACY))
+      .toEqual(['mc-nether-portal（鉄のツルハシとバケツがありネザーへ向かう前）', 'mc-food-and-pace（空腹・進展が止まった・待ちが続いた）']);
   });
 });

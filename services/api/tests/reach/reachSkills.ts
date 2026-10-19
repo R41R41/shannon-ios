@@ -13,7 +13,7 @@ import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { createInMemoryAutonomyService } from '../../src/wiring/autonomyServiceWiring.js';
 import { talkId } from '../../src/mind/action/respond/turnRouting.js';
 import { authorizeToolCall } from '../../src/mind/inhibition/shannonToolGate.js';
-import { SKILL_INDEX_HEADER, SKILL_INDEX_LINES, SKILL_INDEX_WIDTH, parseSkill, type SkillDocument } from '../../src/mind/memory/skillDocument.js';
+import { SKILL_CAPACITY, SKILL_INDEX_HEADER, SKILL_INDEX_LINES, SKILL_INDEX_WIDTH, parseSkill, type SkillDocument } from '../../src/mind/memory/skillDocument.js';
 import { SkillMemory } from '../../src/mind/memory/skillMemory.js';
 import { rankedNodes } from '../../src/mind/memory/skillLineage.js';
 import { ShannonSkillConsolidator, type SkillSleepModels } from '../../src/mind/sleep/skillConsolidation.js';
@@ -125,7 +125,7 @@ async function form() {
       'form.drafts': first.created >= 1 && stored.every(item => item.status === 'trial' && 'skill' in parseSkill(item.body) && item.purposePatternIds.length > 0),
       'form.night_limit': first.created === 2 && second.created === 0,
       'form.no_secret': first.rejections.includes('secret') && revisions.every(revision => !check.carries(revision.body)) && !stored.some(item => item.name === 'club-day'),
-      'form.index': lines[0]!.startsWith(SKILL_INDEX_HEADER) && lines[0]!.includes('2/25') && lines.length <= SKILL_INDEX_LINES && lines.every(line => [...line].length <= SKILL_INDEX_WIDTH) && world.skills.index(SCOPE) === index,
+      'form.index': lines[0]!.startsWith(SKILL_INDEX_HEADER) && lines[0]!.includes(`2/${SKILL_CAPACITY}`) && lines.length <= SKILL_INDEX_LINES && lines.every(line => [...line].length <= SKILL_INDEX_WIDTH) && world.skills.index(SCOPE) === index,
     }, { created: first.created, rejected: first.rejected }, 3);
   } finally { world.close(); }
 }

@@ -23,7 +23,8 @@ const at = '2026-10-17T00:00:00.000Z';
 const later = (minutes: number) => new Date(Date.parse(at) + minutes * 60_000).toISOString();
 const pass = { carries: () => false };
 const MORNING = { time: '100', margin: { darkInSeconds: 645 } }, NOON = { time: '6000', margin: { darkInSeconds: 350 } };
-const STONE = ['oak_planks×4', 'stone_pickaxe×1'], BED_ITEM = 'white_bed×1';
+// Stage 3 is a bed and food enough (`FOOD_STOCK`, 2026-10-19): FED is six items she can eat.
+const STONE = ['oak_planks×4', 'stone_pickaxe×1'], BED_ITEM = 'white_bed×1', FED = 'cooked_beef×6';
 
 /** The real frame's inventory: `{ name, count, durability? }` objects (body worldFrame.ts), never `name×count` strings. */
 const stack = (item: string) => { const [name, count] = item.split('×'); return { name: name!, count: Number(count ?? 1), durability: 1 }; };
@@ -38,15 +39,13 @@ const pointers = (world: Record<string, unknown>, pace: Parameters<typeof minecr
   minecraftSkillPointers(situation(world, pace), names).map(line => line.split('（')[0]);
 
 describe('the stage, from what she carries (stateless)', () => {
-  it('is 1 without a stone pickaxe, 2 with one and no bed, 3 with a bed, 4 with an iron pickaxe or better (the real object frame)', () => {
+  it('is 1 without a stone pickaxe, 2 with one and no bed or food, 3 with a bed and food, 4 with an iron pickaxe or better (the real object frame)', () => {
     expect(minecraftStage(counts())).toBe(1);
     expect(minecraftStage(counts('oak_log×3', 'wooden_pickaxe×1', 'cobblestone×9'))).toBe(1);
     expect(minecraftStage(counts('stone_pickaxe×1'))).toBe(2);
-    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1'))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', FED))).toBe(3);
     expect(minecraftStage(counts('iron_pickaxe×1'))).toBe(4);
-    expect(minecraftStage(counts('diamond_pickaxe×1', 'blue_bed×1'))).toBe(4);
-    // An iron pickaxe is stage 4 whatever else is missing; a bed with no stone pickaxe is still stage 1.
-    expect(minecraftStage(counts('netherite_pickaxe×1'))).toBe(4);
+    // An iron pickaxe is stage 4 or more whatever else is missing; a bed with no stone pickaxe is still stage 1.
     expect(minecraftStage(counts('white_bed×1'))).toBe(1);
   });
 
@@ -54,17 +53,17 @@ describe('the stage, from what she carries (stateless)', () => {
     expect(minecraftStage(counts('golden_pickaxe×1'))).toBe(1);
     expect(minecraftStage(counts('stone_pickaxe_head×1', 'wooden_pickaxe×1'))).toBe(1);
     expect(minecraftStage(counts('stone_pickaxe×1', 'bedrock×1'))).toBe(2);
-    expect(minecraftStage(counts('stone_pickaxe×1', 'light_blue_bed×1'))).toBe(3);
-    expect(minecraftStage(counts('stone_pickaxe×1', 'light_gray_bed×1'))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'light_blue_bed×1', FED))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'light_gray_bed×1', FED))).toBe(3);
     expect(minecraftStage(counts('stone_pickaxe×1', 'iron_pickaxe_broken×1'))).toBe(2);
     // A stack of zero is not carried.
     expect(minecraftStage(carriedItemCounts({ inventory: [{ name: 'stone_pickaxe', count: 0 }] }, {}))).toBe(1);
   });
 
   it('reads objects, name×count strings and slot facts alike, and is the very function the measurement logs use (one definition)', () => {
-    const fromStrings = carriedItemCounts({ inventory: ['stone_pickaxe×1', 'red_bed×1'] }, {});
+    const fromStrings = carriedItemCounts({ inventory: ['stone_pickaxe×1', 'red_bed×1', FED] }, {});
     expect(minecraftStage(fromStrings)).toBe(3);
-    expect(minecraftStage(carriedItemCounts({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'light_blue_bed' }))).toBe(3);
+    expect(minecraftStage(carriedItemCounts({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'light_blue_bed', 'slot:3': FED }))).toBe(3);
     expect(minecraftStage(carriedItemCounts({ inventory: { stone_pickaxe: 1 } }, {}))).toBe(2);
     expect(loggedStage).toBe(minecraftStage);
   });
@@ -72,19 +71,22 @@ describe('the stage, from what she carries (stateless)', () => {
   it('is read from the observation frame in the overworld only (null elsewhere)', () => {
     expect(situation({ inventory: ['stone_pickaxe×1'] }).stage).toBe(2);
     // The real frame's stacks (objects) are what the stage reads; before P7 only slot facts were read and the stage was almost always 1.
-    expect(situation({ inventory: [{ name: 'stone_pickaxe', count: 1, durability: 0.9 }, { name: 'light_blue_bed', count: 1 }] }).stage).toBe(3);
-    expect(minecraftSituation(observation({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'red_bed' }), calm).stage).toBe(3);
+    expect(situation({ inventory: [{ name: 'stone_pickaxe', count: 1, durability: 0.9 }, { name: 'light_blue_bed', count: 1 }, FED] }).stage).toBe(3);
+    expect(minecraftSituation(observation({ inventory: [] }, { 'slot:1': 'stone_pickaxe', 'slot:2': 'red_bed', 'slot:3': FED }), calm).stage).toBe(3);
     expect(minecraftSituation(observation({ dimension: 'the_nether', inventory: ['iron_pickaxe×1'] }, { dimension: 'the_nether' }), calm).stage).toBeNull();
     expect(minecraftSituation(null, calm).stage).toBeNull();
   });
 });
 describe('the stage pointers, in the calm slots after the safety ones', () => {
-  it('points stage 1 at the early toolchain, stage 2 at the bed and the scout, stage 3 at iron, stage 4 at the Nether portal (by day)', () => {
+  it('points stage 1 at the early toolchain, stage 2 at the bed and the scout, stage 3 and 4 at iron, from the bucket at the Nether portal (by day)', () => {
     expect(pointers({ ...MORNING, inventory: ['oak_log×3'] })).toEqual([TOOLCHAIN]);
     expect(pointers({ ...NOON, inventory: STONE })).toEqual([BED, SCOUT]);
-    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM] })).toEqual([IRON]);
-    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', BED_ITEM] })).toEqual([PORTAL]);
-    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', BED_ITEM] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
+    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM, FED] })).toEqual([IRON]);
+    // A bed and no food is still stage 2: the bed pointer is none (she has one), the scout (food) is.
+    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM] })).toEqual([SCOUT]);
+    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', BED_ITEM] })).toEqual([IRON]);
+    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'bucket×1', BED_ITEM] })).toEqual([PORTAL]);
+    expect(pointers({ ...NOON, inventory: ['iron_pickaxe×1', 'water_bucket×1', BED_ITEM] }, { failedStepsInARow: 0, milestones: { netherReached: true } })).toEqual([]);
   });
 
   it('offers the bed at stage 2 by day with no window: the whole day, from the first minute, not only the last ten', () => {
@@ -105,7 +107,7 @@ describe('the stage pointers, in the calm slots after the safety ones', () => {
     expect(pointers({ time: '11800', margin: { darkInSeconds: 60 }, inventory: STONE })).toEqual(retreat);
     expect(pointers({ time: '12500', margin: { darkInSeconds: 25 }, inventory: [] })).toEqual(retreat);
     expect(pointers({ ...NOON, inventory: STONE, nearbyThreats: [{ name: 'zombie', distance: 8 }] })).toEqual(retreat);
-    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM], nearbyThreats: [{ name: 'creeper', distance: 5 }] })).toEqual(retreat);
+    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM, FED], nearbyThreats: [{ name: 'creeper', distance: 5 }] })).toEqual(retreat);
     expect(pointers({ time: '18000', margin: { darkInSeconds: 0 }, inventory: ['oak_log×1'] })).toEqual(retreat);
   });
 
@@ -113,7 +115,7 @@ describe('the stage pointers, in the calm slots after the safety ones', () => {
     expect(pointers({ ...NOON, inventory: STONE, health: 6 })).toEqual(['mc-low-health', BED, SCOUT]);
     expect(pointers({ ...NOON, inventory: STONE, health: 6, food: 3 })).toEqual(['mc-low-health', BED, 'mc-food-and-pace']);
     expect(pointers({ ...NOON, inventory: STONE }, { failedStepsInARow: 4 })).toEqual([BED, 'mc-food-and-pace', SCOUT]);
-    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM], food: 3 })).toEqual(['mc-food-and-pace', IRON]);
+    expect(pointers({ ...NOON, inventory: [...STONE, BED_ITEM, FED], food: 3 })).toEqual(['mc-food-and-pace', IRON]);
     expect(pointers({ ...MORNING, inventory: ['oak_log×1'], health: 6, food: 2 })).toEqual(['mc-low-health', 'mc-food-and-pace', TOOLCHAIN]);
     // In the Nether the stage pointers are none, the Nether ones stay.
     expect(pointers({ dimension: 'the_nether', inventory: ['iron_pickaxe×1'] }, calm, NAMES)).toEqual(['mc-nether-travel']);
@@ -139,9 +141,10 @@ describe('the no-sheep mark keeps working at stage 2 through the whole day', () 
     expect(offered(640)).toEqual([BED, SCOUT]);
     const mark = bedSearchGivenUp(dusk(640));
     expect(mark).toBe(640);
-    expect(offered(640, mark)).toEqual([SCOUT]);
-    expect(offered(300, mark)).toEqual([SCOUT]);
-    expect(offered(90, mark)).toEqual([SCOUT]);
+    // The day's search found none: iron goes on beside the food (2026-10-19), the bed waits for the next day.
+    expect(offered(640, mark)).toEqual([SCOUT, IRON]);
+    expect(offered(300, mark)).toEqual([SCOUT, IRON]);
+    expect(offered(90, mark)).toEqual([SCOUT, IRON]);
     // The next morning (the countdown rises above the mark; a full day is 650 s) the mark is cleared by the body task's own rule.
     expect(offered(650, undefined)).toEqual([BED, SCOUT]);
   });
@@ -149,8 +152,8 @@ describe('the no-sheep mark keeps working at stage 2 through the whole day', () 
   it('is the same mark at dusk as before: a search in the last ten minutes closes the window for the day', () => {
     const mark = bedSearchGivenUp(dusk(400));
     expect(mark).toBe(400);
-    expect(offered(400, mark)).toEqual([SCOUT]);
-    expect(offered(120, mark)).toEqual([SCOUT]);
+    expect(offered(400, mark)).toEqual([SCOUT, IRON]);
+    expect(offered(120, mark)).toEqual([SCOUT, IRON]);
   });
 });
 
@@ -208,7 +211,7 @@ describe('what counts as acting on a pointed skill (tool and argument), content-
 describe('the body task logs an adoption line while a stage skill is pointed (tool name and closed tags only)', () => {
   it('logs the stage, the skill, the tag and the tool for a matching call, and nothing for a call that matches nothing', async () => {
     const tools = [{ name: 'mine-block', readOnly: false }, { name: 'find-blocks', readOnly: true }];
-    const world = observation({ ...NOON, inventory: [...STONE, BED_ITEM] });
+    const world = observation({ ...NOON, inventory: [...STONE, BED_ITEM, FED] });
     const control = { store: { body: () => 'minecraft:home', bind: () => true, safe: () => true }, available: () => ['minecraft:home'],
       frame: () => ({ poll: { skills: tools } }), observe: () => world, imagesUnavailable: () => false, settling: () => false, cancelTask() {} } as unknown as MinecraftControl;
     const step = { id: 'step', scopeKey: 'owner', taskId: 'task-iron', revision: 1, lease: { id: 'lease', holder: 'h', generation: 1 },
@@ -220,7 +223,7 @@ describe('the body task logs an adoption line while a stage skill is pointed (to
     await inActionExecution({ lease, signal: abort.signal, permit: async () => true } as never, async () => {
       made.body.start(abort.signal);
       const context = made.body.context() as { skillPointers?: string[] };
-      expect(context.skillPointers).toEqual([`${IRON}（ベッドがあり鉄のツルハシがまだ無い）`]);
+      expect(context.skillPointers).toEqual([`${IRON}（鉄のツルハシかバケツがまだ無い）`]);
       made.body.noteCall!({ id: 'a', name: 'mc.mine-block', input: { blockName: 'iron_ore', count: 3 } }, 'op-a');
       made.body.noteCall!({ id: 'b', name: 'mc.mine-block', input: { blockName: 'dirt' } }, 'op-b');
       made.body.noteCall!({ id: 'c', name: 'mc.find-blocks', input: { blockName: 'iron_ore' } }, 'op-c');
@@ -321,7 +324,7 @@ describe('the new and rewritten skills of draft-4 and draft-5', () => {
     expect(importer.dryRun('owner', standardSkillPack('legacy-minecraft', 'draft-5')!).problems).toEqual([{ name: PORTAL, code: 'on_trial' }]);
     expect(importer.dryRun('owner', standardSkillPack('legacy-minecraft', 'draft-4')!).problems).toEqual([]);
     expect(apply('draft-4', later(4))).toHaveProperty('receipt');
-    expect(SKILL_CAPACITY).toBe(25);
+    expect(SKILL_CAPACITY).toBe(32);
   });
 
   it('the stage pointer is to a skill she can read: pointed only after draft-4 has put the two new skills in her index', () => {

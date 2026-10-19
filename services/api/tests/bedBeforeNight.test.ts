@@ -14,7 +14,7 @@ import { inActionExecution } from '../src/infra/context/actionExecution.js';
 
 /** Owner 2026-10-17: before night she secures a bed, as knowledge she judges with (`mc-bed-before-night`), not behaviour code. */
 const BED = 'mc-bed-before-night';
-const BED_POINTER = [`${BED}（日暮れが近いのにベッドが無い）`];
+const BED_POINTER = [`${BED}（日暮れまでにベッドが要る）`];
 const RETREAT_POINTER = 'mc-night-retreat（夜・暗くなる直前・敵が近い）';
 const NAMES = new Set([BED, 'mc-night-retreat', 'mc-low-health', 'mc-food-and-pace', 'mc-nether-portal', 'mc-nether-travel', 'mc-blaze-rods']);
 const calm = { failedStepsInARow: 0 };
@@ -77,8 +77,8 @@ describe('the bed pointer (when dusk is near and she carries no bed)', () => {
 
   it('comes after low health and before the Nether path, and is named only when she can read it (before the import: no pointer)', () => {
     const dusk = { time: '9000', margin: { darkInSeconds: 200 } };
-    expect(pointers({ ...dusk, health: 6, inventory: ['iron_pickaxe×1'] })).toEqual(['mc-low-health（体力が半分以下）', ...BED_POINTER,
-      'mc-nether-portal（鉄のツルハシがありネザーへ向かう前）']);
+    expect(pointers({ ...dusk, health: 6, inventory: ['iron_pickaxe×1', 'bucket×1'] })).toEqual(['mc-low-health（体力が半分以下）', ...BED_POINTER,
+      'mc-nether-portal（鉄のツルハシとバケツがありネザーへ向かう前）']);
     expect(pointers(dusk, {}, new Set(['mc-night-retreat', 'mc-low-health']))).toEqual([]);
   });
 });

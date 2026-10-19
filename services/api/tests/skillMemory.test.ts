@@ -70,15 +70,15 @@ describe('SKILL.md', () => {
 });
 
 describe('the index in the profile layer', () => {
-  it('shows its capacity, is at most 26 lines of at most 80 characters, active first, trials marked, and says what did not fit', () => {
-    const entries = Array.from({ length: 30 }, (_, index) => ({ name: `skill-${String(index).padStart(2, '0')}-${'x'.repeat(30)}`, description: 'ずいぶん長い説明が続いて八十文字を超えてしまう時のための確かめの行です', status: index % 3 ? 'trial' as const : 'active' as const, createdAt: minutes(at, -index) }));
+  it('shows its capacity, is at most 33 lines of at most 80 characters, active first, trials marked, and says what did not fit', () => {
+    const entries = Array.from({ length: 40 }, (_, index) => ({ name: `skill-${String(index).padStart(2, '0')}-${'x'.repeat(30)}`, description: 'ずいぶん長い説明が続いて八十文字を超えてしまう時のための確かめの行です', status: index % 3 ? 'trial' as const : 'active' as const, createdAt: minutes(at, -index) }));
     const index = skillIndex(entries);
     const lines = index.split('\n');
-    expect(lines[0]).toBe(`${SKILL_INDEX_HEADER} 30/${SKILL_CAPACITY}（目次。中身は skill_read で開く）]`);
+    expect(lines[0]).toBe(`${SKILL_INDEX_HEADER} 40/${SKILL_CAPACITY}（目次。中身は skill_read で開く）]`);
     expect(lines.length).toBeLessThanOrEqual(SKILL_INDEX_LINES);
     for (const line of lines) expect([...line].length).toBeLessThanOrEqual(SKILL_INDEX_WIDTH);
     expect(lines.slice(1, 11).every(line => !line.includes('（試し）'))).toBe(true);
-    expect(lines.at(-1)).toBe(`- （ほか${30 - (SKILL_CAPACITY - 1)}件は目次に入りきらない。夜にまとめる）`);
+    expect(lines.at(-1)).toBe(`- （ほか${40 - (SKILL_CAPACITY - 1)}件は目次に入りきらない。夜にまとめる）`);
     expect(skillIndex([...entries].reverse())).toBe(index);
     expect(skillIndex(entries.slice(0, 3)).split('\n')).toHaveLength(4);
     expect(skillIndex([])).toBe('');
