@@ -1,9 +1,17 @@
-import type { TaskRuntime, TaskSpec, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskRecord, TaskRuntime, TaskSpec, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { OPERATOR_TITLE_PREFIX, operatorRequestContext } from '../contracts/operatorContract.js';
 
 /** Phases after which a task no longer holds the body or its Minecraft work. */
 const FINISHED: readonly TaskView['phase'][] = ['stopped', 'completed', 'failed'];
+
+/**
+ * A task made by `admit` below: its title carries the operator's prefix and it has the Minecraft request's criteria (closed facts of the
+ * record, as `admit` writes them). Its result is not sent to the root's inbox (`TaskRuntimeStoreOptions.reportsToParent`).
+ */
+export function operatorRequestTask(task: Pick<TaskRecord, 'title' | 'completionCriteria' | 'origin'>, criteria: string): boolean {
+  return task.origin === 'owner_request' && task.title.startsWith(OPERATOR_TITLE_PREFIX) && task.completionCriteria === criteria;
+}
 
 export type OperatorAdmission = { ok: true; task: TaskView; bodyId: string } | { ok: false; code: 'body_unavailable' | 'minecraft_busy' };
 

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-9",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=0e838a78fa1681acc6d418646f57e28301ec96c4006021febe10893b4dd5165d",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-first-day",
+      "path": "mc-first-day/SKILL.md",
+      "sha256": "fa37f69d165a1c00023f2351092ea14920fa4c24c794dff220b72236ee9bd74f",
+      "revises": {
+        "bodySha256": "ba9c856a65bfdc5dd6db065fed1528d8174a3645f86f858746904751fc7c741d"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-food-and-bed",
+      "path": "mc-food-and-bed/SKILL.md",
+      "sha256": "1006fcf82365a5c005971f8c5ffc3b63e17f7cd34e6450854691c11f089cc72c",
+      "revises": {
+        "bodySha256": "0425b79f13eec9c46924f4e68f9a12585902719f7421934c9b18e4ec1c69c9df"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-iron-and-bucket",
+      "path": "mc-iron-and-bucket/SKILL.md",
+      "sha256": "a8050d5cd3373e94f03b222b81e6467af6aad62bc0af26ecf373300f146f1b2d",
+      "revises": {
+        "bodySha256": "6f5413518b4966d6fe546161cda5bb2a2aee6092611b3cdb9913252efac2d747"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-diamond-obsidian",
+      "path": "mc-diamond-obsidian/SKILL.md",
+      "sha256": "8532ce16e4808d2fb0e13a961624b78672d17135fd730a4d57628114b5d2e24a",
+      "revises": {
+        "bodySha256": "cc5f42120c4eb231b0259276b8f26e85261e151a9957695c18c72ceec5e18a0d"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-food-and-pace",
+      "path": "mc-food-and-pace/SKILL.md",
+      "sha256": "52d360db34796b6a890d4d897a8c85c5c8b2ea782c6db466508b80d3c933f82e",
+      "revises": {
+        "bodySha256": "8c0be7590b7c10211cdc5db3a14311533daa9bbbdbbad40d3450ad6ef3a1f5b9"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-night-shelter",
+      "path": "mc-night-shelter/SKILL.md",
+      "sha256": "570e4d850d713f5fa700f2176a35f87f3900e2d1a5b67e0d0b4163a4e02f85b5",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    }
+  ]
+}

@@ -85,6 +85,12 @@ export interface TaskRuntimeOptions {
    */
   pausedSummary?(summary: string): boolean;
   /**
+   * Whether a child's result is sent to its parent's inbox when it ends. Minecraft run 17 (2026-10-19): an operator's request ended,
+   * its result woke the root's common task, and that one decision read 117k tokens ($0.47) and blocked the event loop for 22.7 s to
+   * answer nobody: the operator reads the result from the audit. Absent: every child reports, as before.
+   */
+  reportsToParent?(task: TaskRecord): boolean;
+  /**
    * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }` inherits only the
    * asking conversation's sources, and step records store their sources by reference (`infra/sqlite/fcaProvenanceSets.ts`).
    * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are read either way.

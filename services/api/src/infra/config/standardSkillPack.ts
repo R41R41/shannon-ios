@@ -14,6 +14,7 @@ export function standardSkillPack(packId: string, revision: string): SkillPack |
     'legacy-minecraft/draft-6': '../../../artifacts/skill-packs/legacy-minecraft/draft-6/',
     'legacy-minecraft/draft-7': '../../../artifacts/skill-packs/legacy-minecraft/draft-7/',
     'legacy-minecraft/draft-8': '../../../artifacts/skill-packs/legacy-minecraft/draft-8/',
+    'legacy-minecraft/draft-9': '../../../artifacts/skill-packs/legacy-minecraft/draft-9/',
   };
   const path = paths[`${packId}/${revision}`];
   if (!path) return null;

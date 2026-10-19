@@ -25,6 +25,11 @@ import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './
 
 /** The result of a body action left unrun because an earlier body action of the same response failed (the guard in `executeFcaStep`). */
 export const FCA_EARLIER_ACTION_FAILED = '同じ応答で先に呼んだ体の操作が失敗したため、この操作は実行していません。先の結果と新しい観測から判断し直してください。';
+/**
+ * A body tool absent from this decision's menu (Minecraft run 17: it came while the body's reflex held the body, and read as "not
+ * a tool of this task"): the body is busy or its catalog changed, so a later decision may call it.
+ */
+export const FCA_BODY_TOOL_ABSENT = 'この判断の道具一覧にこの体の道具が無い（体の反射が体を使用中か、体の目録が変わった）。少し待ってから、新しい観測で決め直す。';
 
 export interface FcaStepPorts {
   runtime: TaskRuntime; model: FcaModel;
@@ -302,7 +307,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         if (bodyStale) return staleResult();
         if (skipped) return toolFailure('failed', FCA_EARLIER_ACTION_FAILED, { retryable: true });
         if (call.name === TOOL_OPEN_NAME && selection) return openFcaTool(call.input, catalog, selection);
-        if (!catalog.some(definition => definition.name === call.name)) return toolFailure('not_offered', 'このタスクでは利用できない道具です。');
+        if (!catalog.some(definition => definition.name === call.name)) {
+          return toolFailure('not_offered', call.name.startsWith('mc.') ? FCA_BODY_TOOL_ABSENT : 'このタスクでは利用できない道具です。', { retryable: call.name.startsWith('mc.') });
+        }
         if (selection && !input.tools.some(definition => definition.name === call.name)) return toolFailure('not_offered', '定義が必要な道具は、先に tool_open で開いてください。');
         if (ports.tools?.definitions.some(definition => definition.name === call.name)) {
           // Never turn an unknown outside outcome into a retryable tool result.

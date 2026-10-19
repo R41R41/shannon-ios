@@ -12,6 +12,8 @@ export interface TaskRecoveryParts {
   pendingReceipts(scope: string): TaskSegmentReceipt[]; activeSteps(scope: string): Array<{ taskId: string; lease: ActionLease }>;
   snapshot(scope: string, id: string): TaskSnapshot; failConversation(step: TaskStep): void;
   send(scope: string, source: string, target: string, text: string, id: string): unknown;
+  /** Whether a child's end is sent to its parent (TaskRuntimeStoreOptions.reportsToParent); absent: always. */
+  reportsToParent?(task: TaskRecord): boolean;
   /**
    * After a lost step of a task that runs on its inbox (the internal root): the messages it saw are delivered once more, or
    * consumed by it when it may have acted on them or they already were, and the task wakes if anything is pending
@@ -123,7 +125,9 @@ export class TaskRuntimeRecovery {
       this.parts.maintenance.report(task, 'failed', stepId ?? `retired-${task.id}`);
       return;
     }
-    if (parent && !terminal(parent)) this.parts.send(task.scopeKey, task.id, parent.id, `${task.title}: failed (result unknown)`, `result:retired:${task.id}`);
+    if (parent && !terminal(parent) && this.parts.reportsToParent?.(task) !== false) {
+      this.parts.send(task.scopeKey, task.id, parent.id, `${task.title}: failed (result unknown)`, `result:retired:${task.id}`);
+    }
     if (task.origin === 'owner_request') this.parts.notice?.(task.scopeKey, task.id, stepId, `retired:${task.id}`, retiredTaskReport(task.title));
   }
 

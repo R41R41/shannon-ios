@@ -14,6 +14,8 @@ export interface FcaGoalVerification {
 }
 export interface FcaProgress {
   binding?: FcaGoalBinding;
+  /** Fixed words when a completion needs conditions of her own that pass (`createFcaProgressTools`' `requireConditions`). */
+  completionRule?: string;
   conditions: readonly FcaGoalCondition[]; verification: FcaGoalVerification | null;
   failures: readonly { operationId: string; name: string; failure: string; retryable: boolean }[];
   replans: readonly { failureOperationId: string; summary: string; nextSteps: readonly string[] }[];

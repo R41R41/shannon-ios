@@ -1,3 +1,4 @@
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import { toolFailure, toolOk, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 
@@ -18,7 +19,8 @@ export function minecraftSkillMilliseconds(skill: Pick<MinecraftSkillDefinition,
 export type MinecraftRetryHint = 'retry_same' | 'change_situation' | 'need_material' | 'invalid_input' | 'prepare_first';
 /**
  * The body's night gate (agreed with the body lane on 2026-10-19, Minecraft run 16: down for diamonds at night with no armour, no
- * cooked food and no bed, she died to a zombie at y=-7): at dusk or night it refuses to take her below y=16 while armour, cooked food
+ * cooked food and no bed, she died to a zombie at y=-7): from 300 s before dark (run 17) and at night it refuses to take her below
+ * y=16 while armour, cooked food
  * or a bed is missing, and its text ends with `足りない: armor, cooked_food, bed` (those missing only). The same call does not go
  * through until they are made, so it is not retryable; the hint names the next moves for what is missing.
  */
@@ -32,7 +34,7 @@ export function nightGateNeeds(text: string): NightNeed[] {
   return needs.length ? needs : Object.keys(NIGHT_GATE_NEEDS) as NightNeed[];
 }
 const nightGateWords = (text: string) =>
-  `夜に深い所へは備えがそろうまで行けない。次の手: ${nightGateNeeds(text).map(need => NIGHT_GATE_NEEDS[need]).join('／')}。拠点か浅い穴で精錬と料理を進める`;
+  `日暮れ前と夜に深い所へは備えがそろうまで行けない。次の手: ${nightGateNeeds(text).map(need => NIGHT_GATE_NEEDS[need]).join('／')}。拠点か浅い穴で精錬と料理を進める`;
 /**
  * A bed the body could not craft for want of wool of one colour (agreed with the body lane on 2026-10-19; owner: "make the bed as
  * soon as three wool are in, so that a mixed colour shows itself"; run 16 carried white 2 and light grey 1 and never noticed). The
@@ -78,6 +80,57 @@ export function minecraftRetryHint(failureType: unknown): MinecraftRetryHint | n
   if (NEED_MATERIAL.has(failureType)) return 'need_material';
   if (INVALID_INPUT.has(failureType) || failureType.startsWith('invalid_')) return 'invalid_input';
   return 'change_situation';
+}
+
+/**
+ * A fight she asks for against a creeper is refused before it is sent (owner 2026-10-19, Minecraft run 17: her flee from a creeper
+ * moved 2 m and failed, she then called `combat` on it, and it blew up at her side from full health). The refusal says the moves that
+ * do work: away from it, or three blocks up a pillar where it cannot reach. Only a target she names; `hostile` is the body's choice.
+ */
+const FIGHTS: Readonly<Record<string, string>> = Object.freeze({
+  'mc.combat': 'target', 'mc.attack-continuously': 'entityName', 'mc.attack-nearest': 'entityName',
+});
+export const CREEPER_FIGHT_REFUSAL = 'クリーパーとは戦わない（近くで爆発すると体力の大半を失う）。離れる: flee-from（target=creeper、minDistance=16）。'
+  + '逃げ道が無い時は tower-up（height=3）で柱に上る。爆発の後は落とし物を拾う。';
+export function creeperFightRefusal(name: string, input: unknown): ToolResult | null {
+  const key = FIGHTS[name], value = key && input && typeof input === 'object' ? (input as Record<string, unknown>)[key] : undefined;
+  return typeof value === 'string' && /creeper/iu.test(value) ? toolFailure('refused', CREEPER_FIGHT_REFUSAL, { retryable: false }) : null;
+}
+export const ONE_HIT_WAIT_REFUSAL = 'あと1撃で倒れる時に、敵の近くで待たない。離れる（flee-from、minDistance=16）・3段上る（tower-up、height=3）・'
+  + '囲う（build-around-self、structureName=slit_shelter）のどれかを先にする。';
+/**
+ * A wait while one more hit of a threat within 16 m takes her down (`world.margin.hitsLeft` at most 1) is refused (owner 2026-10-19,
+ * Minecraft run 17: she waited 50 s with "one hit left" shown and a creeper came).
+ */
+function oneHitWaitRefusal(observation: BodyObservation | null): ToolResult | null {
+  const world = observation?.state.world as { margin?: { hitsLeft?: { hits?: unknown } }; nearbyThreats?: unknown } | undefined;
+  const hits = world?.margin?.hitsLeft?.hits;
+  const near = Array.isArray(world?.nearbyThreats) && world.nearbyThreats.some(threat => Number((threat as { distance?: unknown })?.distance) <= 16);
+  return typeof hits === 'number' && hits <= 1 && near ? toolFailure('refused', ONE_HIT_WAIT_REFUSAL, { retryable: false }) : null;
+}
+/** Enemies that shoot from afar: a fight against one at half health or less is lost before it is reached. */
+const RANGED = /^(?:skeleton|stray|bogged|pillager|witch|blaze|ghast)$/u;
+export const FLOOR_FIGHT_REFUSAL = '体の反射が退避中（体を使用中）。終わるまで戦いの道具を出さない: 退避を取り消すことになる。少し待ってから、新しい観測で決める。';
+export const RANGED_FIGHT_REFUSAL = '体力が半分以下で、遠くから撃つ敵がいる時は戦わない。離れて壁や木の陰へ（flee-from、target=その敵、minDistance=16）、'
+  + 'または縦穴（dig-shelter）。夜は外へ出ない。';
+/**
+ * The fights she asks for that are refused before they are sent: against a creeper (`creeperFightRefusal`); any fight while the body's
+ * floor holds the body (its retreat would be cancelled: Minecraft run 17, D14, she called `combat` at 11 health against a skeleton at
+ * night, cancelled the floor's retreat and died); and any fight at half health or less with a ranged enemy within 16 m.
+ */
+export function fightRefusal(name: string, input: unknown, observation: BodyObservation | null): ToolResult | null {
+  if (name === 'mc.wait-time') return oneHitWaitRefusal(observation);
+  if (!FIGHTS[name]) return null;
+  const creeper = creeperFightRefusal(name, input);
+  if (creeper || !observation) return creeper;
+  if (observation.facts.floorActive === true) return toolFailure('refused', FLOOR_FIGHT_REFUSAL, { retryable: true });
+  const world = observation.state.world as { health?: unknown; nearbyThreats?: unknown } | undefined;
+  const health = typeof world?.health === 'number' ? world.health : null;
+  const ranged = Array.isArray(world?.nearbyThreats) && world.nearbyThreats.some(threat => {
+    const item = threat as { name?: unknown; distance?: unknown };
+    return typeof item?.name === 'string' && RANGED.test(item.name) && typeof item.distance === 'number' && item.distance <= 16;
+  });
+  return health !== null && health <= 10 && ranged ? toolFailure('refused', RANGED_FIGHT_REFUSAL, { retryable: false }) : null;
 }
 
 /**

@@ -12,7 +12,8 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const SETTLE_MILLISECONDS = 2_000;
 /** Fast skills that cut off her tool and did nothing, within `restMs`, after which a judgment that may wait leaves her tool alone. */
 const INTERRUPT_BUDGET = 2;
-const CAGE_SKILL = 'build-around-self';
+/** The next moves of a failed one (the cage, the pillar): chosen only when the body offers them now. */
+const FALLBACK_SKILLS = ['build-around-self', 'tower-up'];
 
 /**
  * One step's image-free fast judgment (Syzygy ADR-0011 stage 2, `fastJudgment.ts`): on each new frame it may start one bounded body
@@ -55,9 +56,9 @@ export function createMinecraftFastJudgment(parts: {
     const at = now(), arrived = control.arrivedAt(bodyId);
     const earlier = healths.filter(entry => entry.at < at && at - entry.at <= FAST_JUDGMENT_LIMITS.healthWindowMs).map(entry => entry.health);
     memory.arrival(step.taskId, arrived);
-    // A skill the body does not offer now is never chosen as the next move (the cage of a resting shelter, on an older body).
+    // A skill the body does not offer now is never chosen as the next move (the cage or the pillar, on an older body).
     const resting = memory.resting(step.taskId, at);
-    if (!hasSkill(bodyId, CAGE_SKILL)) resting.add(CAGE_SKILL);
+    for (const skill of FALLBACK_SKILLS) if (!hasSkill(bodyId, skill)) resting.add(skill);
     return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
       resting });
   };
@@ -129,7 +130,8 @@ export function createMinecraftFastJudgment(parts: {
     const fought = decision.kind === 'fight' && outcome === 'cancelled' && !cutOff;
     if (sent.interrupted && !effective && !fought && !byReflex) spend();
     const failed = decision.kind === 'shelter' ? !effective && !cutOff : outcome === 'failed' && !byReflex;
-    if (failed) rest(decision.skill);
+    // A pillar climbed rests too: another three blocks up the same pillar is no new escape.
+    if (failed || decision.skill === 'tower-up') rest(decision.skill);
     parts.log?.(`Shannon Minecraft fast judgment task=${step.taskId} kind=${decision.kind} rule=${decision.rule} skill=${decision.skill}`
       + ` entryToDispatchMs=${Math.max(0, sentAt - sent.judgedAt)} runMs=${Math.max(0, now() - sentAt)} outcome=${outcome}`
       + ` failure=${sent.failureType}${failed ? ` restMs=${FAST_JUDGMENT_LIMITS.restMs}` : ''}${sent.interrupted ? ' cut=true' : ''}${reflexTag(byReflex)}`);

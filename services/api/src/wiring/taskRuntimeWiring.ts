@@ -20,6 +20,8 @@ import type { FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
 import { settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
 import { pausedSpoken, pausedSummary } from './taskPauseNotice.js';
+import { MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
+import { operatorRequestTask } from './operatorMinecraftRequests.js';
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
@@ -81,7 +83,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   /** Set below, once the runtime and the table of running tasks exist; `retireUnknown` asks it which unknown tasks to leave alone. */
   let recovery: FcaBodyRecovery | undefined;
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
-    holdUnknown: task => recovery?.holds(task) ?? false, pausedSummary,
+    holdUnknown: task => recovery?.holds(task) ?? false, pausedSummary, reportsToParent: task => !operatorRequestTask(task, MINECRAFT_REQUEST_CRITERIA),
     ...(options.provenanceRefs ? { provenanceRefs: true } : {}),
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {

@@ -95,11 +95,29 @@ function lifecycle(operator: string, op: string, args: Record<string, unknown>):
   return { ok: true, operator, input: { command: 'lifecycle', action, serverId, keepWorld } };
 }
 
+/**
+ * Why a request's text looks garbled, or null (Minecraft run 17, 2026-10-19: a request written as UTF-8 and read back as CP932 came
+ * in as `繧ｨ繝ｳ繝峨Λ繧定ｨ惹ｼ舌＠縺ｦ縺上□縺輔＞`, was accepted, and was closed after 8 decisions as done). Closed signs only:
+ * the replacement character, a kanji followed at once by half-width katakana twice or more (UTF-8 bytes read as CP932: `繧ｨ`, `繝ｳ`),
+ * the lead kanji such text is made of, or UTF-8 read as Latin-1. Half-width katakana written beside hiragana or apart from kanji
+ * (`ﾀﾞｲﾔを3個掘って`, `｢鉄｣を集めて`) is not refused.
+ */
+export function garbledRequest(text: string): string | null {
+  if (/�/u.test(text)) return 'replacement_character';
+  if ((text.match(/[一-鿿][｡-ﾟ]/gu) ?? []).length >= 2) return 'halfwidth_kana_with_kanji';
+  if ((text.match(/[繧縺繝譁蜈髢]/gu) ?? []).length >= 2) return 'cp932_lead_kanji';
+  // UTF-8 read as Latin-1 or CP1252: a lead byte's letter, then a continuation byte's (in CP1252 also ‚ ƒ … € ™ and the like).
+  if (/[ÃãâÂ][\x80-\xBFŒœŠšŸŽžƒˆ˜–-›€™]/u.test(text)) return 'latin1_mojibake';
+  return null;
+}
+
 function request(operator: string, args: Record<string, unknown>): OperatorParse {
   const goal = typeof args.goal === 'string' ? args.goal.trim() : '';
   if (!goal || goal.length > OPERATOR_LIMITS.goalCharacters || /\p{Cc}/u.test(goal)) {
     return refuse(operator, 'invalid_input', `the request must be 1..${OPERATOR_LIMITS.goalCharacters} characters without control characters`);
   }
+  const garbled = garbledRequest(goal);
+  if (garbled) return refuse(operator, 'invalid_input', `the request text looks garbled (${garbled}): write it as UTF-8 and send it again`);
   const maxMinutes = integer(args.maxMinutes, OPERATOR_LIMITS.defaultMinutes);
   if (maxMinutes === null || maxMinutes < 1 || maxMinutes > OPERATOR_LIMITS.maxMinutes) {
     return refuse(operator, 'invalid_input', `--max-minutes must be 1..${OPERATOR_LIMITS.maxMinutes}`);

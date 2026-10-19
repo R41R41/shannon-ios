@@ -129,7 +129,8 @@ export function createMinecraftTaskBody(parts: {
   const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
   // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
-  const bedSearch = bedSearchMemory((step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown } | null)?.minecraftNoSheepDarkIn);
+  const marks = step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown; minecraftVillageSearched?: unknown } | null;
+  const bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched);
   // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
   const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
     began: Date.parse(step.snapshot.task.createdAt), now });

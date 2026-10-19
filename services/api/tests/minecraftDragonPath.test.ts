@@ -132,7 +132,9 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
 });
 
 describe('the owner\'s order to the dragon, as the step now and the next', () => {
-  const at = (items: string[], dimension = 'overworld', netherReached = false) => milestoneNow({ counts: counts(...items), dimension, netherReached });
+  // A bed and three meals carried, as at every step past the bed: the bed step is kept until they are (run 17, `kept`), tested apart.
+  const SETTLED = ['white_bed×1', 'bread×3'];
+  const at = (items: string[], dimension = 'overworld', netherReached = false) => milestoneNow({ counts: counts(...items, ...SETTLED), dimension, netherReached });
   const step = (items: string[], dimension?: string, netherReached?: boolean) => { const { now, next } = at(items, dimension, netherReached); return [now.name, next?.name]; };
 
   it('lists the owner\'s order from the spawn to the dragon', () => {
@@ -148,7 +150,7 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
     expect(step(['stone_pickaxe×1', 'stone_axe×1', 'oak_log×3'])).toEqual(['食料と羊とベッド', '鉄']);
     // The village is optional (not seen from what she carries): the bed and the food lead to iron.
     expect(step(['stone_pickaxe×1', 'stone_axe×1', 'oak_planks×12', 'white_bed×1', FED])).toEqual(['鉄', 'バケツ']);
-    // An iron pickaxe passes everything before it, the bed too (the dusk pointer looks after the bed from here).
+    // An iron pickaxe passes everything before it while the bed and food hold (without them, the bed step comes back: run 17).
     expect(step(['iron_pickaxe×1'])).toEqual(['バケツ', '鉄の全身の防具']);
     expect(step(['iron_pickaxe×1', 'bucket×1'])).toEqual(['鉄の全身の防具', 'ダイヤ']);
     // Armour made before the bucket passes no bucket.
@@ -179,7 +181,7 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
   });
 
   it('is two lines of fixed words: the step now with its condition and reason, and the next with its condition', () => {
-    const lines = milestoneLines({ counts: counts('diamond_pickaxe×1'), dimension: 'overworld', netherReached: false });
+    const lines = milestoneLines({ counts: counts('diamond_pickaxe×1', ...SETTLED), dimension: 'overworld', netherReached: false });
     expect(lines).toEqual(['今の節目: 黒曜石（条件: obsidian を10個。なぜ: ゲートの枠に最小10個）', '次の節目: ゲート（条件: 枠を建てて火をつけ、入る）']);
     for (const facts of [[], ['stone_pickaxe×1'], ['iron_pickaxe×1'], ['ender_eye×12']]) {
       expect(milestoneLines({ counts: counts(...facts), dimension: 'overworld', netherReached: false }).every(line => [...line].length <= 70)).toBe(true);
@@ -188,7 +190,7 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
   });
 
   it('rides on every decision with an observation, a skill pointed or not, and none without one', () => {
-    const calm = minecraftSkillContext(minecraftSituation(observation({ inventory: ['iron_pickaxe×1', 'bucket×1'], worn: '頭: iron_helmet(残り165/165)、胴: iron_chestplate(残り240/240)、脚: iron_leggings(残り225/225)、足: iron_boots(残り195/195)、左手: なし' }), { failedStepsInARow: 0 }), new Set());
+    const calm = minecraftSkillContext(minecraftSituation(observation({ inventory: ['iron_pickaxe×1', 'bucket×1', 'white_bed×1', 'bread×3'], worn: '頭: iron_helmet(残り165/165)、胴: iron_chestplate(残り240/240)、脚: iron_leggings(残り225/225)、足: iron_boots(残り195/195)、左手: なし' }), { failedStepsInARow: 0 }), new Set());
     expect(calm.fields).toEqual({ milestone: ['今の節目: ダイヤ（条件: diamond_pickaxe を持つ。なぜ: 黒曜石はこれでしか掘れない）', '次の節目: 黒曜石（条件: obsidian を10個）'] });
     const pointed = minecraftSkillContext(minecraftSituation(observation({ inventory: ['oak_log×1'] }), { failedStepsInARow: 0 }), ALL);
     expect(pointed.fields.milestone?.[0]).toMatch(/^今の節目: 木と石のツルハシ/u);

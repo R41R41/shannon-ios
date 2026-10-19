@@ -8,7 +8,7 @@ import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
-import { minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
+import { fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id): BodyTaskContext {
@@ -36,6 +36,8 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (!bodyId || !control.frame(bodyId)) return toolFailure('unavailable', 'マイクラの体の最新観測が届いていない。');
     const schema = call.name === 'minecraft.observe' ? EMPTY : skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;
     if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
+    const refused = fightRefusal(call.name, call.input, control.observe(bodyId));
+    if (refused) return refused;
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     if (call.name === 'minecraft.observe') return toolOk(JSON.stringify(control.observe(bodyId)));
     const active = currentActionExecution();

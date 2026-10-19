@@ -60,7 +60,7 @@ describe('the body\'s night gate, as the model reads its refusal', () => {
     expect(result.ok).toBe(false);
     expect(result).toMatchObject({ retryable: false });
     const said = (result as { text?: string; message?: string }).text ?? JSON.stringify(result);
-    expect(said).toContain('［再試行の目安: prepare_first｜夜に深い所へは備えがそろうまで行けない。次の手: 胸当て（鉄8）を作って着る／かまどで肉を焼く。');
+    expect(said).toContain('［再試行の目安: prepare_first｜日暮れ前と夜に深い所へは備えがそろうまで行けない。次の手: 胸当て（鉄8）を作って着る／かまどで肉を焼く。');
     expect(said).not.toContain('羊毛');
     // The body's own wording (Shannon `utils/nightGate.ts`, mb-body 2026-10-19), its next moves in the text before the list.
     const bodyText = '夜の深い所は備えがそろうまで断る（夜の門）。夜（明けるまで約300秒）で、y16より下（地下深く）へ降りるstair-mine（目標 y-54）を断りました。'

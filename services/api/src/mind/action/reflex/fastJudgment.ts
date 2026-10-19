@@ -28,7 +28,14 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
    * "the floor of the hole is air", and each cut off her `mine-block`): within it the rules choose the next move instead.
    */
   restMs: 60_000,
+  /**
+   * A creeper this close opens the judgment and is fled, by day too, before it is near (owner 2026-10-19, Minecraft run 17: a
+   * creeper at 6 m was fought, the flee from 6.2 m moved 2 m and failed, and it blew up at her side from full health).
+   */
+  creeperDistance: 10,
 });
+/** Three blocks up a pillar of her own blocks: what a creeper cannot reach when running from it failed (`tower-up`). */
+const TOWER = Object.freeze({ skill: 'tower-up', height: 3, blocks: 3 });
 /**
  * The cage the body builds where it stands (`build-around-self`, `slit_shelter`: about ten building blocks and four slabs, a few
  * seconds, no digging): the shelter once `dig-shelter` rests. The body's own list of building blocks (Minebot `buildAroundSelf.ts`).
@@ -41,7 +48,7 @@ const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'bla
 const WEAPON = /(_sword|_axe|^trident|^mace)$/u;
 /** Skills that already defend her: a fast judgment never cuts one off (run 11: a danger reflex stopped her fight and she died). */
 export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set(['attack-continuously', 'attack-nearest', 'retreat-attack', 'flee-from',
-  'dig-shelter', 'build-around-self']);
+  'dig-shelter', 'build-around-self', 'tower-up']);
 
 export interface FastThreat { name: string; distance: number; canReachMe: boolean; ignited: boolean }
 export interface FastBodyState {
@@ -58,6 +65,8 @@ export interface FastBodyState {
   resting: ReadonlySet<string>;
   /** She carries what the cage takes (`CAGE`: building blocks and slabs). */
   canCage: boolean;
+  /** She carries the blocks of a pillar (`TOWER`). */
+  canTower: boolean;
 }
 export type FastKind = 'fight' | 'flee' | 'shelter';
 export type FastEntry = 'close' | 'damage' | 'respawn';
@@ -65,7 +74,7 @@ export interface FastDecision {
   kind: FastKind; skill: string; arguments: Record<string, string | number | boolean>;
   /** The closed rule that chose it; `ambiguous` when only the default decided (an image-free arbiter may later choose). */
   rule: 'respawn_shelter' | 'low_health_shelter' | 'low_health_flee' | 'creeper_flee' | 'outnumbered_shelter' | 'ranged_shelter'
-    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee';
+    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee' | 'creeper_tower';
   ambiguous: boolean;
 }
 export type FastHold = 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper';
@@ -97,7 +106,8 @@ export function fastBodyState(observation: { facts: Readonly<Record<string, unkn
     hasWeapon: inventory.some(item => typeof record(item)?.name === 'string' && WEAPON.test(String(record(item)!.name))),
     floorActive: observation.facts.floorActive === true, floorKnown: typeof observation.facts.floorActive === 'boolean',
     shelterFailed: memory.shelterFailed === true || resting.has('dig-shelter'), resting,
-    canCage: carried(inventory, name => BUILDING_BLOCKS.has(name)) >= CAGE.blocks && carried(inventory, name => name.endsWith('_slab')) >= CAGE.slabs };
+    canCage: carried(inventory, name => BUILDING_BLOCKS.has(name)) >= CAGE.blocks && carried(inventory, name => name.endsWith('_slab')) >= CAGE.slabs,
+    canTower: carried(inventory, name => BUILDING_BLOCKS.has(name)) >= TOWER.blocks };
 }
 /** How many of the items she carries pass `test` (`{name, count}` stacks; a stack without a count is one). */
 function carried(inventory: readonly unknown[], test: (name: string) => boolean): number {
@@ -112,6 +122,7 @@ function carried(inventory: readonly unknown[], test: (name: string) => boolean)
 export function fastEntry(state: FastBodyState): FastEntry | null {
   const near = (distance: number) => state.threats.some(threat => threat.canReachMe && threat.distance <= distance);
   if (state.respawnedRecently && near(FAST_JUDGMENT_LIMITS.respawnDistance)) return 'respawn';
+  if (state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.creeperDistance)) return 'close';
   if (state.healthDropped && near(FAST_JUDGMENT_LIMITS.damageDistance)) return 'damage';
   if (near(state.night ? FAST_JUDGMENT_LIMITS.nightDistance : FAST_JUDGMENT_LIMITS.closeDistance)) return 'close';
   return null;
@@ -119,7 +130,8 @@ export function fastEntry(state: FastBodyState): FastEntry | null {
 
 const decision = (kind: FastKind, rule: FastDecision['rule'], target = 'hostile'): FastDecision => ({
   kind, rule, ambiguous: rule === 'ambiguous_shelter',
-  ...(kind === 'fight' ? { skill: 'attack-continuously', arguments: { entityName: 'hostile', maxAttacks: 12 } }
+  ...(rule === 'creeper_tower' ? { skill: TOWER.skill, arguments: { height: TOWER.height } }
+    : kind === 'fight' ? { skill: 'attack-continuously', arguments: { entityName: 'hostile', maxAttacks: 12 } }
     : kind === 'flee' ? { skill: 'flee-from', arguments: { target, minDistance: 16, timeout: 6000 } }
       : rule === 'shelter_failed_cage' ? { skill: CAGE.skill, arguments: { structureName: CAGE.structureName } }
         : { skill: 'dig-shelter', arguments: {} }),
@@ -164,6 +176,8 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   if (within(8).length >= 3) return decision('shelter', 'outnumbered_shelter');
   const melee = within(6).filter(threat => !RANGED.has(threat.name));
   if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) return decision('shelter', 'ranged_shelter');
+  // Never a fight with a creeper within 10 m (a fight's target is any hostile, the creeper among them): away from it first.
+  if (within(FAST_JUDGMENT_LIMITS.creeperDistance).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');
   if (melee.length >= 1 && melee.length <= 2 && health >= (state.hasWeapon ? 9 : 12)) return decision('fight', 'melee_fight');
   return decision('shelter', 'ambiguous_shelter');
 }
@@ -175,6 +189,10 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
  */
 function afterFailedShelter(state: FastBodyState, chosen: FastDecision): FastDecision {
   const creeper = state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= 6);
+  // Running from a creeper failed (run 17: 2 m over rough ground): up a pillar it cannot climb, when she has the blocks.
+  if (chosen.rule === 'creeper_flee' && state.resting.has(chosen.skill) && state.canTower && !state.resting.has(TOWER.skill)) {
+    return decision('flee', 'creeper_tower');
+  }
   if (chosen.kind === 'fight' && state.resting.has(chosen.skill)) return decision('flee', 'fight_resting_flee', creeper ? 'creeper' : 'hostile');
   if (chosen.kind !== 'shelter' || !(state.shelterFailed || state.resting.has(chosen.skill))) return chosen;
   // Not beside a creeper: the cage takes seconds to build, and its blast would open it.

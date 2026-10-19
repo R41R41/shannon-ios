@@ -27,9 +27,20 @@ export const FCA_PROGRESS_TOOLS: readonly FcaToolDefinition[] = [
     nextSteps: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 1, maxLength: 500 } },
   }, ['failureOperationId', 'summary', 'nextSteps']),
 ];
+/** The fixed words of `requireConditions` in the progress she reads. */
+export const FCA_CONDITIONS_REQUIRED = '完了にするには、goal.set_conditions で依頼の達成を示す観測の条件を置き、それが新しい観測で通ることが要る'
+  + '（例: tool=minecraft.observe、path は空、operator=contains、expected="\"name\":\"diamond_pickaxe\""）。'
+  + '条件が無い・通らない完了は続きに戻り、置いた条件は消える。達成していないなら完了にせず、次の手を進める。';
 /** State goes into the existing segment checkpoint transaction, never an independent task/memory writer. */
 export function createFcaProgressTools(base: FcaExternalTools, options: {
   checkpoint?: unknown; binding?: FcaGoalBinding; permit(): Promise<void>;
+  /**
+   * With no binding, a completion is hers to report (`self_reported`) unless this is set: then it needs conditions of her own
+   * (`goal.set_conditions`) that all pass on a new observation. A body task (Minecraft run 17, 2026-10-19: a garbled request bound to
+   * no goal was closed as complete after 8 decisions with "the dragon is not defeated" in its own summary, and the body stood still
+   * for 6.4 minutes) is held to what it can show.
+   */
+  requireConditions?: boolean;
   /** Domain-owned interruption, identical to an ordinary read's physical lifecycle signal. */
   observationSignal?(name: string, parent: AbortSignal): AbortSignal;
 }): FcaExternalTools & { progress: FcaProgressHooks } {
@@ -62,7 +73,10 @@ export function createFcaProgressTools(base: FcaExternalTools, options: {
   const verify = async (call: Parameters<FcaExternalTools['execute']>[0]): Promise<FcaGoalVerification> => {
     const trusted = binding ? await checks(binding.conditions, call, 'bound') : [];
     const suggested = await checks(state.conditions, call, 'suggested');
-    const verification: FcaGoalVerification = { status: !binding ? 'self_reported' : trusted.every(check => check.passed) ? 'verified' : 'not_verified',
+    const shown = suggested.length > 0 && suggested.every(check => check.passed);
+    const status = binding ? trusted.every(check => check.passed) ? 'verified' : 'not_verified'
+      : options.requireConditions && !shown ? 'not_verified' : 'self_reported';
+    const verification: FcaGoalVerification = { status,
       bindingId: binding?.id ?? null, checks: trusted, suggestedChecks: suggested };
     state.verification = verification; return verification;
   };
@@ -92,14 +106,22 @@ export function createFcaProgressTools(base: FcaExternalTools, options: {
     return toolFailure('invalid_input', `${which}${offered}`, { retryable: false });
   };
   const progress: FcaProgressHooks = {
-    context: () => JSON.parse(JSON.stringify({ ...state, ...(binding ? { binding } : {}) })) as FcaProgress,
+    context: () => JSON.parse(JSON.stringify({ ...state, ...(binding ? { binding } : {}),
+      ...(!binding && options.requireConditions ? { completionRule: FCA_CONDITIONS_REQUIRED } : {}) })) as FcaProgress,
     observed(operationId, name, result) {
       if (!result.ok && !FCA_PROGRESS_TOOLS.some(tool => tool.name === name)) {
         state.failures = [...state.failures, { operationId, name, failure: result.failure ?? 'failed', retryable: result.retryable }].slice(-16);
         state.verification = null;
       }
     },
-    async verifyCompletion(call, permit) { await permit(); const result = await verify(call); await permit(); return result; },
+    async verifyCompletion(call, permit) {
+      await permit();
+      const result = await verify(call);
+      // A completion turned back clears her conditions: the next one is shown by conditions set for it, not by an old one still true.
+      if (!binding && options.requireConditions && result.status === 'not_verified') state.conditions = [];
+      await permit();
+      return result;
+    },
   };
   return { ...base, definitions: [...base.definitions, ...FCA_PROGRESS_TOOLS], progress,
     checkpoint: () => ({ ...base.checkpoint?.(), fcaProgress: state }),

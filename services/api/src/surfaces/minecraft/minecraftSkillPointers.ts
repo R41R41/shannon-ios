@@ -37,6 +37,12 @@ export interface MinecraftSituation {
   milestone: string[];
   /** Stage 2 with no bed and the day's sheep search already given up (`noSheepDarkIn`): the bed waits, iron may go on. */
   bedGivenUp: boolean;
+  /** In the overworld, no village looked for yet in this task (`villageSearched` false); absent where it is not tracked. */
+  villageUnsearched?: boolean;
+  /** A furnace job of hers whose time is up and that was not taken out (`world.jobs`, `verification_due`): what and where, or null. */
+  furnaceDue?: string | null;
+  /** One more hit of a threat near takes her down (`world.margin.hitsLeft` at most 1): who hits that hard, or null. */
+  oneHitFrom?: string | null;
   /** Food enough for iron (`fed`, `minecraftStage.ts`). */
   fed: boolean;
   /** Blaze rods or powder carried and fewer than `EYES_FOR_PORTAL` eyes of ender, outside the End: pearls and eyes to make. */
@@ -58,7 +64,8 @@ type Pointer = { skills: readonly string[]; when: string; applies(situation: Min
 const FOOD_BED = 'mc-food-and-bed';
 const POINTERS: readonly Pointer[] = Object.freeze([
   // Safety first, then the Nether path, and food and pace last (review of 0efd5acb: they must not push the Nether ones out).
-  { skills: ['mc-night-retreat'], when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
+  // mc-night-shelter (draft-9) is the night retreat's successor: the retreat was used in run 17 and cannot be revised while on trial.
+  { skills: ['mc-night-shelter', 'mc-night-retreat'], when: '夜・暗くなる直前・敵が近い', applies: s => s.night || s.darkSoon || s.threatNear },
   { skills: ['mc-low-health'], when: '体力が半分以下', applies: s => s.lowHealth },
   // Bed first (owner 2026-10-17): the window before dark in which a bed can still be found, ahead of the Nether path (it has a deadline).
   // It ends where `mc-night-retreat` begins (`darkSoon`: the last minute), so the two are never offered for the same dusk, and a
@@ -72,12 +79,17 @@ const POINTERS: readonly Pointer[] = Object.freeze([
   // Diamonds, obsidian and the portal (draft-6) from the bucket on; the old Nether skill until then, from the same moment.
   { skills: ['mc-diamond-obsidian', 'mc-nether-portal'], when: '鉄のツルハシ・バケツ・全身の防具がありネザーへ向かう前', applies: s => s.readyForNether },
   { skills: ['mc-food-and-pace'], when: '空腹・進展が止まった・待ちが続いた', applies: s => s.hungry || s.stalled || s.idleWaiting },
+
   // The stage pointers (observation redesign P7) take the calm slots that are left: the bed above is stage 2's, and the Nether
   // path is stage 5's and 6's (`readyForNether`); the safety ones keep their priority and the three-slot limit holds.
   { skills: ['mc-first-day', 'mc-early-toolchain'], when: '石のツルハシがまだ無い', applies: s => s.calm && s.stage === 1 },
   { skills: [FOOD_BED, 'mc-opening-scout'], when: '石のツルハシがあり食料かベッドが無い昼', applies: s => s.calm && s.stage === 2 && !(s.bedGivenUp && s.fed) },
   // Iron from stage 3, and at stage 2 once the day's sheep search found none (with the food pointer beside it while food is short).
   { skills: ['mc-iron-and-bucket'], when: '鉄のツルハシ・バケツ・鉄の全身の防具のどれかが無い', applies: s => s.calm && (s.stage === 3 || s.stage === 4 || s.bedGivenUp) },
+  // A village looked for once, by day, from the stone tools to iron, after the stage's own pointer (owner 2026-10-19: run 17 never
+  // looked, the night took the first day).
+  { skills: [FOOD_BED], when: '村をまだ探していない（明るい間に一度）',
+    applies: s => s.calm && s.villageUnsearched === true && s.stage !== null && s.stage >= 2 && s.stage <= 4 },
   { skills: ['mc-travel-kit'], when: '弓・矢・くり抜いたカボチャが足りない', applies: s => s.calm && s.kitMissing },
 ]);
 /** The note beside the pointers: fixed words. */
@@ -109,23 +121,43 @@ export interface MinecraftPaceFacts {
   recentIdleWaits?: number;
   /** Seconds to dark when `mc.find-nearest-entity` for sheep last found none (`noSheepNearby`), kept while the same day goes on (`bedSearchMark`). */
   noSheepDarkIn?: number;
+  /**
+   * Whether she has looked for a village in this task (`villageSearch`, kept in the checkpoint). False: not yet, and the village
+   * pointer is offered by day; absent (a caller that does not track it): never offered.
+   */
+  villageSearched?: boolean;
+}
+/**
+ * A village search of hers: `explore-for-structure` for a village that answered (found or not); `find-structure` reads the loaded
+ * chunks only and is no search. Owner 2026-10-19, Minecraft run 17: the night took the first day, and no village was looked for
+ * after dawn either (0 searches in 30 minutes).
+ */
+export function villageSearch(call: { name: string; input: unknown }, result: { ok: boolean }): boolean {
+  const type = record(call.input)?.structureType;
+  return result.ok && call.name === 'mc.explore-for-structure' && typeof type === 'string' && type.toLowerCase() === 'village';
 }
 
-/** The task's "no sheep near" mark: from the checkpoint, to the pace facts, to a search result, and back to the checkpoint. */
-export function bedSearchMemory(kept: unknown) {
+/**
+ * The task's "no sheep near" mark: from the checkpoint, to the pace facts, to a search result, and back to the checkpoint; and
+ * whether she has looked for a village in the task (`villageKept`, `villageSearch`), kept the same way.
+ */
+export function bedSearchMemory(kept: unknown, villageKept?: unknown) {
   const start = Number(kept);
-  let mark: number | undefined = Number.isFinite(start) && start > 0 ? start : undefined;
+  let mark: number | undefined = Number.isFinite(start) && start > 0 ? start : undefined, village = villageKept === true;
   return {
     /** The pace fact, after the mark has met the observation (a new day clears it). */
-    facts(observation: BodyObservation | null): Pick<MinecraftPaceFacts, 'noSheepDarkIn'> {
+    facts(observation: BodyObservation | null): Pick<MinecraftPaceFacts, 'noSheepDarkIn' | 'villageSearched'> {
       mark = bedSearchMark(mark, observation);
-      return mark === undefined ? {} : { noSheepDarkIn: mark };
+      return { ...(mark === undefined ? {} : { noSheepDarkIn: mark }), villageSearched: village };
     },
     note(call: { name: string; input: unknown }, result: { ok: boolean; text: string }, observe: () => BodyObservation | null): void {
       if (noSheepNearby(call, result)) mark = bedSearchGivenUp(observe()) ?? mark;
+      if (villageSearch(call, result)) village = true;
     },
     /** Always carries the key: the runner merges a step's checkpoint over the prior one, so a cleared mark must overwrite it with `null` (read as no mark). */
-    checkpoint(): { minecraftNoSheepDarkIn: number | null } { return { minecraftNoSheepDarkIn: mark ?? null }; },
+    checkpoint(): { minecraftNoSheepDarkIn: number | null; minecraftVillageSearched: boolean } {
+      return { minecraftNoSheepDarkIn: mark ?? null, minecraftVillageSearched: village };
+    },
   };
 }
 /** Seconds to dark in the observation (the body's margin, else the time of day); `Infinity` when unknown, at night or not the overworld. */
@@ -175,7 +207,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   const overworld = dimension === 'overworld', nether = dimension === 'the_nether';
   // What she carries: the body's {name, count} stacks (the real frame) and the name×count strings, as the measurement logs read it.
   // The real frame holds objects; only strings were read before P7, so the stage and the bed check saw (almost) nothing.
-  const items = carriedItemCounts(world, facts), dark = darkness(world, overworld), darkIn = untilDark(world);
+  const items = withRecoverableDrops(carriedItemCounts(world, facts), world), dark = darkness(world, overworld), darkIn = untilDark(world);
   // The dragon is the End's aim, not a reason to retreat; an enderman is no threat unless looked at.
   const threatNear = entityNear(list(world.nearbyThreats), name => name !== 'enderman' && name !== 'ender_dragon', THREAT_NEAR);
   const stage = overworld ? minecraftStage(items) : null;
@@ -183,14 +215,16 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   const day = overworld && !dark.night && !dark.darkSoon && darkIn > DARK_SOON_SECONDS;
   return {
     ...dark,
-    threatNear, stage, calm: day && !threatNear,
+    threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
+    oneHitFrom: threatNear ? oneHitFrom(world.margin) : null,
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
     inNether: nether, inEnd: dimension === 'the_end',
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
     ...openingPath(items, stage, darkIn, day, pace),
     ...laterPath(items, dimension, stage),
-    milestone: observation ? milestoneLines({ counts: items, dimension, netherReached: pace.milestones?.netherReached === true }) : [],
+    milestone: observation ? milestoneLines({ counts: items, dimension, netherReached: pace.milestones?.netherReached === true,
+      bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' }) : [],
   };
 }
 
@@ -218,6 +252,48 @@ function laterPath(items: ItemCounts, dimension: string, stage: MinecraftStage |
   };
 }
 
+/**
+ * Lines a decision carries beside the milestone, fixed words with closed facts: one more hit takes her down (owner 2026-10-19,
+ * Minecraft run 17: "one hit left" was shown for D25-D35 and she waited, ran 2 m, fought and walked to a furnace), and a furnace
+ * job left uncollected.
+ */
+function reminders(situation: MinecraftSituation): { reminders?: string[] } {
+  const lines = [...(situation.oneHitFrom ? [`あと1撃で倒れる（${situation.oneHitFrom}）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）のどれか`] : []),
+    ...(situation.furnaceDue ? [`かまどの${situation.furnaceDue}は焼き上がっている。離れる前に withdraw-from-furnace で取り出す`] : [])];
+  return lines.length ? { reminders: lines } : {};
+}
+/** Who takes her down with one more hit (`margin.hitsLeft`: `{from, hits}`), or null. */
+export function oneHitFrom(margin: unknown): string | null {
+  const hits = record(record(margin)?.hitsLeft);
+  const from = typeof hits?.from === 'string' && /^[a-z_]{1,40}$/u.test(hits.from) ? hits.from : null;
+  return from && typeof hits?.hits === 'number' && hits.hits <= 1 ? from : null;
+}
+/**
+ * Her first furnace job whose time is up and that is still in the furnace (`world.jobs` with `verification_due`), as `porkchop×7
+ * (12,84,119)`. Owner 2026-10-19, Minecraft run 17: seven cooked porkchops were left in a furnace from D41 to the end.
+ */
+function furnaceDue(jobs: unknown): string | null {
+  const due = list(jobs).map(record).find(job => job?.status === 'verification_due' && record(job.position));
+  if (!due) return null;
+  const at = record(due.position)!, where = [at.x, at.y, at.z].map(value => Math.round(Number(value)));
+  const item = typeof due.input === 'string' && /^[a-z0-9_]{1,40}$/u.test(due.input) ? due.input : '中身';
+  return where.every(Number.isFinite) ? `${item}×${Math.max(0, Math.round(Number(due.count) || 0))}（${where.join(',')}）` : null;
+}
+/**
+ * What she carries with what she dropped at her latest death while it can still be picked up (owner 2026-10-19, Minecraft run 17:
+ * right after each death she carried nothing, and the stage and the milestone went back to the first wood at D16 and D36). The body's
+ * `world.lastDeath` is said while the drops last; it says when they are gone or none were dropped. `world.deaths` lists `name×n`.
+ */
+export function withRecoverableDrops(items: ItemCounts, world: Record<string, unknown>): ItemCounts {
+  const said = typeof world.lastDeath === 'string' ? world.lastDeath : '';
+  const deaths = Array.isArray(world.deaths) ? world.deaths : [];
+  const lost = record(deaths.at(-1))?.lostItems;
+  if (!said || /もう無かった|消えた見込み|何も落としていない/u.test(said) || !Array.isArray(lost) || !lost.length) return items;
+  const dropped = carriedItemCounts({ inventory: lost.filter(item => typeof item === 'string').slice(0, 64) }, {});
+  const merged = new Map(items);
+  for (const [name, count] of dropped) merged.set(name, (merged.get(name) ?? 0) + count);
+  return merged;
+}
 function dimensionOf(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string {
   return typeof world.dimension === 'string' ? world.dimension : typeof facts.dimension === 'string' ? facts.dimension : '';
 }
@@ -277,7 +353,7 @@ export interface MinecraftSkillContext {
    * The body's pointer fields: none on a calm moment but the milestone; with no gist shown, `skillPointers` and `skillPointerNote` as
    * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
    */
-  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[] };
+  fields: { skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[]; reminders?: string[] };
   /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
@@ -289,7 +365,8 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const matched = matching(situation, skillNames);
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
   const pointed = matched.map(pointer => pointer.skill);
-  const milestone = situation.milestone.length ? { milestone: [...situation.milestone] } : {};
+  const milestone = { ...(situation.milestone.length ? { milestone: [...situation.milestone] } : {}),
+    ...reminders(situation) };
   if (!matched.length) return { fields: milestone, gistTools: new Map(), pointed };
   const shown = gists?.(pointed) ?? new Map<string, readonly string[]>();
   const skillGists = matched.flatMap(pointer => shown.get(pointer.skill)?.length ? [{ skill: pointer.skill, steps: [...shown.get(pointer.skill)!] }] : []);

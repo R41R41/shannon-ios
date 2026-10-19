@@ -54,7 +54,11 @@ export function fed(counts: ItemCounts): boolean {
   return food >= FOOD_STOCK || (food >= FOOD_KEPT && countMatching(counts, IRON_IN_HAND) > 0);
 }
 /** What a milestone is read from: what she carries, where she is, and whether she has been to the Nether (the pace's milestone). */
-export interface MilestoneFacts { counts: ItemCounts; dimension: string; netherReached: boolean }
+export interface MilestoneFacts {
+  counts: ItemCounts; dimension: string; netherReached: boolean;
+  /** A respawn bed of hers is set and remembered (`world.rememberedPlaces.respawn`): her bed stands, though she does not carry it. */
+  bedPlaced?: boolean;
+}
 /**
  * One step of the owner's order to the dragon (owner 2026-10-19): its name, when it is reached (`done`, from `MilestoneFacts`), the
  * condition and the reason in fixed words. `anchor`: a step that cannot be reached early by chance (it holds what comes before it),
@@ -63,6 +67,12 @@ export interface MilestoneFacts { counts: ItemCounts; dimension: string; netherR
  */
 export interface Milestone {
   name: string; condition: string; why: string; done: ((facts: MilestoneFacts) => boolean) | null; anchor?: boolean; optional?: boolean;
+  /**
+   * Not passed by a later anchor while it is open, in the overworld before the Nether (owner 2026-10-19, Minecraft run 17: the iron
+   * pickaxe at D24 passed the bed and the food, and the bed did not come back as the step until D45). The function says whether it
+   * holds well enough to be left behind: a meal or two eaten later does not bring it back.
+   */
+  kept?: (facts: MilestoneFacts) => boolean;
 }
 const has = (facts: MilestoneFacts, pattern: RegExp, least = 1) => countMatching(facts.counts, pattern) >= least;
 const sum = (facts: MilestoneFacts, ...weighted: Array<[RegExp, number]>) =>
@@ -80,9 +90,11 @@ export const MILESTONES: readonly Milestone[] = Object.freeze([
   { name: '石の斧', condition: 'stone_axe 以上を持つ', why: '木を早く集められる', done: facts => has(facts, /^(?:stone|iron|diamond|netherite)_axe$/u) },
   { name: '木材', condition: '板材にして12枚分以上', why: '作業台・棒・ベッド・チェストに要る', done: facts => sum(facts, [/_log$/u, 4], [/_planks$/u, 1]) >= 12 },
   { name: '食料と羊とベッド', condition: 'ベッドと食べ物6個', why: '夜を飛ばせ、空腹で回復が止まらない（鉄より先）',
-    done: facts => has(facts, STONE_TIER_PICKAXE) && has(facts, BED_ITEM) && fed(facts.counts), anchor: true },
+    kept: facts => (has(facts, BED_ITEM) || facts.bedPlaced === true) && countMatching(facts.counts, EDIBLE_FOOD) >= FOOD_KEPT,
+    done: facts => has(facts, STONE_TIER_PICKAXE) && (has(facts, BED_ITEM) || facts.bedPlaced === true) && fed(facts.counts), anchor: true },
   { name: '村の回収', condition: '持ち物では見えない', why: '村があればベッド・食料・鉄が早い', done: null, optional: true },
-  { name: '鉄', condition: 'iron_pickaxe を持つ', why: 'バケツ・防具・ダイヤの採掘に要る', done: facts => has(facts, IRON_TIER_PICKAXE), anchor: true },
+  // Run 17 mined iron 3, 8, 8 and 13 at a time and smelted and waited each time: the step says to take it all at once.
+  { name: '鉄', condition: 'iron_pickaxe を持つ', why: '鉄鉱石は一度に30個掘る（ツルハシ3・バケツ3・防具24）', done: facts => has(facts, IRON_TIER_PICKAXE), anchor: true },
   { name: 'バケツ', condition: 'bucket を持つ', why: '黒曜石を作る水を運ぶ', done: facts => has(facts, IRON_TIER_PICKAXE) && has(facts, BUCKET_ITEM), anchor: true },
   // Run 16: down for diamonds at night with no armour. The bucket is part of it, or armour made first would pass the bucket.
   { name: '鉄の全身の防具', condition: '兜・胸当て・脚・靴を鉄で着る（鉄24）', why: '受ける傷が約6割減る。余裕があれば予備のツルハシ（鉄3）も',
@@ -117,6 +129,10 @@ export function milestoneNow(facts: MilestoneFacts): { now: Milestone; next: Mil
   const open = (index: number) => !MILESTONES[index]!.optional && !MILESTONES[index]!.done?.(facts);
   let now = MILESTONES.findIndex((_, index) => index > lastAnchor && open(index));
   if (now < 0) now = MILESTONES.length - 1;
+  // A kept step passed by a later anchor and still open comes first (the bed and the food before the bucket and the armour).
+  const kept = facts.dimension === 'overworld' && !nether(facts)
+    ? MILESTONES.findIndex((milestone, index) => milestone.kept && index < now && !milestone.kept(facts)) : -1;
+  if (kept >= 0) now = kept;
   const next = MILESTONES.findIndex((milestone, index) => index > now && !milestone.optional);
   return { now: MILESTONES[now]!, next: next < 0 ? null : MILESTONES[next]! };
 }
@@ -151,7 +167,7 @@ const villageCheck = anyOf(tool('mc.recall-places', 'kind', VILLAGE), tool('mc.f
   tool('mc.explore-for-structure', 'structureType', VILLAGE));
 const STRONGHOLD_TYPE = /^stronghold$/u, RAW_FOOD = /^(?:beef|porkchop|mutton|chicken|rabbit|cod|salmon|potato)$/u;
 const named = (name: string) => matcher([name], true, call => call.name === name);
-const RETREAT = 'mc-night-retreat';
+const RETREAT = 'mc-night-retreat', SHELTER = 'mc-night-shelter';
 
 /**
  * The calls that count as acting on a skill (a tool and an argument), beyond the tools only it names. Used for the content-free
@@ -164,10 +180,10 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'village_check', skills: [BED, SCOUT, FOOD_BED, FIRST_DAY], matches: villageCheck },
   { tag: 'sheep_hunt', skills: [BED, FOOD_BED], matches: tool('mc.attack-continuously', 'entityName', /^sheep$/u) },
   { tag: 'bed_craft', skills: [BED, FOOD_BED], matches: tool('mc.craft-one', 'itemName', /^[a-z_]*_bed$/u) },
-  { tag: 'bed_sleep', skills: [BED, FOOD_BED, RETREAT], matches: named('mc.sleep-in-bed') },
-  { tag: 'shelter_dig', skills: [RETREAT], matches: named('mc.dig-shelter') },
-  { tag: 'shelter_build', skills: [RETREAT], matches: tool('mc.build-around-self', 'structureName', /^slit_shelter$/u) },
-  { tag: 'water_leave', skills: [RETREAT], matches: named('mc.leave-water') },
+  { tag: 'bed_sleep', skills: [BED, FOOD_BED, RETREAT, SHELTER], matches: named('mc.sleep-in-bed') },
+  { tag: 'shelter_dig', skills: [RETREAT, SHELTER], matches: named('mc.dig-shelter') },
+  { tag: 'shelter_build', skills: [RETREAT, SHELTER], matches: tool('mc.build-around-self', 'structureName', /^slit_shelter$/u) },
+  { tag: 'water_leave', skills: [RETREAT, SHELTER], matches: named('mc.leave-water') },
   { tag: 'food_hunt', skills: [SCOUT, FOOD_BED], matches: tool('mc.attack-continuously', 'entityName', /^(?:cow|pig|chicken|sheep|rabbit|food_animals)$/u) },
   { tag: 'food_cook', skills: [FOOD_BED], matches: tool('mc.start-smelting', 'inputItem', RAW_FOOD) },
   { tag: 'village_loot', skills: [FOOD_BED], matches: anyOf(named('mc.check-container'), named('mc.withdraw-from-container')) },
@@ -180,7 +196,7 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
   { tag: 'wood_gather', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.mine-block', 'blockName', /_log$/u) },
   { tag: 'tool_craft', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.craft-one', 'itemName', TOOLCHAIN_ITEMS) },
   { tag: 'stone_mine', skills: [TOOLCHAIN, FIRST_DAY], matches: tool('mc.mine-block', 'blockName', /^(?:stone|cobblestone)$/u) },
-  { tag: 'descend', skills: [DIAMOND, RETREAT], matches: named('mc.stair-mine') },
+  { tag: 'descend', skills: [DIAMOND, RETREAT, SHELTER], matches: named('mc.stair-mine') },
   { tag: 'diamond_find', skills: [DIAMOND], matches: tool('mc.find-blocks', 'blockName', /diamond/u) },
   { tag: 'diamond_mine', skills: [DIAMOND], matches: tool('mc.mine-block', 'blockName', /diamond_ore$/u) },
   { tag: 'diamond_tool_craft', skills: [DIAMOND], matches: tool('mc.craft-one', 'itemName', /^(?:diamond_pickaxe|flint_and_steel)$/u) },
@@ -219,8 +235,10 @@ export const ADOPTIONS: readonly Adoption[] = Object.freeze([
  */
 export function adoptionTools(skill: string): Set<string> {
   const own = ADOPTIONS.filter(adoption => adoption.skills.includes(skill));
+  // A skill and its successor (draft-9's night shelter of the night retreat) are one: a tool both use is still theirs alone.
+  const family = (name: string) => name === SHELTER ? RETREAT : name;
   const alone = (name: string) => ADOPTIONS.every(adoption =>
-    !adoption.matches.tools.includes(name) || (adoption.skills.length === 1 && adoption.skills[0] === skill));
+    !adoption.matches.tools.includes(name) || adoption.skills.every(item => family(item) === family(skill)));
   return new Set(own.flatMap(adoption => adoption.matches.tools.filter(name => adoption.matches.anyArgument || alone(name))));
 }
 

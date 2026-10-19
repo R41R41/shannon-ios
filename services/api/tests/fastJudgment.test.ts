@@ -16,7 +16,7 @@ const frame = (sequence: number, at: number, world: Record<string, unknown>, fac
   state: { world: { time: NIGHT, inventory: [{ name: 'stone_pickaxe', count: 1 }], ...world } }, facts: { alive: true, ...facts },
 } as unknown as BodyObservation);
 const state = (overrides: Partial<FastBodyState>): FastBodyState => ({ health: 20, threats: [], night: true, respawnedRecently: false,
-  healthDropped: false, hasWeapon: false, floorActive: false, floorKnown: true, shelterFailed: false, resting: new Set(), canCage: false, ...overrides });
+  healthDropped: false, hasWeapon: false, floorActive: false, floorKnown: true, shelterFailed: false, resting: new Set(), canCage: false, canTower: false, ...overrides });
 const kind = (verdict: ReturnType<typeof fastJudgment>) => 'decision' in verdict ? `${verdict.decision.kind}:${verdict.decision.rule}` : `hold:${verdict.hold}`;
 
 describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {

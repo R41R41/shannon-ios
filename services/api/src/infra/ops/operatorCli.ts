@@ -1,6 +1,6 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { OPERATOR_LIMITS, operatorLabel, type OperatorEnvelope } from '../../contracts/operatorContract.js';
+import { garbledRequest, OPERATOR_LIMITS, operatorLabel, type OperatorEnvelope } from '../../contracts/operatorContract.js';
 import { inspectOperatorAudit, type OperatorAuditInspection, type OperatorAuditRow } from './store/operatorAuditStore.js';
 import { operatorSocketPath, requestOperatorSocket } from './operatorSocket.js';
 
@@ -93,6 +93,9 @@ function requestEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   knownFlags(parsed, ['--operator', '--max-minutes', '--budget-yen']);
   const goal = parsed.positional.join(' ').trim();
   if (!goal) throw new UsageError('the request needs a goal');
+  // The same check as the API's (`garbledRequest`), before anything is sent: run 17's request came in garbled from a CP932 read.
+  const garbled = garbledRequest(goal);
+  if (garbled) throw new UsageError(`the goal looks garbled (${garbled}); write it as UTF-8 and pass it again`);
   const maxMinutes = whole(parsed.flags.get('--max-minutes'), '--max-minutes');
   const budgetYen = whole(parsed.flags.get('--budget-yen'), '--budget-yen');
   const limits = { ...(maxMinutes !== undefined ? { maxMinutes } : {}), ...(budgetYen !== undefined ? { budgetYen } : {}) };

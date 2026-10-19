@@ -58,6 +58,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       pendingReceipts: scope => this.pendingReceipts(scope), activeSteps: scope => this.activeSteps(scope),
       snapshot: (scope, id) => this.snapshotInTransaction(scope, id)!, failConversation: step => this.failConversationInTransaction(step),
       send: (scope, source, target, text, id) => this.sendInTransaction(scope, source, target, text, id),
+      reportsToParent: task => this.options.reportsToParent?.(task) !== false,
       redeliver: (task, stepId, reason) => this.inbox.redeliverLost(task, stepId, reason),
       wake: (task, reason) => { this.inbox.wake(task.scopeKey, task.id, reason); },
       notice: (scope, taskId, stepId, operationId, text) => this.progressStore.notice(scope, taskId, stepId, operationId, text), hold: options.holdUnknown });
@@ -330,7 +331,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       if (terminal({ ...task, status }) && task.origin === 'maintenance') this.maintenance.report(task, status, step.id);
       else if (terminal({ ...task, status }) && task.parentId && task.origin !== 'own_time') {
         const parent = this.required(step.scopeKey, task.parentId);
-        if (!terminal(parent)) this.sendInTransaction(step.scopeKey, step.taskId, task.parentId,
+        if (!terminal(parent) && this.options.reportsToParent?.(task) !== false) this.sendInTransaction(step.scopeKey, step.taskId, task.parentId,
           commit.summary || `${task.title}: ${status}`, `result:${step.id}`);
         if (status === 'completed') this.progressStore.completion(step.scopeKey, task, step.id, commit.summary ?? '');
       }
