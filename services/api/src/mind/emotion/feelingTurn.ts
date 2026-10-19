@@ -57,8 +57,6 @@ export function feelingTurnState(input: FeelingTurnInput): Record<string, unknow
   };
 }
 
-
-
 const round = (value: number) => Math.round(value * 100) / 100;
 
 /** The text turn's Jev call. Never throws: a failure is 「ふつう」. */

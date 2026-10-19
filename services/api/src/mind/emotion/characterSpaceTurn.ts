@@ -58,12 +58,15 @@ export function spaceOf(input: SpaceInput): SpaceLines {
     && Date.parse(event.occurredAt) < Date.parse(at));
   const returning = owner && (input.relation?.awayDays ?? 0) >= 1 && !spokeToday;
   const cues = cuesOfWords(input.words, { returning });
-  const mood = moodAxes({ events: input.events, now: cues, at, localHour: localHour(at, input.timeZone), lingering: input.snapshot.emotion });
+  // Her mood is one, but what happened with him alone stays his: anyone else's turn is not swung by it (review 5).
+  const seen = owner ? input.events : input.events.filter(event => event.audience !== 'owner_alone');
+  const mood = moodAxes({ events: seen, now: cues, at, localHour: localHour(at, input.timeZone), lingering: input.snapshot.emotion });
   const base = input.relation ?? STRANGER_RELATION;
   const mine = input.events.filter(event => event.personKey === key.personKey);
   const max = owner && input.max;
-  const relation = { liking: max ? 1 : base.liking, security: securityToday(base.security, mine, cues) };
+  const relation = { liking: max ? 1 : base.liking, security: securityToday(base.security, mine, cues, at) };
   const position = spacePosition(mood, relation);
   const selection = selectPersona(position, { ownerAlone: owner, max, previous: previousRegion(input.events, key, at) });
-  return { position, selection, block: personaBlock(selection), cues };
+  // The lines shown turn with the minute of the turn.
+  return { position, selection, block: personaBlock(selection, Math.floor(Date.parse(at) / 60_000)), cues };
 }

@@ -15,10 +15,13 @@ import { turnToolResults } from '../../mind/tools/toolsPorts.js';
  *   feeling order, or one in front of others) is written in full, checked (`checkReply`), and when something is off written once more
  *   with a note of what was off after everything else; the second draft is the answer, checked or not. A draft whose turn already ran a
  *   tool is never rewritten (a write must not run twice): its flags go to the next feeling turn instead. The rewrite is offered no
- *   tools and is waited for at most `REWRITE_DEADLINE_MILLISECONDS` (review M5): late, the first draft goes out as it was. Streamed,
+ *   tools and is waited for at most `REWRITE_DEADLINE_MILLISECONDS` (review M5; a strong turn's, Sonnet's, `STRONG_REWRITE_DEADLINE_MILLISECONDS`):
+ *   late, the first draft goes out as it was. Streamed,
  *   the answer goes out in one piece after the check.
  */
 export const REWRITE_DEADLINE_MILLISECONDS = 2_500;
+/** A strong turn's rewrite (Sonnet) is waited for this long. */
+export const STRONG_REWRITE_DEADLINE_MILLISECONDS = 8_000;
 
 export interface FeelingReplyOptions {
   sonnet?: AnthropicChatModel | null;
@@ -104,7 +107,7 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
     // Review L-b: the rewrite is the same model's, but outside the strong turn's release, so a failed rewrite never frees the cap twice.
     const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
-    const second = await within(rewrite, this.options.rewriteDeadlineMilliseconds ?? REWRITE_DEADLINE_MILLISECONDS);
+    const second = await within(rewrite, this.deadlineFor(request));
     if (!second || second.outOfTime) {
       this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter or crossed a line');
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
@@ -114,6 +117,16 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     // A rewrite that still tells a private matter, or still crosses a line no stage crosses, is not sent either.
     const again = checkReply(second.reply, context);
     return unsendable(again) ? this.swallowed(second, again) : second;
+  }
+
+  /**
+   * How long a rewrite is waited for: 2.5 s, and Sonnet's in her character space longer (owner 2026-10-20: there every text reply is
+   * Sonnet's, and in the sandbox its rewrite never came within 2.5 s, so a flagged draft went out as it was).
+   */
+  private deadlineFor(request: Marked): number {
+    if (this.options.rewriteDeadlineMilliseconds !== undefined) return this.options.rewriteDeadlineMilliseconds;
+    // Only a turn of her character space (review 1: with it off, every rewrite is waited for as before).
+    return request.feelingStrong && this.strong && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
   }
 
   /** The safe line in place of a draft that is never sent; the log says which kind of thing it was (never the words). */

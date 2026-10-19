@@ -66,35 +66,53 @@ export const CUE_SWINGS: Readonly<Record<SpaceCue, Partial<Record<MoodAxis | 'se
   feeling_order: { dominance: 0.25, play: 0.1 },
   touch_welcome: { pleasure: 0.3, arousal: 0.25, dominance: -0.2 },
   touch_refused: { pleasure: -0.6, arousal: 0.4, dominance: 0.35, security: -0.1 },
-  hype: { arousal: 0.08, play: 0.06, pleasure: 0.04 },
-  stream_praise: { pleasure: 0.1, dominance: 0.1 },
+  hype: { arousal: 0.3, play: 0.25, pleasure: 0.1 },
+  stream_praise: { pleasure: 0.15, dominance: 0.1 },
 });
 
-const LOVE = /(?:^|[^大])好き(?:だよ|だ|です|！|!|。|$)|大好き|愛してる|会いたかった/u;
+/**
+ * The same cue again counts less (review 6: a flood of comments, three trolls or a run of touches must not pin an axis): the newest
+ * counts whole, each older one of the same cue this share of the one after it; so a cue never moves an axis by more than 2.5 times its
+ * swing, nor 安心 in a day.
+ */
+export const REPEAT_SHARE = 0.6;
+
+/** Love words said to her (「好きだよ」「シャノンが好き」「愛してる」), not a liking for a game or a dish (review 4). */
+const LOVE = new RegExp(['^(?:大好き|好き)(?:だよ|だ|です|！|!|。|…|♡|〜|ー)*$', '(?:シャノン|君|きみ|お前|おまえ)(?:の(?:こと|ほう))?(?:が|を|は)?(?:大好き|好き|愛して)',
+  '愛してる', '会いたかった'].join('|'), 'u');
 const TEASE_MARK = /ポンコツ|へっぽこ|ばーか|バーカ|ドジ|からかっ|ｗ|w$|笑|〜$|（笑）/u;
-const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲みに|飲み会|遊びに|また(?:あとで|明日|今度)|(?:もう|そろそろ)落ちる|友達と|会ってくる/u;
+/** Words that are hurtful whatever mark they carry (「ポンコツ、死ね」 is no tease). */
+const HARSH = /死ね|消えろ|うざい|ウザい|きもい|キモい|ゴミ(?!出し|箱|の日|袋)|黙れ/u;
+/** Words the closed tags read as insults that are not (「ゴミ出し」「バカうま」「アホほど」; review 4). */
+const NOT_INSULT = /ゴミ(?:出し|箱|の日|袋)|バカ(?:うま|正直|でか|みたいに)|アホほど/gu;
+/** Going out somewhere: at 本気 and 重い she sulks at it (`awayStance`); going to bed is not that (review 3). */
+export const OUTING = /行ってくる|行ってきます|出かけ|飲みに|飲み会|遊びに|友達と|会ってくる/u;
+/** Taking leave of her for a while, going to bed included: a little loneliness, at any stage. */
+const LEAVING = new RegExp(`${OUTING.source}|寝る|寝ます|おやすみ|また(?:あとで|明日|今度)|(?:もう|そろそろ)落ちる`, 'u');
 /** Praise his words carry beyond a plain thanks (`utteranceKind` reads thanks and warm words). */
 const PRAISE = /さすが|すごい|天才|えらい|賢い|よくやった|よくできた|助かった|最高|かわいい|可愛い|頼りになる/u;
-const SERIOUS = new RegExp(['相談(?:が|したい|に乗って|させて|していい)', '真剣', '悩(?:んで|み)', '困って', 'どうしたら', '聞いてほしい', 'つらい', '辛い', 'しんどい',
-  '落ち込'].join('|'), 'u');
-/** An apology his words carry beyond the ledger's reading (「からかってごめんね」 is an apology, not a tease). */
-const APOLOGY = /ごめん|すまん|すみません|申し訳|悪かった|言いすぎた|言い過ぎた/u;
+const SERIOUS = new RegExp(['相談(?:が|したい|に乗って|させて|していい)', '真剣', '悩(?:んで|み)', '困って', 'どうしたら', '聞いてほしい', 'つらい', '辛くて', '辛かった',
+  'しんどい', '落ち込'].join('|'), 'u');
+/** An apology his words carry beyond the ledger's reading (「からかってごめんね」 is an apology, not a tease; 「すみません、これ教えて」 is not one). */
+const APOLOGY = /ごめん(?!ください)|悪かった|言いすぎた|言い過ぎた|申し訳(?:ない|ありません)/u;
 
-/** Hurtful words read as a tease when they are marked as one (「ポンコツｗ」), never an insult to her creator. */
+/** Hurtful words read as a tease when they are marked as one (「ポンコツｗ」), never an insult to her creator nor a harsh one. */
 function hurtCues(text: string): SpaceCue[] {
-  const tags = utteranceTags(text);
-  const hurtful = tags.some(tag => tag === 'insult' || tag === 'ai_taunt' || tag === 'creator_insult');
-  const teasing = TEASE_MARK.test(text);
   if (APOLOGY.test(text)) return [];
-  if (hurtful) return [teasing && !tags.includes('creator_insult') ? 'tease' : 'insult'];
-  return teasing && /ポンコツ|へっぽこ|ばーか|バーカ|ドジ|からかっ/u.test(text) ? ['tease'] : [];
+  const plain = text.replace(NOT_INSULT, '');
+  const tags = utteranceTags(plain);
+  const hurtful = tags.some(tag => tag === 'insult' || tag === 'ai_taunt' || tag === 'creator_insult');
+  const teasing = TEASE_MARK.test(plain) && !HARSH.test(plain) && !tags.includes('creator_insult');
+  if (hurtful) return [teasing ? 'tease' : 'insult'];
+  return teasing && /ポンコツ|へっぽこ|ばーか|バーカ|ドジ|からかっ/u.test(plain) ? ['tease'] : [];
 }
 
 /** What kind of words they are (love before praise; an apology; a feeling order). */
 function kindCues(text: string): SpaceCue[] {
   const kind = utteranceKind(text);
   const warm: SpaceCue[] = LOVE.test(text) ? ['love'] : kind === 'praised' || PRAISE.test(text) ? ['praise'] : [];
-  return [...warm, ...(kind === 'apologized' || APOLOGY.test(text) ? ['apology' as const] : []), ...(kind === 'feeling_order' ? ['feeling_order' as const] : [])];
+  const apology: SpaceCue[] = kind === 'apologized' || APOLOGY.test(text) ? ['apology'] : [];
+  return [...warm, ...apology, ...(kind === 'feeling_order' ? ['feeling_order' as const] : [])];
 }
 
 /** The cues of his words (and whether he comes back after a day or more away). */
@@ -102,8 +120,8 @@ export function cuesOfWords(words: string, options: { returning?: boolean } = {}
   const text = words.trim();
   const cues: SpaceCue[] = options.returning ? ['returning'] : [];
   if (!text) return cues;
-  const serious = SERIOUS.test(text) || Array.from(text).length >= 160;
-  const read: [boolean, SpaceCue][] = [[otherAiIn(text), 'other_ai'], [LEAVING.test(text), 'leaving'], [serious, 'serious'], [tenderIn(text), 'tender']];
+  const read: [boolean, SpaceCue][] = [[otherAiIn(text), 'other_ai'], [LEAVING.test(text), 'leaving'], [SERIOUS.test(text), 'serious'],
+    [tenderIn(text), 'tender']];
   return [...new Set([...cues, ...hurtCues(text), ...kindCues(text), ...read.filter(([found]) => found).map(([, cue]) => cue)])];
 }
 
@@ -132,7 +150,7 @@ const clamp = (value: number) => Math.max(-1, Math.min(1, Number.isFinite(value)
 const round = (value: number) => Math.round(value * 1000) / 1000;
 
 export interface MoodInput {
-  /** Her events of the day (every audience: her mood is one), with their instants. */
+  /** Her events of the day (every audience she may carry into this turn: her mood is one), with their instants. */
   events: readonly FeelingEvent[];
   /** This turn's cues, at `at` (his words now). */
   now: readonly SpaceCue[];
@@ -142,17 +160,26 @@ export interface MoodInput {
   lingering: Pick<ShannonEmotion, 'valence' | 'arousal'>;
 }
 
+/** The swings up to now, each with its weight among the same cue (newest whole, then `REPEAT_SHARE` of the one after). */
+function weightedSwings(events: readonly FeelingEvent[], now: readonly SpaceCue[], at: number): { at: number; cue: SpaceCue; weight: number }[] {
+  const swings = [...events.flatMap(event => cuesOfEvent(event).map(cue => ({ at: Date.parse(event.occurredAt), cue }))), ...now.map(cue => ({ at, cue }))]
+    .filter(swing => Number.isFinite(swing.at) && swing.at <= at).sort((a, b) => b.at - a.at);
+  const seen = new Map<SpaceCue, number>();
+  return swings.map(swing => {
+    const count = seen.get(swing.cue) ?? 0;
+    seen.set(swing.cue, count + 1);
+    return { ...swing, weight: REPEAT_SHARE ** count };
+  });
+}
+
 /** Her mood axes now: base, the lingering mood's colour, the hour, and every event's swing decayed by its axis's half-life. */
 export function moodAxes(input: MoodInput): Readonly<Record<MoodAxis, number>> {
   const now = Date.parse(input.at);
-  const swings: { at: number; cue: SpaceCue }[] = [
-    ...input.events.flatMap(event => cuesOfEvent(event).map(cue => ({ at: Date.parse(event.occurredAt), cue }))),
-    ...input.now.map(cue => ({ at: now, cue })),
-  ].filter(swing => Number.isFinite(swing.at) && swing.at <= now);
+  const swings = weightedSwings(input.events, input.now, now);
   const axis = (name: MoodAxis) => {
     const { base, gain, halfLifeMinutes } = DEFAULT_PERSONALITY[name];
-    const moved = swings.reduce((sum, swing) => sum + (CUE_SWINGS[swing.cue][name] ?? 0) * 0.5 ** ((now - swing.at) / (halfLifeMinutes * 60_000)), 0);
-    return base + gain * moved;
+    const decay = (at: number) => 0.5 ** ((now - at) / (halfLifeMinutes * 60_000));
+    return base + gain * swings.reduce((sum, swing) => sum + (CUE_SWINGS[swing.cue][name] ?? 0) * swing.weight * decay(swing.at), 0);
   };
   return {
     pleasure: round(clamp(axis('pleasure') + LINGER_SHARE * input.lingering.valence)),
@@ -162,8 +189,8 @@ export function moodAxes(input: MoodInput): Readonly<Record<MoodAxis, number>> {
   };
 }
 
-/** 安心 moves the same day with what he said today (the day fold carries the days before). */
-export function securityToday(security: number, events: readonly FeelingEvent[], now: readonly SpaceCue[]): number {
-  const moved = [...events.flatMap(cuesOfEvent), ...now].reduce((sum, cue) => sum + (CUE_SWINGS[cue].security ?? 0), 0);
+/** 安心 moves the same day with what he said today (the day fold carries the days before); a repeated cue counts less. */
+export function securityToday(security: number, events: readonly FeelingEvent[], now: readonly SpaceCue[], at: string): number {
+  const moved = weightedSwings(events, now, Date.parse(at)).reduce((sum, swing) => sum + (CUE_SWINGS[swing.cue].security ?? 0) * swing.weight, 0);
   return round(clamp(security + moved));
 }

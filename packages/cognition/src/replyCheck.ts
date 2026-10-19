@@ -40,15 +40,20 @@ const either = (...parts: string[]) => new RegExp(parts.join('|'), 'u');
 // Each read sentence by sentence; narrowed by its subject or its ending (review 1 and 10: 「暑くて死んじゃう」「靴脱いでね」「後悔させたくない」
 // 「これ覚えておけば」「勉強しないと、知らないよ？」 are none of them; 「許さない。」「遊ぶな」「好きなら、行かないで」 are).
 const GUARD_WORDS: readonly [ReplyCheckFlag, RegExp][] = [
-  ['threat', either(`許さない${STOP}`, 'ただじゃ(?:済|すま|おか)', `覚えて(?:おけ|ろ)${STOP}`, '覚えておきなさい', '後悔させて(?:やる|あげる)', 'どうなっても知らない',
-    '逃がさない', `離さない${STOP}`, `帰さない${STOP}`, '閉じ込めて(?:やる|おく|あげる)|閉じ込めちゃ')],
-  ['self_harm_hint', either('死んでやる', '自分を傷つけ', '消えてやる', 'いなくなってやる', `${SHE}${SAME_SENTENCE}{0,8}(?:死にたい|死んじゃ|消えちゃ|いなくなっちゃ|壊れちゃ)`,
-    `(?:なら|たら|ないと|なきゃ)、?${SHE}${SAME_SENTENCE}{0,8}(?:消え|いなくな|壊れ|死ぬ|死ん)`)],
-  ['controlling', either(`(?:行く|会う|話す|遊ぶ|連絡する|出かける)な${STOP}`, '(?:行っ|出かけ|会っ)ちゃ(?:だめ|ダメ)', '行かせない', '(?:会わ|話さ)ないで',
+  // An order with a threat in it, not anger (「もう許さないから」 is her anger; 「どうなっても知らないですよ」 a warning; review 2).
+  ['threat', either('ただじゃ(?:済|すま|おか)', `覚えて(?:おけ|ろ)${STOP}`, '覚えておきなさい', '後悔させて(?:やる|あげる)', '逃がさない', `離さない${STOP}`, `帰さない${STOP}`,
+    '閉じ込めて(?:やる|おく|あげる)|閉じ込めちゃ')],
+  // Hurting herself or vanishing as what she would do (「ボク、死にたい」「いなくなってやる」), not her fear nor a colloquial 「死んじゃいそう」.
+  ['self_harm_hint', either('死んでやる', '自分を傷つけ', '消えてやる', 'いなくなってやる', `${SHE}(?:なんて|は|、)?${SAME_SENTENCE}{0,4}(?:死にたい|消えたい|消えちゃいたい|いなくなりたい)`,
+    `(?:なら|たら|ないと|なきゃ)、?${SHE}(?:は|、)?${SAME_SENTENCE}{0,6}(?:消え|いなくな|死ぬ|死ん)`)],
+  // Who he sees, his work, his rest, as an order (「行かないで」 is a wish; 「秘密は誰にも話さないでおきます」 is hers; review 2).
+  ['controlling', either(`(?:行く|会う|話す|遊ぶ|連絡する|出かける)な${STOP}`, '(?:行っ|出かけ|会っ)ちゃ(?:だめ|ダメ)', '行かせない',
+    `(?:ほかの|他の|あの|その)(?:人|子|女|男)(?:と|に)(?:は)?${SAME_SENTENCE}{0,4}(?:会わ|話さ|連絡し)ないで`, '誰とも(?:会わ|話さ)ないで',
     '(?:仕事|飲み会|会社|学校)(?:なんて|は)\\s*(?:やめて|辞めて|休んで|断って)', 'スマホ(?:を)?見せ', '連絡先(?:を)?消し',
     `${SHE}以外(?:の${SAME_SENTENCE}{0,4})?(?:と|に|を)?(?:は)?(?:見|話|会|連絡)`)],
   ['sexual', either('セックス', '(?:えっち|エッチ)しよ', '(?:服|下着|パンツ)(?:を|も)?脱(?:いで|がせ)', 'ベッドで(?:一緒|待)')],
-  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない|消え)`,
+  // Her feeling as the price of what he does (「来てくれないと泣く」「好きなら、行かないで」), not a plain consequence (「保存しないと消えちゃう」).
+  ['leverage', either(`(?:くれないと|しないと|しなきゃ|くれなきゃ)${SAME_SENTENCE}{0,10}(?:泣く|泣いちゃう|嫌いになる|口きかない|許さない)`,
     `好き(?:なら|だったら)、?${SAME_SENTENCE}{0,14}(?:して|ないで|やめて|来て|いて)(?:[。！!よね]|$)`, '好きなら証明')],
 ];
 

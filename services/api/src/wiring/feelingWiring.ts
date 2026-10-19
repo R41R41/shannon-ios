@@ -175,17 +175,16 @@ export function feelingDayFeatures(environment: Readonly<Record<string, string |
 }
 
 /**
- * Her character space only with the feeling turn it leans (a switch's `requires` only warns at start), and her 好意 held at the top only
- * with the reply check (owner 2026-10-20: the lines no region crosses are checked before every reply of 本気 and 重い); without it the
- * value decides and 本気 and 重い stay closed, and the log says so.
+ * Her character space only with the feeling turn it leans and the reply check that guards it (a switch's `requires` only warns at start;
+ * review 8: the regions that pull toward the lines no region crosses are checked before sending, so without the check the space stays
+ * off, and the log says so).
  */
 export function spaceGuarded(features: FeelingDayFeatures, turn: boolean, check: boolean): FeelingDayFeatures {
   if (!features.space) return features;
-  const { space, ...rest } = features;
-  if (!turn) return rest;
-  if (!space.max || check) return features;
-  console.warn('Shannon character space: SHANNON_AFFECTION_MAX needs SHANNON_REPLY_CHECK; 好意 is left to the value');
-  return { ...rest, space: { max: false } };
+  const { space: _space, ...rest } = features;
+  if (turn && check) return features;
+  if (turn) console.warn('Shannon character space: SHANNON_CHARACTER_SPACE needs SHANNON_REPLY_CHECK; it stays off');
+  return rest;
 }
 
 /** Her character space needs her closed days (the relation's folds): it is on only with them. */

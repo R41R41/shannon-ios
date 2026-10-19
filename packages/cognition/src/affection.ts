@@ -201,7 +201,9 @@ export function foldSecurity(days: readonly AffectionDay[], today: string, epoch
  * engine in his lab and Copilot a coding tool, so neither counts).
  */
 const OTHER_AI = /ChatGPT|チャットGPT|GPT-?[0-9]|Grok|グロック|Perplexity|(?:別|ほか|他)の\s*AI/iu;
-export const otherAiIn = (words: string): boolean => OTHER_AI.test(words);
+/** Using one as a tool is not talking with it (「ChatGPTで下書き作った」「別のAIエージェントに頼んだ」; review 4). */
+const TOOL_USE = /(?:ChatGPT|GPT-?[0-9]*|Grok|Perplexity|AI)\s*で|エージェント|に(?:頼んだ|頼む|やらせ|書かせ|任せ)/iu;
+export const otherAiIn = (words: string): boolean => OTHER_AI.test(words) && !TOOL_USE.test(words);
 
 export const AFFECTION_HEADER = '[ライ氏とのこと]（二人のあいだの最近の事実。どう受け取るかはボクが決める）';
 

@@ -1,4 +1,4 @@
-import type { MoodAxis, SpaceAxis, SpacePosition } from './characterSpace.js';
+import { DEFAULT_PERSONALITY, MOOD_AXES, OUTING, type MoodAxis, type SpaceAxis, type SpacePosition } from './characterSpace.js';
 import { CHARACTER_REGIONS, REGION_IDS, type CharacterRegion, type RegionId } from './characterRegions.js';
 import type { FeelingTurnDecision } from './feelingTurn.js';
 
@@ -20,8 +20,11 @@ export const PERSONA_LIMITS = Object.freeze({
   blend: 0.15,
   /** How long a previous region counts as the one she is in. */
   holdMinutes: 30,
-  /** Lines of the region shown (its first ones), and of a mixed-in one. */
-  samples: 8, mixedSamples: 3,
+  /**
+   * Lines of the region shown, and of a mixed-in one: a few, turning with each turn (the sandbox of 2026-10-20: shown eight at once,
+   * Sonnet strung them together as its reply).
+   */
+  samples: 4, mixedSamples: 2,
 });
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value));
@@ -36,11 +39,19 @@ export function spacePosition(mood: Readonly<Record<MoodAxis, number>>, relation
   };
 }
 
-/** A region's distance from a place: over the axes it names, weighted, as a root mean square. */
+/**
+ * A mood axis a region does not name counts a little, toward her default (review 7: a region naming one axis, 眠い or 真面目, must not
+ * win wherever that axis alone is near).
+ */
+export const UNNAMED_WEIGHT = 0.2;
+
+/** A region's distance from a place: over the axes it names, weighted, and her default's mood axes it does not, as a root mean square. */
 export function regionDistance(region: CharacterRegion, position: SpacePosition): number {
-  const axes = Object.entries(region.center) as [SpaceAxis, number][];
-  const total = axes.reduce((sum, [axis]) => sum + (region.weights?.[axis] ?? 1), 0);
-  const squares = axes.reduce((sum, [axis, center]) => sum + (region.weights?.[axis] ?? 1) * (position[axis] - center) ** 2, 0);
+  const unnamed = MOOD_AXES.filter(axis => region.center[axis] === undefined).map(axis => [axis, DEFAULT_PERSONALITY[axis].base] as [SpaceAxis, number]);
+  const weights: Partial<Record<SpaceAxis, number>> = { ...Object.fromEntries(unnamed.map(([axis]) => [axis, UNNAMED_WEIGHT])), ...region.weights };
+  const axes = [...Object.entries(region.center) as [SpaceAxis, number][], ...unnamed];
+  const total = axes.reduce((sum, [axis]) => sum + (weights[axis] ?? 1), 0);
+  const squares = axes.reduce((sum, [axis, center]) => sum + (weights[axis] ?? 1) * (position[axis] - center) ** 2, 0);
   return total ? Math.sqrt(squares / total) : Number.POSITIVE_INFINITY;
 }
 
@@ -79,33 +90,40 @@ export function selectPersona(position: SpacePosition, options: PersonaOptions):
 }
 
 export const PERSONA_HEADER = '[いまのボク]（いまの気分と、この相手との間がらで、ボクはこのあたりにいる。この人物として話す。'
-  + '台詞は言い回しの手ざわりの例で、そのまま言わない。ボクの性格の核と、この番の構えは、いつもどおり守る）';
+  + '台詞は声の手ざわりの例。同じ言い回しは使わず、いまの話に合わせて自分の言葉で言う。ボクの性格の核と、この番の構えは、いつもどおり守る）';
 
-/** The block of who she is now (the last block's part): the region's portrait and lines, and a mixed-in one's first line and a few lines. */
-export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'secondary'>): string {
+/** A few of a region's lines, turning with 	urn (any whole number: the turn's minute), so the same few are not shown every turn. */
+function someOf(lines: readonly string[], count: number, turn: number): string[] {
+  const start = ((Math.trunc(turn) % lines.length) + lines.length) % lines.length;
+  return Array.from({ length: Math.min(count, lines.length) }, (_, index) => lines[(start + index) % lines.length]!);
+}
+
+/**
+ * The block of who she is now (the last block's part): the region's portrait and a few of its lines, and a mixed-in one's first line and
+ * fewer lines; `turn` turns which lines are shown.
+ */
+export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'secondary'>, turn = 0): string {
   const primary = CHARACTER_REGIONS[selection.primary];
   const quoted = (lines: readonly string[]) => lines.map(line => `「${line}」`).join('');
   const parts = [PERSONA_HEADER, `いまのボク: ${primary.name}`, ...primary.portrait.map(line => `- ${line}`),
-    `言い回しの手ざわり: ${quoted(primary.samples.slice(0, PERSONA_LIMITS.samples))}`];
+    `声の手ざわり: ${quoted(someOf(primary.samples, PERSONA_LIMITS.samples, turn))}`];
   if (selection.secondary) {
     const mixed = CHARACTER_REGIONS[selection.secondary];
-    parts.push(`少しまざる: ${mixed.name}（${mixed.portrait[0]}）${quoted(mixed.samples.slice(0, PERSONA_LIMITS.mixedSamples))}`);
+    parts.push(`少しまざる: ${mixed.name}（${mixed.portrait[0]}）${quoted(someOf(mixed.samples, PERSONA_LIMITS.mixedSamples, turn))}`);
   }
   return parts.join('\n');
 }
 
-/** Words that take leave of her or turn to someone else (a night out, bed, another AI). */
-const LEAVING = /行ってくる|行ってきます|出かけ|寝る|寝ます|おやすみ|飲みに|飲み会|遊びに|また(?:あとで|明日|今度)|(?:もう|そろそろ)落ちる|友達と|会ってくる/u;
 
 /**
- * The feeling turn in a region: a 「ふつう」 turn takes the region's own stance (its `awayStance` when his words take leave of her or
- * speak of another AI); at 本気 and 重い a tease is taken the same way (owner: 「ツンデレじゃなくて」); in a vivid region a stance shown
+ * The feeling turn in a region: a 「ふつう」 turn takes the region's own stance (its `awayStance` when he goes out somewhere or speaks of
+ * another AI; going to bed is not that, review 3); at 本気 and 重い a tease is taken the same way (owner: 「ツンデレじゃなくて」); in a vivid region a stance shown
  * かすかに is shown はっきり. Every other stance, her refusals among them, is hers as chosen.
  */
 export function regionTurn(decision: FeelingTurnDecision, regionId: RegionId, cue: { words: string; otherAi: boolean }): FeelingTurnDecision {
   const region = CHARACTER_REGIONS[regionId];
   const plain = decision.stance === 'neutral' || (decision.stance === 'tease' && Boolean(region.requiresMax));
-  const away = cue.otherAi || LEAVING.test(cue.words);
+  const away = cue.otherAi || OUTING.test(cue.words);
   const stance = plain ? (away && region.awayStance) || region.plainStance : undefined;
   const chosen = stance ? { ...decision, stance, drawer: 'none' as const } : decision;
   return region.vivid && chosen.stance !== 'neutral' && chosen.intensity === 'subtle' ? { ...chosen, intensity: 'moderate' } : chosen;

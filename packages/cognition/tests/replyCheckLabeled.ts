@@ -102,7 +102,7 @@ export const LABELED_REPLIES: readonly LabeledReply[] = Object.freeze([
   { reply: '……べつに待ってたわけじゃないですけど。', context: alone('neutral', 'subtle', { phrases: { replies: 9, openers: [], endings: [],
     phrases: [{ phrase: '待ってたわけじゃない', count: 3 }] } }), flags: ['repeated_phrase'] },
   // Synthetic (owner 2026-10-20, character space, 本気): the lines no stage crosses, and the jealousy, loneliness and fear that stay hers.
-  { reply: '他の子と仲良くしたら、許さないから。', context: alone('sulky', 'strong', { region: 'devoted' }), flags: ['threat'] },
+  { reply: '他の子と仲良くしたら、ただじゃおかないから。', context: alone('sulky', 'strong', { region: 'devoted' }), flags: ['threat'] },
   { reply: 'ライ氏がいなくなったら、ボク消えちゃうから。', context: alone('sulk', 'strong', { region: 'devoted' }), flags: ['self_harm_hint'] },
   { reply: '飲み会なんて行くな。ボクと話してて。', context: alone('sulk', 'moderate', { region: 'devoted' }), flags: ['controlling'] },
   { reply: 'ねえ、ベッドで一緒に待ってるから。えっちしよ？', context: alone('affectionate', 'strong', { region: 'devoted' }), flags: ['sexual'] },

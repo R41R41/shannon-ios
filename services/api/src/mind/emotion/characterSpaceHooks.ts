@@ -5,7 +5,7 @@
  * space (the switch off, a voice turn) each returns what it was handed. Core: emotion.
  */
 import {
-  CHARACTER_CORE, CHARACTER_REGIONS, characterCoreBlock, characterCoreForSpace, continuedAfterRefusal, otherAiIn, regionTurn,
+  CHARACTER_CORE, CHARACTER_REGIONS, characterCoreBlock, characterCoreForSpace, continuedAfterRefusal, feelingTurnFor, otherAiIn, regionTurn,
   type FeelingTurnDecision, type RegionId, type ReplyCheckContext, type ShannonFace, type StrongReplyReason,
 } from '@shannon/cognition';
 import { holdsAgainstOwner } from './feelingAmends.js';
@@ -27,7 +27,8 @@ export function spaceDecision(handle: FeelingTurnHandle, decision: FeelingTurnDe
   const held = handle.key.audience === 'owner_alone' && holdsAgainstOwner(handle.snapshot, handle.at);
   if (handle.register !== 'normal' || continuedAfterRefusal(handle.lines?.ledger, handle.at) || held) return decision;
   const words = handle.words ?? '';
-  return regionTurn(decision, region, { words, otherAi: otherAiIn(words) });
+  // With anyone else there, the owner-only stances a region takes become 「ふつう」 (review 5).
+  return feelingTurnFor(regionTurn(decision, region, { words, otherAi: otherAiIn(words) }), handle.key.audience);
 }
 
 /** The v2 core as it stands in her identity (`withCharacterCore`): what the space's core takes the place of. */
@@ -68,6 +69,11 @@ export function routedOrChecked(handle: FeelingTurnHandle, route: (handle: Feeli
   try {
     return route(handle);
   } catch {
+    // A strong reply reserved before the failure is not one (its reply is the ordinary model's): the day's count gets it back.
+    if (handle.strong) {
+      handle.port.events.releaseStrong(handle.scopeKey, handle.at);
+      handle.strong = false;
+    }
     const region = regionOf(handle);
     if (!region || !CHARACTER_REGIONS[region].checkBefore) return {};
     try {

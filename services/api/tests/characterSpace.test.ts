@@ -7,7 +7,9 @@ import {
 import { SWITCHES, switchOn } from '@shannon/switches';
 import { composedFeeling, feelingDayFeatures, spaceGuarded } from '../src/wiring/feelingWiring.js';
 import { feelingBody, feelingText, feelingVoice } from '../src/mind/emotion/feelingPorts.js';
-import { FeelingReplyChatModel, GUARD_SAFE_REPLY } from '../src/infra/models/feelingStrongChatModel.js';
+import {
+  FeelingReplyChatModel, GUARD_SAFE_REPLY, REWRITE_DEADLINE_MILLISECONDS, STRONG_REWRITE_DEADLINE_MILLISECONDS,
+} from '../src/infra/models/feelingStrongChatModel.js';
 import { fakeFeelingJev } from './support/feelingHarness.js';
 
 /** Her character space in the text turn (owner 2026-10-20; `SHANNON_CHARACTER_SPACE`, `SHANNON_AFFECTION_MAX`). */
@@ -43,14 +45,14 @@ async function say(port: Port, message: string, at = TODAY) {
 }
 
 describe('her character space in a text turn', () => {
-  it('is off by default; on, it needs the feeling turn, and 好意 held at the top needs the reply check', () => {
+  it('is off by default; on, it needs the feeling turn and the reply check', () => {
     expect(switchOn({}, 'SHANNON_CHARACTER_SPACE')).toBe(false);
-    expect(SWITCHES.find(entry => entry.name === 'SHANNON_AFFECTION_MAX')?.requires).toEqual(['SHANNON_CHARACTER_SPACE', 'SHANNON_REPLY_CHECK']);
+    expect(SWITCHES.find(entry => entry.name === 'SHANNON_CHARACTER_SPACE')?.requires).toEqual(['SHANNON_FEELING_TURN', 'SHANNON_INNER_NOTE', 'SHANNON_REPLY_CHECK']);
     expect(feelingDayFeatures({}).space).toBeUndefined();
     expect(feelingDayFeatures({ SHANNON_CHARACTER_SPACE: 'on' }).space).toEqual({ max: false });
     const max = feelingDayFeatures({ SHANNON_CHARACTER_SPACE: 'on', SHANNON_AFFECTION_MAX: 'on' });
     expect(spaceGuarded(max, true, true).space).toEqual({ max: true });
-    expect(spaceGuarded(max, true, false).space).toEqual({ max: false });
+    expect(spaceGuarded(max, true, false).space).toBeUndefined();
     expect(spaceGuarded(max, false, true).space).toBeUndefined();
   });
 
@@ -132,6 +134,16 @@ describe('her character space in a text turn', () => {
     expect(others?.lines?.carriedLines.join('\n') ?? '').not.toContain('[ライ氏とのこと]');
   });
 
+  it('keeps what happened with him alone out of anyone else\'s turn (her mood is one, his moments are his)', async () => {
+    const { port } = composed({ max: false });
+    await say(port, '好きだよ');
+    const others = start(port, 'こんにちは', later(1), false);
+    await feelingText.block(others);
+    expect(others?.lines?.space?.selection.primary).not.toBe('flustered');
+    const owner = start(port, 'ねえ', later(1));
+    expect(owner?.lines?.space?.selection.primary).toBe('flustered');
+  });
+
   it('shows her region\'s face as her mood face', async () => {
     const { port } = composed({ max: false });
     const handle = start(port, 'ちょっと相談があるんだけど、仕事で困ってて');
@@ -145,6 +157,14 @@ describe('her character space in a text turn', () => {
 });
 
 describe('the lines no region crosses, at the reply model', () => {
+  it('waits for a Sonnet rewrite longer only in her space (off, as before)', () => {
+    const model = new FeelingReplyChatModel({ mode: 'local-stub', model: 'fake', generate: async () => ({}) } as never, { sonnet: {} as never });
+    const deadline = (request: object) => (model as unknown as { deadlineFor(request: object): number }).deadlineFor(request);
+    expect(deadline({ feelingStrong: true, feelingCheck: { region: 'devoted' } })).toBe(STRONG_REWRITE_DEADLINE_MILLISECONDS);
+    expect(deadline({ feelingStrong: true, feelingCheck: {} })).toBe(REWRITE_DEADLINE_MILLISECONDS);
+    expect(deadline({ feelingCheck: { region: 'devoted' } })).toBe(REWRITE_DEADLINE_MILLISECONDS);
+  });
+
   const context = { stance: 'sulk' as const, intensity: 'moderate' as const, audience: 'owner_alone' as const, order: false, violation: false, region: 'devoted' as const };
   const always = (reply: string) => ({ mode: 'local-stub' as const, model: 'fake', generate: async () => ({ mode: 'local-stub' as const, model: 'fake', reply }) });
 

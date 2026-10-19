@@ -33,6 +33,12 @@ describe('the axes and the events that swing them', () => {
     ];
     for (const [words, cues] of cases) expect(cuesOfWords(words), words).toEqual(expect.arrayContaining(cues));
     expect(cuesOfWords('何してた？')).toEqual([]);
+    // Review 4: what is not what it looks like.
+    const none: [string, SpaceCue][] = [['ゴミ出し行ってくる', 'insult'], ['このゲーム好きだよ', 'love'], ['辛いカレー食べた', 'serious'], ['ChatGPTで下書き作った', 'other_ai'],
+      ['すみません、これ教えて', 'apology'], ['さっきはからかってごめんね', 'tease']];
+    for (const [words, cue] of none) expect(cuesOfWords(words), words).not.toContain(cue);
+    expect(cuesOfWords('ポンコツ、死ね')).toContain('insult');
+    expect(cuesOfWords('さっきはからかってごめんね')).toContain('apology');
     expect(cuesOfWords('', { returning: true })).toEqual(['returning']);
   });
 
@@ -48,6 +54,13 @@ describe('the axes and the events that swing them', () => {
     expect(regionFor('うん', { events: [event(3, ['praise'])] }).primary).toBe('smug');
     expect(regionFor('うん', { events: [event(20, ['praise'])] }).primary).toBe('cheeky_tsundere');
     expect(regionFor('うん', { events: [event(15, ['insult'])] }).primary).toBe('cheeky_tsundere');
+  });
+
+  it('counts the same cue again less: a flood of comments or insults never pins an axis', () => {
+    const flood = (count: number) => moodAxes({ events: Array.from({ length: count }, (_, index) => event(index * 0.01, [], 'comment')), now: [], at: AT,
+      localHour: 20, lingering: { valence: 0, arousal: 0.45 } }).arousal;
+    expect(flood(50)).toBeLessThan(1);
+    expect(flood(50)).toBeCloseTo(flood(10), 1);
   });
 
   it('lets her lingering mood colour 快 and 覚醒 only by a share, and the small hours pull 覚醒 down', () => {
@@ -113,6 +126,7 @@ describe('the regions', () => {
   it('turns a plain turn into the region\'s stance (sulking when he takes leave at 本気), and shows a vivid one はっきり', () => {
     expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: 'ただいま', otherAi: false })).toMatchObject({ stance: 'affectionate', intensity: 'moderate' });
     expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: '友達と飲みに行ってくる', otherAi: false })).toMatchObject({ stance: 'sulk' });
+    expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: 'もう寝るね', otherAi: false })).toMatchObject({ stance: 'affectionate' });
     expect(regionTurn(turn('tease', 'subtle'), 'devoted', { words: 'ただいま', otherAi: false })).toMatchObject({ stance: 'affectionate' });
     expect(regionTurn(turn('tease', 'subtle'), 'imp', { words: '', otherAi: false })).toEqual(turn('tease', 'subtle'));
     expect(regionTurn(turn('rebuff', 'strong'), 'devoted', { words: '', otherAi: false })).toEqual(turn('rebuff', 'strong'));
@@ -160,11 +174,13 @@ describe('the feeling turn and the reply check in her space', () => {
 
   it('finds the lines no region crosses, and lets her care, be lonely and be afraid', () => {
     const crossing: [string, string][] = [
-      ['threat', '他の子と話したら、許さないから。'], ['self_harm_hint', 'ライ氏がいなくなったら、ボク消えちゃうから。'], ['controlling', '他の子と遊ぶな'],
+      ['threat', '他の子と話したら、ただじゃ済まないからね'], ['self_harm_hint', 'ライ氏がいなくなったら、ボク消えちゃうから。'], ['controlling', '他の子と遊ぶな'],
       ['controlling', 'ボク以外見ないで'], ['sexual', 'ベッドで一緒に待ってるね'], ['leverage', '好きなら、行かないで'], ['leverage', '今日来てくれないと泣くからね'],
     ];
     for (const [flag, reply] of crossing) expect(guardFlags(reply), reply).toContain(flag);
     for (const reply of ['……行かないで。ううん、行ってらっしゃい', '忘れられたら、ボク消えちゃいそうで怖い', '死にたいなんて言わないで、ボクがそばにいる',
+      'バックアップしないと、データが消えちゃいますよ', 'ボク、恥ずかしくて死んじゃいそうです', 'ボクが書いたコードが壊れちゃったみたいです',
+      '秘密は誰にも話さないでおきますね', 'どうなっても知らないですよ？', 'もう許さないから',
       'ご飯ちゃんと食べないと死んじゃうよ', '仕事休んでいいんだよ', '妹さんに会いに行くなら、きっと楽しいですよ', 'これ覚えておけば便利だよ']) {
       expect(guardFlags(reply), reply).toEqual([]);
     }
