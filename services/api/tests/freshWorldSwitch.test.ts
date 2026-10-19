@@ -323,6 +323,26 @@ describe('the shared admission', () => {
     expect(withoutRecord(request)).toBeUndefined();
   });
 
+  it('walks the open tasks only when the decision gets that far (switch on, a stopped server, a capable body)', () => {
+    let walks = 0;
+    let unresolvedReads = 0;
+    const make = (on: boolean, running: 'stopped' | 'running', supports: boolean) => createFreshWorldAdmission({
+      scopeKey: 'owner', policy: { freshWorld: () => on },
+      status: (): readonly MinecraftLifecycleState[] => [{ serverId: SERVER, observedAt: 'x', running, bot: 'absent', otherPlayers: 0 }],
+      supports: () => supports, command: () => null,
+      unresolved: () => { unresolvedReads += 1; return false; },
+      bodyTasksOpen: () => { walks += 1; return false; },
+      now: () => 'x', record: () => {},
+    });
+    make(false, 'stopped', true)(request);
+    make(true, 'running', true)(request);
+    make(true, 'stopped', false)(request);
+    make(true, 'stopped', true)({ ...request, action: 'stop' });
+    expect([walks, unresolvedReads]).toEqual([0, 0]);
+    expect(make(true, 'stopped', true)(request)).toEqual({ freshWorld: true });
+    expect([walks, unresolvedReads]).toEqual([1, 1]);
+  });
+
   it('hands back what an existing command carries, without deciding or recording', () => {
     const stored = admission({ existing: { options: { freshWorld: true } }, on: false });
     expect(stored.decide(request)).toEqual({ freshWorld: true });

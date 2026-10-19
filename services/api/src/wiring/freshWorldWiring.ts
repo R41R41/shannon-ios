@@ -138,15 +138,20 @@ function noted(parts: Pick<FreshWorldParts, 'record' | 'now'>, request: FreshWor
  * the home server, saying why. An applied one is recorded when the command is stored (`freshWorldIssuance`). Any error here is "no".
  */
 export function createFreshWorldAdmission(parts: FreshWorldParts): FreshWorldAdmission {
-  const facts = (request: FreshWorldRequest): FreshWorldFacts => ({
-    action: request.action, serverId: request.serverId, origin: request.origin, via: request.via, existing: parts.command(request.id),
-    switchedOn: request.action === 'start' && request.serverId === FRESH_WORLD_SERVER && parts.policy?.freshWorld(parts.scopeKey) === true,
-    keepWorld: request.keepWorld === true,
-    state: parts.status(parts.scopeKey).find(item => item.serverId === request.serverId),
-    bodySupports: parts.supports(parts.scopeKey),
-    bodyTasksOpen: parts.bodyTasksOpen ? parts.bodyTasksOpen() : null,
-    unresolved: parts.unresolved(),
-  });
+  const facts = (request: FreshWorldRequest): FreshWorldFacts => {
+    const cheap = {
+      action: request.action, serverId: request.serverId, origin: request.origin, via: request.via, existing: parts.command(request.id),
+      switchedOn: request.action === 'start' && request.serverId === FRESH_WORLD_SERVER && parts.policy?.freshWorld(parts.scopeKey) === true,
+      keepWorld: request.keepWorld === true,
+      state: parts.status(parts.scopeKey).find(item => item.serverId === request.serverId),
+      bodySupports: parts.supports(parts.scopeKey),
+    };
+    // The open-task probe walks every task of the scope: ask it (and the unresolved check) only when the decision gets that far.
+    const far = !cheap.existing && cheap.via !== null && cheap.origin === 'owner_request' && cheap.switchedOn && !cheap.keepWorld
+      && cheap.state?.running === 'stopped' && cheap.bodySupports;
+    if (!far) return { ...cheap, bodyTasksOpen: false, unresolved: false };
+    return { ...cheap, bodyTasksOpen: parts.bodyTasksOpen ? parts.bodyTasksOpen() : null, unresolved: parts.unresolved() };
+  };
   return request => {
     try {
       const decision = freshWorldDecision(facts(request));
