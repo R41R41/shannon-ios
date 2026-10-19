@@ -74,7 +74,9 @@ const inCallWithHer = (scopeKey: string, at: string) => bodyStore.latestOfTypes(
 const pushStore = new SQLitePushNotificationStore(databasePath);
 // SHANNON_MORNING_BRIEF (default off): today's weather, schedule and a few of the world's headlines as the morning's initiative.
 const morningBrief = configuredMorningBrief(process.env, { databasePath, now: nowISOString, log: line => console.log(line),
-  headlines: () => store.latestItems(12).filter(item => !/jma\.go\.jp/u.test(item.url)).slice(0, 3).map(item => ({ title: item.title, url: item.url })) });
+  // The brief keeps the fresh ones it has not told yet (`freshHeadlines`, owner 2026-10-19).
+  headlines: () => store.latestItems(30).filter(item => !/jma\.go\.jp/u.test(item.url))
+    .map(item => ({ title: item.title, url: item.url, at: item.publishedAt ?? item.discoveredAt })) });
 const pushSender = createConfiguredPushNotificationSender(process.env);
 const once = process.argv.includes('--once');
 let stopping = false;

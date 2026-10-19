@@ -113,7 +113,8 @@ describe('the proactive morning brief (SHANNON_MORNING_BRIEF)', () => {
     const initiatives = new SQLiteInitiativeStore(path, () => at);
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map(), candidates)).toMatchObject({ sent: 1 });
     const [message] = initiatives.unreadMessages('owner');
-    expect(message).toMatchObject({ sourceTitle: '朝のまとめ', content: expect.stringContaining('おはようございます、今日の福岡市は') });
+    // Owner 2026-10-19 (item 16): the proactive brief opens in her words, to him.
+    expect(message).toMatchObject({ sourceTitle: '朝のまとめ', content: expect.stringContaining('おはようございます、ライ氏。今日の福岡市は') });
     expect(message!.content).toContain('[見出し](https://example.com/a)');
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map(), candidates)).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
     initiatives.close(); brief.close(); state.close();

@@ -15,6 +15,7 @@ import {
   normalizeShannonExpressiveEmotion,
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
+import { moodWithFeeling } from './feelingMood.js';
 import {
   easeLingering, easeShannonFeeling, hasPlaceUnderneath, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
@@ -304,7 +305,7 @@ export function reduceCompanionState(
         if (!committed) return state === current ? current : freezeSnapshot(state);
         if (state === current && current.expressiveEmotion && sameShannonExpressiveEmotion(committed.expressiveEmotion!, current.expressiveEmotion)
           && sameLingering(committed.lingering ?? [], current.lingering ?? [])) return current;
-        next = { ...state, ...committed };
+        next = { ...state, ...committed, emotion: moodWithFeeling(state.emotion, committed.expressiveEmotion) }; // Owner 2026-10-19, item 15.
         break;
       }
       const expressiveEmotion = normalizeShannonExpressiveEmotion(event.emotion);

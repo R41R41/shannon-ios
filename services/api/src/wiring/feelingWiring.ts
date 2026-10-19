@@ -101,13 +101,14 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   const singleFace = singleFaceEnabled(environment);
   const shadow = switchOn(environment, 'SHANNON_CORE_AFFECT') && parts.state ? { shadow: { database: parts.databasePath, snapshot: parts.state } } : {};
   const jevInput = feelingTurnJevInput(environment);
-  const seed = parts.conversation ? talkSeed(parts.conversation) : undefined;
+  // Her replies of the day (the repetition watch) and his words of the last days (the topics to follow up on), from his Talk.
+  const seeds = parts.conversation ? { seed: talkSeed(parts.conversation), talk: talkSeed(parts.conversation, 'user') } : {};
   const sonnet = strongReplyModel(environment, parts);
   const strong = sonnet ? { strong: { cap: strongReplyDailyCap(environment), model: sonnet } } : {};
   const check = turn && switchOn(environment, 'SHANNON_REPLY_CHECK');
   const writer = sentenceWriter(environment, turn && 'shadow' in shadow, parts);
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
-    ...(seed ? { seed } : {}), ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
+    ...seeds, ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
     days: feelingDayFeatures(environment), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
     stream: switchOn(environment, 'SHANNON_FEELING_STREAM') });
 }
@@ -116,18 +117,24 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
  * Today's replies of hers in the owner's newest Talk, through the replay's own forgetting filter (what the owner alone may be shown), for
  * the repetition watch's first turns of the day.
  */
-export function talkSeed(conversation: ConversationStore): RepetitionSeed {
+export function talkSeed(conversation: ConversationStore, role: 'assistant' | 'user' = 'assistant'): RepetitionSeed {
   // Owner 2026-10-19: the day's phrases are counted over the day (`watchPhrases`), and a day of his spans several Talks: every Talk
-  // that moved today (the newest always), oldest reply first.
+  // that moved since then (the newest always), oldest first. `user`: his words, for the topics to follow up on (`followUpTopics`).
+  const limit = role === 'user' ? TALK_WORDS_MESSAGES : TALK_SEED_MESSAGES;
   return (scopeKey, since, at, snapshot) => conversation.listThreads(scopeKey)
     .filter((thread, index) => index === 0 || thread.updatedAt >= since).slice(0, TALK_SEED_THREADS)
-    .flatMap(thread => visibleReplayMessages(snapshot, conversation, scopeKey, thread.threadId, OWNER_AUDIENCE, TALK_SEED_MESSAGES).messages
-      .filter(entry => entry.item.role === 'assistant' && entry.message.observedAt >= since && entry.message.observedAt <= at)
+    .flatMap(thread => visibleReplayMessages(snapshot, conversation, scopeKey, thread.threadId, OWNER_AUDIENCE, limit).messages
+      .filter(entry => entry.item.role === role && entry.message.observedAt >= since && entry.message.observedAt <= at)
       .map(entry => ({ text: entry.item.content, at: entry.message.observedAt,
         ...(entry.message.sourceExperienceId ? { sourceId: entry.message.sourceExperienceId } : {}) })))
     .sort((left, right) => left.at.localeCompare(right.at));
 }
+/** The Talk readers handed in, as the options of `FeelingEvents`. */
+function talkSeeds(parts: { seed?: RepetitionSeed; talk?: RepetitionSeed }): { seed?: RepetitionSeed; talk?: RepetitionSeed } {
+  return { ...(parts.seed ? { seed: parts.seed } : {}), ...(parts.talk ? { talk: parts.talk } : {}) };
+}
 const TALK_SEED_MESSAGES = 48;
+const TALK_WORDS_MESSAGES = 96;
 const TALK_SEED_THREADS = 4;
 
 /**
@@ -167,7 +174,7 @@ export function feelingDayFeatures(environment: Readonly<Record<string, string |
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
 export function composedFeeling(parts: { database: string | DatabaseSync; now: () => string; timeZone: string; chooser: JevChooser | null; turn: boolean;
-  singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
+  singleFace: boolean; jevInput?: FeelingTurnJevInput; seed?: RepetitionSeed; talk?: RepetitionSeed; strong?: { cap: number; model: AnthropicChatModel };
   /** Stage 2 (`SHANNON_REPLY_CHECK`): her replies are checked. */
   check?: boolean;
   /** Item 10 (`SHANNON_TEXT_REGISTER`): her text reply's form and pacing (only with the turn). */
@@ -190,7 +197,7 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   // without the check, no marked line of the owner's reaches a turn with others present.
   const audience = parts.audience === true && parts.check === true && parts.turn;
   const store = new SQLiteFeelingEventStore(parts.database);
-  const seed = parts.seed ? { seed: parts.seed } : {};
+  const seed = talkSeeds(parts);
   const shadowStore = parts.shadow ? new SQLiteFeelingShadowStore(parts.shadow.database) : null;
   let events: FeelingEvents | null = null;
   const shadow = shadowStore && parts.shadow

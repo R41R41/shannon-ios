@@ -39,6 +39,8 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * Three assertions follow the night (`-lingers-into-next-day` 0.88 → 0.44; `-undecided-cue-stays-a-mood`
  * and `-strong-eased-by-apology` now out of sight, so not told); `-again-renews-nothing` keeps its assertions
  * (what is underneath is stored as before, with when it was noted). The scenario-set fingerprint changed with them.
+ * The same day (owner, item 15 of the heart review: a shown feeling of her own draws her numeric mood, and a 「？」 no longer raises her
+ * arousal) the same four moved again by their mood numbers alone; every assertion still passes.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '858b6d1a',
@@ -69,12 +71,12 @@ const resultFingerprints = {
   'affect-baseline-drift': '005850b0',
   'affect-returns-with-awake-time': '955c460e',
   'affect-stands-still-while-dormant': 'b9e9fbaf',
-  'feeling-text-strong-lingers-into-next-day': 'dccdee10',
+  'feeling-text-strong-lingers-into-next-day': 'd2d8e993',
   'feeling-text-subtle-does-not-linger': 'b5c2b163',
-  'feeling-text-undecided-cue-stays-a-mood': '16c79e82',
+  'feeling-text-undecided-cue-stays-a-mood': '05700c1e',
   'feeling-text-undecided-without-cue-leaves-nothing': '29cbf07d',
-  'feeling-text-strong-eased-by-apology': 'f4e18ac9',
-  'feeling-text-strong-again-renews-nothing': 'ad72e00c',
+  'feeling-text-strong-eased-by-apology': 'b0094726',
+  'feeling-text-strong-again-renews-nothing': 'd7b4cce6',
   'feeling-text-strong-sadness-is-not-kept': '74a8a052',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',

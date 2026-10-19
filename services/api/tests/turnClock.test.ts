@@ -5,6 +5,7 @@ import {
   ANSWER_FIRST_LINE, answerFirstLine, NAME_PREFIX_LINE, PERCEPTION_HONESTY_LINE, SPOKEN_SCHEDULE_LINE, spokenReplyLines, spokenScheduleLine,
 } from '../src/surfaces/voice/voiceConversationInstructions.js';
 import { RESEARCH_UNDER_WAY_LINE, TURN_OUT_OF_TIME_LINE, withResearchUnderWay } from '../src/mind/action/respond/turnDeadline.js';
+import { GREETING_CONTEXT_LINE, RESEARCH_PROMISE_LINE } from '../src/mind/action/respond/turnHintLines.js';
 
 describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
   it('says his local date and time, and in the small hours that 「明日」 may mean the day just begun', () => {
@@ -37,7 +38,9 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
     ]) expect(ownerSubjectLine(words), String(words)).toBe('');
     for (const words of ['君のことを考えてた', 'テレビを見ながら寝てた']) expect(ownerSubjectLine(words), words).not.toBe('');
     expect(clockContext({ clock, message: 'シャノンのことを考えてた' } as never)).toEqual([turnClockLine(clock), ownerSubjectLine('シャノンのことを考えてた')]);
-    expect(clockContext({ clock, message: 'おはよう' } as never)).toEqual([turnClockLine(clock)]);
+    // Owner 2026-10-19: a greeting also carries the line his words call for (`turnHintLines.ts`).
+    expect(clockContext({ clock, message: 'おはよう' } as never)).toEqual([turnClockLine(clock), GREETING_CONTEXT_LINE]);
+    expect(clockContext({ clock, message: 'なるほど' } as never)).toEqual([turnClockLine(clock)]);
     expect(clockContext({ message: 'シャノンのことを考えてた' } as never)).toEqual([]);
   });
 
@@ -63,7 +66,8 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
     expect(clockContext({ clock })).toEqual([turnClockLine(clock)]);
     expect(clockContext({})).toEqual([]);
     const request = { scopeKey: 'owner', systemPrompt: 'x', message: '明日の天気は？', history: [], conversationClass: 'direct' } as never;
-    expect(textTurnConversation({ ...(request as object), clock } as never).context.at(-1)).toBe(turnClockLine(clock));
+    // Owner 2026-10-19: a question about the weather also carries the lookup's line after the clock (`turnHintLines.ts`).
+    expect(textTurnConversation({ ...(request as object), clock } as never).context.slice(-2)).toEqual([turnClockLine(clock), RESEARCH_PROMISE_LINE]);
     expect(textTurnConversation(request).context).not.toContain(turnClockLine(clock));
   });
 

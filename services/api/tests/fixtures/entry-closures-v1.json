@@ -376,6 +376,7 @@
     "mind/action/respond/textTurnThinking.ts",
     "mind/action/respond/turnDeadline.ts",
     "mind/action/respond/turnFeedback.ts",
+    "mind/action/respond/turnHintLines.ts",
     "mind/action/respond/turnRouting.ts",
     "mind/action/taskRuntime/store/taskBodyRecoveryMigration.ts",
     "mind/action/taskRuntime/store/taskBodyRecoveryStore.ts",

@@ -14,20 +14,20 @@ const PLAYFUL = new Set<ShannonEmotionKind>([
 const ATTACHMENT = new Set<ShannonEmotionKind>([
   'jealous', 'sulky', 'leftOut', 'lonely', 'attentionSeeking', 'lightPossessive', 'reassurance',
 ]);
-const HIGH_ENERGY = new Set<ShannonEmotionKind>([
+export const HIGH_ENERGY: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
   'excited', 'ecstatic', 'cuteAngry', 'seriousAnger', 'indignant', 'panic', 'scream',
   'shocked', 'triumphant', 'urgent',
 ]);
-const LOW_ENERGY = new Set<ShannonEmotionKind>([
+export const LOW_ENERGY: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
   'relief', 'shy', 'sad', 'disappointed', 'hurt', 'regret', 'helpless', 'tired',
   'sleepy', 'gentle', 'relaxed', 'content', 'quietCompanion', 'tender',
 ]);
-const NEGATIVE = new Set<ShannonEmotionKind>([
+export const NEGATIVE: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
   'cuteAngry', 'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky',
   'leftOut', 'lonely', 'sad', 'disappointed', 'hurt', 'anxious', 'regret', 'helpless',
   'lamenting', 'panic', 'blocked', 'tired', 'apologetic', 'uncomfortable',
 ]);
-const POSITIVE = new Set<ShannonEmotionKind>([
+export const POSITIVE: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
   'bright', 'playful', 'happy', 'fun', 'excited', 'ecstatic', 'relief', 'pride', 'gratitude', 'hope', 'affectionate',
   'giggle', 'smug', 'bashful', 'hidingHappiness', 'triumphant', 'gentle', 'relaxed', 'content', 'quietCompanion', 'tender',
 ]);
@@ -42,7 +42,7 @@ const REACTION = new Set<ShannonEmotionKind>([
  * and that must stay concern for him, not a low mood of her own. Bright, gentle, relaxed and the
  * like are how a reply is delivered (a greeting is bright), and a tone must not cover a mood.
  */
-const MOOD_LIKE = new Set<ShannonEmotionKind>([
+export const MOOD_LIKE: ReadonlySet<ShannonEmotionKind> = new Set<ShannonEmotionKind>([
   'happy', 'excited', 'ecstatic', 'pride', 'gratitude', 'affectionate', 'tender',
   'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky', 'leftOut', 'lonely', 'lightPossessive', 'hurt',
   'uncomfortable',

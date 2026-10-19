@@ -154,6 +154,7 @@ export class TaskRuntimeRecovery {
   }
 }
 
+/** Owner 2026-10-19 (item 10): a failure says why, and what comes next. */
 export function retiredTaskReport(title: string): string {
-  return `「${title.slice(0, 80)}」は結果を確かめられないまま止まり、最後まで進められませんでした。`;
+  return `「${title.slice(0, 80)}」は途中で止まって結果を確かめられず、最後まで進められませんでした。もう一度頼んでもらえたら、最初からやり直します。`;
 }

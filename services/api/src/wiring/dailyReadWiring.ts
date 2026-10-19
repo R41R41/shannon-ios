@@ -40,6 +40,19 @@ export function dailyToolPorts(
   };
 }
 
+/** How old a headline may be for the brief (by when it was published, or found when that is unknown). */
+export const MORNING_BRIEF_HEADLINE_HOURS = 36;
+
+/** At most three headlines not told in an earlier brief, published (or found) in the last `MORNING_BRIEF_HEADLINE_HOURS`. */
+export function freshHeadlines(items: readonly MorningBriefHeadline[], shown: ReadonlySet<string>, at: string): MorningBriefHeadline[] {
+  const now = Date.parse(at);
+  return items.filter(item => {
+    if (shown.has(item.url ?? item.title)) return false;
+    const when = item.at ? Date.parse(item.at) : Number.NaN;
+    return !Number.isFinite(when) || (when <= now + 3_600_000 && now - when <= MORNING_BRIEF_HEADLINE_HOURS * 3_600_000);
+  }).slice(0, 3);
+}
+
 /** The owner-local hours in which the proactive brief may be written (the initiative loop wakes at 7 after quiet hours). */
 export const MORNING_BRIEF_HOURS = Object.freeze({ start: 7, end: 10, withoutWeatherFrom: 9 });
 
@@ -67,6 +80,8 @@ export function configuredMorningBrief(environment: Environment, parts: {
   const snapshot = sqliteOwnerSnapshot(parts.databasePath);
   const upcoming = configuredOwnerUpcoming(environment, parts.databasePath, { snapshot: snapshot.read, now: parts.now });
   let cached: { date: string; candidate: CandidateRow & { score: number } } | null = null;
+  // Owner 2026-10-19 (item 16): the same PubMed paper was the news five mornings running. A headline is told once, and only a fresh one.
+  const shown = new Set<string>();
   return {
     async candidates(at) {
       try {
@@ -79,8 +94,9 @@ export function configuredMorningBrief(environment: Environment, parts: {
           let schedule: ReturnType<typeof todayLines> | null;
           try { schedule = todayLines(upcoming.upcoming.loopLines(scopeKey, at, 'owner')); } catch { schedule = null; }
           let headlines: readonly MorningBriefHeadline[] = [];
-          try { headlines = parts.headlines?.() ?? []; } catch { headlines = []; }
-          const brief = composeMorningBrief({ date, weather, schedule, headlines });
+          try { headlines = freshHeadlines(parts.headlines?.() ?? [], shown, at); } catch { headlines = []; }
+          for (const item of headlines) shown.add(item.url ?? item.title);
+          const brief = composeMorningBrief({ date, weather, schedule, headlines, voice: 'shannon' });
           cached = { date, candidate: {
             item_id: `morning-brief:${date}`, source_id: 'morning-brief', source_title: '朝のまとめ', title: `${localDateLabel(date)}の朝のまとめ`,
             url: '', summary: `${brief.spoken}\n\n${brief.card}`, published_at: at, discovered_at: at, score: 0.8,

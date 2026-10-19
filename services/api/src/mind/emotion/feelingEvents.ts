@@ -1,6 +1,6 @@
 import {
   OWNER_PERSON_KEY, drawersIn, episodeLine, replyFacts, foldEpisodeLedger, innerNoteDay, ledgerFacts, memoryControlFor, repetitionFacts,
-  greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
+  FOLLOW_UP_LIMITS, followUpLine, followUpTopics, greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
   type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type PhraseWatch, type RepetitionWatch,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
@@ -80,6 +80,8 @@ export class FeelingEvents {
 
   constructor(private readonly options: { store: FeelingEventRecords; now: () => string; timeZone: string; partWord: (subject: string) => string;
     reportError?: (error: unknown) => void; seed?: RepetitionSeed;
+    /** His words in his Talk since an instant (owner 2026-10-19: the topics to follow up on). */
+    talk?: RepetitionSeed;
     /** Stage 2 (`SHANNON_CORE_AFFECT`): told of every recorded event, after it is written (the shadow of her fast layer). */
     onRecorded?: (scopeKey: string, event: FeelingEvent) => void;
     /** Stage 3: her closed days and what is carried across them (absent: nothing is carried). */
@@ -136,7 +138,7 @@ export class FeelingEvents {
         const carried = this.options.days?.carried(scopeKey, key, at, snapshot, words, channel) ?? { lines: [], facts: {} };
         const stances = stanceBalance(replies);
         return { ledger, watch, phrases, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone),
-          repetitionLine: [repetitionLine(watch), said, key.audience === 'owner_alone' ? greetingLine(words) : ''].filter(Boolean).join('\n'),
+          repetitionLine: [repetitionLine(watch), said, ...this.greeting(scopeKey, key, at, snapshot, words)].filter(Boolean).join('\n'),
           facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts },
           carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines };
       }, lines => lines.facts);
@@ -144,6 +146,20 @@ export class FeelingEvents {
       this.report(error);
       return null;
     }
+  }
+
+  /**
+   * A short 「元気？」 of the owner alone (owner 2026-10-19, items 5 and 11): answer with one real thing of the day, and what he talked about
+   * in the days before, to ask after once if it fits (`followUpTopics`, read from his words in his Talk now, never kept).
+   */
+  private greeting(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot, words: string): string[] {
+    if (key.audience !== 'owner_alone' || key.personKey !== OWNER_PERSON_KEY) return [];
+    const line = greetingLine(words);
+    if (!line) return [];
+    const dayStart = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - DAY_MILLISECONDS).toISOString();
+    const since = new Date(Date.parse(dayStart) - FOLLOW_UP_LIMITS.days * DAY_MILLISECONDS).toISOString();
+    const heard = this.options.talk?.(scopeKey, since, at, snapshot) ?? [];
+    return [line, followUpLine(followUpTopics(heard, dayStart), this.options.timeZone)];
   }
 
   /**

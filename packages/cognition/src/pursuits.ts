@@ -181,6 +181,7 @@ export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefine
         : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),
   ];
   if (!lines.length) return '';
+  // Owner 2026-10-19 (item 12): told by what it was, not by counts, through the turn's own line when he asks (`OWN_WISH_LINE`).
   const header = '[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）';
   let result = header;
   for (const line of lines) {

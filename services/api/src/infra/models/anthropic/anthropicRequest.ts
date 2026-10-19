@@ -6,6 +6,7 @@ import {
   SPOKEN_STRUCTURED_REPLY_LINE,
   VOICE_NATURAL_INSTRUCTIONS,
 } from '../../../mind/action/respond/respondInstructions.js';
+import { turnHintLines } from '../../../mind/action/respond/turnHintLines.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
 import { attachmentProjection, WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -112,7 +113,8 @@ export function textTurnConversation(request: ShannonChatModelRequest): TurnConv
 export function clockContext(request: Pick<ShannonChatModelRequest, 'clock'> & { message?: string }): string[] {
   // Whose 「〜してた」 his words are (`ownerSubjectLine`): with his clock, in the Claude turns only.
   const subject = request.clock ? ownerSubjectLine(request.message) : '';
-  return request.clock ? [turnClockLine(request.clock), ...(subject ? [subject] : [])] : [];
+  // Owner 2026-10-19: the lines his words call for (an operation, a lookup, her wishes, herself, a greeting; `turnHintLines.ts`).
+  return request.clock ? [turnClockLine(request.clock), ...(subject ? [subject] : []), ...turnHintLines(request.message)] : [];
 }
 
 /** The function tools a session offers now (with the tool menu, the schemas sent this round). */

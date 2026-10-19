@@ -54,7 +54,10 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * (what lingers now carries when it was last noted, `notedAt`). Nothing else of afb38c28 changed.
  * Three digests of `text-promise` were changed by hand the same day for another change that is not stage 3's (owner: an open promise is
  * told with the date its day word meant, under a header that says when to mention it): its second chat request, that request's prompt,
- * and `prompt_projections` (the same prompt as kept).
+ * and `prompt_projections` (the same prompt as kept). Later that day 42 more, again for no change of stage 3's (owner, item 15 of the
+ * heart review: a 「？」 no longer raises her arousal, and a shown feeling of her own draws her numeric mood; with them the turn's lines
+ * his words call for): the prompts and kept rows that carry her mood's numbers or those lines, in text-promise, text-others, text-name,
+ * tool-round, body-touch, body-touch-others and platform (and text-name's second chat request, which carries that prompt).
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 
