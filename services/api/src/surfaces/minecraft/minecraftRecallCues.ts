@@ -30,12 +30,25 @@ function threatWords(world: Record<string, unknown>): string[] {
   return [...new Set(names.flatMap(name => [name, ...(ENTITY_WORDS[name] ? [ENTITY_WORDS[name]!] : [])]))];
 }
 
-/** The dangers now: night, a threat, low health, a death the body reports (its frame's `deaths` or `lastDeath`). */
-function dangerCues(world: Record<string, unknown>, situation: MinecraftSituation, danger: Add): void {
+/** A death counts as now for this long: the body lists those of the last day (B's `world.deaths`, newest last), not all of them news. */
+const RECENT_DEATH_MILLISECONDS = 15 * 60_000;
+
+/** The body's newest death, when it was recent: the entities its cause names (`cause` is the server's line), by id and in Japanese. */
+function recentDeath(world: Record<string, unknown>, now: number): string[] | null {
+  const newest = record(list(world.deaths).at(-1));
+  const at = typeof newest?.at === 'string' ? Date.parse(newest.at) : NaN;
+  if (!newest || !Number.isFinite(at) || now - at > RECENT_DEATH_MILLISECONDS) return null;
+  const cause = typeof newest.cause === 'string' ? newest.cause.toLowerCase() : '';
+  return Object.entries(ENTITY_WORDS).filter(([id]) => cause.includes(id.replace(/_/gu, ' ')) || cause.includes(id)).flat();
+}
+
+/** The dangers now: night, a threat, low health, a death the body reports in its frame's `deaths` (structured; `lastDeath` is a line). */
+function dangerCues(world: Record<string, unknown>, situation: MinecraftSituation, now: number, danger: Add): void {
   if (situation.night || situation.darkSoon) danger('night', '夜', '暗', '退避', '縦穴', '地下');
   if (situation.threatNear) danger('threat', '敵', '逃げ', ...threatWords(world));
   if (situation.lowHealth) danger('lowHealth', '体力', '回復', '逃げ', '死');
-  if (list(world.deaths).length || record(world.lastDeath)) danger('died', '死', '死んだ');
+  const death = recentDeath(world, now);
+  if (death) danger('died', '死', '死んだ', ...death);
 }
 
 /** Where she is on the way: hunger, the bed, the dimension, the stage, a stall and the calls that failed last. */
@@ -51,10 +64,10 @@ function progressCues(world: Record<string, unknown>, situation: MinecraftSituat
 }
 
 export function minecraftRecallCues(observation: BodyObservation | null, situation: MinecraftSituation,
-  recent: ReadonlyArray<{ name: string; ok: boolean }>): BodyRecallCues {
+  recent: ReadonlyArray<{ name: string; ok: boolean }>, now = Date.now()): BodyRecallCues {
   const words: string[] = [], tags: string[] = [], urgent: string[] = [];
   const world = record(observation?.state.world) ?? {};
-  dangerCues(world, situation, (tag, ...found) => {
+  dangerCues(world, situation, now, (tag, ...found) => {
     tags.push(tag);
     urgent.push(...found);
   });

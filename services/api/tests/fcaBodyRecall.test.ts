@@ -154,8 +154,18 @@ describe('a body task\'s recall after review', () => {
 });
 describe('the recall cues of a Minecraft body', () => {
   it('name the night, the threats in Japanese and by id, the stage, a recent failure and a death the body reports', () => {
-    const observation = { state: { world: { nearbyThreats: [{ name: 'zombie', distance: 4 }], dimension: 'overworld', deaths: [{ cause: 'zombie' }] } }, facts: {} } as never;
-    const cues = minecraftRecallCues(observation, situation({ night: true, threatNear: true, stage: 2, calm: false }), [{ name: 'mc.craft-one', ok: false }]);
+    // B's death record (Shannon body-ext c05464e): newest last, the server's line as its cause; `lastDeath` is a line, not a record.
+    const now = Date.parse('2026-10-19T08:30:00.000Z');
+    const death = (at: string, cause: string) => ({ at, position: { x: 1, y: 64, z: 2 }, dimension: 'overworld', cause, lostItems: ['iron_pickaxe×1'] });
+    const world = (deaths: unknown[]) => ({ state: { world: { nearbyThreats: [{ name: 'zombie', distance: 4 }], dimension: 'overworld', deaths,
+      lastDeath: '12分前に(1,64,2)で死んだ。iron_pickaxe を落とした' } }, facts: {} }) as never;
+    const observation = world([death('2026-10-19T06:00:00.000Z', 'Shannon was shot by Skeleton'), death('2026-10-19T08:20:00.000Z', 'Shannon was blown up by Creeper')]);
+    const cues = minecraftRecallCues(observation, situation({ night: true, threatNear: true, stage: 2, calm: false }), [{ name: 'mc.craft-one', ok: false }], now);
+    expect(cues.urgent).toEqual(expect.arrayContaining(['creeper', 'クリーパー']));
+    expect(cues.urgent).not.toContain('スケルトン');
+    // A death of hours ago, or only the line, is no death now.
+    expect(minecraftRecallCues(world([death('2026-10-19T06:00:00.000Z', 'x')]), situation({}), [], now).tags).not.toContain('died');
+    expect(minecraftRecallCues(world([]), situation({}), [], now).tags).not.toContain('died');
     expect(cues.tags).toEqual(expect.arrayContaining(['night', 'threat', 'stage2', 'failure', 'died']));
     expect(cues.urgent).toEqual(expect.arrayContaining(['夜', 'zombie', 'ゾンビ', '死んだ']));
     expect(cues.words).toEqual(expect.arrayContaining(['石のツルハシ', 'craft-one']));
