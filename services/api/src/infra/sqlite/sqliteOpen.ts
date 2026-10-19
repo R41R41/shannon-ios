@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 
 /**
  * The one place that opens the shared SQLite file and sets its connection PRAGMAs (Syzygy ADR-0009 stage 1, D9: S2). A profile
@@ -101,4 +101,29 @@ export function withBusyTimeout<T>(database: DatabaseSync, milliseconds: number,
 /** Folds the write-ahead log back into the file without waiting for readers (before a store closes). */
 export function checkpointPassive(database: DatabaseSync): void {
   database.exec('PRAGMA wal_checkpoint(PASSIVE)');
+}
+
+/**
+ * The statements of a connection that its hot paths run again and again with the same text (a skill's row, a remembered turn by its
+ * id, a thread's messages): prepared once. `database.prepare(text)` compiles the text every time, which was a tenth of the API's
+ * non-idle time while a Minecraft task ran (production run 14, 2026-10-17: `event loop blocked` 204 times in 30 minutes, profiled
+ * offline on a production-shaped world, `tests/perf/`).
+ *
+ * Only for a text that is fixed (never one made with values; a list of placeholders of varying length is bounded by `PREPARED_KEPT`),
+ * and only for statements that are read out at once (`get`, `all`, `run`): a statement kept here is shared by every caller, so none may
+ * hold it half-read (`iterate`) or change its settings (`setReadBigInts`, ...). A schema change prepares it again by itself (SQLite). The
+ * cache ends with its connection.
+ */
+const statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+const PREPARED_KEPT = 256;
+
+export function prepared(database: DatabaseSync, text: string): StatementSync {
+  let byText = statements.get(database);
+  if (!byText) statements.set(database, byText = new Map());
+  const known = byText.get(text);
+  if (known) return known;
+  if (byText.size >= PREPARED_KEPT) byText.delete(byText.keys().next().value!);
+  const statement = database.prepare(text);
+  byText.set(text, statement);
+  return statement;
 }

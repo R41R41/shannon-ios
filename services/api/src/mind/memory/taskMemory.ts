@@ -36,7 +36,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     kept = key !== null && after === mark ? { key, snapshot } : null;
     return snapshot;
   };
-  const read: TaskMemory['read'] = (scope, ids, present, shared) => {
+  const read: TaskMemory['read'] = (scope, ids, present, shared, options) => {
     if (!available(scope, present)) return [];
     const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
     const gate = new DisclosureGate(present, state, store, scope);
@@ -69,8 +69,18 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       }
       if (seen.has(id) || seen.size >= 5000) return false;
       const known = lineage.get(id); if (known !== undefined) return known;
+      // Found visible at this time or an earlier one by a read of this scope (`ScopeMemos.lineages`): visible now.
+      const at = parts.now(), since = withheld.memos.lineages.get(id);
+      if (since !== undefined && since <= at) {
+        lineage.set(id, true);
+        return true;
+      }
       seen.add(id);
-      try { const result = computeLineage(id, seen); lineage.set(id, result); return result; } finally { seen.delete(id); }
+      try {
+        const result = computeLineage(id, seen); lineage.set(id, result);
+        if (result && (since === undefined || at < since)) withheld.memos.lineages.set(id, at);
+        return result;
+      } finally { seen.delete(id); }
     };
     const computeLineage = (id: string, seen: Set<string>): boolean => {
       const experience = experienceOf(id);
@@ -137,8 +147,10 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       const visible = visibleMemoryText(state, id, summary);
       if (!visible || withheld.withholdsReply({ text: visible, observedAt: parts.now(), recalledMemoryIds: [id] })) continue;
       if (memoryControlFor(state, id)?.overrideText) { evidence = ''; applicability = 'owner-corrected memory'; }
+      const listed = options?.provenance === false ? {}
+        : { provenance: { kind: provenanceKind, sourceIds: sources(scope, [id], experienceOf, state), readSourceIds } };
       items.push({ id, summary: visible.slice(0, 1200), observedAt: at, evidence: evidence.slice(0, 300), applicability,
-        confidence, conflicts: [], detailRef: id, provenance: { kind: provenanceKind, sourceIds: sources(scope, [id], experienceOf, state), readSourceIds } });
+        confidence, conflicts: [], detailRef: id, ...listed });
     }
     return items;
     });

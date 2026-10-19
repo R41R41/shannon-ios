@@ -1,3 +1,4 @@
+import { prepared } from '../../../infra/sqlite/sqliteOpen.js';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
@@ -131,7 +132,7 @@ export class SQLiteSkills {
   }
 
   get(scopeKey: string, skillId: string): StoredSkill | null {
-    const row = this.database.prepare('SELECT * FROM shannon_skills WHERE scope_key = ? AND skill_id = ?').get(scopeKey, skillId) as Record<string, unknown> | undefined;
+    const row = prepared(this.database, 'SELECT * FROM shannon_skills WHERE scope_key = ? AND skill_id = ?').get(scopeKey, skillId) as Record<string, unknown> | undefined;
     return row ? parsed(row) : null;
   }
 
@@ -249,12 +250,18 @@ export class SQLiteSkills {
     const rows = (skillId
       ? this.database.prepare('SELECT * FROM shannon_skill_revisions WHERE scope_key = ? AND skill_id = ? ORDER BY version, created_at, kind DESC').all(scopeKey, skillId)
       : this.database.prepare('SELECT * FROM shannon_skill_revisions WHERE scope_key = ? ORDER BY created_at, version').all(scopeKey)) as Array<Record<string, unknown>>;
-    return rows.map(row => ({
-      revisionId: String(row.revision_id), skillId: String(row.skill_id), version: Number(row.version), kind: String(row.kind) as 'version' | 'snapshot', body: String(row.body),
-      bodyHash: String(row.body_hash), provenance: list<OperatorSkillProvenance | null>(row.provenance_json, null), madeBy: String(row.made_by) as 'sleep' | 'owner_edit' | 'operator_authored', actor: String(row.actor) as SkillActor, evidence: list<string[]>(row.evidence_json, []),
-      beforeSha256: text(row.before_sha256), afterSha256: String(row.after_sha256), pinned: Number(row.pinned) === 1, reason: String(row.reason), createdAt: String(row.created_at),
-      parentRevisionId: text(row.parent_revision_id), variantOf: text(row.variant_of), uses: Number(row.uses ?? 0), successes: Number(row.successes ?? 0),
-    }));
+    return rows.map(revisionOfRow);
+  }
+
+  /**
+   * One saved version of a skill by its revision id: what `revisions(scopeKey, skillId)` lists first with that id and kind `version`,
+   * without reading and parsing every revision the skill has (a receipt of a skill is checked thousands of times a walk).
+   */
+  version(scopeKey: string, skillId: string, revisionId: string): SkillRevision | null {
+    const row = prepared(this.database, `SELECT * FROM shannon_skill_revisions
+      WHERE scope_key = ? AND skill_id = ? AND revision_id = ? AND kind = 'version' ORDER BY version, created_at LIMIT 1`)
+      .get(scopeKey, skillId, revisionId) as Record<string, unknown> | undefined;
+    return row ? revisionOfRow(row) : null;
   }
 
   /** Changes the sleep proposed since an instant, split into new skills and patches (the nightly limits). */
@@ -375,6 +382,15 @@ function list<T>(value: unknown, fallback: T): T {
 
 function text(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value);
+}
+
+function revisionOfRow(row: Record<string, unknown>): SkillRevision {
+  return {
+    revisionId: String(row.revision_id), skillId: String(row.skill_id), version: Number(row.version), kind: String(row.kind) as 'version' | 'snapshot', body: String(row.body),
+    bodyHash: String(row.body_hash), provenance: list<OperatorSkillProvenance | null>(row.provenance_json, null), madeBy: String(row.made_by) as 'sleep' | 'owner_edit' | 'operator_authored', actor: String(row.actor) as SkillActor, evidence: list<string[]>(row.evidence_json, []),
+    beforeSha256: text(row.before_sha256), afterSha256: String(row.after_sha256), pinned: Number(row.pinned) === 1, reason: String(row.reason), createdAt: String(row.created_at),
+    parentRevisionId: text(row.parent_revision_id), variantOf: text(row.variant_of), uses: Number(row.uses ?? 0), successes: Number(row.successes ?? 0),
+  };
 }
 
 function nullableNumber(value: unknown): number | null {

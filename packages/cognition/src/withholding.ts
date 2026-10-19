@@ -46,8 +46,9 @@ const NORMALIZED = new Map<string, string>();
 const NORMALIZED_KEPT = 4_096, NORMALIZED_CHARACTERS = 2_000_000;
 let normalizedCharacters = 0;
 function normalized(value: string): string {
-  // A short text is normalized faster than it is looked up and kept.
-  if (value.length < 256) return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
+  // A very short text is normalized faster than it is looked up and kept; from a few dozen characters the locale's lower-casing costs
+  // more than the lookup (a recall step normalized the same remembered replies under each rule of each check).
+  if (value.length < 32) return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
   const known = NORMALIZED.get(value);
   if (known !== undefined) return known;
   const result = value.normalize('NFKC').toLocaleLowerCase('ja-JP');
@@ -105,8 +106,22 @@ function controlBasis(snapshot: CompanionStateSnapshot, control: MemoryControl):
     .filter((value): value is string => Boolean(value)).join('\n');
 }
 
+/**
+ * The rules of a snapshot are a pure value of its controls and facts (a snapshot is frozen), made once per snapshot object: every check
+ * of one moment builds its own `MemoryWithholding` over the same snapshot, and each used to derive the key terms of every control again.
+ */
+const RULES = new WeakMap<CompanionStateSnapshot, readonly MemoryWithholdingRule[]>();
+
 /** One rule per forgotten, rejected or corrected item. An active, uncorrected item withholds nothing. */
 export function memoryWithholdingRules(snapshot: CompanionStateSnapshot): readonly MemoryWithholdingRule[] {
+  const known = RULES.get(snapshot);
+  if (known) return known;
+  const rules = derivedRules(snapshot);
+  if (Object.isFrozen(snapshot)) RULES.set(snapshot, rules);
+  return rules;
+}
+
+function derivedRules(snapshot: CompanionStateSnapshot): readonly MemoryWithholdingRule[] {
   return Object.freeze(snapshot.memoryControls.flatMap(control => {
     const hidden = control.status !== 'active';
     if (!hidden && !control.overrideText) return [];
@@ -124,9 +139,32 @@ export function memoryWithholdingRules(snapshot: CompanionStateSnapshot): readon
   }));
 }
 
-/** Whether a text restates the withheld item: it contains enough of the item's key terms. */
+/**
+ * Whether a text restates the withheld item: it contains enough of the item's key terms. A pure value of the rule and the text, and
+ * a walk of a task's provenance asks it of the same long text (a skill's body) under the same rule once for every time the text was
+ * read at (thousands): kept per rule, for the texts that are long enough to be worth it. Bounded; cleared when full.
+ */
+const RESTATED = new WeakMap<MemoryWithholdingRule, Map<string, boolean>>();
+const RESTATED_KEPT = 256, RESTATED_MINIMUM_CHARACTERS = 256, RESTATED_MAXIMUM_CHARACTERS = 20_000;
 export function restatesWithheldMemory(rule: MemoryWithholdingRule, text: string): boolean {
   if (!rule.terms.length) return false;
+  const keep = text.length >= RESTATED_MINIMUM_CHARACTERS && text.length <= RESTATED_MAXIMUM_CHARACTERS;
+  let known: Map<string, boolean> | undefined;
+  if (keep) {
+    known = RESTATED.get(rule);
+    if (!known) RESTATED.set(rule, known = new Map());
+    const answer = known.get(text);
+    if (answer !== undefined) return answer;
+  }
+  const result = restates(rule, text);
+  if (known) {
+    if (known.size >= RESTATED_KEPT) known.clear();
+    known.set(text, result);
+  }
+  return result;
+}
+
+function restates(rule: MemoryWithholdingRule, text: string): boolean {
   const haystack = normalized(text);
   let matched = 0;
   for (const group of rule.terms) {

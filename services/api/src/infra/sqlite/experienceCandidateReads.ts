@@ -25,6 +25,26 @@ export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, 
   return value;
 }
 
+const keptReads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unknown }>>();
+const KEPT_READS = 64;
+
+/**
+ * `load()` once per key while this connection's database is unchanged: the same rule as `readWhileUnchanged` for reads that are many
+ * (a thread's messages: one recall step asked for the same few threads 14 times, each read and parsed whole) and fixed by their key.
+ * At most `KEPT_READS` keys are kept, the oldest dropped; a changed database is read again.
+ */
+export function readKeptWhileUnchanged<T>(database: DatabaseSync, key: string, load: () => T): T {
+  if (database.isTransaction) return load();
+  let kept = keptReads.get(database);
+  if (!kept) keptReads.set(database, kept = new Map());
+  const mark = changeMark(database), known = kept.get(key);
+  if (known?.mark === mark) return known.value as T;
+  const value = load();
+  if (!known && kept.size >= KEPT_READS) kept.delete(kept.keys().next().value!);
+  kept.set(key, { mark, value });
+  return value;
+}
+
 /** The database's change mark (above): equal marks mean every row reads as it did (inside a transaction: none, `null`). */
 export function databaseChangeMark(database: DatabaseSync): string | null { return database.isTransaction ? null : changeMark(database); }
 
