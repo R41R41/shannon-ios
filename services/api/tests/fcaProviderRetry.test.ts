@@ -149,6 +149,50 @@ describe('asking for a decision again', () => {
     const failure = await decideWithRetry(run.attempt, parts()).catch(error => error as FcaDecisionUnavailableError);
     expect(failure).toMatchObject({ message: 'FCA_MODEL_HTTP_429', attempts: 1 });
     expect(run.calls()).toBe(1);
+    // The step's own wait afterwards must not be shorter than what the provider asked (L-5, `taskRuntimeUnavailable.ts`).
+    expect(failure).toMatchObject({ retryAfterMs: 61_000 });
+    const none = script(Array(9).fill(new FcaProviderError(503)));
+    expect(await decideWithRetry(none.attempt, parts()).catch(error => error as FcaDecisionUnavailableError)).toMatchObject({ retryAfterMs: null });
+  });
+
+  it('asks for the request to be rebuilt before a further attempt once it is ten seconds old, and not before (M-6)', async () => {
+    let time = 0;
+    const fails = [new FcaProviderError(503), new FcaProviderError(503), new FcaProviderError(503), new FcaProviderError(503)];
+    let calls = 0;
+    const slow = async () => {
+      calls += 1;
+      time += 3_000; // every request takes three seconds, then fails
+      const next = fails[calls - 1];
+      if (next) throw next;
+      return output;
+    };
+    const refresh = vi.fn(async () => undefined);
+    const log: string[] = [];
+    expect(await decideWithRetry(slow, parts({ now: () => time, refresh, log: line => log.push(line) }))).toBe(output);
+    // After the 1st, 2nd and 3rd failure the request is 3, 6 and 9 seconds old; after the 4th, 12: rebuilt once, then sent.
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(5);
+    expect(log.filter(line => line.includes('request refreshed'))).toHaveLength(1);
+  });
+
+  it('rebuilds a request again when the next one grows old as well, and ends the decision if the rebuilding itself fails', async () => {
+    let time = 0;
+    const attempt = async () => {
+      time += 11_000;
+      throw new FcaProviderError(503);
+    };
+    const refresh = vi.fn(async () => undefined);
+    await decideWithRetry(attempt, parts({ now: () => time, refresh, policy: { ...FCA_RETRY_POLICY, maxElapsedMs: 10_000_000 } })).catch(() => undefined);
+    expect(refresh).toHaveBeenCalledTimes(4); // five attempts, a rebuilding between each
+    const broken = script([new FcaProviderError(503)]);
+    let clock = 0;
+    const slowFail = async () => {
+      clock += 11_000;
+      return broken.attempt();
+    };
+    await expect(decideWithRetry(slowFail, parts({ now: () => clock, refresh: async () => { throw new Error('FCA_BODY_REVISION_UNKNOWN'); } })))
+      .rejects.toThrow('FCA_BODY_REVISION_UNKNOWN');
+    expect(broken.calls()).toBe(1);
   });
 
   it('stops when the task\'s budget has no room for another request that may be charged', async () => {

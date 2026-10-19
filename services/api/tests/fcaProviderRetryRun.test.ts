@@ -36,7 +36,7 @@ function fixture(script: Answer[], options: { body?: boolean; cap?: number; sugg
   const h = actionHarness(now);
   const budgetStore = new TaskBudgetStore(h.db);
   const budget = fcaBudget({ actions: h.actions, store: budgetStore, now, minecraftRequest: () => true, ...(options.cap ? { taskCapYen: () => options.cap! } : {}) });
-  const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: provider.fetcher, recordUsage: usage => { usages.push(usage); budget.recordUsage(usage.estimatedCostUsd); } });
+  const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: provider.fetcher, recordUsage: usage => { usages.push(usage); budget.recordUsage(usage.estimatedCostUsd, !usage.usageComplete); } });
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now, budget,
     canRunTask: (_runtime, id) => id === only, providerRetryDelayMs: () => options.delay ?? 0, bodyUnavailableCooldownMs: () => options.bodyCooldown ?? 0,
@@ -118,19 +118,50 @@ describe('a decision is asked again inside its step after a provider error (C-20
     const spent = f.budgetStore.spent(f.child.id);
     const total = f.usages.reduce((sum, usage) => sum + usage.estimatedCostUsd, 0);
     expect(f.usages).toHaveLength(3); // the timeout, the tool step, the completing step
-    expect(spent.yen).toBeGreaterThanOrEqual(Math.ceil(f.usages[1]!.estimatedCostUsd * 160));
-    expect(spent.yen).toBeLessThanOrEqual(Math.ceil(total * 160) + 2);
+    // Honest accounting: the timeout is booked in full, but apart (an upper bound of a charge nobody confirmed), not as confirmed spend.
+    expect(f.usages[0]!.usageComplete).toBe(false);
+    expect(spent.estimatedYen).toBeGreaterThanOrEqual(Math.ceil(f.usages[0]!.estimatedCostUsd * 160));
+    expect(spent.yen + spent.estimatedYen).toBeLessThanOrEqual(Math.ceil(total * 160) + 2);
+    const answeredUsd = f.usages[1]!.estimatedCostUsd + f.usages[2]!.estimatedCostUsd;
+    expect(spent.yen).toBeLessThanOrEqual(Math.ceil(answeredUsd * 160) + 1); // the confirmed part is the two answers only
     expect(spent.steps).toBe(2); // the tool step (with the timeout it retried) and the completing step
   });
 
-  it('stops asking where the task\'s cap has no room for another request that may be charged, and the next step meets the cap', async () => {
+  it('stops asking where the task has no room for one more request, and an estimate alone does not fail the task (M-4)', async () => {
     const f = fixture(['ETIMEDOUT', 'ETIMEDOUT', [call('task_list', 'list-1')]], { cap: 1 });
     await f.run();
-    // The first timeout books more than the one yen the operator left this request: no second request is made.
-    expect(f.provider.bodies).toHaveLength(1);
+    // The first timeout books more than the one yen the operator left this request: no second request in that step. A task that is not a
+    // Minecraft request asks once more from a fresh step (its one further round), and fails with its report as any task does: not by the cap.
+    expect(f.provider.bodies).toHaveLength(2);
+    expect(f.phase()).toBe('failed');
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).not.toContain('上限');
+    const spent = f.budgetStore.spent(f.child.id);
+    expect(spent.yen).toBe(0);
+    expect(spent.estimatedYen).toBeGreaterThanOrEqual(1);
+    expect(f.budgetStore.spent(f.child.id).cappedAt).toBeNull();
+  });
+
+  it('pauses (the owner may resume) rather than fails when only estimates would take the task over its cap, then goes on (M-4)', async () => {
+    const f = fixture(['ETIMEDOUT', [call('task_list', 'list-1')]], { cap: 20 });
+    f.budgetStore.add(f.child.id, 'owner', 'owner_request', 19, '2026-10-19T09:00:00.000Z'); // 19 of the 20 yen are confirmed
+    await f.run();
+    // The timeout's estimate (about 1 yen) cannot fail the task: it takes 19 to 20 of 20, so the next step pauses instead.
+    expect(f.phase()).toBe('stopped');
+    expect(f.driver.runtime.get('owner', f.child.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped' });
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toContain('見積り');
+    expect(f.events()).not.toContain('fca_recovery_unknown');
+    const paused = f.budgetStore.spent(f.child.id);
+    expect(paused.cappedAt).toBeNull();
+    expect(paused.estimatedYen).toBeGreaterThanOrEqual(1);
+    expect(paused.openEstimatedYen).toBe(0); // reviewed: the owner was asked
+    expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
+    await f.run();
+    // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one yen step then reaches the cap by confirmed spend,
+    // and that is the cap's to end, as before.
+    expect(f.provider.bodies).toHaveLength(2);
     expect(f.phase()).toBe('failed');
     expect(f.driver.runtime.get('owner', f.child.id)?.summary).toContain('上限');
-    expect(f.budgetStore.spent(f.child.id).yen).toBeGreaterThanOrEqual(1);
+    expect(f.budgetStore.spent(f.child.id).cappedAt).not.toBeNull();
   });
 });
 

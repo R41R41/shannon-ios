@@ -111,7 +111,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       minecraftRequest: task => admittedMinecraftRequest(task, task.parentId ? runtime.runtime.get(task.scopeKey, task.parentId) : null,
         Boolean(minecraft?.control.store.body(task.id))), ...(operatorAudit ? { taskCapYen: (id: string) => operatorAudit.store.budgetYen(id) } : {}) });
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
-      budget.recordUsage(usage.estimatedCostUsd);
+      // A charge nobody confirmed (a lost request, an answer without usable usage) is an upper bound: booked apart (`fcaBudgetWiring.ts`).
+      budget.recordUsage(usage.estimatedCostUsd, !usage.usageComplete);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
         inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });

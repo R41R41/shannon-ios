@@ -2,9 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ActionLease } from '../src/contracts/actionThreadContract.js';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
-import { BODY_ABSENT_SUMMARY, FCA_BODY_RECOVERY_CODE, RECOVERY_LIMIT_SUMMARY } from '../src/wiring/fcaBodyRecovery.js';
+import {
+  AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, FCA_BODY_RECOVERY_CODE, FCA_BODY_RELEASE_ATTEMPTS, FCA_BODY_RELEASE_UNPROVEN, RECOVERY_LIMIT_SUMMARY,
+  RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
+} from '../src/wiring/fcaBodyRecovery.js';
 import { fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
+import { TaskBodyRecoveryStore } from '../src/mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
 import { bodyOperations, operationUnresolved, reconcileOperations } from '../src/surfaces/minecraft/store/minecraftOperationReconcile.js';
 import { minecraftWorld } from './support/fcaBodyRecoveryWorld.js';
@@ -27,8 +31,12 @@ function world(options: Parameters<typeof minecraftWorld>[0] = {}) {
 }
 type World = ReturnType<typeof world>;
 const skillCommands = <T extends { kind: string }>(body: { commands: T[] }) => body.commands.filter(command => command.kind === 'skill');
+interface RecoveryNotice { kind?: string; lostOperations?: unknown[]; instruction?: string; gapSeconds?: number;
+  existingChildren?: Array<{ id: string; title: string; status: string }>; sentNotes?: Array<{ to: string; id: string; preview: string }> }
 const noticeOf = (input: { messages: ReadonlyArray<{ text: string }> } | undefined) => input?.messages
-  .map(message => JSON.parse(message.text) as { kind?: string; lostOperations?: unknown[]; instruction?: string }).find(value => value.kind === 'body.recovery');
+  .flatMap(message => { try { return [JSON.parse(message.text) as RecoveryNotice]; } catch { return []; } }) // other messages are plain text
+  .find(value => value.kind === 'body.recovery');
+const releaseCommands = (body: { commands: Array<{ kind: string }> }) => body.commands.filter(command => command.kind === 'release');
 const taskActions = (w: World, taskId: string) => w.db.prepare("SELECT state,result FROM mind_actions WHERE kind='agentTask' AND source_id LIKE ? ORDER BY created_at")
   .all(`fca:${taskId}:%`) as Array<{ state: string; result: string | null }>;
 async function ticks(w: World, api: ReturnType<World['startApi']>, count: number) {
@@ -73,9 +81,15 @@ describe('a restart while the model was deciding (no body operation was sent)', 
     await w.until(api, () => w.phase(api) === 'completed', 'the task goes on and completes');
     expect(w.inputsOf(task.id)).toHaveLength(2); // the lost decision and one new one
     const notice = noticeOf(w.inputsOf(task.id)[1]);
-    expect(notice).toMatchObject({ kind: 'body.recovery', lostOperations: [] });
+    expect(notice).toMatchObject({ kind: 'body.recovery', lostOperations: [], existingChildren: [], sentNotes: [] });
     expect(notice?.instruction).toContain('none of them was sent again');
+    // The note says how long ago the step was lost (M-3): the eleven minutes the body was away, not "just now".
+    expect(notice?.gapSeconds).toBeGreaterThanOrEqual(11 * 60);
+    expect(notice?.gapSeconds).toBeLessThan(12 * 60);
     expect(skillCommands(again)).toEqual([]);
+    // Nothing is kept for a step that was closed and a task that goes on (L-8).
+    await ticks(w, api, 3);
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
     expect(w.events()).toContain('fca_body_recovered');
     expect(w.events()).not.toContain('fca_unknown_retired');
     expect(taskActions(w, task.id)[0]).toMatchObject({ state: 'failed', result: FCA_BODY_RECOVERY_CODE });
@@ -243,6 +257,10 @@ describe('the body does not come back in time', () => {
     expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
     await ticks(w, api, 15);
     expect(w.inputsOf(task.id)).toHaveLength(1);
+    // The owner sees why it does not start (L-7), once, not only a log line.
+    expect(api.driver.runtime.get('owner', task.id)?.summary).toBe(AWAITING_PROOF_SUMMARY);
+    expect(w.events().filter(event => event === 'fca_note')).toHaveLength(1);
+    expect(api.recovery.retained().awaiting).toBe(1);
     // The body returns: its release is proven, the lost operation closed, the request goes on.
     w.connectBody(api, 'c2', 'drop-on-release');
     await w.until(api, () => w.phase(api) === 'completed', 'goes on once the body is back');
@@ -321,5 +339,204 @@ describe('the lost operations of a step, read and closed', () => {
     // A receipt already settled by the body is still compared with the one that arrives again, as before.
     expect(store.settle(receipt('a', { outcome: 'failed', result: 'x' }))).toBe(true);
     expect(store.settle(receipt('a', { outcome: 'completed' }))).toBe(false);
+  });
+});
+
+describe('the notice is stored before the task goes on (M-1)', () => {
+  it.each([
+    ['a send that throws', () => { throw new Error('FCA_INBOX_UNAVAILABLE'); }],
+    ['a send that reports success without storing anything', () => ({ accepted: true, duplicate: false })],
+  ] as const)('does not resume, nor close the lost step, while the notice is not in the inbox (%s), and goes on when it is', async (_label, failing) => {
+    const w = world();
+    const { api, task } = await strandedSkill(w);
+    await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+    const send = vi.spyOn(api.driver.runtime, 'send').mockImplementation(failing as never);
+    const body = w.connectBody(api, 'c2', 'drop-on-release');
+    await w.until(api, () => w.logs.some(line => line.includes('code=waiting for=notice')), 'the notice cannot be stored');
+    await ticks(w, api, 20);
+    // The body proved its release, but the model has not been told: the task stays unknown, its action stays open, no decision is asked.
+    expect(w.phase(api)).toBe('unknown');
+    expect(w.inputsOf(task.id)).toHaveLength(1);
+    expect(w.events()).not.toContain('fca_body_recovered');
+    expect(taskActions(w, task.id)[0]?.state).not.toBe('failed');
+    expect(send.mock.calls.length).toBeGreaterThan(1); // tried again at each pass
+    send.mockRestore();
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on once the notice is stored');
+    // The lost skill was never sent again, and the next decision was told.
+    expect(skillCommands(body)).toEqual([]);
+    expect(w.inputsOf(task.id)).toHaveLength(2);
+    expect(noticeOf(w.inputsOf(task.id)[1])?.lostOperations).toEqual([{ tool: 'mc.move', outcome: 'no_receipt' }]);
+    expect(releaseCommands(body)).toHaveLength(1); // the proof of the first pass was kept: the body was not asked again for the notice
+    expect(taskActions(w, task.id)[0]).toMatchObject({ state: 'failed', result: FCA_BODY_RECOVERY_CODE });
+  });
+});
+
+describe('the body is asked to release with a backoff, a bounded number of times (M-2)', () => {
+  it('backs off 10 s, 20 s, 40 s ... to 5 min, then pauses the task with the closed reason, without closing the step or asking again', async () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 20].map(releaseBackoffMs)).toEqual([10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000, 300_000]);
+    expect(releaseBackoffMs(0)).toBe(0);
+    const w = world({ windowMs: 600 * MINUTE });
+    const { api, task } = await strandedSkill(w);
+    await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+    const body = w.connectBody(api, 'c2', 'unknown-release'); // the body answers, but never confirms its inputs released
+    await w.until(api, () => releaseCommands(body).length === 1, 'the first release is asked');
+    await api.recovery.idle(); // the ask has come back (a jump of the clock during an ask is not counted)
+    for (let asked = 1; asked < FCA_BODY_RELEASE_ATTEMPTS; asked++) {
+      const wait = releaseBackoffMs(asked);
+      w.advance(wait - 2_000);
+      await ticks(w, api, 8);
+      expect(releaseCommands(body)).toHaveLength(asked); // not before its time
+      w.advance(3_000);
+      await w.until(api, () => releaseCommands(body).length === asked + 1, `release ${asked + 1} is asked after ${wait} ms`);
+      await api.recovery.idle();
+    }
+    // The tenth did not confirm either: the task is paused, nothing is closed, and the body is asked no more.
+    await w.until(api, () => w.phase(api) === 'stopped', 'paused when the attempts are used up');
+    expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped', summary: RELEASE_UNPROVEN_SUMMARY });
+    expect(w.logs.some(line => line.includes(`code=paused reason=${FCA_BODY_RELEASE_UNPROVEN}`))).toBe(true);
+    expect(releaseCommands(body)).toHaveLength(FCA_BODY_RELEASE_ATTEMPTS);
+    expect(taskActions(w, task.id)[0]?.state).not.toBe('failed'); // a lost step is never closed without the proof
+    expect(w.skillRows()[0]!.receipt_json).toBeNull();
+    expect(w.inputsOf(task.id)).toHaveLength(1);
+    const rows = () => (w.db.prepare("SELECT COUNT(*) AS n FROM fca_body_operations WHERE id LIKE 'recheck:%'").get() as { n: number }).n;
+    expect(rows()).toBe(FCA_BODY_RELEASE_ATTEMPTS);
+    w.advance(2 * 60 * MINUTE);
+    await ticks(w, api, 30);
+    expect(rows()).toBe(FCA_BODY_RELEASE_ATTEMPTS); // a day of this would have been 8,640 rows
+    expect(api.recovery.retained().releasing).toBe(0);
+    expect(api.recovery.retained().exhausted).toBe(0);
+  }, 30_000);
+
+  it('stops a task the owner resumed in the same way, and a new resume begins a new count', async () => {
+    const w = world({ windowMs: 600 * MINUTE });
+    const { api, task } = await strandedSkill(w);
+    await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+    w.advance(601 * MINUTE);
+    await w.until(api, () => w.phase(api) === 'stopped', 'paused after the window');
+    const body = w.connectBody(api, 'c2', 'unknown-release');
+    expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+    for (let round = 0; round < 40 && releaseCommands(body).length < FCA_BODY_RELEASE_ATTEMPTS; round++) {
+      w.advance(301_000);
+      await ticks(w, api, 6);
+    }
+    await w.until(api, () => api.driver.runtime.get('owner', task.id)?.summary === RELEASE_UNPROVEN_SUMMARY, 'stopped when the attempts are used up');
+    expect(w.phase(api)).toBe('stopped');
+    expect(releaseCommands(body)).toHaveLength(FCA_BODY_RELEASE_ATTEMPTS);
+    expect(taskActions(w, task.id)[0]?.state).not.toBe('failed');
+    w.advance(10 * MINUTE);
+    await ticks(w, api, 20);
+    expect(releaseCommands(body)).toHaveLength(FCA_BODY_RELEASE_ATTEMPTS);
+    // The body is fine now; the owner resumes, and the release is asked afresh (a new count) and proven.
+    body.behaviour = 'drop-on-release';
+    expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on after a proven release');
+    expect(releaseCommands(body)).toHaveLength(FCA_BODY_RELEASE_ATTEMPTS + 1);
+  }, 30_000);
+});
+
+describe('a request lost before a long stop is stale, not young (M-3)', () => {
+  it('pauses it as stale when the step is older than the window when it is noticed, and tells the model how long ago on resume', async () => {
+    const w = world();
+    const first = w.startApi();
+    const task = w.createTask(first);
+    const body = w.connectBody(first, 'c1', 'complete');
+    w.script.push(w.hangs);
+    await w.until(first, () => w.modelInputs.length === 1, 'the first decision is asked');
+    w.kill(body); // a Spot VM stopped: the dying process settles nothing, so only this API's own recovery can notice the loss
+    // A Spot VM stopped for eight hours: the API starts again, the body is back at once, yesterday's request is not auto-resumed.
+    w.advance(8 * 60 * MINUTE);
+    const api = w.startApi();
+    w.connectBody(api, 'c2', 'complete');
+    await w.until(api, () => w.phase(api) === 'stopped', 'paused as stale');
+    expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped', summary: STALE_SUMMARY });
+    expect(w.events()).toContain('fca_body_paused');
+    expect(w.events()).not.toContain('fca_body_recovered');
+    expect(w.events()).not.toContain('fca_unknown_retired');
+    expect(w.logs.some(line => line.includes('code=paused reason=stale') && line.includes('gapSeconds='))).toBe(true);
+    await ticks(w, api, 15);
+    expect(w.inputsOf(task.id)).toHaveLength(1); // no decision was asked on yesterday's request
+    // The owner decides to go on: the step is closed and the next decision is told the gap.
+    expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on when the owner resumes it');
+    const notice = noticeOf(w.inputsOf(task.id)[1]);
+    expect(notice?.gapSeconds).toBeGreaterThanOrEqual(8 * 3600);
+    expect(notice?.gapSeconds).toBeLessThan(8 * 3600 + 120);
+  });
+
+  it('still resumes a request lost a few minutes before a restart, as it did', async () => {
+    const w = world();
+    const first = w.startApi();
+    w.createTask(first);
+    const body = w.connectBody(first, 'c1', 'complete');
+    w.script.push(w.hangs);
+    await w.until(first, () => w.modelInputs.length === 1, 'the first decision is asked');
+    await w.crash(first, body);
+    w.advance(25 * MINUTE); // inside the 30 minutes
+    const api = w.startApi();
+    w.connectBody(api, 'c2', 'complete');
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on at once');
+    expect(w.events()).not.toContain('fca_body_paused');
+  });
+});
+
+describe('what a lost step may have made or sent is listed, not undone (M-5)', () => {
+  it('names the child tasks and the notes of the lost step in the notice, and only those of that step', async () => {
+    const w = world();
+    const first = w.startApi();
+    const task = w.createTask(first);
+    const body = w.connectBody(first, 'c1', 'complete');
+    // An earlier child and note belong to a step that finished; the lost step makes one child and sends one note, then never answers.
+    w.script.push((input, signal) => {
+      const runtime = first.driver.runtime;
+      const child = runtime.createChild('owner', task.id, { title: '木を集める', goal: '木を八本', context: '調べ方のメモ' }, 'lost-child');
+      runtime.send('owner', task.id, child.id, '先に北の林を見て', 'lost-note');
+      return w.hangs(input, signal);
+    });
+    await w.until(first, () => w.modelInputs.length === 1, 'the first decision is asked');
+    await w.crash(first, body);
+    const api = w.startApi();
+    w.connectBody(api, 'c2', 'complete');
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on');
+    const notice = noticeOf(w.inputsOf(task.id)[1]);
+    expect(notice?.existingChildren).toHaveLength(1);
+    expect(notice?.existingChildren?.[0]).toMatchObject({ title: '木を集める' });
+    expect(notice?.sentNotes).toEqual([{ to: notice?.existingChildren?.[0]?.id, id: 'lost-note', preview: '先に北の林を見て' }]);
+    expect(notice?.instruction).toContain('before you make or send the same again');
+  });
+
+  it('lists nothing from before the step began, nothing the task sent itself, and no context message', () => {
+    const w = world();
+    const api = w.startApi();
+    const task = w.createTask(api);
+    const runtime = api.driver.runtime;
+    const store = new TaskBodyRecoveryStore(w.db);
+    const older = runtime.createChild('owner', task.id, { title: '前の子', goal: 'g', context: 'c' }, 'older');
+    runtime.send('owner', task.id, older.id, '前のメモ', 'older-note');
+    w.advance(10_000);
+    const since = w.now();
+    w.advance(10_000);
+    const newer = runtime.createChild('owner', task.id, { title: '新しい子', goal: 'g', context: 'c' }, 'newer');
+    runtime.send('owner', task.id, newer.id, '新しいメモ', 'newer-note');
+    runtime.send('owner', task.id, task.id, '自分へ', 'to-self');
+    const effects = store.effectsSince('owner', task.id, since);
+    expect(effects.children.map(child => child.title)).toEqual(['新しい子']);
+    expect(effects.notes).toEqual([{ to: newer.id, id: 'newer-note', preview: '新しいメモ' }]);
+    expect(store.effectsSince('owner', task.id, null)).toEqual({ children: [], notes: [] });
+  });
+});
+
+describe('what is kept per step and task is let go (L-8)', () => {
+  it('keeps a waiting reason while a step is waited for, and nothing after the request goes on', async () => {
+    const w = world();
+    const { api, task } = await strandedSkill(w);
+    await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+    await ticks(w, api, 5);
+    expect(api.recovery.retained().told).toBe(1); // "for=body", said once
+    const body = w.connectBody(api, 'c2', 'drop-on-release');
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on');
+    await ticks(w, api, 3);
+    expect(api.recovery.retained()).toEqual({ releasing: 0, told: 0, awaiting: 0, exhausted: 0 });
+    expect(releaseCommands(body)).toHaveLength(1);
+    expect(task.id).toBeTruthy();
   });
 });

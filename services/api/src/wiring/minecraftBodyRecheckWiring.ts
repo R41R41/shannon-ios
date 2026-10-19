@@ -92,7 +92,9 @@ export function createMinecraftBodyRecheck(parts: {
   /**
    * One physical release of one step, now (the Minecraft recovery, `fcaBodyRecovery.ts`): an unknown step need not wait for its
    * unknown exit to record the body as retained before the body is asked. The same command, proof and attempt count as above; the
-   * recovery judges the evidence itself. Busy while another re-check runs.
+   * recovery judges the evidence itself. Busy while another re-check runs. Every call that reaches the body writes one `recheck:` row, so
+   * the caller owns the bound: the recovery asks with a backoff (10 s doubling to 5 min) and at most `FCA_BODY_RELEASE_ATTEMPTS` times
+   * per lost step before it pauses the task (`fcaBodyRecovery.ts`); a call that finds no body connection writes no row.
    */
   function releaseStep(step: { actionId: string; scopeKey: string; lease: ActionLease }): Promise<BodyRecheckResult> {
     if (running || closing) return Promise.resolve({ code: 'recheck_busy', actionIds: [], detail: 'a re-check is running' });

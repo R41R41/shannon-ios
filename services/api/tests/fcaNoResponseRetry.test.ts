@@ -17,15 +17,18 @@ afterEach(async () => { vi.restoreAllMocks(); for (const close of closes.splice(
 const complete: FcaModelOutput = { decision: { kind: 'complete', summary: 'Done' }, history: [{ role: 'assistant', content: 'done' }] };
 
 type Script = Array<'no_response' | 'unknown' | 'rejected' | 'http503' | 'ok'>;
-function fixture(script: Script, options: { delay?: number; holdAfterFirst?: boolean; onDecide?(call: number): void } = {}) {
+function fixture(script: Script, options: { delay?: number; holdAfterFirst?: boolean; onDecide?(call: number): void; moving?: { revision: number } } = {}) {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const h = actionHarness(() => at); migrateAgentTasks(h.db);
   const inputs: FcaModelInput[] = [], bodyEvents: string[] = [];
   let calls = 0, holding = false, started = 0, closed = 0;
   const controller = new AbortController();
-  const body: FcaBodyLifecycle = { start() { started += 1; bodyEvents.push('start'); }, revision: () => 0, context: () => ({ revision: 0, observation: null }),
-    async guard() { return true; }, toolSignal: (_name, parent) => parent, async close() { closed += 1; bodyEvents.push('close'); } };
+  // `moving`: a body whose revision the test changes; a decision made against any other revision than the present one is stale.
+  const live = options.moving ?? { revision: 0 };
+  const body: FcaBodyLifecycle = { start() { started += 1; bodyEvents.push('start'); }, revision: () => live.revision,
+    context: () => ({ revision: live.revision, observation: null }),
+    async guard(revision: number) { return revision === live.revision; }, toolSignal: (_name, parent) => parent, async close() { closed += 1; bodyEvents.push('close'); } };
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => at, providerRetryDelayMs: () => 0,
     model: { async decide(input: FcaModelInput) {
       inputs.push(input); calls += 1; options.onDecide?.(calls);
@@ -126,6 +129,32 @@ describe('a decision that got no answer is asked once more (Minebot runs 12 and 
     await f.driver.tick(); await f.driver.drain();
     expect(f.calls()).toBe(1);
     expect(f.phase()).toBe('unknown');
+  });
+
+  it('asks again with the body\'s present observation after a long wait, so the answer is not discarded as stale (M-6)', async () => {
+    const moving = { revision: 3 };
+    let offset = 0;
+    const real = Date.now.bind(Date);
+    vi.spyOn(Date, 'now').mockImplementation(() => real() + offset);
+    const f = fixture(['no_response', 'ok'], { moving, onDecide: call => { if (call === 1) { offset += 11_000; moving.revision = 7; } } });
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.calls()).toBe(2);
+    // The first request carried the observation of the time it was built; the second, built after eleven seconds, the present one.
+    expect(f.inputs[0]!.body?.revision).toBe(3);
+    expect(f.inputs[1]!.body?.revision).toBe(7);
+    expect(f.inputs[1]).not.toBe(f.inputs[0]);
+    expect(f.inputs[1]!.history).toBe(f.inputs[0]!.history); // nothing but the live parts changed
+    expect(f.phase()).toBe('completed'); // the decision was judged against the new revision, not discarded
+    expect(f.warnings()).toContain(`Shannon FCA decision request refreshed task=${f.task.id}`);
+  });
+
+  it('keeps the request built before the first attempt when the wait was short, even if the body moved', async () => {
+    const moving = { revision: 3 };
+    const f = fixture(['no_response', 'ok'], { moving, onDecide: call => { if (call === 1) moving.revision = 7; } });
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.inputs[1]).toBe(f.inputs[0]);
+    expect(f.phase()).not.toBe('completed'); // stale: its decision is discarded, as it was before this fix, for a wait this short
+    expect(f.warnings().some(line => line.includes('request refreshed'))).toBe(false);
   });
 
   it('does not ask again once the step is stopped during the wait', async () => {

@@ -52,7 +52,16 @@ export function fcaSourceOf(sourceId: string, taskId: string): boolean {
  * caller's own connection, so a caller inside its own transaction keeps that transaction as its commit fence. It never writes.
  */
 /** A step of an FCA task whose outcome was lost, with the lease it ran under (`ActionLeaseReader.lostFcaSteps`). */
-export interface LostFcaStep { actionId: string; taskId: string; lease: { id: string; generation: number; holder: string } }
+export interface LostFcaStep {
+  actionId: string; taskId: string; lease: { id: string; generation: number; holder: string };
+  /** When the lost step began (its `fca_step_started` event), or null. */
+  startedAt: string | null;
+  /**
+   * When the step was last known alive: the end of its lease while the action still records it, else the step's start. Never "when the
+   * recovery noticed": a swept action loses its lease end, and a request is not made young by a reboot.
+   */
+  lostAt: string | null;
+}
 /** How an accepted lifecycle operation ended (`lifecycleOutcomes`). */
 export type LifecycleOutcome = 'completed' | 'refused' | 'cancelled' | 'not_started' | 'unknown';
 
@@ -221,7 +230,12 @@ export class ActionLeaseReader {
       const holder = unknown ? row.last_holder : row.holder;
       if (!taskId || !(unknown || ended) || typeof holder !== 'string') return [];
       const lease = { id: String(row.id), generation: Number(row.generation) - (unknown ? 1 : 0), holder };
-      return [{ actionId: lease.id, taskId, lease }];
+      const started = this.db.prepare(`SELECT occurred_at FROM agent_task_events WHERE task_id=? AND event_type='fca_step_started'
+        AND json_extract(payload_json,'$.actionId')=? AND json_extract(payload_json,'$.generation')=? ORDER BY sequence DESC LIMIT 1`)
+        .get(taskId, lease.id, lease.generation);
+      const startedAt = typeof started?.occurred_at === 'string' ? started.occurred_at : null;
+      const leaseEnd = typeof row.lease_until === 'string' && Number.isFinite(Date.parse(row.lease_until)) ? row.lease_until : null;
+      return [{ actionId: lease.id, taskId, lease, startedAt, lostAt: leaseEnd ?? startedAt }];
     });
   }
 

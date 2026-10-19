@@ -41,7 +41,12 @@ export class FcaProviderError extends Error {
  * observation; the closed code is the last failure's (`FCA_MODEL_HTTP_503`, `FCA_MODEL_RESPONSE_UNKNOWN`, ...).
  */
 export class FcaDecisionUnavailableError extends Error {
-  constructor(code: string, readonly reason: string, readonly attempts: number, readonly possiblyBilled: boolean) {
+  /**
+   * `retryAfterMs`: the provider's own `retry-after` of the failure that ended the retries, when it sent one (even a longer one than is
+   * waited for here): the step-level wait that follows is never shorter than it (`taskRuntimeUnavailable.ts`).
+   */
+  constructor(code: string, readonly reason: string, readonly attempts: number, readonly possiblyBilled: boolean,
+    readonly retryAfterMs: number | null = null) {
     super(code);
     this.name = 'FcaDecisionUnavailableError';
   }
@@ -76,13 +81,22 @@ export interface FcaRetryParts {
   afford?(): boolean;
   /** A failed attempt that carried no decision: its outcome is known (nothing to apply), its spend is recorded by the adapter. */
   failed?(verdict: RetryVerdict): void;
+  /**
+   * Called before a further request when the request in hand is `FCA_RETRY_REFRESH_MS` old or older (after the wait and the gate): the
+   * caller takes the body's observation again and rebuilds what depends on it, so that the decision it gets back is not discarded as
+   * stale. A failure here ends the decision as it would have before the first request.
+   */
+  refresh?(): Promise<void> | void;
   log?(line: string): void;
   policy?: FcaRetryPolicy;
   now?(): number;
   random?(): number;
 }
+/** A request this old (a wait of 10 s or more has passed since it was built) is rebuilt from a fresh observation before it is sent again. */
+export const FCA_RETRY_REFRESH_MS = 10_000;
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
   return new Promise<boolean>(resolve => {
     const stop = () => {
       clearTimeout(timer);
@@ -115,6 +129,7 @@ function nextWait(verdict: RetryVerdict, state: { failed: number; billed: number
 export async function decideWithRetry(attempt: () => Promise<FcaModelOutput>, parts: FcaRetryParts): Promise<FcaModelOutput> {
   const policy = parts.policy ?? FCA_RETRY_POLICY, now = parts.now ?? Date.now, started = now();
   const state = { failed: 0, billed: 0, elapsed: 0 };
+  let builtAt = started;
   for (;;) {
     try {
       return await attempt();
@@ -128,11 +143,16 @@ export async function decideWithRetry(attempt: () => Promise<FcaModelOutput>, pa
       const taken = nextWait(verdict, state, parts);
       if (taken === null) {
         parts.log?.(`Shannon FCA decision unavailable reason=${verdict.reason} attempts=${state.failed}`);
-        throw new FcaDecisionUnavailableError((error as Error).message, verdict.reason, state.failed, state.billed > 0);
+        throw new FcaDecisionUnavailableError((error as Error).message, verdict.reason, state.failed, state.billed > 0, verdict.retryAfterMs);
       }
       parts.log?.(`Shannon FCA decision retry reason=${verdict.reason} attempt=${state.failed + 1}/${policy.maxAttempts} waitMs=${taken}`);
       if (!await wait(taken, parts.signal)) throw new Error('FCA_MODEL_ABORTED');
       await parts.recheck();
+      if (parts.refresh && now() - builtAt >= FCA_RETRY_REFRESH_MS) {
+        await parts.refresh();
+        builtAt = now();
+        parts.log?.('Shannon FCA decision request refreshed');
+      }
     }
   }
 }

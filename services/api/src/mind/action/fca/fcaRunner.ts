@@ -157,9 +157,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
   for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
-  const observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
+  let observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
   const observationFresh = async () => (await Promise.all((ports.observations ?? []).map((observation, index) => observation.guard(observationRevisions[index]!)))).every(Boolean);
-  const bodyRevision = ports.body?.revision() ?? 0;
+  let bodyRevision = ports.body?.revision() ?? 0;
   const skillIndex = ports.tools?.skillIndex?.();
   const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
   const waiting = waitGate.fact();
@@ -179,9 +179,30 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) };
   // A failed attempt that carried no decision leaves nothing to apply: its outcome is known, its spend was recorded by the adapter.
   const answeredNothing = () => { if (execution && execution.stepOutcome !== 'unknown') execution.modelOutcome = 'acknowledged'; };
-  const decide = (asked: FcaModelInput) => decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(asked, signal)), { signal, recheck: checked,
-    delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
-    log: line => console.warn(`${line} task=${step.taskId}`) });
+  /**
+   * A request asked again after a wait of ten seconds or more is rebuilt from the body's present observation: the one built before
+   * the first attempt is minutes old by then, and a decision made on it would be discarded as stale (`bodyStale` below). The body
+   * settles and its revision is read again exactly as before the first request; what the decision is later checked against is that
+   * new revision. Nothing else of the request changes (the history, the tools and the messages are the ones the first attempt had).
+   */
+  const freshen = async (asked: FcaModelInput): Promise<FcaModelInput> => {
+    if (ports.body) await ports.body.guard(ports.body.revision());
+    for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
+    observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
+    bodyRevision = ports.body?.revision() ?? 0;
+    return { ...asked,
+      ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
+      ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}),
+      ...(ports.body ? { body: ports.body.context() } : {}),
+      ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
+  };
+  const decide = (asked: FcaModelInput) => {
+    let current = asked;
+    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(current, signal)), { signal, recheck: checked,
+      delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
+      refresh: async () => { current = await freshen(current); },
+      log: line => console.warn(`${line} task=${step.taskId}`) });
+  };
   const output = await decide(request).catch(async error => {
     // The very first decision of a transient task refused for its betas: no signed history exists, so it starts again in the legacy shape.
     if (!isTransientUnsupported(error) || !selection || selection.obsMode !== 'transient' || input.history.length) throw error;

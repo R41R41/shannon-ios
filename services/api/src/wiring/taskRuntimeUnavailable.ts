@@ -22,6 +22,18 @@ export function unavailableCooldownMs(cycles: number, random: () => number = Mat
   return Math.round(Math.min(BODY_COOLDOWN_CAP_MS, BODY_COOLDOWN_BASE_MS * 2 ** cycles) * (0.8 + random() * 0.4));
 }
 
+/** The longest wait before another round, whatever the provider asks for (the lease is renewed meanwhile; a stop ends the wait). */
+export const UNAVAILABLE_WAIT_CAP_MS = 300_000;
+
+/**
+ * The wait before the next round: the round's own cooldown, never shorter than the `retry-after` the provider sent with the failure that
+ * ended the retries (one longer than `decideWithRetry` waits for), and never longer than `UNAVAILABLE_WAIT_CAP_MS`. Before, a retry-after
+ * above a minute ended the round and the next one asked again after about twenty seconds, into the provider's own wait.
+ */
+export function unavailableWaitMs(cooldownMs: number, retryAfterMs: number | null): number {
+  return Math.min(UNAVAILABLE_WAIT_CAP_MS, Math.max(cooldownMs, retryAfterMs ?? 0));
+}
+
 /**
  * `continued`: the step is closed and the task runs again. `paused`: the Minecraft request is stopped, resumable. `failed`: the task
  * failed with its report.
@@ -42,7 +54,9 @@ export interface UnavailableParts {
   log(line: string): void;
 }
 
-function sleep(milliseconds: number, signal: AbortSignal): Promise<boolean> {
+/** True when the time passed; false when the step was stopped, including a stop that came before the wait began (it waits for nothing). */
+export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
   return new Promise<boolean>(resolve => {
     const stop = () => {
       clearTimeout(timer);
@@ -72,7 +86,7 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
   const cycles = typeof prior.fcaProviderRetries === 'number' ? prior.fcaProviderRetries : 0;
   const body = parts.isBodyTask(step.taskId);
   if (cycles >= (body ? BODY_UNAVAILABLE_CYCLES : OTHER_UNAVAILABLE_CYCLES)) return finish(parts, step, error, body, prior, cycles);
-  const milliseconds = body ? parts.bodyCooldownMs?.(cycles) ?? unavailableCooldownMs(cycles) : parts.otherCooldownMs();
+  const milliseconds = unavailableWaitMs(body ? parts.bodyCooldownMs?.(cycles) ?? unavailableCooldownMs(cycles) : parts.otherCooldownMs(), error.retryAfterMs);
   if (!await sleep(milliseconds, execution.signal) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return null;
   if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
   parts.log(`Shannon FCA step retried task=${step.taskId} code=${error.message}`);

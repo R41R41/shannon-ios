@@ -10,7 +10,7 @@ import { MinecraftControlStore } from '../../src/surfaces/minecraft/store/minecr
 import { bodyLeaseAttempt, bodyLeaseKnown, bodyLeaseValid } from '../../src/wiring/actionLeaseRules.js';
 import { configuredActionResourceProof, configuredRetainedResources } from '../../src/wiring/configuredActionResourceProof.js';
 import { createMinecraftBodyRecheck } from '../../src/wiring/minecraftBodyRecheckWiring.js';
-import { createFcaBodyRecovery, type FcaBodyRecoveryParts } from '../../src/wiring/fcaBodyRecovery.js';
+import { createFcaBodyRecovery, type FcaBodyRecovery, type FcaBodyRecoveryParts } from '../../src/wiring/fcaBodyRecovery.js';
 import { createTaskRuntimeWiring } from '../../src/wiring/taskRuntimeWiring.js';
 import { fcaMinecraftTools } from '../../src/wiring/fcaMinecraftTools.js';
 import { MINECRAFT_REQUEST_CRITERIA } from '../../src/wiring/fcaMinecraftRequests.js';
@@ -39,6 +39,7 @@ export interface WorldBody {
 }
 export interface WorldApi {
   control: MinecraftControl; recheck: ReturnType<typeof createMinecraftBodyRecheck>; driver: ReturnType<typeof createTaskRuntimeWiring>;
+  recovery: FcaBodyRecovery;
 }
 
 export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyRecoveryParts['limit'];
@@ -83,13 +84,14 @@ export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyReco
       leaseValid: (lease, taskId) => bodyLeaseValid(known(lease, taskId), lease, bodyResource, now()) });
     const recheck = createMinecraftBodyRecheck({ db, control, ownerScope: 'owner', deviceId: 'minebot', tickMilliseconds: 3_600_000, releaseMilliseconds: 400,
       actions: { reconcileResource: actions.reconcileResource } });
+    let recovery!: FcaBodyRecovery;
     const driver = createTaskRuntimeWiring({ db, actions, model, scopeKey: 'owner', ownerAlone: () => true, now, providerRetryDelayMs: () => 0,
       ...(budget ? { budget } : {}),
-      bodyRecovery: parts => createFcaBodyRecovery({ ...parts, passMs: 0, log: line => logs.push(line),
+      bodyRecovery: parts => (recovery = createFcaBodyRecovery({ ...parts, passMs: 0, log: line => logs.push(line),
         ...(options.windowMs ? { windowMs: options.windowMs } : {}), ...(options.limit ? { limit: options.limit } : {}),
-        body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null, release: step => recheck.releaseStep(step) } }),
+        body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null, release: step => recheck.releaseStep(step) } })),
       stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }) }) });
-    const api = { control, recheck, driver };
+    const api = { control, recheck, driver, recovery };
     apis.push(api);
     return api;
   }
@@ -160,6 +162,15 @@ export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyReco
     }
   }
 
+  /**
+   * The VM was stopped (a Spot eviction, a kill): nothing of the dying process runs, so it settles nothing and marks no task unknown.
+   * Its steps' leases are left to run out, its objects abandoned (they are closed with the world); only the body goes away.
+   */
+  function kill(body?: WorldBody) {
+    body?.stop();
+    db.prepare("UPDATE mind_actions SET lease_until=? WHERE state IN ('running','waiting','stopping')").run(new Date(clock - 1_000).toISOString());
+  }
+
   async function until(api: WorldApi, condition: () => boolean, label: string, limit = 600) {
     for (let i = 0; i < limit; i++) {
       if (condition()) return;
@@ -178,7 +189,7 @@ export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyReco
   const skillRows = () => db.prepare("SELECT id,phase,receipt_json FROM fca_body_operations WHERE json_extract(command_json,'$.kind')='skill'").all() as
     Array<{ id: string; phase: string; receipt_json: string | null }>;
 
-  return { db, store, actions, logs, modelInputs, script, startApi, connectBody, createTask, crash, until, phase, events, hangs, moves, skillRows, task,
+  return { db, store, actions, logs, modelInputs, script, startApi, connectBody, createTask, crash, kill, until, phase, events, hangs, moves, skillRows, task,
     advance(milliseconds: number) { clock += milliseconds; }, now, clockMs: () => clock,
     /** Time that passes while the API waits (a jump is taken for a stall of its thread and not counted: `MinecraftControl.receiptOf`). */
     async elapse(milliseconds: number) {

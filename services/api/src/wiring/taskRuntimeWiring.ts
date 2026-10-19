@@ -157,7 +157,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
       if (!budgeted.ok) {
         // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to settleFailedStep.
-        await stopForBudget(admitted, budgeted.report);
+        await stopForBudget(admitted, budgeted.report, budgeted.code === 'task_estimates');
         await flushReceipts();
         return;
       }
@@ -271,18 +271,22 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * A task at its cap, or an own-time task without budget (E3): failed with its report in one commit. A task with unfinished
    * children cannot fail while they run, so it and its children are stopped instead and this step closes as stopped. Any
    * refusal is thrown to the caller, which closes the step through settleFailedStep.
+   *
+   * `pausing` (only unconfirmed charges would take the task over its cap, `fcaBudgetWiring.ts`): the task is never failed. It is stopped
+   * (resumable by the owner) with the report as its summary, whether or not it has children.
    */
-  async function stopForBudget(step: TaskStep, report: string): Promise<void> {
-    runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
+  async function stopForBudget(step: TaskStep, report: string, pausing = false): Promise<void> {
+    if (!pausing) runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
     const task = runtime.get(scopeKey, step.taskId);
     const open = (id: string) => !['completed', 'failed', 'stopped', undefined].includes(runtime.get(scopeKey, id)?.phase);
-    if (task?.childIds.some(open)) {
-      const stopped = runtime.stop(scopeKey, step.taskId, 'fca_budget_capped');
+    if (pausing || task?.childIds.some(open)) {
+      const stopped = runtime.stop(scopeKey, step.taskId, pausing ? 'fca_budget_estimates' : 'fca_budget_capped');
       for (const item of stopped) if (item.id !== step.taskId) running.get(item.id)?.controller.abort();
       for (const live of runtime.activeSteps(scopeKey)) {
         if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());
       }
       if (!runtime.recordStoppedStep(step)) throw new Error('FCA_BUDGET_STOP_UNRECORDED');
+      if (pausing) unavailable.note(step.taskId, report);
       return;
     }
     if (!runtime.commitStep(step, { disposition: 'fail', summary: report, history: [] })) throw new Error('FCA_BUDGET_COMMIT_REFUSED');
