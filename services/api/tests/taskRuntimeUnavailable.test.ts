@@ -17,7 +17,7 @@ function fixture(options: { body?: boolean; cooldown?: number; phase?: string } 
     runtime: { get: () => ({ phase: options.phase ?? 'executing' }), commitStep: (_step: unknown, commit: unknown) => { commits.push(commit); return {}; },
       stop: () => [] } as never,
     scopeKey: 'owner', isBodyTask: () => options.body ?? true, otherCooldownMs: () => options.cooldown ?? 4_000,
-    bodyCooldownMs: () => options.cooldown ?? 20_000, fail: () => true, note: () => undefined, log: () => undefined,
+    bodyCooldownMs: () => options.cooldown ?? 20_000, fail: () => true, note: () => undefined, pauseNotice: () => undefined, log: () => undefined,
   };
   const step = { id: 's1', taskId: 'task-1', scopeKey: 'owner', snapshot: { checkpoint: null } } as never;
   const execution = (signal: AbortSignal) => ({ signal, stepOutcome: undefined }) as never;

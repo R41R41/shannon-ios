@@ -67,7 +67,8 @@ export class TaskBodyRecoveryStore {
   /** The non-terminal tasks of the scope that owe a notice. */
   owingTaskIds(scopeKey: string): string[] {
     return this.db.prepare(`SELECT t.task_id FROM agent_tasks t JOIN fca_task_checkpoints c ON c.task_id=t.task_id
-      WHERE t.scope_key=? AND t.status NOT IN ('completed','failed','cancelled') AND c.checkpoint_json LIKE '%${OWED_KEY}%'`).all(scopeKey)
+      WHERE t.scope_key=? AND t.status NOT IN ('completed','failed','cancelled')
+      AND CASE WHEN json_valid(c.checkpoint_json) THEN json_array_length(c.checkpoint_json,'$.${OWED_KEY}') ELSE 0 END > 0`).all(scopeKey)
       .map(row => String(row.task_id));
   }
 

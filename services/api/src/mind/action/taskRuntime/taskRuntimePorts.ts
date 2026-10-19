@@ -80,6 +80,11 @@ export interface TaskRuntimeOptions {
    */
   holdUnknown?(task: TaskRecord): boolean;
   /**
+   * Whether a task's summary is one a pause wrote ("paused, can be resumed"): `resume` clears it, and so does the first commit of a task
+   * that is running again, so that a task that goes on does not keep saying it is paused. Absent: no summary is cleared.
+   */
+  pausedSummary?(summary: string): boolean;
+  /**
    * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }` inherits only the
    * asking conversation's sources, and step records store their sources by reference (`infra/sqlite/fcaProvenanceSets.ts`).
    * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are read either way.
@@ -98,6 +103,12 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   placeContext?(scopeKey: string, taskId: string): import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext | undefined;
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   recordProgress?(step: TaskStep, event: TaskProgressEvent): boolean;
+  /**
+   * The owner-visible report that the runtime paused a task by itself (resumable, not failed), written once per `key` (a step or a
+   * pause): false when there is no such task or this report is already there. It needs no step, so it also serves a pause made while
+   * the task is stopping or has no step. Resuming the task takes the report away again.
+   */
+  recordPauseNotice?(scopeKey: string, taskId: string, key: string, text: string): boolean;
   /** Writes the spoken form of the task's current report; false once that report was replaced or already has one. */
   /** `heard`: the report was said in the voice turn that asked for it (`TaskProgressStore.hear`), so it is never said again (its card stays). */
   recordSpokenReport?(scopeKey: string, taskId: string, reportId: string, spoken: string, heard?: true): boolean;

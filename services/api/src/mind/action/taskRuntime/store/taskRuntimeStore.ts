@@ -18,10 +18,7 @@ import { TaskSourceStore } from './taskSourceStore.js';
 import { TaskHistoryStore } from './taskHistoryStore.js';
 import { TaskProgressStore } from './taskProgressStore.js';
 import type { TaskProgressEvent } from '../taskProgressPorts.js';
-interface Checkpoint {
-  checkpoint_json: string | null; wait_reason: string | null; stop_requested: number;
-  step_id: string | null; lease_json: string | null; last_admission: number; observed_messages_json: string | null;
-}
+import type { Checkpoint } from './taskCheckpointRow.js';
 const terminal = (task: TaskRecord): boolean => ['completed', 'failed', 'cancelled'].includes(task.status);
 /** Subordinate inbox/history/checkpoints. The injected authority alone owns task status and its event sequence. */
 export class SQLiteTaskRuntimeStore implements TaskRuntime {
@@ -31,6 +28,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   progress(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.read(id) : null; }
   recordSpokenReport(s: string, id: string, r: string, t: string, heard?: true) { return this.progressStore[heard ? 'hear' : 'speak'](s, id, r, t); }
   recordProgress(step: TaskStep, event: TaskProgressEvent) { return this.progressStore.record(step, event, () => this.matches(step) && this.get(step.scopeKey, step.taskId)?.phase === 'executing' && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())); }
+  recordPauseNotice(scope: string, id: string, key: string, text: string) { return this.progressStore.pauseNotice(scope, id, key, text); }
   admitSleep(scope: string, jobId: string) {
     const root = this.authority.root(scope);
     if (root && this.options.sleepTicket?.(scope, jobId)) this.authority.transaction(() => this.recovery.revive(root, 'sleep_admission'));
@@ -327,7 +325,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       this.histories.appendStep(step, history, commit.disposition, this.now(), status);
       this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=? WHERE task_id=?')
         .run(waiting ? awaitingSource && commit.disposition === 'complete' ? 'source' : 'message' : null, step.taskId);
-      this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: task.origin === 'maintenance' ? this.maintenance.summary(task) : commit.summary },
+      this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: task.origin === 'maintenance' ? this.maintenance.summary(task) : commit.summary ?? (this.options.pausedSummary?.(task.summary) ? '' : undefined) },
         { stepId: step.id, actionId: step.lease.id, generation: step.lease.generation, disposition: commit.disposition });
       if (terminal({ ...task, status }) && task.origin === 'maintenance') this.maintenance.report(task, status, step.id);
       else if (terminal({ ...task, status }) && task.parentId && task.origin !== 'own_time') {
@@ -407,7 +405,9 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       if (!task || task.phase !== 'stopped' || (task.kind !== 'conversation' && this.sources.hasUnboundOrigin(taskId)) || (task.origin === 'maintenance' && !this.maintenance.resumable(scopeKey, taskId))) return null;
       if (this.ancestors(task).some(parent => ['stopped', 'stopping', 'unknown'].includes(this.view(parent).phase))) return null;
       this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=NULL WHERE task_id=?').run(taskId);
-      return this.view(this.authority.event(scopeKey, taskId, 'fca_resumed', this.now(), { status: 'queued', pauseReason: null }));
+      this.progressStore.clearPauseNotice(taskId); // what a pause said (its report, its summary) is not what a task that runs again says
+      const summary = this.options.pausedSummary?.(task.summary) ? { summary: '' } : {};
+      return this.view(this.authority.event(scopeKey, taskId, 'fca_resumed', this.now(), { status: 'queued', pauseReason: null, ...summary }));
     });
   }
   activeSteps(scopeKey: string): Array<{ taskId: string; lease: ActionLease }> {
