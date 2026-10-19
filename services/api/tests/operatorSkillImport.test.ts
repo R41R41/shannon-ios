@@ -130,7 +130,7 @@ describe('skills import over the operator socket', () => {
       const env = { SHANNON_DATABASE_PATH: database, SHANNON_OPERATOR: 'ops' };
       expect(await runOperatorCli(['skills', 'import', 'dry-run', '--pack', 'legacy-minecraft', '--revision', 'draft-1'], env, io, deps)).toBe(0);
       const planHash = lines.find(line => line.startsWith('planHash: '))!.slice(10);
-      expect(lines).toEqual(expect.arrayContaining([expect.stringMatching(/^ {2}skill: mc-early-toolchain [a-f0-9]{64}$/u), 'capacity: {"used":0,"added":4,"limit":25}']));
+      expect(lines).toEqual(expect.arrayContaining([expect.stringMatching(/^ {2}skill: mc-early-toolchain [a-f0-9]{64}$/u), 'capacity: {"used":0,"added":4,"limit":32}']));
       expect(lines.join('\n')).not.toContain('## 手順');
       lines.length = 0;
       expect(await runOperatorCli(['skills', 'import', 'apply', '--pack', 'legacy-minecraft', '--revision', 'draft-1', '--plan-hash', planHash,

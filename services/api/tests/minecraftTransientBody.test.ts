@@ -34,7 +34,8 @@ describe('phase facts and the pace ledger', () => {
   it('states tier, bed, cooked food, food items or none, village, biome and surface', () => {
     const facts = minecraftPhaseFacts(frame({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, biome: '', rememberedPlaces: { 村: '1,2,3' },
       inventory: [{ name: 'stone_pickaxe', count: 1 }, { name: 'white_bed', count: 1 }, { name: 'cooked_beef', count: 4 }, { name: 'bread', count: 1 }] }), 12);
-    expect(facts).toMatchObject({ tier: 3, hasBed: true, cookedFood: 5, foodItems: ['cooked_beef×4', 'bread×1'], villageKnown: true, biome: null, onSurface: true, elapsedMinutes: 12 });
+    // Five things to eat are short of the six stage 3 wants beside the bed (2026-10-19): the tier is still 2.
+    expect(facts).toMatchObject({ tier: 2, hasBed: true, cookedFood: 5, foodItems: ['cooked_beef×4', 'bread×1'], villageKnown: true, biome: null, onSurface: true, elapsedMinutes: 12 });
     expect(minecraftPhaseFacts(frame({ dimension: 'overworld', position: { x: 0, y: 20, z: 0 }, biome: 'plains', inventory: [] }), 1))
       .toMatchObject({ tier: 1, hasBed: false, noFood: true, villageKnown: false, biome: 'plains', onSurface: false });
   });

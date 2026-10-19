@@ -29,17 +29,17 @@ function world() {
   return { database, memory, importer, apply };
 }
 
-describe('skill capacity 25 (owner decision of 2026-10-14)', () => {
-  it('lists up to 25 skills in a 26-line index of at most 80 characters', () => {
-    expect(SKILL_CAPACITY).toBe(25);
-    expect(SKILL_INDEX_LINES).toBe(26);
+describe('skill capacity 32 (owner decision of 2026-10-14: 25; legacy-minecraft draft-6 of 2026-10-19: 32)', () => {
+  it('lists up to 32 skills in a 33-line index of at most 80 characters', () => {
+    expect(SKILL_CAPACITY).toBe(32);
+    expect(SKILL_INDEX_LINES).toBe(33);
     const { memory } = world();
     for (let i = 0; i < SKILL_CAPACITY; i++) {
       const created = memory.create('owner', { draft: { name: `skill-${i}`, description: `用途${i}の時`, steps: '1. 確かめる', aids: '- なし', references: '- 運用作成' }, evidence: [] }, pass, at);
       expect(created).toHaveProperty('skillId');
     }
     const lines = memory.index('owner').split('\n');
-    expect(lines[0]).toBe(`${SKILL_INDEX_HEADER} 25/25（目次。中身は skill_read で開く）]`);
+    expect(lines[0]).toBe(`${SKILL_INDEX_HEADER} 32/32（目次。中身は skill_read で開く）]`);
     expect(lines).toHaveLength(SKILL_INDEX_LINES);
     expect(lines.every(line => [...line].length <= SKILL_INDEX_WIDTH)).toBe(true);
     expect(memory.create('owner', { draft: { name: 'one-more', description: '余分な時', steps: '1. 確かめる', aids: '- なし', references: '- 運用作成' }, evidence: [] }, pass, at)).toEqual({ rejected: 'over_capacity' });

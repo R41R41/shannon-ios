@@ -35,11 +35,12 @@ describe('milestones', () => {
 });
 
 describe('stage', () => {
-  it('is 1 without a stone pickaxe, 2 with one and no bed, 3 with a bed, 4 with an iron pickaxe', () => {
+  it('is 1 without a stone pickaxe, 2 with one and no bed or food, 3 with a bed and food, 4 with an iron pickaxe', () => {
     expect(minecraftStage(counts([]))).toBe(1);
     expect(minecraftStage(counts(['wooden_pickaxe×1', 'white_bed×1']))).toBe(1);
     expect(minecraftStage(counts(['stone_pickaxe×1']))).toBe(2);
-    expect(minecraftStage(counts(['stone_pickaxe×1', 'white_bed×1']))).toBe(3);
+    expect(minecraftStage(counts(['stone_pickaxe×1', 'white_bed×1']))).toBe(2);
+    expect(minecraftStage(counts(['stone_pickaxe×1', 'white_bed×1', 'cooked_beef×6']))).toBe(3);
     expect(minecraftStage(counts(['iron_pickaxe×1']))).toBe(4);
     expect(minecraftStage(counts(['iron_pickaxe×1', 'white_bed×1']))).toBe(4);
   });
