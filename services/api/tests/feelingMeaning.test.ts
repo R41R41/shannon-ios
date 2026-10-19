@@ -46,7 +46,7 @@ describe('the meaning questions (feeling_meaning.v1)', () => {
     const { jev, words } = await chat(true, { deliberate: 0.9, teasing: 0.05 });
     expect(Object.keys(jev.questions[0]!)).toContain('deliberate');
     expect((jev.states[0]!.shannon_feeling as Record<string, unknown>).read_meaning).toBe(true);
-    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v1', 'feeling_meaning.v1']);
+    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v2', 'feeling_meaning.v1']);
     expect(words.at(-1)!.meaning).toEqual({ deliberate: 0.9, teasing: 0.05 });
     expect(JSON.stringify(words)).not.toContain('ポンコツ');
   });
@@ -54,14 +54,14 @@ describe('the meaning questions (feeling_meaning.v1)', () => {
   it('are not asked with the shadow alone (review M4: SHANNON_CORE_AFFECT changes no Jev question)', async () => {
     const { jev } = await chat(true, { deliberate: 0.9, teasing: 0.05 }, false);
     expect(Object.keys(jev.questions[0]!)).toEqual(['stance', 'intensity', 'drawer']);
-    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v1']);
+    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v2']);
   });
 
   it('are not asked without the shadow: the same questions, state and set as stage 1', async () => {
     const { jev, words } = await chat(false, { deliberate: 0.9, teasing: 0.05 });
     expect(Object.keys(jev.questions[0]!)).toEqual(['stance', 'intensity', 'drawer']);
     expect('read_meaning' in (jev.states[0]!.shannon_feeling as Record<string, unknown>)).toBe(false);
-    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v1']);
+    expect(jev.traces[0]!.answers.qv).toEqual(['feeling_turn.v2']);
     expect(words.at(-1)!.meaning).toBeUndefined();
   });
 
@@ -74,7 +74,7 @@ describe('the meaning questions (feeling_meaning.v1)', () => {
     expect(await blameAfter({ deliberate: 0.95, teasing: 0.05 })).toBeGreaterThan(await blameAfter({ deliberate: 0.1, teasing: 0.95 }));
   });
 
-  it('ride on the voice router\'s call too, traced as voice_route.v5', async () => {
+  it('ride on the voice router\'s call too, traced as voice_route.v7', async () => {
     const asked: Record<string, unknown>[] = [];
     const answers = { ...Object.fromEntries(VOICE_SKILLS.map(skill => [`skill__${skill}`, { type: 'noul', noul: 0.1 }])),
       reply_required: { noul: 0.9 }, solution_wanted: { noul: 0.2 }, conversation_class: { choice: 'direct' }, affect: { choice: 'annoyed' },
@@ -92,6 +92,6 @@ describe('the meaning questions (feeling_meaning.v1)', () => {
     const decided = await gateway.decide({ ...input, shannonFeeling: { audience: 'owner_alone', register_hint: 'normal', read_meaning: true } });
     expect(Object.keys(asked[0]!.questions as object)).toEqual(expect.arrayContaining(['feeling_deliberate', 'feeling_teasing']));
     expect(decided.feeling?.meaning).toEqual({ deliberate: 0.8, teasing: 0.3 });
-    expect(drafts.map(draft => draft.answers.qv)).toEqual([['voice_route.v5']]);
+    expect(drafts.map(draft => draft.answers.qv)).toEqual([['voice_route.v7']]);
   });
 });

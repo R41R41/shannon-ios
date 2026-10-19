@@ -255,7 +255,7 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_FEELING_MEANING', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CORE_AFFECT', 'SHANNON_FEELING_TURN'],
-    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v5).',
+    doc: 'ADR-0013 D3.1: the feeling turn\'s Jev call also asks whether his words were meant or teasing (feeling_meaning.v1, voice_route.v7).',
   },
   {
     name: 'SHANNON_RELATIONSHIP_LEDGER', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_FEELING_EVENTS'],

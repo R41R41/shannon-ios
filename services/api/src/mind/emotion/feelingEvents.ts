@@ -1,7 +1,7 @@
 import {
   OWNER_PERSON_KEY, drawersIn, episodeLine, replyFacts, foldEpisodeLedger, innerNoteDay, ledgerFacts, memoryControlFor, repetitionFacts,
-  repetitionLine, watchRepetition,
-  type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type RepetitionWatch,
+  greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
+  type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type PhraseWatch, type RepetitionWatch,
 } from '@shannon/cognition';
 import { observeSync } from '../../infra/observer/observerContext.js';
 import type { FeelingDays } from './feelingDays.js';
@@ -32,6 +32,8 @@ export type RepetitionSeed = (scopeKey: string, since: string, at: string, snaps
 export interface FeelingLines {
   ledger: EpisodeLedger;
   watch: RepetitionWatch;
+  /** The day's phrases of her words in his Talk (the owner alone; null otherwise or with nothing read). */
+  phrases?: PhraseWatch | null;
   ledgerLine: string;
   repetitionLine: string;
   /** Closed numbers for the chooser and the Observer. */
@@ -121,15 +123,22 @@ export class FeelingEvents {
     try {
       return observeSync('emotion', { phase: 'feeling.ledger', audience: key.audience, owner: key.personKey === OWNER_PERSON_KEY }, () => {
         const ledger = foldEpisodeLedger(this.today(scopeKey, at, snapshot), key);
-        const replies = this.todaysReplies(scopeKey, key, at, snapshot);
+        const { replies, texts } = this.todaysReplies(scopeKey, key, at, snapshot);
         const watch = watchRepetition(replies, key.audience);
+        // Owner 2026-10-19: the day's openers, endings and phrases of her words in his Talk (read now, never kept).
+        const phrases = texts.length ? watchPhrases(texts) : null;
+        const said = phrases ? phraseLine(phrases) : '';
+        const counted: Record<string, number> = phrases
+          ? { phrases_repeated: phrases.openers.length + phrases.endings.length + phrases.phrases.length } : {};
         // Stage 2 (`SHANNON_REPLY_CHECK`): what the check found in her last reply goes to the next feeling turn (absent without it).
         const last = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0]?.facts.checkFlags;
         const checked: Record<string, string> = last?.length ? { last_check: last.join('|') } : {};
         const carried = this.options.days?.carried(scopeKey, key, at, snapshot, words, channel) ?? { lines: [], facts: {} };
-        return { ledger, watch, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone), repetitionLine: repetitionLine(watch),
-          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...checked, ...carried.facts }, carriedLines: carried.lines,
-          carriedTouchLines: carried.touchLines ?? carried.lines };
+        const stances = stanceBalance(replies);
+        return { ledger, watch, phrases, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone),
+          repetitionLine: [repetitionLine(watch), said, key.audience === 'owner_alone' ? greetingLine(words) : ''].filter(Boolean).join('\n'),
+          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts },
+          carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines };
       }, lines => lines.facts);
     } catch (error) {
       this.report(error);
@@ -142,16 +151,17 @@ export class FeelingEvents {
    * 「ライ氏、」 from the first turn). The owner's are seeded from today's replies of his Talk that are not events yet (before the switch, or
    * from another path), so a watch is never empty in the morning; nothing is seeded for anyone else.
    */
-  private todaysReplies(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot): FeelingEvent[] {
+  private todaysReplies(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot): { replies: FeelingEvent[]; texts: string[] } {
     const since = new Date(Date.parse(innerNoteDay(at, this.options.timeZone).endsAt) - DAY_MILLISECONDS).toISOString();
     const events = this.options.store.ownReplies(scopeKey, key.audience, 16)
       .filter(event => event.occurredAt >= since && remembered(snapshot, event.sourceId));
-    if (key.personKey !== OWNER_PERSON_KEY || !this.options.seed) return events;
+    if (key.personKey !== OWNER_PERSON_KEY || key.audience !== 'owner_alone' || !this.options.seed) return { replies: events, texts: [] };
     const known = new Set(events.map(event => event.sourceId));
-    const seeded = this.options.seed(scopeKey, since, at, snapshot).filter(reply => !reply.sourceId || !known.has(reply.sourceId))
+    const talk = this.options.seed(scopeKey, since, at, snapshot);
+    const seeded = talk.filter(reply => !reply.sourceId || !known.has(reply.sourceId))
       .map((reply, index): FeelingEvent => ({ ...key, id: `seed:${index}`, kind: 'own_reply', identity: 'registered', channel: 'text',
         sourceId: reply.sourceId ?? null, facts: replyFacts(reply.text, drawersIn), occurredAt: reply.at }));
-    return [...events, ...seeded];
+    return { replies: [...events, ...seeded], texts: talk.map(reply => reply.text) };
   }
 
   /**

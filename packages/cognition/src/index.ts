@@ -382,7 +382,7 @@ export {
 } from './innerNote.js';
 export {
   ADDRESS_WHEN_NATURAL, FALSEHOOD_LINE, INNER_NOTE_ADDRESS_LINE, INNER_NOTE_EXPRESSIVE_LINE, INNER_NOTE_HONESTY_LINE, LIGHT_SULKING_LINE,
-  apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt, teasingIn, touchAgreementIn, touchConsentIn, type TouchConsent,
+  apologyIn, goodnightIn, innerNoteExpressiveEmotionPrompt, teasingIn, tenderIn, touchAgreementIn, touchConsentIn, warmWordsIn, type TouchConsent,
 } from './innerNoteWords.js';
 export {
   INNER_NOTE_REFLECTION_SCHEMA, innerNoteReflectionInput, innerNoteReflectionInstructions, parsedInnerNoteReflection,

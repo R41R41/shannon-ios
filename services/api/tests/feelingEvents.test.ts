@@ -310,7 +310,7 @@ describe('voice: the feeling turn rides on the router\'s one Jev call', () => {
   });
   const input = { scopeKey: 'owner', transcript: '怒って見せて', participantMode: 'owner' as const, requestedLocation: false, hasFreshLocation: false };
 
-  it('asks the same questions as before without the state, and the three feeling questions with it (voice_route.v4)', async () => {
+  it('asks the same questions as before without the state, and the three feeling questions with it (voice_route.v6)', async () => {
     const asked: Record<string, unknown>[] = [];
     const fetcher = (async (_url: unknown, init?: RequestInit) => {
       asked.push(JSON.parse(String(init?.body)));
@@ -327,7 +327,7 @@ describe('voice: the feeling turn rides on the router\'s one Jev call', () => {
     expect(Object.keys((asked[1]!.questions as object))).toEqual([...Object.keys(asked[0]!.questions as object), 'feeling_stance', 'feeling_intensity', 'feeling_drawer']);
     expect((asked[1]!.state as Record<string, unknown>).shannon_feeling).toBeDefined();
     expect(decided.feeling).toEqual({ stance: 'not_play_along', intensity: 'moderate', drawer: 'creator_joke', register: 'normal', source: 'jev' });
-    expect(drafts.map(draft => draft.answers.qv)).toEqual([['voice_route.v2'], ['voice_route.v4']]);
+    expect(drafts.map(draft => draft.answers.qv)).toEqual([['voice_route.v2'], ['voice_route.v6']]);
     expect(drafts[1]!.answers.feelingStance).toBe('not_play_along');
   });
 

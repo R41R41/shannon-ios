@@ -116,7 +116,7 @@ export interface VoiceDecisionInput {
   shannonInner?: string;
   /**
    * Syzygy ADR-0013 stage 1 (`SHANNON_FEELING_TURN`): the feeling turn's state (closed numbers of the day's ledger and the watch,
-   * the audience). Present, the router also asks the feeling turn's three questions (`voice_route.v4`) and answers `feeling`.
+   * the audience). Present, the router also asks the feeling turn's three questions (`voice_route.v6`) and answers `feeling`.
    */
   shannonFeeling?: Readonly<Record<string, unknown>>;
 }

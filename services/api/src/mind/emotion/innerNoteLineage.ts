@@ -1,5 +1,5 @@
 import {
-  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, touchConsentIn, visibleMemoryText,
+  apologyIn, goodnightIn, isMemoryEvidenceVisible, soothingIn, teasingIn, touchConsentIn, visibleMemoryText, warmWordsIn,
   type CompanionStateSnapshot, type InnerNoteEvent,
 } from '@shannon/cognition';
 import type { InnerNoteTurn } from './innerNotePorts.js';
@@ -135,6 +135,8 @@ export function turnEvent(turn: InnerNoteTurn, context: { recentTouch?: boolean 
   if (soothing) return { event: { kind: soothing, ...base }, goodnight };
   if (teasingIn(turn.userMessage)) return { event: { kind: 'teasing', ...base }, goodnight };
   if (consent) return { event: { kind: 'consent', ...base }, goodnight };
+  // Owner 2026-10-19: a warm word to her (「かわいいね」「やさしいね、いつもありがとう」) is a kind thing that happened, as an exact thanks is.
+  if (warmWordsIn(turn.userMessage)) return { event: { kind: 'kindness', ...base }, goodnight };
   const feeling = turn.feeling;
   if (feeling && feeling.kind !== 'neutral' && feeling.intensity >= 0.6) return { event: { kind: 'strong_reply', ...base, feeling }, goodnight };
   return { event: null, goodnight };

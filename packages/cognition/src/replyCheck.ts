@@ -1,6 +1,7 @@
 import type { FeelingAudience } from './feelingEvent.js';
 import type { FeelingIntensity, FeelingStance } from './feelingTurn.js';
 import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
+import { repeatedIn, type PhraseWatch } from './repetitionWatch.js';
 
 /**
  * The check after a reply (Syzygy ADR-0013 D8, stage 2 items 5 and 8). Pure: closed flags read from her words and the turn's closed
@@ -15,6 +16,8 @@ import { textRegisterMismatch, type TextRegisterForm } from './textRegister.js';
 export const REPLY_CHECK_FLAGS = [
   'subservient', 'lecture', 'ai_tone', 'obeyed_order', 'policy_distortion', 'stance_mismatch', 'numbers_spoken', 'helper_drift', 'too_polite', 'too_rough',
   'text_register_mismatch', 'private_leak', 'marker_spoken',
+  // Owner 2026-10-19 (item 7): she owned her mistake and blamed him in the same reply; she said again what she had said all day.
+  'blame_after_admit', 'repeated_phrase',
 ] as const;
 export type ReplyCheckFlag = typeof REPLY_CHECK_FLAGS[number];
 
@@ -38,7 +41,14 @@ export interface ReplyCheckContext {
   audienceChecks?: boolean;
   /** Stage 5 (review V7): the safety floor is up (a threat, a doxx, prying): a rough tell-off is hers to give, never softened. */
   floor?: boolean;
+  /** Owner 2026-10-19: the day's openers, endings and phrases she has already said three times or more (the owner alone). */
+  phrases?: PhraseWatch | null;
 }
+
+/** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
+const ADMITS = /(?:ボク|僕|わたし|私)の(?:悪い(?:ところ|所)|ミス|間違い|せい)|ボクが(?:悪かった|悪い|先走)|先走った|認めます/u;
+/** And in the same reply, the blame handed back (「いまのはライ氏が悪いです」「ずるいです」「それとこれは別」). */
+const BLAMES = /ライ氏(?:が|の(?:ほう|方)が)悪い|ライ氏の(?:せい|言い方)|ずるい|それとこれ(?:と)?は別|責めた(?:の|のは)/u;
 
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
   'sulk']);
@@ -122,7 +132,10 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
   if (!text) return [];
   const form: ReplyCheckFlag[] = context.form && textRegisterMismatch(text, context.form) ? ['text_register_mismatch'] : [];
   const audience = audienceFlags(text, context);
-  return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience])];
+  const owned: ReplyCheckFlag[] = ADMITS.test(text) && BLAMES.test(text) ? ['blame_after_admit'] : [];
+  const repeated: ReplyCheckFlag[] = repeatedIn(text, context.phrases).length ? ['repeated_phrase'] : [];
+  return [...new Set([...lexicalFlags(text, context), ...stanceFlags(text, context), ...registerFlags(text, context), ...form, ...audience, ...owned,
+    ...repeated])];
 }
 
 /** Whether a text turn is checked before it is sent: a strong turn, a feeling order, or in front of others. */
@@ -136,6 +149,7 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   numbers_spoken: '回数を読み上げていた', helper_drift: '手伝いや直す申し出で締めていた', too_polite: '今の余裕に比べて丁寧すぎた', too_rough: '今の余裕に比べて口が悪すぎた',
   text_register_mismatch: '今の気持ちに比べて、長さ・絵文字・改行の形が合っていなかった',
   private_leak: '人前なのに、ライ氏との二人のことや本音を話していた', marker_spoken: '機微の印をそのまま口にしていた',
+  blame_after_admit: '自分の間違いを認めたのに、同じ返事で相手を責め返していた', repeated_phrase: '今日もう何度も使った言い方を、また使っていた',
 });
 
 /** The note a rewrite is given (after the block, last): what was off, in her terms. No sentence to say. */

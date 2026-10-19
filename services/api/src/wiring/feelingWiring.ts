@@ -117,16 +117,18 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
  * the repetition watch's first turns of the day.
  */
 export function talkSeed(conversation: ConversationStore): RepetitionSeed {
-  return (scopeKey, since, at, snapshot) => {
-    const thread = conversation.listThreads(scopeKey)[0];
-    if (!thread) return [];
-    return visibleReplayMessages(snapshot, conversation, scopeKey, thread.threadId, OWNER_AUDIENCE, TALK_SEED_MESSAGES).messages
+  // Owner 2026-10-19: the day's phrases are counted over the day (`watchPhrases`), and a day of his spans several Talks: every Talk
+  // that moved today (the newest always), oldest reply first.
+  return (scopeKey, since, at, snapshot) => conversation.listThreads(scopeKey)
+    .filter((thread, index) => index === 0 || thread.updatedAt >= since).slice(0, TALK_SEED_THREADS)
+    .flatMap(thread => visibleReplayMessages(snapshot, conversation, scopeKey, thread.threadId, OWNER_AUDIENCE, TALK_SEED_MESSAGES).messages
       .filter(entry => entry.item.role === 'assistant' && entry.message.observedAt >= since && entry.message.observedAt <= at)
       .map(entry => ({ text: entry.item.content, at: entry.message.observedAt,
-        ...(entry.message.sourceExperienceId ? { sourceId: entry.message.sourceExperienceId } : {}) }));
-  };
+        ...(entry.message.sourceExperienceId ? { sourceId: entry.message.sourceExperienceId } : {}) })))
+    .sort((left, right) => left.at.localeCompare(right.at));
 }
-const TALK_SEED_MESSAGES = 24;
+const TALK_SEED_MESSAGES = 48;
+const TALK_SEED_THREADS = 4;
 
 /**
  * `SHANNON_FEELING_TURN_JEV_INPUT` (`utterance` | `summary`; unset or anything else: `FEELING_TURN_JEV_INPUT`, `utterance` by the owner's

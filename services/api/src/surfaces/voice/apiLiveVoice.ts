@@ -203,7 +203,7 @@ async function completeLiveVoiceDelegation(
     context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
     ...innerNoteVoice.route(dependencies.innerNote, scopeKey, alone && !temporaryGuest, occurredAt), // ADR-0012: voice_route.v3 sees her.
-    ...feelingVoice.route(feelingTurn, transcript, routingState), // ADR-0013: voice_route.v4 also asks her stance (no extra round trip).
+    ...feelingVoice.route(feelingTurn, transcript, routingState), // ADR-0013: voice_route.v6 also asks her stance (no extra round trip).
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined, ...dependencies.looks?.routing,
   };
   let decision = await timing.measure('route', () => bounded('route_timeout', router.decide(routeInput), () => localRules.decide(routeInput)));

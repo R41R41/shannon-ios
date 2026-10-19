@@ -40,7 +40,7 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
       const trace = voiceRouteTrace(this.inner, input, decision, probe, Math.max(0, clock() - started), at, this.options.usdPerJevCall);
       const set = this.options.questionSet;
       // Syzygy ADR-0012: a turn that gave Jev her inner line asked `voice_route.v3`.
-      // Syzygy ADR-0013: a turn that also asked the feeling turn asked `voice_route.v4`.
+      // Syzygy ADR-0013: a turn that also asked the feeling turn asked `voice_route.v6`.
       const feeling = input.shannonFeeling?.read_meaning === true ? JEV_QUESTION_SETS.voiceRouteFeelingMeaning : JEV_QUESTION_SETS.voiceRouteFeeling;
       const id = set && input.shannonFeeling ? feeling : set && input.shannonInner ? JEV_QUESTION_SETS.voiceRouteInner : set?.id;
       this.write(input.scopeKey, set ? { ...trace, answers: { ...trace.answers, qv: [id!], ql: set.language } } : trace);

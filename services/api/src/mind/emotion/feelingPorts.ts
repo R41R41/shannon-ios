@@ -160,8 +160,9 @@ function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | null {
     lineBreaks: handle.textRegister.lineBreaks } } : {};
   const ledger = handle.lines?.ledger;
   const counted = Boolean(ledger && (ledger.touches > 0 || ledger.apologies > 0 || ledger.orders > 0));
+  const phrases = handle.lines?.phrases ? { phrases: handle.lines.phrases } : {}; // Owner 2026-10-19: what she already said 3 times today.
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
-    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}) };
+    turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
@@ -333,7 +334,7 @@ export const feelingText = Object.freeze({
   },
 });
 
-/** The voice turn's hooks (`apiLiveVoice.ts`). The feeling questions ride on the router's Jev call (`voice_route.v4`). */
+/** The voice turn's hooks (`apiLiveVoice.ts`). The feeling questions ride on the router's Jev call (`voice_route.v6`). */
 export const feelingVoice = Object.freeze({
   start: (port: FeelingPort | null | undefined, input: { scopeKey: string; alone: boolean; guest: boolean; threadId: string; transcript: string; at: string;
     snapshot: CompanionStateSnapshot }): FeelingTurnHandle | null => {

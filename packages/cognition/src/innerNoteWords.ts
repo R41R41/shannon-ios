@@ -18,6 +18,8 @@ const SORRY = '(?:ごめん(?:なさい|ね|な)?|ゴメン|すまん|すまな�
 const FAULT = /(?:出来心|言いすぎ|言い過ぎ|やりすぎ|やり過ぎ|悪かった|わざと|嫌だった|いやだった|そんなつもり|驚かせ|怒らせ|傷つけ|からかいすぎ|許して)/u;
 const ENDS_SORRY = new RegExp(`${SORRY}(?:って|よ|ね)?${TAIL}$`, 'u');
 const HAS_SORRY = new RegExp(SORRY, 'u');
+/** Making up (owner 2026-10-19: 「お互い悪かった」 is amends from both, a good thing for her to reflect on). */
+const RECONCILE = /仲直り|お互い(?:様|さま|悪かった)|水に流/u;
 const ENDS_FAULT = new RegExp(`(?:悪かった|言いすぎた|言い過ぎた|やりすぎた|やり過ぎた|許して)(?:よ|ね|わ)?${TAIL}$`, 'u');
 
 const TEASE = '(?:ポンコツ|ぽんこつ|へっぽこ|ドジ|チョロい|ちょろい|チョロ|バカ|ばか|アホ|あほ)';
@@ -33,13 +35,41 @@ const short = (message: string, maximum: number) => Array.from(message.trim()).l
 export function apologyIn(message: string): boolean {
   const text = message.trim();
   if (!short(text, 60)) return false;
-  return ENDS_SORRY.test(text) || ENDS_FAULT.test(text) || (HAS_SORRY.test(text) && FAULT.test(text));
+  return ENDS_SORRY.test(text) || ENDS_FAULT.test(text) || (HAS_SORRY.test(text) && FAULT.test(text)) || RECONCILE.test(text);
 }
 
 /** A tease of her: the word said of her (her name, お前・君) or as a judgement of her (「ポンコツだな」). Unsure means no. */
 export function teasingIn(message: string): boolean {
   const text = message.trim();
   return short(text, 80) && (TEASE_AT_HER.test(text) || TEASE_PREDICATE.test(text) || MOCK_GENIUS.test(text));
+}
+
+/**
+ * A warm word to her (owner 2026-10-19: in a week of 「かわいいね」「やさしいね、いつもありがとう」「愛してるよ」 not one of her inner
+ * notes was about something kind; only an exact 「ありがとう」 counted): fondness, praise, thanks or missing her, in a short message that
+ * is not a tease and not a negation of the word. Unsure means no.
+ */
+const WARM = new RegExp(`(?:${[
+  'かわい(?:い|すぎ|かった)', '可愛(?:い|すぎ|かった)', 'カワイイ', '(?:シャノン|君|きみ|お前|おまえ)(?:の(?:こと|事))?(?:が|も|は)?(?:大)?好き',
+  '^(?:大)?好き(?:だよ|です|よ)?', '好きだから', '大好き', '愛して(?:る|います|ます)', 'やさしい', '優しい', 'えらい', '偉い', '美人', 'かっこいい',
+  '格好いい', 'いい子', 'ありがと', '感謝', '(?:嬉し|うれし)かった', '大事にする', '会いたかった', '(?:寂し|さみし|さびし)かった', '声(?:が|を)?聞(?:け|き)(?:て|たい)',
+].join('|')})`, 'u');
+const NOT_WARM = /(?:かわいく|可愛く|やさしく|優しく|えらく|偉く)(?:ない|なかった)|好きじゃない|嫌い/u;
+
+export function warmWordsIn(message: string): boolean {
+  const text = message.trim();
+  return short(text, 80) && WARM.test(text) && !NOT_WARM.test(text) && !teasingIn(text);
+}
+
+/**
+ * A moment for her softer side (owner 2026-10-19: 「寂しかった？」「声が聞きたい」 met 「……ふん」 again and again): he is unwell, tired
+ * or low, misses her, or says he cares. The feeling turn is told it (`this_turn.tender`); it never decides her stance.
+ */
+const TENDER = /(?:寂し|さみし|さびし|会いたい|声(?:が|を)?聞(?:き|け)|風邪|熱が|体調|具合|しんど|疲れ|つかれ|眠れな|落ち込|へこ|つら(?:い|かった)|辛(?:い|かった)|愛して|大好き|大事にする)/u;
+
+export function tenderIn(message: string): boolean {
+  const text = message.trim();
+  return short(text, 200) && TENDER.test(text);
 }
 
 /** His goodnight to her: the whole message is a goodnight (「じゃあ、おやすみ」「そろそろ寝るね」), nothing more. Her day may end there. */
