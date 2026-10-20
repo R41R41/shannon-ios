@@ -6,8 +6,10 @@ import { FEELING_EVENTS_STEP } from './emotion/004_feeling_events.js';
 import { FEELING_SHADOW_STEP } from './emotion/005_feeling_shadow.js';
 import { FEELING_DAYS_STEP } from './emotion/006_feeling_days.js';
 import { REPLY_DRAFTS_STEP } from './emotion/007_reply_drafts.js';
+import { REPLY_SONNET_DAYS_STEP } from './emotion/008_reply_sonnet_days.js';
 
 export { FEELING_DAYS_STEP, FEELING_EVENTS_STEP, FEELING_SHADOW_STEP, INNER_NOTES_STEP, INNER_NOTE_ATTEMPTS_STEP, INNER_NOTE_EPISODES_STEP, REPLY_DRAFTS_STEP };
+export { REPLY_SONNET_DAYS_STEP };
 
 /** Every schema step of her inner note (Syzygy ADR-0012), in order; its store applies them when it opens (switch on only). */
 export const EMOTION_STEPS: readonly SchemaStep[] = Object.freeze([INNER_NOTES_STEP, INNER_NOTE_EPISODES_STEP, INNER_NOTE_ATTEMPTS_STEP]);
@@ -23,3 +25,6 @@ export const FEELING_DAYS_STEPS: readonly SchemaStep[] = Object.freeze([FEELING_
 
 /** Her rewritten drafts (owner 2026-10-20); applied only when `SHANNON_NATURAL_TALK` opens their store. */
 export const REPLY_DRAFTS_STEPS: readonly SchemaStep[] = Object.freeze([REPLY_DRAFTS_STEP]);
+
+/** Her replies on Sonnet, counted per day (owner 2026-10-21); applied only when `SHANNON_REPLY_SONNET` opens their store. */
+export const REPLY_SONNET_DAYS_STEPS: readonly SchemaStep[] = Object.freeze([REPLY_SONNET_DAYS_STEP]);

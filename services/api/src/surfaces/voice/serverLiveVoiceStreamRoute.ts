@@ -12,7 +12,7 @@ import { VoiceSegmentTags } from '../../infra/models/voiceAudioTags.js';
 import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { WAITING_CUE_DELAY_MILLISECONDS } from './voiceWaitingCue.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
-import { expressionOf, oneHeadEnabled, voiceSonnetEnabled } from '../../contracts/oneHeadContract.js';
+import { expressionOf, oneHeadEnabled, replySonnetEnabled } from '../../contracts/oneHeadContract.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -57,8 +57,8 @@ export function createLiveVoiceStreamRoute(
     };
     request.once('aborted', abort);
     response.once('close', abort);
-    // Owner 2026-10-21 (`SHANNON_VOICE_SONNET`): her first clause is said at once.
-    const segmenter = new SpokenSentenceSegmenter(voiceSonnetEnabled() ? { firstClauseCharacters: FIRST_CLAUSE_CHARACTERS } : {});
+    // Owner 2026-10-21 (`SHANNON_REPLY_SONNET`): her first clause is said at once.
+    const segmenter = new SpokenSentenceSegmenter(replySonnetEnabled() ? { firstClauseCharacters: FIRST_CLAUSE_CHARACTERS } : {});
     // Her sentences carry audio tags for the voice only (`voiceAudioTags.ts`): shown without them, spoken with them.
     const tags = new VoiceSegmentTags();
     let voicePlan: Record<string, unknown> | undefined;

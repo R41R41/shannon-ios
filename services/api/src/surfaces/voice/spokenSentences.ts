@@ -47,7 +47,7 @@ const QUOTE_OPENERS = '「『（(“';
 const QUOTE_CLOSERS = '」』）)”';
 
 /**
- * Owner 2026-10-21 (`SHANNON_VOICE_SONNET`): a reply's first sentence is said from its first clause, once that clause is this many
+ * Owner 2026-10-21 (`SHANNON_REPLY_SONNET`): a reply's first sentence is said from its first clause, once that clause is this many
  * characters long and ends at a 「、」 outside a quotation, so her first words reach the speaker before the sentence is finished (the
  * Discord voice channel cuts every clause so, `VOICE_SENTENCE_CUT`). Only the first: the rest is said sentence by sentence.
  */

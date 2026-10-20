@@ -4,70 +4,71 @@ import { TieredChatModel } from './tieredChatModel.js';
 import { VOICE_SONNET_FIRST_TOKEN } from '../../mind/action/respond/turnRouting.js';
 
 /**
- * Her spoken replies on Sonnet (owner 2026-10-21, 「声は全部 Sonnet」; `SHANNON_VOICE_SONNET`). Core: response path.
+ * Her replies on Sonnet (owner 2026-10-21, 「声は全部 Sonnet」 then 「文字も全部 Sonnet」; `SHANNON_REPLY_SONNET`). Core: response path.
  *
- * Every voice reply, from every entry (the apps' and Windows' voice, Discord's voice channel) and before anyone, is Sonnet 5.5's:
- * the plain spoken stream (`generateVoiceStreaming`, `generateVoice`), a voice turn's structured request (`spokenReply`) and a
- * platform's voice turn answered as a typed turn (`voiceReply`, dc-voice). A typed reply, the router and the small helpers are
- * the model's of before, unchanged.
+ * Every reply of hers, spoken or written, from every entry (the apps' and Windows' voice and Talk, a Talk read aloud, Discord's voice
+ * and text, her game chat) and before anyone, is Sonnet 5.5's: the plain spoken stream (`generateVoiceStreaming`, `generateVoice`), a
+ * voice turn's structured request (`spokenReply`) and every conversation turn's reply (`conversationReply`, its check's rewrite
+ * included). What is not a reply (the router, the small helpers, anything else asking this model) is the model's of before.
  *
- * - The day's cap (`VoiceSonnetDay`, `SHANNON_VOICE_SONNET_DAILY_CAP`): past it a voice reply is Haiku's until the day turns (the
- *   server's own day, counted in this process: a restart counts from zero). A reply Sonnet did not serve does not count.
+ * - The day's cap (`SonnetReplyCap`, `SHANNON_REPLY_SONNET_DAILY_CAP`): voice and text together; past it a reply is Haiku's until the
+ *   day turns. A reply Sonnet did not serve does not count. The wiring keeps the count in the database (kept across restarts).
  * - The first word: a spoken stream waits for Sonnet's first word or tool call at most `VOICE_SONNET_FIRST_TOKEN.maximumMs` (and
- *   never into the room the turn keeps); past it, or when Sonnet fails before anything was said, Haiku answers the turn
- *   (`TieredChatModel`). Once a word went out a failure ends with her fixed line, never a second voice.
- * - Its prefix is cached: the wiring builds the Sonnet model with the voice cache plan (`anthropicVoicePlan.ts`): one fixed system
- *   and tool pair for every voice turn of a Talk, the turn's own lines after the words.
+ *   never into the room the turn keeps); past it, or when Sonnet fails before anything was said or done, Haiku answers the turn
+ *   (`TieredChatModel`). Once a word went out or a tool ran, a failure ends with her fixed line, never a second answer.
+ * - Its prefix is cached: the wiring builds the Sonnet model with the cache plans (`anthropicCachePlan.ts`, `anthropicVoicePlan.ts`):
+ *   one fixed system and tool set for every turn, the turn's own lines after the words.
  */
-export interface VoiceReplyOptions {
+export interface SonnetReplyCap {
+  readonly cap: number;
+  /** One more Sonnet reply today, or false past the cap. */
+  take(): boolean;
+  /** A reply that Sonnet did not serve after all (it failed, or Haiku answered in its place). */
+  release(): void;
+  /** Today's count (diagnosis and tests). */
+  count(): number;
+}
+
+export interface ReplySonnetOptions {
   sonnet: AnthropicChatModel;
-  day: VoiceSonnetDay;
+  day: SonnetReplyCap;
   log?: (line: string) => void;
 }
 
-/** The day's count of spoken replies served by Sonnet: a cap a day, counted again when the day changes. */
-export class VoiceSonnetDay {
+/** The day's count in this process only (the bench and tests; the server keeps it in its database, `SQLiteReplySonnetDays`). */
+export class MemorySonnetReplyCap implements SonnetReplyCap {
   private day = '';
   private used = 0;
-  private warned = '';
 
-  constructor(readonly cap: number, private readonly today: () => string, private readonly log: (line: string) => void = line => console.warn(line)) {}
+  constructor(readonly cap: number, private readonly today: () => string) {}
 
-  /** One more Sonnet reply today, or false past the cap (said once a day). */
   take(): boolean {
     const day = this.today();
     if (day !== this.day) {
       this.day = day;
       this.used = 0;
     }
-    if (this.used < this.cap) {
-      this.used += 1;
-      return true;
-    }
-    if (this.warned !== day) this.log(`Shannon voice replies: the day's cap of ${this.cap} Sonnet replies is reached; voice stays on Haiku today`);
-    this.warned = day;
-    return false;
+    if (this.used >= this.cap) return false;
+    this.used += 1;
+    return true;
   }
 
-  /** A reply that Sonnet did not serve after all (it failed, or Haiku answered in its place). */
   release(): void {
     if (this.used > 0) this.used -= 1;
   }
 
-  /** Today's count (diagnosis and tests). */
   count(): number {
     return this.day === this.today() ? this.used : 0;
   }
 }
 
-export class VoiceReplyChatModel implements ShannonChatModel {
-  readonly mode: ShannonChatModel['mode'];
+export class ReplySonnetChatModel implements ShannonChatModel {  readonly mode: ShannonChatModel['mode'];
   readonly model: string;
   readonly searchWeb?: ShannonChatModel['searchWeb'];
   readonly readWeb?: ShannonChatModel['readWeb'];
   private readonly tiered: TieredChatModel;
 
-  constructor(private readonly inner: ShannonChatModel, private readonly options: VoiceReplyOptions) {
+  constructor(private readonly inner: ShannonChatModel, private readonly options: ReplySonnetOptions) {
     this.mode = inner.mode;
     this.model = inner.model;
     if (inner.searchWeb) this.searchWeb = inner.searchWeb;
@@ -75,18 +76,18 @@ export class VoiceReplyChatModel implements ShannonChatModel {
     this.tiered = new TieredChatModel(inner, options.sonnet, options.log);
   }
 
-  /** The turn's model of before (its pinned mode), with her voice still on Sonnet. */
+  /** The turn's model of before (its pinned mode), with her replies still on Sonnet. */
   forTurn(scopeKey: string): ShannonChatModel {
-    return new VoiceReplyChatModel(this.inner.forTurn?.(scopeKey) ?? this.inner, this.options);
+    return new ReplySonnetChatModel(this.inner.forTurn?.(scopeKey) ?? this.inner, this.options);
   }
 
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
-    if (!spoken(request) || !this.options.day.take()) return this.inner.generate(request);
+    if (!isReply(request) || !this.options.day.take()) return this.inner.generate(request);
     return this.counted(this.tiered.generate(onSonnet(request)));
   }
 
   generateStreaming(request: ShannonChatModelRequest, onReplyText: (text: string) => void | Promise<void>): Promise<ShannonChatModelResult> {
-    if (spoken(request) && this.options.day.take()) return this.counted(this.tiered.generateStreaming(onSonnet(request), onReplyText));
+    if (isReply(request) && this.options.day.take()) return this.counted(this.tiered.generateStreaming(onSonnet(request), onReplyText));
     return this.inner.generateStreaming ? this.inner.generateStreaming(request, onReplyText) : this.inner.generate(request);
   }
 
@@ -120,9 +121,9 @@ export class VoiceReplyChatModel implements ShannonChatModel {
   }
 }
 
-/** A reply that is spoken: a voice turn's structured request, or a platform's voice turn answered as a typed turn. */
-function spoken(request: ShannonChatModelRequest): boolean {
-  return request.spokenReply === true || request.voiceReply === true;
+/** A reply of hers: a voice turn's structured request, or a conversation turn's reply (typed, read aloud, or a platform's). */
+function isReply(request: ShannonChatModelRequest): boolean {
+  return request.spokenReply === true || request.conversationReply === true;
 }
 
 /** The tiered model answers `tier: sonnet` with Sonnet; its fallback strips the tier, so the model of before answers as it would. */

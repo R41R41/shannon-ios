@@ -354,9 +354,9 @@ export const SWITCHES = [
       + 'unbound Discord conversations and strangers answered; her character space and guard lines on voice too.',
   },
   {
-    name: 'SHANNON_VOICE_SONNET', default: 'off', kind: 'explicit_on', owner: 'model', requires: [], setup: 'on',
-    doc: 'Owner 2026-10-21: every spoken reply (apps, Windows, Discord voice; anyone) is Sonnet 5.5, prefix cached; Haiku past '
-      + 'SHANNON_VOICE_SONNET_DAILY_CAP a day or when its first word is late; the router and helpers unchanged.',
+    name: 'SHANNON_REPLY_SONNET', default: 'off', kind: 'explicit_on', owner: 'model', requires: [], setup: 'on',
+    doc: 'Owner 2026-10-21: every reply, voice and text (apps, Windows, Discord, game chat; anyone), is Sonnet 5.5, prefix cached; Haiku '
+      + 'past SHANNON_REPLY_SONNET_DAILY_CAP a day (voice and text together) or when a voice first word is late; the router and helpers unchanged.',
   },
   {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],

@@ -53,6 +53,8 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'emotion/006_feeling_days': '27736c122507ed4e21734c7831dbb340630702d23a4cbe35dc9d97081efefb55',
   // 2026-10-20: her rewritten drafts, made when SHANNON_NATURAL_TALK first opens their store.
   'emotion/007_reply_drafts': 'f1566b8c0014345f439840bb5e87d2d18057dcefff903f6135be449e5efeea69',
+  // 2026-10-21: her replies on Sonnet counted per day, made when SHANNON_REPLY_SONNET first opens their store.
+  'emotion/008_reply_sonnet_days': 'a5f2d09ba445b97ecd2ef91c4a98ffb413e4d346621cc544aaf6c412642bd3a8',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
