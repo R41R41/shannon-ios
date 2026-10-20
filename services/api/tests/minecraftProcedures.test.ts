@@ -302,5 +302,8 @@ describe('Minecraft procedures (mb-arch)', () => {
     const late = { now: () => AT + 700_000, taskStartedAt: AT, toldLate: new Set<string>() };
     expect(minecraftStopWhy(night({ white_bed: 1 }), '鉄', late)).toBe('「鉄」の目安420秒を280秒過ぎた（いま700秒）');
     expect(minecraftStopWhy(night({ white_bed: 1 }), '鉄', late)).toBeNull();
+    // The route's leg (mb-head's plan) before the owner's table.
+    const routed = { ...late, toldLate: new Set<string>(), targetSeconds: (name: string) => name === '鉄' ? 650 : undefined };
+    expect(minecraftStopWhy(night({ white_bed: 1 }), '鉄', routed)).toBeNull();
   });
 });

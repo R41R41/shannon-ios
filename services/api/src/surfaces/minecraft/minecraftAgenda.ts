@@ -92,6 +92,8 @@ interface Parts {
   pending?(): boolean;
   /** When the task began (ms): the procedures' time budget counts from it. */
   taskStartedAt?: number;
+  /** A step's time budget from the task's route (mb-head), when it has one. */
+  targetSeconds?(milestone: string): number | undefined;
 }
 
 const short = (text: string) => text.replace(/\s+/gu, ' ').slice(0, 120);
@@ -128,7 +130,8 @@ function procedure(tools: FcaExternalTools, parts: Parts, call: Call, one: (call
   log(parts, `Shannon Minecraft procedure task=${parts.taskId} input=${JSON.stringify(call.input).slice(0, 80)}`);
   return runMinecraftProcedure({ taskId: parts.taskId, observe: parts.observe, execute, now,
     offered: name => tools.definitions.some(tool => tool.name === name), batchObsidian: batchObsidianOf(tools),
-    ...(parts.pending ? { pending: parts.pending } : {}), ...(parts.taskStartedAt !== undefined ? { taskStartedAt: parts.taskStartedAt } : {}) }, call);
+    ...(parts.pending ? { pending: parts.pending } : {}), ...(parts.taskStartedAt !== undefined ? { taskStartedAt: parts.taskStartedAt } : {}),
+    ...(parts.targetSeconds ? { targetSeconds: parts.targetSeconds } : {}) }, call);
 }
 
 /** Whether an error of a sub-command must end the call (an outcome not known, a stop); any other is told as a failed item. */

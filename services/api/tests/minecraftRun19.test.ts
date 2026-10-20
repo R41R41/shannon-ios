@@ -22,6 +22,8 @@ import { minecraftSituation, minecraftSkillContext } from '../src/surfaces/minec
 import { milestoneFollowMemory, milestoneSteps } from '../src/surfaces/minecraft/minecraftMilestoneFollow.js';
 import { MILESTONE_TARGET_SECONDS, milestoneLines } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
+import { ROUTE_PLAN, createRoutePlanning, planWanted, routeFrom, routeInput, routeLines } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
+import { configuredMinecraftRoutePlanner } from '../src/wiring/minecraftRouteWiring.js';
 
 /**
  * Minecraft run 19 (2026-10-20, 10:54 JST): the owner's in-game 「続けて」 was refused twice as `queue_unavailable`, with a reply
@@ -188,5 +190,96 @@ describe('the time budget to the Nether and the steps from the diamonds on', () 
     expect(milestoneSteps('ダイヤ', 3).join('\n')).toContain('mc.stair-mine（targetY=-58）');
     expect(milestoneSteps('黒曜石', 3).join('\n')).toContain('mc.use-item-on-block（溶岩の座標、itemName=water_bucket）');
     expect(milestoneSteps('ゲート', 3).join('\n')).toContain('mc.build-structure（structureName=nether_portal、x、y、z、facing）');
+  });
+});
+describe('her route to the Nether, planned once by a strong model', () => {
+  const answer = { legs: [
+    { milestone: '木と石のツルハシ', goal: '近くの森で原木と石', where: 'スポーンの北 20m', targetSeconds: 140 },
+    { milestone: '食料と羊とベッド', goal: '村でベッドとパン', where: '東 171m の村', x: 287, y: 85, z: 13, targetSeconds: 900 },
+    { milestone: 'エンド', goal: 'x', where: 'x', targetSeconds: 10 },
+    { milestone: '鉄', goal: '洞窟で鉄30', where: '北の洞窟', targetSeconds: 400 },
+    { milestone: '木', goal: '戻り', where: 'x', targetSeconds: 50 },
+  ] };
+  it('keeps only the order\'s steps, in its order, never later than the owner\'s budget', () => {
+    const route = routeFrom(answer, 30, 0, 'start')!;
+    expect(route.legs.map(leg => leg.milestone)).toEqual(['木と石のツルハシ', '食料と羊とベッド', '鉄']);
+    expect(route.legs.map(leg => leg.targetSeconds)).toEqual([140, 600, 400]);
+    expect(route.legs[1]).toMatchObject({ x: 287, y: 85, z: 13 });
+    expect(routeFrom({ legs: [] }, 0, 0, 'start')).toBeNull();
+    expect(routeLines(route, '食料と羊とベッド')).toEqual(['ルート（最初の計画、30秒）:', '済 木と石のツルハシ: 近くの森で原木と石／スポーンの北 20m／140秒まで',
+      '▶ 食料と羊とベッド: 村でベッドとパン／東 171m の村（287,85,13）／600秒まで', '・ 鉄: 洞窟で鉄30／北の洞窟／400秒まで']);
+  });
+  it('is asked at the start, and again only when a step is late, with replans left and the last plan old enough', () => {
+    const route = routeFrom(answer, 30, 0, 'start')!;
+    expect(planWanted(null, '木', 5)).toBe('start');
+    expect(planWanted(route, '鉄', 600)).toBeNull();
+    expect(planWanted(route, '鉄', 400 + ROUTE_PLAN.lateSeconds)).toBe('late');
+    expect(planWanted({ ...route, replans: ROUTE_PLAN.replans }, '鉄', 900)).toBeNull();
+    expect(planWanted({ ...route, plannedAtSeconds: 500 }, '鉄', 700)).toBeNull();
+    expect(planWanted(null, 'ネザー要塞', 5)).toBeNull();
+  });
+  it('gives the planner where she is and what the body knows of the land', () => {
+    const input = routeInput({ biome: 'snowy_plains', position: { x: 1, y: 70, z: 2 }, mapSummary: '溶岩池 西 90m (−88,63,4)', rememberedPlaces: { village: '171m 東 (287,85,13)' },
+      inventory: [{ name: 'oak_log', count: 3 }] }, 12, '木');
+    expect(input).toContain('地図の要約: 溶岩池 西 90m');
+    expect(input).toContain('持ち物: oak_log×3');
+    expect(input).toContain('既定の目安（秒）: 木 60');
+  });
+  it('asks once in a step without making the decision wait, takes the answer at the close, and keeps it', async () => {
+    const lines: string[] = [];
+    let asked = 0;
+    const planning = createRoutePlanning({ kept: undefined, taskId: 'task', log: line => lines.push(line),
+      planner: async () => { asked += 1; return answer; } });
+    const first = planning.situate({ milestoneName: '木', elapsedSeconds: 10 }, { biome: 'plains' });
+    expect(first.route).toBeUndefined();
+    planning.situate({ milestoneName: '木', elapsedSeconds: 12 }, { biome: 'plains' });
+    expect(asked).toBe(1);
+    await planning.close();
+    const kept = planning.checkpoint();
+    expect(kept.minecraftRoute?.legs).toHaveLength(3);
+    expect(kept.minecraftRouteAsks).toBe(1);
+    const next = createRoutePlanning({ kept: kept.minecraftRoute, keptAsks: kept.minecraftRouteAsks, taskId: 'task', log: () => {}, planner: async () => { asked += 1; return answer; } });
+    expect(next.situate({ milestoneName: '鉄', elapsedSeconds: 300 }, {}).route?.[0]).toBe('ルート（最初の計画、10秒）:');
+    expect(asked).toBe(1);
+    expect(lines).toEqual(['Shannon Minecraft route asked task=task reason=start at=10', 'Shannon Minecraft route planned task=task legs=3']);
+    // A planner that keeps failing is not asked again at every step.
+    const failing = createRoutePlanning({ kept: undefined, keptAsks: ROUTE_PLAN.asks, taskId: 'task', log: () => {}, planner: async () => { asked += 1; throw new Error('x'); } });
+    failing.situate({ milestoneName: '木', elapsedSeconds: 10 }, {});
+    expect(asked).toBe(1);
+  });
+  it('lets a replan when late give the steps left until a minute after it, never past the Nether\'s 1,800 s', () => {
+    const late = routeFrom({ legs: [{ milestone: '鉄', goal: '洞窟', where: '北', targetSeconds: 1_000 }, { milestone: 'ネザー', goal: 'g', where: 'w', targetSeconds: 2_400 }] }, 900, 1, 'late')!;
+    expect(late.legs.map(leg => leg.targetSeconds)).toEqual([960, 1_800]);
+  });
+  it('does not keep a stopped step waiting for the planner', async () => {
+    let aborted = false;
+    const planning = createRoutePlanning({ kept: undefined, taskId: 'task', log: () => {},
+      planner: (_system, _input, signal) => new Promise(resolve => { signal.addEventListener('abort', () => { aborted = true; resolve(null); }); }) });
+    planning.situate({ milestoneName: '木', elapsedSeconds: 5 }, {});
+    const started = Date.now();
+    await planning.close(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(aborted).toBe(true);
+    expect(planning.checkpoint()).toEqual({ minecraftRouteAsks: 1 });
+  });
+  it('charges a request that got no answer at its upper bound', async () => {
+    const charged: number[] = [];
+    const planner = configuredMinecraftRoutePlanner({ SHANNON_MINECRAFT_ROUTE_PLAN: 'on' }, { recordUsage: usage => charged.push(usage.estimatedCostUsd),
+      client: { messages: { create: async () => { throw new Error('network'); } } } })!;
+    await expect(planner('s', 'i', new AbortController().signal)).rejects.toThrow('network');
+    expect(charged).toHaveLength(1);
+    expect(charged[0]).toBeGreaterThan(0);
+  });
+  it('charges the call as a decision is and returns the parsed answer; off by default', async () => {
+    expect(configuredMinecraftRoutePlanner({ ANTHROPIC_API_KEY: 'key' }, { recordUsage: () => {} })).toBeUndefined();
+    const charged: number[] = [];
+    let sent: { model?: string } = {};
+    const planner = configuredMinecraftRoutePlanner({ SHANNON_MINECRAFT_ROUTE_PLAN: 'on' }, { recordUsage: usage => charged.push(usage.estimatedCostUsd),
+      client: { messages: { create: (async (body: { model: string }) => { sent = body; return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(answer) }],
+        usage: { input_tokens: 3_000, output_tokens: 1_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } }; }) as never } } })!;
+    expect(await planner('system', 'input', new AbortController().signal)).toEqual(answer);
+    expect(sent.model).toBe('claude-opus-5-5');
+    expect(charged).toHaveLength(1);
+    expect(charged[0]).toBeGreaterThan(0);
   });
 });

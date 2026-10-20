@@ -1,5 +1,5 @@
 import {
-  bedSearchMemory, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+  bedSearchMemory, createRoutePlanning, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
 } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
@@ -110,6 +110,8 @@ export function createMinecraftTaskBody(parts: {
   governor?: ReflexGovernor;
   /** Syzygy ADR-0011 stage 2 (`SHANNON_MINECRAFT_FAST_JUDGMENT`): danger is judged without an image (`minecraftFastJudgment.ts`). */
   fastJudgment?: boolean;
+  /** The strong model's route plan (`minecraftRouteWiring.ts`, `SHANNON_MINECRAFT_ROUTE_PLAN`): the answer's JSON, or a throw; none when absent. */
+  routePlanner?(system: string, input: string, signal: AbortSignal): Promise<unknown>;
   log?(line: string): void;
   /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
   metricsLog?(line: string): void;
@@ -129,11 +131,15 @@ export function createMinecraftTaskBody(parts: {
   const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
   // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
-  const marks = step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown; minecraftVillageSearched?: unknown } | null;
-  const bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched),
+  const marks = step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown; minecraftVillageSearched?: unknown; minecraftRoute?: unknown;
+    minecraftRouteAsks?: unknown } | null,
+    bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched),
     // Daytime decisions in a row that went elsewhere than the step now (`minecraftMilestoneFollow.ts`), kept as the marks are.
     follow = milestoneFollowMemory((step.snapshot.checkpoint as { minecraftMilestoneDrift?: unknown } | null)?.minecraftMilestoneDrift,
-    decisions => log(`Shannon Minecraft milestone steps task=${step.taskId} decisions=${decisions}`));
+    decisions => log(`Shannon Minecraft milestone steps task=${step.taskId} decisions=${decisions}`)),
+    // Her route to the Nether, planned by a strong model at the task's start and when a step is late (`minecraftRoutePlanner.ts`).
+    routePlan = createRoutePlanning({ kept: marks?.minecraftRoute, keptAsks: marks?.minecraftRouteAsks, planner: parts.routePlanner,
+      log: line => log(line), taskId: step.taskId });
   // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
   const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
     began: Date.parse(step.snapshot.task.createdAt), now });
@@ -401,8 +407,8 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation),
-        elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) }));
+      const situation = routePlan.situate(follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation),
+        elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) })), observation?.state.world);
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
       pointedSkills = skills.pointed;
@@ -455,8 +461,11 @@ export function createMinecraftTaskBody(parts: {
     },
     async close() {
       measured(() => metrics.flush());
+      // The route's answer is waited for alongside the teardown, never ahead of it; a stopped step does not wait (the review).
+      const route = routePlan.close(monitorAbort.signal.aborted).catch(() => {});
       if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
       if (monitoring) await monitoring.catch(() => {}); if (active) await active;
+      await route;
       if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     },
   };
@@ -467,7 +476,7 @@ export function createMinecraftTaskBody(parts: {
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
     checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
-      ...bedSearch.checkpoint(), ...follow.checkpoint(),
+      ...bedSearch.checkpoint(), ...follow.checkpoint(), ...routePlan.checkpoint(),
       ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })(),
       ...(() => { try { return paceLedger.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {

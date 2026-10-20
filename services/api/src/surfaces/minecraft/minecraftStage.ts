@@ -146,6 +146,13 @@ export const MILESTONE_TARGET_SECONDS: Readonly<Record<string, number>> = Object
   '木': 60, '木と石のツルハシ': 150, '石の斧': 150, '木材': 200, '食料と羊とベッド': 600, '鉄': 420, 'バケツ': 420, '鉄の全身の防具': 780,
   'ダイヤ': 1_200, '黒曜石': 1_500, 'ゲート': 1_650, 'ネザー': 1_800,
 });
+/**
+ * A step's budget: the owner's own seconds, a deadline from the task's start, not a sum along the order. The bed's 600 s is the
+ * first night's, so it may fall after the iron's 420 s though the bed comes first in the order. Undefined for a step without one.
+ */
+export function milestoneTargetSeconds(name: string): number | undefined {
+  return MILESTONE_TARGET_SECONDS[name];
+}
 /** What a step that is late cuts first: the detours run 18 and 19 lost their time to. */
 export const MILESTONE_LATE_CUTS = '掘りすぎ（鉄は33まで）・望みの薄い探し（羊の出ない所、同じ方角）・水の中の生き物の追い・かまどの前の待ち';
 
@@ -155,7 +162,7 @@ export const MILESTONE_LATE_CUTS = '掘りすぎ（鉄は33まで）・望みの
  */
 export function milestoneLines(facts: MilestoneFacts, elapsedSeconds?: number): string[] {
   const { now, next } = milestoneNow(facts);
-  const target = MILESTONE_TARGET_SECONDS[now.name];
+  const target = milestoneTargetSeconds(now.name);
   const seconds = elapsedSeconds !== undefined && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0 ? Math.round(elapsedSeconds) : null;
   const budget = target === undefined || seconds === null ? []
     : [seconds > target ? `時間の目安: 「${now.name}」は${target}秒までに。いま${seconds}秒で${seconds - target}秒遅れている。寄り道を切る: ${MILESTONE_LATE_CUTS}`

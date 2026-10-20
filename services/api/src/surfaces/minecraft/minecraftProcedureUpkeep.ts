@@ -1,6 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import { BED_ITEM } from './minecraftItems.js';
-import { MILESTONE_TARGET_SECONDS } from './minecraftStage.js';
+import { milestoneTargetSeconds } from './minecraftStage.js';
 import { carried, inPack, nearestNeed, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { doing, type McDo } from './minecraftProcedureMoves.js';
 
@@ -8,7 +8,7 @@ import { doing, type McDo } from './minecraftProcedureMoves.js';
  * What the executor does before any procedure's own next move, and when it hands the turn back (session mb-arch). Upkeep: eat when
  * hungry, put on the armour carried, sleep in the bed she carries when night falls. The turn goes back to the planner for what the
  * rules do not settle: a new message, low health, enemies close, hunger with nothing to eat, the night on the surface with no bed, and a
- * step past its time budget (`MILESTONE_TARGET_SECONDS`, once a step), so the planner can choose what to cut.
+ * step past its time budget (the route's leg or `MILESTONE_TARGET_SECONDS`, once a step), so the planner can choose what to cut.
  */
 export const PROCEDURE_UPKEEP = Object.freeze({
   /** Eat at this food level or below (of 20). */
@@ -77,6 +77,8 @@ export interface StopParts {
   now(): number;
   /** The steps already told late in this task (once each). */
   toldLate: Set<string>;
+  /** A step's time budget: the route's leg (mb-head's route plan) when it has one, else the owner's table. */
+  targetSeconds?(milestone: string): number | undefined;
 }
 
 function danger(facts: MinecraftProcedureFacts): string | null {
@@ -88,7 +90,7 @@ function danger(facts: MinecraftProcedureFacts): string | null {
 }
 
 function late(procedure: string, parts: StopParts): string | null {
-  const target = MILESTONE_TARGET_SECONDS[procedure];
+  const target = parts.targetSeconds?.(procedure) ?? milestoneTargetSeconds(procedure);
   if (target === undefined || parts.taskStartedAt === undefined || parts.toldLate.has(procedure)) return null;
   const seconds = Math.round((parts.now() - parts.taskStartedAt) / 1000);
   if (seconds <= target + PROCEDURE_UPKEEP.lateBy) return null;

@@ -23,7 +23,7 @@
     {
       "name": "mc-iron-and-bucket",
       "path": "mc-iron-and-bucket/SKILL.md",
-      "sha256": "47e67cb7a81c0063e2de7f97ba372182e23137f80e3984d7a942d41d34c61233",
+      "sha256": "57eb1e35713b02e2ba6df4b3308d05fbb4a83ae6d50eef6a34c951e2d9dc5273",
       "revises": {
         "bodySha256": "a8050d5cd3373e94f03b222b81e6467af6aad62bc0af26ecf373300f146f1b2d"
       },
@@ -36,7 +36,7 @@
     {
       "name": "mc-diamond-obsidian",
       "path": "mc-diamond-obsidian/SKILL.md",
-      "sha256": "e9c55b624f772649050bfd88ae397794bc4081f25f81529ca3ac185b343626c8",
+      "sha256": "a6053b4e696b1a5968914e81aedc4ba0055ea0ed1520676d7a6d90823b2cb24c",
       "revises": {
         "bodySha256": "8532ce16e4808d2fb0e13a961624b78672d17135fd730a4d57628114b5d2e24a"
       },

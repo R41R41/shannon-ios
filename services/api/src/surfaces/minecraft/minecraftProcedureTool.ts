@@ -5,6 +5,7 @@ import type { ToolResult } from '../../mind/tools/shannonTools.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { milestoneNow } from './minecraftStage.js';
+import { keptRoute } from './minecraftRoutePlanner.js';
 import { bodyFailureOf } from './minecraftOutcome.js';
 import { minecraftProcedureFacts, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain } from './minecraftProcedures.js';
@@ -68,14 +69,17 @@ export function cutProcedureItem(taskId: string): boolean {
  * What a step hands the executor's procedures: whether a message came into the task's inbox after the step began (the step's own are
  * not new), and when the task began.
  */
-export function minecraftProcedureStepParts(runtime: Pick<TaskRuntime, 'pendingMessageIds'>, step: TaskStep): { pending(): boolean; taskStartedAt?: number } {
+export function minecraftProcedureStepParts(runtime: Pick<TaskRuntime, 'pendingMessageIds'>, step: TaskStep)
+  : { pending(): boolean; taskStartedAt?: number; targetSeconds(milestone: string): number | undefined } {
   const started = Date.parse(step.snapshot.task.createdAt);
+  const route = keptRoute((step.snapshot.checkpoint as Record<string, unknown> | null | undefined)?.minecraftRoute);
+  const targetSeconds = (milestone: string) => route?.legs.find(leg => leg.milestone === milestone)?.targetSeconds;
   const pending = () => {
     try {
       return (runtime.pendingMessageIds?.(step.scopeKey, step.taskId) ?? []).some(id => !step.messageIds.includes(id));
     } catch { return false; }
   };
-  return { pending, ...(Number.isFinite(started) ? { taskStartedAt: started } : {}) };
+  return { pending, targetSeconds, ...(Number.isFinite(started) ? { taskStartedAt: started } : {}) };
 }
 
 /** The decision's line that names the procedure of the step now, when there is one (the planner does what it is shown, run 19). */
@@ -97,6 +101,7 @@ export interface ProcedureRunParts {
   batchObsidian?: string | null;
   pending?(): boolean;
   taskStartedAt?: number;
+  targetSeconds?(milestone: string): number | undefined;
   now(): number;
 }
 
