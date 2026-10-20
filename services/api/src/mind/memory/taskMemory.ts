@@ -1,6 +1,7 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { ownerImpressionReader } from '../recall/impressionRecallPorts.js';
 import { DeepChains, deepWalk, settleDeepChains } from './recallChainDepth.js';
 import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
@@ -11,6 +12,8 @@ export interface TaskMemoryParts {
   state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore; ownerScope: string;
   ownerAlone(): boolean; now(): string; knowledge?: Pick<ShannonKnowledgeStore, 'listShannonKnowledge'>;
   readSourceVisible?: ReadSourceVisible;
+  /** The server environment unless a test sets the impression switches (`ownerImpressionReader`). */
+  environment?: Readonly<Record<string, string | undefined>>;
   /** SOURCE_WALK_LIMIT unless a test compares the bound at a smaller one. */
   sourceWalkLimit?: number;
 }
@@ -73,6 +76,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const gate = new DisclosureGate(present, state, store, scope);
     const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
     const interestLine = selfInterestLines(store, scope, present);
+    const impressionLine = ownerImpressionReader(store, state, scope, present, parts.environment);
     return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
     const experienceOf = (id: string) => {
@@ -134,7 +138,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         const scalar = [...state.userFacts, ...state.relationships, ...state.prospectiveMemories].find(row => row.id === id);
         if (scalar) return !scalar.sourceExperienceId || lineageVisible(scalar.sourceExperienceId, seen);
         return state.activeMemories.some(row => row.id === id) || state.interests.some(text => memoryIdentifier('interest', text) === id)
-          || interestLine(id) !== null;
+          || interestLine(id) !== null || impressionLine(id) !== null;
       }
       return gate.allowsTurn(experience) && !withheld.withholdsExperience(experience)
         && !(experience.readSourceIds ?? []).some(ref => !withheld.readSourceAvailable(ref, experience.observedAt))
@@ -197,6 +201,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         const active = state.activeMemories.find(row => row.id === id);
         const interest = state.interests.find(text => memoryIdentifier('interest', text) === id);
         const own = experience || fact || promise || active || interest ? null : interestLine(id);
+        const impression = experience || fact || promise || active || interest || own ? null : impressionLine(id);
         if (experience) {
           if (!lineageVisible(id)) continue;
           provenanceKind = 'experience'; readSourceIds = experience.readSourceIds ?? [];
@@ -209,7 +214,8 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
           summary = promise.summary; at = promise.updatedAt; evidence = promise.evidence ?? ''; applicability = `promise ${promise.status}`;
         } else if (active) { summary = active.summary; at = state.updatedAt; applicability = 'active memory';
         } else if (interest) { summary = interest; at = state.updatedAt; applicability = 'current interest';
-        } else if (own) { summary = own; at = state.updatedAt; applicability = 'her own interest'; }
+        } else if (own) { summary = own; at = state.updatedAt; applicability = 'her own interest';
+        } else if (impression) { summary = impression; at = state.updatedAt; applicability = 'impression of a person'; }
       }
       if (!summary) continue;
       const visible = visibleMemoryText(state, id, summary);

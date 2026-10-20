@@ -258,6 +258,54 @@ export function recallImpressions(
 }
 
 /**
+ * Impressions a turn recalled (`impression:<id>` in its `recalledMemoryIDs`), as the owner alone may be shown them now: the
+ * impression's text, or null. The rules `selectImpressions` applies with only the owner present: impressions switched on, a live row,
+ * a remembered person who is not forgotten, and the forgetting boundary of `usableImpression`. What a message of his picks among
+ * those (a person he names, a fading one his words bring up) is not asked: this turn did pick it, and he may name anyone. With
+ * anyone else present every id is null: who else may see an impression is the gate's (`DisclosureGate`), not this. A store that
+ * fails to answer gives null, as these ids gave before.
+ *
+ * No answer depends on the time of the reading, as the lineage memo of `taskMemory.ts` requires (`ScopeMemos.lineages`,
+ * `fcaLoopStallTime.test.ts`): with F6 decay another person's impression is usable by the age of its evidence, which hides it later
+ * without any write, so with decay on another person's impression is null here (production 2026-10-20: none was ever recalled).
+ *
+ * From 2026-10-01 to 2026-10-20 the reads of her memory (`taskMemory.ts`, the owner's alone) did not know these ids, so every
+ * turn that recalled one, and every turn that recalled such a turn, was hidden from them (45 of 1,223 turns in production).
+ */
+export function ownerImpressionReader(
+  store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
+): (memoryId: string) => string | null {
+  let parts: OwnerImpressionParts | null | undefined;
+  return memoryId => {
+    if (!memoryId.startsWith(IMPRESSION_MEMORY_PREFIX) || !isOwnerOnly(present)) return null;
+    try {
+      parts ??= ownerImpressionParts(store, state, scopeKey, environment);
+      const row = parts?.source.impression(scopeKey, memoryId.slice(IMPRESSION_MEMORY_PREFIX.length));
+      return parts && row && impressionMemoryId(row.id) === memoryId ? shownToOwnerAlone(row, state, parts) : null;
+    } catch { return null; }
+  };
+}
+
+interface OwnerImpressionParts { source: ImpressionSource; people: readonly ImpressionPerson[]; check: ImpressionEvidenceCheck; decay: boolean }
+
+function ownerImpressionParts(
+  store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, environment: Readonly<Record<string, string | undefined>>,
+): OwnerImpressionParts | null {
+  const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
+  return source ? { source, people: source.people(scopeKey), check: new ImpressionEvidenceCheck(state, store, scopeKey),
+    decay: mindSwitches(environment).evidenceDecay } : null;
+}
+
+function shownToOwnerAlone(row: PersonImpression, state: CompanionStateSnapshot, parts: OwnerImpressionParts): string | null {
+  if (row.personKey !== OWNER_PERSON_KEY && (parts.decay || !parts.people.some(person => person.id === row.personKey && !person.forgotten))) return null;
+  if (row.status !== 'active' && row.status !== 'fading') return null;
+  if (parts.check.rules.length) parts.check.load([row]);
+  const usable = usableImpression(row, state, parts.check, parts.people);
+  return usable ? `${usable.statement}${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}` : null;
+}
+
+/**
  * For her own thinking (the activity loop's owner-context block may call this later): what she has come to
  * feel about how the owner is with her, as lines without header or instruction. The same gates as a turn;
  * `present` defaults to the owner alone. Empty while impressions are off.
