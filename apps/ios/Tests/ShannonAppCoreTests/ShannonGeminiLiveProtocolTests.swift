@@ -158,8 +158,8 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
             ShannonVoicePlanDTO(shouldRespond: true, conversationClass: .direct, affect: affect, delivery: delivery)
         }
         XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ここだけの話なんだけどね", plan: plan(.playful)),
-                       "[anime character] [playfully] [whispers]")
-        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "内緒だよ", plan: nil), "[anime character] [playfully] [whispers]")
+                       "[anime character] [whispers]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "内緒だよ", plan: nil), "[anime character] [whispers]")
         XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ふぁ…もう寝ようかな", plan: plan(.sleepy, .gentle)),
                        "[anime character] [sleepy] [softly]")
         XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "もうちょっとかまってよ", plan: plan(.attentionSeeking)),

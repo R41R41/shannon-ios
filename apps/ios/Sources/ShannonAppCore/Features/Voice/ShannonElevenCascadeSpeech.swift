@@ -14,9 +14,9 @@ enum ShannonElevenCascadeSpeech {
             of: #"(実装|提案|任せ|作業|始め|進め|やって|試し|行きましょう)"#,
             options: .regularExpression
         ) != nil
-        let secret = isSecret(text)
+        // A whisper lasts longer with no other acting tag beside it (her voice, 2026-10-20); the server asks it again each 「、」.
+        if isSecret(text) { return "\(characterTag) [whispers]" }
         guard let plan else {
-            if secret { return "\(characterTag) [playfully] [whispers]" }
             if text.contains("ふふ") || text.contains("任せて") || text.contains("天才") {
                 return everydayStyle
             }
@@ -75,19 +75,17 @@ enum ShannonElevenCascadeSpeech {
         if let affect { tags.append(affect) }
         // Close, quiet feelings (tender, her 「本気」, keeping him company, sleepy) are said softly when not hurried.
         let unhurried = plan.delivery == .gentle || plan.delivery == .conversational
-        let expressiveDelivery: String? = if secret { "[whispers]" } else {
-            switch plan.affect {
-            case .bright, .happy, .fun, .playful, .giggle, .teasing, .mischievous,
-                 .plotting, .smug, .excited, .ecstatic, .triumphant:
-                "[energetically]"
-            case .tender, .affectionate:
-                actionReply ? "[energetically]" : unhurried ? "[softly]" : delivery
-            case .protective, .reassurance:
-                "[clearly]"
-            case .quietCompanion, .sleepy:
-                unhurried ? "[softly]" : delivery
-            default: delivery
-            }
+        let expressiveDelivery: String? = switch plan.affect {
+        case .bright, .happy, .fun, .playful, .giggle, .teasing, .mischievous,
+             .plotting, .smug, .excited, .ecstatic, .triumphant:
+            "[energetically]"
+        case .tender, .affectionate:
+            actionReply ? "[energetically]" : unhurried ? "[softly]" : delivery
+        case .protective, .reassurance:
+            "[clearly]"
+        case .quietCompanion, .sleepy:
+            unhurried ? "[softly]" : delivery
+        default: delivery
         }
         if let expressiveDelivery, !tags.contains(expressiveDelivery) { tags.append(expressiveDelivery) }
         return tags.joined(separator: " ")

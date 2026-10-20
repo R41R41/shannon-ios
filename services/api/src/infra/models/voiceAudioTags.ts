@@ -4,16 +4,18 @@
  * and stored never has them (`displayedVoiceText`), the ElevenLabs voice keeps only these (`elevenVoiceText`), and the Gemini voice
  * hears none and gets a Japanese direction instead (`geminiVoiceRequest`).
  *
- * Checked with her voice on eleven_v4_turbo (text-to-dialogue/stream-input, ja), 2026-10-20: every tag below changed the delivery
- * or added the sound; none was read out as a word.
+ * Played with her voice on eleven_v4_turbo (text-to-dialogue/stream-input, ja), 2026-10-20, against the same sentence without the
+ * tag: each sound added 0.5–1.1 s of laughter, breath or a throat sound, a whisper took the pitch out of its clause, a pause doubled
+ * or tripled the longest silence, [sleepy] was 7 dB quieter. [shouts] changed nothing (left out); [sweetly] and [nervously] were
+ * the faintest (kept: they do no harm). Tags not listed here were not tried.
  */
 export const VOICE_AUDIO_TAGS = Object.freeze({
   /** How the voice is produced. */
-  voice: ['whispers', 'softly', 'shouts'],
+  voice: ['whispers', 'softly'],
   /** Sounds between or inside words. */
   sounds: ['laughs', 'giggles', 'chuckles', 'sighs', 'exhales', 'gasps', 'clears throat', 'yawns', 'gulps', 'sniffs', 'inhales deeply', 'hums'],
   /** A feeling for the words that follow. */
-  feelings: ['sleepy', 'sweetly', 'excited', 'nervously', 'sarcastically', 'tearfully', 'pouting'],
+  feelings: ['sleepy', 'sweetly', 'excited', 'nervously', 'tearfully', 'pouting'],
   /** A silence. */
   pauses: ['short pause', 'long pause'],
 } as const);
@@ -97,6 +99,21 @@ export function elevenVoiceText(text: string): string {
     : kind === 'allowed' && count <= MAXIMUM_INLINE_TAGS ? `[${canonical(inner)}]` : null);
 }
 
+/**
+ * On eleven_v4_turbo a whisper lasts one clause, then her voice comes back (her voice, 2026-10-20: 58 % of the sounding frames
+ * still had a pitch; asked again after each 「、」, 40 %). From where the sentence (or its acting tags) asks for it to the next
+ * other tag, `[whispers]` is asked again after each 「、」.
+ */
+export function heldWhisper(actingTags: string, text: string): string {
+  const start = actingTags.includes('[whispers]') ? 0 : text.indexOf('[whispers]');
+  if (start < 0) return text;
+  const whispered = text.slice(start);
+  const next = whispered.slice(1).search(/\[(?!whispers\])/u);
+  const end = next < 0 ? whispered.length : next + 1;
+  const held = whispered.slice(0, end).replace(/、(?!\s*\[|\s*$)\s*/gu, '、[whispers] ');
+  return `${text.slice(0, start)}${held}${whispered.slice(end)}`;
+}
+
 /** The allowed tags in a text, in order, lowercase. */
 export function voiceAudioTagsIn(text: string): VoiceAudioTag[] {
   const tags: VoiceAudioTag[] = [];
@@ -109,13 +126,12 @@ export function voiceAudioTagsIn(text: string): VoiceAudioTag[] {
 /** The Gemini voice reads no tag: each becomes a short Japanese direction added to its style. */
 const GEMINI_DIRECTIONS: Readonly<Record<VoiceAudioTag, string>> = Object.freeze({
   whispers: '途中からささやき声で、息を多めに、ごく小さく。', softly: '途中から声を落として、柔らかく。',
-  shouts: '途中で一度だけ大きな声を出す。',
   laughs: '途中で小さく笑う。', giggles: '途中でくすくす笑う。', chuckles: '途中で喉の奥で短く笑う。',
   sighs: '途中で軽くため息をつく。', exhales: '途中でふっと息を吐く。', gasps: '途中で息をのむ。',
   'clears throat': '途中で小さく咳払いをする。', yawns: '途中であくびまじりに。', gulps: '途中でごくりと息をのむ。',
   sniffs: '途中で鼻をすする。', 'inhales deeply': '途中で深く息を吸う。', hums: '途中で小さく鼻歌まじりに。',
   sleepy: '眠そうに、ゆるく。', sweetly: '甘えた声で。', excited: 'わくわくと弾んで。', nervously: 'そわそわと落ち着かずに。',
-  sarcastically: '皮肉っぽく。', tearfully: '涙ぐんだ声で。', pouting: '口をとがらせて拗ねたように。',
+  tearfully: '涙ぐんだ声で。', pouting: '口をとがらせて拗ねたように。',
   'short pause': '途中で短い間を置く。', 'long pause': '途中で長めの間を置く。',
 });
 
@@ -159,6 +175,6 @@ export const VOICE_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
   '- Use them rarely: most replies have none, a few have one, never more than two in a reply. Choose the moment that earns it: '
   + '[whispers] for a secret or something said close and quietly, [softly] or [sweetly] for affection, [sleepy] or [yawns] late at night '
   + 'when drowsy, [laughs] or [giggles] when something is really funny, [sighs] for real relief or resignation, [gasps] for real surprise.',
-  '- The tags are never shown or read as words. Do not write any other bracketed direction, and never write the sound itself as text '
-  + '(no 「（笑）」 or 「はぁ」 beside a tag).',
+  '- The tags are never shown or read as words. Do not write any other bracketed direction, and do not also write the sound as text '
+  + 'right beside its tag (no 「（笑）」 next to [laughs]).',
 ]);

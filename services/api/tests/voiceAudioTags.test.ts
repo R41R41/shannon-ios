@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  displayedVoiceText, elevenVoiceText, geminiVoiceRequest, VOICE_AUDIO_TAG_LINES, VOICE_AUDIO_TAGS, voiceAudioTagsIn, VoiceSegmentTags,
+  displayedVoiceText, elevenVoiceText, geminiVoiceRequest, heldWhisper, VOICE_AUDIO_TAG_LINES, VOICE_AUDIO_TAGS, voiceAudioTagsIn, VoiceSegmentTags,
 } from '../src/infra/models/voiceAudioTags.js';
 import { voiceAudioTagsEnabled, voiceConversationInstructions } from '../src/surfaces/voice/voiceConversationInstructions.js';
 
@@ -22,6 +22,14 @@ describe('her voice audio tags', () => {
     expect(elevenVoiceText('[sighs][sighs][sighs][sighs] 疲れた。')).toBe('[sighs] [sighs] [sighs] 疲れた。');
     expect(elevenVoiceText('[Minebot] を見て。')).toBe('Minebot を見て。');
     expect(voiceAudioTagsIn('[long  pause] えっと [giggles]')).toEqual(['long pause', 'giggles']);
+  });
+
+  it('asks a whisper again after each 「、」 until another tag, as her voice needs on v4 Turbo', () => {
+    expect(heldWhisper('[anime character] [whispers] ', 'これは内緒なんだけど、ボク、技を覚えたんだよ。'))
+      .toBe('これは内緒なんだけど、[whispers] ボク、[whispers] 技を覚えたんだよ。');
+    expect(heldWhisper('[anime character] ', 'ねえ、 [whispers] 内緒だけど、教えるね。[laughs] うそ、だよ。'))
+      .toBe('ねえ、 [whispers] 内緒だけど、[whispers] 教えるね。[laughs] うそ、だよ。');
+    expect(heldWhisper('[anime character] ', 'うん、いいよ。')).toBe('うん、いいよ。');
   });
 
   it('gives the Gemini voice no tag, and a Japanese direction for each after its style', () => {

@@ -1,6 +1,6 @@
 import { normalizedSpeechText } from './geminiSpeech.js';
 import type { GeminiSpeechRequest, GeminiSpeechStreamResult } from './geminiSpeech.js';
-import { elevenVoiceText } from './voiceAudioTags.js';
+import { elevenVoiceText, heldWhisper } from './voiceAudioTags.js';
 
 const maximumAudioBytes = 8 * 1024 * 1024;
 const endpoint = 'wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input';
@@ -85,7 +85,7 @@ export class ElevenSpeechGateway {
     return {
       contentType: 'audio/l16', sampleRate: 24_000, channels: 1, bitsPerSample: 16,
       model: this.model, voice: this.voice, outputUsdPerTenSeconds: 0,
-      chunks: this.audioChunks(socket, `${tags}${withoutRepeatedOpening(tags, text)}`, signal),
+      chunks: this.audioChunks(socket, `${tags}${heldWhisper(tags, withoutRepeatedOpening(tags, text))}`, signal),
     };
   }
 

@@ -92,6 +92,7 @@ describe('Eleven v4 Turbo speech', () => {
     socket.emit('open');
     await Promise.resolve();
     expect(JSON.parse(socket.sent[1] ?? '{}').inputs[0].text).toBe('[anime character] [whispers] [giggles] 内緒だよ。');
+    expect(JSON.parse(socket.sent[1] ?? '{}').inputs[0].text).not.toContain('[whispers] [whispers]');
     socket.emit('message', JSON.stringify({ audio: Buffer.from([1, 2]).toString('base64') }));
     socket.emit('message', JSON.stringify({ is_final: true }));
     await next;
