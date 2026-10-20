@@ -186,6 +186,10 @@ export const SWITCHES = [
     doc: 'Image-free fast judgment of danger for a Minecraft body: fight, flee or shelter from its own state (Syzygy ADR-0011 stage 2).',
   },
   {
+    name: 'SHANNON_MINECRAFT_WORKING_EVENTS', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
+    doc: 'What a Minecraft body tells while it works cuts a stalled command or a calm wait with a need in reach (mb-arch stage 1).',
+  },
+  {
     name: 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL', default: 'off', kind: 'on_only', owner: 'recall', requires: [],
     doc: 'Conversation recall reads temporal knowledge.',
   },
