@@ -3,7 +3,7 @@ import type { LiveMoment, WorkingEvent } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { MinecraftLive, type LiveFrames, type LiveTaskInfo } from '../src/surfaces/minecraft/minecraftLive.js';
 import { LIVE_BLOCK_HEADER, liveBlock } from '../src/surfaces/minecraft/minecraftLiveBlock.js';
-import { carriedWords, doingWords, mapWords, mobWords, timeWords } from '../src/surfaces/minecraft/minecraftLiveWords.js';
+import { carriedWords, doingWords, mapWords, mobWords, skillDoing, timeWords } from '../src/surfaces/minecraft/minecraftLiveWords.js';
 
 const T0 = Date.parse('2026-10-20T10:00:00.000Z');
 let sequence = 0;
@@ -36,6 +36,11 @@ describe('the words', () => {
     expect(doingWords({ name: 'mc.attack-continuously', input: { entityName: 'zombie' } })).toBe('ゾンビを相手に戦っている');
     expect(doingWords({ name: 'mc.something-new', input: {} })).toBe('マイクラの作業を進めている');
     expect(doingWords(null)).toBe('');
+    expect(doingWords(null, '掘っている')).toBe('掘っている');
+    expect(doingWords({ name: 'mc.run-procedure', input: { milestone: '鉄' } }, '掘っている')).toBe('「鉄」の手順を進めていて、掘っている');
+    expect(doingWords({ name: 'mc.run-procedure', input: {} })).toBe('決めた手順を進めていて、まとめて動かしている');
+    expect(skillDoing('stair-mine')).toBe('階段状に掘り下がっている');
+    expect(skillDoing('nonsense')).toBe('');
     expect([timeWords(500), timeWords(6000), timeWords(13_000), timeWords(18_000), timeWords(null)]).toEqual(['明け方', '昼', '夕方', '夜', '']);
   });
   it('says what she carries that is worth saying', () => {
@@ -241,6 +246,23 @@ describe('MinecraftLive', () => {
     f.advance(30_000);
     f.show(observation());
     expect(f.live.block({ alone: true })).not.toContain('詰まり気味');
+  });
+
+  it('says what a procedure is doing by the command the body reports, while the report is recent', () => {
+    const f = fixture();
+    f.live.begin(f.task());
+    f.live.activity('task', { name: 'mc.run-procedure', input: { milestone: '鉄', through: 'バケツ' } });
+    expect(f.live.block({ alone: true })).toContain('いましていること: 「鉄」の手順を進めていて、まとめて動かしている');
+    const progress: WorkingEvent = { seq: 1, at: new Date(T0).toISOString(), kind: 'action.progress', subject: 'op9', data: { skill: 'mine-block', elapsedMs: 4000 } };
+    f.live.events('minecraft:world', [progress]);
+    expect(f.live.block({ alone: true })).toContain('いましていること: 「鉄」の手順を進めていて、掘っている');
+    f.advance(8_000);
+    f.show(observation());
+    expect(f.live.block({ alone: true })).toContain('まとめて動かしている');
+    // No call of hers, but the body is working (a filler the executor runs): told by what it reports.
+    f.live.activity('task', null);
+    f.live.events('minecraft:world', [{ ...progress, seq: 2, data: { skill: 'stair-mine' } }]);
+    expect(f.live.block({ alone: true })).toContain('いましていること: 階段状に掘り下がっている');
   });
 
   it('counts the replies being written and the last time someone spoke to her', () => {

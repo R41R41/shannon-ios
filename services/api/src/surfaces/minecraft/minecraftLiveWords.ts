@@ -47,12 +47,27 @@ const DOING: Readonly<Record<string, (call: NonNullable<Call>) => string>> = Obj
   'mc.leave-water': () => '水から上がろうとしている',
   'mc.flee-from': () => '敵から逃げている',
   'mc.eat': () => 'ごはんを食べている',
-  'mc.run-procedure': () => '決めた手順をまとめて進めている',
 });
-/** What a running tool is doing, in a few words: the tool and the item or block it names, never its other arguments. */
-export function doingWords(call: Call): string {
-  if (!call) return '';
-  return DOING[call.name]?.(call) ?? 'マイクラの作業を進めている';
+/** What a body command is doing, from the skill the body names in its progress events (the commands a procedure runs are not her own calls). */
+const SKILLS: Readonly<Record<string, string>> = Object.freeze({
+  'mine-block': '掘っている', 'stair-mine': '階段状に掘り下がっている', 'move-to': '歩いて移動している', 'explore-for-structure': '歩いて探している',
+  'attack-continuously': '戦っている', 'wait-time': '少し待っている', 'craft-one': '何かを作っている', 'start-smelting': 'かまどで焼いている',
+  'withdraw-from-furnace': 'かまどから取り出している', 'build-structure': '何かを建てている', 'build-around-self': '身を守る囲いを作っている',
+  'dig-shelter': '穴を掘って身を隠している', 'use-item-on-block': '道具を使って作業している', 'sleep-in-bed': 'ベッドで寝ている',
+});
+export const skillDoing = (skill: string): string => SKILLS[skill] ?? '';
+
+/**
+ * What a running tool is doing, in a few words: the tool and the item or block it names, never its other arguments. A procedure runs
+ * many commands under one call of hers: it is told by the step it runs, and by the command the body reports now (`running`).
+ */
+export function doingWords(call: Call, running = ''): string {
+  if (!call) return running;
+  if (call.name === 'mc.run-procedure') {
+    const step = typeof arg(call, 'milestone') === 'string' ? `「${String(arg(call, 'milestone')).slice(0, 20)}」の手順を進めていて、` : '決めた手順を進めていて、';
+    return `${step}${running || 'まとめて動かしている'}`;
+  }
+  return DOING[call.name]?.(call) ?? (running || 'マイクラの作業を進めている');
 }
 
 /** The body's four parts of the day, from the tick (as the body tells it to the companion). */

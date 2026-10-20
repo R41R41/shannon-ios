@@ -3,7 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { liveBlock, type LiveSnapshot } from './minecraftLiveBlock.js';
 import { bodyInDanger, createMomentDetector, dayTick, dimensionOfWorld, type MomentDetector } from './minecraftMoments.js';
-import { carriedWords, doingWords, mapWords, mobWords, timeWords } from './minecraftLiveWords.js';
+import { carriedWords, doingWords, mapWords, mobWords, skillDoing, timeWords } from './minecraftLiveWords.js';
 import { MILESTONES, milestoneNow, milestoneTargetSeconds } from './minecraftStage.js';
 import { withRecoverableDrops } from './minecraftSkillPointers.js';
 
@@ -40,7 +40,7 @@ export interface LiveFrames {
 }
 
 export const LIVE_FRAME_MAXIMUM_SECONDS = 120;
-const MOMENTS_KEPT = 40, DETECT_EVERY_MS = 400, SHOWN_MOMENT_MINUTES = 10, STUCK_SHOWN_SECONDS = 25;
+const MOMENTS_KEPT = 40, DETECT_EVERY_MS = 400, SHOWN_MOMENT_MINUTES = 10, STUCK_SHOWN_SECONDS = 25, RUNNING_SHOWN_SECONDS = 6;
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -66,6 +66,8 @@ eplying, heard). */
   private replies = 0;
   private heardAt: number | null = null;
   private stall: { what: string; seconds: number; at: number } | null = null;
+  /** The command the body reported running last (its progress events come every two seconds): it says what a procedure is doing. */
+  private running: { skill: string; at: number } | null = null;
 
   constructor(private readonly parts: {
     frames: LiveFrames; now?: () => number; log?: (line: string) => void;
@@ -177,6 +179,7 @@ eplying, heard). */
     try {
       const now = this.now();
       for (const event of events) {
+        if (event.kind === 'action.progress') this.running = { skill: String(event.data.skill ?? ''), at: now };
         if (event.kind !== 'action.stalled') continue;
         const skill = String(event.data.skill ?? ''), seconds = Math.round((finite(event.data.sinceProgressMs) ?? 0) / 1000), what = SKILL_WORDS[skill] ?? '作業';
         this.stall = { what, seconds, at: now };
@@ -192,9 +195,15 @@ eplying, heard). */
     const found = bodyId ? this.parts.frames.latest(bodyId, LIVE_FRAME_MAXIMUM_SECONDS * 1000) : null;
     if (!found && !task) return null;
     const base = { goal: task?.info.goal ?? null, goalIsRequest: task ? task.info.origin !== 'own_time' : false,
-      elapsedSeconds: task ? Math.max(0, Math.round((now - task.info.createdAtMs) / 1000)) : null, doing: doingWords(task?.call ?? null) };
+      elapsedSeconds: task ? Math.max(0, Math.round((now - task.info.createdAtMs) / 1000)) : null,
+      doing: doingWords(task?.call ?? null, this.runningWords(now)) };
     if (!found) return this.disconnected(base);
     return this.read(found.observation, found.ageMs, base, task);
+  }
+
+  /** What the body's running command is doing, while its last progress event is recent. */
+  private runningWords(now: number): string {
+    return this.running && now - this.running.at <= RUNNING_SHOWN_SECONDS * 1000 ? skillDoing(this.running.skill) : '';
   }
 
   private disconnected(base: Pick<LiveSnapshot, 'goal' | 'goalIsRequest' | 'elapsedSeconds' | 'doing'>): LiveSnapshot {
