@@ -1,4 +1,5 @@
 import { prepared } from '../../../infra/sqlite/sqliteOpen.js';
+import { databaseChangeMark } from '../../../infra/sqlite/experienceCandidateReads.js';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
@@ -109,6 +110,9 @@ export class SQLiteSkills {
   constructor(private readonly database: DatabaseSync, options: { createSchema: boolean }) {
     if (options.createSchema) ensureSkillSchema(database);
   }
+
+  /** This database's change mark (`databaseChangeMark`): equal marks, every skill row reads as it did. Null in a transaction or closed. */
+  changeMark(): string | null { return this.database.isOpen ? databaseChangeMark(this.database) : null; }
 
   importReceipt(scopeKey: string, receiptId: string): SkillImportReceipt | null {
     const row = this.database.prepare('SELECT receipt_json FROM shannon_skill_imports WHERE scope_key = ? AND receipt_id = ?').get(scopeKey, receiptId) as { receipt_json: string } | undefined;

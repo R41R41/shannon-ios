@@ -54,6 +54,11 @@ export interface FcaSourceGuard {
   sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string, via?: FcaWalkCaller): boolean;
   /** The verdict `sources` would reuse now, or undefined where it would walk (nothing is walked or remembered). */
   peek?(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean | undefined;
+  /**
+   * Whether `peek` would answer false now, for the gates that act on nothing else (`peekedVisible`): the moment's state and read
+   * receipts are asked only where a withheld verdict is kept for these sources.
+   */
+  withheld?(scopeKey: string, task: TaskView, sources: readonly TaskSource[]): boolean;
   content?(scopeKey: string, taskId: string, text: string, observedAt: string): boolean;
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   /**

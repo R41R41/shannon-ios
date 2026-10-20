@@ -16,6 +16,8 @@ import type { TaskRuntime, TaskSource, TaskStep, TaskView } from '../mind/action
  */
 export function peekedVisible(guard: FcaSourceGuard | undefined, scopeKey: string, task: TaskView,
   sources: readonly TaskSource[], whole: () => boolean): boolean {
+  // `withheld` is `peek` read this way, asking the moment only where a withheld verdict is kept (`fcaConversationSources.ts`).
+  if (guard?.withheld) return !guard.withheld(scopeKey, task, sources);
   return guard?.peek ? guard.peek(scopeKey, task, sources) !== false : whole();
 }
 

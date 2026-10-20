@@ -69,6 +69,57 @@ describe('the scheduler gate (the wake tick)', () => {
   });
 });
 
+describe('the gates\' question (`withheld`)', () => {
+  /** `withheld` and `peek` asked at the same instant: withheld exactly where peek is false. */
+  const same = (w: ReturnType<typeof world>) => {
+    const peeked = w.guard.peek!('owner', w.task, w.rows), withheld = w.guard.withheld!('owner', w.task, w.rows);
+    expect(withheld).toBe(peeked === false);
+    return { peeked, withheld };
+  };
+
+  it('is peek\'s false in every state a verdict can be in, and asks no receipt where none is withheld', () => {
+    const w = world();
+    // No verdict.
+    expect(same(w)).toEqual({ peeked: undefined, withheld: false });
+    // A visible verdict: no receipt is asked again for the gate.
+    expect(w.guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(true);
+    const asks = vi.fn(w.f.readSourceVisible);
+    const asking = createFcaSourceGuard({ runtime: w.runtime, state: w.f.world.store, conversations: w.f.world.store, ownerScope: 'owner',
+      ownerAlone: w.f.ownerAlone, readSourceVisible: asks, clock: () => Date.parse(w.f.world.now()) });
+    expect(asking.sources('owner', w.task, w.rows, undefined, 'step')).toBe(true);
+    asks.mockClear();
+    expect(asking.withheld!('owner', w.task, w.rows)).toBe(false);
+    expect(asks).not.toHaveBeenCalled();
+    expect(same(w)).toEqual({ peeked: true, withheld: false });
+    // Past the verdict's window: nothing kept.
+    w.advance(6_000);
+    expect(same(w)).toEqual({ peeked: undefined, withheld: false });
+    // A forget: the whole check withholds it, and that verdict is the gates' false.
+    w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'forget' });
+    expect(w.guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(false);
+    expect(same(w)).toEqual({ peeked: false, withheld: true });
+    // ...until its window ends (then the whole check, where tools run, judges it again).
+    w.advance(6_000);
+    expect(same(w)).toEqual({ peeked: undefined, withheld: false });
+    expect(w.guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(false);
+    // The owner no longer alone: withheld at once, with or without a verdict.
+    w.f.setAlone(false);
+    expect(same(w)).toEqual({ peeked: false, withheld: true });
+  });
+
+  it('is what the scheduler and the monitor act on', () => {
+    const w = world();
+    expect(w.guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(true);
+    const peekOnly = { sources: w.guard.sources, peek: w.guard.peek } as typeof w.guard;
+    expect(peekedVisible(w.guard, 'owner', w.task, w.rows, () => { throw new Error('no whole check'); })).toBe(true);
+    expect(peekedVisible(peekOnly, 'owner', w.task, w.rows, () => { throw new Error('no whole check'); })).toBe(true);
+    w.f.memoryService.mutate('owner', { memoryId: w.recent, action: 'forget' });
+    expect(w.guard.sources('owner', w.task, w.rows, undefined, 'step')).toBe(false);
+    expect(peekedVisible(w.guard, 'owner', w.task, w.rows, () => true)).toBe(false);
+    expect(peekedVisible(peekOnly, 'owner', w.task, w.rows, () => true)).toBe(false);
+  });
+});
+
 describe('the task runtime tick', () => {
   it('asks the scheduler gate for a ready task, and the whole gate only where the task is admitted', async () => {
     const h = actionHarness(() => '2026-10-17T00:00:00.000Z'); migrateAgentTasks(h.db); cleanups.push(() => h.close());

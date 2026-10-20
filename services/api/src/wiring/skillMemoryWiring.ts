@@ -113,6 +113,12 @@ export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string)
       if (!bodyPasses(body)) return null;
       return { body, provenance: revision?.provenance ?? skill.provenance };
     },
+    // The checks `readSource` takes (made anew here, as there, when they have expired): `fcaReadSourceAnswers.ts` keys its answers by them.
+    readSourceChecks: (scopeKey, renew) => {
+      if (!sources || !memory.ready()) return null;
+      const checks = renew ? checksFor(scopeKey, sources) : reused.get(scopeKey);
+      return checks ? { checks, mark: renew ? memory.store.changeMark() : null } : null;
+    },
     used: (scopeKey, name, use, at) => memory.used(scopeKey, name, use, at),
     nextTurn: (scopeKey, talk, serve, at) => memory.nextTurn(scopeKey, talk, serve, at),
   };

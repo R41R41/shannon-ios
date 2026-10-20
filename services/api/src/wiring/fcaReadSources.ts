@@ -5,6 +5,7 @@ import type { ConversationStore } from '../mind/memory/memoryPorts.js';
 import type { StudyStore } from '../mind/action/ownTime/store/studyStore.js';
 import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 import type { AetherContextReader } from '../integrations/aether/aetherContext.js';
+import { readSourceAnswers } from './fcaReadSourceAnswers.js';
 
 /** Taken once, here: asked from a catch block at the very end of the stack, a lookup through another module's exports can itself fail. */
 const stackRanOut = isStackOverflow, insideWalk = insideDeepWalk;
@@ -23,6 +24,11 @@ export interface FcaReadSourcesOptions {
   /** These native readers return only currently accessible sources; no prompt parsing or new remote executor. */
   skill?(scopeKey: string, skillId: string, revisionId?: string): { body: string } | null;
   folderAvailable?(scopeKey: string, host: string): boolean;
+  /**
+   * The checks `skill` reads a skill under (`SkillTurnPorts.readSourceChecks`): an answer that read a skill is given again only under
+   * the same ones (`fcaReadSourceAnswers.ts`). Absent: never given again.
+   */
+  skillChecks?(scopeKey: string, renew: boolean): { checks: object; mark: string | null } | null;
 }
 
 /**
@@ -32,6 +38,8 @@ export interface FcaReadSourcesOptions {
 export function createFcaReadSources(parts: FcaReadSourcesOptions):
   (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
   const job = readSourceJob(parts.conversations);
+  // Every receipt is read through `tracked` (what it asks outside the database is noted); a check's receipts are answered once a moment.
+  const answers = readSourceAnswers(parts), tracked = answers.tracked;
   /**
    * What the skill reader answered (existence, status, ancestry, body checks: the same at every time of a receipt), per skill and
    * revision, for one check of the caller's (`shared`: one walk of the FCA source guard over one snapshot); a later check asks
@@ -41,22 +49,25 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
    */
   const walks = new WeakMap<object, Map<string, { body: string } | null>>();
   const skillOf = (shared: ReadSourceSnapshot | undefined): SkillReader => (scopeKey, skillId, revisionId) => {
-    if (!shared) return parts.skill?.(scopeKey, skillId, revisionId) ?? null;
+    if (!shared) return tracked.skill?.(scopeKey, skillId, revisionId) ?? null;
     const walk = shared.walk ?? shared.withholding;
     let known = walks.get(walk);
     if (!known) walks.set(walk, known = new Map());
     const key = revisionId === undefined ? `${scopeKey}\u0000${skillId}` : `${scopeKey}\u0000${skillId}\u0000${revisionId}\u0001`;
-    if (!known.has(key)) known.set(key, parts.skill?.(scopeKey, skillId, revisionId) ?? null);
+    // Asked through `tracked` even when this walk read it already: a later answer of the walk reads the skill as well.
+    if (!known.has(key)) known.set(key, tracked.skill?.(scopeKey, skillId, revisionId) ?? null);
+    else answers.readSkill(scopeKey);
     return known.get(key)!;
   };
   return (scopeKey, sourceId, observedAt, shared) => {
     try {
       if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || sourceId.length > 240) return false;
-      if (shared) return readSourceVisible(parts, skillOf(shared), scopeKey, sourceId, observedAt, shared);
+      if (shared) return answers.answer(scopeKey, sourceId, observedAt, shared,
+        () => readSourceVisible(tracked, skillOf(shared), scopeKey, sourceId, observedAt, shared));
       // Without a caller's snapshot: the state is read fresh every time, and one synchronous job shares the withholding made under
       // that same state (2026-10-13: each of a turn's ~224 checks loaded every remembered turn again, ~3 s a turn on the VM).
       const state = parts.state.snapshot(scopeKey);
-      return readSourceVisible(parts, skillOf(undefined), scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
+      return readSourceVisible(tracked, skillOf(undefined), scopeKey, sourceId, observedAt, { state, withholding: job.withholding(scopeKey, state) });
     } catch (error) {
       // A stack overflow inside a long recall walk is not "not visible": it goes up to the walk, which settles the chain and asks again.
       if (goesUp(error)) throw error;
