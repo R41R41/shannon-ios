@@ -15,7 +15,10 @@ Python 3.12 の標準ライブラリだけを使います（`python3 -I trials.p
    `agent_tasks.goal` が 13 文字で届いたかを確かめて、結果に `goalOk` として残す。
 3. 5 秒ごとに RCON で持ち物（`clear <体> <物> 0` で数える。着ている防具も入る）・次元・死んだ数を見て、節目の時刻を記録する。
 4. 終わりの条件（区間の「end」の節目がすべて済んだ）・時間切れ・費用の上限・死亡・タスクの終わり のどれかで止める。
-   止まっていなければ `cancel`、止まらなければ `release`。そのあと `logout`、サーバーを `stop.sh` で止める。
+   タスクの一時停止（paused）は、90 秒続くか「止まった」になるまで終わりと見ない（`fca_unknown` の止まりは、体の確かめ直しで数秒のうちに
+   再開されることが多い。10/20 の 1 回目はここを終わりと見て、再開した最中に logout した）。
+   タスクが体を放す（終わる、または paused・stopped になる）まで体はログインしたままにして、`cancel`、それでも放さなければ `release`。
+   そのあと `logout`、サーバーを `stop.sh` で止める。その試しの journal の `Shannon FCA step unknown` の code も結果に残す。
 5. 1 回のまとめての実行（バッチ）が終わったら、`level-name`・`level-seed`・`world-id`・`server.properties` を控えのとおりに戻す。
 
 **本番のワールドのフォルダ（`shannon_home`）は、動かさず、書きもしません。** 戻し忘れに備えて、始める前の設定を `state.json` と

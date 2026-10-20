@@ -62,6 +62,14 @@ class MilestoneTest(unittest.TestCase):
         self.assertIn('minecraft:iron_boots', trials.tracked_items(self.section))
 
 
+class SettledTest(unittest.TestCase):
+    def test_an_unknown_pause_still_holds_the_body(self):
+        self.assertFalse(trials.settled({'status': 'paused', 'execState': 'unknown'}))
+        self.assertTrue(trials.settled({'status': 'paused', 'execState': 'stopped'}))
+        self.assertTrue(trials.settled({'status': 'failed', 'execState': 'failed'}))
+        self.assertFalse(trials.settled({'status': 'running', 'execState': 'waiting'}))
+
+
 class ReportTest(unittest.TestCase):
     def test_previous_result_and_delta(self):
         with tempfile.TemporaryDirectory() as tmp:

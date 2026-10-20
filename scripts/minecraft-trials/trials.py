@@ -54,7 +54,13 @@ MODEL_LINE = b'SHANNON_FCA_MODEL=claude-sonnet-5-5\n'
 GOAL = 'エンドラを討伐してください'
 OPERATOR = 'trials'
 RATE_PER_HOUR = 20          # OPERATOR_LIMITS.requestsPerHour (accepted invocations of every operator)
-TERMINAL = {'completed', 'failed', 'cancelled', 'paused'}
+FINISHED = {'completed', 'failed', 'cancelled'}
+PAUSE_PATIENCE = 90          # an fca_unknown pause is often resumed by the body recovery within seconds (trial 20261020T1450)
+
+
+def settled(row):
+    """The task holds the body no more: finished, or paused as stopped."""
+    return row.get('status') in FINISHED or (row.get('status') == 'paused' and row.get('execState') == 'stopped')
 
 
 def log(*parts):
@@ -852,6 +858,18 @@ def wait_body_online(seconds=90):
     return False
 
 
+def step_unknown_codes(task_id, since_iso):
+    """`Shannon FCA step unknown task=<id> code=<code>` lines of the trial (the journal is readable by the service user)."""
+    since = dt.datetime.strptime(since_iso[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+    out = subprocess.run(['journalctl', '-u', 'shannon-ios', '--since', since, '--no-pager', '-o', 'short-iso'], capture_output=True, text=True, timeout=60).stdout
+    codes = []
+    for line in out.splitlines():
+        if f'task={task_id}' in line and 'FCA step unknown' in line:
+            m = re.search(r'code=(\S+)', line)
+            codes.append({'at': line[:19], 'code': m.group(1) if m else '?'})
+    return codes
+
+
 def run_trial(section, seed_key, batch, cfg, dry_run):
     trial_id = f'{batch}-s{section["id"]}-{seed_key}'
     variant = (load_json(os.path.join(HERE, 'seeds.json'), {}).get('variants') or {}).get(seed_key, {})
@@ -904,7 +922,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
     log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
     latched, maxima, first_seen, last = {}, {}, {}, {}
     items = tracked_items(section)
-    reason = None
+    reason, paused_since = None, None
     while True:
         elapsed = time.monotonic() - t0
         try:
@@ -923,24 +941,39 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
         last = {'counts': counts, 'state': state, 'row': row}
         if done: reason = 'reached'; break
         if state.get('deaths'): reason = 'died'; break
-        if row.get('status') in TERMINAL: reason = f'task_{row["status"]}:{row.get("pauseReason") or row.get("execState")}'; break
+        if row.get('status') in FINISHED: reason = f'task_{row["status"]}:{row.get("pauseReason") or row.get("execState")}'; break
+        if row.get('status') == 'paused':
+            paused_since = paused_since if paused_since is not None else elapsed
+            if elapsed - paused_since >= PAUSE_PATIENCE or settled(row):
+                reason = f'task_paused:{row.get("pauseReason") or row.get("execState")}'; break
+        else:
+            paused_since = None
         if row.get('yen', 0) >= cfg['trialCapYen'] - 1: reason = 'budget'; break
         if elapsed >= section['limitMinutes'] * 60: reason = 'time_limit'; break
         time.sleep(cfg['pollSeconds'])
     elapsed = time.monotonic() - t0
     log(f'trial {trial_id}: {reason} at {elapsed:.0f} s; milestones {latched}')
+    # The body stays logged in until the task holds it no more: a logout under an unknown step leaves the task waiting for the body.
     row = task_row(task_id) or {}
-    if row.get('status') not in TERMINAL:
-        ops('cancel', task_id)
-        for _ in range(30):
+    cleanup = []
+    if not settled(row):
+        cleanup.append('cancel:' + str(ops('cancel', task_id).get('code')))
+        for _ in range(60):
             row = task_row(task_id) or {}
-            if row.get('status') in TERMINAL: break
+            if settled(row): break
             time.sleep(2)
-        if row.get('status') not in TERMINAL:
+        if not settled(row):
             wait_rate(2)
-            ops('release')
+            cleanup.append('release:' + str(ops('release').get('code')))
+            for _ in range(30):
+                row = task_row(task_id) or {}
+                if settled(row): break
+                time.sleep(2)
     time.sleep(3)
     row = task_row(task_id) or {}
+    cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
+    result['cleanup'] = cleanup
+    result['stepUnknown'] = step_unknown_codes(task_id, result['startedAt'])
     result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason == 'reached' else None,
                    'elapsed': round(elapsed, 1), 'milestones': latched, 'firstSeen': first_seen, 'maxCounts': maxima,
                    'missing': [m['name'] for m in section['milestones'] if m.get('end') and m['name'] not in latched],
