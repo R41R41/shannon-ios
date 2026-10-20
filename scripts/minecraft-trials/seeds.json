@@ -1,0 +1,426 @@
+{
+ "note": "facts from trials.py scout (radius 96 around spawn; locate for structures and biomes). distances in blocks from the world spawn.",
+ "seeds": [
+  {
+   "key": "r16",
+   "seed": "-2560667610695674423",
+   "source": "実走16（10/19 22:42）",
+   "tags": [
+    "plains",
+    "村 814m",
+    "地表の溶岩 12m",
+    "原木 48m",
+    "荒れたポータル 173m"
+   ],
+   "spawn": [
+    0,
+    91,
+    0
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 814,
+   "igloo": 1523,
+   "ruinedPortal": 173,
+   "surfaceLava": 12.2,
+   "nearestLog": 48.7,
+   "logsWithin32": 0,
+   "ironOreWithin48": 1920,
+   "coalOreWithin48": 3587,
+   "deepLavaChunks": 63,
+   "animals": {
+    "chicken": 8,
+    "pig": 4,
+    "sheep": 4
+   },
+   "nearestSheep": 52.4,
+   "plains": 0,
+   "snowyPlains": 2479
+  },
+  {
+   "key": "r17",
+   "seed": "4657921116182387842",
+   "source": "実走17（10/20 01:08）",
+   "tags": [
+    "forest",
+    "村 266m",
+    "地表の溶岩 36m",
+    "原木 2m"
+   ],
+   "spawn": [
+    0,
+    78,
+    0
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 266,
+   "igloo": 1985,
+   "ruinedPortal": 364,
+   "surfaceLava": 36.5,
+   "nearestLog": 2.0,
+   "logsWithin32": 462,
+   "ironOreWithin48": 2963,
+   "coalOreWithin48": 2953,
+   "deepLavaChunks": 61,
+   "animals": {
+    "pig": 9,
+    "chicken": 7,
+    "cow": 4,
+    "sheep": 2,
+    "rabbit": 1
+   },
+   "nearestSheep": 42.4,
+   "plains": 90,
+   "snowyPlains": 2307
+  },
+  {
+   "key": "r18",
+   "seed": "1765884804166637495",
+   "source": "実走18（10/20 07:04）",
+   "tags": [
+    "savanna",
+    "羊なし（96m）",
+    "村 723m",
+    "地表の溶岩 50m",
+    "原木 2m"
+   ],
+   "spawn": [
+    16,
+    79,
+    -48
+   ],
+   "spawnBiome": "minecraft:savanna",
+   "village": 723,
+   "igloo": 3792,
+   "ruinedPortal": 895,
+   "surfaceLava": 50.5,
+   "nearestLog": 2.8,
+   "logsWithin32": 64,
+   "ironOreWithin48": 2115,
+   "coalOreWithin48": 2527,
+   "deepLavaChunks": 42,
+   "animals": {
+    "pig": 11,
+    "chicken": 4
+   },
+   "nearestSheep": null,
+   "plains": 214,
+   "snowyPlains": 3678
+  },
+  {
+   "key": "r19-snowy",
+   "seed": "5313593320881658764",
+   "source": "実走19（10/20 10:28）",
+   "tags": [
+    "snowy_plains",
+    "羊なし（96m）",
+    "村 402m",
+    "地表の溶岩 50m",
+    "原木 42m",
+    "イグルー 64m（ベッド）"
+   ],
+   "spawn": [
+    0,
+    67,
+    0
+   ],
+   "spawnBiome": "minecraft:snowy_plains",
+   "village": 402,
+   "igloo": 64,
+   "ruinedPortal": 461,
+   "surfaceLava": 50.0,
+   "nearestLog": 42.7,
+   "logsWithin32": 0,
+   "ironOreWithin48": 2046,
+   "coalOreWithin48": 2098,
+   "deepLavaChunks": 71,
+   "animals": {
+    "rabbit": 8
+   },
+   "nearestSheep": null,
+   "plains": 729,
+   "snowyPlains": 0
+  },
+  {
+   "key": "x1",
+   "seed": "5866716653854575253",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "birch_forest",
+    "村 2021m",
+    "地表の溶岩 66m",
+    "原木 1m"
+   ],
+   "spawn": [
+    -16,
+    71,
+    -16
+   ],
+   "spawnBiome": "minecraft:birch_forest",
+   "village": 2021,
+   "igloo": 2380,
+   "ruinedPortal": 448,
+   "surfaceLava": 66.8,
+   "nearestLog": 1.4,
+   "logsWithin32": 473,
+   "ironOreWithin48": 2033,
+   "coalOreWithin48": 3012,
+   "deepLavaChunks": 35,
+   "animals": {
+    "chicken": 12,
+    "pig": 8,
+    "sheep": 6
+   },
+   "nearestSheep": 33.1,
+   "plains": 480,
+   "snowyPlains": 1746
+  },
+  {
+   "key": "x2",
+   "seed": "-343556679361711778",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "forest",
+    "村 467m",
+    "地表の溶岩 64m",
+    "原木 2m"
+   ],
+   "spawn": [
+    0,
+    69,
+    0
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 467,
+   "igloo": 2485,
+   "ruinedPortal": 272,
+   "surfaceLava": 64.9,
+   "nearestLog": 2.8,
+   "logsWithin32": 339,
+   "ironOreWithin48": 2114,
+   "coalOreWithin48": 2386,
+   "deepLavaChunks": 53,
+   "animals": {
+    "cow": 4,
+    "pig": 1,
+    "sheep": 8,
+    "chicken": 1
+   },
+   "nearestSheep": 11.7,
+   "plains": 45,
+   "snowyPlains": 2433
+  },
+  {
+   "key": "x3",
+   "seed": "-7713296442948452590",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "forest",
+    "村 359m",
+    "地表の溶岩 8m",
+    "原木 3m"
+   ],
+   "spawn": [
+    0,
+    136,
+    0
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 359,
+   "igloo": 4667,
+   "ruinedPortal": 467,
+   "surfaceLava": 8.1,
+   "nearestLog": 3.6,
+   "logsWithin32": 401,
+   "ironOreWithin48": 3019,
+   "coalOreWithin48": 9451,
+   "deepLavaChunks": 51,
+   "animals": {
+    "cow": 2,
+    "chicken": 10,
+    "sheep": 6,
+    "pig": 3
+   },
+   "nearestSheep": 77.4,
+   "plains": 71,
+   "snowyPlains": 4800
+  },
+  {
+   "key": "x4",
+   "seed": "-8015210105121280558",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "forest",
+    "村 475m",
+    "地表の溶岩 33m",
+    "原木 2m"
+   ],
+   "spawn": [
+    -16,
+    84,
+    16
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 475,
+   "igloo": 3759,
+   "ruinedPortal": 558,
+   "surfaceLava": 33.2,
+   "nearestLog": 2.2,
+   "logsWithin32": 212,
+   "ironOreWithin48": 3079,
+   "coalOreWithin48": 4152,
+   "deepLavaChunks": 49,
+   "animals": {
+    "sheep": 5,
+    "chicken": 5
+   },
+   "nearestSheep": 19.0,
+   "plains": 32,
+   "snowyPlains": 3598
+  },
+  {
+   "key": "x5",
+   "seed": "-5281875285714604988",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "plains",
+    "村 1285m",
+    "地表の溶岩 32m",
+    "原木 12m"
+   ],
+   "spawn": [
+    -16,
+    65,
+    16
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 1285,
+   "igloo": 1731,
+   "ruinedPortal": 1274,
+   "surfaceLava": 32.0,
+   "nearestLog": 12.0,
+   "logsWithin32": 15,
+   "ironOreWithin48": 2244,
+   "coalOreWithin48": 2270,
+   "deepLavaChunks": 41,
+   "animals": {
+    "pig": 14,
+    "sheep": 4,
+    "cow": 4
+   },
+   "nearestSheep": 50.8,
+   "plains": 0,
+   "snowyPlains": 1274
+  },
+  {
+   "key": "x6",
+   "seed": "-8504033051134914667",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "forest",
+    "村 1676m",
+    "地表の溶岩 なし（96m）",
+    "原木 1m"
+   ],
+   "spawn": [
+    80,
+    74,
+    -144
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 1676,
+   "igloo": 3073,
+   "ruinedPortal": 329,
+   "surfaceLava": null,
+   "nearestLog": 1.4,
+   "logsWithin32": 471,
+   "ironOreWithin48": 2136,
+   "coalOreWithin48": 2682,
+   "deepLavaChunks": 30,
+   "animals": {
+    "chicken": 9,
+    "sheep": 2,
+    "cow": 2
+   },
+   "nearestSheep": 50.9,
+   "plains": 131,
+   "snowyPlains": 1987
+  },
+  {
+   "key": "x7",
+   "seed": "8621378575707639967",
+   "source": "ランダムな候補（10/20 下見）",
+   "tags": [
+    "snowy_plains",
+    "羊なし（96m）",
+    "村 407m",
+    "地表の溶岩 11m",
+    "原木 13m"
+   ],
+   "spawn": [
+    -80,
+    77,
+    320
+   ],
+   "spawnBiome": "minecraft:snowy_plains",
+   "village": 407,
+   "igloo": 283,
+   "ruinedPortal": 351,
+   "surfaceLava": 11.0,
+   "nearestLog": 13.4,
+   "logsWithin32": 9,
+   "ironOreWithin48": 2047,
+   "coalOreWithin48": 2867,
+   "deepLavaChunks": 38,
+   "animals": {
+    "rabbit": 8
+   },
+   "nearestSheep": null,
+   "plains": 257,
+   "snowyPlains": 0
+  },
+  {
+   "key": "v160",
+   "seed": "2336550045790902932",
+   "source": "ランダムな候補 q8（10/20 速い下見で村 160m）",
+   "tags": [
+    "forest",
+    "村 160m",
+    "地表の溶岩 73m",
+    "原木 6m",
+    "羊 10（96m）"
+   ],
+   "spawn": [
+    0,
+    63,
+    0
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 160,
+   "igloo": 2784,
+   "ruinedPortal": 724,
+   "surfaceLava": 72.7,
+   "nearestLog": 6.0,
+   "logsWithin32": 207,
+   "ironOreWithin48": 2133,
+   "coalOreWithin48": 2678,
+   "deepLavaChunks": 35,
+   "animals": {
+    "sheep": 10,
+    "cow": 4,
+    "chicken": 4,
+    "pig": 1
+   },
+   "nearestSheep": 32.6,
+   "plains": 45,
+   "snowyPlains": 2652
+  }
+ ],
+ "variants": {
+  "r17-village": {
+   "world": "r17",
+   "near": "village",
+   "offset": 48,
+   "note": "実走17 の種で、村（spawn から 266m、(-144, -224)）の 48m 手前から始める。村あり（羊・ベッド・食べ物）の条件"
+  }
+ }
+}

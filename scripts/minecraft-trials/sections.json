@@ -1,0 +1,88 @@
+{
+  "trialCapYen": 300,
+  "batchCapYen": 3000,
+  "pollSeconds": 5,
+  "note": "seconds are from the accepted request; targetSeconds = the owner's milestone targets of 2026-10-20 (420 / 600 / 780 / 1,200 / 1,500 / 1,650 / 1,800) taken as differences; time = the game time a real run would be at (20 ticks a second from a dawn start)",
+  "sections": [
+    {
+      "id": 1, "name": "ゼロ→石器", "targetSeconds": 150, "limitMinutes": 6,
+      "start": { "time": 0, "give": {} },
+      "milestones": [
+        { "name": "原木", "any": ["#minecraft:logs"] },
+        { "name": "作業台", "any": ["minecraft:crafting_table"] },
+        { "name": "木のツルハシ", "any": ["minecraft:wooden_pickaxe"] },
+        { "name": "石のツルハシ", "any": ["minecraft:stone_pickaxe"], "end": true },
+        { "name": "石の斧", "any": ["minecraft:stone_axe"] }
+      ],
+      "seeds": ["r17", "r16", "r19-snowy"]
+    },
+    {
+      "id": 2, "name": "石器→鉄のツルハシとバケツ", "targetSeconds": 270, "limitMinutes": 10,
+      "start": { "time": 3000, "give": {
+        "minecraft:stone_pickaxe": 1, "minecraft:stone_axe": 1, "minecraft:crafting_table": 1, "minecraft:oak_log": 4,
+        "minecraft:oak_planks": 4, "minecraft:stick": 4, "minecraft:cobblestone": 12 } },
+      "milestones": [
+        { "name": "石炭", "any": ["minecraft:coal", "minecraft:charcoal"] },
+        { "name": "かまど", "any": ["minecraft:furnace"] },
+        { "name": "鉄の原鉱", "any": ["minecraft:raw_iron"] },
+        { "name": "鉄インゴット", "any": ["minecraft:iron_ingot"] },
+        { "name": "鉄のツルハシ", "any": ["minecraft:iron_pickaxe"], "end": true },
+        { "name": "バケツ", "any": ["minecraft:bucket", "minecraft:water_bucket", "minecraft:lava_bucket"], "end": true }
+      ],
+      "seeds": ["r19-snowy", "r18", "x3"]
+    },
+    {
+      "id": 3, "name": "鉄のツルハシ→鉄の全身と予備のツルハシ＋ベッド", "targetSeconds": 360, "limitMinutes": 14,
+      "start": { "time": 8400, "give": {
+        "minecraft:iron_pickaxe": 1, "minecraft:stone_pickaxe": 1, "minecraft:stone_axe": 1, "minecraft:bucket": 1,
+        "minecraft:furnace": 1, "minecraft:crafting_table": 1, "minecraft:coal": 4, "minecraft:cobblestone": 20,
+        "minecraft:oak_log": 4, "minecraft:stick": 4, "minecraft:bread": 3 } },
+      "milestones": [
+        { "name": "鉄の胸当て", "any": ["minecraft:iron_chestplate"] },
+        { "name": "鉄の脚当て", "any": ["minecraft:iron_leggings"] },
+        { "name": "鉄の兜", "any": ["minecraft:iron_helmet"] },
+        { "name": "鉄の靴", "any": ["minecraft:iron_boots"] },
+        { "name": "予備のツルハシ", "any": ["minecraft:iron_pickaxe", "minecraft:diamond_pickaxe"], "count": 2, "end": true },
+        { "name": "ベッド", "any": ["#minecraft:beds"], "orRespawn": true, "end": true },
+        { "name": "鉄の全身", "all": ["minecraft:iron_helmet", "minecraft:iron_chestplate", "minecraft:iron_leggings", "minecraft:iron_boots"], "end": true }
+      ],
+      "seeds": ["r19-snowy", "r18", "x2", "v160"]
+    },
+    {
+      "id": 4, "name": "鉄の全身→ダイヤのツルハシ", "targetSeconds": 420, "limitMinutes": 12,
+      "start": { "time": 15600,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate",
+                  "armor.legs": "minecraft:iron_leggings", "armor.feet": "minecraft:iron_boots" },
+        "give": {
+          "minecraft:iron_pickaxe": 2, "minecraft:stone_sword": 1, "minecraft:stone_axe": 1, "minecraft:bucket": 1,
+          "minecraft:white_bed": 1, "minecraft:crafting_table": 1, "minecraft:furnace": 1, "minecraft:coal": 8,
+          "minecraft:cobblestone": 32, "minecraft:oak_log": 4, "minecraft:torch": 8, "minecraft:cooked_beef": 6 } },
+      "milestones": [
+        { "name": "ダイヤ", "any": ["minecraft:diamond"] },
+        { "name": "ダイヤ 3", "any": ["minecraft:diamond"], "count": 3 },
+        { "name": "ダイヤのツルハシ", "any": ["minecraft:diamond_pickaxe"], "end": true }
+      ],
+      "seeds": ["r17", "x4", "r16"]
+    },
+    {
+      "id": 5, "name": "ダイヤのツルハシ→黒曜石 10→ゲート→ネザー", "targetSeconds": 600, "limitMinutes": 15,
+      "start": { "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate",
+                  "armor.legs": "minecraft:iron_leggings", "armor.feet": "minecraft:iron_boots" },
+        "give": {
+          "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:stone_sword": 1, "minecraft:stone_axe": 1,
+          "minecraft:water_bucket": 1, "minecraft:bucket": 1, "minecraft:iron_ingot": 2, "minecraft:white_bed": 1,
+          "minecraft:crafting_table": 1, "minecraft:furnace": 1, "minecraft:coal": 8, "minecraft:cobblestone": 64,
+          "minecraft:oak_log": 4, "minecraft:torch": 8, "minecraft:cooked_beef": 6 } },
+      "milestones": [
+        { "name": "黒曜石 1", "any": ["minecraft:obsidian"] },
+        { "name": "黒曜石 10", "any": ["minecraft:obsidian"], "count": 10 },
+        { "name": "火打石", "any": ["minecraft:flint", "minecraft:flint_and_steel"] },
+        { "name": "火打石と打ち金", "any": ["minecraft:flint_and_steel"] },
+        { "name": "ゲート（黒曜石を 8 以上置いた）", "dropFrom": "minecraft:obsidian", "after": 10, "drop": 8 },
+        { "name": "ネザー", "dimension": "minecraft:the_nether", "end": true }
+      ],
+      "seeds": ["x3", "r16", "x6"]
+    }
+  ]
+}
