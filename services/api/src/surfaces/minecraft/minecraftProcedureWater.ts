@@ -1,6 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
-import { cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { block, cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cardinal, doing, stuck, type McMove } from './minecraftProcedureMoves.js';
 import { waterPlaces } from './minecraftProcedureMap.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
@@ -46,14 +46,44 @@ export const waterGivenUp = (memory: ProcedureMemory, below: boolean) => memory.
  * Water found, the nearest cell not given up on walked to (a walk that was getting nearer is made again, not counted), and scooped. Deep
  * down only a cell within `NEAR_BELOW` m counts: a walk through rock takes two to eight seconds a metre.
  */
+/** What a step of height weighs against a metre along the ground (a walk down into rock and back up is the slowest there is). */
+const HEIGHT_WEIGHT = 3;
+/** What a metre of a water's distance from the furnaces (where the next steps are) weighs against one from her. */
+const ANCHOR_WEIGHT = 0.5;
+/**
+ * Water below this height is taken for a cave's, a ravine's or the sea's floor (the sea's surface lies at 62): a walk into rock, and
+ * back up, whatever the height she stands at. It costs this much more than the same water on the surface (run 21: the cave's at 58
+ * against the pond's at 62, both some 30 blocks below a hill she stood on).
+ */
+const CAVE_LEVEL = 60, CAVE_PENALTY = 40;
+
+/**
+ * The water to walk to, of those the body found: the cheapest walk, not the nearest in three dimensions (run 21: the nearest, 37 m
+ * off, lay in a cave 30 blocks down, and the walk down through rock and back cost about 150 s; the water at her own height, 50 m off,
+ * was passed over). Height counts `HEIGHT_WEIGHT` times a metre along the ground, and the furnaces' distance a little (she goes back
+ * to them next). The order the body gave is kept for ties.
+ */
+export function cheapestWater(from: Cell | null, cells: readonly Cell[], anchors: readonly Cell[] = []): Cell | undefined {
+  if (!from) return cells[0];
+  const cost = (cell: Cell) => Math.hypot(cell.x - from.x, cell.z - from.z) + HEIGHT_WEIGHT * Math.abs(cell.y - from.y) + (cell.y < CAVE_LEVEL ? CAVE_PENALTY : 0)
+    + (anchors.length ? ANCHOR_WEIGHT * Math.min(...anchors.map(anchor => Math.hypot(cell.x - anchor.x, cell.y - anchor.y, cell.z - anchor.z))) : 0);
+  let best: Cell | undefined, bestCost = Infinity;
+  for (const cell of cells) {
+    const value = cost(cell);
+    if (value < bestCost) { best = cell; bestCost = value; }
+  }
+  return best;
+}
+
 export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemory, maxDistance = 64): McMove {
   const deep = !onSurface(facts);
   const from = facts.at;
   const scoop = (cell: Cell): MinecraftWorkItem => ({ tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'bucket' }, why: '水を汲む', expectMs: 3_000,
     key: `water:scoop:${cellKey(cell)}`, onFail: failure => giveUp(cell, failure) });
   const pick = (text: string): MinecraftWorkItem | null => {
-    const cell = cellsInText(text).find(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
-      && (!deep || !from || Math.hypot(candidate.x - from.x, candidate.y - from.y, candidate.z - from.z) <= NEAR_BELOW));
+    const cell = cheapestWater(from, cellsInText(text).filter(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
+      && (!deep || !from || Math.hypot(candidate.x - from.x, candidate.y - from.y, candidate.z - from.z) <= NEAR_BELOW)),
+    facts.jobs.map(job => block(job.position)));
     if (!cell) {
       memory.notes.set('water:none', deep ? 'below' : 'surface');
       return null;
@@ -61,7 +91,7 @@ export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemo
     return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 2 }, why: '水のそばへ行く', expectMs: 30_000, key: `water:walk:${cellKey(cell)}`,
       resumable: true, onFail: failure => giveUp(cell, failure), then: () => scoop(cell), chain: 2 };
   };
-  return doing({ tool: 'mc.find-blocks', input: { blockName: 'water', maxDistance: deep ? NEAR_BELOW + 18 : maxDistance, count: 8 }, why: '水を探す',
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'water', maxDistance: deep ? NEAR_BELOW + 18 : maxDistance, count: 16 }, why: '水を探す',
     expectMs: 2_000, key: `water:find:${memory.succeeded('water:find')}:${unreachable.length}`, then: pick, chain: 3 });
 }
 

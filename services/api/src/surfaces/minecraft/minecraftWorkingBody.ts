@@ -1,4 +1,4 @@
-import type { FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
+import type { FcaBodyLifecycle, FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
 import type { TaskRuntime, TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from './minecraftControl.js';
 import type { WorkingNeed } from '@shannon/mind';
@@ -86,6 +86,7 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
     },
     ...(inner.transient ? { transient: () => ({ ...inner.transient!(), ...fields }) } : {}),
     guard: version => inner.guard(version - cuts),
+    ...(inner.guardFor ? { guardFor: (version: number, call: FcaToolCall) => inner.guardFor!(version - cuts, call) } : {}),
     toolSignal(name, parent) {
       const signal = inner.toolSignal(name, parent);
       if (!name.startsWith('mc.')) return signal;

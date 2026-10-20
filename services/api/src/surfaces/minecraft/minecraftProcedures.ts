@@ -4,7 +4,7 @@ import { MILESTONES } from './minecraftStage.js';
 import type { MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import type { McMove } from './minecraftProcedureMoves.js';
 import { axeMove, bedAndFoodMove, pickaxeMove, storeMove, woodMove } from './minecraftProceduresEarly.js';
-import { IRON_PLAN, ironHeld, ironMove, makePiece, type ProcedureTaskStore } from './minecraftProceduresIron.js';
+import { IRON_PLAN, ironHeld, ironInFurnaces, ironMove, ironShort, makePiece, type ProcedureTaskStore } from './minecraftProceduresIron.js';
 import { diamondMove, gateMove, obsidianMove } from './minecraftProceduresDeep.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 import { carried, type Cell } from './minecraftProcedureFacts.js';
@@ -93,9 +93,14 @@ export function procedureWords(milestone: string): readonly string[] {
   return STEPS.get(milestone)?.say ?? [];
 }
 
-/** The armour's step goes on to the spare pickaxe while the iron for it is there. */
+/**
+ * The armour's step goes on to the spare pickaxe while the iron for it is there, or is still to be dug (`ironShort`: the digs are for the
+ * armour, the sword, the pickaxe and the bucket first, and the second one takes the spare's and the flint's with it): no iron held is
+ * the end of the step only when none is wanted either.
+ */
 function spareDone(facts: MinecraftProcedureFacts): boolean {
-  return IRON_PLAN.every(planned => planned.have(facts)) || ironHeld(facts) < 3;
+  // Not while iron she smelted lies in a furnace within reach: the gate's flint and steel takes the one ingot that is left over.
+  return !ironInFurnaces(facts) && (IRON_PLAN.every(planned => planned.have(facts)) || (ironHeld(facts) < 3 && ironShort(facts) <= 0));
 }
 
 /**

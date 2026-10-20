@@ -187,11 +187,15 @@ export function createRoutePlanning(parts: {
       const lines = this.context(record(world), situation.milestoneName ?? null, situation.elapsedSeconds ?? Number.NaN);
       return lines.length ? { ...situation, route: lines } : situation;
     },
-    /** At the step's close: nothing is waited for. A stopped step ends the request still out (the task is stopping). */
+    /**
+     * At the step's close: nothing is waited for. A stopped step ends the request still out (the task is stopping); that ask is given
+     * back (a request the task's stop cut off is no failed ask of the planner, and a task that goes on after a pause may ask again).
+     */
     async close(stopped = false): Promise<void> {
       const pending = slot.pending;
       if (!stopped || !pending) return;
       pending.abort.abort();
+      slot.asks = Math.max(0, slot.asks - 1);
       finish(pending, null);
     },
     checkpoint(): { minecraftRoute?: MinecraftRoute; minecraftRouteAsks?: number } {

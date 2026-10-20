@@ -39,6 +39,12 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
    * zombies took her to 7 in 26 s and then to 0 while the cage was being built).
    */
   outnumberedHealth: 14, bareArmor: 2,
+  /**
+   * One or two archers at her, with a sword in hand, at least `bareArmor` pieces of armour on and this health or more, are fought, not
+   * hidden from (run 21, 2026-10-21: one skeleton and a creeper in a cave at 20 of 20 in iron armour with an iron sword; the rules took
+   * the archer for a ranged enemy, built cages and ran for 140 s, nobody struck once, and she was at 5 of 20). An archer is weak up close.
+   */
+  shooterFightHealth: 10, shooterFightMax: 2,
 });
 /** Three blocks up a pillar of her own blocks: what a creeper cannot reach when running from it failed (`tower-up`). */
 const TOWER = Object.freeze({ skill: 'tower-up', height: 3, blocks: 3 });
@@ -53,10 +59,17 @@ const BUILDING_BLOCKS: ReadonlySet<string> = new Set(['cobblestone', 'cobbled_de
 /** Enemies that shoot from afar (shared with the refusal of her fights, minecraftOutcome.ts). */
 export const RANGED_ENEMIES: ReadonlySet<string> = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch', 'blaze', 'ghast', 'drowned_trident']);
 const RANGED = RANGED_ENEMIES;
+/** The archers that are walked up to and struck (the others shoot from where blows do not reach, or fly). */
+export const WALK_UP_SHOOTERS: ReadonlySet<string> = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'witch']);
 const WEAPON = /(_sword|_axe|^trident|^mace)$/u;
+/**
+ * The fights she chooses herself (`mc.combat` and the others): while one is hers the fast judgment does not take the body from her
+ * (`minecraftFastJudgment.ts`), and a decision of this kind is not dropped because a reflex touched the body meanwhile (the adapter's
+ * `guardFor`). Run 21: three of them were dropped as stale, one after the other, and nobody struck.
+ */
+export const FIGHT_SKILLS: ReadonlySet<string> = new Set(['attack-continuously', 'attack-nearest', 'retreat-attack', 'combat', 'combat-engage']);
 /** Skills that already defend her: a fast judgment never cuts one off (run 11: a danger reflex stopped her fight and she died). */
-export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set(['attack-continuously', 'attack-nearest', 'retreat-attack', 'flee-from',
-  'dig-shelter', 'build-around-self', 'tower-up']);
+export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set([...FIGHT_SKILLS, 'flee-from', 'dig-shelter', 'build-around-self', 'tower-up']);
 
 /**
  * `canReachMe`: the body's word, true or false, or null when it said nothing (Minecraft run 18, 07:23:23 and 07:23:46 JST: a zombie
@@ -92,7 +105,7 @@ export interface FastDecision {
   /** The closed rule that chose it; `ambiguous` when only the default decided (an image-free arbiter may later choose). */
   rule: 'respawn_shelter' | 'low_health_shelter' | 'low_health_flee' | 'creeper_flee' | 'outnumbered_shelter' | 'ranged_shelter'
     | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee' | 'creeper_tower'
-    | 'outnumbered_tower' | 'outnumbered_cage' | 'low_health_tower';
+    | 'outnumbered_tower' | 'outnumbered_cage' | 'low_health_tower' | 'shooter_fight';
   ambiguous: boolean;
 }
 export type FastHold = 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper';
@@ -223,6 +236,25 @@ function outnumbered(state: FastBodyState, melee: readonly FastThreat[], health:
   return state.canCage && !state.resting.has(CAGE.skill) ? decision('shelter', 'outnumbered_cage') : null;
 }
 
+/** A weapon in the pack and at least `bareArmor` pieces of armour worn, from a frame's world (an unknown armour reads as worn, as in `fastBodyState`). */
+export function armedAndArmoured(world: unknown): boolean {
+  const body = record(world) ?? {};
+  const inventory = Array.isArray(body.inventory) ? body.inventory : [];
+  const weapon = inventory.some(item => typeof record(item)?.name === 'string' && WEAPON.test(String(record(item)!.name)));
+  return weapon && (armorOf(body.worn).armorPieces ?? FAST_JUDGMENT_LIMITS.bareArmor) >= FAST_JUDGMENT_LIMITS.bareArmor;
+}
+
+/**
+ * Whether one or two archers at her are fought: a weapon in hand, `bareArmor` pieces of armour or more (an unknown count reads as
+ * armoured, as in `outnumbered`), health at `shooterFightHealth` or more, and every shooter within 16 m one that is walked up to.
+ */
+function shooterFight(state: FastBodyState, reachable: readonly FastThreat[], health: number): boolean {
+  const shooters = reachable.filter(threat => RANGED.has(threat.name));
+  return state.hasWeapon && (state.armorPieces ?? FAST_JUDGMENT_LIMITS.bareArmor) >= FAST_JUDGMENT_LIMITS.bareArmor
+    && health >= FAST_JUDGMENT_LIMITS.shooterFightHealth && shooters.length >= 1 && shooters.length <= FAST_JUDGMENT_LIMITS.shooterFightMax
+    && shooters.every(threat => WALK_UP_SHOOTERS.has(threat.name));
+}
+
 /** The rules after the entry, in the design's order. */
 function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   const reachable = state.threats.filter(threat => reaches(threat, entry !== 'close'));
@@ -236,9 +268,13 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   const melee = within(6).filter(threat => !RANGED.has(threat.name));
   const before = outnumbered(state, melee, health);
   if (before) return before;
-  if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) return decision('shelter', 'ranged_shelter');
+  const creeperNear = within(FAST_JUDGMENT_LIMITS.creeperDistance).some(threat => threat.name === 'creeper');
+  if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) {
+    // Armed and armoured against one or two archers that can be walked up to: the fight first (never with a creeper within 10 m).
+    return !creeperNear && shooterFight(state, within(16), health) ? decision('fight', 'shooter_fight') : decision('shelter', 'ranged_shelter');
+  }
   // Never a fight with a creeper within 10 m (a fight's target is any hostile, the creeper among them): away from it first.
-  if (within(FAST_JUDGMENT_LIMITS.creeperDistance).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');
+  if (creeperNear) return decision('flee', 'creeper_flee', 'creeper');
   if (melee.length >= 1 && melee.length <= 2 && health >= (state.hasWeapon ? 9 : 12)) return decision('fight', 'melee_fight');
   return decision('shelter', 'ambiguous_shelter');
 }

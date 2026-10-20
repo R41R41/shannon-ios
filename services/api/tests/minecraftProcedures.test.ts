@@ -25,11 +25,15 @@ describe('Minecraft procedures (mb-arch)', () => {
     const { call } = setup(body);
     const results: ToolResult[] = [];
     const plan: Input[] = [{ milestone: '木', through: '食料と羊とベッド' }, { milestone: '鉄', through: '鉄の全身の防具' }, { milestone: 'ダイヤ', through: 'ゲート' }];
-    for (const input of plan) results.push(await call(input));
+    // A run cut between items at its time bound (mb-r21) is asked for again, as the planner does.
+    for (const input of plan) {
+      results.push(await call(input));
+      for (let again = 0; again < 3 && results.at(-1)!.text.includes('上限で区切った'); again += 1) results.push(await call(input));
+    }
     for (let again = 0; body.dimension === 'overworld' && again < 4; again += 1) results.push(await call({ milestone: 'ダイヤ', through: 'ゲート' }));
     const seconds = Math.round((body.clock - AT) / 1000);
     expect(body.dimension, results.map(result => result.text).join('\n---\n')).toBe('the_nether');
-    expect(results.length).toBeLessThanOrEqual(5);
+    expect(results.length).toBeLessThanOrEqual(7);
     expect(body.worn.sort()).toEqual(['iron_boots', 'iron_chestplate', 'iron_helmet', 'iron_leggings']);
     expect(seconds).toBeLessThan(1_800);
     console.info(`simulated: ${seconds}s, planner calls ${results.length}, body calls ${body.calls.length}, marks ${JSON.stringify([...body.marks])}`);

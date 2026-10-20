@@ -18,6 +18,7 @@ import {
 import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import { observerHandoff } from '../../infra/observer/observerContext.js';
 import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
+import { createBodyRevisions, createFightOwner, fightCall } from './minecraftFightOwner.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
@@ -146,7 +147,10 @@ export function createMinecraftTaskBody(parts: {
   /** What the last context() read, for the decision that follows: its transient live state and its recall cues (built only if asked). */
   let latest: { transient(): Record<string, unknown>; cues(): ReturnType<typeof minecraftRecallCues> } | null = null;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
-  let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
+  let started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity, stopped = false;
+  // mb-r21 (run 21): the body's revision moves for every touch of the body, her tool being cut off ("hard") or only a reflex acting
+  // beside it ("soft"); a fight she chose goes on past soft touches (`guardFor`) and the fast judgment leaves it to her (`fightOwned`).
+  const revisions = createBodyRevisions(), fightOwner = createFightOwner(now), fightOwned = () => fightOwner.owned();
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
   let lastSignature = '', lastSequence = -1, lastFastSequence = -1;
@@ -275,13 +279,13 @@ export function createMinecraftTaskBody(parts: {
    */
   const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal, entry?: ReflexEntryFacts) => {
     const interrupting = mode === 'explicit' || activeAction !== undefined;
-    if (interrupting) revision += 1;
+    if (interrupting) revisions.hard();
     modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
     const job = controller.run(request, signal);
     if (entry) governor.began(step.taskId, now(), entry);
     // Effective: a body action completed in it. A session that only observed and returned is followed by its mode's cooldown.
     const ended = (effective: boolean) => { if (entry) governor.ended(step.taskId, now(), entry, effective); };
-    const touched = () => { if (!interrupting) revision += 1; };
+    const touched = () => { if (!interrupting) revisions.soft(); };
     // `active` settles only after this bookkeeping, so `guard` compares the revision as the session left it.
     const settled = job.then(receipt => {
       if (receipt?.control === 'held') unknown = true;
@@ -299,8 +303,8 @@ export function createMinecraftTaskBody(parts: {
     return job;
   };
   const fast = parts.fastJudgment ? createMinecraftFastJudgment({ control, step, governor, now, context, permit: signal => permit(signal),
-    activeAction: () => activeAction, interrupt: () => toolAborts.forEach(abort => abort.abort()),
-    touched: () => { revision += 1; }, stepOutcome: value => { execution!.stepOutcome = value; }, unknown: () => { unknown = true; },
+    activeAction: () => activeAction, interrupt: () => toolAborts.forEach(abort => abort.abort()), fightOwned,
+    touched: () => { revisions.soft(); }, stepOutcome: value => { execution!.stepOutcome = value; }, unknown: () => { unknown = true; },
     send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), hold, log }) : null;
   const startFast = (job: Promise<void>) => {
     const settled = job.then(() => null, error => {
@@ -395,12 +399,12 @@ export function createMinecraftTaskBody(parts: {
   const body: FcaBodyLifecycle = {
     start(signal) {
       if (started) return; started = true; execution = currentActionExecution();
-      const cancel = () => { monitorAbort.abort(); toolAborts.forEach(abort => abort.abort()); const id = bound(); if (id) controller.cancel(step.scopeKey, id); control.cancelTask(step.taskId); };
+      const cancel = () => { stopped = true; monitorAbort.abort(); toolAborts.forEach(abort => abort.abort()); const id = bound(); if (id) controller.cancel(step.scopeKey, id); control.cancelTask(step.taskId); };
       signal.addEventListener('abort', cancel, { once: true }); if (signal.aborted) cancel();
       cleanupListeners.add(() => signal.removeEventListener('abort', cancel));
       timer = setInterval(poll, parts.pollMilliseconds ?? 250); timer.unref(); poll();
     },
-    revision: () => revision,
+    revision: () => revisions.revision,
     settling: () => !!availableBody() && control.settling(availableBody()!, spawnGrace),
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
@@ -418,12 +422,24 @@ export function createMinecraftTaskBody(parts: {
       // Built only if the decision is transient (`transient()` below); the legacy decision reads the summary above, as before.
       latest = { transient: () => minecraftTransientBody({ observation, pace, fields: skills.fields, ledger: paceLedger }),
         cues: () => minecraftRecallCues(observation, situation, recentResults) };
-      return { revision, observation: summary, pace, ...skills.fields };
+      return { revision: revisions.revision, observation: summary, pace, ...skills.fields };
     },
     transient: () => latest?.transient() ?? {},
     recallCues: () => latest?.cues() ?? { words: [], tags: [] },
     storedResult: (call, text) => storedBodyResult(call.name, text),
-    async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
+    async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return revisions.current(version); },
+    /** A fight she chose goes on when only reflexes touched the body since the decision (not when her own tool was cut off): the fight is hers. */
+    async guardFor(version, call) {
+      if (active) await active;
+      if (fault) throw fault;
+      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+      if (revisions.current(version)) return true;
+      if (!fightCall(call.name)) return false;
+      fightOwner.claim();
+      const kept = revisions.current(version, true);
+      measured(() => log(`Shannon Minecraft fight kept task=${step.taskId} tool=${call.name} touches=${revisions.since(version)} kept=${kept}`));
+      return kept;
+    },
     toolSignal(name, parent) {
       if (!name.startsWith('mc.')) return parent;
       const id = availableBody(); if (id && live()) control.store.bind(step.taskId, id);
@@ -431,7 +447,7 @@ export function createMinecraftTaskBody(parts: {
       const cancel = () => abort.abort(); parent.addEventListener('abort', cancel, { once: true });
       cleanupListeners.add(() => parent.removeEventListener('abort', cancel));
       // A tool cut off by a session in progress leaves the decision stale even when the session itself touches nothing.
-      if (active) revision += 1;
+      if (active) revisions.hard();
       if (parent.aborted || active) abort.abort();
       return abort.signal;
     },
@@ -441,6 +457,7 @@ export function createMinecraftTaskBody(parts: {
       measured(() => metrics.noteCall(call.name, call.input, gistTools));
       follow.note(call);
       if (!call.name.startsWith('mc.')) return;
+      if (fightCall(call.name)) fightOwner.began();
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
       if (!active && !closed) noteGistFollowed(call.name, call.input);
       if (!active && !closed) noteStageAdoption(call);
@@ -453,6 +470,7 @@ export function createMinecraftTaskBody(parts: {
       measured(() => paceLedger.note(call, { ok: result.ok, failure: result.failure ?? null, bodyReflex: result.bodyReflex === true },
         durationMilliseconds ?? 0));
       if (activeAction?.name === call.name) activeAction = undefined;
+      if (fightCall(call.name)) fightOwner.ended();
       if (call.name === 'mc.goal-evidence' && result.ok) milestones = minecraftMilestones(result.text) ?? milestones;
       if (call.name === 'mc.wait-time' && result.ok) idleWaitMs = Math.min(idleWaitMs + pendingWaitMs, 86_400_000);
       pendingWaitMs = 0;
@@ -461,8 +479,12 @@ export function createMinecraftTaskBody(parts: {
     },
     async close() {
       measured(() => metrics.flush());
-      // The route's answer is waited for alongside the teardown, never ahead of it; a stopped step does not wait (the review).
-      const route = routePlan.close(monitorAbort.signal.aborted).catch(() => {});
+      // The route's request goes on past the step (it is the task's, `createRoutePlanning`); only a task stopped or cancelled ends it
+      // (`stopped`, set by the step's own abort). It was `monitorAbort.signal.aborted`, which the first close of a step itself sets:
+      // a step is closed twice (the runner's `closeMs` and its `finally`), and the second close ended the request every time (run 21:
+      // three of four requests aborted at the step's end, the first plan came at 34 s, the late one never).
+      const route = routePlan.close(stopped).catch(() => {});
+      measured(() => log(`Shannon Minecraft route close task=${step.taskId} stopped=${stopped} first=${!closed}`));
       if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
       if (monitoring) await monitoring.catch(() => {}); if (active) await active;
       await route;

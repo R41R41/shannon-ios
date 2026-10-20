@@ -35,6 +35,11 @@ export interface MinecraftWorkItem {
   resumable?: boolean;
   /** Called when the item failed for good (not a walk that was getting nearer): the procedure's own memory of what cannot be reached. */
   onFail?(failure: string, text: string): void;
+  /**
+   * A failure that is the item's success in the body's own words (mb-r21): a furnace taken from before its batch was done answers
+   * `waiting_external` with "完成済みの…を回収しました", having given what was ready. True: the item is counted as done.
+   */
+  accepts?(failure: string, text: string): boolean;
 }
 
 const RAW_FOOD = ['porkchop', 'beef', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon'];
@@ -45,7 +50,8 @@ const IRON_INPUT = /raw_iron|iron_ore/u;
  */
 export const FURNACE_WALK_FROM = 3;
 
-interface Job { position: { x: number; y: number; z: number }; remainingEstimateMs: number; input: string }
+/** `count`: the batch's size when the body says it (`world.jobs[].count`), else null. */
+interface Job { position: { x: number; y: number; z: number }; remainingEstimateMs: number; input: string; count: number | null }
 
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 function worldOf(observation: BodyObservation | null): Record<string, unknown> {
@@ -71,7 +77,7 @@ export function jobsOf(observation: BodyObservation | null): Job[] {
     if (!job || !position || typeof job.remainingEstimateMs !== 'number') return [];
     if (![position.x, position.y, position.z].every(value => typeof value === 'number')) return [];
     return [{ position: { x: position.x as number, y: position.y as number, z: position.z as number }, remainingEstimateMs: job.remainingEstimateMs,
-      input: String(job.input ?? '') }];
+      input: String(job.input ?? ''), count: typeof job.count === 'number' && Number.isFinite(job.count) && job.count >= 0 ? job.count : null }];
   });
 }
 

@@ -262,7 +262,8 @@ describe('her route to the Nether, planned once by a strong model', () => {
     await planning.close(true);
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(aborted).toBe(true);
-    expect(planning.checkpoint()).toEqual({ minecraftRouteAsks: 1 });
+    // mb-r21: a request the task's stop cut off is no ask of the planner that failed: it is given back.
+    expect(planning.checkpoint()).toEqual({});
   });
   it('charges a request that got no answer at its upper bound', async () => {
     const charged: number[] = [];

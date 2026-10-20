@@ -1,5 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { RANGED_ENEMIES } from '../../mind/action/reflex/fastJudgment.js';
+import { FAST_JUDGMENT_LIMITS, RANGED_ENEMIES, WALK_UP_SHOOTERS, armedAndArmoured } from '../../mind/action/reflex/fastJudgment.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import { toolFailure, toolOk, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 
@@ -143,7 +143,11 @@ function rangedFightRefusal(name: string, input: unknown, observation: BodyObser
   const world = observation.state.world as { health?: unknown; nearbyThreats?: unknown } | undefined;
   const health = typeof world?.health === 'number' ? world.health : null;
   if (health === null || health > 10 || holdingPosition(input)) return null;
-  const ranged = reaching(world?.nearbyThreats).some(threat => RANGED_ENEMIES.has(threat.name));
+  const shooters = reaching(world?.nearbyThreats).filter(threat => RANGED_ENEMIES.has(threat.name));
+  // mb-r21 (run 21): with a sword in hand and armour on, one or two archers she can walk up to are fought down to the floor of the rules.
+  if (health > FAST_JUDGMENT_LIMITS.lowHealth && shooters.length <= FAST_JUDGMENT_LIMITS.shooterFightMax && shooters.every(threat => WALK_UP_SHOOTERS.has(threat.name))
+    && armedAndArmoured(world)) return null;
+  const ranged = shooters.length > 0;
   const target = String((input as Record<string, unknown> | null)?.[FIGHTS[name]!] ?? 'hostile').toLowerCase();
   const atRanged = RANGED_ENEMIES.has(target) || target === 'hostile' || target === '';
   return ranged && atRanged ? toolFailure('refused', RANGED_FIGHT_REFUSAL, { retryable: false }) : null;
@@ -154,6 +158,21 @@ function rangedFightRefusal(name: string, input: unknown, observation: BodyObser
  * (`［再試行の目安: retry_same｜…］`) and is retryable for `retry_same` and `change_situation` only. A failure without one, a
  * `BODY_*` code in its text among them, is as it was: not retryable, its text as the body wrote it.
  */
+const ARMOUR_PIECE = /^(?:leather|chainmail|iron|golden|diamond|netherite)_(?:helmet|chestplate|leggings|boots)$/u;
+/**
+ * A piece of armour she asked to be crafted that the frame shows in her pack or worn (mb-r21, run 21: the body's armour reflex put on
+ * the chestplate and the helmet the moment each was made, cut the craft off as `interrupted_by_reflex`, and the craft read as a failure
+ * with the calls after it in the response thrown away). The item name when it is one, else null.
+ */
+export function armourCrafted(input: unknown, observation: BodyObservation | null): string | null {
+  const name = input && typeof input === 'object' ? (input as Record<string, unknown>).itemName : undefined;
+  if (typeof name !== 'string' || !ARMOUR_PIECE.test(name)) return null;
+  const world = observation?.state.world as { inventory?: unknown; worn?: unknown } | undefined;
+  const inPack = (Array.isArray(world?.inventory) ? world!.inventory : []).some(item => (item as { name?: unknown } | null)?.name === name);
+  const worn = typeof world?.worn === 'string' && new RegExp(`(?:頭|胴|脚|足):\\s*${name}(?![a-z_])`, 'u').test(world.worn);
+  return inPack || worn ? name : null;
+}
+
 /** The body's own failure kind kept on a result (minecraftSkillResult), for the executor's procedures (mb-arch); the model never reads it. */
 export function bodyFailureOf(result: ToolResult): string | null {
   const kind = (result as { bodyFailure?: unknown }).bodyFailure;

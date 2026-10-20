@@ -96,7 +96,8 @@ describe('the fast judgment and a hostile the body did not mark', () => {
   });
   it('flees an unmarked creeper all the same: its blast needs no path; and hides from an unmarked archer', () => {
     expect(rule(state([{ name: 'creeper', distance: 8, canReachMe: null, ignited: false }], { night: false }))).toBe('creeper_flee');
-    expect(rule(state([{ name: 'skeleton', distance: 5, canReachMe: null, ignited: false }], { night: false }))).toBe('ranged_shelter');
+    // Unarmed (mb-r21: with a sword and armour one or two archers are fought, `shooter_fight`).
+    expect(rule(state([{ name: 'skeleton', distance: 5, canReachMe: null, ignited: false }], { night: false, hasWeapon: false }))).toBe('ranged_shelter');
     expect(rule(state([{ name: 'creeper', distance: 8, canReachMe: false, ignited: false }], { night: false }))).toBe('no_threat');
   });
 });
