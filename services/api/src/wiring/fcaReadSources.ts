@@ -29,6 +29,8 @@ export interface FcaReadSourcesOptions {
    * the same ones (`fcaReadSourceAnswers.ts`). Absent: never given again.
    */
   skillChecks?(scopeKey: string, renew: boolean): { checks: object; mark: string | null } | null;
+  /** Where and on which clock the answers' counts are named (`Shannon FCA receipt answers`); `console.warn` and `Date.now` unless a test moves them. */
+  answerCounts?: { log(line: string): void; clock(): number };
 }
 
 /**
@@ -38,8 +40,10 @@ export interface FcaReadSourcesOptions {
 export function createFcaReadSources(parts: FcaReadSourcesOptions):
   (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
   const job = readSourceJob(parts.conversations);
+  // The mark answers are kept under (the source rows', `provenanceMark.ts`): made here, where the reader is made, after every schema.
+  parts.conversations.prepareProvenanceMark?.();
   // Every receipt is read through `tracked` (what it asks outside the database is noted); a check's receipts are answered once a moment.
-  const answers = readSourceAnswers(parts), tracked = answers.tracked;
+  const answers = readSourceAnswers(parts, parts.answerCounts?.log, parts.answerCounts?.clock), tracked = answers.tracked;
   /**
    * What the skill reader answered (existence, status, ancestry, body checks: the same at every time of a receipt), per skill and
    * revision, for one check of the caller's (`shared`: one walk of the FCA source guard over one snapshot); a later check asks

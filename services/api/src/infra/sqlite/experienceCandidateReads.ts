@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { dataVersion, prepared } from './sqliteOpen.js';
+import { sourceRowsMark } from './provenanceMark.js';
 
 /**
  * The remembered turns as last read, per scope, kept with the database's change mark at that read. 2026-10-13: one text turn read
@@ -12,16 +13,21 @@ import { dataVersion, prepared } from './sqliteOpen.js';
  */
 const reads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unknown }>>();
 
-/** `load()` once per scope while this connection's database is unchanged; afterwards read afresh. */
+/**
+ * `load()` (the remembered turns) once per scope while they are unchanged; afterwards read afresh. They are source rows, so the source
+ * rows' mark tells (`provenanceMark.ts`; the database's own where it cannot): production run 19, every lease renewal and step's progress
+ * moved the whole database's mark, and the turns were read again each time. Null: not kept.
+ */
 export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, load: () => T): T {
   // Inside a transaction a read may see rows a rollback takes back: it is neither kept nor reused.
   if (database.isTransaction) return load();
   let byScope = reads.get(database);
   if (!byScope) reads.set(database, byScope = new Map());
-  const mark = changeMark(database), known = byScope.get(scopeKey);
-  if (known?.mark === mark) return known.value as T;
+  const markOf = sourceRowsMark, mark = markOf(database), known = byScope.get(scopeKey);
+  if (mark !== null && known?.mark === mark) return known.value as T;
   const value = load();
-  byScope.set(scopeKey, { mark, value });
+  // Kept only under the mark read before the rows, and only if the rows did not change while they were read.
+  if (mark !== null && markOf(database) === mark) byScope.set(scopeKey, { mark, value });
   return value;
 }
 

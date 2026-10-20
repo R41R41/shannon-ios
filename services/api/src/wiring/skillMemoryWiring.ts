@@ -48,26 +48,36 @@ export const SKILL_CHECK_REUSE_MS = 2_000;
 /** What a turn is handed: the index, one skill by name, and the notes of its use; a skill built from something forgotten is left out at once. */
 export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string) => CompanionStateSnapshot,
   sources?: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>, clock: () => number = Date.now): SkillTurnPorts {
-  type Checks = { version: number; at: number; pass: (sources: readonly string[]) => boolean; check: SkillBodyCheck | null; bodies: Map<string, boolean> };
+  type Checks = { version: number; at: number; mark: string | null; pass: (sources: readonly string[]) => boolean; check: SkillBodyCheck | null;
+    bodies: Map<string, boolean> };
   const reused = new Map<string, Checks>();
   /**
-   * The state as last read, kept while the database is unchanged (its change mark moves with every write of any connection): a receipt
-   * of a skill is checked thousands of times a walk, and each check read and parsed the state twice. What the checks use of it (the
-   * memory controls, the version) is a function of the rows; the state's own clock (what fades) is not read here.
+   * The state as last read, kept while the rows it is read from are unchanged (`provenanceMark`: the state, the remembered turns and the
+   * evidence of a correction; the database's own change mark where that cannot be told): a receipt of a skill is checked thousands of
+   * times a walk, and each check read and parsed the state twice. What the checks use of it (the memory controls, the version) is a
+   * function of the rows; the state's own clock (what fades) is not read here.
    */
   const states = new Map<string, { mark: string; state: CompanionStateSnapshot }>();
+  const rowsMark = () => sources?.provenanceMark?.() ?? sources?.changeMark?.() ?? null;
   const stateOf = (scopeKey: string): CompanionStateSnapshot => {
-    const mark = sources?.changeMark?.() ?? null, known = states.get(scopeKey);
+    const mark = rowsMark(), known = states.get(scopeKey);
     if (mark !== null && known?.mark === mark) return known.state;
     const state = snapshot(scopeKey);
     if (mark !== null) states.set(scopeKey, { mark, state });
     return state;
   };
+  /**
+   * The checks of a moment: reused for `SKILL_CHECK_REUSE_MS` under the same state version, and for as long as no row they are made from
+   * has changed (the turns' and her skills' marks: made again then, they would be the same). What a check asks of a task's own records
+   * (`fcaSleepTaskEvidence.ts`) is asked afresh at each use, as before.
+   */
   const checksFor = (scopeKey: string, store: NonNullable<typeof sources>): Checks => {
-    const state = stateOf(scopeKey), at = clock(), known = reused.get(scopeKey);
-    if (known && known.version === state.version && at >= known.at && at - known.at < SKILL_CHECK_REUSE_MS) return known;
+    const state = stateOf(scopeKey), at = clock(), known = reused.get(scopeKey), rows = rowsMark(), skills = memory.store.changeMark();
+    const mark = rows !== null && skills !== null ? `${rows}|${skills}` : null;
+    const recent = known !== undefined && at >= known.at && at - known.at < SKILL_CHECK_REUSE_MS;
+    if (known && known.version === state.version && (recent || (mark !== null && known.mark === mark))) return known;
     const pass = skillSourcesPass(store, memory, scopeKey);
-    const fresh = { version: state.version, at, pass, check: skillBodyCheck(state, store, scopeKey), bodies: new Map<string, boolean>() };
+    const fresh = { version: state.version, at, mark, pass, check: skillBodyCheck(state, store, scopeKey), bodies: new Map<string, boolean>() };
     reused.set(scopeKey, fresh);
     return fresh;
   };

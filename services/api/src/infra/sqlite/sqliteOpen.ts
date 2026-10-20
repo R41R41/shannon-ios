@@ -78,6 +78,11 @@ export function dataVersion(database: DatabaseSync): number {
   return Number((prepared(database, 'PRAGMA data_version').get() as { data_version: number }).data_version);
 }
 
+/** SQLite's `schema_version`: it moves with every schema change by any connection (its statement is prepared once, `prepared`). */
+export function schemaVersion(database: DatabaseSync): number {
+  return Number((prepared(database, 'PRAGMA schema_version').get() as { schema_version: number }).schema_version);
+}
+
 /** The names of a table's columns (empty when the table does not exist). */
 export function tableColumns(database: DatabaseSync, table: string): Set<string> {
   if (!/^[a-z_]+$/u.test(table)) throw new Error('SCHEMA_TABLE');

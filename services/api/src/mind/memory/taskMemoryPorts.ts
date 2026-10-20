@@ -13,6 +13,11 @@ export interface TaskMemoryResult { status: 'ready' | 'no_match' | 'withheld' | 
 /** One synchronous check's state and withholding; `walk`: that read's own token, so a reader's per-walk memo ends with the read. */
 export interface TaskMemoryReadSnapshot {
   state: CompanionStateSnapshot; withholding: MemoryWithholding; walk?: object;
+  /**
+   * The source rows' mark (`ConversationStore.provenanceMark`) the withholding's remembered turns were read under, when its maker knows
+   * it (the FCA source guard's moment): a reader's answers are then shared with every withholding made from the same rows.
+   */
+  rows?: string;
   /** The remembered turns as of this snapshot's database (`TaskMemory.readSnapshot` only); absent, each read asks the store. */
   experience?(id: string): ShannonExperience | null;
 }
