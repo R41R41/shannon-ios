@@ -2,6 +2,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { adoptionTags, adoptionTools, fed, milestoneLines, milestoneNow, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 export { milestoneFollowMemory } from './minecraftMilestoneFollow.js';
+export { createRoutePlanning } from './minecraftRoutePlanner.js';
 import { bedLead } from './minecraftBedLead.js';
 
 /**
@@ -66,6 +67,8 @@ export interface MinecraftSituation {
   woodShort?: boolean;
   /** No bed of hers yet and a bed or a village she knows of to go to first (`minecraftBedLead.ts`, run 19), as one line, or null. */
   bedLead?: string | null;
+  /** Seconds since the task began (`MinecraftPaceFacts`), and her route to the Nether as lines (the adapter, `minecraftRoutePlanner.ts`). */
+  elapsedSeconds?: number | null; route?: readonly string[];
 }
 /**
  * A pointer names its skill and the skills it succeeds (legacy-minecraft draft-6, 2026-10-19): the first of `skills` she can read now
@@ -239,7 +242,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
     oneHitFrom: threatNear ? oneHitFrom(world.margin) : null, dropsLeft: dropsLine(world),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
-    inNether: nether, inEnd: dimension === 'the_end',
+    inNether: nether, inEnd: dimension === 'the_end', elapsedSeconds: pace.elapsedSeconds ?? null,
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
     ...openingPath(items, stage, darkIn, day, pace),
     ...laterPath(items, dimension, stage),
@@ -399,7 +402,7 @@ export interface MinecraftSkillContext {
    * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
    */
   fields: { milestoneSteps?: string[]; skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[];
-    reminders?: string[] };
+    route?: string[]; reminders?: string[] };
   /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
@@ -412,7 +415,7 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
   const pointed = matched.map(pointer => pointer.skill);
   const milestone = { ...(situation.milestone.length ? { milestone: [...situation.milestone] } : {}),
-    ...reminders(situation) };
+    ...(situation.route?.length ? { route: [...situation.route] } : {}), ...reminders(situation) };
   // The step's procedure goes first, ahead of the pointers and their gists (never a gist: a use would hold a skill's revision).
   const head = situation.milestoneSteps?.length ? { milestoneSteps: [...situation.milestoneSteps] } : {};
   if (!matched.length) return { fields: { ...head, ...milestone }, gistTools: new Map(), pointed };

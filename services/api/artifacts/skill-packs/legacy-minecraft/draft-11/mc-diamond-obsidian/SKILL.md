@@ -10,7 +10,7 @@ description: 鉄の全身の後、y=-58でダイヤ→黒曜石10→火打石→
 2. 鉄の全身の防具を着て、焼いた食料とベッドを持ち、昼のうちに降りる: mc.stair-mine（targetY=-58）。ダイヤは y=-58 付近にいちばん多い。
 3. y=-58 で枝掘り: mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）。見つからなければ stair-mine の direction を変えて横へ 20 ブロックほど進み、また mine-block。3個でダイヤのツルハシ。
 4. 黒曜石は溶岩の溜まり（流れていない溶岩）に水をかけて作る: mc.find-blocks（blockName=lava、maxDistance=32）→ mc.use-item-on-block（溶岩の座標、itemName=water_bucket）。固まったらダイヤのツルハシで掘る: mc.mine-block（blockName=obsidian、count=10）。水はバケツで汲み戻す。流れる溶岩は丸石になる。y=-58 付近は溶岩の溜まりが多い。
-5. 深い層では溶岩の上を掘らない。足元と前を確かめ、溶岩が見えたら丸石で塞ぐ。
+5. 近道: 荒廃したポータル（地表や水の底の、壊れた黒曜石の枠）は、枠の黒曜石を掘れて、横の箱に火打ち金や金がある。村の鍛冶屋の箱には鉄や黒曜石が入っていることがある（火打ち金は荒廃したポータルの箱）。地図か場所の記憶にあれば、先にそこへ。深い層では溶岩の上を掘らない。足元と前を確かめ、溶岩が見えたら丸石で塞ぐ。
 6. 火打石は砂利から: mc.mine-block（blockName=gravel、count=10）。砂利1個で約1割が火打石。鉄1と火打石1で火打ち金（flint_and_steel）。
 7. ゲートは黒曜石の 4×5 の枠（横4・縦5、角は要らない、中は 2×3 の空き）。平らな地面の上に建てる: mc.build-structure（structureName=nether_portal、x、y、z、facing）。火打ち金を持っていれば完成後に体が火をつける。点いたかは観測で確かめ、点かなければ mc.use-item-on-block（枠の内側の底、itemName=flint_and_steel）。
 8. 入る: mc.enter-portal（枠の内側の座標）。入る前の目安は、焼いた食料十数個、丸石64以上、鉄の防具と盾、予備のツルハシ。全部そろうまで待ち続けない。ネザーの1マスはオーバーワールドの8マス。帰りのゲートの場所は覚えておく。
@@ -19,7 +19,7 @@ description: 鉄の全身の後、y=-58でダイヤ→黒曜石10→火打石→
 - 深い層へ: mc.stair-mine（targetY=-58、direction=north など）
 - 掘る: mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）、黒曜石（blockName=obsidian、count=10）、砂利（blockName=gravel、count=10）
 - 溶岩: mc.find-blocks（blockName=lava、maxDistance=32）。水をかける: mc.use-item-on-block（x、y、z、itemName=water_bucket）。水を汲む: mc.use-item-on-block（水の座標、itemName=bucket）
-- 作る: mc.craft-one（itemName=diamond_pickaxe、flint_and_steel）
+- 作る: mc.craft-one（itemName=diamond_pickaxe、flint_and_steel）。箱: mc.check-container → mc.withdraw-from-container
 - ゲート: mc.build-structure（structureName=nether_portal、x、y、z、facing）。入る: mc.enter-portal（x、y、z）。場所: mc.recall-places
 
 ## 補助

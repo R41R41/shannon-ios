@@ -25,6 +25,7 @@ import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
 import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
+import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -157,6 +158,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
+          // Owner 2026-10-20: her route to the Nether from a strong model, charged as a decision is (`minecraftRouteWiring.ts`).
+          ...minecraftRoutePlannerPart(values, recordUsage),
           sourcesVisible: () => check.whole('body') ?? false }),
           { on: switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
