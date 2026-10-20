@@ -120,7 +120,8 @@ function procedure(tools: FcaExternalTools, parts: Parts, call: Call, one: (call
     const seq = state.agenda.begin('procedure', item.name, '手順', now());
     let result: ToolResult = { ok: false, text: '', failure: 'failed', retryable: true };
     try {
-      result = await one({ ...call, ...item, last: true });
+      // No detour after an item: the procedure takes what is near itself, and a detour after each of sixty items would ask Jev each time.
+      result = await one({ ...call, ...item, last: false });
       return result;
     } finally { state.agenda.end(seq, result.ok, result.ok ? short(result.text) : result.failure ?? 'failed', now()); }
   };

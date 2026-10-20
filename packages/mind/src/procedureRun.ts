@@ -47,6 +47,11 @@ export class ProcedureMemory {
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if (!ok) this.how.set(key, failure ?? 'failed');
   }
+
+  /** A failure kept as how the work last went, without counting it (a passing one, `ProcedureRunPorts.passing`). */
+  note(key: string, failure: string): void {
+    this.how.set(key, failure);
+  }
 }
 
 export interface Procedure<Facts, Item> {
@@ -66,6 +71,8 @@ export interface ProcedureRunPorts<Facts, Item> {
   upkeep?(facts: Facts, memory: ProcedureMemory): Extract<ProcedureMove<Item>, { kind: 'do' }> | null;
   /** A failure kind that ends the run at once (the planner must see it), whatever the counts. */
   final?(failure: string): boolean;
+  /** A failure kind that passes (a reflex of the body that cut in): not counted the first time in a row for its work. */
+  passing?(failure: string): boolean;
   run(item: Item, step: ProcedureStepInfo): Promise<ProcedureItemResult>;
   now(): number;
   signal: AbortSignal;
@@ -126,8 +133,12 @@ async function runOne<Facts, Item>(state: RunState<Facts, Item>, procedure: stri
   const at = state.ports.now();
   const result = await state.ports.run(move.item, { procedure, key: move.key, why: move.why, index: state.items.length });
   const failure = result.failure ?? 'failed';
-  state.memory.record(move.key, result.ok, result.ok ? null : failure);
   state.items.push({ procedure, key: move.key, why: move.why, ok: result.ok, failure: result.ok ? null : failure, ms: state.ports.now() - at });
+  if (!result.ok && state.ports.passing?.(failure) && state.memory.lastFailure(move.key) !== failure) {
+    state.memory.note(move.key, failure);
+    return null;
+  }
+  state.memory.record(move.key, result.ok, result.ok ? null : failure);
   if (result.ok) return null;
   state.failures += 1;
   if (state.ports.final?.(failure)) return ended(state, 'failed', procedure, `${move.why}ができなかった（${failure}）`);
@@ -138,10 +149,12 @@ async function runOne<Facts, Item>(state: RunState<Facts, Item>, procedure: stri
 async function throughOne<Facts, Item>(state: RunState<Facts, Item>, procedure: Procedure<Facts, Item>): Promise<ProcedureRunResult | null> {
   for (;;) {
     const facts = state.ports.facts();
-    if (procedure.done(facts)) return null;
+    // Upkeep first, even when the procedure is done: the armour made last is still put on.
+    const upkeep = state.ports.upkeep?.(facts, state.memory) ?? null;
+    if (!upkeep && procedure.done(facts)) return null;
     const held = heldBack(state, procedure.id, facts);
     if (held) return held;
-    const move = state.ports.upkeep?.(facts, state.memory) ?? procedure.next(facts, state.memory);
+    const move = upkeep ?? procedure.next(facts, state.memory);
     if (move.kind === 'done') return null;
     if (move.kind === 'stuck') return ended(state, 'stuck', procedure.id, move.why);
     const blocked = refused(state, procedure.id, move);

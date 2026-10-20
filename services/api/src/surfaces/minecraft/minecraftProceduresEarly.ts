@@ -72,7 +72,9 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMov
       ...(colour ? { color: colour } : {}) }, why: 'ベッドの羊毛を取る', expectMs: 30_000, key: `wool:${colour ?? 'any'}:${have}` });
   }
   const key = `sheep:find:${inPack(facts, WOOL)}`;
-  return memory.notes.has('sheep:none') || memory.failed(key) ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key);
+  // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
+  const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
+  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key);
 }
 
 /** Food enough to go on (`fed`): an animal in reach, else any food animal near; null when fed. */
@@ -85,7 +87,7 @@ function foodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMo
       expectMs: 20_000, key: `food:${animal.name}:${food}` });
   }
   const key = `food:any:${food}`;
-  if (memory.failed(key)) return stuck('食べ物の動物が近くに見えない');
+  if (memory.lastFailure(key) === 'target_not_found') return stuck('食べ物の動物が近くに見えない');
   return doing({ tool: 'mc.attack-continuously', input: { entityName: 'food_animals', maxKills: 3, maxDistance: 48 }, why: '食べ物の動物を探して取る',
     expectMs: 40_000, key });
 }

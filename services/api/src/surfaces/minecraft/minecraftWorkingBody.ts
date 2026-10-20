@@ -101,7 +101,13 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
     },
     noteResult(call, result, durationMilliseconds) {
       inner.noteResult?.(call, result, durationMilliseconds);
-      arbiter.end(call.name);
+      if (call.name !== MINECRAFT_PROCEDURE_TOOL) {
+        arbiter.end(call.name);
+        return;
+      }
+      // The procedure ended: its last item is not followed until the next watch (the next decision would see it as running).
+      if (followed) arbiter.end(followed.name);
+      followed = null;
     },
     async close() {
       closed = true;

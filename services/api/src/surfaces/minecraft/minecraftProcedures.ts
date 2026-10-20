@@ -75,6 +75,14 @@ function spareDone(facts: MinecraftProcedureFacts): boolean {
   return IRON_PLAN.every(planned => planned.have(facts)) || ironHeld(facts) < 3;
 }
 
+/**
+ * The obsidian's own step: ten carried, or the frame built, or the Nether (the milestone also passes on a flint and steel alone, which
+ * would leave the gate without its frame).
+ */
+function obsidianDone(facts: MinecraftProcedureFacts, context: ProcedureContext): boolean {
+  return (facts.counts.get('obsidian') ?? 0) >= 10 || context.store.portal !== undefined || facts.milestone.netherReached;
+}
+
 /** The procedures from `from` to `through` (both included, in the owner's order); empty when `from` has none or comes after `through`. */
 export function minecraftProcedureChain(from: string, through: string | null,
   context: ProcedureContext): Procedure<MinecraftProcedureFacts, MinecraftWorkItem>[] {
@@ -86,7 +94,8 @@ export function minecraftProcedureChain(from: string, through: string | null,
     const step = STEPS.get(name)!;
     return {
       id: name,
-      done: facts => milestone.done?.(facts.milestone) === true && (name !== '鉄の全身の防具' || spareDone(facts)),
+      done: facts => name === '黒曜石' ? obsidianDone(facts, context)
+        : milestone.done?.(facts.milestone) === true && (name !== '鉄の全身の防具' || spareDone(facts)),
       next: (facts, memory) => step.move(facts, memory, context),
     };
   });

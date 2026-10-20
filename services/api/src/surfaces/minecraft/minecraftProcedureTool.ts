@@ -5,10 +5,11 @@ import type { ToolResult } from '../../mind/tools/shannonTools.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { milestoneNow } from './minecraftStage.js';
+import { bodyFailureOf } from './minecraftOutcome.js';
 import { minecraftProcedureFacts, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain } from './minecraftProcedures.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
-import { finalFailure, minecraftStopWhy, minecraftUpkeep } from './minecraftProcedureUpkeep.js';
+import { finalFailure, minecraftStopWhy, minecraftUpkeep, passingFailure } from './minecraftProcedureUpkeep.js';
 
 /**
  * The planner's one call for a whole procedure (session mb-arch, owner 2026-10-20: 「30分でスムーズにネザーに行く」; run 19 took 64
@@ -36,12 +37,14 @@ interface TaskProcedureState {
   toldLate: Set<string>;
   /** The item running now: what the arbiter follows, and what a cut stops. */
   item: { name: string; input: unknown; operationId: string; controller: AbortController } | null;
+  /** The last run handed the turn back for a reason (not done, not its bounds): its step, so the hint does not ask the same again. */
+  handedBack: string | null;
 }
 const states = new Map<string, TaskProcedureState>();
 function stateOf(taskId: string): TaskProcedureState {
   let state = states.get(taskId);
   if (!state) {
-    state = { store: { furnaces: [] }, toldLate: new Set(), item: null };
+    state = { store: { furnaces: [] }, toldLate: new Set(), item: null, handedBack: null };
     states.set(taskId, state);
     if (states.size > 32) states.delete(states.keys().next().value as string);
   }
@@ -76,10 +79,11 @@ export function minecraftProcedureStepParts(runtime: Pick<TaskRuntime, 'pendingM
 }
 
 /** The decision's line that names the procedure of the step now, when there is one (the planner does what it is shown, run 19). */
-export function minecraftProcedureHint(observation: BodyObservation | null): string[] {
+export function minecraftProcedureHint(taskId: string, observation: BodyObservation | null): string[] {
   if (!observation) return [];
   const now = milestoneNow(minecraftProcedureFacts(observation).milestone).now.name;
-  return PROCEDURE_MILESTONES.includes(now) ? [`手順: ${MINECRAFT_PROCEDURE_TOOL}（milestone=${now}、through=先の節目）で「${now}」から先をまとめて流せる`] : [];
+  if (!PROCEDURE_MILESTONES.includes(now) || states.get(taskId)?.handedBack === now) return [];
+  return [`手順: ${MINECRAFT_PROCEDURE_TOOL}（milestone=${now}、through=先の節目）で「${now}」から先をまとめて流せる`];
 }
 
 type Call = { operationId: string; input: unknown; signal: AbortSignal };
@@ -106,29 +110,56 @@ function readInput(input: unknown): { from: string; through: string | null } | n
   return through && PROCEDURE_MILESTONES.indexOf(through) < PROCEDURE_MILESTONES.indexOf(value.milestone) ? null : { from: value.milestone, through };
 }
 
-/** One item and its chain, each a body call with an operation id of its own; a cut of the arbiter ends the item as failed `cut`. */
+/** How long a procedure waits after a call for a frame the body sent after it (its 200 ms beat), before it reads the next move. */
+const FRESH_FRAME_MS = 800;
+
+/**
+ * A frame newer than the one there when the call ended: the counts the next move reads are the call's own (a frame a beat behind would
+ * dig the logs it just dug again). Given up after `FRESH_FRAME_MS`.
+ */
+async function freshFrame(parts: ProcedureRunParts): Promise<void> {
+  const before = parts.observe()?.sequence ?? null;
+  const until = Date.now() + FRESH_FRAME_MS;
+  while (before !== null && Date.now() < until && (parts.observe()?.sequence ?? before) <= before) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+/** A body call's result as a procedure item's: the body's own failure kind when it named one (`target_not_found`), else the tool's. */
+function itemResult(told: ToolResult): ProcedureItemResult {
+  if (told.ok) return { ok: true, text: told.text, failure: null };
+  return { ok: false, text: told.text, failure: told.bodyReflex ? 'interrupted_by_reflex' : bodyFailureOf(told) ?? told.failure ?? 'failed' };
+}
+
+/** One body call of an item, followed by the arbiter as the running command; a cut of it ends it as failed `cut`. */
+async function runLink(parts: ProcedureRunParts, call: Call, state: TaskProcedureState, next: MinecraftWorkItem,
+  operationId: string): Promise<ProcedureItemResult> {
+  const controller = new AbortController();
+  state.item = { name: next.tool, input: next.input, operationId, controller };
+  let result: ProcedureItemResult;
+  try {
+    result = itemResult(await parts.execute({ name: next.tool, input: next.input, operationId, signal: AbortSignal.any([call.signal, controller.signal]) }));
+  } catch (error) {
+    // A cut ends the item; an outcome not known, a lost lease, a stop or withheld sources end the call, cut or not.
+    const fatal = error instanceof Error && /OUTCOME_UNKNOWN|LEASE|STOP|WITHHELD/u.test(error.message);
+    if (fatal || call.signal.aborted || !controller.signal.aborted) throw error;
+    result = { ok: false, text: '', failure: 'cut' };
+  } finally { state.item = null; }
+  return controller.signal.aborted && !call.signal.aborted && !result.ok ? { ...result, failure: 'cut' } : result;
+}
+
+/** One item and its chain, each a body call with an operation id of its own. */
 async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedureState, item: MinecraftWorkItem, index: number): Promise<ProcedureItemResult> {
   let result: ProcedureItemResult = { ok: false, text: '', failure: 'not_offered' };
   let link = 0;
   for (let next: MinecraftWorkItem | null = item; next; link += 1) {
     if (!parts.offered(next.tool)) return { ok: false, text: '', failure: 'not_offered' };
-    const controller = new AbortController();
-    const operationId = `${call.operationId}:p${index}.${link}`;
-    state.item = { name: next.tool, input: next.input, operationId, controller };
-    try {
-      const told = await parts.execute({ name: next.tool, input: next.input, operationId, signal: AbortSignal.any([call.signal, controller.signal]) });
-      // The body's own kind when it named one (`target_not_found`), else the tool's.
-      result = { ok: told.ok, text: told.text, failure: told.ok ? null : told.bodyFailure ?? told.failure ?? 'failed' };
-    } catch (error) {
-      if (call.signal.aborted || !controller.signal.aborted) throw error;
-      result = { ok: false, text: '', failure: 'cut' };
-    } finally { state.item = null; }
-    if (controller.signal.aborted && !call.signal.aborted && !result.ok) result = { ...result, failure: 'cut' };
+    result = await runLink(parts, call, state, next, `${call.operationId}:p${index}.${link}`);
+    await freshFrame(parts);
     next = result.ok && next.then ? next.then(result.text) : null;
   }
   return result;
 }
-
 function resultText(chainText: string, run: ProcedureRunResult, facts: MinecraftProcedureFacts): string {
   const now = milestoneNow(facts.milestone).now.name;
   return [`手順 ${chainText}`, ...procedureRunLines(run), `今の節目: ${now}`].join('\n');
@@ -144,11 +175,13 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
   const chain = minecraftProcedureChain(asked.from, asked.through, { store: state.store, batchObsidian: parts.batchObsidian ?? null });
   const facts = () => minecraftProcedureFacts(parts.observe());
   const run = await runProcedures(chain, {
-    facts, now: parts.now, signal: call.signal, upkeep: minecraftUpkeep, final: finalFailure,
+    facts, now: parts.now, signal: call.signal, upkeep: minecraftUpkeep, final: finalFailure, passing: passingFailure,
     stopWhy: (current, at) => minecraftStopWhy(current, at.procedure, { ...parts, toldLate: state.toldLate }),
     run: (item, step) => runItem(parts, call, state, item, step.index),
   });
   const text = resultText(asked.through ? `「${asked.from}」→「${asked.through}」` : `「${asked.from}」`, run, facts());
-  const ok = run.outcome === 'done' || run.outcome === 'stopped' || run.outcome === 'limit';
+  state.handedBack = run.outcome === 'done' || run.outcome === 'limit' ? null : run.at;
+  // A hand-back for a reason is the call working as meant; only a failure or a stop is a failed call.
+  const ok = run.outcome !== 'failed' && run.outcome !== 'cancelled';
   return ok ? { ok, text, retryable: false } : { ok, text, failure: 'failed', retryable: run.outcome === 'failed' };
 }

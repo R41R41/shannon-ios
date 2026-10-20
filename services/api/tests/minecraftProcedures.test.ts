@@ -3,6 +3,8 @@ import { withMinecraftAgenda } from '../src/surfaces/minecraft/minecraftAgenda.j
 import { cutProcedureItem, procedureItem } from '../src/surfaces/minecraft/minecraftProcedureTool.js';
 import { PROCEDURE_MILESTONES, procedureWords } from '../src/surfaces/minecraft/minecraftProcedures.js';
 import { followsMilestone, milestoneSteps } from '../src/surfaces/minecraft/minecraftMilestoneFollow.js';
+import { minecraftStopWhy } from '../src/surfaces/minecraft/minecraftProcedureUpkeep.js';
+import { minecraftProcedureFacts } from '../src/surfaces/minecraft/minecraftProcedureFacts.js';
 import type { FcaExternalTools } from '../src/mind/action/fca/fcaPorts.js';
 import type { ToolResult } from '../src/mind/tools/shannonTools.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
@@ -42,6 +44,8 @@ class SimBody {
   private placed = 0;
   private gravelDigs = 0;
   portal: string | null = null;
+  /** Each look is a new frame (the body's 200 ms beat). */
+  private frames = 0;
 
   add(name: string, count: number) { this.pack.set(name, (this.pack.get(name) ?? 0) + count); }
   take(name: string, count: number): boolean {
@@ -76,7 +80,8 @@ class SimBody {
       ...((this.pack.get('coal') ?? 0) < 8 && this.y > 0 ? [{ id: 'fuel:b:10,60,0', need: 'fuel', name: 'coal_ore', position: { x: 10, y: 60, z: 0 }, distance: 10, canReach: true }] : []),
       { id: 'wood:b:5,64,0', need: 'wood', name: 'oak_log', position: { x: 5, y: 64, z: 0 }, distance: 5, canReach: true },
     ];
-    return { schemaVersion: 1, bodyId: 'minecraft:world', sequence: 1, stateAt: new Date(this.clock).toISOString(), receivedAt: new Date(this.clock).toISOString(),
+    this.frames += 1;
+    return { schemaVersion: 1, bodyId: 'minecraft:world', sequence: this.frames, stateAt: new Date(this.clock).toISOString(), receivedAt: new Date(this.clock).toISOString(),
       connected: true, facts: { danger: false },
       state: { world: { position: { x: 0, y: this.y, z: 0 }, dimension: this.dimension, health: 20, food: Math.round(this.food), inventory, jobs, nearbyNeeds: needs,
         worn: this.worn.length ? this.worn.map((name, i) => `${['頭', '胴', '脚', '足'][i] ?? '手'}: ${name}`).join('、') : '頭: なし',
@@ -102,7 +107,7 @@ class SimBody {
     return result;
   }
   private ok(text: string): ToolResult { return { ok: true, text, retryable: false }; }
-  private fail(kind: string, text = kind): ToolResult { return { ok: false, text, failure: 'failed', bodyFailure: kind, retryable: true }; }
+  private fail(kind: string, text = kind): ToolResult { return { ok: false, text, failure: 'failed', bodyFailure: kind, retryable: true } as ToolResult; }
 
   tool_mine_block(input: Input): ToolResult {
     const count = Number(input.count ?? 1), block = String(input.blockName);
@@ -253,11 +258,12 @@ describe('Minecraft procedures (mb-arch)', () => {
     body.add('stone_pickaxe', 1);
     body.add('oak_log', 4);
     body.tool_find_nearest_entity = () => ({ ok: true, text: 'sheepは見つかりませんでした', retryable: false });
-    body.tool_attack_continuously = () => ({ ok: false, text: '', failure: 'failed', bodyFailure: 'target_not_found', retryable: true });
+    body.tool_attack_continuously = () => ({ ok: false, text: '', failure: 'failed', bodyFailure: 'target_not_found', retryable: true }) as ToolResult;
     const { call } = setup(body);
     const result = await call({ milestone: '食料と羊とベッド' });
     expect(result.text).toContain('ベッドも羊も近くに見えない（128m）');
-    expect(result.ok).toBe(false);
+    // A hand-back for a reason is the call working as meant.
+    expect(result.ok).toBe(true);
     const slow = new SimBody();
     const { taskId, call: run } = setup(slow);
     let cut = false;
@@ -275,5 +281,26 @@ describe('Minecraft procedures (mb-arch)', () => {
     const { call } = setup(new SimBody());
     expect((await call({ milestone: 'ネザー要塞' })).failure).toBe('invalid_input');
     expect((await call({ milestone: '鉄', through: '木' })).failure).toBe('invalid_input');
+  });
+
+  it('stops for the night and hunger only where the procedure cannot answer them itself, and for a missing frame', () => {
+    const night = (pack: Record<string, number>, food = 20) => {
+      const body = new SimBody();
+      for (const [name, count] of Object.entries(pack)) body.add(name, count);
+      body.food = food;
+      const frame = body.observation();
+      (frame.state as { world: { margin: unknown } }).world.margin = { lightInSeconds: 200 };
+      return minecraftProcedureFacts(frame);
+    };
+    const parts = { now: () => AT, toldLate: new Set<string>() };
+    expect(minecraftStopWhy(night({}), '木', parts)).toBe('夜になった（ベッドを持っていない）');
+    expect(minecraftStopWhy(night({ white_wool: 3 }), '食料と羊とベッド', parts)).toBeNull();
+    expect(minecraftStopWhy(night({ white_bed: 1 }), '木', parts)).toBeNull();
+    expect(minecraftStopWhy(night({ white_bed: 1 }, 4), '鉄', parts)).toBe('空腹（4）で食べ物を持っていない');
+    expect(minecraftStopWhy(night({ white_bed: 1 }, 4), '食料と羊とベッド', parts)).toBeNull();
+    expect(minecraftStopWhy(minecraftProcedureFacts(null), '鉄', parts)).toBe('体の観測が届いていない');
+    const late = { now: () => AT + 700_000, taskStartedAt: AT, toldLate: new Set<string>() };
+    expect(minecraftStopWhy(night({ white_bed: 1 }), '鉄', late)).toBe('「鉄」の目安420秒を280秒過ぎた（いま700秒）');
+    expect(minecraftStopWhy(night({ white_bed: 1 }), '鉄', late)).toBeNull();
   });
 });

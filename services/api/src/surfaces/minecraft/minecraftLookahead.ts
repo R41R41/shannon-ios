@@ -38,7 +38,7 @@ export function withMinecraftAgendaParts<M extends object>(minecraft: M | null, 
 export function minecraftAgendaBodyParts(taskId: string, observe: () => BodyObservation | null) {
   return {
     onWaitNeed: (need: WorkingNeed) => preemptForNeed(taskId, need),
-    agendaLines: () => [...minecraftAgendaLines(taskId), ...minecraftProcedureHint(observe())],
+    agendaLines: () => [...minecraftAgendaLines(taskId), ...minecraftProcedureHint(taskId, observe())],
     procedure: { item: () => procedureItem(taskId), cut: () => cutProcedureItem(taskId) },
   };
 }

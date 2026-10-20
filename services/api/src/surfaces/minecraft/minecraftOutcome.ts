@@ -154,6 +154,12 @@ function rangedFightRefusal(name: string, input: unknown, observation: BodyObser
  * (`［再試行の目安: retry_same｜…］`) and is retryable for `retry_same` and `change_situation` only. A failure without one, a
  * `BODY_*` code in its text among them, is as it was: not retryable, its text as the body wrote it.
  */
+/** The body's own failure kind kept on a result (minecraftSkillResult), for the executor's procedures (mb-arch); the model never reads it. */
+export function bodyFailureOf(result: ToolResult): string | null {
+  const kind = (result as { bodyFailure?: unknown }).bodyFailure;
+  return typeof kind === 'string' ? kind : null;
+}
+
 export function minecraftSkillResult(receipt: MinecraftControlReceipt): ToolResult {
   if (receipt.outcome === 'completed') return toolOk(receipt.result ?? '操作の実行結果を受け取った。目的の達成は新しい観測で確認する。');
   const text = receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`;

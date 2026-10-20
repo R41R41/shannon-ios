@@ -17,7 +17,6 @@ const DIAMOND = /^diamond$/u;
 const OBSIDIAN = /^obsidian$/u;
 const FLINT_AND_STEEL = /^flint_and_steel$/u;
 const DEEP_Y = -58;
-const DIRECTIONS = [{ x: 1, z: 0 }, { x: 0, z: 1 }, { x: -1, z: 0 }, { x: 0, z: -1 }];
 
 /** 「ダイヤ」: down to Y-58, the diamonds near dug (a wider look, then a tunnel each way), the pickaxe made. */
 export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
@@ -27,18 +26,14 @@ export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMem
   if (y > DEEP_Y + 10) {
     return doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる', expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` });
   }
-  for (const radius of [32, 64]) {
-    const key = `diamond:${have}:${radius}:${memory.succeeded('diamond:tunnel')}`;
+  // The body finds ores in the whole loaded world (its view distance), hidden ones too, and digs its way there: a wider look, not a tunnel.
+  for (const radius of [32, 64, 128]) {
+    const key = `diamond:${have}:${radius}`;
     if (memory.lastFailure(key) === 'target_not_found') continue;
     return doing({ tool: 'mc.mine-block', input: { blockName: 'diamond_ore', count: 3 - have, searchRadius: radius }, why: 'ダイヤを掘る',
-      expectMs: 90_000, key });
+      expectMs: 90_000 + radius * 1_000, key });
   }
-  const tunnels = memory.succeeded('diamond:tunnel');
-  const way = DIRECTIONS[tunnels % 4]!;
-  if (tunnels >= 4 || !facts.at) return stuck('Y-58 の周り 64m とトンネル 4 本でダイヤが見つからない');
-  const at = block(facts.at);
-  return doing({ tool: 'mc.move-to', input: { x: at.x + 40 * way.x, y: at.y, z: at.z + 40 * way.z, goalType: 'near', range: 3 }, why: '横へ掘り進んで探す',
-    expectMs: 90_000, key: 'diamond:tunnel' });
+  return stuck('Y-58 の周り 128m にダイヤが見えない');
 }
 
 /** Water in the bucket: the nearest water source found, walked to, scooped. */
@@ -78,7 +73,7 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
   if (!carried(facts, DIAMOND_PICKAXE)) return stuck('黒曜石はダイヤのツルハシでしか掘れない');
   if (!inPack(facts, /^water_bucket$/u)) {
     if (!inPack(facts, /^bucket$/u)) return stuck('水を運ぶバケツが無い');
-    return memory.notes.has('water:none') || memory.failed('water:find') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
+    return memory.notes.has('water:none') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
   }
   const count = carried(facts, OBSIDIAN);
   if (batchObsidian && !memory.failed(`obsidian:batch:${count}`)) {
@@ -92,11 +87,11 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
 function flintMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
   if (!inPack(facts, /^gravel$/u)) {
     const key = `gravel:${carried(facts, /^flint$/u)}`;
-    if (memory.failed(key)) return stuck('48m 以内に砂利が見えない');
+    if (memory.lastFailure(key) === 'target_not_found') return stuck('48m 以内に砂利が見えない');
     return doing({ tool: 'mc.mine-block', input: { blockName: 'gravel', count: 6, searchRadius: 48 }, why: '火打石の砂利を掘る', expectMs: 30_000, key });
   }
   const tries = (memory.notes.get('flint:tries') as number | undefined) ?? 0;
-  if (tries >= 20) return stuck('砂利を 20 回掘り直しても火打石が出ない');
+  if (tries >= 40) return stuck('砂利を 40 回掘り直しても火打石が出ない');
   memory.notes.set('flint:tries', tries + 1);
   const dig = (text: string): MinecraftWorkItem | null => {
     const cell = cellsInText(text)[0];

@@ -51,12 +51,13 @@ function makePiece(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McM
   if (!next || carried(facts, INGOT) < next.iron) return null;
   const key = `craft:${next.item}:${carried(facts, IRON_PICKAXE)}`;
   const table = memory.lastFailure(key) === 'crafting_table_missing' ? planksFor(facts, 6) : null;
-  return table ?? (next.sticks ? sticksFor(facts) : null) ?? craft(next.item, `${next.item}を作る`, 1, key);
+  // Four sticks for a pickaxe: two left over for the diamond pickaxe, made deep down where there is no wood.
+  return table ?? (next.sticks ? sticksFor(facts, 4) : null) ?? craft(next.item, `${next.item}を作る`, 1, key);
 }
 
 /** A furnace done (or nearly) within reach: what it made taken out, without waiting. */
 function takeOut(facts: MinecraftProcedureFacts): McMove | null {
-  const job = facts.jobs.find(item => item.remainingEstimateMs <= 1_500 && distance(facts, item.position) <= 48);
+  const job = facts.jobs.find(item => item.remainingEstimateMs <= 500 && distance(facts, item.position) <= 48);
   if (!job) return null;
   return doing({ tool: 'mc.withdraw-from-furnace', input: { ...job.position, waitForCompletion: false }, why: 'かまどの鉄を取り出す', expectMs: 6_000,
     key: `withdraw:${cellKey(job.position)}:${carried(facts, INGOT)}` });
@@ -99,9 +100,11 @@ function newFurnace(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, c
 }
 
 /** The raw iron carried put in the furnaces: two of them, half each; coal dug first when it is near and short. */
-function smelt(facts: MinecraftProcedureFacts, store: ProcedureTaskStore): McMove | null {
+function smelt(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, memory: ProcedureMemory): McMove | null {
   const raw = inPack(facts, RAW_IRON);
   if (!raw) return null;
+  // A furnace that refused raw iron (picked up, gone) is forgotten.
+  store.furnaces = store.furnaces.filter(cell => memory.lastFailure(`smelt:${cellKey(cell)}:${raw}`) === null);
   const busy = new Set(facts.jobs.map(job => cellKey(block(job.position))));
   const free = store.furnaces.filter(cell => !busy.has(cellKey(cell)) && distance(facts, cell) <= 64);
   const split = free.length >= 2 || store.furnaces.length < 2 ? Math.ceil(raw / 2) : raw;
@@ -141,6 +144,6 @@ function waitFurnace(facts: MinecraftProcedureFacts): McMove | null {
 /** 「鉄」「バケツ」「鉄の全身の防具」: make, take out, smelt, dig, and only then wait. */
 export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
   for (const job of facts.jobs) if (!store.furnaces.some(cell => cellKey(cell) === cellKey(block(job.position)))) store.furnaces.push(block(job.position));
-  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store) ?? digIron(facts, memory) ?? waitFurnace(facts)
+  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? digIron(facts, memory) ?? waitFurnace(facts)
     ?? stuck('鉄の手順で次にできる手が無い');
 }

@@ -1,7 +1,7 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import { BED_ITEM } from './minecraftItems.js';
 import { MILESTONE_TARGET_SECONDS } from './minecraftStage.js';
-import { carried, inPack, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { carried, inPack, nearestNeed, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { doing, type McDo } from './minecraftProcedureMoves.js';
 
 /**
@@ -25,7 +25,8 @@ export const PROCEDURE_UPKEEP = Object.freeze({
 const FOOD_ORDER = ['cooked_beef', 'cooked_porkchop', 'cooked_mutton', 'cooked_chicken', 'cooked_salmon', 'cooked_cod', 'cooked_rabbit', 'bread',
   'baked_potato', 'golden_carrot', 'apple', 'carrot', 'melon_slice', 'sweet_berries', 'beef', 'porkchop', 'mutton', 'rabbit', 'cod', 'salmon',
   'dried_kelp', 'potato'];
-const SURFACE = new Set(['木', '木と石のツルハシ', '石の斧', '木材', '食料と羊とベッド']);
+const BED_STEP = '食料と羊とベッド';
+const SURFACE = new Set(['木', '木と石のツルハシ', '石の斧', '木材', BED_STEP]);
 const ARMOR: ReadonlyArray<{ piece: string; destination: string }> = [
   { piece: 'chestplate', destination: 'torso' }, { piece: 'leggings', destination: 'legs' }, { piece: 'helmet', destination: 'head' },
   { piece: 'boots', destination: 'feet' },
@@ -55,13 +56,18 @@ function sleep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | 
   return memory.failed('sleep') ? null : doing({ tool: 'mc.sleep-in-bed', input: { isTakeBed: true }, why: '夜をベッドで飛ばす', expectMs: 12_000, key: 'sleep' });
 }
 
+/** The moment's upkeep, each kind left for the rest of the run once it failed (an upkeep never ends a run). */
 export function minecraftUpkeep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | null {
-  return eat(facts) ?? wear(facts) ?? sleep(facts, memory);
+  if (!facts.observation) return null;
+  const fresh = (move: McDo | null) => move && !memory.failed(move.key) && !memory.lastFailure(move.key) ? move : null;
+  return fresh(eat(facts)) ?? fresh(wear(facts)) ?? sleep(facts, memory);
 }
 
 /** Failures the planner must see at once: the body's night gate, a full pack, no tool or a broken one, a bed that explodes. */
 const FINAL = new Set(['night_unprepared', 'inventory_full', 'missing_tool', 'tool_broke', 'tool_durability_low', 'bed_explodes', 'not_offered']);
 export const finalFailure = (failure: string) => FINAL.has(failure);
+/** The body's reflex cut in (a fight, a fall): the work is tried again once before it counts; a danger that stays is a stop. */
+export const passingFailure = (failure: string) => failure === 'interrupted_by_reflex';
 
 export interface StopParts {
   /** A message came into the task's inbox after the decision that started the run. */
@@ -90,12 +96,25 @@ function late(procedure: string, parts: StopParts): string | null {
   return `「${procedure}」の目安${target}秒を${seconds - target}秒過ぎた（いま${seconds}秒）`;
 }
 
+/** The bed's procedure can still end the night itself: three wool of a colour carried, or a standing bed near. */
+function bedAtHand(facts: MinecraftProcedureFacts): boolean {
+  return [...facts.pack].some(([name, count]) => /_wool$/u.test(name) && count >= 3) || nearestNeed(facts, 'bed', 24) !== null;
+}
+
+/** The night on the surface with no bed: the planner's (a shelter), unless the bed's own procedure can make or take one now. */
+function nightStop(facts: MinecraftProcedureFacts, procedure: string): string | null {
+  if (!facts.night || facts.dimension !== 'overworld' || !SURFACE.has(procedure) || inPack(facts, BED_ITEM)) return null;
+  return procedure === BED_STEP && bedAtHand(facts) ? null : '夜になった（ベッドを持っていない）';
+}
+
 /** Why the turn goes back to the planner before the next item, or null. */
 export function minecraftStopWhy(facts: MinecraftProcedureFacts, procedure: string, parts: StopParts): string | null {
   if (parts.pending?.()) return '新しい伝言が届いた';
+  // No frame for a while (`MinecraftControl.frame`): nothing here is known, so nothing is planned from it.
+  if (!facts.observation) return '体の観測が届いていない';
   const near = danger(facts);
   if (near) return near;
-  if (facts.food !== null && facts.food <= 6 && !eat(facts)) return `空腹（${facts.food}）で食べ物を持っていない`;
-  if (facts.night && facts.dimension === 'overworld' && SURFACE.has(procedure) && !inPack(facts, BED_ITEM)) return '夜になった（ベッドを持っていない）';
-  return late(procedure, parts);
+  // The food's own procedure hunts: hunger is the planner's only elsewhere.
+  if (facts.food !== null && facts.food <= 6 && !eat(facts) && procedure !== BED_STEP) return `空腹（${facts.food}）で食べ物を持っていない`;
+  return nightStop(facts, procedure) ?? late(procedure, parts);
 }
