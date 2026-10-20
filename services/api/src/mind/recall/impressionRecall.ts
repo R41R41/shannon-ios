@@ -276,27 +276,33 @@ export function ownerImpressionReader(
   store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): (memoryId: string) => string | null {
-  let parts: { source: ImpressionSource; people: readonly ImpressionPerson[]; check: ImpressionEvidenceCheck; decay: boolean } | null | undefined;
+  let parts: OwnerImpressionParts | null | undefined;
   return memoryId => {
     if (!memoryId.startsWith(IMPRESSION_MEMORY_PREFIX) || !isOwnerOnly(present)) return null;
-    if (parts === undefined) {
-      try {
-        const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
-        parts = source ? { source, people: source.people(scopeKey), check: new ImpressionEvidenceCheck(state, store, scopeKey),
-          decay: mindSwitches(environment).evidenceDecay } : null;
-      } catch { parts = null; }
-    }
-    if (!parts) return null;
     try {
-      const row = parts.source.impression(scopeKey, memoryId.slice(IMPRESSION_MEMORY_PREFIX.length));
-      if (!row || impressionMemoryId(row.id) !== memoryId) return null;
-      if (row.personKey !== OWNER_PERSON_KEY && (parts.decay || !parts.people.some(person => person.id === row.personKey && !person.forgotten))) return null;
-      if (row.status !== 'active' && row.status !== 'fading') return null;
-      if (parts.check.rules.length) parts.check.load([row]);
-      const usable = usableImpression(row, state, parts.check, parts.people);
-      return usable ? `${usable.statement}${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}` : null;
+      parts ??= ownerImpressionParts(store, state, scopeKey, environment);
+      const row = parts?.source.impression(scopeKey, memoryId.slice(IMPRESSION_MEMORY_PREFIX.length));
+      return parts && row && impressionMemoryId(row.id) === memoryId ? shownToOwnerAlone(row, state, parts) : null;
     } catch { return null; }
   };
+}
+
+interface OwnerImpressionParts { source: ImpressionSource; people: readonly ImpressionPerson[]; check: ImpressionEvidenceCheck; decay: boolean }
+
+function ownerImpressionParts(
+  store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, environment: Readonly<Record<string, string | undefined>>,
+): OwnerImpressionParts | null {
+  const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
+  return source ? { source, people: source.people(scopeKey), check: new ImpressionEvidenceCheck(state, store, scopeKey),
+    decay: mindSwitches(environment).evidenceDecay } : null;
+}
+
+function shownToOwnerAlone(row: PersonImpression, state: CompanionStateSnapshot, parts: OwnerImpressionParts): string | null {
+  if (row.personKey !== OWNER_PERSON_KEY && (parts.decay || !parts.people.some(person => person.id === row.personKey && !person.forgotten))) return null;
+  if (row.status !== 'active' && row.status !== 'fading') return null;
+  if (parts.check.rules.length) parts.check.load([row]);
+  const usable = usableImpression(row, state, parts.check, parts.people);
+  return usable ? `${usable.statement}${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}` : null;
 }
 
 /**
