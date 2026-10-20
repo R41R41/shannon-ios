@@ -36,6 +36,8 @@ export interface WorkingNeed {
 export interface WorkingProgress {
   subject: string; skill: string; measure: string | null; elapsedMs: number; sinceProgressMs: number; distance: number | null;
   stalled: boolean; at: string;
+  /** What the body says makes a stall worse where it is (`water`), or null. */
+  hazard: string | null;
 }
 
 const SUBJECT = /^[A-Za-z0-9][A-Za-z0-9_.:,@-]*$/u;
@@ -155,7 +157,8 @@ export class WorkingEventLog {
       // Still stalled while the time since progress keeps growing; progress (it falls back) ends the stall.
       const stalled = event.kind === 'action.stalled' || (!!before?.stalled && since >= before.sinceProgressMs);
       this.progressMap.set(event.subject, { subject: event.subject, skill: String(d.skill ?? ''), measure: typeof d.measure === 'string' ? d.measure : null,
-        elapsedMs: numberOf(d.elapsedMs) ?? 0, sinceProgressMs: since, distance: numberOf(d.distance), stalled, at: event.at });
+        elapsedMs: numberOf(d.elapsedMs) ?? 0, sinceProgressMs: since, distance: numberOf(d.distance), stalled, at: event.at,
+        hazard: typeof d.hazard === 'string' ? d.hazard : null });
       if (this.progressMap.size > 64) this.progressMap.delete(this.progressMap.keys().next().value as string);
     }
   }

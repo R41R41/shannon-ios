@@ -15,10 +15,17 @@ import type { WorkingEvent, WorkingNeed, WorkingProgress } from './workingEvents
  */
 export const WORKING_ARBITER_V0 = Object.freeze({
   stallCutMs: 20_000,
-  /** A wait with less than this left is let run: cutting it saves nothing. */
+  /** In water (the body says hazard=water) a stall is cut sooner: run 19 chased salmon for 201 s and lost breath to it. */
+  waterStallCutMs: 10_000,
+  /**
+   * A wait with less than this left, or with how long it has left unknown, is let run: cutting it saves nothing. Run 19 cut a
+   * furnace wait twice with about 3 s left (the furnace's time was not known to it).
+   */
   waitCutRemainingMs: 15_000,
   needCutDistance: 24,
   cutsPerMinute: 2,
+  /** A cut holds its topic this long: the same work is not cut again within it, but a dig or a hunt an hour on may stall anew. */
+  topicMemoryMs: 300_000,
   lines: 6,
 });
 
@@ -31,6 +38,11 @@ export interface RunningWork {
   startedAt: number;
   /** For a wait: how long it still has, when known. */
   remainingMs: number | null;
+  /**
+   * The work itself, whatever id each asking of it got: the same tool on the same target (run 19 asked the same furnace again under a
+   * new id, and it was cut again). A cut is never made twice on the same topic. The subject when absent.
+   */
+  topic?: string;
 }
 
 export type ArbiterVerdict =
@@ -52,14 +64,16 @@ export function arbitrate(input: {
   const o = { ...WORKING_ARBITER_V0, ...input.options };
   const running = input.running;
   if (!running) return { act: 'none' };
-  if (input.recentCuts.some(cut => cut.subject === running.subject)) return { act: 'none' };
+  const topic = running.topic ?? running.subject;
+  if (input.recentCuts.some(cut => cut.subject === topic && input.now - cut.at < o.topicMemoryMs)) return { act: 'none' };
   if (input.recentCuts.filter(cut => input.now - cut.at < 60_000).length >= o.cutsPerMinute) return { act: 'none' };
   const progress = input.progress?.subject === running.subject ? input.progress : null;
-  if (!running.waiting && progress?.measure && progress.sinceProgressMs >= o.stallCutMs) {
+  const stallLimit = progress?.hazard === 'water' ? o.waterStallCutMs : o.stallCutMs;
+  if (!running.waiting && progress?.measure && progress.sinceProgressMs >= stallLimit) {
     const { sinceProgressMs, distance } = progress;
     return { act: 'cut', rule: 'stalled', subject: running.subject, tool: running.tool, sinceProgressMs, distance };
   }
-  if (running.waiting && input.calm && (running.remainingMs === null || running.remainingMs >= o.waitCutRemainingMs)) {
+  if (running.waiting && input.calm && running.remainingMs !== null && running.remainingMs >= o.waitCutRemainingMs) {
     const need = input.needs.find(item => item.canReach && item.distance !== null && item.distance <= o.needCutDistance && (input.cutFor?.(item) ?? true));
     if (need) return { act: 'cut', rule: 'need_during_wait', subject: running.subject, tool: running.tool, need };
   }

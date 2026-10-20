@@ -20,16 +20,23 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
  */
 export const MINECRAFT_WORKING = Object.freeze({ calmThreatDistance: 16, needsShown: 4 });
 
-const WHAT: Readonly<Record<string, string>> = { bed_wool: '羊', food: '食べ物の動物', iron: '鉄鉱石', wood: '原木' };
+const WHAT: Readonly<Record<string, string>> = {
+  bed: '置かれたベッド', bed_wool: '羊', food: '食べ物の動物', iron: '鉄鉱石', fuel: '石炭', wood: '原木',
+};
 const colour = (need: WorkingNeed) => typeof need.data.color === 'string' ? need.data.color : null;
 const TAKE: Readonly<Record<string, (need: WorkingNeed) => string>> = {
+  // Run 19: an igloo's bed stood 13 m off for the whole run; dug, a bed is carried (and the night is skipped with it).
+  // dig-block-at keeps off a bed (equipment) unless told to take it, and does not walk: move to it first.
+  bed: need => `mc.move-to（x=${need.data.x}、y=${need.data.y}、z=${need.data.z}、goalType=block）→ mc.dig-block-at（x=${need.data.x}、`
+    + `y=${need.data.y}、z=${need.data.z}、takeEquipment=true。掘れば持てる）`,
   bed_wool: need => `mc.attack-continuously（entityName=sheep${colour(need) ? `、color=${colour(need)}` : ''}、maxKills=1）`,
   food: need => `mc.attack-continuously（entityName=${need.name}、maxKills=2）`,
   iron: need => `mc.mine-block（blockName=${need.name}、searchRadius=24）`,
+  fuel: need => `mc.mine-block（blockName=${need.name}、count=4）`,
   wood: need => `mc.mine-block（blockName=${need.name}、count=3）`,
 };
 /** A wait is ended for these only: logs are in reach all morning, and a wait cut for each would never let one finish. */
-const WAIT_WORTH: ReadonlySet<string> = new Set(['iron', 'bed_wool', 'food']);
+const WAIT_WORTH: ReadonlySet<string> = new Set(['bed', 'iron', 'bed_wool', 'food']);
 const NAME = /^[a-z0-9_]{1,40}$/u;
 
 /** The id the body knows a skill command by (`fcaMinecraftTools`: `skill:` and the operation id's SHA-256). */
@@ -56,7 +63,9 @@ export function minecraftCalm(observation: BodyObservation | null): boolean {
 
 /** The needs in reach now, as one line with the tool that takes each kind (once); null when none can be got at. */
 export function minecraftNeedsLine(needs: readonly WorkingNeed[]): string | null {
-  const reachable = needs.filter(need => need.canReach && WHAT[need.need]).slice(0, MINECRAFT_WORKING.needsShown);
+  // A standing bed first, however far: four runs in a row ended without a bed (runs 16 to 19), the nearer logs can wait.
+  const ordered = [...needs].sort((a, b) => Number(b.need === 'bed') - Number(a.need === 'bed'));
+  const reachable = ordered.filter(need => need.canReach && WHAT[need.need]).slice(0, MINECRAFT_WORKING.needsShown);
   if (!reachable.length) return null;
   const seen = reachable.map(need => `${WHAT[need.need]}${need.need === 'bed_wool' && colour(need) ? `（${colour(need)}）` : ''}`
     + `${need.distance !== null ? `${Math.round(need.distance)}m` : ''}${need.data.exposed === false ? '（埋まっている）' : ''}`);
@@ -64,16 +73,29 @@ export function minecraftNeedsLine(needs: readonly WorkingNeed[]): string | null
   return `近くに要る物（届く）: ${seen.join('・')}。今の作業の区切りで寄って取れる: ${take.join('、')}`;
 }
 
-/** One entry of the frame's list, checked: one of the four needs, names of the game's own form, a distance in reach. Null if not. */
+/** What a need says besides its kind and distance: the wool's colour, out of sight, and its cell. */
+function needData(need: Record<string, unknown>): Record<string, string | number | boolean> {
+  const data: Record<string, string | number | boolean> = {};
+  if (typeof need.color === 'string' && NAME.test(need.color)) data.color = need.color;
+  if (need.exposed === false) data.exposed = false;
+  const position = need.position && typeof need.position === 'object' ? need.position as Record<string, unknown> : null;
+  if (position && ['x', 'y', 'z'].every(axis => Number.isSafeInteger(position[axis]))) Object.assign(data, { x: position.x, y: position.y, z: position.z });
+  return data;
+}
+
+/**
+ * One entry of the frame's list, checked: one of the kinds known here, names of the game's own form, a distance in reach (a standing
+ * bed is said up to 96 m). Null if not.
+ */
 function frameNeed(item: unknown, at: string): (WorkingNeed & { distance: number }) | null {
   const need = item && typeof item === 'object' ? item as Record<string, unknown> : null;
   const distance = Number(need?.distance);
   if (!need || !WHAT[String(need.need)] || typeof need.name !== 'string' || !NAME.test(need.name)) return null;
-  if (!Number.isFinite(distance) || distance < 0 || distance > 64) return null;
+  if (!Number.isFinite(distance) || distance < 0 || distance > 100) return null;
   const id = typeof need.id === 'string' ? need.id.slice(0, 160) : `${String(need.need)}:${need.name}:${distance}`;
-  const data: Record<string, string | boolean> = {};
-  if (typeof need.color === 'string' && NAME.test(need.color)) data.color = need.color;
-  if (need.exposed === false) data.exposed = false;
+  const data = needData(need);
+  // A bed is taken where it stands: without its cell there is nothing to say.
+  if (need.need === 'bed' && data.x === undefined) return null;
   return { id, need: String(need.need), name: need.name, distance, canReach: need.canReach === true, at, data };
 }
 
@@ -116,6 +138,38 @@ function waitMilliseconds(call: { name: string; input: unknown }): number | null
   return Number.isFinite(milliseconds) ? milliseconds : null;
 }
 
+/** A call's cell (x, y, z), when it names one. */
+function cellOf(input: unknown): string | null {
+  const value = input && typeof input === 'object' ? input as Record<string, unknown> : null;
+  if (!value || !['x', 'y', 'z'].every(axis => typeof value[axis] === 'number' && Number.isFinite(value[axis]))) return null;
+  return `${Math.floor(value.x as number)},${Math.floor(value.y as number)},${Math.floor(value.z as number)}`;
+}
+
+/**
+ * The work a call asks for, whatever id it got: the tool and its target (a cell, the block or the animal it names). Run 19 asked the same
+ * furnace again under a new id and the arbiter cut it again; on the same topic a cut is made once.
+ */
+export function minecraftWorkTopic(call: { name: string; input: unknown }): string {
+  const value = call.input && typeof call.input === 'object' ? call.input as Record<string, unknown> : {};
+  const target = cellOf(call.input) ?? [value.blockName, value.entityName, value.itemName].find(item => typeof item === 'string') ?? '';
+  return `${call.name}@${String(target).slice(0, 80)}`;
+}
+
+/**
+ * How long the furnace a withdraw waits for still has (`world.jobs`, the body's smelting jobs and their estimated end): the job at the
+ * call's cell, else the soonest; null when the body has none. Run 19 cut a withdraw with about 3 s left, not knowing it.
+ */
+export function minecraftFurnaceRemaining(observation: BodyObservation | null, input: unknown): number | null {
+  const world = observation ? (observation.state as { world?: { jobs?: unknown } }).world : undefined;
+  const jobs = (Array.isArray(world?.jobs) ? world!.jobs as Array<Record<string, unknown>> : [])
+    .filter(job => typeof job.remainingEstimateMs === 'number' && Number.isFinite(job.remainingEstimateMs));
+  if (!jobs.length) return null;
+  const cell = cellOf(input);
+  // A furnace named and not among the jobs (the list was cut, or it is not tracked): not known, so not cut.
+  if (cell) return (jobs.find(job => cellOf(job.position) === cell)?.remainingEstimateMs as number | undefined) ?? null;
+  return Math.min(...jobs.map(job => job.remainingEstimateMs as number));
+}
+
 export interface MinecraftWorkingArbiter {
   /** A call of hers begins (`noteCall`); only `mc.*` skills are followed. */
   begin(call: { name: string; input: unknown }, operationId: string): void;
@@ -127,11 +181,33 @@ export interface MinecraftWorkingArbiter {
   fields(observation: BodyObservation | null): { working?: { running?: string; events?: string[]; needs?: string } };
 }
 
+interface Running extends RunningWork { input: unknown; waitMs: number | null; cursor: number | null }
+
+/**
+ * The needs that came into reach after the wait began. The body judged the wait when it began (it refuses a wait while there is other
+ * work, wait_refused): what it knew then is its call. The arbiter ends a wait only for what is new since.
+ */
+function freshNeedIds(log: WorkingEventLog, cursor: number | null): Set<string> {
+  // No log when the wait began: nothing is known to be new since.
+  if (cursor === null) return new Set();
+  return new Set(log.since(cursor).events.filter(event => event.kind === 'need.appeared').map(event => event.subject));
+}
+
 export function createMinecraftWorkingArbiter(parts: {
   log(): WorkingEventLog | null; now(): number; taskId: string; stepId: string;
   send(text: string, id: string): void; line(text: string): void;
+  /**
+   * The executor's: a need that came into reach during a wait is taken by it and the wait resumed (`preemptForNeed`). True when it
+   * did: then nothing is cut and the task is not told (the call's own result says it).
+   */
+  onWaitNeed?(need: WorkingNeed): boolean;
+  /**
+   * The executor's procedure (`mc.run-procedure`): a cut of its running item stops that item only and the procedure goes on. True when it
+   * did: the cut counts against the topic as any, but the task is not told and the decision stays current.
+   */
+  onCut?(): boolean;
 }): MinecraftWorkingArbiter {
-  let running: RunningWork | null = null;
+  let running: Running | null = null;
   const memory = taskMemory(parts.taskId);
   // A task reads from its first step on: what the body told before the task began is not its news.
   if (memory.cursor === null) memory.cursor = parts.log()?.cursor() ?? null;
@@ -146,11 +222,16 @@ export function createMinecraftWorkingArbiter(parts: {
       parts.line(cutLine(parts.taskId, verdict, now - startedAt));
     } catch { /* logging never fails a step */ }
   };
+  const remaining = (work: Running, observation: BodyObservation | null, now: number): number | null => {
+    if (work.tool === 'mc.withdraw-from-furnace') return minecraftFurnaceRemaining(observation, work.input);
+    return work.waitMs === null ? null : work.waitMs - (now - work.startedAt);
+  };
   return {
     begin(call, operationId) {
       if (!call.name.startsWith('mc.')) return;
-      running = { subject: minecraftCommandId(operationId), tool: call.name, waiting: minecraftWaitingCall(call.name, call.input),
-        startedAt: parts.now(), remainingMs: waitMilliseconds(call) };
+      running = { subject: minecraftCommandId(operationId), topic: minecraftWorkTopic(call), tool: call.name, input: call.input,
+        waiting: minecraftWaitingCall(call.name, call.input), startedAt: parts.now(), remainingMs: null, waitMs: waitMilliseconds(call),
+        cursor: parts.log()?.cursor() ?? null };
     },
     end(name) {
       if (running?.tool === name) running = null;
@@ -159,12 +240,26 @@ export function createMinecraftWorkingArbiter(parts: {
       const log = parts.log();
       if (!log || !running) return { act: 'none' };
       const now = parts.now();
-      const work = running.remainingMs === null ? running : { ...running, remainingMs: running.remainingMs - (now - running.startedAt) };
+      const work = { ...running, remainingMs: running.waiting ? remaining(running, observation, now) : null };
+      const fresh = running.waiting ? freshNeedIds(log, running.cursor) : new Set<string>();
       const verdict = arbitrate({ now, running: work, progress: log.progress(running.subject), needs: minecraftFrameNeeds(observation),
-        calm: minecraftCalm(observation), recentCuts: cuts, cutFor: need => WAIT_WORTH.has(need.need) });
+        calm: minecraftCalm(observation), recentCuts: cuts, cutFor: need => WAIT_WORTH.has(need.need) && fresh.has(need.id) });
       if (verdict.act !== 'cut') return verdict;
-      cuts.push({ at: now, subject: verdict.subject });
+      // A need the executor takes is no cut: nothing is recorded against the wait's topic, and the task is not told.
+      if (verdict.rule === 'need_during_wait' && parts.onWaitNeed?.(verdict.need)) {
+        try {
+          parts.line(`Shannon Minecraft working take task=${parts.taskId} need=${verdict.need.need} tool=${verdict.tool}`);
+        } catch { /* logging never fails a step */ }
+        return { act: 'none' };
+      }
+      cuts.push({ at: now, subject: running.topic ?? verdict.subject });
       if (cuts.length > 8) cuts.shift();
+      if (parts.onCut?.()) {
+        try {
+          parts.line(`${cutLine(parts.taskId, verdict, now - running.startedAt)} inProcedure=true`);
+        } catch { /* logging never fails a step */ }
+        return { act: 'none' };
+      }
       tell(verdict, now, running.startedAt);
       return verdict;
     },

@@ -154,13 +154,21 @@ function rangedFightRefusal(name: string, input: unknown, observation: BodyObser
  * (`［再試行の目安: retry_same｜…］`) and is retryable for `retry_same` and `change_situation` only. A failure without one, a
  * `BODY_*` code in its text among them, is as it was: not retryable, its text as the body wrote it.
  */
+/** The body's own failure kind kept on a result (minecraftSkillResult), for the executor's procedures (mb-arch); the model never reads it. */
+export function bodyFailureOf(result: ToolResult): string | null {
+  const kind = (result as { bodyFailure?: unknown }).bodyFailure;
+  return typeof kind === 'string' ? kind : null;
+}
+
 export function minecraftSkillResult(receipt: MinecraftControlReceipt): ToolResult {
   if (receipt.outcome === 'completed') return toolOk(receipt.result ?? '操作の実行結果を受け取った。目的の達成は新しい観測で確認する。');
   const text = receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`;
   const hint = minecraftRetryHint(receipt.failureType);
-  if (!hint) return toolFailure('failed', text, { retryable: false });
+  // The body's kind as it named it (a closed id), for the executor's procedures (session mb-arch).
+  const kind = typeof receipt.failureType === 'string' && /^[a-z_]{1,40}$/u.test(receipt.failureType) ? { bodyFailure: receipt.failureType } : {};
+  if (!hint) return { ...toolFailure('failed', text, { retryable: false }), ...kind };
   const words = hint === 'prepare_first' ? nightGateWords(text) : receipt.failureType === BED_WOOL_FAILURE ? bedWoolWords(text) : HINT_WORDS[hint];
-  const failure = toolFailure('failed', `${text}\n［再試行の目安: ${hint}｜${words}］`,
-    { retryable: hint === 'retry_same' || hint === 'change_situation' });
+  const failure = { ...toolFailure('failed', `${text}\n［再試行の目安: ${hint}｜${words}］`,
+    { retryable: hint === 'retry_same' || hint === 'change_situation' }), ...kind };
   return receipt.failureType === BODY_REFLEX_FAILURE ? Object.freeze({ ...failure, bodyReflex: true as const }) : failure;
 }

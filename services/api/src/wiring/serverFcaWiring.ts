@@ -8,6 +8,10 @@ import { createFcaSleepWiring } from './fcaSleepWiring.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
 import { withMinecraftWorking } from '../surfaces/minecraft/minecraftWorkingBody.js';
+import { withMinecraftAgenda } from '../surfaces/minecraft/minecraftAgenda.js';
+import { minecraftProcedureStepParts } from '../surfaces/minecraft/minecraftProcedureTool.js';
+import { minecraftAgendaBodyParts, withMinecraftAgendaParts } from '../surfaces/minecraft/minecraftLookahead.js';
+import { minecraftOpportunityJudge } from '../surfaces/minecraft/minecraftOpportunityJudge.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
 import { admittedMinecraftRequest, fcaMinecraftRequests, MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
@@ -25,6 +29,7 @@ import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
 import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
+import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -127,8 +132,10 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
     // A Minecraft task's skill reads, settled by what the task then does (`fcaSkillOutcomes.ts`).
-    const minecraft = withSkillOutcomes(configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions }),
-      parts.skills, parts.now);
+    // SHANNON_MINECRAFT_AGENDA (mb-arch): the next decision asked while the body works, and the executor around its tools.
+    const minecraft = withMinecraftAgendaParts(withSkillOutcomes(
+      configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions }),
+      parts.skills, parts.now), switchOn(values, 'SHANNON_MINECRAFT_AGENDA'));
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
@@ -157,8 +164,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
+          // Owner 2026-10-20: her route to the Nether from a strong model, charged as a decision is (`minecraftRouteWiring.ts`).
+          ...minecraftRoutePlannerPart(values, recordUsage),
           sourcesVisible: () => check.whole('body') ?? false }),
-          { on: switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step }) : null;
+          { on: minecraft.agenda.on || switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step,
+            ...(minecraft.agenda.on
+              ? minecraftAgendaBodyParts(step.taskId, () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '')) : {}) }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
@@ -179,7 +190,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
-        return ({ selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
         taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
@@ -192,9 +203,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
           sourcesVisible: () => check.whole('tool') ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) }),
-          ...(minecraft ? [fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
+          ...(minecraft ? [withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
             sourcesVisible: () => check.whole('tool') ?? false,
-            ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }), ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
+            ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
+            { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
+              ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
+            ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
@@ -262,7 +276,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       ...source.recalledMemoryIds.map(id => `memory:${id}`), ...(source.readSourceIds ?? []).map(id => `read:${id}`),
     ]);
     return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
-      lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null,
+      lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent, admission: requests.admission } : null,
       // Whether a Minecraft-bound task is running, stopping or unknown (the phases that are not final); null when that cannot be read.
       // 「新しいワールドで始める」 (`freshWorldWiring.ts`) makes a new world only when this is exactly false.
       minecraftTasksOpen: (): boolean | null => { try { return requests ? requests.operator.open().length > 0 : null; } catch { return null; } },

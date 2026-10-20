@@ -106,6 +106,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   voiceRouteFeelingMeaning: 'voice_route.v7',
   /** Owner 2026-10-19: whether his words apologise or make amends, by meaning, asked while she holds something against him (text and voice). */
   feelingAmends: 'feeling_amends.v1',
+  /** Session mb-arch (`SHANNON_MINECRAFT_AGENDA`): whether a Minecraft body takes a thing in reach now, between the calls asked of it. */
+  minecraftOpportunity: 'mc_opportunity.v1',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';

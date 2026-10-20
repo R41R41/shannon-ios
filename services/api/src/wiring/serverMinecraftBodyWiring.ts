@@ -25,7 +25,7 @@ export function gameBodyMayCall(method: string | undefined, path: string): boole
     || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
 }
 
-type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent'>;
+type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent' | 'fcaAdmission'>;
 
 /**
  * Her Minecraft body as the server wires it: its game experiences, the game-chat route whose owner intents enter the common
@@ -39,7 +39,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
-  let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } | null = null;
+  let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
+    admission?: MinecraftBodyDependencies['fcaAdmission'] } | null = null;
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
@@ -51,8 +52,10 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
     /** The game-chat route, once the conversation kernel it answers through exists. */
     connect(dependencies: RouteDependencies): void {
       const fcaIntent: MinecraftBodyDependencies['fcaIntent'] = input => common ? common.intent(input)
-        : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const });
-      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent });
+        : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason: 'body_unavailable' as const });
+      // Without the common runtime there is no body to hand anything to; said after her reply (a stop is answered there too).
+      const fcaAdmission: MinecraftBodyDependencies['fcaAdmission'] = input => common ? common.admission?.(input) ?? null : 'body_unavailable';
+      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent, fcaAdmission });
     },
     /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */
     refusesConsole(request: IncomingMessage, response: ServerResponse, devices: { authenticate(authorization: string | undefined): ShannonDevicePrincipal | null } | null): boolean {

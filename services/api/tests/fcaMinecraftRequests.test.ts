@@ -94,6 +94,45 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     f.owner(false); expect(await f.api.intent({ ...input, intent: { kind: 'none', goal: '' }, experienceId: null })).toEqual({ kind: 'none', goal: '' });
   });
 
+  it('names each refusal (run 19: one queue_unavailable for four checks), and gives the words to a task under way as a message', async () => {
+    const lines: string[] = [], f = fixture();
+    const api = fcaMinecraftRequests({ runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime,
+      state: f.state, conversations: f.conversations, ownerScope: 'owner', ownerAlone: () => true }), ownerScope: 'owner', ownerAlone: () => alone,
+      sourceVisible: () => visibleTurn, stop: async (id, reason) => f.runtime.stop('owner', id, reason), atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test'),
+      log: line => lines.push(line) });
+    let alone = true, visibleTurn = true;
+    const said = (text: string) => f.conversations.appendTurn('owner', 'platform:minecraft:world', text, 'はい', at).id;
+    const input = { scopeKey: 'owner', request: f.request, experienceId: said('羊を探して'), intent: { kind: 'task' as const, goal: '羊を探す' } };
+    expect(api.admission({ scopeKey: 'other', request: f.request })).toBe('not_owner_scope');
+    alone = false;
+    expect(await api.intent(input)).toEqual({ kind: 'none', goal: '', rejected: 'queue_unavailable', reason: 'others_present' });
+    alone = true; visibleTurn = false;
+    expect(await api.intent(input)).toMatchObject({ reason: 'turn_not_visible' });
+    expect(await api.intent({ ...input, experienceId: null })).toMatchObject({ reason: 'no_turn' });
+    expect(await api.intent({ ...input, request: { ...f.request, serverId: 'elsewhere' } })).toMatchObject({ reason: 'body_unavailable' });
+    expect(lines).toEqual(['Shannon Minecraft intent refused reason=others_present kind=task', 'Shannon Minecraft intent refused reason=turn_not_visible kind=task',
+      'Shannon Minecraft intent refused reason=no_turn kind=task', 'Shannon Minecraft intent refused reason=body_unavailable kind=task']);
+    visibleTurn = true;
+    const first = (await api.intent(input))!;
+    // 「続けて」 while it is under way: the same task, its inbox, with the turn as the message's source; no second task.
+    const again = (await api.intent({ ...input, experienceId: said('続けて'), request: { ...f.request, requestId: 'game-two' }, intent: { kind: 'task', goal: '続けて羊を探す' } }))!;
+    expect(again.request?.id).toBe(first.request?.id);
+    expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toHaveLength(1);
+    const messages = f.runtime.snapshot('owner', first.request!.id)!.messages.filter(message => message.id.startsWith('external:'));
+    expect(messages.map(message => message.text)).toEqual(['ゲーム内の本人の依頼: 羊を探す', 'ゲーム内の本人の言葉（いまのタスクへ）: 続けて羊を探す']);
+    expect(lines.at(-1)).toBe(`Shannon Minecraft intent delivered task=${first.request!.id} as=message`);
+    // A stopping or paused one would drop the words: a new task instead (the review). And a body task that is not his request is no target.
+    f.runtime.stop('owner', first.request!.id, 'owner_game_stop');
+    const later = (await api.intent({ ...input, experienceId: said('羊を探して'), request: { ...f.request, requestId: 'game-three' } }))!;
+    expect(later.request?.id).not.toBe(first.request?.id);
+    // Another task that only touched the body (a tool call bound it) is not his request: the words never go there.
+    f.runtime.stop('owner', later.request!.id, 'owner_game_stop');
+    const other = f.runtime.createChild('owner', f.root.id, { title: 'research', goal: 'research', completionCriteria: 'other' }, 'other-task');
+    expect(f.bodyStore.bind(other.id, 'minecraft:world')).toBe(true);
+    const fresh = (await api.intent({ ...input, experienceId: said('羊を探して'), request: { ...f.request, requestId: 'game-four' } }))!;
+    expect(fresh.request?.id).not.toBe(other.id);
+  });
+
   it('pages over canonical tasks for status and cancels a child pending in its exact originating foreground turn', async () => {
     const f = fixture();
     for (let i = 0; i < 105; i++) {

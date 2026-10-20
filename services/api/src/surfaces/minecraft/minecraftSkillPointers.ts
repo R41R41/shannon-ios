@@ -2,6 +2,8 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { adoptionTags, adoptionTools, fed, milestoneLines, milestoneNow, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 export { milestoneFollowMemory } from './minecraftMilestoneFollow.js';
+export { createRoutePlanning } from './minecraftRoutePlanner.js';
+import { bedLead } from './minecraftBedLead.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -63,6 +65,10 @@ export interface MinecraftSituation {
   milestoneSteps?: readonly string[];
   /** Fewer than twelve planks' worth of wood (`WOOD_PLANKS`, a log is four): the first day's pointer stays at stage 2 (run 18). */
   woodShort?: boolean;
+  /** No bed of hers yet and a bed or a village she knows of to go to first (`minecraftBedLead.ts`, run 19), as one line, or null. */
+  bedLead?: string | null;
+  /** Seconds since the task began (`MinecraftPaceFacts`), and her route to the Nether as lines (the adapter, `minecraftRoutePlanner.ts`). */
+  elapsedSeconds?: number | null; route?: readonly string[];
 }
 /**
  * A pointer names its skill and the skills it succeeds (legacy-minecraft draft-6, 2026-10-19): the first of `skills` she can read now
@@ -131,6 +137,8 @@ const DAY_SECONDS = 650;
 /** The pace facts the situation reads (`minecraftPace`). */
 export interface MinecraftPaceFacts {
   failedStepsInARow: number; milestones?: { netherReached: boolean | null };
+  /** Seconds since the task began, for the step's time budget (`MILESTONE_TARGET_SECONDS`); absent: no budget line. */
+  elapsedSeconds?: number;
   /** Her `mc.wait-time` calls among her latest tool results (at most six): only recent waits count, never the task's total. */
   recentIdleWaits?: number;
   /** Seconds to dark when `mc.find-nearest-entity` for sheep last found none (`noSheepNearby`), kept while the same day goes on (`bedSearchMark`). */
@@ -230,11 +238,11 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   return {
     ...dark,
     threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
-    ...stepNow(observation, world, items, dimension, pace.milestones?.netherReached === true),
+    ...stepNow(observation, world, items, dimension, pace.milestones?.netherReached === true, pace.elapsedSeconds),
     oneHitFrom: threatNear ? oneHitFrom(world.margin) : null, dropsLeft: dropsLine(world),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
-    inNether: nether, inEnd: dimension === 'the_end',
+    inNether: nether, inEnd: dimension === 'the_end', elapsedSeconds: pace.elapsedSeconds ?? null,
     blazeNear: nether && entityNear([...list(world.nearbyThreats), ...list(world.nearbyEntities)], name => name === 'blaze', 48),
     ...openingPath(items, stage, darkIn, day, pace),
     ...laterPath(items, dimension, stage),
@@ -242,11 +250,14 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
 }
 
 /** The owner's order now (its lines and its name), and the wood short of the step 「木材」. */
-function stepNow(observation: BodyObservation | null, world: Record<string, unknown>, items: ItemCounts, dimension: string, netherReached: boolean)
-  : Pick<MinecraftSituation, 'milestone' | 'milestoneName' | 'woodShort'> {
+function stepNow(observation: BodyObservation | null, world: Record<string, unknown>, items: ItemCounts, dimension: string, netherReached: boolean,
+  elapsedSeconds?: number)
+  : Pick<MinecraftSituation, 'milestone' | 'milestoneName' | 'woodShort' | 'bedLead'> {
   const facts = { counts: items, dimension, netherReached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' };
-  return { milestone: observation ? milestoneLines(facts) : [], milestoneName: observation ? milestoneNow(facts).now.name : null,
-    woodShort: dimension === 'overworld' && countMatching(items, /_log$/u) * 4 + countMatching(items, /_planks$/u) < WOOD_PLANKS };
+  const bedless = dimension === 'overworld' && !facts.bedPlaced && countMatching(items, BED_ITEM) === 0;
+  return { milestone: observation ? milestoneLines(facts, elapsedSeconds) : [], milestoneName: observation ? milestoneNow(facts).now.name : null,
+    woodShort: dimension === 'overworld' && countMatching(items, /_log$/u) * 4 + countMatching(items, /_planks$/u) < WOOD_PLANKS,
+    bedLead: bedless ? bedLead(world) : null };
 }
 
 /** The overworld opening up to the Nether: the bed before dark, the day's sheep search given up, food enough, the portal (null stage: elsewhere). */
@@ -280,6 +291,8 @@ function laterPath(items: ItemCounts, dimension: string, stage: MinecraftStage |
  */
 function reminders(situation: MinecraftSituation): { reminders?: string[] } {
   const lines = [...(situation.dropsLeft ? [`死んだ所に落とし物が残っている（${situation.dropsLeft}）。消える前に拾いに戻る（recall-places の死亡地点、pickup-nearest-item）`] : []),
+    // By day with no threat near: the bed or the village to go to before the sheep (run 19).
+    ...(situation.calm && situation.bedLead ? [situation.bedLead] : []),
     ...(situation.oneHitFrom ? [`あと1撃で倒れる（${situation.oneHitFrom}）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）のどれか`] : []),
     ...(situation.furnaceDue ? [`かまどの${situation.furnaceDue}は焼き上がりの時刻を過ぎた。離れる前に withdraw-from-furnace で取り出す`] : [])];
   return lines.length ? { reminders: lines } : {};
@@ -389,7 +402,7 @@ export interface MinecraftSkillContext {
    * before. `milestone`: the owner's order (the step now and the next), on every decision with an observation.
    */
   fields: { milestoneSteps?: string[]; skillPointers?: string[]; skillGists?: MinecraftSkillGist[]; skillPointerNote?: string; milestone?: string[];
-    reminders?: string[] };
+    route?: string[]; reminders?: string[] };
   /** The body tools each shown gist names, by skill (`gistToolNames`); for a gist that names none, its skill's specific adoption tools. */
   gistTools: ReadonlyMap<string, ReadonlySet<string>>;
   /** The names of the skills pointed at this decision (shown or not), for `adoptionTags`. */
@@ -402,7 +415,7 @@ export function minecraftSkillContext(situation: MinecraftSituation, skillNames:
   const skillPointers = matched.map(pointer => `${pointer.skill}（${pointer.when}）`);
   const pointed = matched.map(pointer => pointer.skill);
   const milestone = { ...(situation.milestone.length ? { milestone: [...situation.milestone] } : {}),
-    ...reminders(situation) };
+    ...(situation.route?.length ? { route: [...situation.route] } : {}), ...reminders(situation) };
   // The step's procedure goes first, ahead of the pointers and their gists (never a gist: a use would hold a skill's revision).
   const head = situation.milestoneSteps?.length ? { milestoneSteps: [...situation.milestoneSteps] } : {};
   if (!matched.length) return { fields: { ...head, ...milestone }, gistTools: new Map(), pointed };

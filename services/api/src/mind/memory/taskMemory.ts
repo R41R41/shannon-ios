@@ -24,6 +24,24 @@ function scalarIndex(state: CompanionStateSnapshot): ReadonlyMap<string, { sourc
   return rows;
 }
 
+/**
+ * Her own interests (`si-…`, `sqliteSelfInterests.ts`) that a turn recalled from the self-interest index in its prompt
+ * (`turnCognitiveContext.ts`): the index line she would show this audience now, or null. From 2026-10-14 to Minecraft run 19 such an
+ * id was unknown here, so every turn that recalled one was hidden from every read and every lineage through it. In run 19 the owner's
+ * in-game 「続けて」 was refused as `queue_unavailable`, because his own turn was not visible to the check of its source.
+ */
+const SELF_INTEREST_ID = /^si-[a-f0-9]{16}$/u;
+function selfInterestLines(store: ConversationStore, scope: string, present: MemoryAudience): (id: string) => string | null {
+  let index: string | null = null;
+  return id => {
+    if (!SELF_INTEREST_ID.test(id)) return null;
+    if (index === null) {
+      try { index = store.selfInterestProjection?.(scope, present) ?? ''; } catch { index = ''; }
+    }
+    return index.split('\n').map(line => line.trim()).find(line => line.includes(`${id}:`)) ?? null;
+  };
+}
+
 /** Same canonical store, disclosure and forgetting gates as conversation recall. No cached private text. */
 export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
   const walkLimit = parts.sourceWalkLimit ?? SOURCE_WALK_LIMIT;
@@ -54,6 +72,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
     const gate = new DisclosureGate(present, state, store, scope);
     const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
+    const interestLine = selfInterestLines(store, scope, present);
     return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
     const experienceOf = (id: string) => {
@@ -114,7 +133,8 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         }
         const scalar = [...state.userFacts, ...state.relationships, ...state.prospectiveMemories].find(row => row.id === id);
         if (scalar) return !scalar.sourceExperienceId || lineageVisible(scalar.sourceExperienceId, seen);
-        return state.activeMemories.some(row => row.id === id) || state.interests.some(text => memoryIdentifier('interest', text) === id);
+        return state.activeMemories.some(row => row.id === id) || state.interests.some(text => memoryIdentifier('interest', text) === id)
+          || interestLine(id) !== null;
       }
       return gate.allowsTurn(experience) && !withheld.withholdsExperience(experience)
         && !(experience.readSourceIds ?? []).some(ref => !withheld.readSourceAvailable(ref, experience.observedAt))
@@ -176,6 +196,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         const promise = state.prospectiveMemories.find(row => row.id === id);
         const active = state.activeMemories.find(row => row.id === id);
         const interest = state.interests.find(text => memoryIdentifier('interest', text) === id);
+        const own = experience || fact || promise || active || interest ? null : interestLine(id);
         if (experience) {
           if (!lineageVisible(id)) continue;
           provenanceKind = 'experience'; readSourceIds = experience.readSourceIds ?? [];
@@ -187,7 +208,8 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
           if (!gate.allows(id, promise.disclosure) || (promise.sourceExperienceId && !lineageVisible(promise.sourceExperienceId))) continue;
           summary = promise.summary; at = promise.updatedAt; evidence = promise.evidence ?? ''; applicability = `promise ${promise.status}`;
         } else if (active) { summary = active.summary; at = state.updatedAt; applicability = 'active memory';
-        } else if (interest) { summary = interest; at = state.updatedAt; applicability = 'current interest'; }
+        } else if (interest) { summary = interest; at = state.updatedAt; applicability = 'current interest';
+        } else if (own) { summary = own; at = state.updatedAt; applicability = 'her own interest'; }
       }
       if (!summary) continue;
       const visible = visibleMemoryText(state, id, summary);
