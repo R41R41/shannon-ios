@@ -44,3 +44,8 @@ export function textRegisterReply(directive: TextRegisterDirective, input: { mes
   const first = sentences[0]?.trim() ?? '', rest = sentences.slice(1).join('').trim();
   return first && rest ? { ...directive, parts: [first, rest] } : { ...directive };
 }
+
+/** A voice channel's words are heard, not read: its feeling turn runs without the text register (a typed reply's form and pacing). */
+export function feelingPortFor<T extends { textRegister?: boolean } | null>(surface: { voice?: boolean } | undefined, port: T): T {
+  return surface?.voice && port ? { ...port, textRegister: false } : port;
+}

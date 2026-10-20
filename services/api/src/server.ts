@@ -23,7 +23,7 @@ import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedg
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
-import { configuredSonnet } from './wiring/sonnetWiring.js';
+import { closeReplySonnet, configuredSonnet, withReplySonnet } from './wiring/sonnetWiring.js';
 import { createModelModeWiring } from './wiring/modelModeWiring.js';
 import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
 import { failureTrail } from './infra/http/failureTrail.js';
@@ -179,7 +179,7 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 // What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
-const chatModel = modelModes.chatModel;
+const chatModel = withReplySonnet(process.env, modelModes.chatModel, { timeZone: autonomyConfig.timeZone, now, usageStore: persistentStore, haiku });
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
@@ -228,7 +228,7 @@ const kernel = createLocalApiKernel(now, {
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore, memoryRecall, ...(innerNote ? { innerNote: innerNote.port } : {}),
-  ...(feeling ? { feeling: feeling.port } : {}), autonomy,
+  ...(feeling ? { feeling: feeling.port } : {}), autonomy, ...(minecraft.live ? { minecraftLive: minecraft.live } : {}),
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { fcaTouch: () => fca?.touch ?? null, store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
@@ -241,7 +241,7 @@ const kernel = createLocalApiKernel(now, {
   ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null }, memoryPorts?.proposals ?? null, peopleFacts);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
@@ -287,7 +287,8 @@ const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDa
 if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
 // `opsCli.ts skills import`: the paired route's own import over the operator's socket (`skillImportCommand.ts`).
 const operatorSkillImport = { importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, now };
-const fca = configuredServerFca(process.env, { ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), skills: skillMemory?.memory ?? null, ...(skills ? { skillOpen: skills.open } : {}), operator: { lifecycle, actions: mind?.actions ?? null, activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore, skillImport: operatorSkillImport }, ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope, renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
+const fca = configuredServerFca(process.env, { live: minecraft.live ?? undefined, ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), skills: skillMemory?.memory ?? null, ...(skills ? { skillOpen: skills.open } : {}), operator: { lifecycle, actions: mind?.actions ?? null, activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore, skillImport: operatorSkillImport }, ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope, renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
+minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -486,7 +487,7 @@ function shutdown(): void {
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
-    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close(); feeling?.close();
+    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close(); feeling?.close(); closeReplySonnet();
     opsStore.close();
     shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();

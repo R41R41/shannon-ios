@@ -198,6 +198,17 @@ export const SWITCHES = [
     doc: 'A Minecraft task plans ahead while its body works, fills waits, takes nearby needs and resumes (mb-arch); with the working events.',
   },
   {
+    name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
+    doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
+      + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',
+  },
+  {
+    name: 'SHANNON_MINECRAFT_LIVE_SPEECH', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LIVE'],
+    doc: 'Owner 2026-10-20 (dc-live): she says a word of her own about a moment of her Minecraft body (a diamond, the armour, a near death, '
+      + 'the night) in the voice channel she is in or the body\'s text channel, one or two a minute at most and never over someone who is '
+      + 'talking. The body must be set to speak (MINEBOT_LIVE_*).',
+  },
+  {
     name: 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL', default: 'off', kind: 'on_only', owner: 'recall', requires: [],
     doc: 'Conversation recall reads temporal knowledge.',
   },
@@ -318,6 +329,34 @@ export const SWITCHES = [
   {
     name: 'SHANNON_VOICE_AUDIO_TAGS', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: [], setup: 'on',
     doc: 'Owner 2026-10-20: her spoken replies may carry ElevenLabs audio tags ([whispers] [laughs] [sighs]…) for the voice only; off, no tag line.',
+  },
+  {
+    name: 'SHANNON_DC_VOICE', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
+    doc: 'Owner 2026-10-20: a Discord voice channel is answered by her one mind (/v1/platform/voice/*): turn, speech, mouth. '
+      + 'Needs SHANNON_PLATFORM_REPLY, the bridge and an ElevenLabs voice. Off: 503 PLATFORM_VOICE_DISABLED, the bot answers as before.',
+  },
+  {
+    name: 'SHANNON_DC_VOICE_FILLER', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
+    doc: 'A voice channel turn may name a short filler (うん。 えっと、) for the bot to say at once while the reply is written.',
+  },
+  {
+    name: 'SHANNON_DC_VOICE_MINECRAFT', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
+    doc: 'The owner\'s spoken request in a voice channel reaches her Minecraft body: '
+      + 'a message to the task under way, a stop, or (alone) a new task.',
+  },
+  {
+    name: 'SHANNON_DC_VOICE_MOUTH', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
+    doc: 'Her mouth in the voice channel: say / poll / result / wording / said, so other parts can make her say a line there.',
+  },
+  {
+    name: 'SHANNON_ONE_HEAD', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
+    doc: 'Owner 2026-10-20 (one head, entries only hear and speak): POST /v1/converse; Discord voice through the app voice turn; '
+      + 'unbound Discord conversations and strangers answered; her character space and guard lines on voice too.',
+  },
+  {
+    name: 'SHANNON_REPLY_SONNET', default: 'off', kind: 'explicit_on', owner: 'model', requires: [], setup: 'on',
+    doc: 'Owner 2026-10-21: every reply, voice and text (apps, Windows, Discord, game chat; anyone), is Sonnet 5.5, prefix cached; Haiku '
+      + 'past SHANNON_REPLY_SONNET_DAILY_CAP a day (voice and text together) or when a voice first word is late; the router and helpers unchanged.',
   },
   {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],

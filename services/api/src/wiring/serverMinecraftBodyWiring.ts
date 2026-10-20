@@ -11,6 +11,7 @@ import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import { readJson, sendJson } from '../infra/http/serverHttp.js';
 import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
 import { createMinecraftBodyRoute } from './minecraftBodyRouteWiring.js';
+import { configuredMinecraftLive, type CommentaryParts } from './minecraftLiveWiring.js';
 
 /** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
@@ -37,6 +38,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   const configuration = configuredMinecraftBody(environment);
   const experiences = configuration ? new SQLiteGameExperiences(databasePath) : null;
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
+  // SHANNON_MINECRAFT_LIVE (session dc-live): her body's present for the conversations, and (with _SPEECH) her live commentary. Off: null.
+  const live = configuredMinecraftLive(environment);
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
@@ -44,7 +47,16 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
-    connectControl(value: NonNullable<typeof common>): void { common = value; },
+    /** Her body's present (SHANNON_MINECRAFT_LIVE), handed to the conversation kernel and the task bodies; null while the switch is off. */
+    live: live?.live ?? null,
+    connectControl(value: NonNullable<typeof common>): void {
+      common = value;
+      live?.connectControl(value.control);
+    },
+    /** Her live commentary, once what writes her line exists (SHANNON_MINECRAFT_LIVE_SPEECH). */
+    startLive(parts: Omit<CommentaryParts, 'scopeKey'>): void {
+      if (configuration) live?.startCommentary({ ...parts, scopeKey: configuration.ownerScopeKey });
+    },
     /** Her Minecraft body's token: never given a desktop-body identity (`desktopBodyIdentity.ts`). */
     isGameDevice: isGameBody,
     /** `ShannonBodyOptions.game`: the one device whose game events are taken. */
@@ -105,6 +117,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
       return true;
     },
     close(): void {
+      live?.stop();
       route?.close();
       experiences?.close();
     },

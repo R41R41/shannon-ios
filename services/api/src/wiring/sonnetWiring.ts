@@ -5,6 +5,7 @@ import { AnthropicSkillSleepModel } from '../infra/models/anthropic/anthropicSki
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { TieredChatModel } from '../infra/models/tieredChatModel.js';
+export { closeReplySonnet, withReplySonnet } from './replySonnetWiring.js';
 
 /**
  * Wiring of the Sonnet tier (Syzygy ADR-0008 stage 2, step 5; owner answers I-1, I-2, I-6). Null unless the Anthropic key is

@@ -18,14 +18,18 @@ export interface MinecraftTurnLog {
 
 /**
  * The answer log of a surface that answers through the conversation kernel. Her Minecraft body keeps it in
- * `minecraft_body_turns`; the platform reply route (`platformReply.ts`) in `platform_reply_turns`, where `device_id` holds
+ * `minecraft_body_turns`; the platform reply route (`platformReply.ts`) in `platform_reply_turns`, the voice channel
+ * (`platformVoice.ts`) in `platform_voice_turns`, where `device_id` holds
  * the platform. Same shape, separate tables.
  */
+const SURFACE_TURN_TABLES = ['minecraft_body_turns', 'platform_reply_turns', 'platform_voice_turns'] as const;
+export type SurfaceTurnTable = (typeof SURFACE_TURN_TABLES)[number];
+
 export class SQLiteSurfaceTurnLog implements MinecraftTurnLog {
   private readonly database: DatabaseSync;
 
-  constructor(path: string, private readonly table: 'minecraft_body_turns' | 'platform_reply_turns') {
-    if (table !== 'minecraft_body_turns' && table !== 'platform_reply_turns') throw new Error('Unknown surface turn table');
+  constructor(path: string, private readonly table: SurfaceTurnTable) {
+    if (!SURFACE_TURN_TABLES.includes(table)) throw new Error('Unknown surface turn table');
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.database.exec(`

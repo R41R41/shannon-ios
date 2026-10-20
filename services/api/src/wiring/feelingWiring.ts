@@ -16,6 +16,7 @@ import { AnthropicChatModel } from '../infra/models/anthropic/anthropicChatModel
 import { anthropicApiKey, sonnetSettings } from '../infra/models/anthropic/anthropicConfig.js';
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
 import { FeelingReplyChatModel } from '../infra/models/feelingStrongChatModel.js';
+import { repliesOnSonnet } from './replySonnetWiring.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import type { WebSearchOperation } from '../infra/models/webSearch.js';
 import { FEELING_TURN_JEV_INPUT, FEELING_TURN_JEV_INPUTS, type FeelingTurnJevInput } from '../contracts/feelingEventContract.js';
@@ -35,12 +36,16 @@ export interface ConfiguredFeeling {
 /** The day's cap of strong replies (`SHANNON_FEELING_STRONG_REPLY_DAILY_CAP`; owner decision 2026-10-14: a daily guard). */
 export const FEELING_STRONG_REPLY_DAILY_CAP = 200;
 
-/** Sonnet for strong feeling turns: the app's Sonnet settings and the shared Anthropic key; null when switched off or without the key. */
+/**
+ * Sonnet for strong feeling turns: the app's Sonnet settings and the shared Anthropic key; null when switched off or without the key, and
+ * while every reply is Sonnet's (`SHANNON_REPLY_SONNET`, owner 2026-10-21: one cap a day for all of them, `replySonnetWiring.ts`).
+ */
 function strongReplyModel(environment: Readonly<Record<string, string | undefined>>, parts: { usageStore?: LlmUsageStore; now: () => string;
   webSearch?: WebSearchOperation })
   : AnthropicChatModel | null {
   const apiKey = anthropicApiKey(environment);
   if (!switchOn(environment, 'SHANNON_FEELING_STRONG_REPLY_MODEL') || !feelingTurnEnabled(environment) || !apiKey) return null;
+  if (repliesOnSonnet(environment)) return null;
   return new AnthropicChatModel({ apiKey, settings: sonnetSettings(environment), now: parts.now,
     agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac', ...(parts.usageStore ? { usageStore: parts.usageStore } : {}),
     ...(parts.webSearch ? { webSearch: parts.webSearch } : {}) });
@@ -111,7 +116,7 @@ export function configuredFeeling(environment: Readonly<Record<string, string | 
   return composedFeeling({ database: parts.databasePath, now: parts.now, timeZone: parts.timeZone, chooser, turn, singleFace, jevInput,
     ...seeds, ...strong, ...shadow, check, ...(writer ? { sentence: writer } : {}), ...presentationFlags(environment, turn),
     days: spaceGuarded(feelingDayFeatures(environment), turn, check), audience: switchOn(environment, 'SHANNON_FEELING_AUDIENCE'),
-    stream: switchOn(environment, 'SHANNON_FEELING_STREAM') });
+    stream: switchOn(environment, 'SHANNON_FEELING_STREAM'), ...(repliesOnSonnet(environment) ? { repliesOnSonnet: true } : {}) });
 }
 
 /**
@@ -222,7 +227,9 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): keys by who wrote, light ledgers, audience layers, the source cap and the audience checks. */
   audience?: boolean;
   /** Stage 5 (`SHANNON_FEELING_STREAM`, with the audience layers): her feeling on a stream. */
-  stream?: boolean }): ConfiguredFeeling {
+  stream?: boolean;
+  /** `SHANNON_REPLY_SONNET`: every reply is Sonnet's, so a rewrite in her character space is waited for as a Sonnet one. */
+  repliesOnSonnet?: boolean }): ConfiguredFeeling {
   // Review R1: the audience layers only with the reply check and the turn they rely on (a switch's `requires` only warns at start);
   // without the check, no marked line of the owner's reaches a turn with others present.
   const audience = parts.audience === true && parts.check === true && parts.turn;
@@ -248,7 +255,8 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);
   const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
   const { drafts, drafted } = draftKeeping(parts, space);
-  const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, { sonnet, checked, released, ...drafted }) : model);
+  const options = { sonnet, checked, released, ...drafted, ...(parts.repliesOnSonnet ? { repliesOnSonnet: true } : {}) };
+  const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, options) : model);
   const close = () => {
     store.close();
     drafts?.close();

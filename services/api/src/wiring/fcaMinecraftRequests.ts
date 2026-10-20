@@ -6,6 +6,8 @@ import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/to
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import { operatorMinecraftRequests, type OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
+import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
+import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
@@ -34,7 +36,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   /** Where the content-free lines go (`console.log` when absent). */
   log?(line: string): void;
 }): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
-  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests } {
+  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort } {
   const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -61,7 +63,10 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
     return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
   };
+  const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
+    sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(), openRequest, spec, log });
   return {
+    voice,
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();

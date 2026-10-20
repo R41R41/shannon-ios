@@ -2,7 +2,10 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult 
 import type {
   ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine, ChatTextRegister,
 } from '../../contracts/contracts.js';
-import { ChatSentenceSplitter, splitChatSentences } from './chatSentenceSplitter.js';
+import { ChatSentenceSplitter, splitChatSentences, type ChatSentenceSplitterOptions } from './chatSentenceSplitter.js';
+
+/** A voice channel's reply is cut at a clause after this many characters, so her first words do not wait for the first full stop. */
+export const VOICE_SENTENCE_CUT: ChatSentenceSplitterOptions = Object.freeze({ clauseCharacters: 14 });
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
@@ -33,6 +36,8 @@ export interface ChatSentenceTurn {
   /** The turn's Notion, Aether and Voyager reads: the prompt text and the pages that become a source list. */
   capability: { prompt: string; sources: readonly unknown[] };
   placeSearch: boolean;
+  /** A voice channel's turn (`TextTurnSurface.voice`): sent early whoever is present, the audience's view of the reply being the reply. */
+  voice?: boolean;
   /**
    * Item 10 (`SHANNON_TEXT_REGISTER`): her form and pacing, with a bypass already known (review M3). A paced turn (a pause, the typing
    * display or a split) is sent once complete, when the reply's own bypass is known too; a bypassed or unpaced one may stream early.
@@ -69,11 +74,11 @@ export async function generateChatTurn(
 ): Promise<ShannonChatModelResult> {
   if (turn.body.stream !== 'sentences') return model.generate(request);
   const fallback = plannedFallback(turn);
-  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming && !paced(turn.textRegister);
+  const early = sink && fallback === null && (turn.audience.alone || turn.voice === true) && model.generateStreaming && !paced(turn.textRegister);
   const register = turn.textRegister ? { textRegister: turn.textRegister } : {};
   let completion: ShannonChatModelResult;
   if (early) {
-    const splitter = new ChatSentenceSplitter();
+    const splitter = new ChatSentenceSplitter(turn.voice === true ? VOICE_SENTENCE_CUT : undefined);
     let index = 0;
     completion = await model.generateStreaming!(request, text => {
       for (const sentence of splitter.append(text)) {

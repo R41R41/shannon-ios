@@ -57,6 +57,8 @@ export interface LoopStallOptions {
   observer?: boolean;
   /** Gives up after this long. */
   timeoutMilliseconds?: number;
+  /** Called once the world and the action store exist, before the task starts: another workload may share them (oiceContentionBench.ts). */
+  onWorld?(parts: { world: ReturnType<typeof fcaDenseWorld>['world']; actions: ReturnType<typeof actionHarness> }): void;
   /**
    * As production wires it since 2026-10-19 (serverFcaWiring.ts): the observation mode (default transient), the body task's recall
    * (bodyTaskRecall.ts, default on) and the scheduler's next turn at once (continueAtOnce, default on). legacyShape gives all three as before
@@ -110,6 +112,7 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
   const clock = () => new Date().toISOString();
   // One SQLite file for the store, the actions and the task runtime, as production's API process has (the sleep store's database).
   const actions = actionHarness(clock, world.path, world.store.fcaDatabase());
+  options.onWorld?.({ world, actions });
   const ownerAlone = () => true;
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot',
     servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;

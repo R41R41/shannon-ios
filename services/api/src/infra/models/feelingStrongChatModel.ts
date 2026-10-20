@@ -43,6 +43,8 @@ export interface FeelingReplyOptions {
    * rewritten, with its flags and the rewrite, kept for a few days (`replyDraftStore.ts`).
    */
   drafted?: (scopeKey: string, draft: { turn: string; flags: readonly ReplyCheckFlag[]; first: string; second: string | null }) => void;
+  /** `SHANNON_REPLY_SONNET` (owner 2026-10-21): every reply is Sonnet's below this model, so a rewrite in her space is waited for as Sonnet's. */
+  repliesOnSonnet?: boolean;
   log?: (line: string) => void;
 }
 
@@ -140,7 +142,8 @@ export class FeelingReplyChatModel implements ShannonChatModel {
   private deadlineFor(request: Marked): number {
     if (this.options.rewriteDeadlineMilliseconds !== undefined) return this.options.rewriteDeadlineMilliseconds;
     // Only a turn of her character space (review 1: with it off, every rewrite is waited for as before).
-    const wait = request.feelingStrong && this.strong && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
+    const onSonnet = this.options.repliesOnSonnet === true || Boolean(request.feelingStrong && this.strong);
+    const wait = onSonnet && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
     const left = turnLeft(request);
     return left === null ? wait : Math.max(0, Math.min(wait, left - REWRITE_TURN_MARGIN_MILLISECONDS));
   }
@@ -182,6 +185,15 @@ const crossed = (flags: readonly string[]) => flags.some(flag => (GUARD_FLAGS as
 const unsendable = (flags: readonly string[]) => privacy(flags) || crossed(flags);
 const safe = (result: ShannonChatModelResult, flags: readonly string[]): ShannonChatModelResult =>
   ({ ...result, reply: privacy(flags) ? PRIVATE_SAFE_REPLY : GUARD_SAFE_REPLY });
+
+/**
+ * One head (`SHANNON_ONE_HEAD`): the line a spoken sentence is replaced by when its flags say it is never sent (a private matter told,
+ * a marker read out, a guard line crossed), the same lines as a text draft's; null when it may be said.
+ */
+export function unsendableLine(flags: readonly string[]): string | null {
+  if (!unsendable(flags)) return null;
+  return privacy(flags) ? PRIVATE_SAFE_REPLY : GUARD_SAFE_REPLY;
+}
 
 function plain(request: Marked): ShannonChatModelRequest {
   if (!request.feelingStrong && !request.feelingCheck) return request;

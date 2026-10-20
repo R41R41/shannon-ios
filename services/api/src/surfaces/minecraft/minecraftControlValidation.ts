@@ -48,6 +48,18 @@ export function validSkillInput(value: unknown, schema: Readonly<Record<string, 
   return typeof value === 'number' && Number.isFinite(value) && (schema.type !== 'integer' || Number.isInteger(value))
     && value >= Number(schema.minimum ?? -30_000_000) && value <= Number(schema.maximum ?? 30_000_000);
 }
+/** The live speech fields of a poll (session dc-live): receipts the body gives for lines it was handed, and the room it plays in. Both optional. */
+const SPEECH_OUTCOMES = ['spoken', 'posted', 'declined', 'failed'];
+const CONVERSATION_ID = /^discord:\d{0,25}:\d{1,25}$/;
+function validLiveSpeech(value: Record<string, unknown>): boolean {
+  const receipts = value.speechReceipts, room = value.liveRoom;
+  const receiptsOk = receipts === undefined || (Array.isArray(receipts) && receipts.length <= 8 && receipts.every(item => record(item) && controlId(item.id)
+    && SPEECH_OUTCOMES.includes(String(item.outcome)) && (item.reason === undefined || typeof item.reason === 'string' && /^[a-z_]{1,40}$/.test(item.reason))
+    && (item.conversationId === undefined || typeof item.conversationId === 'string' && CONVERSATION_ID.test(item.conversationId))));
+  const roomOk = room === undefined || (record(room) && typeof room.voice === 'boolean' && typeof room.humanSpeaking === 'boolean'
+    && (room.sinceHumanMs === null || typeof room.sinceHumanMs === 'number' && Number.isFinite(room.sinceHumanMs) && room.sinceHumanMs >= 0));
+  return receiptsOk && roomOk;
+}
 export function validControlPoll(value: unknown, now: number): value is MinecraftControlPoll {
   if (!record(value) || value.schemaVersion !== 1 || !controlId(value.serverId) || !controlId(value.connectionId)) return false;
   const o = value.observation;
@@ -66,6 +78,7 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
   if (!Array.isArray(value.activeOperationIds) || value.activeOperationIds.length > 8 || value.activeOperationIds.some(id => !controlId(id))) return false;
   // Each event is checked when it is taken (`WorkingEventLog`, the first 32 only); a malformed one is skipped, never the whole poll.
   if (value.events !== undefined && !Array.isArray(value.events)) return false;
+  if (!validLiveSpeech(value)) return false;
   return Array.isArray(value.receipts) && value.receipts.length <= 16 && value.receipts.every(r => record(r) && controlId(r.id)
     && r.connectionId === value.connectionId && ['completed', 'failed', 'cancelled', 'unknown'].includes(String(r.outcome))
     && typeof r.inputsReleased === 'boolean' && timestamp(r.observedAt) && (r.result === undefined || typeof r.result === 'string' && r.result.length <= 16_000)

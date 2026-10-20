@@ -603,9 +603,10 @@ describe('guests and other people present never move her feeling toward the owne
     // (`autonomyCore.ts` names the module's path among the core paths.)
     // Syzygy ADR-0008 stage 3 (S3): the model's contract, split out of `chatModel.ts` unchanged, names the field now.
     // Syzygy ADR-0012 D5.2: her inner note's hook reads the decided feeling only through `decidedReplyFeeling` (owner alone, switch on).
-    expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModelContract.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts',
-      'innerNotePorts.ts']);
-    const kernel = readApiSource('apiKernel.ts');
+    expect(naming).toEqual(['autonomyCore.ts', 'chatModelContract.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts',
+      'innerNotePorts.ts', 'textConversation.ts']);
+    // One head's one flow: the chat turn is the text modality (`textConversation.ts`).
+    const kernel = readApiSource('textConversation.ts');
     expect(kernel.match(/replyFeelingOffer\(audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/resolveTextReplyEmotion\(\{[^}]*\}, completion, audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/replyFeeling|resolveTextReplyEmotion/giu)).toHaveLength(4);

@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
 import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { bindScope, readJson, sendJson } from '../../infra/http/serverHttp.js';
-import { SpokenSentenceSegmenter, unquotedSpokenLine } from './spokenSentences.js';
+import { FIRST_CLAUSE_CHARACTERS, SpokenSentenceSegmenter, unquotedSpokenLine } from './spokenSentences.js';
 import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
 import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
@@ -12,6 +12,7 @@ import { VoiceSegmentTags } from '../../infra/models/voiceAudioTags.js';
 import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { WAITING_CUE_DELAY_MILLISECONDS } from './voiceWaitingCue.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
+import { expressionOf, oneHeadEnabled, replySonnetEnabled } from '../../contracts/oneHeadContract.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -56,7 +57,8 @@ export function createLiveVoiceStreamRoute(
     };
     request.once('aborted', abort);
     response.once('close', abort);
-    const segmenter = new SpokenSentenceSegmenter();
+    // Owner 2026-10-21 (`SHANNON_REPLY_SONNET`): her first clause is said at once.
+    const segmenter = new SpokenSentenceSegmenter(replySonnetEnabled() ? { firstClauseCharacters: FIRST_CLAUSE_CHARACTERS } : {});
     // Her sentences carry audio tags for the voice only (`voiceAudioTags.ts`): shown without them, spoken with them.
     const tags = new VoiceSegmentTags();
     let voicePlan: Record<string, unknown> | undefined;
@@ -84,6 +86,7 @@ export function createLiveVoiceStreamRoute(
     };
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
+      const expressionEvents = record(body)?.expressionEvents === true; // One head: the client reads `expression` lines.
       timing = new TurnTiming('voice', turnTimingId(record(record(record(body)?.deviceContext)?.userUtterance)?.id));
       await withObserverRun(voiceObservationOptions(scopeKey, body), async () => {
         const apiResponse = await kernel.streamLiveVoiceDelegation({
@@ -101,6 +104,10 @@ export function createLiveVoiceStreamRoute(
             voicePlan = plan;
             startStream(response);
             await writeEvent(response, { type: 'plan', voicePlan: plan });
+            // One head: her face as the event every entry reads (`expression`), for a client that asks for it (`expressionEvents`): the
+            // iPhone's reader refuses a line type it does not know, so nobody else is sent one.
+            const expression = expressionEvents && oneHeadEnabled() ? expressionOf(plan) : null;
+            if (expression) await writeEvent(response, expression);
             const phrase = typeof plan.waitingPhrase === 'string' ? plan.waitingPhrase.trim() : '';
             if (firstPlan && phrase && !receivedDelta) {
               const segmentPlan = waitingSegmentPlan(plan);

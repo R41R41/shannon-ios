@@ -30,6 +30,18 @@ export function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | nul
     ...(region ? { region } : {}), ...(handle.lines?.space?.natural ? { natural: true as const } : {}) };
 }
 
+/**
+ * One head (`SHANNON_ONE_HEAD`): the context each spoken sentence is checked with before it is said (her guard lines in her space's
+ * region, and with others there a private matter or a spoken marker), once the router's decision is known; null when nothing would be
+ * checked (no check, no region and no audience questions), so such a turn streams exactly as before (`VoiceSentenceGuard`).
+ */
+export function voiceGuardContext(handle: FeelingTurnHandle | null): ReplyCheckContext | null {
+  if (!handle) return null;
+  const context = safely(() => checkContext(handle), null);
+  const audience = context?.audienceChecks === true && context.audience !== 'owner_alone';
+  return context && (context.region || audience) ? context : null;
+}
+
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */
 export function registerNow(handle: FeelingTurnHandle): FeelingRegister {
   const level = handle.port.coreAffect ? composureLevel(handle) : undefined;

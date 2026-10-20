@@ -14,8 +14,10 @@ import type { ShannonModelToolSession } from '../../infra/models/chatModelTools.
 export function startVoiceStage2(chooser: ToolMenuChooser | undefined | null, parts: {
   autonomy: { tools?: ShannonToolRunner } | undefined; server: Partial<ConversationToolServer>; scopeKey: string; threadId: string; transcript: string;
   guest: boolean; legacyGuest: boolean; alone: boolean;
+  /** One head: a platform's seat decides it (`seatToolAudience`). */
+  audience?: true | 'shared' | 'guests';
 }) {
-  const toolAudience = parts.guest ? !parts.legacyGuest && 'guests' as const : parts.alone || 'others' as const;
+  const toolAudience = parts.audience ?? (parts.guest ? !parts.legacyGuest && 'guests' as const : parts.alone || 'others' as const);
   const choices = startTurnToolMenu(chooser, parts.autonomy, parts.scopeKey, 'voice', toolAudience, parts.server, `${parts.threadId}\n${parts.transcript}`, ownerAloneReads(toolAudience));
   return { toolAudience, choices };
 }

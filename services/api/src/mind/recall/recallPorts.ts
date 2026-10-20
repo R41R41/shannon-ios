@@ -5,7 +5,7 @@
  */
 export {
   REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, summaryCoverRule, type ReplayRule, type ReplayWindow,
-  afterLongSilence, voiceReplayGap,
+  afterLongSilence, voiceReplayGap, conversationReplay,
 } from './conversationWindow.js';
 export { VOICE_HISTORY, VOICE_SUMMARY_CHARACTERS, coversLive, isOperatorNote, voiceHistorySummaryOn } from './voiceHistory.js';
 export { ImpressionEvidenceCheck, impressionSubject, impressionText, recallImpressions, usableImpression } from './impressionRecall.js';
