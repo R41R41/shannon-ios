@@ -55,6 +55,12 @@ export interface FcaBodyLifecycle {
   context(): { revision: number; observation: BodyObservation | null };
   /** Drain active reflex work and refuse a decision made against an older physical generation. Unknown throws. */
   guard(revision: number): Promise<boolean>;
+  /**
+   * `guard` for one call of the decision: a call of the kind the body owns for the task (a fight she chose) may go on when the body
+   * was touched only by its own reflexes since the decision (mb-r21, run 21: three fights dropped as stale one after the other while
+   * the reflexes touched the body every few seconds). Absent: `guard` for every call.
+   */
+  guardFor?(revision: number, call: FcaToolCall): Promise<boolean>;
   toolSignal(name: string, parent: AbortSignal): AbortSignal;
   noteCall?(call: FcaToolCall, operationId: string): void;
   /** `durationMilliseconds`: how long the call took (the transient pace's breakdown by kind of call). */

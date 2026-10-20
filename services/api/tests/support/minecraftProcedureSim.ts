@@ -75,7 +75,8 @@ export class SimBody {
     const inventory = [...this.pack].map(([name, count]) => this.durability.has(name) ? { name, count, durability: { left: this.durability.get(name)!, max: 131 } } : { name, count });
     const jobs = [...this.furnaces].filter(([, job]) => job.count > 0 || job.out > 0).map(([cell, job]) => {
       const [x, y, z] = cell.split(',').map(Number);
-      return { position: { x, y, z }, remainingEstimateMs: Math.max(0, job.doneAt - this.clock), input: job.input, count: job.count };
+      // The batch's size, as the body reports it until the furnace is emptied (mb-r21: what is smelted and not yet taken out is still counted).
+      return { position: { x, y, z }, remainingEstimateMs: Math.max(0, job.doneAt - this.clock), input: job.input, count: job.count + job.out };
     });
     const needs = [
       ...(this.dimension === 'overworld' && this.y > 0 && this.ironNeeded() > 0 && this.pack.has('stone_pickaxe') ? [{ id: 'iron:b:30,40,0', need: 'iron', name: 'iron_ore',

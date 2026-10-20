@@ -61,10 +61,43 @@ function wear(facts: MinecraftProcedureFacts): McDo | null {
  * is asked for, so there is no later night to carry it to.
  */
 function sleep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | null {
-  if (!facts.night || facts.dimension !== 'overworld' || !inPack(facts, BED_ITEM) || facts.threats.some(threat => threat.distance <= 12)) return null;
-  // Once a run: a sleep that failed (an enemy near, no room for the bed) is the planner's, at the night's stop below.
-  return memory.failed('sleep') ? null
-    : doing({ tool: 'mc.sleep-in-bed', input: { isTakeBed: false }, why: '夜をベッドで飛ばす（ベッドは置いたまま）', expectMs: 12_000, key: 'sleep' });
+  if (!facts.night || facts.dimension !== 'overworld' || !inPack(facts, BED_ITEM)) return null;
+  const near = facts.threats.filter(threat => threat.distance <= 12);
+  if (near.length) return clearBedroom(facts, memory, near);
+  // mb-r21 (run 21: "ベッドを設置できる適切な場所が見つかりませんでした" in a rock passage, and the night fought through): a bed that found no
+  // place is tried again from another spot (8 m off, a different side each time, twice at most), and then the planner has it.
+  const moved = Number(memory.notes.get('bed:moved') ?? 0);
+  if (memory.notes.get('bed:noplace') === true && moved < MOVES_FOR_A_BED) {
+    const [dx, dz] = BED_SPOTS[moved % BED_SPOTS.length]!;
+    const at = facts.at;
+    if (at && !memory.failed(`sleep:move:${moved}`)) {
+      return doing({ tool: 'mc.move-to', input: { x: Math.floor(at.x) + dx, y: Math.floor(at.y), z: Math.floor(at.z) + dz, goalType: 'near', range: 3 },
+        why: 'ベッドを置ける場所を変える', expectMs: 20_000, key: `sleep:move:${moved}`,
+        then: () => { memory.notes.set('bed:moved', moved + 1); memory.notes.delete('bed:noplace'); return null; } });
+    }
+  }
+  // A sleep that failed otherwise (an enemy near) is the planner's, at the night's stop below.
+  const key = `sleep:${moved}`;
+  return memory.failed(key) ? null
+    : doing({ tool: 'mc.sleep-in-bed', input: { isTakeBed: false }, why: '夜をベッドで飛ばす（ベッドは置いたまま）', expectMs: 12_000, key,
+      onFail: (_failure, text) => { if (/適切な場所|置ける場所|設置できる/u.test(text)) memory.notes.set('bed:noplace', true); } });
+}
+
+const MOVES_FOR_A_BED = 2;
+const BED_SPOTS: ReadonlyArray<readonly [number, number]> = [[8, 0], [-8, 0], [0, 8], [0, -8]];
+const SWORD = /(?:_sword|_axe)$/u;
+
+/**
+ * Enemies near keep the night from being slept through (the bed refuses within 8 m, walls or not). Armed, armoured and healthy, with no
+ * creeper among them, they are fought first (twice at most in a run); otherwise it is the planner's, as before.
+ */
+function clearBedroom(facts: MinecraftProcedureFacts, memory: ProcedureMemory, near: readonly { name: string }[]): McDo | null {
+  const armed = [...facts.pack.keys()].some(name => SWORD.test(name));
+  if (!armed || facts.armorPieces < 2 || (facts.health ?? 0) < 12 || near.length > 3 || near.some(threat => threat.name === 'creeper')) return null;
+  const fought = Number(memory.notes.get('bed:fights') ?? 0);
+  if (fought >= 2 || memory.failed(`sleep:clear:${fought}`)) return null;
+  return doing({ tool: 'mc.attack-continuously', input: { entityName: 'hostile', maxKills: 3 }, why: '寝る前に近くの敵を倒す', expectMs: 20_000,
+    key: `sleep:clear:${fought}`, then: () => { memory.notes.set('bed:fights', fought + 1); return null; } });
 }
 
 /** The moment's upkeep, each kind left for the rest of the run once it failed (an upkeep never ends a run). */

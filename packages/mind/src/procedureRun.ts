@@ -74,6 +74,11 @@ export interface ProcedureRunPorts<Facts, Item> {
   /** A failure kind that passes (a reflex of the body that cut in): not counted the first time in a row for its work. */
   passing?(failure: string): boolean;
   run(item: Item, step: ProcedureStepInfo): Promise<ProcedureItemResult>;
+  /**
+   * About how long an item takes (ms), when known. An item that would carry the run past its time bound is not begun: the run is
+   * cut between items, never in the middle of a dig (mb-r21, run 21: the last iron dig began at 525 s of 600 and ran 180 s).
+   */
+  expectMs?(item: Item): number;
   now(): number;
   signal: AbortSignal;
 }
@@ -159,6 +164,13 @@ async function throughOne<Facts, Item>(state: RunState<Facts, Item>, procedure: 
     if (move.kind === 'stuck') return ended(state, 'stuck', procedure.id, move.why);
     const blocked = refused(state, procedure.id, move);
     if (blocked) return blocked;
+    // Cut between items: one that would not end inside the time bound waits for the next run (the first item of a run always goes).
+    const expected = move === upkeep ? 0 : state.ports.expectMs?.(move.item) ?? 0;
+    const elapsedMs = state.ports.now() - state.started;
+    if (state.items.length > 0 && expected > 0 && elapsedMs + expected > state.limits.ms) {
+      return ended(state, 'limit', procedure.id, `一度に流す上限（${state.limits.items}手・${Math.round(state.limits.ms / 1000)}秒）の手前で、`
+        + `次の手（約${Math.round(expected / 1000)}秒）を始めずに区切った`);
+    }
     const end = await runOne(state, procedure.id, move);
     if (end) return end;
   }

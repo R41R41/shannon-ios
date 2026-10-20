@@ -167,6 +167,7 @@ async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedur
     result = await runLink(parts, call, state, next, `${call.operationId}:p${index}.${link}`);
     await freshFrame(parts);
     let nearer = false;
+    if (!result.ok && next.accepts?.(result.failure ?? 'failed', result.text)) result = { ok: true, text: result.text, failure: null };
     if (!result.ok) {
       nearer = next.resumable === true && OUT_OF_TIME.has(result.failure ?? '') && GETTING_NEARER.test(result.text);
       if (nearer) result = { ok: true, text: result.text, failure: null };
@@ -203,6 +204,8 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
     facts, now: parts.now, signal: call.signal, upkeep: minecraftUpkeep, final: finalFailure, passing: passingFailure,
     stopWhy: (current, at) => minecraftStopWhy(current, at.procedure, { ...parts, toldLate: state.toldLate, lateAtStart }),
     run: (item, step) => runItem(parts, call, state, item, step.index),
+    // The whole chain of an item is cut between items too (`chain` items follow, each short: the first's time is what is asked of the bound).
+    expectMs: item => item.expectMs,
   });
   const text = resultText(asked.through ? `「${asked.from}」→「${asked.through}」` : `「${asked.from}」`, run, facts());
   state.handedBack = run.outcome === 'done' || run.outcome === 'limit' ? null : run.at;

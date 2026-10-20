@@ -3,7 +3,7 @@ import type { TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import { createFastJudgmentMemory, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import {
-  DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, fastBodyState, fastJudgment, fastSkillMilliseconds, type FastDecision,
+  DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, FIGHT_SKILLS, fastBodyState, fastJudgment, fastSkillMilliseconds, type FastDecision,
 } from '../../mind/action/reflex/fastJudgment.js';
 import type { MinecraftControl } from './minecraftControl.js';
 
@@ -28,6 +28,12 @@ export function createMinecraftFastJudgment(parts: {
   /** The step's lease, owner and sources still current, with the body resource permit. */
   permit(signal: AbortSignal): Promise<boolean>;
   activeAction(): { name: string } | undefined;
+  /**
+   * Whether a fight is hers now: one of her fight tools has just been called or is running (`FIGHT_SKILLS`, the adapter's window).
+   * Absent: never. While it is, the judgment starts nothing above the floor of the rules (mb-r21: three of her fights were dropped as
+   * stale in a row while the judgment's flights and cages kept touching the body).
+   */
+  fightOwned?(): boolean;
   /** Cuts off the FCA's body tools in flight. */
   interrupt(): void;
   /** The body was touched: a decision made meanwhile is stale. */
@@ -111,7 +117,7 @@ export function createMinecraftFastJudgment(parts: {
   const defending = (health: number | null, decision: FastDecision) => {
     const running = parts.activeAction()?.name.replace(/^mc\./u, '');
     if (!running || !DEFENSIVE_SKILLS.has(running)) return null;
-    return (health ?? 0) <= 6 && decision.kind !== 'fight' && running.startsWith('attack') ? null : running;
+    return (health ?? 0) <= FAST_JUDGMENT_LIMITS.lowHealth && decision.kind !== 'fight' && FIGHT_SKILLS.has(running) ? null : running;
   };
   /**
    * The end of a sent fast skill: its rest, the interrupt it spent, and its line. A skill cut off before its time was up (the FCA's own
@@ -225,6 +231,9 @@ export function createMinecraftFastJudgment(parts: {
       if (frames < 2) return null;
       const { decision } = verdict, running = defending(state.health, decision);
       if (running) return parts.hold('fca_defending', { skill: running }), null;
+      // The fight is hers (she chose one, or has just finished one): the judgment does not take the body from it, unless health is at the
+      // floor of the rules (then it may, as it may cut off a fight she is in).
+      if (parts.fightOwned?.() && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth) return parts.hold('fca_fight_owned', { kind: decision.kind }), null;
       if (!hasSkill(bodyId, decision.skill)) {
         return parts.hold('fast_skill_missing', { skill: decision.skill }), null;
       }

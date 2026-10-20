@@ -8,7 +8,7 @@ import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
-import { fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
+import { armourCrafted, fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id): BodyTaskContext {
@@ -83,7 +83,16 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (receipt.outcome === 'completed' && current!.name === 'goal-evidence') {
       try { parts.evidence?.(receipt.result); } catch { /* learning never fails a step */ }
     }
-    return minecraftSkillResult(receipt);
+    const result = minecraftSkillResult(receipt);
+    if (!result.ok && result.bodyReflex && current!.name === 'craft-one') {
+      // The body's armour reflex put on what was just made and cut the craft off: the craft worked (the frame a beat later shows it).
+      for (let look = 0; look < 3; look += 1) {
+        const made = armourCrafted(call.input, control.observe(bodyId));
+        if (made) return toolOk(`${made}を作り、体の反射が着けた（作る操作は反射に割り込まれたが、できている）。`);
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    }
+    return result;
   } };
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {
