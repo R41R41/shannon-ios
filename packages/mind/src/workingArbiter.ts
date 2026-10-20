@@ -24,6 +24,8 @@ export const WORKING_ARBITER_V0 = Object.freeze({
   waitCutRemainingMs: 15_000,
   needCutDistance: 24,
   cutsPerMinute: 2,
+  /** A cut holds its topic this long: the same work is not cut again within it, but a dig or a hunt an hour on may stall anew. */
+  topicMemoryMs: 300_000,
   lines: 6,
 });
 
@@ -63,7 +65,7 @@ export function arbitrate(input: {
   const running = input.running;
   if (!running) return { act: 'none' };
   const topic = running.topic ?? running.subject;
-  if (input.recentCuts.some(cut => cut.subject === topic)) return { act: 'none' };
+  if (input.recentCuts.some(cut => cut.subject === topic && input.now - cut.at < o.topicMemoryMs)) return { act: 'none' };
   if (input.recentCuts.filter(cut => input.now - cut.at < 60_000).length >= o.cutsPerMinute) return { act: 'none' };
   const progress = input.progress?.subject === running.subject ? input.progress : null;
   const stallLimit = progress?.hazard === 'water' ? o.waterStallCutMs : o.stallCutMs;

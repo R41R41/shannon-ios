@@ -26,7 +26,9 @@ const WHAT: Readonly<Record<string, string>> = {
 const colour = (need: WorkingNeed) => typeof need.data.color === 'string' ? need.data.color : null;
 const TAKE: Readonly<Record<string, (need: WorkingNeed) => string>> = {
   // Run 19: an igloo's bed stood 13 m off for the whole run; dug, a bed is carried (and the night is skipped with it).
-  bed: need => `mc.dig-block-at（x=${need.data.x}、y=${need.data.y}、z=${need.data.z}。掘れば持てる）`,
+  // dig-block-at keeps off a bed (equipment) unless told to take it, and does not walk: move to it first.
+  bed: need => `mc.move-to（x=${need.data.x}、y=${need.data.y}、z=${need.data.z}、goalType=block）→ mc.dig-block-at（x=${need.data.x}、`
+    + `y=${need.data.y}、z=${need.data.z}、takeEquipment=true。掘れば持てる）`,
   bed_wool: need => `mc.attack-continuously（entityName=sheep${colour(need) ? `、color=${colour(need)}` : ''}、maxKills=1）`,
   food: need => `mc.attack-continuously（entityName=${need.name}、maxKills=2）`,
   iron: need => `mc.mine-block（blockName=${need.name}、searchRadius=24）`,
@@ -163,8 +165,8 @@ export function minecraftFurnaceRemaining(observation: BodyObservation | null, i
     .filter(job => typeof job.remainingEstimateMs === 'number' && Number.isFinite(job.remainingEstimateMs));
   if (!jobs.length) return null;
   const cell = cellOf(input);
-  const here = cell ? jobs.find(job => cellOf(job.position) === cell) : undefined;
-  if (here) return here.remainingEstimateMs as number;
+  // A furnace named and not among the jobs (the list was cut, or it is not tracked): not known, so not cut.
+  if (cell) return (jobs.find(job => cellOf(job.position) === cell)?.remainingEstimateMs as number | undefined) ?? null;
   return Math.min(...jobs.map(job => job.remainingEstimateMs as number));
 }
 
@@ -179,13 +181,15 @@ export interface MinecraftWorkingArbiter {
   fields(observation: BodyObservation | null): { working?: { running?: string; events?: string[]; needs?: string } };
 }
 
-interface Running extends RunningWork { input: unknown; waitMs: number | null; cursor: number }
+interface Running extends RunningWork { input: unknown; waitMs: number | null; cursor: number | null }
 
 /**
  * The needs that came into reach after the wait began. The body judged the wait when it began (it refuses a wait while there is other
  * work, wait_refused): what it knew then is its call. The arbiter ends a wait only for what is new since.
  */
-function freshNeedIds(log: WorkingEventLog, cursor: number): Set<string> {
+function freshNeedIds(log: WorkingEventLog, cursor: number | null): Set<string> {
+  // No log when the wait began: nothing is known to be new since.
+  if (cursor === null) return new Set();
   return new Set(log.since(cursor).events.filter(event => event.kind === 'need.appeared').map(event => event.subject));
 }
 
@@ -217,7 +221,7 @@ export function createMinecraftWorkingArbiter(parts: {
       if (!call.name.startsWith('mc.')) return;
       running = { subject: minecraftCommandId(operationId), topic: minecraftWorkTopic(call), tool: call.name, input: call.input,
         waiting: minecraftWaitingCall(call.name, call.input), startedAt: parts.now(), remainingMs: null, waitMs: waitMilliseconds(call),
-        cursor: parts.log()?.cursor() ?? 0 };
+        cursor: parts.log()?.cursor() ?? null };
     },
     end(name) {
       if (running?.tool === name) running = null;

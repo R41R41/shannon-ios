@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WorkingEventLog } from '@shannon/mind';
-import { createMinecraftWorkingArbiter, minecraftCalm, minecraftCommandId, minecraftFrameNeeds, minecraftNeedsLine, minecraftWaitingCall,
-  minecraftWorkTopic } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
+import { createMinecraftWorkingArbiter, minecraftCalm, minecraftCommandId, minecraftFrameNeeds, minecraftFurnaceRemaining, minecraftNeedsLine,
+  minecraftWaitingCall, minecraftWorkTopic } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 
 const AT = '2026-10-20T10:00:00.000Z';
@@ -78,6 +78,32 @@ describe('Minecraft working arbiter (mb-arch stage 1)', () => {
     expect(minecraftWorkTopic(withdraw)).toBe('mc.withdraw-from-furnace@74,29,-14');
   });
 
+  it('knows a furnace only by its own job: another furnace\'s time is not taken for it', () => {
+    const jobs = (position: { x: number; y: number; z: number }) => frame({ jobs: [{ position, remainingEstimateMs: 40_000 }] });
+    expect(minecraftFurnaceRemaining(jobs({ x: 74, y: 29, z: -14 }), { x: 74, y: 29, z: -14 })).toBe(40_000);
+    expect(minecraftFurnaceRemaining(jobs({ x: 1, y: 2, z: 3 }), { x: 74, y: 29, z: -14 })).toBeNull();
+    expect(minecraftFurnaceRemaining(jobs({ x: 1, y: 2, z: 3 }), {})).toBe(40_000);
+    expect(minecraftFurnaceRemaining(frame({}), { x: 74, y: 29, z: -14 })).toBeNull();
+  });
+
+  it('holds a topic for five minutes: the same dig may be cut again after that', () => {
+    const f = fixture();
+    const dig = { name: 'mc.mine-block', input: { blockName: 'iron_ore' } };
+    f.arbiter.begin(dig, 'op-1');
+    f.tell('action.stalled', minecraftCommandId('op-1'), { skill: 'mine-block', measure: 'travel', sinceProgressMs: 21_000 });
+    expect(f.arbiter.check(day).act).toBe('cut');
+    f.arbiter.end(dig.name);
+    f.advance(60_000);
+    f.arbiter.begin(dig, 'op-2');
+    f.tell('action.stalled', minecraftCommandId('op-2'), { skill: 'mine-block', measure: 'travel', sinceProgressMs: 21_000 });
+    expect(f.arbiter.check(day).act).toBe('none');
+    f.arbiter.end(dig.name);
+    f.advance(300_000);
+    f.arbiter.begin(dig, 'op-3');
+    f.tell('action.stalled', minecraftCommandId('op-3'), { skill: 'mine-block', measure: 'travel', sinceProgressMs: 21_000 });
+    expect(f.arbiter.check(day).act).toBe('cut');
+  });
+
   it('leaves a wait alone for a need that was already there when it began: the body judged that wait (wait_refused)', () => {
     const f = fixture();
     f.tell('need.appeared', ironNeed.id, { need: 'iron', name: 'iron_ore', distance: 16, canReach: true });
@@ -101,7 +127,8 @@ describe('Minecraft working arbiter (mb-arch stage 1)', () => {
     const bed = { id: 'bed:b:69,66,4', need: 'bed', name: 'red_bed', position: { x: 69, y: 66, z: 4 }, distance: 13, canReach: true };
     const coal = { id: 'fuel:b:70,66,20', need: 'fuel', name: 'coal_ore', position: { x: 70, y: 66, z: 20 }, distance: 12, canReach: true };
     expect(minecraftNeedsLine(minecraftFrameNeeds(withNeeds([bed, coal])))).toBe('近くに要る物（届く）: 置かれたベッド13m・石炭12m。今の作業の区切りで寄って取れる: '
-      + 'mc.dig-block-at（x=69、y=66、z=4。掘れば持てる）、mc.mine-block（blockName=coal_ore、count=4）');
+      + 'mc.move-to（x=69、y=66、z=4、goalType=block）→ mc.dig-block-at（x=69、y=66、z=4、takeEquipment=true。掘れば持てる）、'
+      + 'mc.mine-block（blockName=coal_ore、count=4）');
     // Four nearer needs never push a standing bed out of the line.
     const logs = [1, 2, 3, 4].map(i => ({ id: `wood:b:${i},64,0`, need: 'wood', name: 'oak_log', position: { x: i, y: 64, z: 0 }, distance: i, canReach: true }));
     expect(minecraftNeedsLine(minecraftFrameNeeds(withNeeds([...logs, { ...bed, distance: 72 }])))).toMatch(/^近くに要る物（届く）: 置かれたベッド72m・/u);
