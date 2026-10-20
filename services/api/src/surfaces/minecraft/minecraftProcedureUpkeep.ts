@@ -22,7 +22,7 @@ export const PROCEDURE_UPKEEP = Object.freeze({
 });
 
 /** Food to eat by preference: cooked and ready food first, raw meat that does no harm after; never what poisons. */
-const FOOD_ORDER = ['cooked_beef', 'cooked_porkchop', 'cooked_mutton', 'cooked_chicken', 'cooked_salmon', 'cooked_cod', 'cooked_rabbit', 'bread',
+export const FOOD_ORDER = ['cooked_beef', 'cooked_porkchop', 'cooked_mutton', 'cooked_chicken', 'cooked_salmon', 'cooked_cod', 'cooked_rabbit', 'bread',
   'baked_potato', 'golden_carrot', 'apple', 'carrot', 'melon_slice', 'sweet_berries', 'beef', 'porkchop', 'mutton', 'rabbit', 'cod', 'salmon',
   'dried_kelp', 'potato'];
 const BED_STEP = '食料と羊とベッド';
@@ -32,9 +32,14 @@ const ARMOR: ReadonlyArray<{ piece: string; destination: string }> = [
   { piece: 'boots', destination: 'feet' },
 ];
 
-function eat(facts: MinecraftProcedureFacts): McDo | null {
+/**
+ * A meal when hungry: the first food of the order that she carries and that did not fail for this hunger already (run 20: a raw beef
+ * the body would not let her eat at 12 of 20 held the next meal back, twice; the next food is tried, and none failing ends nothing).
+ */
+function eat(facts: MinecraftProcedureFacts, memory?: ProcedureMemory): McDo | null {
   if (facts.food === null || facts.food > PROCEDURE_UPKEEP.eatAt) return null;
-  const food = FOOD_ORDER.find(name => (facts.pack.get(name) ?? 0) > 0);
+  const food = FOOD_ORDER.find(name => (facts.pack.get(name) ?? 0) > 0 && !(memory && (memory.failed(`eat:${facts.food}:${name}`) > 0
+    || memory.lastFailure(`eat:${facts.food}:${name}`))));
   return food ? doing({ tool: 'mc.use-item', input: { itemName: food }, why: `空腹なので${food}を食べる`, expectMs: 3_000, key: `eat:${facts.food}:${food}` }) : null;
 }
 
@@ -49,18 +54,24 @@ function wear(facts: MinecraftProcedureFacts): McDo | null {
   return null;
 }
 
-/** Night in the overworld with a bed carried and nothing hostile near: sleep, and take the bed up again. */
+/**
+ * Night in the overworld with a bed carried and nothing hostile near: sleep, and leave the bed where it stands (mb-r20). Run 20 took the
+ * bed up again after the night, died an hour of play later 400 m from where she slept, and came back at the world's first spawn with the
+ * bed in the drops of her death. A bed left standing is where she wakes after a death; at most one night falls inside the half hour that
+ * is asked for, so there is no later night to carry it to.
+ */
 function sleep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | null {
   if (!facts.night || facts.dimension !== 'overworld' || !inPack(facts, BED_ITEM) || facts.threats.some(threat => threat.distance <= 12)) return null;
   // Once a run: a sleep that failed (an enemy near, no room for the bed) is the planner's, at the night's stop below.
-  return memory.failed('sleep') ? null : doing({ tool: 'mc.sleep-in-bed', input: { isTakeBed: true }, why: '夜をベッドで飛ばす', expectMs: 12_000, key: 'sleep' });
+  return memory.failed('sleep') ? null
+    : doing({ tool: 'mc.sleep-in-bed', input: { isTakeBed: false }, why: '夜をベッドで飛ばす（ベッドは置いたまま）', expectMs: 12_000, key: 'sleep' });
 }
 
 /** The moment's upkeep, each kind left for the rest of the run once it failed (an upkeep never ends a run). */
 export function minecraftUpkeep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | null {
   if (!facts.observation) return null;
   const fresh = (move: McDo | null) => move && !memory.failed(move.key) && !memory.lastFailure(move.key) ? move : null;
-  return fresh(eat(facts)) ?? fresh(wear(facts)) ?? sleep(facts, memory);
+  return fresh(eat(facts, memory)) ?? fresh(wear(facts)) ?? sleep(facts, memory);
 }
 
 /** Failures the planner must see at once: the body's night gate, a full pack, no tool or a broken one, a bed that explodes. */
@@ -77,6 +88,12 @@ export interface StopParts {
   now(): number;
   /** The steps already told late in this task (once each). */
   toldLate: Set<string>;
+  /**
+   * The steps this run found already late when it first came to them (true) or not (false) (mb-r20). A step that is late from its first
+   * look is not told late: the planner called it knowing (the line of its budget says so at every decision), and run 20's iron step went
+   * back at once, 0 items and 18 s of a route asked again for nothing. Absent: every late step is told, as before.
+   */
+  lateAtStart?: Map<string, boolean>;
   /** A step's time budget: the route's leg (mb-head's route plan) when it has one, else the owner's table. */
   targetSeconds?(milestone: string): number | undefined;
 }
@@ -89,13 +106,19 @@ function danger(facts: MinecraftProcedureFacts): string | null {
   return null;
 }
 
-function late(procedure: string, parts: StopParts): string | null {
+/** How far past its budget a step is by the clock, or null when it has no budget or the task's start is not known. */
+function lateness(procedure: string, parts: StopParts): { target: number; seconds: number; past: boolean } | null {
   const target = parts.targetSeconds?.(procedure) ?? milestoneTargetSeconds(procedure);
-  if (target === undefined || parts.taskStartedAt === undefined || parts.toldLate.has(procedure)) return null;
+  if (target === undefined || parts.taskStartedAt === undefined) return null;
   const seconds = Math.round((parts.now() - parts.taskStartedAt) / 1000);
-  if (seconds <= target + PROCEDURE_UPKEEP.lateBy) return null;
+  return { target, seconds, past: seconds > target + PROCEDURE_UPKEEP.lateBy };
+}
+
+function late(procedure: string, parts: StopParts): string | null {
+  const late = lateness(procedure, parts);
+  if (!late || !late.past || parts.toldLate.has(procedure) || parts.lateAtStart?.get(procedure) === true) return null;
   parts.toldLate.add(procedure);
-  return `「${procedure}」の目安${target}秒を${seconds - target}秒過ぎた（いま${seconds}秒）`;
+  return `「${procedure}」の目安${late.target}秒を${late.seconds - late.target}秒過ぎた（いま${late.seconds}秒）`;
 }
 
 /** The bed's procedure can still end the night itself: three wool of a colour carried, or a standing bed near. */
@@ -111,6 +134,8 @@ function nightStop(facts: MinecraftProcedureFacts, procedure: string): string | 
 
 /** Why the turn goes back to the planner before the next item, or null. */
 export function minecraftStopWhy(facts: MinecraftProcedureFacts, procedure: string, parts: StopParts): string | null {
+  // The first look at a step in this run says whether it began late (whatever else holds the turn back now).
+  if (parts.lateAtStart && !parts.lateAtStart.has(procedure)) parts.lateAtStart.set(procedure, lateness(procedure, parts)?.past === true);
   if (parts.pending?.()) return '新しい伝言が届いた';
   // No frame for a while (`MinecraftControl.frame`): nothing here is known, so nothing is planned from it.
   if (!facts.observation) return '体の観測が届いていない';

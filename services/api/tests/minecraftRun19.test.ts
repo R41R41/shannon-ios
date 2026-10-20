@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { memoryWorld } from './support/memoryWorld.js';
 import { createTaskMemory } from '../src/mind/memory/taskMemory.js';
@@ -22,7 +22,7 @@ import { minecraftSituation, minecraftSkillContext } from '../src/surfaces/minec
 import { milestoneFollowMemory, milestoneSteps } from '../src/surfaces/minecraft/minecraftMilestoneFollow.js';
 import { MILESTONE_TARGET_SECONDS, milestoneLines } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
-import { ROUTE_PLAN, createRoutePlanning, planWanted, routeFrom, routeInput, routeLines } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
+import { ROUTE_PLAN, createRoutePlanning, forgetRoutes, planWanted, routeFrom, routeInput, routeLines } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
 import { configuredMinecraftRoutePlanner } from '../src/wiring/minecraftRouteWiring.js';
 
 /**
@@ -193,6 +193,7 @@ describe('the time budget to the Nether and the steps from the diamonds on', () 
   });
 });
 describe('her route to the Nether, planned once by a strong model', () => {
+  beforeEach(() => forgetRoutes());
   const answer = { legs: [
     { milestone: '木と石のツルハシ', goal: '近くの森で原木と石', where: 'スポーンの北 20m', targetSeconds: 140 },
     { milestone: '食料と羊とベッド', goal: '村でベッドとパン', where: '東 171m の村', x: 287, y: 85, z: 13, targetSeconds: 900 },
@@ -225,7 +226,7 @@ describe('her route to the Nether, planned once by a strong model', () => {
     expect(input).toContain('持ち物: oak_log×3');
     expect(input).toContain('既定の目安（秒）: 木 60');
   });
-  it('asks once in a step without making the decision wait, takes the answer at the close, and keeps it', async () => {
+  it('asks once in a step without making the decision wait, takes the answer when it comes, and keeps it', async () => {
     const lines: string[] = [];
     let asked = 0;
     const planning = createRoutePlanning({ kept: undefined, taskId: 'task', log: line => lines.push(line),
@@ -235,13 +236,14 @@ describe('her route to the Nether, planned once by a strong model', () => {
     planning.situate({ milestoneName: '木', elapsedSeconds: 12 }, { biome: 'plains' });
     expect(asked).toBe(1);
     await planning.close();
+    await new Promise(resolve => setTimeout(resolve, 5));
     const kept = planning.checkpoint();
     expect(kept.minecraftRoute?.legs).toHaveLength(3);
     expect(kept.minecraftRouteAsks).toBe(1);
     const next = createRoutePlanning({ kept: kept.minecraftRoute, keptAsks: kept.minecraftRouteAsks, taskId: 'task', log: () => {}, planner: async () => { asked += 1; return answer; } });
     expect(next.situate({ milestoneName: '鉄', elapsedSeconds: 300 }, {}).route?.[0]).toBe('ルート（最初の計画、10秒）:');
     expect(asked).toBe(1);
-    expect(lines).toEqual(['Shannon Minecraft route asked task=task reason=start at=10', 'Shannon Minecraft route planned task=task legs=3']);
+    expect(lines).toEqual(['Shannon Minecraft route asked task=task reason=start at=10', expect.stringMatching(/^Shannon Minecraft route planned task=task legs=3 reason=start askedMs=\d+$/u)]);
     // A planner that keeps failing is not asked again at every step.
     const failing = createRoutePlanning({ kept: undefined, keptAsks: ROUTE_PLAN.asks, taskId: 'task', log: () => {}, planner: async () => { asked += 1; throw new Error('x'); } });
     failing.situate({ milestoneName: '木', elapsedSeconds: 10 }, {});

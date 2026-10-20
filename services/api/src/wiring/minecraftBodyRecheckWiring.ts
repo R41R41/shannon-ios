@@ -31,6 +31,8 @@ export function createMinecraftBodyRecheck(parts: {
   const resource = actionResource(parts.deviceId, 'minecraft-body');
   const leases = new ActionLeaseReader(parts.db);
   const attempts = new Map<string, number>();
+  /** The steps whose waiting for the body has been said (`body_unavailable`), until their code changes. */
+  const told = new Map<string, string>();
   let running: Promise<BodyRecheckResult> | null = null, closing = false;
   const held = () => leases.retainedUnknownSteps(resource).filter(step => step.scopeKey === parts.ownerScope);
   const reconcile = async (lease: ActionLease): Promise<boolean> => {
@@ -77,7 +79,12 @@ export function createMinecraftBodyRecheck(parts: {
         // Only a physical attempt counts against the API's own budget; waiting for the body to connect does not.
         if (code === 'not_confirmed' || code === 'proof_refused') attempts.set(step.actionId, tried + 1);
         if (code === 'released') attempts.delete(step.actionId);
-        parts.log?.(`Shannon Minecraft body re-check origin=${origin} action=${step.actionId} code=${code}`);
+        // The API's own pass every few seconds says a waiting for the body once, not every five seconds (mb-r20: run 20's journal held
+        // one `body_unavailable` line every 5 s for as long as the body stayed away, with nothing else in it).
+        if (origin === 'operator' || code !== 'body_unavailable' || told.get(step.actionId) !== code) {
+          parts.log?.(`Shannon Minecraft body re-check origin=${origin} action=${step.actionId} code=${code}`);
+        }
+        if (code === 'body_unavailable') told.set(step.actionId, code); else told.delete(step.actionId);
         codes.push(code);
       }
       const order: BodyRecheckCode[] = ['not_confirmed', 'proof_refused', 'body_unavailable', 'released'];

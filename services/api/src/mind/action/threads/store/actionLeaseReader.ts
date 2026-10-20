@@ -216,6 +216,16 @@ export class ActionLeaseReader {
   }
 
   /**
+   * The actions other than `exceptId` that hold `resource` for something live: running, waiting or stopping, or unknown and still
+   * inside the window where its work may be going on (`sent`). A retained record (an unknown action past its exit) is not one.
+   */
+  liveHolders(resource: string, exceptId: string): string[] {
+    if (!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mind_actions'").get()) return [];
+    return this.db.prepare(`SELECT id FROM mind_actions WHERE id!=? AND (state IN ('running','waiting','stopping') OR (state='unknown' AND sent=1))
+      AND EXISTS (SELECT 1 FROM json_each(resources_json) WHERE value=?) LIMIT 8`).all(exceptId, resource).map(row => String(row.id));
+  }
+
+  /**
    * The steps of nonterminal FCA tasks (in the scope) whose outcome was lost, oldest first, each as the lease it ran under: the
    * action is `unknown` (the attempt before the one that closed it), or still marked live though its lease ended before `at`
    * (a process that died cannot renew it; the sweep has not run yet). The Minecraft recovery closes them (`fcaBodyRecovery.ts`).

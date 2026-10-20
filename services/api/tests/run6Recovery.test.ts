@@ -340,3 +340,68 @@ describe('set_day right after a login (run 6)', () => {
     expect(await lifecycle(() => state({ otherPlayers: 1 })).run()).toMatchObject({ ok: false, code: 'refused', message: expect.stringContaining('ほかの参加者がいる') });
   });
 });
+
+/**
+ * Minecraft run 20 (2026-10-20, mb-r20): twice a step whose outcome was lost kept the body retained while the body itself was out of the
+ * server (kicked for a timeout), so the re-check could not ask it, and every start, login and logout was refused with `lease_conflict`:
+ * the owner's own path had to release it. The operation that brings the body back goes on without the body resource when only lost steps
+ * hold it and the body is not in the server; the guarantee (two never drive one body) is kept, since a live holder or a joined body refuses.
+ */
+describe('the operator\'s start, login and logout with the body held only by a lost step (mb-r20)', () => {
+  it('tells the lost step that retains the body from a live holder', () => {
+    const f = stuck();
+    const reader = new ActionLeaseReader(f.db);
+    expect(reader.retainedUnknownSteps(body)).toMatchObject([{ actionId: f.lease.id, scopeKey: 'owner' }]);
+    expect(reader.liveHolders(body, 'none')).toEqual([]);
+    // Released by the owner, the body is taken by a live action: that one is a live holder, and not to itself.
+    expect(f.store.releaseRetainedByOwner('owner', f.lease.id, 'request1', 'owner1', f.now())).toBe(1);
+    const next = f.store.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'fca:next:1', resources: [body] }, f.now());
+    const lease = leaseOf(f.store.claim(next.id, 'runner-2', f.now())!);
+    expect(reader.retainedUnknownSteps(body)).toEqual([]);
+    expect(reader.liveHolders(body, 'none')).toEqual([lease.id]);
+    expect(reader.liveHolders(body, lease.id)).toEqual([]);
+  });
+
+  function operator(lost: boolean) {
+    const state: MinecraftLifecycleState = { serverId: 'shannon-home', observedAt: '2026-10-20T13:00:00.000Z', running: 'running', bot: 'absent', otherPlayers: 0 };
+    const service = { available: () => true, status: () => [state], store: { unresolved: () => false } } as unknown as MinecraftLifecycle;
+    const offered: Array<boolean | undefined> = [], logs: string[] = [];
+    const runner = { admit: async () => ({ execution: { lease: { id: 'own-action', generation: 1, holder: 'h' } }, finish: async () => {} }),
+      takeBody: async (_own: unknown, bypass?: () => boolean) => { const answer = bypass?.(); offered.push(answer); return answer ?? false; },
+      detach: () => Promise.resolve() } as unknown as LifecycleRunner;
+    const created = createOperatorLifecycle({ service, runner, scopeKey: 'owner', serverIds: ['shannon-home'], ownerAlone: () => true, allowed: () => true,
+      onlyLostSteps: () => lost, log: line => logs.push(line) });
+    const run = (action: 'login' | 'start' | 'logout' | 'stop' | 'set_day') =>
+      created.execute({ id: 'operator:0a1b2c3d-1111-4222-8333-444455556666', serverId: 'shannon-home', action }, () => {});
+    return { run, offered, logs };
+  }
+
+  it('goes on without the body when only lost steps hold it, and says so', async () => {
+    const f = operator(true);
+    for (const action of ['login', 'start', 'logout', 'stop'] as const) expect(await f.run(action)).toMatchObject({ ok: true });
+    expect(f.offered).toEqual([true, true, true, true]);
+    expect(f.logs[0]).toContain('goes on without the body');
+  });
+
+  it('is refused as before when something else holds the body, and a set_day never goes without it', async () => {
+    const f = operator(false);
+    expect(await f.run('login')).toMatchObject({ ok: false, code: 'lease_conflict' });
+    expect(await operator(true).run('set_day')).toMatchObject({ ok: false, code: 'lease_conflict' });
+    const day = operator(true);
+    await day.run('set_day');
+    expect(day.offered).toEqual([undefined]);
+  });
+
+  it('says a body waiting for the re-check once, not every five seconds', async () => {
+    const f = stuck();
+    const logs: string[] = [];
+    const recheck = createMinecraftBodyRecheck({ db: f.db, control: f.control, ownerScope: 'owner', deviceId: 'minebot', tickMilliseconds: 3_600_000,
+      actions: { reconcileResource: async () => false }, log: line => logs.push(line) });
+    cleanups.push(() => void recheck.close());
+    for (let pass = 0; pass < 4; pass += 1) expect(await recheck.request('start')).toMatchObject({ code: 'body_unavailable' });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('code=body_unavailable');
+    await recheck.request('operator');
+    expect(logs).toHaveLength(2);
+  });
+});

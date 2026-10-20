@@ -22,6 +22,8 @@ const ROUTE_OUTPUT_TOKENS = 6_000;
  */
 export function configuredMinecraftRoutePlanner(values: Readonly<Record<string, string | undefined>>, parts: {
   recordUsage(usage: AnthropicFcaUsage): void; client?: RouteClient;
+  /** Where the content-free line of how the request went goes (its seconds and tokens, so that a slow plan has a reason on record). */
+  log?(line: string): void;
 }): ((system: string, input: string, signal: AbortSignal) => Promise<unknown>) | undefined {
   if (!switchOn(values, 'SHANNON_MINECRAFT_ROUTE_PLAN')) return undefined;
   const apiKey = anthropicApiKey(values);
@@ -31,7 +33,10 @@ export function configuredMinecraftRoutePlanner(values: Readonly<Record<string, 
   return async (system, input, signal) => {
     const body = structuredBody(model, system, input, ROUTE_SCHEMA, 'medium', ROUTE_OUTPUT_TOKENS);
     let message: Anthropic.Message;
+    const began = Date.now();
+    const say = (line: string) => { try { parts.log?.(line); } catch { /* logging never fails a plan */ } };
     try { message = await client.messages.create(body, { signal }); } catch (error) {
+      say(`Shannon Minecraft route model model=${model} ms=${Date.now() - began} outcome=${signal.aborted ? 'aborted' : 'error'}`);
       // A request that got no answer may still be billed: charged at its upper bound, as a lost decision is.
       parts.recordUsage({ model, usageComplete: false, inputTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 0, totalTokens: 0,
         estimatedCostUsd: unknownCostUpperBound(model, body.max_tokens, 0, null) });
@@ -44,6 +49,9 @@ export function configuredMinecraftRoutePlanner(values: Readonly<Record<string, 
     const inputTokens = counts.input + counts.cacheWrite + counts.cacheRead;
     parts.recordUsage({ model, usageComplete: complete, inputTokens, cachedInputTokens: counts.cacheRead, cacheCreationInputTokens: counts.cacheWrite,
       outputTokens: counts.output, totalTokens: inputTokens + counts.output, estimatedCostUsd: cost });
+    // Why a plan took the time it took: the request's seconds, the tokens in and out (the thinking is in the output), and how it ended.
+    say(`Shannon Minecraft route model model=${model} ms=${Date.now() - began} inputTokens=${inputTokens} outputTokens=${counts.output}`
+      + ` thinkingBlocks=${message.content.filter(block => block.type === 'thinking').length} stop=${message.stop_reason ?? 'none'}`);
     if (message.stop_reason !== 'end_turn') throw new Error('MINECRAFT_ROUTE_INCOMPLETE');
     const text = message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('').trim();
     return JSON.parse(text) as unknown;
@@ -59,6 +67,6 @@ function clientFor(apiKey: string): RouteClient {
 /** The body task's part (`routePlanner`): empty while off. */
 export function minecraftRoutePlannerPart(values: Readonly<Record<string, string | undefined>>, recordUsage: (usage: AnthropicFcaUsage) => void)
   : { routePlanner?: NonNullable<ReturnType<typeof configuredMinecraftRoutePlanner>> } {
-  const planner = configuredMinecraftRoutePlanner(values, { recordUsage });
+  const planner = configuredMinecraftRoutePlanner(values, { recordUsage, log: line => console.info(line) });
   return planner ? { routePlanner: planner } : {};
 }
