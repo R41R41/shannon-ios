@@ -61,3 +61,4 @@ export * from './deliberation.js';
 export * from './workingEvents.js';
 export * from './workingArbiter.js';
 export * from './workAgenda.js';
+export * from './procedureRun.js';

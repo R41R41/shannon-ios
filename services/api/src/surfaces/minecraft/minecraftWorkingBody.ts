@@ -3,6 +3,7 @@ import type { TaskRuntime, TaskStep } from '../../mind/action/taskRuntime/taskRu
 import type { MinecraftControl } from './minecraftControl.js';
 import type { WorkingNeed } from '@shannon/mind';
 import { createMinecraftWorkingArbiter } from './minecraftWorkingArbiter.js';
+import { MINECRAFT_PROCEDURE_TOOL } from './minecraftProcedures.js';
 
 /** The working field with the executor's lines (`agenda`) beside the arbiter's. */
 function withAgenda(fields: { working?: Record<string, unknown> }, agenda: readonly string[]): Record<string, unknown> {
@@ -25,6 +26,11 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
   onWaitNeed?(need: WorkingNeed): boolean;
   /** The executor's: what it did for her since the last decision, a line each. */
   agendaLines?(): string[];
+  /**
+   * The executor's procedure (`minecraftProcedureTool.ts`): its running item is what the arbiter follows, and a cut stops that item only
+   * (the planner's call goes on, so the decision stays current).
+   */
+  procedure?: { item(): { name: string; input: unknown; operationId: string } | null; cut(): boolean };
 }): Made {
   if (!parts.on) return made;
   const { control, runtime, step } = parts, inner = made.body;
@@ -39,11 +45,23 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
   };
   const arbiter = createMinecraftWorkingArbiter({ log: events,
     now: parts.now ?? Date.now, taskId: step.taskId, stepId: step.id, line: parts.log ?? (line => console.info(line)),
-    send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), ...(parts.onWaitNeed ? { onWaitNeed: parts.onWaitNeed } : {}) });
+    send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), ...(parts.onWaitNeed ? { onWaitNeed: parts.onWaitNeed } : {}),
+    ...(parts.procedure ? { onCut: () => procedureItemOn() && parts.procedure!.cut() } : {}) });
   const aborts = new Set<AbortController>();
   let cuts = 0, closed = false, timer: ReturnType<typeof setInterval> | undefined, fields: Record<string, unknown> = {};
+  /** The procedure's item the arbiter follows now (its operation id), kept in step with the executor's. */
+  let followed: { name: string; operationId: string } | null = null;
+  const procedureItemOn = () => followed !== null;
+  const followProcedure = () => {
+    const item = parts.procedure?.item() ?? null;
+    if (item?.operationId === followed?.operationId) return;
+    if (followed) arbiter.end(followed.name);
+    followed = item ? { name: item.name, operationId: item.operationId } : null;
+    if (item) arbiter.begin(item, item.operationId);
+  };
   const watch = () => {
     if (closed || runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') return;
+    followProcedure();
     if (arbiter.check(frame()).act !== 'cut') return;
     cuts += 1;
     aborts.forEach(abort => abort.abort());
@@ -78,7 +96,8 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
     },
     noteCall(call, operationId) {
       inner.noteCall?.(call, operationId);
-      arbiter.begin(call, operationId);
+      // A procedure is followed item by item (`followProcedure`), not as one long command.
+      if (call.name !== MINECRAFT_PROCEDURE_TOOL) arbiter.begin(call, operationId);
     },
     noteResult(call, result, durationMilliseconds) {
       inner.noteResult?.(call, result, durationMilliseconds);

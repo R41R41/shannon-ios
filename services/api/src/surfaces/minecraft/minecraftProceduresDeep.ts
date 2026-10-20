@@ -1,0 +1,144 @@
+import type { ProcedureMemory } from '@shannon/mind';
+import type { MinecraftWorkItem } from './minecraftFillers.js';
+import { block, carried, cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { craft, doing, fromFirstCell, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
+
+/**
+ * From the diamonds to the gate (session mb-arch; 「ダイヤ」「黒曜石」「ゲート」), with the body's own tools (Minebot catalog):
+ * `stair-mine` to Y-58, `mine-block` for the diamonds (it finds them in the loaded world and digs its way there), the obsidian cast by
+ * pouring the water bucket on a lava source (`use-item-on-block` does it and takes the water back) and dug with the diamond pickaxe,
+ * flint from gravel (dug again where it was set down: a tenth of the time it drops flint), the frame built and lit at once
+ * (`build-structure nether_portal` lights it when the flint and steel is carried), and the portal block found and entered.
+ *
+ * `batchObsidian`: the body's own tool that casts and digs many at once, when its catalog offers one (mb-body is making it).
+ */
+const DIAMOND_PICKAXE = /^(?:diamond|netherite)_pickaxe$/u;
+const DIAMOND = /^diamond$/u;
+const OBSIDIAN = /^obsidian$/u;
+const FLINT_AND_STEEL = /^flint_and_steel$/u;
+const DEEP_Y = -58;
+const DIRECTIONS = [{ x: 1, z: 0 }, { x: 0, z: 1 }, { x: -1, z: 0 }, { x: 0, z: -1 }];
+
+/** 「ダイヤ」: down to Y-58, the diamonds near dug (a wider look, then a tunnel each way), the pickaxe made. */
+export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+  const have = carried(facts, DIAMOND);
+  if (have >= 3) return toolOf(facts, 'diamond_pickaxe', null);
+  const y = facts.at ? Math.floor(facts.at.y) : 64;
+  if (y > DEEP_Y + 10) {
+    return doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる', expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` });
+  }
+  for (const radius of [32, 64]) {
+    const key = `diamond:${have}:${radius}:${memory.succeeded('diamond:tunnel')}`;
+    if (memory.lastFailure(key) === 'target_not_found') continue;
+    return doing({ tool: 'mc.mine-block', input: { blockName: 'diamond_ore', count: 3 - have, searchRadius: radius }, why: 'ダイヤを掘る',
+      expectMs: 90_000, key });
+  }
+  const tunnels = memory.succeeded('diamond:tunnel');
+  const way = DIRECTIONS[tunnels % 4]!;
+  if (tunnels >= 4 || !facts.at) return stuck('Y-58 の周り 64m とトンネル 4 本でダイヤが見つからない');
+  const at = block(facts.at);
+  return doing({ tool: 'mc.move-to', input: { x: at.x + 40 * way.x, y: at.y, z: at.z + 40 * way.z, goalType: 'near', range: 3 }, why: '横へ掘り進んで探す',
+    expectMs: 90_000, key: 'diamond:tunnel' });
+}
+
+/** Water in the bucket: the nearest water source found, walked to, scooped. */
+function fillBucket(memory: ProcedureMemory): McMove {
+  const scoop = (cell: Cell): MinecraftWorkItem => ({ tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'bucket' }, why: '水を汲む', expectMs: 3_000,
+    key: `water:scoop:${cellKey(cell)}` });
+  const walk = fromFirstCell(memory, 'water:none', cell => ({ tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 2 }, why: '水のそばへ行く',
+    expectMs: 30_000, key: `water:walk:${cellKey(cell)}`, then: () => scoop(cell), chain: 2 }));
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'water', maxDistance: 48, count: 3 }, why: '水を探す', expectMs: 2_000, key: 'water:find',
+    then: walk, chain: 3 });
+}
+
+/** One obsidian: the nearest lava source found, walked to, the water poured on it, the obsidian dug. */
+function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+  const count = carried(facts, OBSIDIAN);
+  const tried = (memory.notes.get('lava:tried') as Set<string> | undefined) ?? new Set<string>();
+  memory.notes.set('lava:tried', tried);
+  const pick = (text: string): MinecraftWorkItem | null => {
+    const cell = cellsInText(text).find(item => !tried.has(cellKey(item)));
+    if (!cell) {
+      memory.notes.set('lava:none', true);
+      return null;
+    }
+    tried.add(cellKey(cell));
+    const dig = { tool: 'mc.dig-block-at', input: { ...cell }, why: '黒曜石を掘る', expectMs: 12_000, key: `obsidian:dig:${cellKey(cell)}` };
+    const pour = { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket' }, why: '溶岩に水をかける', expectMs: 4_000,
+      key: `obsidian:pour:${cellKey(cell)}`, then: (result: string) => /黒曜石に変換/u.test(result) ? dig : null, chain: 2 };
+    return { tool: 'mc.move-to', input: { ...cell, goalType: 'block' }, why: '溶岩のそばへ行く', expectMs: 20_000, key: `obsidian:walk:${cellKey(cell)}`,
+      then: () => pour, chain: 3 };
+  };
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 32, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
+    key: `obsidian:${count}`, then: pick, chain: 4 });
+}
+
+/** 「黒曜石」: ten obsidian, by the body's batch tool when it has one, else one lava source at a time. */
+export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batchObsidian: string | null): McMove {
+  if (!carried(facts, DIAMOND_PICKAXE)) return stuck('黒曜石はダイヤのツルハシでしか掘れない');
+  if (!inPack(facts, /^water_bucket$/u)) {
+    if (!inPack(facts, /^bucket$/u)) return stuck('水を運ぶバケツが無い');
+    return memory.notes.has('water:none') || memory.failed('water:find') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
+  }
+  const count = carried(facts, OBSIDIAN);
+  if (batchObsidian && !memory.failed(`obsidian:batch:${count}`)) {
+    return doing({ tool: batchObsidian, input: { count: 10 - count }, why: '黒曜石をまとめて作る', expectMs: 180_000, key: `obsidian:batch:${count}` });
+  }
+  if (memory.notes.has('lava:none')) return stuck('32m 以内に使える溶岩の溜まりが見えない');
+  return castOne(facts, memory);
+}
+
+/** Flint: gravel set down and dug again where it stands (a tenth of the time it drops flint), gravel dug first when none is carried. */
+function flintMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+  if (!inPack(facts, /^gravel$/u)) {
+    const key = `gravel:${carried(facts, /^flint$/u)}`;
+    if (memory.failed(key)) return stuck('48m 以内に砂利が見えない');
+    return doing({ tool: 'mc.mine-block', input: { blockName: 'gravel', count: 6, searchRadius: 48 }, why: '火打石の砂利を掘る', expectMs: 30_000, key });
+  }
+  const tries = (memory.notes.get('flint:tries') as number | undefined) ?? 0;
+  if (tries >= 20) return stuck('砂利を 20 回掘り直しても火打石が出ない');
+  memory.notes.set('flint:tries', tries + 1);
+  const dig = (text: string): MinecraftWorkItem | null => {
+    const cell = cellsInText(text)[0];
+    return cell ? { tool: 'mc.dig-block-at', input: { ...cell }, why: '砂利を掘り直す', expectMs: 3_000, key: `flint:dig:${tries}` } : null;
+  };
+  return doing({ tool: 'mc.place-block-at', input: { blockName: 'gravel' }, why: '砂利を置き直す', expectMs: 3_000, key: `flint:${tries}`, then: dig, chain: 2 });
+}
+
+/** The frame built beside her and lit (its place kept for the task), its portal block found and entered. */
+function portalMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: { portal?: Cell }): McMove {
+  const origin = store.portal;
+  if (!origin) {
+    if (!facts.at) return stuck('自分の位置が分からない');
+    const at = block(facts.at);
+    const cell = { x: at.x + 2, y: at.y, z: at.z };
+    const built = () => {
+      store.portal = cell;
+      return null;
+    };
+    return doing({ tool: 'mc.build-structure', input: { structureName: 'nether_portal', ...cell }, why: 'ゲートの枠を建てて火をつける', expectMs: 60_000,
+      key: 'portal:build', then: built });
+  }
+  const enter = fromFirstCell(memory, 'portal:unlit', cell => ({ tool: 'mc.enter-portal', input: { ...cell }, why: 'ゲートに入る', expectMs: 35_000,
+    key: 'portal:enter' }));
+  if (memory.notes.has('portal:unlit') && !memory.notes.has('portal:lit')) {
+    memory.notes.delete('portal:unlit');
+    memory.notes.set('portal:lit', true);
+    return doing({ tool: 'mc.use-item-on-block', input: { x: origin.x + 1, y: origin.y, z: origin.z, itemName: 'flint_and_steel' }, why: 'ゲートに火をつける',
+      expectMs: 3_000, key: 'portal:light' });
+  }
+  if (memory.notes.has('portal:unlit')) return stuck('ゲートに火がつかない');
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'nether_portal', maxDistance: 16, count: 1 }, why: 'ゲートの入口を探す', expectMs: 2_000,
+    key: `portal:find:${memory.succeeded('portal:light')}`, then: enter, chain: 2 });
+}
+
+/** 「ゲート」: the flint and steel, then the frame, the fire and the way in. */
+export function gateMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: { portal?: Cell }): McMove {
+  if (!carried(facts, FLINT_AND_STEEL)) {
+    if (carried(facts, /^flint$/u) && carried(facts, /^iron_ingot$/u)) return craft('flint_and_steel', '火打石と打ち金を作る');
+    if (!carried(facts, /^iron_ingot$/u)) return stuck('火打石と打ち金に鉄インゴットが 1 個要る');
+    return flintMove(facts, memory);
+  }
+  if (carried(facts, OBSIDIAN) < 10 && !store.portal) return stuck('ゲートの枠に黒曜石が 10 個要る');
+  return portalMove(facts, memory, store);
+}

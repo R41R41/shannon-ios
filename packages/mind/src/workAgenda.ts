@@ -8,7 +8,8 @@
  * Like the rest of this package it holds no timer and no store: the service keeps one per task and hands the time in.
  */
 export const WORK_AGENDA_V1 = 'work.agenda.v1';
-export const WORK_AGENDA_SOURCES = Object.freeze(['planner', 'filler', 'interrupt', 'resume', 'cut'] as const);
+/** `procedure`: an item of a procedure the planner started (`procedureRun.ts`); its call's own result tells it, so no line repeats it. */
+export const WORK_AGENDA_SOURCES = Object.freeze(['planner', 'filler', 'interrupt', 'resume', 'cut', 'procedure'] as const);
 export type WorkAgendaSource = typeof WORK_AGENDA_SOURCES[number];
 export const WORK_AGENDA_LIMITS = Object.freeze({ kept: 64, lines: 6, note: 160 });
 
@@ -63,12 +64,12 @@ export class WorkAgenda {
 }
 
 const LABEL: Readonly<Record<WorkAgendaSource, string>> = {
-  planner: '頼まれた手', filler: '待つ間に', interrupt: '割り込み', resume: '再開', cut: '切った',
+  planner: '頼まれた手', filler: '待つ間に', interrupt: '割り込み', resume: '再開', cut: '切った', procedure: '手順',
 };
 
 /** What happened since the last decision, a line each, newest last, at most `limit`: what, why, and how it ended. */
 export function agendaLines(entries: readonly WorkAgendaEntry[], limit: number = WORK_AGENDA_LIMITS.lines): string[] {
-  return entries.filter(entry => entry.source !== 'planner').slice(-limit).map(entry => {
+  return entries.filter(entry => entry.source !== 'planner' && entry.source !== 'procedure').slice(-limit).map(entry => {
     const end = entry.endedAt === null ? '（実行中）' : entry.ok ? `→ ${entry.note ?? '済'}` : `→ できなかった: ${entry.note ?? ''}`;
     return `${LABEL[entry.source]}: ${entry.tool}（${entry.why}）${end}`;
   });

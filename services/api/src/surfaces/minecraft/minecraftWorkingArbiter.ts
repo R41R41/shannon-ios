@@ -201,6 +201,11 @@ export function createMinecraftWorkingArbiter(parts: {
    * did: then nothing is cut and the task is not told (the call's own result says it).
    */
   onWaitNeed?(need: WorkingNeed): boolean;
+  /**
+   * The executor's procedure (`mc.run-procedure`): a cut of its running item stops that item only and the procedure goes on. True when it
+   * did: the cut counts against the topic as any, but the task is not told and the decision stays current.
+   */
+  onCut?(): boolean;
 }): MinecraftWorkingArbiter {
   let running: Running | null = null;
   const memory = taskMemory(parts.taskId);
@@ -249,6 +254,12 @@ export function createMinecraftWorkingArbiter(parts: {
       }
       cuts.push({ at: now, subject: running.topic ?? verdict.subject });
       if (cuts.length > 8) cuts.shift();
+      if (parts.onCut?.()) {
+        try {
+          parts.line(`${cutLine(parts.taskId, verdict, now - running.startedAt)} inProcedure=true`);
+        } catch { /* logging never fails a step */ }
+        return { act: 'none' };
+      }
       tell(verdict, now, running.startedAt);
       return verdict;
     },

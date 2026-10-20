@@ -35,6 +35,8 @@ export interface ToolResult {
   failure?: ToolFailureKind;
   retryable: boolean;
   bodyReflex?: true; // The body's own reflex cut the call off (`interrupted_by_reflex`): not a failed step; the model does not read this field.
+  /** The body's own failure kind (Minebot `failureType`, e.g. `target_not_found`), for the executor's procedures; the model does not read it. */
+  bodyFailure?: string;
   /** For `refused` and `not_offered`: why, and what would make the call work. */
   refusal?: { why: string; wouldWork: string };
   evidence?: ToolExecutionEvidence;

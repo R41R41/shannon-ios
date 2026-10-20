@@ -1,4 +1,5 @@
 import { ADOPTIONS, type AdoptionCall } from './minecraftStage.js';
+import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, procedureWords } from './minecraftProcedures.js';
 
 /**
  * The owner's order (`milestone`) followed or not, decision by decision (Minecraft run 18, 2026-10-20: the step was 「木材」 for twelve
@@ -9,7 +10,7 @@ import { ADOPTIONS, type AdoptionCall } from './minecraftStage.js';
  */
 export const MILESTONE_DRIFT = Object.freeze({ decisions: 3 });
 
-interface Procedure { tags: readonly string[]; tools?: readonly string[]; also?: (call: AdoptionCall) => boolean; steps: readonly string[] }
+interface Procedure { tags: readonly string[]; tools?: readonly string[]; also?: (call: AdoptionCall) => boolean }
 const WOOD = ['wood_gather', 'tool_craft'], IRON = ['iron_find', 'iron_mine', 'iron_smelt', 'iron_tool_craft', 'iron_armor_craft', 'descend'];
 const FURNACE = ['mc.withdraw-from-furnace'];
 const argumentOf = (call: AdoptionCall, key: string) => {
@@ -22,45 +23,39 @@ const ironPrep = (call: AdoptionCall) => (call.name === 'mc.craft-one' && /^(?:f
 const BED_STEP = '食料と羊とベッド';
 /** Gravel for the flint of the flint and steel. */
 const gravel = (call: AdoptionCall) => call.name === 'mc.mine-block' && /gravel/u.test(argumentOf(call, 'blockName'));
-const LOG_STEP = 'mc.mine-block（blockName=近くの原木1種類、例 oak_log。「,」で並べない、count=3 以上。原木1個で板4枚、板12枚分まで）';
-/** By the milestone's name (`MILESTONES`); a step not here (from the diamonds on) has no procedure to put first. */
+/**
+ * By the milestone's name (`MILESTONES`): how a call is seen to work at it. Its procedure's words live with the executor's moves for it
+ * (`procedureWords`, `minecraftProcedures.ts`, session mb-arch): one place for both.
+ */
 const PROCEDURES: ReadonlyMap<string, Procedure> = new Map<string, Procedure>([
-  ['木', { tags: WOOD, steps: [LOG_STEP] }],
-  ['木と石のツルハシ', { tags: [...WOOD, 'stone_mine'],
-    steps: ['mc.craft-one（itemName=wooden_pickaxe）→ mc.mine-block（blockName=stone、count=8）→ mc.craft-one（itemName=stone_pickaxe）'] }],
-  ['石の斧', { tags: WOOD, steps: ['mc.craft-one（itemName=stone_axe。丸石3・棒2）'] }],
-  ['木材', { tags: WOOD, steps: [LOG_STEP] }],
+  ['木', { tags: WOOD }],
+  ['木と石のツルハシ', { tags: [...WOOD, 'stone_mine'] }],
+  ['石の斧', { tags: WOOD }],
+  ['木材', { tags: WOOD }],
   // Not the furnace: run 18 took iron out of it at D34 and D35 while this was the step.
-  [BED_STEP, { tags: ['sheep_search', 'sheep_hunt', 'bed_craft', 'bed_sleep', 'food_hunt', 'food_cook', 'village_check', 'village_loot', 'village_food'],
-    steps: [
-      '羊を探す: mc.find-nearest-entity（entityType=sheep、maxDistance=128）。見えている羊は mc.attack-continuously（entityName=sheep、maxKills=3）',
-      '同じ色の羊毛3個と板材3枚で mc.craft-one（itemName=white_bed など羊毛の色の _bed）',
-      '128 m に羊が居なければ探しに出る: mc.explore-for-structure（structureType=sheep、持っている羊毛の色を color に）か、'
-        + '村 mc.explore-for-structure（structureType=village、maxDistance=160）。村なら家のベッドを壊して持つ',
-      '焼いた食料が6個に足りなければ mc.attack-continuously（entityName=food_animals、maxKills=4）→ mc.start-smelting（inputItem=beef など）',
-    ] }],
-  ['鉄', { tags: IRON, tools: FURNACE, also: ironPrep,
-    steps: ['mc.mine-block（blockName=iron_ore、count=30、searchRadius=48）→ かまど2台で mc.start-smelting（inputItem=raw_iron）→ mc.craft-one（itemName=iron_pickaxe）'] }],
-  ['バケツ', { tags: IRON, tools: FURNACE, also: ironPrep, steps: ['mc.craft-one（itemName=bucket。鉄3）'] }],
+  [BED_STEP, { tags: ['sheep_search', 'sheep_hunt', 'bed_craft', 'bed_sleep', 'food_hunt', 'food_cook', 'village_check', 'village_loot', 'village_food'] }],
+  ['鉄', { tags: IRON, tools: FURNACE, also: ironPrep }],
+  ['バケツ', { tags: IRON, tools: FURNACE, also: ironPrep }],
   // Owner 2026-10-20 (30 minutes to the Nether): the way from diamonds to the gate, with the body's own tools (Minebot catalog).
-  ['ダイヤ', { tags: ['descend', 'diamond_find', 'diamond_mine', 'diamond_tool_craft'], steps: [
-    'mc.stair-mine（targetY=-58）→ mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）→ mc.craft-one（itemName=diamond_pickaxe）',
-    '見つからなければ mc.stair-mine の direction を変えて横へ約20ブロック進み、また mine-block' ] }],
-  ['黒曜石', { tags: ['lava_find', 'water_pour', 'lava_pour', 'obsidian_mine'], also: gravel, steps: [
-    'mc.find-blocks（blockName=lava、maxDistance=32）→ mc.use-item-on-block（溶岩の座標、itemName=water_bucket）→ mc.mine-block（blockName=obsidian、count=10）',
-    '水はバケツで汲み戻す: mc.use-item-on-block（水の座標、itemName=bucket）。流れる溶岩は丸石になるので、溜まり（源）にかける' ] }],
-  ['ゲート', { tags: ['portal_build', 'portal_enter', 'diamond_tool_craft'], also: gravel, steps: [
-    '火打石: mc.mine-block（blockName=gravel、count=10）→ mc.craft-one（itemName=flint_and_steel）',
-    '平らな地面で mc.build-structure（structureName=nether_portal、x、y、z、facing）→ 点いたか観測で確かめ → mc.enter-portal（枠の内側の座標）' ] }],
-  ['鉄の全身の防具', { tags: IRON, tools: [...FURNACE, 'mc.equip-item'], also: ironPrep,
-    steps: ['mc.craft-one（itemName=iron_helmet・iron_chestplate・iron_leggings・iron_boots。鉄24）→ mc.equip-item（itemName=iron_chestplate、destination=torso など）'] }],
+  ['ダイヤ', { tags: ['descend', 'diamond_find', 'diamond_mine', 'diamond_tool_craft'] }],
+  ['黒曜石', { tags: ['lava_find', 'water_pour', 'lava_pour', 'obsidian_mine'], also: gravel }],
+  ['ゲート', { tags: ['portal_build', 'portal_enter', 'diamond_tool_craft'], also: gravel }],
+  ['鉄の全身の防具', { tags: IRON, tools: [...FURNACE, 'mc.equip-item'], also: ironPrep }],
 ]);
 
-/** Whether a call works at the named step: a tag of its own (`ADOPTIONS`) or one of its tools. */
+/** The executor's procedure started at or through the step (`mc.run-procedure`, mb-arch) works at it. */
+function runsProcedure(milestone: string, call: AdoptionCall): boolean {
+  if (call.name !== MINECRAFT_PROCEDURE_TOOL) return false;
+  const from = PROCEDURE_MILESTONES.indexOf(argumentOf(call, 'milestone')), at = PROCEDURE_MILESTONES.indexOf(milestone);
+  const through = argumentOf(call, 'through') ? PROCEDURE_MILESTONES.indexOf(argumentOf(call, 'through')) : from;
+  return from >= 0 && at >= from && at <= Math.max(from, through);
+}
+
+/** Whether a call works at the named step: a tag of its own (`ADOPTIONS`), one of its tools, or the executor's procedure for it. */
 export function followsMilestone(milestone: string, call: AdoptionCall): boolean {
   const procedure = PROCEDURES.get(milestone);
   if (!procedure) return false;
-  return procedure.tools?.includes(call.name) === true || procedure.also?.(call) === true
+  return procedure.tools?.includes(call.name) === true || procedure.also?.(call) === true || runsProcedure(milestone, call)
     || ADOPTIONS.some(adoption => procedure.tags.includes(adoption.tag) && adoption.matches(call));
 }
 
@@ -69,10 +64,9 @@ export function followsMilestone(milestone: string, call: AdoptionCall): boolean
  * village she knows of (`minecraftBedLead.ts`), first in the bed's step (run 19: an igloo's bed 13 m away was never taken).
  */
 export function milestoneSteps(milestone: string, decisions: number, lead?: string | null): string[] {
-  const procedure = PROCEDURES.get(milestone);
-  if (!procedure) return [];
+  if (!PROCEDURES.has(milestone)) return [];
   const first = milestone === BED_STEP && lead ? [lead] : [];
-  return [`今の節目「${milestone}」から${decisions}回続けて別のことをした。いまの作業の区切りで、まずこれを進める:`, ...first, ...procedure.steps];
+  return [`今の節目「${milestone}」から${decisions}回続けて別のことをした。いまの作業の区切りで、まずこれを進める:`, ...first, ...procedureWords(milestone)];
 }
 
 type Drift = { milestone: string; decisions: number };

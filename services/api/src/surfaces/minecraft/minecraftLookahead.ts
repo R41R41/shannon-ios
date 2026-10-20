@@ -1,5 +1,8 @@
 import { createFcaLookahead, type FcaLookahead } from '../../mind/action/fca/fcaLookahead.js';
-import { agendaActedSince } from './minecraftAgenda.js';
+import type { WorkingNeed } from '@shannon/mind';
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { agendaActedSince, minecraftAgendaLines, preemptForNeed } from './minecraftAgenda.js';
+import { cutProcedureItem, minecraftProcedureHint, procedureItem } from './minecraftProcedureTool.js';
 
 /**
  * Which of her calls are long enough to ask the next decision while they run (session mb-arch, `SHANNON_MINECRAFT_AGENDA`): a decision
@@ -26,4 +29,16 @@ export function withMinecraftAgendaParts<M extends object>(minecraft: M | null, 
   : (M & { agenda: { on: boolean; lookahead?: FcaLookahead } }) | null {
   if (!minecraft) return null;
   return Object.assign(minecraft, { agenda: on ? { on, lookahead: createMinecraftLookahead(log) } : { on } });
+}
+
+/**
+ * What a Minecraft task's body takes from the executor while the agenda is on (`minecraftWorkingBody.ts`): a need in a wait left to it,
+ * the decision's lines (what it did, and the procedure of the step now), and the procedure's running item.
+ */
+export function minecraftAgendaBodyParts(taskId: string, observe: () => BodyObservation | null) {
+  return {
+    onWaitNeed: (need: WorkingNeed) => preemptForNeed(taskId, need),
+    agendaLines: () => [...minecraftAgendaLines(taskId), ...minecraftProcedureHint(observe())],
+    procedure: { item: () => procedureItem(taskId), cut: () => cutProcedureItem(taskId) },
+  };
 }

@@ -4,6 +4,8 @@ import type { ToolResult } from '../../mind/tools/shannonTools.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { minecraftFurnaceRemaining, minecraftWaitingCall } from './minecraftWorkingArbiter.js';
 import { afterCallWork, fillable, nextFiller, takeNeed, type MinecraftWorkItem } from './minecraftFillers.js';
+import { MINECRAFT_PROCEDURE_DEFINITION, runMinecraftProcedure } from './minecraftProcedureTool.js';
+import { MINECRAFT_PROCEDURE_TOOL } from './minecraftProcedures.js';
 
 /**
  * The executor of a Minecraft task (session mb-arch; `SHANNON_MINECRAFT_AGENDA`). It wraps the body's tools, inside the step and its
@@ -84,17 +86,48 @@ export function agendaActedSince(taskId: string, at: number): boolean {
 }
 
 type Call = Parameters<FcaExternalTools['execute']>[0];
-interface Parts { on: boolean; taskId: string; observe(): BodyObservation | null; judge?: MinecraftAgendaJudge; now?: () => number; log?(line: string): void }
+interface Parts {
+  on: boolean; taskId: string; observe(): BodyObservation | null; judge?: MinecraftAgendaJudge; now?: () => number; log?(line: string): void;
+  /** A message came into the task's inbox after this step began (a procedure hands the turn back for it). */
+  pending?(): boolean;
+  /** When the task began (ms): the procedures' time budget counts from it. */
+  taskStartedAt?: number;
+}
 
 const short = (text: string) => text.replace(/\s+/gu, ' ').slice(0, 120);
-const LABEL: Readonly<Record<WorkAgendaSource, string>> = { planner: '', filler: '待つ間に', interrupt: '割り込み', resume: '再開', cut: '切った' };
+const LABEL: Readonly<Record<WorkAgendaSource, string>> = { planner: '', filler: '待つ間に', interrupt: '割り込み', resume: '再開', cut: '切った',
+  procedure: '手順' };
 const WAIT_FILLED: ToolResult = { ok: true, text: '待つ時間を、待つ間の仕事に使った', retryable: false };
 const told = (result: ToolResult) => result.ok ? `→ ${short(result.text)}` : `→ できなかった（${result.failure ?? 'failed'}）`;
 
 export function withMinecraftAgenda(tools: FcaExternalTools, parts: Parts): FcaExternalTools {
   if (!parts.on) return tools;
   const readOnly = (name: string) => tools.definitions.find(tool => tool.name === name)?.effect === 'read';
-  return { ...tools, execute: call => !call.name.startsWith('mc.') || readOnly(call.name) ? tools.execute(call) : executeWithAgenda(tools, parts, call) };
+  const body = tools.definitions.some(tool => tool.name.startsWith('mc.'));
+  const one = (call: Call) => !call.name.startsWith('mc.') || readOnly(call.name) ? tools.execute(call) : executeWithAgenda(tools, parts, call);
+  return { ...tools, definitions: body ? [...tools.definitions, MINECRAFT_PROCEDURE_DEFINITION] : tools.definitions,
+    execute: call => call.name === MINECRAFT_PROCEDURE_TOOL && body ? procedure(tools, parts, call, one) : one(call) };
+}
+
+/** The body's own tool that casts obsidian many at a time, when its catalog offers one (mb-body). */
+const batchObsidianOf = (tools: FcaExternalTools) => tools.definitions.find(tool => /^mc\.[a-z-]*obsidian[a-z-]*$/u.test(tool.name))?.name ?? null;
+
+/** `mc.run-procedure`: each item a call of the executor's (its waits filled, a detour after it), told in the agenda as the procedure's. */
+function procedure(tools: FcaExternalTools, parts: Parts, call: Call, one: (call: Call) => Promise<ToolResult>): Promise<ToolResult> {
+  const now = parts.now ?? Date.now;
+  const state = stateOf(parts.taskId);
+  const execute = async (item: { name: string; input: unknown; operationId: string; signal: AbortSignal }) => {
+    const seq = state.agenda.begin('procedure', item.name, '手順', now());
+    let result: ToolResult = { ok: false, text: '', failure: 'failed', retryable: true };
+    try {
+      result = await one({ ...call, ...item, last: true });
+      return result;
+    } finally { state.agenda.end(seq, result.ok, result.ok ? short(result.text) : result.failure ?? 'failed', now()); }
+  };
+  log(parts, `Shannon Minecraft procedure task=${parts.taskId} input=${JSON.stringify(call.input).slice(0, 80)}`);
+  return runMinecraftProcedure({ taskId: parts.taskId, observe: parts.observe, execute, now,
+    offered: name => tools.definitions.some(tool => tool.name === name), batchObsidian: batchObsidianOf(tools),
+    ...(parts.pending ? { pending: parts.pending } : {}), ...(parts.taskStartedAt !== undefined ? { taskStartedAt: parts.taskStartedAt } : {}) }, call);
 }
 
 /** Whether an error of a sub-command must end the call (an outcome not known, a stop); any other is told as a failed item. */

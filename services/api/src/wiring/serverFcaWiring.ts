@@ -8,8 +8,9 @@ import { createFcaSleepWiring } from './fcaSleepWiring.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
 import { withMinecraftWorking } from '../surfaces/minecraft/minecraftWorkingBody.js';
-import { minecraftAgendaLines, preemptForNeed, withMinecraftAgenda } from '../surfaces/minecraft/minecraftAgenda.js';
-import { withMinecraftAgendaParts } from '../surfaces/minecraft/minecraftLookahead.js';
+import { withMinecraftAgenda } from '../surfaces/minecraft/minecraftAgenda.js';
+import { minecraftProcedureStepParts } from '../surfaces/minecraft/minecraftProcedureTool.js';
+import { minecraftAgendaBodyParts, withMinecraftAgendaParts } from '../surfaces/minecraft/minecraftLookahead.js';
 import { minecraftOpportunityJudge } from '../surfaces/minecraft/minecraftOpportunityJudge.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
@@ -164,7 +165,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
           sourcesVisible: () => check.whole('body') ?? false }),
           { on: minecraft.agenda.on || switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step,
-            ...(minecraft.agenda.on ? { onWaitNeed: need => preemptForNeed(step.taskId, need), agendaLines: () => minecraftAgendaLines(step.taskId) } : {}) }) : null;
+            ...(minecraft.agenda.on
+              ? minecraftAgendaBodyParts(step.taskId, () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '')) : {}) }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
@@ -202,7 +204,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             sourcesVisible: () => check.whole('tool') ?? false,
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
             { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
-              observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
+              ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
             ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
