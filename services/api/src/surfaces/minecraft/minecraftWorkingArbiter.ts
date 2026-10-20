@@ -71,9 +71,10 @@ function frameNeed(item: unknown, at: string): (WorkingNeed & { distance: number
   if (!need || !WHAT[String(need.need)] || typeof need.name !== 'string' || !NAME.test(need.name)) return null;
   if (!Number.isFinite(distance) || distance < 0 || distance > 64) return null;
   const id = typeof need.id === 'string' ? need.id.slice(0, 160) : `${String(need.need)}:${need.name}:${distance}`;
-  const color = typeof need.color === 'string' && NAME.test(need.color) ? { color: need.color } : {};
-  return { id, need: String(need.need), name: need.name, distance, canReach: need.canReach === true, at,
-    data: { ...color, ...(need.exposed === false ? { exposed: false } : {}) } };
+  const data: Record<string, string | boolean> = {};
+  if (typeof need.color === 'string' && NAME.test(need.color)) data.color = need.color;
+  if (need.exposed === false) data.exposed = false;
+  return { id, need: String(need.need), name: need.name, distance, canReach: need.canReach === true, at, data };
 }
 
 /**
