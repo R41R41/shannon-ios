@@ -35,7 +35,7 @@ export const LIVE_COMMENTARY_V1 = Object.freeze({
 
 export const LIVE_MOMENT_KINDS = Object.freeze([
   'died', 'near_death', 'diamond_found', 'armor_complete', 'tool_made', 'dimension_entered', 'night_fell', 'morning', 'slept',
-  'lava_escape', 'structure_found', 'blaze_seen', 'item_got', 'dragon_stage', 'milestone_passed', 'milestone_late', 'hungry', 'stuck',
+  'lava_escape', 'lava_near', 'structure_found', 'blaze_seen', 'item_got', 'dragon_stage', 'milestone_passed', 'milestone_late', 'hungry', 'stuck',
 ] as const);
 export type LiveMomentKind = typeof LIVE_MOMENT_KINDS[number];
 
@@ -70,6 +70,7 @@ const KINDS: Readonly<Record<LiveMomentKind, KindRow>> = Object.freeze({
   morning: { weight: 0.35, topic: 'time', lifetime: 40 },
   slept: { weight: 0.6, topic: 'time', lifetime: 40 },
   lava_escape: { weight: 0.7, topic: 'hazard', lifetime: 20 },
+  lava_near: { weight: 0.55, topic: 'hazard', lifetime: 25 },
   structure_found: { weight: 0.6, topic: 'structure', lifetime: 60 },
   blaze_seen: { weight: 0.65, topic: 'mob', lifetime: 30 },
   item_got: { weight: 0.55, topic: 'item', lifetime: 60 },

@@ -42,6 +42,7 @@ const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
   morning: () => '夜が明けた。',
   slept: () => 'ベッドで寝て、朝になった。',
   lava_escape: () => '溶岩に落ちかけて、反射で抜け出した。',
+  lava_near: f => `溶岩の溜まりがすぐそばにある（${text(f.distance)}mほど）。`,
   structure_found: f => `${text(f.name)}を見つけた（${text(f.distance)}mほど先）。`,
   blaze_seen: () => 'ブレイズが近くにいる。',
   item_got: f => `${itemWords(text(f.item))}を手に入れた（いま${text(f.count)}個）。`,

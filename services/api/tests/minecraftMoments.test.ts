@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveMoment } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { bodyInDanger, createMomentDetector, dayTick, dimensionOfWorld, isNightTick, mapDiamondCount, mapStructures } from '../src/surfaces/minecraft/minecraftMoments.js';
+import { bodyInDanger, createMomentDetector, dayTick, dimensionOfWorld, isNightTick, mapDiamondCount, mapLavaDistance, mapStructures } from '../src/surfaces/minecraft/minecraftMoments.js';
 
 const T0 = Date.parse('2026-10-20T10:00:00.000Z');
 let sequence = 0;
@@ -139,6 +139,23 @@ describe('createMomentDetector', () => {
     const near = { dimension: 'the_nether', nearbyThreats: [{ name: 'blaze', distance: 20, canReachMe: true }] };
     expect(kinds(detector.observe(frame(near, { dimension: 'the_nether' }), T0 + 1000))).toEqual(['blaze_seen']);
     expect(detector.observe(frame(near, { dimension: 'the_nether' }), T0 + 1500)).toEqual([]);
+  });
+
+  it('notices lava close by on the map once, and again only after she went away from it', () => {
+    const detector = createMomentDetector();
+    const lava = (metres: number) => frame({ mapSummary: `溶岩の溜まり 2か所: ${metres}m 西 (1,-55,3) 地下×31、90m 東 (2,60,3) 地表` });
+    detector.observe(lava(40), T0);
+    expect(detector.observe(lava(10), T0 + 500)).toEqual([]);
+    expect(detector.observe(lava(5), T0 + 1000).map(moment => [moment.kind, moment.facts])).toEqual([['lava_near', { distance: 5 }]]);
+    expect(detector.observe(lava(3), T0 + 1500)).toEqual([]);
+    expect(detector.observe(lava(10), T0 + 2000)).toEqual([]);
+    detector.observe(lava(30), T0 + 2500);
+    expect(kinds(detector.observe(lava(4), T0 + 3000))).toEqual(['lava_near']);
+    // Beside lava from the first frame is not news.
+    const start = createMomentDetector();
+    start.observe(lava(2), T0);
+    expect(start.observe(lava(2), T0 + 500)).toEqual([]);
+    expect(mapLavaDistance('鉱石: 鉄 1か所')).toBeNull();
   });
 
   it('notices the dragon and the crystals in the End', () => {

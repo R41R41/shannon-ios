@@ -48,11 +48,18 @@ export function mapStructures(map: unknown): Map<string, number | null> {
   return found;
 }
 
+/** The distance in metres of the nearest lava pool the map knows (「溶岩の溜まり 5か所: 20m 西 …」), or null. */
+export function mapLavaDistance(map: unknown): number | null {
+  const match = typeof map === 'string' ? /溶岩の溜まり\s*\d+か所:\s*(\d+)m/u.exec(map) : null;
+  return match ? Number(match[1]) : null;
+}
+
 /** How many places of diamond ore the map knows (「鉱石: ダイヤ 2か所（…）」), or 0. */
 export function mapDiamondCount(map: unknown): number {
   return typeof map === 'string' ? Number(/ダイヤ\s*(\d+)か所/u.exec(map)?.[1] ?? 0) : 0;
 }
 
+const LAVA_NEAR = 6, LAVA_FAR = 14;
 const SHOWN_STRUCTURES = new Set(['村', '荒廃したポータル', 'イグルー', '難破船', 'ネザー要塞', '砦の遺跡', '要塞', 'エンドポータル']);
 const FIRST_ITEMS: ReadonlyArray<readonly [string, RegExp, number]> = [
   ['blaze_rod', /^blaze_rod$/u, 1], ['ender_pearl', /^ender_pearl$/u, 1], ['ender_eye', /^ender_eye$/u, 1], ['flint_and_steel', /^flint_and_steel$/u, 1],
@@ -79,7 +86,7 @@ export function bodyInDanger(observation: BodyObservation): boolean {
 interface Reading {
   alive: boolean; health: number | null; food: number | null; dimension: LiveDimension | null; tick: number | null; at: number;
   counts: ItemCounts; structures: Map<string, number | null>; diamondOre: number; lavaEscapes: number; blaze: boolean; dragon: boolean;
-  crystals: number | null; armor: boolean;
+  crystals: number | null; armor: boolean; lavaDistance: number | null;
 }
 
 function read(observation: BodyObservation, at: number): Reading {
@@ -91,7 +98,7 @@ function read(observation: BodyObservation, at: number): Reading {
   return { alive: observation.facts.alive === true, health: finite(world.health), food: finite(world.food),
     dimension: dimensionOfWorld(world, observation.facts), tick: dayTick(world), at, counts, structures: mapStructures(world.mapSummary),
     diamondOre: mapDiamondCount(world.mapSummary), lavaEscapes: lava, blaze: named('blaze', 32).length > 0, dragon: named('ender_dragon', 128).length > 0,
-    crystals: crystals > 0 ? crystals : null, armor: fullArmor(counts) };
+    crystals: crystals > 0 ? crystals : null, armor: fullArmor(counts), lavaDistance: mapLavaDistance(world.mapSummary) };
 }
 
 type Facts = Record<string, LiveScalar>;
@@ -107,7 +114,7 @@ export function createMomentDetector(): MomentDetector {
   // What was told in this run, so a thing is news once: the items, the pickaxe tiers, the structures, the diamond places.
   const told = { items: new Set<string>(), tools: new Set<string>(), structures: new Set<string>(), diamondOre: 0, armor: false };
   // Edges that re-arm: the near death after her health recovers, the blaze and the dragon after they were gone.
-  const armed = { life: true, hunger: true, blaze: true, dragon: true };
+  const armed = { life: true, hunger: true, blaze: true, dragon: true, lava: true };
   let serial = 0;
   const make = (kind: LiveMoment['kind'], at: number, facts: Facts, key?: string): LiveMoment => ({ kind, key: key ?? `${kind}:${++serial}`, at, facts });
 
@@ -197,6 +204,7 @@ export function createMomentDetector(): MomentDetector {
     const out: LiveMoment[] = [];
     if (now.dimension !== prev.dimension && now.dimension && prev.dimension) out.push(make('dimension_entered', at, { dimension: now.dimension }));
     if (now.lavaEscapes > prev.lavaEscapes) out.push(make('lava_escape', at, {}, `lava:${now.lavaEscapes}`));
+    out.push(...lavaNear(now, at));
     if (now.dimension === 'the_nether') {
       if (now.blaze && !prev.blaze && armed.blaze) {
         armed.blaze = false;
@@ -205,6 +213,17 @@ export function createMomentDetector(): MomentDetector {
     }
     if (now.dimension === 'the_end') out.push(...endStage(now, prev, at));
     return out;
+  }
+
+  /** A lava pool the map knows within LAVA_NEAR metres, once, and again after she was LAVA_FAR away. */
+  function lavaNear(now: Reading, at: number): LiveMoment[] {
+    if (now.lavaDistance === null || now.lavaDistance > LAVA_FAR) {
+      armed.lava = true;
+      return [];
+    }
+    if (!armed.lava || now.lavaDistance > LAVA_NEAR) return [];
+    armed.lava = false;
+    return [make('lava_near', at, { distance: now.lavaDistance })];
   }
 
   function endStage(now: Reading, prev: Reading, at: number): LiveMoment[] {
@@ -223,6 +242,7 @@ export function createMomentDetector(): MomentDetector {
     observe(observation, at) {
       const now = read(observation, at), prev = before;
       before = now;
+      if (!prev && now.lavaDistance !== null && now.lavaDistance <= LAVA_NEAR) armed.lava = false;
       if (!prev || !observation.connected) return [];
       return [...life(now, prev, observation, at), ...clock(now, prev, at), ...places(now, prev, at), ...belongings(now, prev, at),
         ...surroundings(now, prev, at)];
