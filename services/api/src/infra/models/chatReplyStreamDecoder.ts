@@ -1,3 +1,5 @@
+import { ReplyBreakFilter } from './replyBreaks.js';
+
 /**
  * Reads the `reply` string out of the structured chat turn while the provider is still
  * writing it. The provider sends the turn as JSON text in arbitrary pieces:
@@ -11,8 +13,10 @@
  * - an escape or a surrogate pair cut by a piece boundary is held until it is whole;
  * - nothing is returned from any other field, and nothing at all when `reply` is not the
  *   first key or is not a string. The caller then has only the completed turn.
+ * - a line break written as 「\」「n」 is read as one (`replyBreaks.ts`), as `parseStructuredTurn` does.
  */
 export class ChatReplyStreamDecoder {
+  private readonly breaks = new ReplyBreakFilter();
   private stage: 'object' | 'key-quote' | 'key' | 'colon' | 'value-quote' | 'value' | 'closed' = 'object';
   private key = '';
   /** A backslash was read; for `\u` the hex digits collected so far. */
@@ -54,7 +58,9 @@ export class ChatReplyStreamDecoder {
         this.finished = true;
         const last = this.highSurrogate;
         this.highSurrogate = '';
-        return last ? this.visible(last) : '';
+        const shown = last ? this.shown(last) : '';
+        const held = this.breaks.end();
+        return `${shown}${held ? this.visible(held) : ''}`;
       }
       return this.decoded(unit);
     }
@@ -79,11 +85,16 @@ export class ChatReplyStreamDecoder {
     if (this.highSurrogate) {
       const high = this.highSurrogate;
       this.highSurrogate = '';
-      if (code >= 0xDC00 && code <= 0xDFFF) return this.visible(high + unit);
-      return this.visible(high) + this.decoded(unit);
+      if (code >= 0xDC00 && code <= 0xDFFF) return this.shown(high + unit);
+      return this.shown(high) + this.decoded(unit);
     }
     if (code >= 0xD800 && code <= 0xDBFF) { this.highSurrogate = unit; return ''; }
-    return this.visible(unit);
+    return this.shown(unit);
+  }
+
+  /** Decoded text through the line-break filter, then the trim. */
+  private shown(text: string): string {
+    return text.split('').map(unit => this.breaks.push(unit)).join('').split('').map(unit => this.visible(unit)).join('');
   }
 
   /** Applies the trim of the finished reply to text that is still arriving. */

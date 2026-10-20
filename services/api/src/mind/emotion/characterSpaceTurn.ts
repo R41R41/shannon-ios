@@ -4,7 +4,7 @@
  * is there. Computation only: nothing is kept but the region her reply is recorded with (for the next turn's stickiness). Core: emotion.
  */
 import {
-  OWNER_PERSON_KEY, cuesOfWords, moodAxes, personaBlock, securityToday, selectPersona, spacePosition, PERSONA_LIMITS, isRegionId,
+  OWNER_PERSON_KEY, PLAY_CUES, cuesOfWords, moodAxes, personaBlock, securityToday, selectPersona, spacePosition, PERSONA_LIMITS, isRegionId,
   type CompanionStateSnapshot, type FeelingEvent, type PersonaSelection, type Relation, type RegionId, type SpaceCue, type SpacePosition,
 } from '@shannon/cognition';
 import type { FeelingKey } from './feelingEvents.js';
@@ -17,6 +17,8 @@ export interface SpaceLines {
   block: string;
   /** This turn's cues (recorded on his words' event). */
   cues: readonly SpaceCue[];
+  /** `SHANNON_NATURAL_TALK`, the owner alone: she talks, not reports (`naturalTalk.ts`). */
+  natural?: true;
 }
 
 /** Someone she does not know yet: a little reserved, not distrustful. */
@@ -48,6 +50,8 @@ export interface SpaceInput {
   relation?: Relation & { awayDays?: number };
   /** The owner holds her 好意 at its top (`SHANNON_AFFECTION_MAX`; the owner alone only). */
   max: boolean;
+  /** `SHANNON_NATURAL_TALK` (the owner alone only): the cues of play, and 好意 counted once at 本気 and 重い. */
+  natural?: boolean;
 }
 
 /** Her space this turn. */
@@ -57,7 +61,8 @@ export function spaceOf(input: SpaceInput): SpaceLines {
   const spokeToday = input.events.some(event => event.personKey === key.personKey && event.audience === key.audience && event.kind !== 'own_reply'
     && Date.parse(event.occurredAt) < Date.parse(at));
   const returning = owner && (input.relation?.awayDays ?? 0) >= 1 && !spokeToday;
-  const cues = cuesOfWords(input.words, { returning });
+  const natural = owner && input.natural === true;
+  const cues = cuesOfWords(input.words, { returning, natural });
   // Her mood is one, but what happened with him alone stays his: anyone else's turn is not swung by it (review 5).
   const seen = owner ? input.events : input.events.filter(event => event.audience !== 'owner_alone');
   const mood = moodAxes({ events: seen, now: cues, at, localHour: localHour(at, input.timeZone), lingering: input.snapshot.emotion });
@@ -66,7 +71,8 @@ export function spaceOf(input: SpaceInput): SpaceLines {
   const max = owner && input.max;
   const relation = { liking: max ? 1 : base.liking, security: securityToday(base.security, mine, cues, at) };
   const position = spacePosition(mood, relation);
-  const selection = selectPersona(position, { ownerAlone: owner, max, previous: previousRegion(input.events, key, at) });
+  const play = natural ? { natural: cues.some(cue => PLAY_CUES.includes(cue)) ? 'play' as const : 'on' as const } : {};
+  const selection = selectPersona(position, { ownerAlone: owner, max, ...play, previous: previousRegion(input.events, key, at) });
   // The lines shown turn with the minute of the turn.
-  return { position, selection, block: personaBlock(selection, Math.floor(Date.parse(at) / 60_000)), cues };
+  return { position, selection, block: personaBlock(selection, Math.floor(Date.parse(at) / 60_000)), cues, ...(natural ? { natural: true as const } : {}) };
 }

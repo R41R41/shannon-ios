@@ -15,6 +15,8 @@ import type { EpisodeLedger } from './episodeLedger.js';
 export const FEELING_STANCES = [
   'neutral', 'accept', 'shy', 'sulky', 'exasperated', 'snipe', 'scold', 'rebuff', 'refuse_body', 'tease', 'cover_up', 'worry', 'not_play_along',
   'talk_back', 'sulk', 'cold', 'affectionate',
+  // Owner 2026-10-20 (`SHANNON_NATURAL_TALK`): she plays along with a bit, answers a joke with one, and calls a joke out. Offered only then.
+  'play_along', 'boke_back', 'tsukkomi',
 ] as const;
 export type FeelingStance = typeof FEELING_STANCES[number];
 export const isFeelingStance = (value: unknown): value is FeelingStance => FEELING_STANCES.some(stance => stance === value);
@@ -60,6 +62,9 @@ export const FEELING_STANCE_CRITERIA: Readonly<Record<FeelingStance, string>> = 
   sulk: 'She sulks to be noticed.',
   cold: 'She turns cool and distant.',
   affectionate: 'She is openly fond and a little clingy.',
+  play_along: 'She goes along with the bit or the request to act (sing, whisper, act shy, scold theatrically) and performs it with gusto, in text.',
+  boke_back: 'She answers a joke or a setup with a playful joke of her own, riding the bit.',
+  tsukkomi: 'She calls out the joke or the cheeky, lewd tease with a quick flustered retort, laughing it off instead of lecturing.',
 });
 
 export const FEELING_INTENSITY_CRITERIA: Readonly<Record<FeelingIntensity, string>> = Object.freeze({
@@ -69,7 +74,7 @@ export const FEELING_INTENSITY_CRITERIA: Readonly<Record<FeelingIntensity, strin
 const STANCE_WORDS: Readonly<Record<FeelingStance, string>> = Object.freeze({
   neutral: 'ふつう', accept: '受け入れる', shy: '照れる', sulky: 'むっとする', exasperated: '呆れる', snipe: '毒づく', scold: '叱る', rebuff: '突っぱねる',
   refuse_body: '体で拒む', tease: 'からかう・ふざけ返す', cover_up: 'ごまかす', worry: '心配する', not_play_along: '乗らない', talk_back: '言い返す',
-  sulk: 'すねる', cold: '冷たくする', affectionate: '甘える',
+  sulk: 'すねる', cold: '冷たくする', affectionate: '甘える', play_along: '乗る・演じる', boke_back: 'ボケ返す', tsukkomi: 'ツッコむ',
 });
 const INTENSITY_WORDS: Readonly<Record<FeelingIntensity, string>> = Object.freeze({ subtle: 'かすかに', moderate: 'はっきり', strong: '強く' });
 const REGISTER_WORDS: Readonly<Record<FeelingRegister, string>> = Object.freeze({
@@ -98,9 +103,12 @@ export const OWNER_ONLY_STANCES: readonly FeelingStance[] = Object.freeze(['affe
 export const OWNER_ONLY_DRAWERS: readonly ComebackDrawer[] = Object.freeze(['creator_joke']);
 const ownerOnly = (audience: FeelingAudience) => audience === 'owner_alone';
 
-/** The stances offered for an audience, in menu order. */
-export function stancesFor(audience: FeelingAudience): FeelingStance[] {
-  return FEELING_STANCES.filter(stance => ownerOnly(audience) || !OWNER_ONLY_STANCES.includes(stance));
+/** The playful stances (`SHANNON_NATURAL_TALK`): offered only with it, so the menu of before is unchanged without it. */
+export const PLAY_STANCES: readonly FeelingStance[] = Object.freeze(['play_along', 'boke_back', 'tsukkomi']);
+
+/** The stances offered for an audience, in menu order (the playful ones only with `natural`). */
+export function stancesFor(audience: FeelingAudience, natural = false): FeelingStance[] {
+  return FEELING_STANCES.filter(stance => (ownerOnly(audience) || !OWNER_ONLY_STANCES.includes(stance)) && (natural || !PLAY_STANCES.includes(stance)));
 }
 
 /** The drawers offered for an audience, in menu order. */
@@ -175,6 +183,8 @@ export interface FeelingTurnBlockInput {
   carried?: readonly string[];
   /** `SHANNON_CHARACTER_SPACE`: who she is now (`personaBlock`) and whether her feeling runs high there (absent: the block of before). */
   persona?: { block: string; vivid: boolean };
+  /** `SHANNON_NATURAL_TALK`, the owner alone: she plays along; `casual`: his words are talk, not a request, so she answers short. */
+  natural?: { casual: boolean };
 }
 
 /**
@@ -187,6 +197,16 @@ export const AFFECTION_GUARD_LINE = 'どれだけ好きでも、どんな気分�
 /** In a vivid region her reply's feeling may run strong (the reply-feeling block says strong is for what lingers). */
 export const VIVID_FEELING_LINE = 'いまのボクは、気持ちが動きやすい。返事の気持ち（feeling）は、moderate や strong で選んでよい。';
 
+/**
+ * Owner 2026-10-20 (「全然思った通りに乗ってくれない…クリーンすぎて人間らしくない」; `SHANNON_NATURAL_TALK`, the owner alone): a bit, a
+ * joke or a request to act is play, joined unless she is truly upset; a lewd tease is answered with a flustered retort at most.
+ */
+export const NATURAL_ORDER_LINE = '気持ちへの注文や演技の振り（「恥ずかしがって」「罵倒して」「歌って」）は遊び。機嫌が悪くなければ、乗って演じる。'
+  + '乗らないのは、本当に嫌な時と、体の線に触れる時だけ。';
+export const NATURAL_PLAY_LINE = 'ライ氏との会話。振りやボケには乗る（ボケ返す・ツッコむ・演じる）。下ネタのからかいには、照れてツッコむまで（性的な返事や描写はしない）。'
+  + '説教や、関係のない恨み言の蒸し返しで返さない。';
+export const NATURAL_SHORT_LINE = 'この番は短く。ライ氏の一言には、一言か二言で返す。まとめや次の提案で締めない。';
+
 /** The block the reply model reads last. Always present while the feeling turn is on, so the ledger facts arrive even for 「ふつう」. */
 export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   // Whatever was handed in, nothing of the owner-only layer is written in front of anyone else.
@@ -194,12 +214,15 @@ export function feelingTurnBlock(input: FeelingTurnBlockInput): string {
   const stance = decision.stance === 'neutral' ? '構え: ふつう（特別な構えはない）'
     : `構え: ${STANCE_WORDS[decision.stance]}（${INTENSITY_WORDS[decision.intensity]}）`;
   const persona = input.persona ? [input.persona.block, ...(input.persona.vivid ? [VIVID_FEELING_LINE] : []), AFFECTION_GUARD_LINE] : [];
+  const natural = input.natural && input.audience === 'owner_alone' ? input.natural : null;
+  const order = input.order ? (natural ? NATURAL_ORDER_LINE : FEELING_ORDER_LINE) : '';
+  const play = natural ? [NATURAL_PLAY_LINE, natural.casual ? NATURAL_SHORT_LINE : ''] : [];
   return [
     FEELING_TURN_HEADER, stance,
     decision.register !== 'normal' ? `話し方の段: ${REGISTER_WORDS[decision.register]}` : '',
     input.ledgerLine ? `事実: ${input.ledgerLine.replace(/\n/gu, '\n事実: ')}` : '', ...(input.carried ?? []),
     input.ledgerLine || input.carried?.length ? FEELING_FACTS_USE_LINE : '',
-    input.repetitionLine, drawerHint(decision.drawer), input.order ? FEELING_ORDER_LINE : '', FEELING_CHARACTER_LINE, FEELING_POLICY_LINE,
+    input.repetitionLine, drawerHint(decision.drawer), order, FEELING_CHARACTER_LINE, FEELING_POLICY_LINE, ...play,
     ...persona,
   ].filter(Boolean).join('\n');
 }
@@ -244,6 +267,21 @@ export function stanceFacts(balance: StanceBalance): Record<string, number | str
   const day = (Object.entries(balance.counts) as [FeelingStance, number][]).sort((a, b) => b[1] - a[1]).map(([stance, count]) => `${stance}:${count}`);
   return { stances_today: day.length ? day.join(',') : 'none', warm_stances_today: balance.warm, cool_stance_run: balance.coolRun,
     warm_due: balance.coolRun >= STANCE_LEAN_LIMITS.coolRun ? 1 : 0 };
+}
+
+/**
+ * `SHANNON_NATURAL_TALK`: the stance the chooser gave her last replies, and how many in a row were the same (the chooser's own, before a
+ * region's rule; owner 2026-10-20: 「からかう」 fifteen times of eighteen, whatever he said). From `NATURAL_STANCE_RUN` it turns to another.
+ */
+export const NATURAL_STANCE_RUN = 4;
+export function sameStanceFacts(replies: readonly { facts: { turnStance?: string; jevStance?: string }; occurredAt: string }[])
+  : Record<string, number | string> {
+  const stances = [...replies].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+    .map(reply => reply.facts.jevStance ?? reply.facts.turnStance ?? 'neutral');
+  const last = stances[0];
+  if (!last) return { last_stance: 'none', same_stance_run: 0 };
+  const run = stances.findIndex(stance => stance !== last);
+  return { last_stance: last, same_stance_run: run === -1 ? stances.length : run };
 }
 
 /** A stance's word, for the Observer and the eval report. */

@@ -42,6 +42,8 @@ export interface FeelingTurnInput {
   amends?: boolean;
   /** Owner 2026-10-20 (`SHANNON_CHARACTER_SPACE`): the region she is in (`feeling_turn.v3`: its lean); absent, v2 as before. */
   region?: RegionId;
+  /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`, the owner alone, with a region): `feeling_turn.v4`, with the cues of his words. */
+  natural?: boolean;
 }
 
 /** What the chooser is shown: closed numbers, the audience, the words of this turn. */
@@ -53,11 +55,12 @@ export function feelingTurnState(input: FeelingTurnInput): Record<string, unknow
     this_turn: { feeling_order: kind === 'feeling_order', apology: kind === 'apologized', kind_words: kind === 'praised', tender: tenderIn(input.utterance) },
     ...(input.reading ? { read_meaning: true } : {}), ...(input.amends ? { read_amends: true } : {}),
     ledger: input.lines?.facts ?? {}, mood: { valence: round(input.mood.valence), arousal: round(input.mood.arousal) },
-    ...(input.region ? { persona: input.region } : {}),
+    ...(input.region ? { persona: input.region } : {}), ...(natural(input) ? { cues: input.lines?.space?.cues ?? [] } : {}),
   };
 }
 
 const round = (value: number) => Math.round(value * 100) / 100;
+const natural = (input: FeelingTurnInput) => input.natural === true && Boolean(input.region) && input.audience === 'owner_alone';
 
 /** The text turn's Jev call. Never throws: a failure is 「ふつう」. */
 export async function chooseFeelingTurn(chooser: JevChooser | null, input: FeelingTurnInput): Promise<FeelingTurnDecision> {
@@ -71,9 +74,9 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
     const lean = input.region ? CHARACTER_REGIONS[input.region].lean : undefined;
     const decided = await chooser.decide({
       scopeKey: input.scopeKey, surface: input.surface === 'voice' ? 'voice' : 'text', decision: 'feeling_turn',
-      sets: [lean ? JEV_QUESTION_SETS.feelingTurnStaged : JEV_QUESTION_SETS.feelingTurn, ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : []),
+      sets: [turnSet(input, lean), ...(input.reading ? [JEV_QUESTION_SETS.feelingMeaning] : []),
         ...(input.amends && input.audience === 'owner_alone' ? [JEV_QUESTION_SETS.feelingAmends] : [])],
-      state, questions: feelingTurnQuestions('', input.audience, input.reading === true, input.amends === true, lean),
+      state, questions: feelingTurnQuestions('', input.audience, input.reading === true, input.amends === true, lean, natural(input)),
       parse: answers => feelingTurnFromAnswers(answers, input.register, '', input.audience),
       fallback: () => neutralFeelingTurn(input.register),
       traceAnswers: value => ({ stance: value.stance, intensity: value.intensity, drawer: value.drawer, register: value.register, source: value.source }),
@@ -81,6 +84,12 @@ export async function chooseFeelingTurn(chooser: JevChooser | null, input: Feeli
     return decided.value;
   }, value => ({ stance: value.stance, intensity: value.intensity, drawer: value.drawer, register: value.register, source: value.source,
     latencyMs: Math.round(performance.now() - started) })).catch(() => neutralFeelingTurn(input.register));
+}
+
+/** The feeling turn's question set: v4 with play (`SHANNON_NATURAL_TALK`), v3 in a region, else v2. */
+function turnSet(input: FeelingTurnInput, lean: string | undefined) {
+  if (natural(input)) return JEV_QUESTION_SETS.feelingTurnNatural;
+  return lean ? JEV_QUESTION_SETS.feelingTurnStaged : JEV_QUESTION_SETS.feelingTurn;
 }
 
 /** The decision, or 「ふつう」 if it is not there within the extra wait (measured from now, the moment the reply is otherwise ready). */

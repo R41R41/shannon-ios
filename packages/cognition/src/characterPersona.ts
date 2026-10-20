@@ -45,10 +45,30 @@ export function spacePosition(mood: Readonly<Record<MoodAxis, number>>, relation
  */
 export const UNNAMED_WEIGHT = 0.2;
 
-/** A region's distance from a place: over the axes it names, weighted, and her default's mood axes it does not, as a root mean square. */
-export function regionDistance(region: CharacterRegion, position: SpacePosition): number {
+/**
+ * `SHANNON_NATURAL_TALK` (owner 2026-10-20): at 本気 and 重い 好意 counts once, not twice, so that with 好意 held at its top she still
+ * goes to 照れ, 小悪魔 and はしゃぎ when his words take her there (that day: 本気 or 重い in 14 replies of 16).
+ */
+export const NATURAL_HELD_LIKING_WEIGHT = 1;
+/**
+ * And in a turn of play (his words a tease, a bit, a joke, a wish to be held) while he holds 好意 at its top (a held value, not one she
+ * reached), the other regions are compared with her by her mood alone: their 好意 does not count (照れ sits at 0.4, so a held 1 kept her
+ * from it however flustered she was). A plain turn keeps 好意 in the comparison, so 本気 stays where she rests.
+ */
+function weightsOf(region: CharacterRegion, natural: 'off' | 'on' | 'held'): CharacterRegion['weights'] {
+  if (natural === 'off') return region.weights;
+  if (region.requiresMax) return { ...region.weights, liking: NATURAL_HELD_LIKING_WEIGHT };
+  return natural === 'held' ? { ...region.weights, liking: 0 } : region.weights;
+}
+
+/**
+ * A region's distance from a place: over the axes it names, weighted, and her default's mood axes it does not, as a root mean square.
+ * `natural` (`SHANNON_NATURAL_TALK`): `on`, or `held` while he holds her 好意 at its top.
+ */
+export function regionDistance(region: CharacterRegion, position: SpacePosition, natural: 'off' | 'on' | 'held' = 'off'): number {
   const unnamed = MOOD_AXES.filter(axis => region.center[axis] === undefined).map(axis => [axis, DEFAULT_PERSONALITY[axis].base] as [SpaceAxis, number]);
-  const weights: Partial<Record<SpaceAxis, number>> = { ...Object.fromEntries(unnamed.map(([axis]) => [axis, UNNAMED_WEIGHT])), ...region.weights };
+  const weights: Partial<Record<SpaceAxis, number>> = { ...Object.fromEntries(unnamed.map(([axis]) => [axis, UNNAMED_WEIGHT])),
+    ...weightsOf(region, natural) };
   const axes = [...Object.entries(region.center) as [SpaceAxis, number][], ...unnamed];
   const total = axes.reduce((sum, [axis]) => sum + (weights[axis] ?? 1), 0);
   const squares = axes.reduce((sum, [axis, center]) => sum + (weights[axis] ?? 1) * (position[axis] - center) ** 2, 0);
@@ -62,6 +82,8 @@ export interface PersonaOptions {
   max: boolean;
   /** The region she was in a moment ago (within `holdMinutes`), if any. */
   previous?: RegionId | null;
+  /** `SHANNON_NATURAL_TALK`: 好意 counts once at 本気 and 重い; `play`, a turn of play (`weightsOf`). */
+  natural?: 'on' | 'play';
 }
 
 export interface PersonaSelection {
@@ -78,11 +100,13 @@ export function openRegions(options: Pick<PersonaOptions, 'ownerAlone' | 'max'>)
 
 /** Who she is at a place: the nearest open region (a previous one holds within the stickiness), and a nearly as near one mixed in. */
 export function selectPersona(position: SpacePosition, options: PersonaOptions): PersonaSelection {
-  const ranked = openRegions(options).map(region => ({ id: region.id, distance: regionDistance(region, position) }))
+  const natural = !options.natural ? 'off' : options.max && options.natural === 'play' ? 'held' : 'on';
+  const ranked = openRegions(options).map(region => ({ id: region.id, distance: regionDistance(region, position, natural) }))
     .sort((a, b) => a.distance - b.distance);
   const distances = Object.fromEntries(ranked.map(item => [item.id, round(item.distance)])) as Partial<Record<RegionId, number>>;
   const best = ranked[0]!;
-  const held = ranked.find(item => item.id === options.previous);
+  // A turn of play moves her at once (`SHANNON_NATURAL_TALK`): the region of a moment ago does not hold.
+  const held = options.natural === 'play' ? undefined : ranked.find(item => item.id === options.previous);
   const primary = held && held.distance <= best.distance + PERSONA_LIMITS.stickiness ? held : best;
   const second = ranked.find(item => item.id !== primary.id);
   const mixed = second && second.distance <= primary.distance + PERSONA_LIMITS.blend ? { secondary: second.id } : {};

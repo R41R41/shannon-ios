@@ -6,6 +6,7 @@ import {
   GENERATED_ARTIFACT_INSTRUCTIONS,
   INTENT_PLAN_INSTRUCTIONS,
   ROOM_LOOK_SCHEMA,
+  NATURAL_TALK_STYLE_INSTRUCTIONS,
   SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
   THREAD_SUMMARY_INSTRUCTIONS,
   THREAD_TITLE_INSTRUCTIONS,
@@ -88,7 +89,8 @@ export function chatTurnRequestBody(
  * Talk (her reply's feeling, her tools) and what she knows of the owner. Shared by the OpenAI adapter and the Claude request.
  */
 export function chatTurnInstructions(request: ShannonChatModelRequest, agentHostHint: string | undefined): string {
-  return [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
+  // `SHANNON_NATURAL_TALK` (the owner alone): the conversation's style in place of the report's.
+  return [request.systemPrompt, request.naturalTalk ? NATURAL_TALK_STYLE_INSTRUCTIONS : SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
     GENERATED_ARTIFACT_INSTRUCTIONS,
     INTENT_PLAN_INSTRUCTIONS,
     agentTaskInstructions(agentHostHint),

@@ -44,6 +44,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   feelingStrong?: true;
   /** Syzygy ADR-0013 stage 2 (`SHANNON_REPLY_CHECK`): checked before sending, rewritten once at most (`FeelingReplyChatModel`). */
   feelingCheck?: import('@shannon/cognition').ReplyCheckContext;
+  /** `SHANNON_NATURAL_TALK`: a text turn with the owner alone is answered in the conversation's style (`NATURAL_TALK_STYLE_INSTRUCTIONS`). */
+  naturalTalk?: true;
   /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
   spokenReply?: boolean;
   /**

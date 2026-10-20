@@ -17,6 +17,7 @@ import {
 } from '@shannon/cognition';
 import { capFor, regionFace, regionOf, routedOrChecked, spaceDecision, spaceIdentity, warnCapped } from './characterSpaceHooks.js';
 import { checkContext, checkFacts, registerNow } from './feelingTurnCheck.js';
+import { naturalBlock, naturalLedgerLine, naturalOf, naturalReplyFacts, naturalRequest, playAsked } from './naturalTalk.js';
 import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -107,6 +108,9 @@ export interface FeelingTurnHandle {
   textRegister?: TextRegisterDirective;
   /** His words of this turn (at 本気, whether they take leave of her). */
   words?: string;
+  /** `SHANNON_NATURAL_TALK`: the chooser's own stance, and whether the day's touch facts were in the block (`naturalTalk.ts`). */
+  jevStance?: string;
+  ledgerShown?: boolean;
 }
 
 interface BeginInput { scopeKey: string; key: FeelingKey; channel: FeelingChannel; words: string; at: string; snapshot: CompanionStateSnapshot }
@@ -121,15 +125,16 @@ function begin(port: FeelingPort, input: BeginInput): FeelingTurnHandle {
 
 /** The block the reply reads last: the feeling turn's while it is on, else the facts alone ('' when there are none). */
 function blockOf(handle: FeelingTurnHandle, decision: FeelingTurnDecision | null): string {
-  const ledgerLine = handle.lines?.ledgerLine ?? '', repetitionLine = handle.lines?.repetitionLine ?? '';
+  const ledgerLine = naturalLedgerLine(handle, handle.lines?.ledgerLine ?? ''), repetitionLine = handle.lines?.repetitionLine ?? '';
+  handle.ledgerShown = Boolean(ledgerLine);
   // Stage 5: what the last stream left, for the owner alone only (「今日の配信疲れた…」).
   const glow = handle.port.stream && handle.key.audience === 'owner_alone' ? handle.port.stream.afterglow(handle.scopeKey, handle.at, handle.snapshot) : '';
   const carried = [...handle.lines?.carriedLines ?? [], ...(glow ? [glow] : [])];
   if (decision) {
     const space = handle.lines?.space;
     const persona = space ? { persona: { block: space.block, vivid: CHARACTER_REGIONS[space.selection.primary].vivid === true } } : {};
-    const extra = { ...(carried.length ? { carried } : {}), ...persona };
-    return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order, audience: handle.key.audience, ...extra });
+    const extra = { ...(carried.length ? { carried } : {}), ...persona, ...naturalBlock(handle) };
+    return feelingTurnBlock({ decision, ledgerLine, repetitionLine, order: handle.order || playAsked(handle), audience: handle.key.audience, ...extra });
   }
   const facts = [ledgerLine, ...carried, ledgerLine || carried.length ? FEELING_FACTS_USE_LINE : '', repetitionLine].filter(Boolean);
   return facts.length ? [FEELING_FACTS_HEADER, ...facts].join('\n') : '';
@@ -156,7 +161,7 @@ function turnEnded(handle: FeelingTurnHandle, input: { at: string; words: string
   const strong = handle.strong ? { replyModel: 'strong' as const } : {};
   const check = checkFacts(handle, input.reply);
   const register = handle.register !== 'normal' ? { register: handle.register } : {};
-  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check, ...spaceReply(handle) };
+  const facts = { ...replyFacts(input.reply, drawersIn), ...stance, ...register, ...strong, ...check, ...spaceReply(handle), ...naturalReplyFacts(handle) };
   const record = (event: FeelingEvent) => handle.port.events.record(handle.scopeKey, event);
   // His words' closed tags only while something reads them (the fast layer, the closed days' folds; review Low).
   const tags = handle.port.coreAffect || handle.port.days ? utteranceTags(input.words) : [];
@@ -245,6 +250,7 @@ export const feelingText = Object.freeze({
       const region = regionOf(handle);
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
         utterance: input.message, lines: handle.lines, register: handle.register, mood: snapshot.emotion, ...amends, ...(region ? { region } : {}),
+        ...(naturalOf(handle) ? { natural: true } : {}),
         ...(port.jevInput ? { jevInput: port.jevInput } : {}), ...(port.meaning ? { reading: true } : {}) }) : null;
       handle.sentence = port.sentence && port.coreAffect && port.turn
         ? safely(() => startFeelingSentence(port.events, port.sentence!, { ...handle, words: input.message }), null) : null;
@@ -259,6 +265,7 @@ export const feelingText = Object.freeze({
     if (!handle) return '';
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
     const chosen = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
+    if (chosen && naturalOf(handle)) handle.jevStance = chosen.stance;
     handle.decision = safely(() => spaceDecision(handle, chosen), chosen);
     const lines = sentence ? await sentence : null;
     const decided = handle.port.textRegister ? handle.decision : null;
@@ -287,8 +294,8 @@ export const feelingText = Object.freeze({
   /** `SHANNON_CHARACTER_SPACE`: her identity with the space's core in place of v2 (`characterSpaceHooks.ts`); as it was otherwise. */
   staged: spaceIdentity,
   /** The text reply's model (after `block`): `{ feelingStrong: true }` for a strong turn within the day's cap, else nothing. */
-  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext } =>
-    (handle ? routedOrChecked(handle, routeReply, checkContext) : {}),
+  route: (handle: FeelingTurnHandle | null): { feelingStrong?: true; feelingCheck?: ReplyCheckContext; naturalTalk?: true } =>
+    (handle ? { ...routedOrChecked(handle, routeReply, checkContext), ...naturalRequest(handle) } : {}),
   /** The message face under `SHANNON_SINGLE_FACE`: the turn's stance, else the reply's feeling (never her own apology), else the mood. */
   face: (handle: FeelingTurnHandle | null, resolved: ReplyEmotion, snapshot: CompanionStateSnapshot, at: string): ReplyEmotion => {
     if (!handle?.port.singleFace) return resolved;

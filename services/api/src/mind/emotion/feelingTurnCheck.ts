@@ -27,7 +27,7 @@ export function checkContext(handle: FeelingTurnHandle): ReplyCheckContext | nul
   const region = regionOf(handle);
   return { stance: handle.decision.stance, intensity: handle.decision.intensity, audience: handle.key.audience, order: handle.order, violation,
     turn: handle.turn, counted, ...(level !== undefined ? { level } : {}), ...form, ...(handle.port.audience ? { audienceChecks: true } : {}), ...phrases,
-    ...(region ? { region } : {}) };
+    ...(region ? { region } : {}), ...(handle.lines?.space?.natural ? { natural: true as const } : {}) };
 }
 
 /** The register her composure holds now: the fast layer's step when it is known, else the turn's (item 10). */

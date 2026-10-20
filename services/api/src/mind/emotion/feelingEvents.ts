@@ -1,6 +1,7 @@
 import {
   OWNER_PERSON_KEY, drawersIn, episodeLine, replyFacts, foldEpisodeLedger, innerNoteDay, ledgerFacts, memoryControlFor, repetitionFacts,
-  FOLLOW_UP_LIMITS, followUpLine, followUpTopics, greetingLine, phraseLine, repetitionLine, stanceBalance, stanceFacts, watchPhrases, watchRepetition,
+  FOLLOW_UP_LIMITS, followUpLine, followUpTopics, greetingLine, phraseLine, repetitionLine, sameStanceFacts, stanceBalance, stanceFacts, watchPhrases,
+  watchRepetition,
   type CompanionStateSnapshot, type EpisodeLedger, type FeelingAudience, type FeelingEvent, type PhraseWatch, type RepetitionWatch,
 } from '@shannon/cognition';
 import { spaceOf, type SpaceInput, type SpaceLines } from './characterSpaceTurn.js';
@@ -90,7 +91,7 @@ export class FeelingEvents {
     /** Stage 3: her closed days and what is carried across them (absent: nothing is carried). */
     days?: FeelingDays;
     /** `SHANNON_CHARACTER_SPACE` (absent: off), with the owner's `SHANNON_AFFECTION_MAX`. */
-    space?: { max: boolean } }) {}
+    space?: { max: boolean; natural?: boolean } }) {}
 
   get timeZone(): string { return this.options.timeZone; }
 
@@ -145,7 +146,8 @@ export class FeelingEvents {
         const stances = stanceBalance(replies);
         return { ledger, watch, phrases, ledgerLine: episodeLine(ledger, at, this.options.partWord, this.options.timeZone),
           repetitionLine: [repetitionLine(watch), said, ...this.greeting(scopeKey, key, at, snapshot, words)].filter(Boolean).join('\n'),
-          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts },
+          facts: { ...ledgerFacts(ledger, at), ...repetitionFacts(watch), ...counted, ...stanceFacts(stances), ...checked, ...carried.facts,
+            ...this.runFacts(key, replies, channel) },
           carriedLines: carried.lines, carriedTouchLines: carried.touchLines ?? carried.lines,
           ...this.spaceFor({ key, at, snapshot, words, events: day, ...(carried.relation ? { relation: carried.relation } : {}) }, channel) };
       }, lines => lines.facts);
@@ -156,14 +158,20 @@ export class FeelingEvents {
   }
 
   /** Her character space in a text turn (`SHANNON_CHARACTER_SPACE`); nothing otherwise, or when it fails (a turn goes on without it). */
-  private spaceFor(input: Omit<SpaceInput, 'timeZone' | 'max'>, channel?: FeelingEvent['channel']): { space?: SpaceLines } {
+  private spaceFor(input: Omit<SpaceInput, 'timeZone' | 'max' | 'natural'>, channel?: FeelingEvent['channel']): { space?: SpaceLines } {
     if (!this.options.space || channel !== 'text') return {};
     try {
-      return { space: spaceOf({ ...input, timeZone: this.options.timeZone, max: this.options.space.max }) };
+      const { max, natural } = this.options.space;
+      return { space: spaceOf({ ...input, timeZone: this.options.timeZone, max, natural: natural === true }) };
     } catch (error) {
       this.report(error);
       return {};
     }
+  }
+
+  /** `SHANNON_NATURAL_TALK`, a text turn of the owner alone: the chooser's last stance and its run (`sameStanceFacts`); nothing otherwise. */
+  private runFacts(key: FeelingKey, replies: readonly FeelingEvent[], channel?: FeelingEvent['channel']): Record<string, number | string> {
+    return this.options.space?.natural && channel === 'text' && key.audience === 'owner_alone' ? sameStanceFacts(replies) : {};
   }
 
   /**

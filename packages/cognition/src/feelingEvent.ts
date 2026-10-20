@@ -87,6 +87,10 @@ export interface FeelingEventFacts {
   cues?: readonly string[];
   /** `SHANNON_CHARACTER_SPACE`: the region of her character space her reply was written from (its id). */
   region?: string;
+  /** `SHANNON_NATURAL_TALK`: the stance the chooser gave, before a region's rule turned it (the day's run reads it). */
+  jevStance?: string;
+  /** `SHANNON_NATURAL_TALK`: the day's touch facts were in this reply's block (each grievance is told her once, `naturalTalk.ts`). */
+  ledgerShown?: true;
 }
 
 export interface FeelingEvent {

@@ -21,7 +21,7 @@ import {
 } from '../src/infra/sqlite/migrations/executionSteps.js';
 import { openDatabase, SQLITE_PROFILES, type SqliteProfileName } from '../src/infra/sqlite/sqliteOpen.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { EMOTION_STEPS, FEELING_DAYS_STEPS, FEELING_SHADOW_STEPS, FEELING_STEPS } from '../src/infra/sqlite/migrations/emotionSteps.js';
+import { EMOTION_STEPS, FEELING_DAYS_STEPS, FEELING_SHADOW_STEPS, FEELING_STEPS, REPLY_DRAFTS_STEPS } from '../src/infra/sqlite/migrations/emotionSteps.js';
 import { oldExecutionSchema, oldTaskRuntimeSchema } from './support/executionSchema88d7bfd0.js';
 
 /**
@@ -412,6 +412,10 @@ describe('the pinned checksums', () => {
     ]);
     expect(FEELING_DAYS_STEPS.map(step => [step.id, schemaStepChecksum(step)])).toEqual([
       ['emotion/006_feeling_days', '27736c122507ed4e21734c7831dbb340630702d23a4cbe35dc9d97081efefb55'],
+    ]);
+    // Owner 2026-10-20: her rewritten drafts, only when `SHANNON_NATURAL_TALK` opens their store.
+    expect(REPLY_DRAFTS_STEPS.map(step => [step.id, schemaStepChecksum(step)])).toEqual([
+      ['emotion/007_reply_drafts', 'f1566b8c0014345f439840bb5e87d2d18057dcefff903f6135be449e5efeea69'],
     ]);
   });
 

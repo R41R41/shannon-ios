@@ -223,6 +223,18 @@ Explicit_on, default off; needs `SHANNON_FEELING_TURN` and `SHANNON_REPLY_CHECK`
 - **The facts of the two of them** (`affectionLines`, `[ライ氏とのこと]`, the owner alone): how often they talked, the days he was away, kind words, a hurtful word or a touch after her no this week, promises, another AI lately. Never a value.
 - **Observer**: `feeling.affection` (value, 好意, 安心, the number of fact lines).
 - Off: every prompt, question set, route and check is as before.
+
+## Her talk with the owner alone (`SHANNON_NATURAL_TALK`, owner 2026-10-20)
+
+Explicit_on, default off; needs `SHANNON_CHARACTER_SPACE` (applied only with it: the space carries it). Text turns of the owner alone only. Owner: 「全然思った通りに乗ってくれない…クリーンすぎて人間らしくない」. `services/api/src/mind/emotion/naturalTalk.ts`; in `@shannon/cognition` the cues, stances and lines below.
+
+- **The reply's style** (`NATURAL_TALK_STYLE_INSTRUCTIONS`, in place of `SHANNON_RESPONSE_STYLE_INSTRUCTIONS`; one fixed text, so the cached prefix holds): talk is answered as talk (a line for a line, no conclusion or next step, time, plans and work only when asked), bits and jokes joined, a lewd tease answered with a flustered retort at most (never a sexual reply), singing and whispering acted in text, the honesty rules for facts and work. Talk turns (short, no request) get `NATURAL_SHORT_LINE` in the last block.
+- **The day's touch facts** reach the block only within 10 minutes of a touch (once: `facts.ledgerShown` on her reply), or when his words are about her body, touching her or an apology.
+- **Cues** (`flirt`, `play`, `joke`, `cuddle`; not in words of insult or of a serious talk) swing her toward 照れ, はしゃぎ, 小悪魔 and デレ. At 本気 and 重い 好意 counts once (`NATURAL_HELD_LIKING_WEIGHT`); in a turn of play while 好意 is held at its top, the other regions are compared by her mood alone and the region of a moment ago does not hold.
+- **The feeling turn** (`feeling_turn.v4`): no fixed 「slightly tsundere」 opener (the region's lean says who she is), a bit or a request to act is play joined unless she is upset (`NATURAL_ORDER_LINE` in the block), the stances `play_along`, `boke_back`, `tsukkomi`, and `last_stance`/`same_stance_run` (four in a row: another stance). Jev's own stance is kept on her reply (`facts.jevStance`).
+- **The check**: no `obeyed_order` on a request to act; a sweet reply on a declining stance is noted, not rewritten (`rewriteFlags`); a rewrite for a repeated phrase changes the wording only. A rewritten draft is kept 7 days (`emotion/007_reply_drafts`, table `shannon_reply_drafts`: the first draft, its flags, the rewrite; the owner alone only; never the Observer's).
+- **Always** (fixes, not behind the switch): a line break the model wrote as 「\」「n」 is read as one (`replyBreaks.ts`, outside code; whole reply and stream alike); a rewrite is never waited for past the turn's deadline less 1.5 s; an English sentence inside a Japanese spoken reply is dropped (`withoutStrayEnglish`), and the voice-tag lines say to speak Japanese.
+- Off: every prompt, question set, route and check is as before. To turn it back: `SHANNON_NATURAL_TALK=off` (or remove it) and restart.
 ## Observer
 
 Node `emotion`, closed values only: `feeling.event` (kind, identity, audience, channel, composure, register, stance, opener), `feeling.ledger` (the ledger's and the watch's numbers, composure and register), `feeling.turn` (stance, intensity, drawer, register, source, latency), `feeling.face` (source, expression).
