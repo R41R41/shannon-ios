@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WorkingEventLog } from '@shannon/mind';
-import { createMinecraftWorkingArbiter, minecraftCalm, minecraftCommandId, minecraftFrameNeeds, minecraftNeedsLine, minecraftWaitingCall } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
+import { createMinecraftWorkingArbiter, minecraftCalm, minecraftCommandId, minecraftFrameNeeds, minecraftNeedsLine, minecraftWaitingCall,
+  minecraftWorkTopic } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 
 const AT = '2026-10-20T10:00:00.000Z';
@@ -39,9 +40,10 @@ describe('Minecraft working arbiter (mb-arch stage 1)', () => {
     expect(f.arbiter.check(day)).toEqual({ act: 'none' });
   });
 
-  it('cuts a calm wait with time left when a need comes into reach, and not at night or with a threat near', () => {
+  it('cuts a calm wait with time left when a need comes into reach after it began, and not at night or with a threat near', () => {
     const f = fixture();
     f.arbiter.begin({ name: 'mc.wait-time', input: { milliseconds: 58_000 } }, 'op-wait');
+    f.tell('need.appeared', ironNeed.id, { need: 'iron', name: 'iron_ore', distance: 16, canReach: true });
     expect(f.arbiter.check(withNeeds([ironNeed], { lightInSeconds: 400 }))).toEqual({ act: 'none' });
     expect(f.arbiter.check(withNeeds([ironNeed], undefined, [{ distance: 9, canReachMe: true }]))).toEqual({ act: 'none' });
     expect(f.arbiter.check(withNeeds([{ ...ironNeed, canReach: false }]))).toEqual({ act: 'none' });
@@ -50,8 +52,60 @@ describe('Minecraft working arbiter (mb-arch stage 1)', () => {
     expect(f.arbiter.check(withNeeds([ironNeed]))).toEqual({ act: 'none' });
     const g = fixture();
     g.arbiter.begin({ name: 'mc.withdraw-from-furnace', input: { x: 1, y: 2, z: 3, waitForCompletion: true } }, 'op-withdraw');
-    expect(g.arbiter.check(withNeeds([ironNeed]))).toMatchObject({ act: 'cut', rule: 'need_during_wait', need: { name: 'iron_ore' } });
+    g.tell('need.appeared', ironNeed.id, { need: 'iron', name: 'iron_ore', distance: 16, canReach: true });
+    const furnace = (remainingEstimateMs: number) => frame({ margin: { darkInSeconds: 300 }, nearbyThreats: [], nearbyNeeds: [ironNeed],
+      jobs: [{ position: { x: 1, y: 2, z: 3 }, remainingEstimateMs }] });
+    expect(g.arbiter.check(furnace(40_000))).toMatchObject({ act: 'cut', rule: 'need_during_wait', need: { name: 'iron_ore' } });
     expect(JSON.parse(g.sent[0]!.text).note).toBe('mc.withdraw-from-furnace の待ちを切った: iron_ore（iron）が16mにある。取ってから、待っていた作業に戻る');
+  });
+
+  it('run 19: never cuts a furnace wait with about 3 s left, nor one whose furnace it does not know, nor the same furnace asked again', () => {
+    const f = fixture();
+    const withdraw = { name: 'mc.withdraw-from-furnace', input: { x: 74, y: 29, z: -14, waitForCompletion: true } };
+    const furnace = (remainingEstimateMs: number | null) => frame({ margin: { darkInSeconds: 300 }, nearbyThreats: [],
+      nearbyNeeds: [{ ...ironNeed, distance: 15.7 }], ...(remainingEstimateMs === null ? {} : { jobs: [{ position: { x: 74, y: 29, z: -14 }, remainingEstimateMs }] }) });
+    f.arbiter.begin(withdraw, 'op-1');
+    f.tell('need.appeared', ironNeed.id, { need: 'iron', name: 'iron_ore', distance: 15.7, canReach: true });
+    expect(f.arbiter.check(furnace(3_000))).toEqual({ act: 'none' });
+    expect(f.arbiter.check(furnace(null))).toEqual({ act: 'none' });
+    expect(f.arbiter.check(furnace(40_000)).act).toBe('cut');
+    // The same furnace asked again, under a new id: the same work, not cut twice.
+    f.arbiter.end(withdraw.name);
+    f.arbiter.begin(withdraw, 'op-2');
+    f.tell('need.appeared', 'iron:b:60,40,0', { need: 'iron', name: 'iron_ore', distance: 12, canReach: true });
+    expect(f.arbiter.check(frame({ margin: { darkInSeconds: 300 }, nearbyThreats: [],
+      nearbyNeeds: [{ ...ironNeed, id: 'iron:b:60,40,0', distance: 12 }], jobs: [{ position: { x: 74, y: 29, z: -14 }, remainingEstimateMs: 30_000 }] }))).toEqual({ act: 'none' });
+    expect(minecraftWorkTopic(withdraw)).toBe('mc.withdraw-from-furnace@74,29,-14');
+  });
+
+  it('leaves a wait alone for a need that was already there when it began: the body judged that wait (wait_refused)', () => {
+    const f = fixture();
+    f.tell('need.appeared', ironNeed.id, { need: 'iron', name: 'iron_ore', distance: 16, canReach: true });
+    f.arbiter.begin({ name: 'mc.wait-time', input: { milliseconds: 58_000 } }, 'op-wait');
+    expect(f.arbiter.check(withNeeds([ironNeed]))).toEqual({ act: 'none' });
+  });
+
+  it('cuts a chase in water after 10 s without progress, on land only after 20 s', () => {
+    const water = fixture();
+    water.arbiter.begin({ name: 'mc.attack-continuously', input: { entityName: 'salmon' } }, 'op-chase');
+    const subject = minecraftCommandId('op-chase');
+    water.tell('action.stalled', subject, { skill: 'attack-continuously', measure: 'chase', sinceProgressMs: 10_000, hazard: 'water' });
+    expect(water.arbiter.check(day)).toMatchObject({ act: 'cut', rule: 'stalled', tool: 'mc.attack-continuously' });
+    const land = fixture();
+    land.arbiter.begin({ name: 'mc.attack-continuously', input: { entityName: 'sheep' } }, 'op-chase');
+    land.tell('action.stalled', subject, { skill: 'attack-continuously', measure: 'chase', sinceProgressMs: 15_000 });
+    expect(land.arbiter.check(day)).toEqual({ act: 'none' });
+  });
+
+  it('says a standing bed with the cell to dig, and coal as fuel', () => {
+    const bed = { id: 'bed:b:69,66,4', need: 'bed', name: 'red_bed', position: { x: 69, y: 66, z: 4 }, distance: 13, canReach: true };
+    const coal = { id: 'fuel:b:70,66,20', need: 'fuel', name: 'coal_ore', position: { x: 70, y: 66, z: 20 }, distance: 12, canReach: true };
+    expect(minecraftNeedsLine(minecraftFrameNeeds(withNeeds([bed, coal])))).toBe('近くに要る物（届く）: 置かれたベッド13m・石炭12m。今の作業の区切りで寄って取れる: '
+      + 'mc.dig-block-at（x=69、y=66、z=4。掘れば持てる）、mc.mine-block（blockName=coal_ore、count=4）');
+    // Four nearer needs never push a standing bed out of the line.
+    const logs = [1, 2, 3, 4].map(i => ({ id: `wood:b:${i},64,0`, need: 'wood', name: 'oak_log', position: { x: i, y: 64, z: 0 }, distance: i, canReach: true }));
+    expect(minecraftNeedsLine(minecraftFrameNeeds(withNeeds([...logs, { ...bed, distance: 72 }])))).toMatch(/^近くに要る物（届く）: 置かれたベッド72m・/u);
+    expect(minecraftFrameNeeds(withNeeds([{ ...bed, position: undefined }]))).toEqual([]);
   });
 
   it('keeps the cuts of a task across its steps: a new step never cuts the same command again', () => {

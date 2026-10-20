@@ -43,7 +43,8 @@ describe('working events', () => {
 
 describe('working arbiter v0', () => {
   const progress = (sinceProgressMs: number, measure: string | null = 'target') =>
-    ({ subject: 'op-move', skill: 'move-to', measure, elapsedMs: 60_000, sinceProgressMs, distance: 30, stalled: sinceProgressMs >= 15_000, at: AT });
+    ({ subject: 'op-move', skill: 'move-to', measure, elapsedMs: 60_000, sinceProgressMs, distance: 30, stalled: sinceProgressMs >= 15_000, at: AT,
+      hazard: null as string | null });
   const needs = (distance: number, canReach = true) => [{ id: 'b:1', need: 'iron', name: 'iron_ore', distance, canReach, at: AT, data: {} }];
 
   it('cuts a command whose measure has not got better for 20 s, and not a wait or one without a measure', () => {
@@ -64,6 +65,17 @@ describe('working arbiter v0', () => {
     expect(arbitrate({ ...base, running: wait, needs: needs(30), calm: true })).toEqual({ act: 'none' });
     expect(arbitrate({ ...base, running: { ...wait, remainingMs: 10_000 }, needs: needs(16), calm: true })).toEqual({ act: 'none' });
     expect(arbitrate({ ...base, running: move, needs: needs(5), calm: true })).toEqual({ act: 'none' });
+  });
+
+  it('run 19: cuts a stall in water at 10 s, never a wait with how long it has left unknown, and a topic only once', () => {
+    const base = { now: NOW, needs: [], calm: true, recentCuts: [] };
+    const watery = { ...progress(10_000), hazard: 'water' };
+    expect(arbitrate({ ...base, running: move, progress: watery }).act).toBe('cut');
+    expect(arbitrate({ ...base, running: move, progress: { ...progress(10_000), hazard: null } }).act).toBe('none');
+    expect(arbitrate({ ...base, running: { ...wait, remainingMs: null }, progress: null, needs: needs(16) })).toEqual({ act: 'none' });
+    const again = { ...wait, subject: 'op-wait-2', topic: 'mc.withdraw-from-furnace@74,29,-14' };
+    expect(arbitrate({ ...base, running: again, progress: null, needs: needs(16), recentCuts: [{ at: NOW - 5_000, subject: again.topic }] }))
+      .toEqual({ act: 'none' });
   });
 
   it('never cuts the same command twice, nor more than twice a minute', () => {
