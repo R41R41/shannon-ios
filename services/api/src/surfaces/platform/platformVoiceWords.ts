@@ -92,7 +92,7 @@ export class VoiceWords {
     if (!Array.isArray(value)) return [];
     const lines: HeardLine[] = [];
     for (const line of value as Array<Partial<HeardLine> | null>) {
-      const sound = line && identifier(line.userId, 160) && bodyText(line.name, 80) && bodyText(line.text, 600);
+      const sound = line && identifier(line.userId, 160) && bodyText(line.name, 80) && bodyText(line.text, 1_000);
       if (sound && Number.isFinite(Date.parse(line.at as string))) lines.push(line as HeardLine);
     }
     return lines;

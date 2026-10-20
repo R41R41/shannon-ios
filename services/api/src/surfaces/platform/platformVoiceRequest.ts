@@ -108,7 +108,7 @@ function validatedParticipants(value: unknown): string[] {
 
 function validatedHeardLine(line: unknown): HeardLine {
   const item = line !== null && typeof line === 'object' && !Array.isArray(line) ? line as Record<string, unknown> : {};
-  const sound = identifier(item.userId, 160) && bodyText(item.name, 80) && bodyText(item.text, 600);
+  const sound = identifier(item.userId, 160) && bodyText(item.name, 80) && bodyText(item.text, 1_000);
   if (!sound || typeof item.at !== 'string' || !Number.isFinite(Date.parse(item.at))) throw badRequest('heard is invalid.');
   return {
     userId: (item.userId as string).trim(), name: (item.name as string).trim(), text: (item.text as string).trim(),
@@ -152,7 +152,7 @@ function validatedFlags(body: Record<string, unknown>): void {
   for (const flag of ['followsShannonTurn', 'speakingNow'] as const) {
     if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw badRequest(`${flag} is invalid.`);
   }
-  if (body.fillerId !== undefined && !identifier(body.fillerId, 40)) throw badRequest('fillerId is invalid.');
+  if (body.fillerId !== undefined && !identifier(body.fillerId, 80)) throw badRequest('fillerId is invalid.');
 }
 
 export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
