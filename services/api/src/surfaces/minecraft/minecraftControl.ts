@@ -96,15 +96,7 @@ export class MinecraftControl {
     if (old?.poll.connectionId === input.connectionId && old.poll.observation.facts.alive !== false && input.observation.facts.alive === false) {
       for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
     }
-    let eventsThrough: number | undefined;
-    try {
-      const log = this.workingLogs.get(bodyId) ?? (input.events ? new WorkingEventLog() : undefined);
-      if (log) {
-        this.workingLogs.set(bodyId, log);
-        log.connect(input.connectionId);
-        if (input.events) eventsThrough = log.take(input.connectionId, input.events).through;
-      }
-    } catch { /* what the body told while working never fails a poll */ }
+    const eventsThrough = this.takeEvents(bodyId, input);
     const acknowledged: string[] = [];
     for (const receipt of input.receipts) {
       const command = this.store.command(receipt.id);
@@ -157,6 +149,16 @@ export class MinecraftControl {
       }
     }
     return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}) };
+  }
+  /** A poll's events into the body's log; the highest number taken, or undefined when the poll carried none. Never fails the poll. */
+  private takeEvents(bodyId: string, input: MinecraftControlPoll): number | undefined {
+    try {
+      const log = this.workingLogs.get(bodyId) ?? (input.events ? new WorkingEventLog() : undefined);
+      if (!log) return undefined;
+      this.workingLogs.set(bodyId, log);
+      log.connect(input.connectionId);
+      return input.events ? log.take(input.connectionId, input.events).through : undefined;
+    } catch { return undefined; }
   }
   /** A command this process waits for expires when its wait says so (time counted from delivery, without stalls); another by its deadline. */
   private expired(command: MinecraftControlCommand): boolean {

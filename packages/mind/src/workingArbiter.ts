@@ -56,7 +56,8 @@ export function arbitrate(input: {
   if (input.recentCuts.filter(cut => input.now - cut.at < 60_000).length >= o.cutsPerMinute) return { act: 'none' };
   const progress = input.progress?.subject === running.subject ? input.progress : null;
   if (!running.waiting && progress?.measure && progress.sinceProgressMs >= o.stallCutMs) {
-    return { act: 'cut', rule: 'stalled', subject: running.subject, tool: running.tool, sinceProgressMs: progress.sinceProgressMs, distance: progress.distance };
+    const { sinceProgressMs, distance } = progress;
+    return { act: 'cut', rule: 'stalled', subject: running.subject, tool: running.tool, sinceProgressMs, distance };
   }
   if (running.waiting && input.calm && (running.remainingMs === null || running.remainingMs >= o.waitCutRemainingMs)) {
     const need = input.needs.find(item => item.canReach && item.distance !== null && item.distance <= o.needCutDistance && (input.cutFor?.(item) ?? true));
@@ -71,7 +72,8 @@ const metres = (value: number | null) => value === null ? '' : `${Math.round(val
 /** What the task is told when the arbiter cut its command: fixed words with closed facts (no text from the world). */
 export function cutNote(verdict: Exclude<ArbiterVerdict, { act: 'none' }>): string {
   if (verdict.rule === 'stalled') {
-    return `${verdict.tool} を切った: ${seconds(verdict.sinceProgressMs)}秒進んでいない${verdict.distance !== null ? `（残り${metres(verdict.distance)}）` : ''}。同じ手をそのまま繰り返さず、道か目標を変える`;
+    const left = verdict.distance !== null ? `（残り${metres(verdict.distance)}）` : '';
+    return `${verdict.tool} を切った: ${seconds(verdict.sinceProgressMs)}秒進んでいない${left}。同じ手をそのまま繰り返さず、道か目標を変える`;
   }
   return `${verdict.tool} の待ちを切った: ${verdict.need.name}（${verdict.need.need}）が${metres(verdict.need.distance)}にある。取ってから、待っていた作業に戻る`;
 }
@@ -83,7 +85,8 @@ export function cutNote(verdict: Exclude<ArbiterVerdict, { act: 'none' }>): stri
 export function workingEventLines(events: readonly WorkingEvent[], limit: number = WORKING_ARBITER_V0.lines): string[] {
   const latestNeed = new Map<string, number>();
   events.forEach((event, index) => { if (event.kind.startsWith('need.')) latestNeed.set(String(event.data.need), index); });
-  const kept = events.filter((event, index) => event.kind === 'action.stalled' || (event.kind.startsWith('need.') && latestNeed.get(String(event.data.need)) === index));
+  const latest = (event: WorkingEvent, index: number) => event.kind.startsWith('need.') && latestNeed.get(String(event.data.need)) === index;
+  const kept = events.filter((event, index) => event.kind === 'action.stalled' || latest(event, index));
   const stalls = kept.filter(event => event.kind === 'action.stalled').slice(-limit);
   const room = limit - stalls.length;
   const needs = room > 0 ? kept.filter(event => event.kind !== 'action.stalled').slice(-room) : [];
@@ -93,7 +96,8 @@ export function workingEventLines(events: readonly WorkingEvent[], limit: number
     const distance = typeof d.distance === 'number' ? d.distance : null;
     if (event.kind === 'need.appeared') return [`見えた: ${String(d.name)}（${String(d.need)}）${metres(distance)}${d.canReach === false ? '・届かない' : ''}`];
     if (event.kind === 'need.gone') return [`見えなくなった: ${String(d.name)}（${String(d.need)}）`];
-    if (event.kind === 'action.stalled') return [`進んでいない: ${String(d.skill)} ${seconds(Number(d.sinceProgressMs) || 0)}秒${distance !== null ? `・残り${metres(distance)}` : ''}`];
+    const left = distance !== null ? `・残り${metres(distance)}` : '';
+    if (event.kind === 'action.stalled') return [`進んでいない: ${String(d.skill)} ${seconds(Number(d.sinceProgressMs) || 0)}秒${left}`];
     return [];
   });
   return lines.slice(-limit);
@@ -103,5 +107,7 @@ export function workingEventLines(events: readonly WorkingEvent[], limit: number
 export function runningLine(running: RunningWork | null, progress: WorkingProgress | null, now: number): string | null {
   if (!running) return null;
   const p = progress?.subject === running.subject ? progress : null;
-  return `今の道具: ${running.tool}・経過${seconds(now - running.startedAt)}秒${p?.measure ? `・最後に進んだのは${seconds(p.sinceProgressMs)}秒前` : ''}${p?.distance != null ? `・残り${metres(p.distance)}` : ''}`;
+  const moved = p?.measure ? `・最後に進んだのは${seconds(p.sinceProgressMs)}秒前` : '';
+  const left = p?.distance != null ? `・残り${metres(p.distance)}` : '';
+  return `今の道具: ${running.tool}・経過${seconds(now - running.startedAt)}秒${moved}${left}`;
 }

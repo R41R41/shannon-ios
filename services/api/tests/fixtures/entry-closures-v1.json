@@ -761,6 +761,8 @@
     "surfaces/minecraft/minecraftTaskMetrics.ts",
     "surfaces/minecraft/minecraftTransientBody.ts",
     "surfaces/minecraft/minecraftTransientObservation.ts",
+    "surfaces/minecraft/minecraftWorkingArbiter.ts",
+    "surfaces/minecraft/minecraftWorkingBody.ts",
     "surfaces/minecraft/serverMinecraftBodyRoute.ts",
     "surfaces/minecraft/store/minecraftControlStore.ts",
     "surfaces/minecraft/store/minecraftLifecycleStore.ts",

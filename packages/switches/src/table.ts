@@ -187,7 +187,7 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_MINECRAFT_WORKING_EVENTS', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
-    doc: 'Read what a Minecraft body tells while it works (needs in reach, progress, stalls): cut a stalled command or a calm wait with a need in reach, and tell each decision (mb-arch stage 1).',
+    doc: 'What a Minecraft body tells while it works cuts a stalled command or a calm wait with a need in reach (mb-arch stage 1).',
   },
   {
     name: 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL', default: 'off', kind: 'on_only', owner: 'recall', requires: [],

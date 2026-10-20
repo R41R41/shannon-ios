@@ -7,6 +7,7 @@ import { actionPermit, currentActionExecution } from '../infra/context/actionExe
 import { createFcaSleepWiring } from './fcaSleepWiring.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
+import { withMinecraftWorking } from '../surfaces/minecraft/minecraftWorkingBody.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
 import { admittedMinecraftRequest, fcaMinecraftRequests, MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
@@ -149,13 +150,15 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
         // `check.whole` names its caller for the slow-walk line; `check.peek` is the observation monitor's, which walks nothing (`fcaPeekGates.ts`).
         const check = stepVisibility(() => visible, step);
-        const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
+        // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled command (`minecraftWorkingBody.ts`).
+        const body = minecraft ? withMinecraftWorking(createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
           // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
           ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') ? bodySkillGists(step, parts.skillOpen,
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
-          sourcesVisible: () => check.whole('body') ?? false }) : null;
+          sourcesVisible: () => check.whole('body') ?? false }),
+          { on: switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
         const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };

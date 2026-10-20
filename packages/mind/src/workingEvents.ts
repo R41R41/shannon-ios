@@ -28,34 +28,56 @@ export interface WorkingEvent {
 }
 
 /** A need the body has in reach now: the last `need.appeared` for its id with no `need.gone` after it. */
-export interface WorkingNeed { id: string; need: string; name: string; distance: number | null; canReach: boolean; at: string; data: Readonly<Record<string, WorkingScalar>> }
+export interface WorkingNeed {
+  id: string; need: string; name: string; distance: number | null; canReach: boolean; at: string;
+  data: Readonly<Record<string, WorkingScalar>>;
+}
 /** The latest `action.progress` / `action.stalled` for a command. */
-export interface WorkingProgress { subject: string; skill: string; measure: string | null; elapsedMs: number; sinceProgressMs: number; distance: number | null; stalled: boolean; at: string }
+export interface WorkingProgress {
+  subject: string; skill: string; measure: string | null; elapsedMs: number; sinceProgressMs: number; distance: number | null;
+  stalled: boolean; at: string;
+}
 
 const SUBJECT = /^[A-Za-z0-9][A-Za-z0-9_.:,@-]*$/u;
 const KEY = /^[A-Za-z][A-Za-z0-9_]*$/u;
 const numberOf = (value: WorkingScalar | undefined): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const scalar = (item: unknown) => item === null || typeof item === 'boolean' || typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item));
 
-/** One event from a body, checked: closed keys and kinds, bounded subject and data (scalars only). A frozen copy, or what is wrong. */
-export function checkedWorkingEvent(value: unknown): WorkingEvent | string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'event must be an object';
-  const row = value as Record<string, unknown>;
+/** The data's problem, or null: at most `dataKeys` keys of a plain form, scalar values, bounded text. */
+function dataProblem(entries: readonly [string, unknown][]): string | null {
+  if (entries.length > WORKING_EVENT_LIMITS.dataKeys) return 'data has too many keys';
+  for (const [key, item] of entries) {
+    if (key.length > WORKING_EVENT_LIMITS.key || !KEY.test(key)) return `data.${key.slice(0, 40)} is not a valid key`;
+    if (!scalar(item)) return `data.${key} must be a scalar`;
+    if (typeof item === 'string' && item.length > WORKING_EVENT_LIMITS.text) return `data.${key} is too long`;
+  }
+  return null;
+}
+
+/** The envelope's problem (keys, seq, at, kind, subject), or null. */
+function envelopeProblem(row: Record<string, unknown>): string | null {
   const unknown = Object.keys(row).find(key => !['seq', 'at', 'kind', 'subject', 'data'].includes(key));
   if (unknown) return `${unknown} is not allowed`;
   if (!Number.isSafeInteger(row.seq) || (row.seq as number) < 1) return 'seq is invalid';
   if (typeof row.at !== 'string' || row.at.length > 40 || Number.isNaN(Date.parse(row.at))) return 'at is invalid';
   if (!(WORKING_EVENT_KINDS as readonly string[]).includes(String(row.kind))) return 'kind is invalid';
-  if (typeof row.subject !== 'string' || row.subject.length > WORKING_EVENT_LIMITS.subject || !SUBJECT.test(row.subject)) return 'subject is invalid';
+  const subject = row.subject;
+  if (typeof subject !== 'string' || subject.length > WORKING_EVENT_LIMITS.subject || !SUBJECT.test(subject)) return 'subject is invalid';
+  return null;
+}
+
+/** One event from a body, checked: closed keys and kinds, bounded subject and data (scalars only). A frozen copy, or what is wrong. */
+export function checkedWorkingEvent(value: unknown): WorkingEvent | string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'event must be an object';
+  const row = value as Record<string, unknown>;
+  const envelope = envelopeProblem(row);
+  if (envelope) return envelope;
   const data = row.data;
   if (!data || typeof data !== 'object' || Array.isArray(data)) return 'data must be an object';
   const entries = Object.entries(data as Record<string, unknown>);
-  if (entries.length > WORKING_EVENT_LIMITS.dataKeys) return 'data has too many keys';
-  for (const [key, item] of entries) {
-    if (key.length > WORKING_EVENT_LIMITS.key || !KEY.test(key)) return `data.${key.slice(0, 40)} is not a valid key`;
-    if (item !== null && typeof item !== 'boolean' && typeof item !== 'string' && !(typeof item === 'number' && Number.isFinite(item))) return `data.${key} must be a scalar`;
-    if (typeof item === 'string' && item.length > WORKING_EVENT_LIMITS.text) return `data.${key} is too long`;
-  }
-  return Object.freeze({ seq: row.seq as number, at: row.at, kind: row.kind as WorkingEventKind, subject: row.subject,
+  const problem = dataProblem(entries);
+  if (problem) return problem;
+  return Object.freeze({ seq: row.seq as number, at: row.at as string, kind: row.kind as WorkingEventKind, subject: row.subject as string,
     data: Object.freeze(Object.fromEntries(entries)) as Readonly<Record<string, WorkingScalar>> });
 }
 
@@ -90,8 +112,12 @@ export class WorkingEventLog {
       if (event.seq <= this.through) continue;
       this.through = event.seq;
       this.taken += 1;
-      this.events.push(event); this.order.push(this.taken);
-      if (this.events.length > WORKING_EVENT_LIMITS.kept) { this.events.shift(); this.order.shift(); }
+      this.events.push(event);
+      this.order.push(this.taken);
+      if (this.events.length > WORKING_EVENT_LIMITS.kept) {
+        this.events.shift();
+        this.order.shift();
+      }
       this.fold(event);
       accepted++;
     }
@@ -107,7 +133,10 @@ export class WorkingEventLog {
   /** The body's connection now: a new one forgets the needs and the progress of the old (also when its first poll carries no events). */
   connect(connection: string): void {
     if (connection === this.connection) return;
-    this.connection = connection; this.through = 0; this.needMap.clear(); this.progressMap.clear();
+    this.connection = connection;
+    this.through = 0;
+    this.needMap.clear();
+    this.progressMap.clear();
   }
 
   cursor(): number { return this.taken; }
@@ -122,9 +151,11 @@ export class WorkingEventLog {
     } else if (event.kind === 'need.gone') this.needMap.delete(event.subject);
     else {
       const before = this.progressMap.get(event.subject);
+      const since = numberOf(d.sinceProgressMs) ?? 0;
+      // Still stalled while the time since progress keeps growing; progress (it falls back) ends the stall.
+      const stalled = event.kind === 'action.stalled' || (!!before?.stalled && since >= before.sinceProgressMs);
       this.progressMap.set(event.subject, { subject: event.subject, skill: String(d.skill ?? ''), measure: typeof d.measure === 'string' ? d.measure : null,
-        elapsedMs: numberOf(d.elapsedMs) ?? 0, sinceProgressMs: numberOf(d.sinceProgressMs) ?? 0, distance: numberOf(d.distance),
-        stalled: event.kind === 'action.stalled' || (!!before?.stalled && (numberOf(d.sinceProgressMs) ?? 0) >= (before?.sinceProgressMs ?? 0)), at: event.at });
+        elapsedMs: numberOf(d.elapsedMs) ?? 0, sinceProgressMs: since, distance: numberOf(d.distance), stalled, at: event.at });
       if (this.progressMap.size > 64) this.progressMap.delete(this.progressMap.keys().next().value as string);
     }
   }
