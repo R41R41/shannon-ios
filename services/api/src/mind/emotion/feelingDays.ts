@@ -34,7 +34,7 @@ export interface FeelingDayFeatures {
   /** Stage 4 (`SHANNON_FEELING_AUDIENCE`): friends' and strangers' ledgers, and the owner's lines marked when he is with others. */
   audience?: boolean;
   /** `SHANNON_CHARACTER_SPACE` (absent: off), and the owner's `SHANNON_AFFECTION_MAX`. Its folds read the closed days, so they are kept. */
-  space?: { max: boolean };
+  space?: { max: boolean; natural?: boolean };
 }
 
 /** Whether any of what is carried is on (the closed-day table opens only then). */

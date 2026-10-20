@@ -12,7 +12,7 @@ import type { ShannonEmotionKind } from './types.js';
 const STANCE_FACE: Readonly<Record<Exclude<FeelingStance, 'neutral'>, ShannonEmotionKind>> = Object.freeze({
   accept: 'gentle', shy: 'flustered', sulky: 'annoyed', exasperated: 'deadpan', snipe: 'selfDeprecating', scold: 'annoyed', rebuff: 'annoyed',
   refuse_body: 'annoyed', tease: 'teasing', cover_up: 'hidingHappiness', worry: 'caring', not_play_along: 'deadpan', talk_back: 'indignant',
-  sulk: 'sulky', cold: 'deadpan', affectionate: 'affectionate',
+  sulk: 'sulky', cold: 'deadpan', affectionate: 'affectionate', play_along: 'fun', boke_back: 'giggle', tsukkomi: 'flustered',
 });
 /** Her stance on a touch (the body's closed words). */
 const TOUCH_STANCE_FACE: Readonly<Record<string, ShannonEmotionKind | undefined>> = Object.freeze({

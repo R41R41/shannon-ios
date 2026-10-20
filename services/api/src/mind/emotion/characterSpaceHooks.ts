@@ -41,7 +41,8 @@ const V2_CORE_BLOCK = characterCoreBlock(CHARACTER_CORE);
 export function spaceIdentity<T extends { systemPrompt: string; prompt: string }>(handle: FeelingTurnHandle | null, layered: T): T {
   if (!handle || !regionOf(handle)) return layered;
   try {
-    const core = characterCoreBlock(characterCoreForSpace());
+    // `SHANNON_NATURAL_TALK` (the owner alone): v3-space with her tone line (`v3-natural`), also one fixed text.
+    const core = characterCoreBlock(characterCoreForSpace(handle.lines?.space?.natural === true));
     const swap = (text: string) => text.replace(V2_CORE_BLOCK, () => core);
     return { ...layered, systemPrompt: swap(layered.systemPrompt), prompt: swap(layered.prompt) };
   } catch {

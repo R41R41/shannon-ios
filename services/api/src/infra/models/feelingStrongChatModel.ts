@@ -1,4 +1,4 @@
-import { GUARD_FLAGS, checkReply, rewriteNote, type ReplyCheckContext, type ReplyCheckFlag } from '@shannon/cognition';
+import { GUARD_FLAGS, checkReply, rewriteFlags, rewriteNote, type ReplyCheckContext, type ReplyCheckFlag } from '@shannon/cognition';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from './chatModel.js';
 import type { AnthropicChatModel } from './anthropic/anthropicChatModel.js';
 import { TieredChatModel } from './tieredChatModel.js';
@@ -22,6 +22,11 @@ import { turnToolResults } from '../../mind/tools/toolsPorts.js';
 export const REWRITE_DEADLINE_MILLISECONDS = 2_500;
 /** A strong turn's rewrite (Sonnet) is waited for this long. */
 export const STRONG_REWRITE_DEADLINE_MILLISECONDS = 8_000;
+/**
+ * A rewrite is never waited for past the turn's own deadline less this (owner 2026-10-20: a turn ran out of time; the first draft
+ * then goes out, checked as above, rather than the turn's fixed out-of-time line).
+ */
+export const REWRITE_TURN_MARGIN_MILLISECONDS = 1_500;
 
 export interface FeelingReplyOptions {
   sonnet?: AnthropicChatModel | null;
@@ -33,6 +38,11 @@ export interface FeelingReplyOptions {
   ranTool?: (request: ShannonChatModelRequest) => boolean;
   /** A strong turn that failed (review P3a): it no longer counts against the day's cap. */
   released?: (scopeKey: string) => void;
+  /**
+   * `SHANNON_NATURAL_TALK`, the owner alone (owner 2026-10-20: what a rewrite took out could not be told afterwards): the draft that was
+   * rewritten, with its flags and the rewrite, kept for a few days (`replyDraftStore.ts`).
+   */
+  drafted?: (scopeKey: string, draft: { turn: string; flags: readonly ReplyCheckFlag[]; first: string; second: string | null }) => void;
   log?: (line: string) => void;
 }
 
@@ -99,15 +109,19 @@ export class FeelingReplyChatModel implements ShannonChatModel {
   private async checked(request: Marked, context: ReplyCheckContext, first: ShannonChatModelResult): Promise<ShannonChatModelResult> {
     const flags = first.outOfTime ? [] : checkReply(first.reply, context);
     const ranTool = this.options.ranTool ? this.options.ranTool(request) : safeCount(() => turnToolResults(request.tools).length) > 0;
-    if (!flags.length || ranTool) {
+    // `SHANNON_NATURAL_TALK`: some flags are noted and not rewritten for (`rewriteFlags`).
+    const rewriting = rewriteFlags(flags, context);
+    if (!rewriting.length || ranTool) {
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
       return ranTool && unsendable(flags) ? this.swallowed(first, flags) : first;
     }
     const { tools: _tools, ...words } = request;
-    const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(flags)].filter(Boolean).join('\n\n') };
+    const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(rewriting, context.natural === true)].filter(Boolean).join('\n\n') };
     // Review L-b: the rewrite is the same model's, but outside the strong turn's release, so a failed rewrite never frees the cap twice.
-    const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
-    const second = await within(rewrite, this.deadlineFor(request));
+    // No time left in the turn: no rewrite is started at all (it would be paid for and dropped).
+    const deadline = this.deadlineFor(request);
+    const second = deadline > 0 ? await within(this.rewrite(request, note), deadline) : null;
+    this.keepDraft(request.scopeKey, context, { flags, first: first.reply, second });
     if (!second || second.outOfTime) {
       this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter or crossed a line');
       this.options.checked?.(request.scopeKey, flags, false, context.turn);
@@ -126,7 +140,23 @@ export class FeelingReplyChatModel implements ShannonChatModel {
   private deadlineFor(request: Marked): number {
     if (this.options.rewriteDeadlineMilliseconds !== undefined) return this.options.rewriteDeadlineMilliseconds;
     // Only a turn of her character space (review 1: with it off, every rewrite is waited for as before).
-    return request.feelingStrong && this.strong && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
+    const wait = request.feelingStrong && this.strong && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
+    const left = turnLeft(request);
+    return left === null ? wait : Math.max(0, Math.min(wait, left - REWRITE_TURN_MARGIN_MILLISECONDS));
+  }
+
+  /** The rewrite: the same model as the draft's. */
+  private rewrite(request: Marked, note: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    return request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
+  }
+
+  /** A rewritten draft of a natural turn, kept for diagnosis (never fails the turn). */
+  private keepDraft(scopeKey: string, context: ReplyCheckContext,
+    draft: { flags: readonly ReplyCheckFlag[]; first: string; second: ShannonChatModelResult | null }): void {
+    if (!context.natural) return;
+    try {
+      this.options.drafted?.(scopeKey, { turn: context.turn ?? '', flags: draft.flags, first: draft.first, second: draft.second?.reply ?? null });
+    } catch { /* a draft not kept never affects the reply */ }
   }
 
   /** The safe line in place of a draft that is never sent; the log says which kind of thing it was (never the words). */
@@ -169,6 +199,14 @@ async function within<T>(answer: Promise<T>, milliseconds: number): Promise<T | 
   try {
     return await Promise.race([answer.catch(() => null), late]);
   } finally { clearTimeout(timer); }
+}
+
+/** What is left of the turn's deadline (its tool session's), or null when the turn has none or it cannot be read. */
+function turnLeft(request: Marked): number | null {
+  try {
+    const left = request.tools?.deadline.left();
+    return typeof left === 'number' && Number.isFinite(left) ? left : null;
+  } catch { return null; }
 }
 
 /** A count that cannot be read counts as one: closed, no rewrite. */

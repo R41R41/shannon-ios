@@ -23,6 +23,7 @@ import { configuredFeelingSentenceWriter, type FeelingSentenceWriter } from '../
 import { FeelingDays, carriesAnything, type FeelingDayFeatures } from '../mind/emotion/feelingDays.js';
 import { StreamFeeling } from '../mind/emotion/streamFeeling.js';
 import { SQLiteFeelingDayStore } from '../mind/emotion/store/feelingDayStore.js';
+import { SQLiteReplyDraftStore, type ReplyDraft } from '../mind/emotion/store/replyDraftStore.js';
 
 export interface ConfiguredFeeling {
   port: FeelingPort;
@@ -169,7 +170,8 @@ function closedDays(parts: { database: string | DatabaseSync; now: () => string;
 
 /** The stage-3 switches (each needs `SHANNON_FEELING_EVENTS`, checked before this is read), and her character space with 好意 held at the top. */
 export function feelingDayFeatures(environment: Readonly<Record<string, string | undefined>>): FeelingDayFeatures {
-  const space = switchOn(environment, 'SHANNON_CHARACTER_SPACE') ? { space: { max: switchOn(environment, 'SHANNON_AFFECTION_MAX') } } : {};
+  const natural = switchOn(environment, 'SHANNON_NATURAL_TALK') ? { natural: true } : {};
+  const space = switchOn(environment, 'SHANNON_CHARACTER_SPACE') ? { space: { max: switchOn(environment, 'SHANNON_AFFECTION_MAX'), ...natural } } : {};
   return { relationship: switchOn(environment, 'SHANNON_RELATIONSHIP_LEDGER'), episodes: switchOn(environment, 'SHANNON_EPISODE_MEMORY'),
     boundaries: switchOn(environment, 'SHANNON_BOUNDARY_MEMORY'), ...space };
 }
@@ -188,8 +190,16 @@ export function spaceGuarded(features: FeelingDayFeatures, turn: boolean, check:
 }
 
 /** Her character space needs her closed days (the relation's folds): it is on only with them. */
-function spaceOption(days: FeelingDayFeatures | undefined, closed: FeelingDays | undefined): { space?: { max: boolean } } {
+function spaceOption(days: FeelingDayFeatures | undefined, closed: FeelingDays | undefined): { space?: { max: boolean; natural?: boolean } } {
   return days?.space && closed ? { space: days.space } : {};
+}
+
+/** `SHANNON_NATURAL_TALK` (with her space and the check): the owner's rewritten drafts are kept a few days (`replyDraftStore.ts`); else none. */
+function draftKeeping(parts: { database: string | DatabaseSync; now: () => string; check?: boolean }, space: { space?: { natural?: boolean } })
+  : { drafts: SQLiteReplyDraftStore | null; drafted: { drafted?: (scopeKey: string, draft: ReplyDraft) => void } } {
+  if (!space.space?.natural || !parts.check) return { drafts: null, drafted: {} };
+  const drafts = new SQLiteReplyDraftStore(parts.database, parts.now);
+  return { drafts, drafted: { drafted: (scopeKey, draft) => drafts.keep(scopeKey, draft) } };
 }
 
 /** The composition itself (tests and the replay hand their own parts: an in-memory table, a fake or real chooser). */
@@ -237,9 +247,11 @@ export function composedFeeling(parts: { database: string | DatabaseSync; now: (
   const sonnet = parts.strong?.model ?? null;
   const checked = (scopeKey: string, found: readonly string[], rewritten: boolean, turn?: string) => events?.noteCheck(scopeKey, found, rewritten, turn);
   const released = (scopeKey: string) => events?.releaseStrong(scopeKey, parts.now());
-  const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, { sonnet, checked, released }) : model);
+  const { drafts, drafted } = draftKeeping(parts, space);
+  const wrap = (model: ShannonChatModel) => (sonnet || parts.check ? new FeelingReplyChatModel(model, { sonnet, checked, released, ...drafted }) : model);
   const close = () => {
     store.close();
+    drafts?.close();
     shadowStore?.close();
     closed.store?.close();
   };

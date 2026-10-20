@@ -98,6 +98,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   feelingTurn: 'feeling_turn.v2',
   /** Owner 2026-10-20 (`SHANNON_CHARACTER_SPACE`): v2 with the region she is in and its lean (`CharacterRegion.lean`). */
   feelingTurnStaged: 'feeling_turn.v3',
+  /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`, the owner alone): v3 with play joined, the playful stances and no run of one stance. */
+  feelingTurnNatural: 'feeling_turn.v4',
   /** The voice route that also asks the feeling turn's questions (either route set above, plus those); v6 with the stance's v2 wording. */
   voiceRouteFeeling: 'voice_route.v6',
   /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's call (text and voice). */

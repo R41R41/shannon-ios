@@ -48,7 +48,9 @@ export const LINGER_SHARE = 0.3;
  * words). Rules only: no model call, no latency (a reading by Jev may join later; its cost is one more question on the feeling turn).
  */
 export const SPACE_CUES = ['praise', 'love', 'tease', 'insult', 'apology', 'other_ai', 'leaving', 'returning', 'serious', 'tender', 'feeling_order',
-  'touch_welcome', 'touch_refused', 'hype', 'stream_praise'] as const;
+  'touch_welcome', 'touch_refused', 'hype', 'stream_praise',
+  // Owner 2026-10-20 (`SHANNON_NATURAL_TALK`): a cheeky or lewd tease, a request to act or play, a joke or a setup, a wish to be held.
+  'flirt', 'play', 'joke', 'cuddle'] as const;
 export type SpaceCue = typeof SPACE_CUES[number];
 
 /** Each cue's swing of her mood axes, and its share of 安心 the same day (the day fold carries it on). */
@@ -68,6 +70,11 @@ export const CUE_SWINGS: Readonly<Record<SpaceCue, Partial<Record<MoodAxis | 'se
   touch_refused: { pleasure: -0.6, arousal: 0.4, dominance: 0.35, security: -0.1 },
   hype: { arousal: 0.3, play: 0.25, pleasure: 0.1 },
   stream_praise: { pleasure: 0.15, dominance: 0.1 },
+  // Toward 照れ (flustered), はしゃぎ and 小悪魔 (hyped, imp), and 遊び up; a wish to be held, toward 照れ and デレ.
+  flirt: { arousal: 0.5, dominance: -0.8, play: 0.25, pleasure: 0.15 },
+  play: { play: 0.5, arousal: 0.35, pleasure: 0.2, dominance: 0.1 },
+  joke: { play: 0.4, pleasure: 0.2, arousal: 0.1 },
+  cuddle: { pleasure: 0.35, arousal: 0.3, dominance: -0.4, security: 0.03 },
 });
 
 /**
@@ -115,14 +122,40 @@ function kindCues(text: string): SpaceCue[] {
   return [...warm, ...apology, ...(kind === 'feeling_order' ? ['feeling_order' as const] : [])];
 }
 
-/** The cues of his words (and whether he comes back after a day or more away). */
-export function cuesOfWords(words: string, options: { returning?: boolean } = {}): SpaceCue[] {
+/** A cheeky or lewd tease, or words of play with her body (the closed tag `lewd` as well); never a touch itself (that is the body's). */
+const FLIRT = /えっち|エッチ|エロ|セクシー|おっぱい|[腋脇横下]パイ|お尻|おしり|スカートの中|太もも|ふともも|くすぐ|キス|ちゅー|チュー|変態|へんたい|感度チェック/u;
+/** A request to act or play (歌って, ささやいて, 罵倒して, 恥ずかしがって), or a game of pretend. */
+const PLAY = new RegExp(['歌(?:って|える|ったり|ってみ)', 'ささや(?:いて|き|ける)', '囁(?:いて|き)', '声まね', 'ものまね', 'モノマネ', '演じて', 'ごっこ', '罵倒', '罵って', '蔑ん',
+  '見下し', '(?:恥ずかしがっ|照れ|甘え|怒っ|すね|拗ね)て(?:み|見|よ|ほし|欲し|くれ)', 'っぽく(?:言|喋|しゃべ|して)', '(?:って|と)言ってみて', 'やってみて'].join('|'), 'u');
+/** A joke or a setup: laughter marks, a gag, or the plain bit (「お風呂入ってる？」 to someone on a screen). */
+const JOKE = /(?<![A-Za-z./])[ｗw]{2,}(?![A-Za-z./])|(?<![A-Za-z])[ｗw]$|笑笑|（笑）|\(笑\)|草$|冗談|(?<!ピン|寝)ボケ|ネタ(?!バレ)|なんちゃって|うそうそ|ドヤ|どや|大変美味|お風呂入って(?:る|ます)[？?]/u;
+/** A wish to be held or close (「抱きしめられたらいいのに」). */
+const CUDDLE = /抱きしめ|抱っこ|だっこ|ぎゅ[ーっ]|ハグ|なでなで|撫でて|膝枕|ひざまくら|添い寝|くっつ|甘えたい|甘えて|そばにいて|一緒にいたい|会いたい/u;
+
+/** The cues of play (`SHANNON_NATURAL_TALK`). */
+export const PLAY_CUES: readonly SpaceCue[] = Object.freeze(['flirt', 'play', 'joke', 'cuddle']);
+
+/** `SHANNON_NATURAL_TALK`: the cues of play in his words (none for words of insult or of a serious talk). */
+function playCues(text: string, tags: readonly string[]): SpaceCue[] {
+  const read: [boolean, SpaceCue][] = [[tags.includes('lewd') || FLIRT.test(text), 'flirt'], [PLAY.test(text), 'play'], [JOKE.test(text), 'joke'],
+    [CUDDLE.test(text), 'cuddle']];
+  return read.filter(([found]) => found).map(([, cue]) => cue);
+}
+
+/**
+ * The cues of his words (and whether he comes back after a day or more away); `natural` (`SHANNON_NATURAL_TALK`): the cues of play as
+ * well, unless his words hurt or are serious.
+ */
+export function cuesOfWords(words: string, options: { returning?: boolean; natural?: boolean } = {}): SpaceCue[] {
   const text = words.trim();
   const cues: SpaceCue[] = options.returning ? ['returning'] : [];
   if (!text) return cues;
   const read: [boolean, SpaceCue][] = [[otherAiIn(text), 'other_ai'], [LEAVING.test(text), 'leaving'], [SERIOUS.test(text), 'serious'],
     [tenderIn(text), 'tender']];
-  return [...new Set([...cues, ...hurtCues(text), ...kindCues(text), ...read.filter(([found]) => found).map(([, cue]) => cue)])];
+  const hurt = hurtCues(text);
+  const found = [...cues, ...hurt, ...kindCues(text), ...read.filter(([found]) => found).map(([, cue]) => cue)];
+  const play = options.natural && !found.includes('insult') && !found.includes('serious') ? playCues(text, utteranceTags(text)) : [];
+  return [...new Set([...found, ...play])];
 }
 
 /** The cues of a recorded event: his words' (recorded on the event), a touch's stance, a comment's kind. */

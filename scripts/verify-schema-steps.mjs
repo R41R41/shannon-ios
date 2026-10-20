@@ -51,6 +51,8 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   // The shadow of her fast layer (ADR-0013 stage 2), made when SHANNON_CORE_AFFECT first opens its store.
   'emotion/005_feeling_shadow': '314d33b616f087a45219f75637ddd480aa15bdcaade1d830ab1130e7996ee5b2',
   'emotion/006_feeling_days': '27736c122507ed4e21734c7831dbb340630702d23a4cbe35dc9d97081efefb55',
+  // 2026-10-20: her rewritten drafts, made when SHANNON_NATURAL_TALK first opens their store.
+  'emotion/007_reply_drafts': 'f1566b8c0014345f439840bb5e87d2d18057dcefff903f6135be449e5efeea69',
 });
 
 /** The slot rows each limit-writing step leaves (S3 review L5): `pool:max` and `class:pool:max`, sorted. */
@@ -101,6 +103,8 @@ export const S3_ADDITIONS = Object.freeze({
     'shannon_feeling_shadow',
     // Her closed days (emotion/006, ADR-0013 stage 3), made when one of the stage-3 switches first opens their store.
     'shannon_feeling_days',
+    // Her rewritten drafts (emotion/007, 2026-10-20), made when SHANNON_NATURAL_TALK first opens their store.
+    'shannon_reply_drafts',
   ]),
 });
 

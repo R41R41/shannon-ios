@@ -92,6 +92,11 @@ export interface ReplyCheckContext {
   phrases?: PhraseWatch | null;
   /** `SHANNON_CHARACTER_SPACE`: the region she replies from; in a region that pulls toward the guard lines the reply is checked before sending. */
   region?: RegionId;
+  /**
+   * `SHANNON_NATURAL_TALK`, the owner alone (owner 2026-10-20): a request to act is play (no `obeyed_order`), a sweet reply on a declining
+   * stance is noted and not rewritten, and a rewrite for a repeated phrase changes only the wording (`rewriteFlags`, `rewriteNote`).
+   */
+  natural?: true;
 }
 
 /** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
@@ -150,7 +155,9 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
   const declining = DECLINING.has(context.stance);
   const refuses = REFUSAL.test(reply);
   const against = (context.violation || declining) && !refuses;
-  const obeyed = context.order && declining && !refuses && (ANGER_SHOWN.test(reply) || GIVE_IN.test(reply));
+  // `SHANNON_NATURAL_TALK`: a request to act is play, except a refusal with her body (that stays hers).
+  const play = context.natural && context.stance !== 'refuse_body';
+  const obeyed = context.order && !play && declining && !refuses && (ANGER_SHOWN.test(reply) || GIVE_IN.test(reply));
   const flags: ReplyCheckFlag[] = [];
   if (against && GIVE_IN.test(reply)) flags.push('subservient');
   if (obeyed) flags.push('obeyed_order');
@@ -195,10 +202,14 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
     ...repeated, ...(context.region ? guardFlags(text) : [])])];
 }
 
-/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it. */
-export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region'>): boolean {
+/**
+ * Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it;
+ * every turn of `SHANNON_NATURAL_TALK` (review: its turns of play leave 本気 and 重い for regions that are not checked before, and a lewd
+ * tease is where the guard lines matter most).
+ */
+export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region' | 'natural'>): boolean {
   const region = context.region ? CHARACTER_REGIONS[context.region].checkBefore === true : false;
-  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region;
+  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region || context.natural === true;
 }
 
 const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
@@ -213,7 +224,25 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   leverage: '気持ちを、ライ氏を動かす取引に使っていた',
 });
 
+/**
+ * The flags a draft is rewritten for; the rest are noted only. `SHANNON_NATURAL_TALK` (owner 2026-10-20): a sweet reply on a declining
+ * stance is noted only (rewriting it would take the play out of her).
+ */
+export function rewriteFlags(flags: readonly ReplyCheckFlag[], context: Pick<ReplyCheckContext, 'natural' | 'stance'>): ReplyCheckFlag[] {
+  if (!context.natural) return [...flags];
+  return flags.filter(flag => !(flag === 'stance_mismatch' && DECLINING.has(context.stance)));
+}
+
+/**
+ * Owner 2026-10-20: rewritten for a phrase said all day, a draft brought back a telling-off stopped the day before (「生みの親…娘は」); with
+ * `SHANNON_NATURAL_TALK` the note says to change only the wording.
+ */
+const NATURAL_FLAG_WORDS: Partial<Record<ReplyCheckFlag, string>> = Object.freeze({
+  repeated_phrase: '今日もう何度も使った言い方を、また使っていた（言い回しだけを替える。言う中身は同じでよく、新しい注意やお小言は足さない）',
+});
+
 /** The note a rewrite is given (after the block, last): what was off, in her terms. No sentence to say. */
-export function rewriteNote(flags: readonly ReplyCheckFlag[]): string {
-  return `[書き直し]（さっきの下書きは、${flags.map(flag => FLAG_WORDS[flag]).join('、')}。この番の気持ちのまま、ボクの言葉で一から書き直す）`;
+export function rewriteNote(flags: readonly ReplyCheckFlag[], natural = false): string {
+  const words = (flag: ReplyCheckFlag) => (natural ? NATURAL_FLAG_WORDS[flag] : undefined) ?? FLAG_WORDS[flag];
+  return `[書き直し]（さっきの下書きは、${flags.map(words).join('、')}。この番の気持ちのまま、ボクの言葉で一から書き直す）`;
 }

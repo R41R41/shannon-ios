@@ -312,6 +312,10 @@ export const SWITCHES = [
     doc: 'Owner 2026-10-20: the owner holds her 好意 at its top; 本気 and 重い open with him alone (never reached by the value).',
   },
   {
+    name: 'SHANNON_NATURAL_TALK', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: ['SHANNON_CHARACTER_SPACE'],
+    doc: 'Owner 2026-10-20: with the owner alone she talks, not reports: plays along, short replies, touch facts only when they matter.',
+  },
+  {
     name: 'SHANNON_VOICE_AUDIO_TAGS', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: [], setup: 'on',
     doc: 'Owner 2026-10-20: her spoken replies may carry ElevenLabs audio tags ([whispers] [laughs] [sighs]…) for the voice only; off, no tag line.',
   },

@@ -85,9 +85,39 @@ function rewritten(text: string, replace: (inner: string, kind: Kind, allowedCou
   return result.replace(/[ \t]{2,}/gu, ' ').trim();
 }
 
+/** Kana or kanji. */
+const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]/u;
+/** A run of Latin words, as an English sentence would be (a bracketed tag is not part of one). */
+const LATIN_RUN = /[A-Za-z][A-Za-z0-9 ,;:'’-]*[A-Za-z0-9][.!?]?/gu;
+/** Words a sentence has and a name or a product hardly does. */
+const SENTENCE_WORD = /\b(?:the|an?|is|are|was|it|it's|i|i'm|not|to|of|and|you|if|that|this|do|don't|doesn't|be|going|just)\b/iu;
+
+/** A reply that speaks of English (he asked for it): its English stays. */
+const ENGLISH_ASKED = /英語|英文|English/iu;
+/** A quoted or bracketed span (a title, a song, his words): never dropped. */
+const QUOTED = /(「[^」]*」|『[^』]*』|“[^”]*”|"[^"]*"|（[^）]*）|\([^)]*\))/u;
+
+/** How much of a text is Japanese and how much Latin letters (a reply mostly in Japanese is one with an English sentence in it). */
+export function scriptCounts(text: string): { japanese: number; latin: number } {
+  return { japanese: (text.match(new RegExp(JAPANESE.source, 'gu')) ?? []).length, latin: (text.match(/[A-Za-z]/gu) ?? []).length };
+}
+
+/**
+ * An English sentence in a Japanese spoken reply is not hers (owner 2026-10-20 08:03: 「Doesn't matter if it's a joke; I'm not going to make a
+ * big deal of it right now.」 said and shown in the middle of a Japanese reply; the spoken-delivery lines are English): a run of five
+ * Latin words or more with a word only a sentence has is dropped, outside quotes and brackets, where the reply (`around`, the text by
+ * default) is mostly Japanese (a Japanese character for every four Latin letters or more) and does not speak of English (he asked for it).
+ */
+export function withoutStrayEnglish(text: string, around: { japanese: number; latin: number } = scriptCounts(text)): string {
+  if (!around.japanese || around.japanese * 4 < around.latin || ENGLISH_ASKED.test(text) || !/[A-Za-z]/u.test(text)) return text;
+  const kept = text.split(QUOTED).map(part => (QUOTED.test(part) ? part
+    : part.replace(LATIN_RUN, run => (run.trim().split(/\s+/u).length >= 5 && SENTENCE_WORD.test(run) ? '' : run)))).join('');
+  return kept === text ? text : kept.replace(/[ \t]{2,}/gu, ' ').trim();
+}
+
 /** What is shown and kept of her words: no audio tag and no made-up direction; a bracketed word stays as written. */
 export function displayedVoiceText(text: string): string {
-  return rewritten(text, (inner, kind) => (kind === 'word' ? `[${inner}]` : null));
+  return rewritten(withoutStrayEnglish(text), (inner, kind) => (kind === 'word' ? `[${inner}]` : null));
 }
 
 /**
@@ -95,7 +125,7 @@ export function displayedVoiceText(text: string): string {
  * bracketed word without its brackets (a bracket would make it a direction).
  */
 export function elevenVoiceText(text: string): string {
-  return rewritten(text, (inner, kind, count) => kind === 'word' ? inner
+  return rewritten(withoutStrayEnglish(text), (inner, kind, count) => kind === 'word' ? inner
     : kind === 'allowed' && count <= MAXIMUM_INLINE_TAGS ? `[${canonical(inner)}]` : null);
 }
 
@@ -138,7 +168,7 @@ const GEMINI_DIRECTIONS: Readonly<Record<VoiceAudioTag, string>> = Object.freeze
 /** The text and style for the Gemini voice: no tag in the text; what they asked for, in Japanese, after the style (500 characters at most). */
 export function geminiVoiceRequest(text: string, style: string | undefined): { text: string; style: string | undefined } {
   const directions = [...new Set(voiceAudioTagsIn(text).map(tag => GEMINI_DIRECTIONS[tag]))].join('');
-  const spoken = rewritten(text, (inner, kind) => (kind === 'word' ? inner : null));
+  const spoken = rewritten(withoutStrayEnglish(text), (inner, kind) => (kind === 'word' ? inner : null));
   if (!directions) return { text: spoken, style };
   return { text: spoken, style: `${style ? `${style} ` : ''}${directions}`.slice(0, 500) };
 }
@@ -149,8 +179,14 @@ export function geminiVoiceRequest(text: string, style: string | undefined): { t
  */
 export class VoiceSegmentTags {
   private held = '';
+  /** The reply so far, as Japanese characters and Latin letters (a segment is judged with the reply around it). */
+  private readonly seen = { japanese: 0, latin: 0 };
 
-  take(segment: string): { text: string; voiceText?: string } | null {
+  take(said: string): { text: string; voiceText?: string } | null {
+    const counts = scriptCounts(said);
+    this.seen.japanese += counts.japanese;
+    this.seen.latin += counts.latin;
+    const segment = withoutStrayEnglish(said, this.seen);
     const text = displayedVoiceText(segment);
     const voice = `${this.held}${segment}`;
     if (!text) {
@@ -177,4 +213,6 @@ export const VOICE_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
   + 'when drowsy, [laughs] or [giggles] when something is really funny, [sighs] for real relief or resignation, [gasps] for real surprise.',
   '- The tags are never shown or read as words. Do not write any other bracketed direction, and do not also write the sound as text '
   + 'right beside its tag (no 「（笑）」 next to [laughs]).',
+  // Owner 2026-10-20 08:03: an English sentence was spoken in a Japanese reply (`withoutStrayEnglish` drops one that still comes).
+  '- Everything you say is Japanese: the tags are the only English in a reply. Never write a sentence in English unless he asks for English.',
 ]);
