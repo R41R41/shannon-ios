@@ -6,6 +6,7 @@ import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/to
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import { operatorMinecraftRequests, type OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
+import type { VoiceMinecraftIntentResult, VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
@@ -34,7 +35,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   /** Where the content-free lines go (`console.log` when absent). */
   log?(line: string): void;
 }): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
-  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests } {
+  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort } {
   const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -61,7 +62,60 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
     return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
   };
+  /**
+   * An owner's spoken request in a Discord voice channel (dc-voice, `platformVoice.ts`). The platform policy has already said that the
+   * verified owner spoke. A request while one of his is under way is a message to that task, as game chat's is, and a stop stops the
+   * body's tasks, whoever else is in the channel; a new task is made only when he is alone there (`allowNew`).
+   */
+  const voice: VoiceMinecraftPort = {
+    state() {
+      const bodies = parts.control.available();
+      if (bodies.length !== 1) return { connected: false, running: null };
+      const open = openRequest(bodies[0]!);
+      return { connected: true, running: open ? { id: open.id, goal: open.goal } : null };
+    },
+    async intent(input) {
+      const { intent, scopeKey } = input;
+      if (intent.kind === 'none') return { delivered: false };
+      const fail = (reason: NonNullable<VoiceMinecraftIntentResult['reason']>): VoiceMinecraftIntentResult => {
+        log(`Shannon Minecraft voice intent refused reason=${reason} kind=${intent.kind}`);
+        return { delivered: false, reason };
+      };
+      if (scopeKey !== parts.ownerScope) return fail('not_owner_scope');
+      if (intent.kind === 'stop') {
+        for (const task of bound()) await parts.stop(task.id, 'owner_voice_stop');
+        return { delivered: true, as: 'stop' };
+      }
+      const bodies = parts.control.available();
+      if (bodies.length !== 1) return fail('body_unavailable');
+      if (!input.experienceId) return fail('no_turn');
+      if (!parts.sourceVisible(input.experienceId)) return fail('turn_not_visible');
+      const bodyId = bodies[0]!;
+      const running = openRequest(bodyId);
+      if (running) {
+        try {
+          parts.runtime.observeExternal(scopeKey, running.id, { eventId: `dcv:${input.requestId}`, experienceIds: [input.experienceId], observedAt: input.observedAt,
+            text: `Discordの通話での本人の言葉（いまのタスクへ）: ${intent.goal}` });
+          log(`Shannon Minecraft voice intent delivered task=${running.id} as=message`);
+          return { delivered: true, as: 'message', taskId: running.id };
+        } catch (error) {
+          // It ended meanwhile (`FCA_TARGET_FINISHED`): a new task if he is alone, as game chat does. A changed retry still conflicts.
+          if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
+        }
+      }
+      if (!input.allowNew) return fail('others_present');
+      const experienceId = input.experienceId;
+      return parts.atomic(() => {
+        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `dcv:${input.requestId}`, { sources: 'asking' });
+        parts.runtime.observeExternal(scopeKey, task.id, { eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
+          text: `Discordの通話での本人の依頼: ${intent.goal}` });
+        if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
+        return { delivered: true, as: 'task', taskId: task.id };
+      });
+    },
+  };
   return {
+    voice,
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();

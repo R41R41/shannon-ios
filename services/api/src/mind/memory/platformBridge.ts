@@ -97,6 +97,11 @@ export interface PlatformAudiencePolicy {
   speaker?: FeelingSpeaker;
 }
 
+/** What the caller knows beyond the request: a voice channel with anyone but the owner in it (`PlatformBridgeService.audiencePolicy`). */
+export interface PlatformAudienceOptions {
+  sharedPresence?: boolean;
+}
+
 export class PlatformBridgeError extends Error {
   constructor(
     readonly code: 'BAD_REQUEST' | 'PLATFORM_CONVERSATION_DENIED' | 'PLATFORM_ACTOR_DENIED' | 'PLATFORM_TURN_CONFLICT'
@@ -235,7 +240,7 @@ export class PlatformBridgeService {
    * also used by her Minecraft body's turn through the conversation kernel (`platformSurface.ts`). Refuses as
    * `context` does.
    */
-  audiencePolicy(value: unknown): PlatformAudiencePolicy {
+  audiencePolicy(value: unknown, options: PlatformAudienceOptions = {}): PlatformAudiencePolicy {
     const request = validatedPlatformContext(value);
     const binding = this.boundConversation(request);
     const scopeKey = this.configuration.scopeKey;
@@ -245,10 +250,14 @@ export class PlatformBridgeService {
       ? this.people.person(scopeKey, request.platform, request.sourceUserId) : null;
     if (!ownerWrote && (!request.conversationKind || !this.people || !this.peopleEnabled())) throw actorDenied();
     const threadId = platformBridgeThreadId(request.platform, request.conversationId);
+    // `sharedPresence` (a voice channel with anyone but the owner in it): what a conversation bound `owner-private` is for the owner
+    // alone is, while others are there, an audience of the conversation as a whole, exactly as a shared conversation would be.
+    const sharedPresence = options.sharedPresence === true;
+    const memberAudience = () => (sharedPresence ? groupAudience(threadId) : platformAudience(binding, request));
     // A DM with a friend is that friend alone; any other conversation is one audience as a whole.
-    const present = ownerWrote ? platformAudience(binding, request) : this.people!.audience(request.conversationKind!, threadId, friend?.id);
+    const present = ownerWrote ? memberAudience() : this.people!.audience(request.conversationKind!, threadId, friend?.id);
     // The owner's private conversation is never projected for anyone else.
-    if (!ownerWrote && platformAudience(binding, request).kind === 'owner') throw actorDenied();
+    if (!ownerWrote && !sharedPresence && platformAudience(binding, request).kind === 'owner') throw actorDenied();
     const gate = new DisclosureGate(present, snapshot, this.conversationStore, scopeKey);
     // Owner decision 2026-10-06 (S6): a turn anyone else wrote, in a DM or a shared conversation, is given only what may
     // be shown to anyone; nobody but the owner himself releases a protected line, so none is given.
@@ -262,6 +271,11 @@ export class PlatformBridgeService {
       personIds: userIds.flatMap(id => this.people!.person(scopeKey, request.platform, id)?.id ?? []), present, at: this.now() }) : [];
     const speaker = feelingSpeakerOf(present, ownerWrote, friend?.id ?? null, `${request.platform}:${request.sourceUserId}`, threadId);
     return { binding, threadId, ownerWrote, present, ownerPresent, gate, snapshot, peopleLines, impressionLines, ...(speaker ? { speaker } : {}) };
+  }
+
+  /** The binding of a conversation, or null when it is not allowlisted (the voice route reads who the owner is before it decides the audience). */
+  bindingOf(request: { platform: ShannonPlatform; conversationId: string }): PlatformBridgeBinding | null {
+    return bindingFor(this.configuration, request.platform, request.conversationId) ?? null;
   }
 
   private boundConversation(request: { platform: ShannonPlatform; conversationId: string }): PlatformBridgeBinding {

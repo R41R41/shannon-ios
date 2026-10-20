@@ -20,6 +20,8 @@ const CLOSERS = '」』）)】]〉》”';
 /** Taken into the sentence when they directly follow its terminator. */
 const AFTER_TERMINATOR = `${TERMINATORS}${CLOSERS}"'`;
 const SOFT_BREAKS = '、，,;；:：';
+/** Where a voice reply may be cut inside a sentence (`ChatSentenceSplitterOptions.clauseCharacters`). */
+const CLAUSE_BREAKS = '、，';
 const INLINE_CODE_MAXIMUM_LENGTH = 80;
 const URL_PREFIXES = ['https://', 'http://'] as const;
 /** Printable ASCII except space, `"`, `<` and `>`; a backtick also ends a URL. */
@@ -34,9 +36,19 @@ interface ScanState {
 
 interface Cut { end: number; state: ScanState }
 
+export interface ChatSentenceSplitterOptions {
+  /**
+   * A voice channel's reply is cut at a 「、」 once the sentence so far is this many UTF-16 units long, so the first words reach the
+   * speaker before the sentence is finished (dc-voice). Absent: a sentence ends only at a terminator, as for a reader.
+   */
+  clauseCharacters?: number;
+}
+
 export class ChatSentenceSplitter {
   private pending = '';
   private state: ScanState = { depth: 0, fenced: false };
+
+  constructor(private readonly options: ChatSentenceSplitterOptions = {}) {}
 
   append(delta: string): string[] {
     this.pending += delta;
@@ -53,7 +65,7 @@ export class ChatSentenceSplitter {
   private drain(final: boolean): string[] {
     const sentences: string[] = [];
     while (this.pending) {
-      const cut = nextCut(this.pending, this.state, final);
+      const cut = nextCut(this.pending, this.state, final, this.options.clauseCharacters ?? 0);
       if (!cut) break;
       sentences.push(this.pending.slice(0, cut.end));
       this.pending = this.pending.slice(cut.end);
@@ -64,12 +76,12 @@ export class ChatSentenceSplitter {
 }
 
 /** The sentences of a complete text. `splitChatSentences(text).join('') === text`. */
-export function splitChatSentences(text: string): string[] {
-  const splitter = new ChatSentenceSplitter();
+export function splitChatSentences(text: string, options?: ChatSentenceSplitterOptions): string[] {
+  const splitter = new ChatSentenceSplitter(options);
   return [...splitter.append(text), ...splitter.flush()];
 }
 
-function nextCut(text: string, start: ScanState, final: boolean): Cut | null {
+function nextCut(text: string, start: ScanState, final: boolean, clause = 0): Cut | null {
   const length = text.length;
   const limit = CHAT_SENTENCE_MAXIMUM_LENGTH;
   let depth = start.depth;
@@ -153,6 +165,11 @@ function nextCut(text: string, start: ScanState, final: boolean): Cut | null {
       end = whitespaceEnd(text, end);
       if (end === length && !final) return null;
       return { end, state: { depth: 0, fenced: false } };
+    }
+    if (clause > 0 && CLAUSE_BREAKS.includes(character) && index + 1 >= clause) {
+      const end = whitespaceEnd(text, index + 1);
+      if (end === length && !final) return null;
+      return { end, state: { depth, fenced } };
     }
     if (softBreak(character)) soft = { end: index + 1, state: before };
     index += 1;

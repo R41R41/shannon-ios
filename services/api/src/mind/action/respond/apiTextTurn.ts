@@ -88,6 +88,12 @@ export interface TextTurnSurface {
   threadTitle: string;
   offerMinecraftIntent?: boolean;
   /**
+   * Her words are heard, not read (a Discord voice channel, `platformVoice.ts`): the text register (a typed reply's form and pacing)
+   * does not apply, and the reply's sentences may go out while the model writes whoever is present (`generateChatTurn`): the
+   * platform audience's reply is shown as it is, so nothing is lost by sending it early.
+   */
+  voice?: boolean;
+  /**
    * Her `minecraft.*` tools are offered by the app's owner-alone rule (a platform conversation bound `owner-private`).
    * Without it a surface is not offered them: game chat asks her body through the turn's intent.
    */
