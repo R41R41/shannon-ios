@@ -44,6 +44,8 @@ class SimBody {
   private placed = 0;
   private gravelDigs = 0;
   portal: string | null = null;
+  /** The body's map of the world (`mapSummary`). */
+  map = '';
   /** Each look is a new frame (the body's 200 ms beat). */
   private frames = 0;
 
@@ -85,7 +87,7 @@ class SimBody {
       connected: true, facts: { danger: false },
       state: { world: { position: { x: 0, y: this.y, z: 0 }, dimension: this.dimension, health: 20, food: Math.round(this.food), inventory, jobs, nearbyNeeds: needs,
         worn: this.worn.length ? this.worn.map((name, i) => `${['頭', '胴', '脚', '足'][i] ?? '手'}: ${name}`).join('、') : '頭: なし',
-        nearbyThreats: [], margin: { darkInSeconds: 300 } } } as never };
+        nearbyThreats: [], margin: { darkInSeconds: 300 }, mapSummary: this.map } } as never };
   }
 
   /** When each of the owner's milestones was first reached, in seconds from the start. */
@@ -306,6 +308,25 @@ describe('Minecraft procedures (mb-arch)', () => {
     expect(result.text).toContain('最後まで着いた');
     expect(body.pack.get('obsidian')).toBe(10);
     expect(body.calls).toEqual(['mc.find-blocks', 'mc.move-to', 'mc.use-item-on-block']);
+  });
+  it('walks to the diamonds the body\'s map remembers when none are in sight, and looks again from there (mb-body map)', async () => {
+    const body = new SimBody();
+    for (const [name, count] of [['iron_pickaxe', 1], ['stick', 4], ['crafting_table', 1]] as const) body.add(name, count);
+    body.y = -58;
+    body.map = '鉱石: coal_ore 12m 北 (5,-50,-12)、diamond_ore 150m 東 (150,-58,3)\n溶岩の溜まり 1 か所: 40m 南 (0,-58,40)';
+    let walked = false;
+    const dig = body.tool_mine_block.bind(body);
+    body.tool_mine_block = (input: Input) => walked ? dig(input) : { ok: false, text: '見つかりません', failure: 'failed', bodyFailure: 'target_not_found', retryable: true } as ToolResult;
+    const walk = body.tool_move_to.bind(body);
+    body.tool_move_to = (input?: Input) => {
+      expect(input).toMatchObject({ x: 150, y: -58, z: 3 });
+      walked = true;
+      return walk();
+    };
+    const { call } = setup(body);
+    const result = await call({ milestone: 'ダイヤ' });
+    expect(result.text).toContain('最後まで着いた');
+    expect(body.calls.filter(name => name === 'mc.mine-block')).toHaveLength(4);
   });
   it('refuses a milestone it has no procedure for, and a through before the start', async () => {
     const { call } = setup(new SimBody());

@@ -1,6 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
-import { block, carried, cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { block, carried, cellKey, cellsInText, inPack, mapPlaces, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { craft, doing, fromFirstCell, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
 
 /**
@@ -27,13 +27,35 @@ export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMem
     return doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる', expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` });
   }
   // The body finds ores in the whole loaded world (its view distance), hidden ones too, and digs its way there: a wider look, not a tunnel.
+  const moves = (memory.notes.get('diamond:moves') as number | undefined) ?? 0;
   for (const radius of [32, 64, 128]) {
-    const key = `diamond:${have}:${radius}`;
+    const key = `diamond:${have}:${radius}:${moves}`;
     if (memory.lastFailure(key) === 'target_not_found') continue;
     return doing({ tool: 'mc.mine-block', input: { blockName: 'diamond_ore', count: 3 - have, searchRadius: radius }, why: 'ダイヤを掘る',
       expectMs: 90_000 + radius * 1_000, key });
   }
-  return stuck('Y-58 の周り 128m にダイヤが見えない');
+  return towardMapped(facts, memory, { head: '鉱石', name: /diamond/u, note: 'diamond', why: '地図で覚えているダイヤの所へ行く' })
+    ?? stuck('Y-58 の周り 128m にダイヤが見えず、地図にも覚えていない');
+}
+
+/**
+ * A place the body's map remembers (mb-body's `mapSummary`) and the procedure has not gone to yet, walked to; the procedure looks again
+ * from there (`<note>:moves` counts the walks, so the next looks are new work). Null when the map has none left.
+ */
+function towardMapped(facts: MinecraftProcedureFacts, memory: ProcedureMemory,
+  place: { head: string; name?: RegExp; note: string; why: string }): McMove | null {
+  const visited = (memory.notes.get(`${place.note}:visited`) as Set<string> | undefined) ?? new Set<string>();
+  memory.notes.set(`${place.note}:visited`, visited);
+  const cell = mapPlaces(facts, place.head, place.name).find(item => !visited.has(cellKey(item)));
+  if (!cell) return null;
+  visited.add(cellKey(cell));
+  const arrived = () => {
+    memory.notes.set(`${place.note}:moves`, ((memory.notes.get(`${place.note}:moves`) as number | undefined) ?? 0) + 1);
+    memory.notes.delete(`${place.note}:none`);
+    return null;
+  };
+  return doing({ tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 4 }, why: place.why, expectMs: 120_000,
+    key: `${place.note}:map:${cellKey(cell)}`, then: arrived });
 }
 
 /** Water in the bucket: the nearest water source found, walked to, scooped. */
@@ -71,7 +93,7 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch:
       then: () => pour, chain: 3 };
   };
   return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 32, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
-    key: `obsidian:${count}`, then: pick, chain: 4 });
+    key: `obsidian:${count}:${memory.notes.get('lava:moves') ?? 0}`, then: pick, chain: 4 });
 }
 
 /** 「黒曜石」: ten obsidian, by the body's batch tool when it has one, else one lava source at a time. */
@@ -82,7 +104,10 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
     return memory.notes.has('water:none') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
   }
   const count = carried(facts, OBSIDIAN);
-  if (memory.notes.has('lava:none')) return stuck('32m 以内に使える溶岩の溜まりが見えない');
+  if (memory.notes.has('lava:none')) {
+    return towardMapped(facts, memory, { head: '溶岩の溜まり', note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く' })
+      ?? stuck('32m 以内に使える溶岩の溜まりが見えず、地図にも覚えていない');
+  }
   return castOne(facts, memory, batchObsidian ? 10 - count : null);
 }
 
