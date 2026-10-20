@@ -24,6 +24,7 @@ import type { PlatformBridgeRouteDependencies } from '../surfaces/platform/serve
 import { PlatformVoiceService, platformVoiceEnabled } from '../surfaces/platform/platformVoice.js';
 import type { PlatformVoiceRoutes } from '../surfaces/platform/platformVoiceRoute.js';
 import { voiceMouth } from '../surfaces/platform/voiceMouth.js';
+import { voiceRooms } from '../surfaces/platform/voiceRoom.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
 import { createConfiguredElevenSpeechGateway } from '../infra/models/elevenSpeech.js';
 import { splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
@@ -60,7 +61,7 @@ export function createConfiguredPlatformBridgeRoute(
   const voice: PlatformVoiceRoutes | null = replies && voiceTurns ? {
     service: new PlatformVoiceService({
       scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns: voiceTurns, now,
-      chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), environment: () => environment,
+      chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), environment: () => environment, rooms: voiceRooms,
       ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
     }),
     mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,

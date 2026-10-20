@@ -105,3 +105,6 @@ export class VoiceRooms {
 }
 
 export { clip as clipVoiceText };
+
+/** The rooms of this server: the voice routes and head-side callers (`voiceMouth.setSituation`) share them. */
+export const voiceRooms = new VoiceRooms();

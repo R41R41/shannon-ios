@@ -49,6 +49,8 @@ export interface VoiceTurnRequest {
   heard: HeardLine[];
   followsShannonTurn: boolean;
   speakingNow: boolean;
+  /** The filler the body already began to play (it may start one without waiting for the decision line); she goes on from it. */
+  fillerId?: string;
   situation?: string;
   sttMs?: number;
   utteranceMs?: number;
@@ -73,7 +75,7 @@ export interface StoredVoiceTurn {
 
 const REQUEST_FIELDS = new Set([
   'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'userMessage', 'observedAt',
-  'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'situation', 'sttMs', 'utteranceMs',
+  'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
 ]);
 
 export const identifier = (value: unknown, maximum: number): value is string =>
@@ -143,9 +145,14 @@ function validatedIdentity(body: Record<string, unknown>): void {
   if (!bodyText(body.sourceDisplayName, 80)) throw badRequest('sourceDisplayName is invalid.');
   if (!bodyText(body.userMessage, PLATFORM_VOICE_LIMITS.messageCharacters)) throw badRequest('userMessage is invalid.');
   if (typeof body.observedAt !== 'string' || !Number.isFinite(Date.parse(body.observedAt))) throw badRequest('observedAt is invalid.');
+  validatedFlags(body);
+}
+
+function validatedFlags(body: Record<string, unknown>): void {
   for (const flag of ['followsShannonTurn', 'speakingNow'] as const) {
     if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw badRequest(`${flag} is invalid.`);
   }
+  if (body.fillerId !== undefined && !identifier(body.fillerId, 40)) throw badRequest('fillerId is invalid.');
 }
 
 export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
@@ -165,6 +172,7 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     heard: validatedHeard(body.heard),
     followsShannonTurn: body.followsShannonTurn === true,
     speakingNow: body.speakingNow === true,
+    ...(body.fillerId !== undefined ? { fillerId: trimmed('fillerId') } : {}),
     ...validatedExtras(body),
   };
 }

@@ -50,6 +50,8 @@ class Model implements ShannonChatModel {
   reply = 'うん、いいよ。';
   intent: { kind: 'none' | 'task' | 'stop'; goal: string } | null = null;
   streams = true;
+  /** Holds the model after this many characters until the promise settles (the first words are out, the rest is not written yet). */
+  pause: { after: number; until: Promise<void> } | null = null;
   private result(): ShannonChatModelResult {
     return { mode: this.mode, model: this.model, reply: this.reply, ...(this.intent ? { minecraftIntent: this.intent } : {}) };
   }
@@ -60,7 +62,10 @@ class Model implements ShannonChatModel {
   async generateStreaming(request: ShannonChatModelRequest, onReplyText: (text: string) => void | Promise<void>): Promise<ShannonChatModelResult> {
     this.requests.push(request);
     if (!this.streams) return this.result();
-    for (let at = 0; at < this.reply.length; at += 3) await onReplyText(this.reply.slice(at, at + 3));
+    for (let at = 0; at < this.reply.length; at += 3) {
+      if (this.pause && at >= this.pause.after) await this.pause.until;
+      await onReplyText(this.reply.slice(at, at + 3));
+    }
     return this.result();
   }
 }
@@ -259,6 +264,54 @@ describe('POST /v1/platform/voice/turn', () => {
   });
 });
 
+describe('what the turn is told besides the words', () => {
+  it('sends her first words while the model is still writing, with others in the channel too', async () => {
+    const { service, model, now, close } = harness();
+    model.reply = 'えっと、いまは鉄を探してるところだよ、洞窟の奥まで来たからもう少しかな。';
+    let release!: () => void;
+    model.pause = { after: 30, until: new Promise<void>(resolve => { release = resolve; }) };
+    const lines: VoiceTurnLine[] = [];
+    const turn = service.turn({ platform: 'discord', requestId: 'early', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+      userMessage: 'いまどんな感じ？', observedAt: now(), participants: [OWNER, FRIEND] }, line => lines.push(line));
+    const startedAt = Date.now();
+    while (!lines.some(line => line.type === 'sentence') && Date.now() - startedAt < 2_000) await new Promise(resolve => setTimeout(resolve, 5));
+    expect(lines.some(line => line.type === 'sentence')).toBe(true);
+    expect(lines.some(line => line.type === 'done')).toBe(false);
+    release();
+    await turn;
+    expect(lines.at(-1)).toMatchObject({ type: 'done' });
+    expect(sentences(lines).map(line => line.text).join('')).toBe(model.reply);
+    await close();
+  });
+
+  it('goes on from the filler the body began, and ignores one it does not know', async () => {
+    const { say, model, close } = harness();
+    const begun = await say('マイクラのエンドラってどうやって倒すのがいいと思う？', { fillerId: 'sou' });
+    expect(begun[0]).toMatchObject({ type: 'decision', filler: { id: 'sou', text: 'そうだねぇ。' } });
+    expect(promptOf(model.requests[0]!)).toContain('「そうだねぇ。」と声に出している');
+    const unknown = await say('マイクラのエンドラってどうやって倒すのがいいと思う？', { fillerId: 'nothing-like-it' });
+    expect((unknown[0] as Extract<VoiceTurnLine, { type: 'decision' }>).filler?.id).not.toBe('nothing-like-it');
+    await close();
+  });
+
+  it('adds what the body is doing to every reply, and what the owner asked of it only to the owner', async () => {
+    const { service, say, model, body, close } = harness();
+    body.running = { id: 'task-1', goal: 'エンダードラゴンを倒す' };
+    service.rooms.setSituation('default', '洞窟を下りている。体力 14/20。');
+    await say('シャノン、いま何してる？', { participants: [OWNER, FRIEND] });
+    let prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('洞窟を下りている。体力 14/20。');
+    expect(prompt).toContain('「エンダードラゴンを倒す」をしている');
+    await say('シャノン、いま何してるの？', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    prompt = promptOf(model.requests[1]!);
+    expect(prompt).toContain('洞窟を下りている。体力 14/20。');
+    expect(prompt).not.toContain('エンダードラゴンを倒す');
+    await say('シャノン、今の様子は？', { participants: [OWNER, FRIEND], situation: '鉄の鉱石の前にいる。' });
+    expect(promptOf(model.requests[2]!)).toContain('鉄の鉱石の前にいる。');
+    expect(promptOf(model.requests[2]!)).not.toContain('洞窟を下りている');
+    await close();
+  });
+});
 describe('the owner\'s spoken request for her Minecraft body', () => {
   it('is offered the intent field only to the owner with the body connected and others in the channel, and a friend never moves it', async () => {
     const { say, model, body, close } = harness();

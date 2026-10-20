@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { validatedElevenTags } from '../../infra/models/elevenSpeech.js';
+import { voiceRooms, type VoiceRooms } from './voiceRoom.js';
 
 /**
  * Her mouth in a Discord voice channel, as the head's side of it (dc-voice, 2026-10-20; the contract is `dc-speak-interface.md`).
@@ -131,7 +132,15 @@ export class VoiceMouthQueue {
   private lastPoll: number | null = null;
   private waiter: { release(why: Release): void } | null = null;
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(private readonly now: () => number = Date.now, private readonly rooms: VoiceRooms = voiceRooms) {}
+
+  /**
+   * What her Minecraft body is doing, in words, for her talk in the voice channel (`dc-speak-interface.md` §5): the latest is added to
+   * each reply while it is fresh. `conversationKey` is the conversation, or `default` for the one voice channel she is in.
+   */
+  setSituation(conversationKey: string, text: string, ttlMs?: number): void {
+    this.rooms.setSituation(conversationKey, text, ttlMs);
+  }
 
   /** Whether the body took a poll lately: a line sent now has someone to take it. */
   bodyOnline(): boolean {

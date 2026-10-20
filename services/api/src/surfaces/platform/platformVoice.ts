@@ -21,7 +21,7 @@ import {
   FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
-import { selectVoiceFiller, type VoiceFiller } from './voiceFillers.js';
+import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
 import type { VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftState } from './voiceMinecraftPort.js';
 
@@ -275,6 +275,11 @@ export class PlatformVoiceService {
   }
 
   private fillerFor(request: VoiceTurnRequest, address: VoiceAddress): VoiceFiller | null {
+    const begun = request.fillerId ? voiceFillerById(request.fillerId) : null;
+    if (begun) {
+      this.rooms.useFiller(request.conversationId, begun.id);
+      return begun;
+    }
     const wanted = switchOn(this.environment, 'SHANNON_DC_VOICE_FILLER');
     const previous = this.rooms.lastFiller(request.conversationId);
     const filler = wanted ? selectVoiceFiller({ transcript: request.userMessage, reason: address.reason, previous }) : null;
