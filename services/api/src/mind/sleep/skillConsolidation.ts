@@ -223,9 +223,10 @@ export class ShannonSkillConsolidator {
   }
 
   private proposerInput(scopeKey: string, round: number, limits: { create: number; update: number }, opened: ReadonlyMap<string, StoredPattern>,
-    bases: ReturnType<ShannonSkillConsolidator['bases']>): unknown {
-    const pages = this.skills.patterns(scopeKey);
-    const skills = this.skills.store.all(scopeKey);
+    bases: ReturnType<ShannonSkillConsolidator['bases']>, hidden: ReadonlySet<string> = new Set()): unknown {
+    // A page or a skill left out of the night (its sources are not visible, `skillFcaPhase.ts`) is not in the index, the list or the opened pages.
+    const pages = this.skills.patterns(scopeKey).filter(page => !hidden.has(page.patternId));
+    const skills = this.skills.store.all(scopeKey).filter(skill => !hidden.has(skill.skillId));
     return {
       round, rounds: PROPOSER_ROUNDS, limits,
       capacity: { used: skills.length, limit: SKILL_CAPACITY },
@@ -240,13 +241,16 @@ export class ShannonSkillConsolidator {
       }),
       reverted: this.revertedShown(scopeKey).slice(-12)
         .map(entry => ({ target: entry.target, purposes: entry.purposePatternIds, diff: entry.diff.slice(0, 300) })),
-      opened: [...opened.values()].map(page => ({ id: page.patternId, kind: page.kind, title: page.title, body: page.body })),
+      opened: [...opened.values()].filter(page => !hidden.has(page.patternId)).map(page => ({ id: page.patternId, kind: page.kind, title: page.title, body: page.body })),
     };
   }
 
   private applyProposal(answer: ProposerAnswer, scopeKey: string, limits: { create: number; update: number }, check: SkillBodyCheck | null,
-    texts: readonly string[], at: string, reject: (why: SkillRejection) => void, bases: ReturnType<ShannonSkillConsolidator['bases']>): 'created' | 'updated' | 'rejected' {
-    const pages = this.skills.patterns(scopeKey);
+    texts: readonly string[], at: string, reject: (why: SkillRejection) => void, bases: ReturnType<ShannonSkillConsolidator['bases']>,
+    hidden: ReadonlySet<string> = new Set()): 'created' | 'updated' | 'rejected' {
+    // Only what the model was shown can be cited or changed: a page or skill left out of the night is not.
+    if (answer.operation !== 'create' && hidden.has(answer.skillId)) { reject('not_found'); return 'rejected'; }
+    const pages = this.skills.patterns(scopeKey).filter(page => !hidden.has(page.patternId));
       const purposes = answer.purposePatternIds.filter(id => pages.some(page => page.patternId === id));
       if (!purposes.length) { reject('no_purpose'); return 'rejected'; }
       // A skill's evidence is its pages' own evidence (so forgetting reaches it) and the pages themselves.
@@ -279,7 +283,11 @@ export class ShannonSkillConsolidator {
     return this.skills.store.audits(scopeKey).filter(entry => {
       const skill = skills.get(entry.skillId);
       if (entry.status !== 'reverted' || !skill || skill.statusReason === 'source_forgotten' || skill.exportHold === 'withdrawn') return false;
-      try { return pass([...skill.sources, ...entry.purposePatternIds.map(id => `pattern:${id}`)]); } catch { return false; }
+      // The revisions the change is shown from are judged too (their evidence is cited with it), so a night is never withheld by one.
+      try {
+        const evidence = this.skills.store.revisions(scopeKey, entry.skillId).filter(revision => [entry.fromVersion, entry.toVersion].includes(revision.version)).flatMap(revision => revision.evidence);
+        return pass([...skill.sources, ...entry.purposePatternIds.map(id => `pattern:${id}`), ...evidence]);
+      } catch { return false; }
     });
   }
 

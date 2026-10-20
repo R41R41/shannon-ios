@@ -9,8 +9,28 @@ import { failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskEx
  * The old nightly schedule is the authority. The binding never grants owner task privileges. A bound night's job row carries
  * the task's mark (`lease_owner = fca-sleep:<task>`), never a second renewed lease (S7).
  */
-export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = () => new Date().toISOString()) {
+/**
+ * How long a night waits for a body task (Minecraft) to end before it starts anyway: from the time the night became available (03:00),
+ * to 09:00. The night's checks and writes share the API's one thread with the body, whose tools stalled for 3 minutes on 2026-10-21
+ * (Minecraft run 21); the model-free part of the night is not worth that, and a body task that runs through the morning does not hold it for good.
+ */
+export const SLEEP_BODY_DEFER_MS = 6 * 3_600_000;
+/**
+ * The exec states of a task that is working (ready for its next step, in a step, or being stopped). One that waits (for a word of his,
+ * for the body to come back), is paused or has finished is not taking the thread, and does not hold the night back.
+ */
+const WORKING = "('ready','active','stopping')";
+
+export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = () => new Date().toISOString(),
+  options: { /** Whether a body task is working now; its tasks (`fca_body_bindings`) by default. */ bodyWorking?: () => boolean; deferMs?: number; log?: (line: string) => void } = {}) {
   const owner = (taskId: string) => `fca-sleep:${taskId}`;
+  const deferMs = options.deferMs ?? SLEEP_BODY_DEFER_MS, log = options.log ?? ((line: string) => console.warn(line));
+  const bodyWorking = options.bodyWorking ?? (() => {
+    // The table exists once a body has been bound; before that no body task can be working.
+    try { return !!db.prepare(`SELECT 1 FROM fca_body_bindings b JOIN agent_tasks t ON t.task_id=b.task_id WHERE t.scope_key=? AND t.exec_state IN ${WORKING} LIMIT 1`).get(ownerScope); } catch { return false; }
+  });
+  /** The nights already named as postponed (once each, not every second). */
+  const postponed = new Set<string>();
   function ticket(scope: string, jobId: string): TaskSleepTicket | null {
     if (scope !== ownerScope) return null;
     const row = db.prepare('SELECT * FROM background_jobs WHERE job_id=? AND scope_key=?').get(jobId, scope);
@@ -78,8 +98,15 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
     return underWriteLock(db, null, '', () => {
       // A previous night or an in-flight legacy batch keeps its scope-exclusive schedule claim.
       if (scheduleHeld(runtime)) return null;
-      const row = db.prepare("SELECT job_id FROM background_jobs WHERE scope_key=? AND job_kind='sleep-consolidation' AND status='pending' AND attempts=0 AND available_at<=? ORDER BY sequence LIMIT 1").get(ownerScope, now());
+      const row = db.prepare("SELECT job_id, available_at FROM background_jobs WHERE scope_key=? AND job_kind='sleep-consolidation' AND status='pending' AND attempts=0 AND available_at<=? ORDER BY sequence LIMIT 1").get(ownerScope, now());
       if (!row) return null;
+      // A night does not start while a body task is working: it stays pending, and is asked again at the next wake, until the body
+      // ends or `deferMs` has passed since the night became available (then it starts).
+      if (Date.parse(now()) - Date.parse(String(row.available_at)) < deferMs && bodyWorking()) {
+        if (!postponed.has(String(row.job_id))) { postponed.add(String(row.job_id)); log(`Shannon FCA sleep postponed job=${row.job_id} reason=body_task_working`); }
+        return null;
+      }
+      if (postponed.delete(String(row.job_id))) log(`Shannon FCA sleep starting job=${row.job_id} after postponement`);
       const task = runtime.admitSleep(ownerScope, String(row.job_id));
       if (!task) return null;
       const changed = db.prepare("UPDATE background_jobs SET status='leased',lease_owner=?,lease_until=?,attempts=1 WHERE job_id=? AND scope_key=? AND status='pending' AND attempts=0")

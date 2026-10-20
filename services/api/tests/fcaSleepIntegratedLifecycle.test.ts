@@ -234,4 +234,35 @@ describe('sleep joins the existing common FCA lifecycle through the production s
     await f.tick(); expect(analyses).toBe(1);
     expect(status(f, night.jobId)?.status).toBe('leased');
   });
+  describe('a night does not start while a body task is working', () => {
+    const enqueue = (f: ReturnType<typeof integratedFcaHarness>) => {
+      f.store.appendTurn('owner', 'night', message, '覚えました。', '2026-10-06T12:00:00.000Z');
+      expect(f.store.enqueueSleepConsolidations('2026-10-06', '2026-10-06T00:00:00.000Z', '2026-10-07T00:00:00.000Z', f.now())).toBe(1);
+    };
+    it('waits for the working body (its own bindings by default) and starts when the body task has ended', async () => {
+      const f = fixture({ mode: 'local-rules', async analyze() { return proposal; } });
+      enqueue(f); f.advance(1);
+      await f.talk('石を採ってください。', async turn => { expect((await turn.call('minecraft.request', { goal: '石を一つ採る' })).ok).toBe(true); });
+      expect(f.sleep!.jobs.admit(f.driver.runtime)).toBeNull();
+      expect(f.sleep!.jobs.admit(f.driver.runtime)).toBeNull();
+      expect(f.actions.db.prepare("SELECT status,attempts FROM background_jobs WHERE job_kind='sleep-consolidation'").get()).toEqual({ status: 'pending', attempts: 0 });
+      const body = f.driver.runtime.list('owner').find(task => task.goal === '石を一つ採る')!;
+      await f.driver.stop(body.id, 'owner_stop'); await f.driver.drain();
+      expect(f.sleep!.jobs.admit(f.driver.runtime)).toMatchObject({ kind: 'sleep', origin: 'maintenance' });
+    });
+
+    it('postpones only up to the limit from the time the night became available, then starts it', () => {
+      let working = true; const lines: string[] = [];
+      const f = integratedFcaHarness({ sleep: { analyzer: { mode: 'local-rules', async analyze() { return proposal; } },
+        jobs: { bodyWorking: () => working, deferMs: 60_000, log: line => lines.push(line) } }, decide: () => round({ kind: 'wait', summary: 'waiting' }) });
+      cleanup.push(() => f.close());
+      enqueue(f); f.advance(1);
+      expect(f.sleep!.jobs.admit(f.driver.runtime)).toBeNull(); expect(f.sleep!.jobs.admit(f.driver.runtime)).toBeNull();
+      expect(lines).toHaveLength(1); expect(lines[0]).toContain('reason=body_task_working');
+      f.advance(61_000);
+      expect(f.sleep!.jobs.admit(f.driver.runtime)).toMatchObject({ kind: 'sleep' });
+      expect(lines.at(-1)).toContain('after postponement');
+      working = false;
+    });
+  });
 });
