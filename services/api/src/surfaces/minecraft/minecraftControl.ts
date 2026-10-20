@@ -1,9 +1,10 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
-import { WorkingEventLog, type ActionLease } from '@shannon/mind';
+import { WorkingEventLog, type ActionLease, type WorkingEvent } from '@shannon/mind';
 import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
-import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply } from '../../contracts/minecraftControlContract.js';
+import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply, MinecraftLiveRoom, MinecraftLiveSpeech,
+  MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
 import { MinecraftControlStore } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
 
@@ -59,6 +60,11 @@ export class MinecraftControl {
   private readonly arrivals = new Map<string, number>();
   /** Told when a body on the same connection is seen alive and then dead (its facts' `alive` turns false). Listeners never throw. */
   readonly deathListeners = new Set<(bodyId: string) => void>();
+  /** Told each frame, and each batch of the body's events as they are taken (MinecraftLive, session dc-live). Never throw into a poll. */
+  readonly frameListeners = new Set<(bodyId: string, observation: BodyObservation, arrival: { newConnection: boolean }) => void>();
+  readonly eventListeners = new Set<(bodyId: string, events: readonly WorkingEvent[]) => void>();
+  /** Her lines for the room (LiveSpeechOutbox, session dc-live): the reply carries the one due, a poll brings the body's answers. */
+  speech: { take(): MinecraftLiveSpeech[]; receive(receipts: readonly MinecraftLiveSpeechReceipt[], room: MinecraftLiveRoom | null): void } | null = null;
   /** The commands this process waits for, and when each was last handed to the body (`command`). */
   private readonly waiting = new Map<string, Waiting>();
   private readonly deliveries = new Map<string, number>();
@@ -91,6 +97,12 @@ export class MinecraftControl {
   working(bodyId: string): WorkingEventLog | null { return this.workingLogs.get(bodyId) ?? null; }
   available(): string[] { return [...this.frames.keys()].filter(id => this.frame(id)); }
   observe(bodyId: string): BodyObservation | null { return this.frame(bodyId)?.poll.observation ?? null; }
+  /** The body's newest connected frame at most maxAgeMs old (a conversation may read a frame older than the 3 s a command needs), or null. */
+  latest(bodyId: string, maxAgeMs: number): { observation: BodyObservation; ageMs: number } | null {
+    const frame = this.frames.get(bodyId);
+    const ageMs = frame ? this.options.now() - frame.received : Infinity;
+    return frame && frame.poll.observation.connected && ageMs <= maxAgeMs ? { observation: frame.poll.observation, ageMs } : null;
+  }
   /**
    * Whether this body cannot give a first-person picture now, so a session that requires one would only end
    * `observation_unavailable` (Minebot lane 2026-10-14: a task's whole first step went to such a session, decisions 0).
@@ -128,6 +140,8 @@ export class MinecraftControl {
     if (old?.poll.connectionId === input.connectionId && old.poll.observation.facts.alive !== false && input.observation.facts.alive === false) {
       for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
     }
+    const newConnection = !old || old.poll.connectionId !== input.connectionId;
+    for (const listener of this.frameListeners) try { listener(bodyId, observation, { newConnection }); } catch { /* the live view never fails a poll */ }
     const eventsThrough = this.takeEvents(bodyId, input);
     const acknowledged: string[] = [];
     for (const receipt of input.receipts) {
@@ -180,7 +194,16 @@ export class MinecraftControl {
         this.deliveries.set(c.id, this.options.now());
       }
     }
-    return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}) };
+    const speech = this.speech ? this.liveSpeech(this.speech, input) : [];
+    return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
+      ...(speech.length ? { speech } : {}) };
+  }
+  /** The body's answers and room into the outbox, and the line due: never fails a poll. */
+  private liveSpeech(port: NonNullable<MinecraftControl['speech']>, input: MinecraftControlPoll): MinecraftLiveSpeech[] {
+    try {
+      port.receive(input.speechReceipts ?? [], input.liveRoom ?? null);
+      return port.take();
+    } catch { return []; }
   }
   /** A poll's events into the body's log; the highest number taken, or undefined when the poll carried none. Never fails the poll. */
   private takeEvents(bodyId: string, input: MinecraftControlPoll): number | undefined {
@@ -189,7 +212,10 @@ export class MinecraftControl {
       if (!log) return undefined;
       this.workingLogs.set(bodyId, log);
       log.connect(input.connectionId);
-      return input.events ? log.take(input.connectionId, input.events).through : undefined;
+      const before = log.cursor(), through = input.events ? log.take(input.connectionId, input.events).through : undefined;
+      const fresh = log.since(before).events;
+      if (fresh.length) for (const listener of this.eventListeners) try { listener(bodyId, fresh); } catch { /* the live view never fails a poll */ }
+      return through;
     } catch { return undefined; }
   }
   /** A command this process waits for expires when its wait says so (time counted from delivery, without stalls); another by its deadline. */

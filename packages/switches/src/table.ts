@@ -198,6 +198,17 @@ export const SWITCHES = [
     doc: 'A Minecraft task plans ahead while its body works, fills waits, takes nearby needs and resumes (mb-arch); with the working events.',
   },
   {
+    name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
+    doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
+      + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',
+  },
+  {
+    name: 'SHANNON_MINECRAFT_LIVE_SPEECH', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LIVE'],
+    doc: 'Owner 2026-10-20 (dc-live): she says a word of her own about a moment of her Minecraft body (a diamond, the armour, a near death, '
+      + 'the night) in the voice channel she is in or the body\'s text channel, one or two a minute at most and never over someone who is '
+      + 'talking. The body must be set to speak (MINEBOT_LIVE_*).',
+  },
+  {
     name: 'SHANNON_TEMPORAL_KNOWLEDGE_RECALL', default: 'off', kind: 'on_only', owner: 'recall', requires: [],
     doc: 'Conversation recall reads temporal knowledge.',
   },

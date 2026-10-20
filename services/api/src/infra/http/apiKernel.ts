@@ -77,7 +77,7 @@ import {
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
+import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, markLiveTurn, type LiveBodyReader, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -145,7 +145,7 @@ export interface ShannonApiKernelOptions {
    */
   turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
-  turnRouting?: TurnRouting; feeling?: import('../../mind/emotion/feelingPorts.js').FeelingPort; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; conversationExtras?: () => import('../../contracts/conversationExtrasContract.js').ConversationExtrasPorts | null; // Stage2 routing and Stage5 optional, server-bound reaction metadata; rich chat (docs/rich-chat-contract.md).
+  turnRouting?: TurnRouting; feeling?: import('../../mind/emotion/feelingPorts.js').FeelingPort; minecraftLive?: LiveBodyReader | null; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; conversationExtras?: () => import('../../contracts/conversationExtrasContract.js').ConversationExtrasPorts | null; // Stage2 routing and Stage5 optional, server-bound reaction metadata; rich chat (docs/rich-chat-contract.md).
   /**
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
@@ -180,7 +180,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
+  private readonly notion: NotionTurnReader | null; private readonly minecraftLive: LiveBodyReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: ReportedWork | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined; private readonly conversationExtras: NonNullable<ShannonApiKernelOptions['conversationExtras']>;
@@ -221,7 +221,7 @@ export class ShannonApiKernel {
     this.memoryRecall = options.memoryRecall ?? null;
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
-    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities; this.conversationExtras = options.conversationExtras ?? (() => null);
+    this.turnChooser = options.turnChooser ?? null; this.minecraftLive = options.minecraftLive ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities; this.conversationExtras = options.conversationExtras ?? (() => null);
     this.mind = options.mind ?? null; this.fcaConversation = options.fcaConversation ?? null; this.fcaVoice = options.fcaVoice ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
@@ -354,7 +354,7 @@ export class ShannonApiKernel {
    */
   async textTurn(input: TextTurnInput): Promise<TextTurnResult> {
     const model = this.chatModel.forTurn?.(input.body.scopeKey) ?? this.chatModel;
-    return withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input, model)) : this.performTextTurn(input, model));
+    return markLiveTurn(this.minecraftLive, () => withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input, model)) : this.performTextTurn(input, model)));
   }
   private async performTextTurn(input:TextTurnInput, model: ShannonChatModel):Promise<TextTurnResult> {
     const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
@@ -491,7 +491,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
-      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}), ...(this.feedback ? { feedback: this.feedback } : {}), ...(this.stage5Capabilities ? {stage5Capabilities:this.stage5Capabilities} : {}),
+      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.minecraftLive ? { minecraftLive: this.minecraftLive } : {}), ...(this.mind ? { mind: this.mind } : {}), ...(this.feedback ? { feedback: this.feedback } : {}), ...(this.stage5Capabilities ? {stage5Capabilities:this.stage5Capabilities} : {}),
       ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}), ...(this.innerNote ? { innerNote: this.innerNote } : {}), ...(this.feeling ? { feeling: this.feeling } : {}),
     };
   }

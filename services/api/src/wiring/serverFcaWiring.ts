@@ -7,6 +7,8 @@ import { actionPermit, currentActionExecution } from '../infra/context/actionExe
 import { createFcaSleepWiring } from './fcaSleepWiring.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
+import type { MinecraftLiveSink } from '../surfaces/minecraft/minecraftLive.js';
+import { withMinecraftLive } from '../surfaces/minecraft/minecraftLiveBody.js';
 import { withMinecraftWorking } from '../surfaces/minecraft/minecraftWorkingBody.js';
 import { withMinecraftAgenda } from '../surfaces/minecraft/minecraftAgenda.js';
 import { minecraftProcedureStepParts } from '../surfaces/minecraft/minecraftProcedureTool.js';
@@ -92,6 +94,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   skills?: Pick<SkillMemory, 'usedInTask' | 'settleTask'> | null;
   /** `skill.read`'s own port (`SkillTurnPorts.open`): a body task's pointed skills, for their gists (`SHANNON_FCA_SKILL_GIST`). */
   skillOpen?: SkillTurnPorts['open'];
+  /** SHANNON_MINECRAFT_LIVE (session dc-live): told what task a Minecraft body is on, for the conversations' view of it. */
+  live?: MinecraftLiveSink;
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
@@ -190,7 +194,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
-        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: body.body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
         taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
