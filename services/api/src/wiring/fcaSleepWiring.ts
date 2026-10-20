@@ -24,11 +24,13 @@ export function createFcaSleepWiring(parts: { store: SQLiteShannonStore; ownerSc
   analyzer?: SleepMemoryAnalyzer; knowledgeAnalyzer?: KnowledgeAnalyzer | null;
   /** Optional deterministic dependencies for integration tests; production uses the configured original models. */
   peoplePhase?: (observeSources: (ids: readonly string[]) => boolean) => SleepFcaPhaseHandler;
+  /** Tests: whether a body task is working (the night waits while it is), and how long it may wait. */
+  jobs?: Parameters<typeof createFcaSleepJobs>[3];
 }) {
   const { store, ownerScope, values } = parts, db = store.fcaDatabase();
   if (!store.memoryProposals()) throw new Error('FCA_SLEEP_MEMORY_OUTBOX_REQUIRED');
   const now = parts.now ?? (() => new Date().toISOString());
-  const jobs = createFcaSleepJobs(db, ownerScope, now);
+  const jobs = createFcaSleepJobs(db, ownerScope, now, parts.jobs);
   const memory = store.memoryProposals();
   const skillMemory = configuredSkillMemory(values, { database: db, databasePath: null, createsSchema: true });
   const skills = skillMemory ? skillSleepConsolidator(values, { memory: skillMemory.memory, store, choices: store.choiceLedger(), now }) : null;
