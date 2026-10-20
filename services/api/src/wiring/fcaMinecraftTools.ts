@@ -29,7 +29,8 @@ export function catalogDrift(call: { name: string; input: unknown }, before: Ski
   if (current && before && JSON.stringify(current) === JSON.stringify(before)) return null;
   const keys = current && before ? [...new Set([...Object.keys(before), ...Object.keys(current)])]
     .filter(key => JSON.stringify((before as Record<string, unknown>)[key]) !== JSON.stringify((current as Record<string, unknown>)[key])) : ['missing'];
-  const callable = !!current && !!before && current.readOnly === before.readOnly
+  // Another connection is another bot or world: what the call was decided on may not be there.
+  const callable = !!current && !!before && current.readOnly === before.readOnly && connectionBefore === connectionNow
     && (JSON.stringify(current.inputSchema) === JSON.stringify(before.inputSchema) || validSkillInput(call.input, current.inputSchema as never));
   return { callable, line: `tool=${call.name} keys=${keys.join(',')} connection=${short(connectionBefore)}->${short(connectionNow)} callable=${callable}` };
 }
@@ -70,8 +71,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (drift) {
       console.info(`Shannon Minecraft catalog changed task=${step.taskId} ${drift.line}`);
       // Nothing has gone to the body yet: a call the changed list no longer takes is a failed call she may make again, never an unknown step.
-      const words = '体の道具の一覧が、この判断の後で変わった。体にはまだ何も送っていない。新しい観測で道具を確かめて、もう一度呼べる。';
-      if (!drift.callable) return toolFailure('unavailable', words, { retryable: true });
+      // The step's list is fixed when it begins: the same call fails again until the next decision builds it anew.
+      const words = '体の道具の一覧か接続が、この判断の後で変わった。体にはまだ何も送っていない。この判断を終えれば、次の判断で新しい一覧になる。';
+      if (!drift.callable) return toolFailure('unavailable', words, { retryable: false });
     }
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     active.stepOutcome = 'unknown';

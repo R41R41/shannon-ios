@@ -115,6 +115,9 @@ describe('Minecraft common FCA body protocol', () => {
     now += 6_000;
     expect(() => f.control.poll(f.scope, older())).not.toThrow();
     expect(f.control.frame('minecraft:world')?.poll.connectionId).toBe('connection');
+    // Only as a stand-in: the newer one is taken again at once, and the earlier one is refused again.
+    expect(() => f.control.poll(f.scope, f.poll({ connectionId: 'newer' }))).not.toThrow();
+    expect(() => f.control.poll(f.scope, older())).toThrow('FCA_BODY_RETIRED_CONNECTION');
   });  it('keeps capture only in memory and only across fresh same-connection heartbeats', async () => {
     const f = fixture(), result = f.control.command({ ...f.command, kind: 'capture' });
     f.control.poll(f.scope, f.poll());
