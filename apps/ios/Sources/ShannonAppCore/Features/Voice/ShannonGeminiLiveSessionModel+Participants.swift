@@ -176,7 +176,7 @@ enum ShannonVoiceLocalReply {
     static func deliver(
         _ text: String, onSegment: ShannonVoiceSegmentHandler
     ) async -> ShannonLiveVoiceDelegationResponseDTO {
-        await onSegment(text, nil)
+        await onSegment(text, nil, nil)
         return ShannonLiveVoiceDelegationResponseDTO(threadId: threadID, model: "local-rule", reply: text)
     }
 }

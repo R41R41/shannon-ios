@@ -1,5 +1,6 @@
 import { normalizedSpeechText } from './geminiSpeech.js';
 import type { GeminiSpeechRequest, GeminiSpeechStreamResult } from './geminiSpeech.js';
+import { elevenVoiceText } from './voiceAudioTags.js';
 
 const maximumAudioBytes = 8 * 1024 * 1024;
 const endpoint = 'wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input';
@@ -26,6 +27,17 @@ export function validatedElevenTags(value: string | undefined): string {
     throw new ElevenSpeechError('ELEVEN_SPEECH_INVALID_STYLE');
   }
   return `${tags} `;
+}
+
+/** A tag the sentence opens with that the acting tags already have (「[whispers]」 twice) is said once. */
+function withoutRepeatedOpening(tags: string, text: string): string {
+  const head = new Set(tags.match(/\[[^\]]+\]/gu) ?? []);
+  let rest = text;
+  for (let opening = /^\[[^\]]+\]\s*/u.exec(rest); opening; opening = /^\[[^\]]+\]\s*/u.exec(rest)) {
+    if (!head.has(opening[0].trim())) break;
+    rest = rest.slice(opening[0].length);
+  }
+  return rest || text;
 }
 
 function decodeAudio(value: unknown): Uint8Array {
@@ -61,7 +73,8 @@ export class ElevenSpeechGateway {
   }
 
   async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
-    const text = normalizedSpeechText(request.text);
+    // Tags inside the sentence are kept only when they are hers to use (`VOICE_AUDIO_TAGS`); any other bracketed direction is dropped.
+    const text = normalizedSpeechText(elevenVoiceText(normalizedSpeechText(request.text)));
     const tags = validatedElevenTags(request.style);
     const params = new URLSearchParams({
       model_id: this.model, output_format: 'pcm_24000', language_code: 'ja',
@@ -72,7 +85,7 @@ export class ElevenSpeechGateway {
     return {
       contentType: 'audio/l16', sampleRate: 24_000, channels: 1, bitsPerSample: 16,
       model: this.model, voice: this.voice, outputUsdPerTenSeconds: 0,
-      chunks: this.audioChunks(socket, `${tags}${text}`, signal),
+      chunks: this.audioChunks(socket, `${tags}${withoutRepeatedOpening(tags, text)}`, signal),
     };
   }
 

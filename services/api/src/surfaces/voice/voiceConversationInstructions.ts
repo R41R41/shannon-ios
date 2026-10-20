@@ -6,6 +6,14 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * only shapes how that character sounds aloud and how a voice turn is grounded.
  */
 import { innerNoteEnabled } from '../../mind/emotion/innerNotePorts.js';
+import { switchOn, type SwitchValues } from '@shannon/switches';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { VOICE_AUDIO_TAG_LINES } from '../../infra/models/voiceAudioTags.js';
+
+/** `SHANNON_VOICE_AUDIO_TAGS`: her voice's audio tags in the reply prompt (shown and stored text never has them either way). */
+export function voiceAudioTagsEnabled(values: SwitchValues = serverEnvironment()): boolean {
+  return switchOn(values, 'SHANNON_VOICE_AUDIO_TAGS');
+}
 
 /** The fixed tone of before; with her character core (`SHANNON_INNER_NOTE`) how she sounds is hers. */
 const BRIGHT_TONE = '- Sound bright and self-assured with crisp endings and buoyant energy, without shouting or imitating a named character. Do not default to worried reassurance, hesitant permission-seeking, sighs, breathy interjections, or repeated safety check-ins; use a softer tone only when the user is actually distressed or needs care.';
@@ -17,6 +25,8 @@ export function voiceConversationInstructions(
   ownerConversation = true,
   /** Syzygy ADR-0012 D5.1 (`SHANNON_INNER_NOTE`): she is an AGI, not a maid; off, the line is what it was. */
   innerNote = innerNoteEnabled(),
+  /** Owner 2026-10-20: her voice's audio tags (`voiceAudioTags.ts`), with `SHANNON_VOICE_AUDIO_TAGS` on. */
+  audioTags = voiceAudioTagsEnabled(),
 ): string {
   return [
     '[Live voice conversation]',
@@ -29,6 +39,7 @@ export function voiceConversationInstructions(
     ...(ownerConversation ? [] : [
       innerNote ? `- ${WITH_FRIEND}` : `- Keep the same lively maid personality. ${WITH_FRIEND}`,
     ]),
+    ...(audioTags ? VOICE_AUDIO_TAG_LINES : []),
     '# Conversation flow',
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
     '- If the user interrupts, stop and listen. Keep unanswered earlier input; combine additions and apply explicit corrections in chronological order.',

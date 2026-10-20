@@ -300,6 +300,10 @@ export const SWITCHES = [
     doc: 'Owner 2026-10-20: the owner holds her 好意 at its top; 本気 and 重い open with him alone (never reached by the value).',
   },
   {
+    name: 'SHANNON_VOICE_AUDIO_TAGS', default: 'off', kind: 'explicit_on', owner: 'emotion', requires: [], setup: 'on',
+    doc: 'Owner 2026-10-20: her spoken replies may carry ElevenLabs audio tags ([whispers] [laughs] [sighs]…) for the voice only; off, no tag line.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

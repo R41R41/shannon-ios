@@ -357,6 +357,9 @@ public enum ShannonLiveVoiceStreamEventTypeDTO: String, Codable, Equatable, Send
 public struct ShannonLiveVoiceStreamEventDTO: Codable, Equatable, Sendable {
     public let type: ShannonLiveVoiceStreamEventTypeDTO
     public let text: String?
+    /// On `segment` (newer servers, owner 2026-10-20): the sentence for her voice with its audio tags (`[whispers]`); `text` is
+    /// what is shown, without them.
+    public let voiceText: String?
     public let voicePlan: ShannonVoicePlanDTO?
     public let response: ShannonLiveVoiceDelegationResponseDTO?
     public let status: Int?
@@ -364,9 +367,11 @@ public struct ShannonLiveVoiceStreamEventDTO: Codable, Equatable, Sendable {
     public let code: String?
 }
 
+/// `text` is shown and kept; `voiceText`, when the server sent one, is what her voice says (with its audio tags).
 public typealias ShannonVoiceSegmentHandler = @MainActor @Sendable (
     _ text: String,
-    _ voicePlan: ShannonVoicePlanDTO?
+    _ voicePlan: ShannonVoicePlanDTO?,
+    _ voiceText: String?
 ) async -> Void
 
 public typealias ShannonVoiceStreamingDelegation = @MainActor (

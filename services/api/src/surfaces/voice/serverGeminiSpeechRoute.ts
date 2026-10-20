@@ -8,6 +8,7 @@ import {
 import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
 import type { GeminiSpeechGateway } from '../../infra/models/geminiSpeech.js';
 import { createConfiguredElevenSpeechGateway, ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
+import { geminiVoiceRequest } from '../../infra/models/voiceAudioTags.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { observeAsync } from '../../infra/observer/observerContext.js';
 
@@ -69,8 +70,8 @@ export function createGeminiSpeechRoute(
       const values = body && typeof body === 'object' && !Array.isArray(body)
         ? body as Record<string, unknown>
         : {};
-      const text = normalizedSpeechText(values.text);
-      const style = typeof values.style === 'string' ? values.style : undefined;
+      const requested = normalizedSpeechText(values.text);
+      const requestedStyle = typeof values.style === 'string' ? values.style : undefined;
       const provider = values.provider ?? 'gemini';
       if (provider !== 'gemini' && provider !== 'eleven') {
         return sendJson(response, 400, { error: 'SPEECH_INVALID_PROVIDER' });
@@ -82,9 +83,13 @@ export function createGeminiSpeechRoute(
           message: '選択した音声は現在利用できません。',
         });
       }
-      if (style !== undefined && style.length > 500) {
+      if (requestedStyle !== undefined && requestedStyle.length > 500) {
         return sendJson(response, 400, { error: 'GEMINI_SPEECH_INVALID_STYLE' });
       }
+      // The Gemini voice reads no audio tag (`voiceAudioTags.ts`): the tags of her sentence become a Japanese direction in its style.
+      const spoken = provider === 'gemini' ? geminiVoiceRequest(requested, requestedStyle) : { text: requested, style: requestedStyle };
+      const text = normalizedSpeechText(spoken.text);
+      const style = spoken.style;
       if (provider === 'eleven') validatedElevenTags(style);
       if (!activeScopes.acquire(principal.scopeKey)) return refuseSpeech(response, 'BUSY', provider);
       try {

@@ -148,8 +148,27 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "そばにいますよ", plan: tender),
-            "[anime character] [reassuringly] [calmly]"
+            "[anime character] [reassuringly] [softly]"
         )
+    }
+
+    /// Owner 2026-10-20 (「ささやき声ができていなかった」): the same scenes as the Windows app's `speechStyle.ts`.
+    func testElevenWhispersASecretAndSoundsSleepySweetAndSoft() {
+        func plan(_ affect: ShannonVoiceAffectDTO, _ delivery: ShannonVoiceDeliveryDTO = .conversational) -> ShannonVoicePlanDTO {
+            ShannonVoicePlanDTO(shouldRespond: true, conversationClass: .direct, affect: affect, delivery: delivery)
+        }
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ここだけの話なんだけどね", plan: plan(.playful)),
+                       "[anime character] [playfully] [whispers]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "内緒だよ", plan: nil), "[anime character] [playfully] [whispers]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ふぁ…もう寝ようかな", plan: plan(.sleepy, .gentle)),
+                       "[anime character] [sleepy] [softly]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "もうちょっとかまってよ", plan: plan(.attentionSeeking)),
+                       "[anime character] [sweetly]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ずっと一緒にいるよ", plan: plan(.affectionate)),
+                       "[anime character] [reassuringly] [softly]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "疲れたね", plan: plan(.tired, .gentle)), "[anime character] [calmly]")
+        XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "これは内緒ね", plan: plan(.playful)).contains("ささやき声"))
+        XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "おやすみ", plan: plan(.sleepy)).contains("眠そうに"))
     }
 
     func testDelegationResponseDecodesVisibleAgentTaskProposal() throws {

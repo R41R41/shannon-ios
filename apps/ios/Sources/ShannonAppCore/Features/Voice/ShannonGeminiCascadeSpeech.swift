@@ -24,7 +24,7 @@ enum ShannonGeminiCascadeSpeech {
         } else {
             direction = "自然な会話の調子で、前後の文となめらかにつなげる。"
         }
-        return String("\(baseStyle) \(direction)".prefix(500))
+        return String("\(baseStyle) \(direction)\(secretDirection(text))".prefix(500))
     }
 
     static func style(for text: String, plan: ShannonVoicePlanDTO?) -> String {
@@ -59,7 +59,9 @@ enum ShannonGeminiCascadeSpeech {
             "短い強い驚きとして演じ、叫び続けない。"
         case .blocked:
             "少し悔しさを含めつつ、状況を正直に説明する声。"
-        case .tired, .sleepy, .relaxed:
+        case .sleepy:
+            "眠そうに、ゆるく、声量を落として。"
+        case .tired, .relaxed:
             "テンポと声量を少し落とした穏やかな声。"
         }
         let delivery: String = switch plan.delivery {
@@ -74,7 +76,12 @@ enum ShannonGeminiCascadeSpeech {
         case 0.4..<0.75: "感情をはっきり伝えるが、内容を邪魔しない強さで。"
         default: "この瞬間にふさわしい強い感情を、わざとらしくならない範囲で明確に。"
         }
-        return String("明るく自然な日本語の会話。\(affect) \(intensity) \(delivery)".prefix(500))
+        return String("明るく自然な日本語の会話。\(affect) \(intensity) \(delivery)\(secretDirection(text))".prefix(500))
+    }
+
+    /// A secret is whispered, as with the ElevenLabs voice (`ShannonElevenCascadeSpeech.isSecret`, owner 2026-10-20).
+    static func secretDirection(_ text: String) -> String {
+        ShannonElevenCascadeSpeech.isSecret(text) ? " 内緒話のように、息を多めにしたささやき声で。" : ""
     }
 
     static func segments(_ text: String) -> [String] {
@@ -160,8 +167,9 @@ final class ShannonGeminiStreamingSpeechCoordinator {
         self.busyRetryDelays = busyRetryDelays
     }
 
-    func enqueue(_ text: String, plan: ShannonVoicePlanDTO?) async {
-        let spokenText = ShannonGeminiCascadeSpeech.spokenText(for: text)
+    /// `voiceText` (with audio tags, from newer servers) is what is synthesized; `text` stays the shown sentence.
+    func enqueue(_ text: String, voiceText: String? = nil, plan: ShannonVoicePlanDTO?) async {
+        let spokenText = ShannonGeminiCascadeSpeech.spokenText(for: voiceText ?? text)
         guard !spokenText.isEmpty else { return }
         while activeCount >= 2, !isCancelled {
             guard !Task.isCancelled else { return }

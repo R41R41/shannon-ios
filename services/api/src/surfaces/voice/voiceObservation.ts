@@ -21,11 +21,15 @@ export function voiceObservationOptions(scopeKey: string, body: unknown) {
   return { scopeKey, surface: 'voice', audience, ...(runId ? { runId } : {}) };
 }
 
-/** Only text actually handed to the NDJSON writer is a streamed sentence, never a provider delta. */
+/**
+ * Only text actually handed to the NDJSON writer is a streamed sentence, never a provider delta. `voiceText` (additive) is the
+ * sentence for her voice with its audio tags (`voiceAudioTags.ts`); `text` is what is shown, and an older client reads only that.
+ */
 export function writeObservedVoiceSegment(response: ServerResponse, text: string, voicePlan: Record<string, unknown> | undefined,
-  source?: 'llm' | 'plan'): Promise<void> {
+  source?: 'llm' | 'plan', voiceText?: string): Promise<void> {
   if (source) observerHandoff(source, 'sentences', { text });
-  return observeAsync('sentences', { delivery: 'stream', text }, () => writeEvent(response, { type: 'segment', text, voicePlan }),
+  return observeAsync('sentences', { delivery: 'stream', text },
+    () => writeEvent(response, { type: 'segment', text, ...(voiceText ? { voiceText } : {}), voicePlan }),
     () => ({ delivered: true }));
 }
 

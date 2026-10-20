@@ -8,6 +8,7 @@ import { SpokenSentenceSegmenter, unquotedSpokenLine } from './spokenSentences.j
 import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
 import { withObserverRun } from '../../infra/observer/observerContext.js';
 import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
+import { VoiceSegmentTags } from '../../infra/models/voiceAudioTags.js';
 import { TurnTiming, turnOutcome, turnTimingId } from '../../infra/observer/turnTiming.js';
 import { WAITING_CUE_DELAY_MILLISECONDS } from './voiceWaitingCue.js';
 import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
@@ -56,6 +57,8 @@ export function createLiveVoiceStreamRoute(
     request.once('aborted', abort);
     response.once('close', abort);
     const segmenter = new SpokenSentenceSegmenter();
+    // Her sentences carry audio tags for the voice only (`voiceAudioTags.ts`): shown without them, spoken with them.
+    const tags = new VoiceSegmentTags();
     let voicePlan: Record<string, unknown> | undefined;
     let receivedPlan = false;
     let receivedDelta = false;
@@ -114,22 +117,24 @@ export function createLiveVoiceStreamRoute(
             receivedDelta = true;
             cancelWaiting();
             for (const segment of segmenter.append(delta)) {
+              const sentence = tags.take(opening(segment));
+              if (!sentence) continue;
               startStream(response);
               firstSegment();
-              const text = opening(segment);
               spokenReplySegments += 1;
-              await writeObservedVoiceSegment(response, text, voicePlan, 'llm');
+              await writeObservedVoiceSegment(response, sentence.text, voicePlan, 'llm', sentence.voiceText);
             }
           },
           // Before a wait for research: what is held of her acknowledgement goes out now, not when the wait ends.
           flushSpoken: async () => {
             if (controller.signal.aborted) return;
             for (const segment of segmenter.flush()) {
+              const sentence = tags.take(opening(segment));
+              if (!sentence) continue;
               startStream(response);
               firstSegment();
-              const text = opening(segment);
               spokenReplySegments += 1;
-              await writeObservedVoiceSegment(response, text, voicePlan, 'llm');
+              await writeObservedVoiceSegment(response, sentence.text, voicePlan, 'llm', sentence.voiceText);
             }
           },
         });
@@ -147,9 +152,11 @@ export function createLiveVoiceStreamRoute(
         const reply = typeof bodyRecord?.reply === 'string' ? bodyRecord.reply : '';
         if (!receivedDelta && reply) {
           for (const segment of segmenter.append(reply)) {
+            const sentence = tags.take(segment);
+            if (!sentence) continue;
             startStream(response);
             firstSegment();
-            await writeObservedVoiceSegment(response, segment, voicePlan);
+            await writeObservedVoiceSegment(response, sentence.text, voicePlan, undefined, sentence.voiceText);
           }
         }
         // A reply cut at its length limit ends at its last complete sentence (`truncated`, the
@@ -160,9 +167,11 @@ export function createLiveVoiceStreamRoute(
           if (spokenReplySegments > 0) segmenter.discard();
         }
         for (const segment of segmenter.flush()) {
+          const sentence = tags.take(opening(segment));
+          if (!sentence) continue;
           startStream(response);
           firstSegment();
-          await writeObservedVoiceSegment(response, opening(segment), voicePlan);
+          await writeObservedVoiceSegment(response, sentence.text, voicePlan, undefined, sentence.voiceText);
         }
         startStream(response);
         await writeEvent(response, { type: 'completed', response: apiResponse.body });

@@ -145,6 +145,7 @@
     "infra/models/spokenReportModel.ts",
     "infra/models/tieredChatModel.ts",
     "infra/models/turnChecker.ts",
+    "infra/models/voiceAudioTags.ts",
     "infra/models/voiceTranscription.ts",
     "infra/models/webResearch.ts",
     "infra/models/webSearch.ts",

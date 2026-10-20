@@ -14,7 +14,7 @@ struct ShannonVoiceWorkspaceTests {
         _ = try await model.performLiveVoiceDelegationResponse(
             transcript: "実装して", participantMode: .owner, threadID: "call")
         _ = try await model.performLiveVoiceDelegationStreamingResponse(
-            transcript: "続き", participantMode: .owner, threadID: "call", onSegment: { _, _ in })
+            transcript: "続き", participantMode: .owner, threadID: "call", onSegment: { _, _, _ in })
         _ = try await model.analyzeVoiceCameraSnapshot(jpegData: Data([1]), threadID: "call")
         try await model.commitRealtimeVoiceTurn(userTranscript: "実装して", shannonTranscript: "確認してね", threadID: "call")
 
