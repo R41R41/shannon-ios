@@ -78,14 +78,36 @@ describe('a turn that recalled an impression of a person', () => {
     expect(f.memory().read('owner', [id], OWNER_AUDIENCE)).toEqual([]);
   });
 
-  it('is hidden when every turn the impression was noticed in is forgotten', () => {
+  it('is hidden when every turn the impression was noticed in is forgotten, and not while one of them is kept', () => {
     const f = fixture();
-    f.save(f.impression('imp-c'));
+    const second = f.store.appendTurn('owner', 'thread', 'ほんと可愛いなあ', 'もう', f.now());
+    f.save(f.impression('imp-c', { evidence: [{ id: f.evidence.id, at: f.evidence.observedAt, stance: 'support' },
+      { id: second.id, at: second.observedAt, stance: 'support' }] }));
     const { turn } = f.recalling(impressionMemoryId('imp-c'));
     expect(f.visible(turn.id)).toEqual([turn.id]);
     f.advance(1000);
     new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: f.evidence.id, action: 'forget' });
+    expect(f.visible(turn.id)).toEqual([turn.id]);
+    f.advance(1000);
+    new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: second.id, action: 'forget' });
     expect(f.visible(turn.id)).toEqual([]);
+  });
+
+  it('the reader itself answers by the owner\'s controls: his correction is the text, his forgetting is nothing', () => {
+    const f = fixture();
+    f.save(f.impression('imp-e'));
+    const id = impressionMemoryId('imp-e');
+    const reader = () => ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, {})(id);
+    expect(reader()).toBe('ライ氏は、ボクのことをよく「可愛い」と言う／ボクの気持ち: うれしい');
+    f.advance(1000);
+    new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: id, action: 'correct', text: 'ライ氏はたまにボクを褒める' });
+    expect(reader()).toBe('ライ氏はたまにボクを褒める');
+    f.advance(1000);
+    new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: id, action: 'forget' });
+    expect(reader()).toBeNull();
+    // A store that cannot answer gives what these ids gave before: nothing.
+    const broken = { ...f.store, impressionStore: () => { throw new Error('closed'); } } as unknown as typeof f.store;
+    expect(ownerImpressionReader(broken, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, {})(id)).toBeNull();
   });
 
   it('of another person: visible while that person is remembered, hidden once forgotten or unknown', () => {
@@ -98,6 +120,12 @@ describe('a turn that recalled an impression of a person', () => {
     expect(f.visible(turn.id)).toEqual([turn.id]);
     expect(f.memory().read('owner', [impressionMemoryId('imp-m')], OWNER_AUDIENCE)).toMatchObject([{ summary: expect.stringContaining('ミキさんは、ボクをからかう') }]);
     expect(f.visible(f.recalling(impressionMemoryId('imp-x')).turn.id)).toEqual([]);
+    // With F6 decay another person's impression is usable by the age of its evidence, which a later reading may hide without any write:
+    // closed here, so what one reading found visible stays true for every later one (the lineage memo). The owner's own keep their rule.
+    expect(f.visible(turn.id, { SHANNON_EVIDENCE_DECAY: 'on' })).toEqual([]);
+    const own = f.impression('imp-o');
+    f.save(own);
+    expect(f.visible(f.recalling(impressionMemoryId('imp-o')).turn.id, { SHANNON_EVIDENCE_DECAY: 'on' })).toHaveLength(1);
     f.people.updatePerson('owner', miki.id, { forgottenAt: f.now() }, f.now());
     expect(f.visible(turn.id)).toEqual([]);
   });
@@ -108,10 +136,10 @@ describe('a turn that recalled an impression of a person', () => {
     f.save(f.impression('imp-d'));
     const id = impressionMemoryId('imp-d'), { turn } = f.recalling(id);
     const withMiki = peopleAudience([miki.id]);
-    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, f.now(), {})(id)).not.toBeNull();
-    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', withMiki, f.now(), {})(id)).toBeNull();
+    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, {})(id)).not.toBeNull();
+    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', withMiki, {})(id)).toBeNull();
     // Not of that form, or another kind of id: unknown here.
-    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, f.now(), {})('imp-d')).toBeNull();
+    expect(ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, {})('imp-d')).toBeNull();
     const memory = createTaskMemory({ state: f.store, conversations: f.store, ownerScope: 'owner', ownerAlone: () => true, now: f.now, environment: {} });
     expect(memory.read('owner', [turn.id], withMiki)).toEqual([]);
     const notAlone = createTaskMemory({ state: f.store, conversations: f.store, ownerScope: 'owner', ownerAlone: () => false, now: f.now, environment: {} });

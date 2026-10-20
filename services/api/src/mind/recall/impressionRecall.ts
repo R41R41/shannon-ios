@@ -259,36 +259,43 @@ export function recallImpressions(
 
 /**
  * Impressions a turn recalled (`impression:<id>` in its `recalledMemoryIDs`), as the owner alone may be shown them now: the
- * impression's text, or null. The rules `selectImpressions` applies with only the owner present, whatever the message: impressions
- * switched on, a live row (with F6 decay, another person's by its evidence), a remembered person who is not forgotten, and the
- * forgetting boundary of `usableImpression`. Nothing more is shown than a turn of his alone could show. With anyone else present
- * every id is null: who else may see an impression is the gate's (`DisclosureGate`), not this.
+ * impression's text, or null. The rules `selectImpressions` applies with only the owner present: impressions switched on, a live row,
+ * a remembered person who is not forgotten, and the forgetting boundary of `usableImpression`. What a message of his picks among
+ * those (a person he names, a fading one his words bring up) is not asked: this turn did pick it, and he may name anyone. With
+ * anyone else present every id is null: who else may see an impression is the gate's (`DisclosureGate`), not this. A store that
+ * fails to answer gives null, as these ids gave before.
+ *
+ * No answer depends on the time of the reading, as the lineage memo of `taskMemory.ts` requires (`ScopeMemos.lineages`,
+ * `fcaLoopStallTime.test.ts`): with F6 decay another person's impression is usable by the age of its evidence, which hides it later
+ * without any write, so with decay on another person's impression is null here (production 2026-10-20: none was ever recalled).
  *
  * From 2026-10-01 to 2026-10-20 the reads of her memory (`taskMemory.ts`, the owner's alone) did not know these ids, so every
- * turn that recalled one, and every turn that recalled such a turn, was hidden from them (45 turns in production).
+ * turn that recalled one, and every turn that recalled such a turn, was hidden from them (45 of 1,223 turns in production).
  */
 export function ownerImpressionReader(
-  store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience, at: string,
+  store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): (memoryId: string) => string | null {
   let parts: { source: ImpressionSource; people: readonly ImpressionPerson[]; check: ImpressionEvidenceCheck; decay: boolean } | null | undefined;
   return memoryId => {
     if (!memoryId.startsWith(IMPRESSION_MEMORY_PREFIX) || !isOwnerOnly(present)) return null;
     if (parts === undefined) {
-      const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
-      parts = source ? { source, people: source.people(scopeKey), check: new ImpressionEvidenceCheck(state, store, scopeKey),
-        decay: mindSwitches(environment).evidenceDecay } : null;
+      try {
+        const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
+        parts = source ? { source, people: source.people(scopeKey), check: new ImpressionEvidenceCheck(state, store, scopeKey),
+          decay: mindSwitches(environment).evidenceDecay } : null;
+      } catch { parts = null; }
     }
     if (!parts) return null;
-    const row = parts.source.impression(scopeKey, memoryId.slice(IMPRESSION_MEMORY_PREFIX.length));
-    if (!row || impressionMemoryId(row.id) !== memoryId) return null;
-    const owner = row.personKey === OWNER_PERSON_KEY;
-    if (!owner && !parts.people.some(person => person.id === row.personKey && !person.forgotten)) return null;
-    const live = row.status === 'active' || row.status === 'fading';
-    if (!(parts.decay && !owner ? decayedUsable(row, state, at) : live)) return null;
-    if (parts.check.rules.length) parts.check.load([row]);
-    const usable = usableImpression(row, state, parts.check, parts.people);
-    return usable ? `${usable.statement}${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}` : null;
+    try {
+      const row = parts.source.impression(scopeKey, memoryId.slice(IMPRESSION_MEMORY_PREFIX.length));
+      if (!row || impressionMemoryId(row.id) !== memoryId) return null;
+      if (row.personKey !== OWNER_PERSON_KEY && (parts.decay || !parts.people.some(person => person.id === row.personKey && !person.forgotten))) return null;
+      if (row.status !== 'active' && row.status !== 'fading') return null;
+      if (parts.check.rules.length) parts.check.load([row]);
+      const usable = usableImpression(row, state, parts.check, parts.people);
+      return usable ? `${usable.statement}${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}` : null;
+    } catch { return null; }
   };
 }
 

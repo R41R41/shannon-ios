@@ -1,7 +1,7 @@
 import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/search/searchQuery.js';
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
-import { ownerImpressionReader } from '../recall/impressionRecall.js';
+import { ownerImpressionReader } from '../recall/impressionRecallPorts.js';
 import { DeepChains, deepWalk, settleDeepChains } from './recallChainDepth.js';
 import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
@@ -57,7 +57,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
     const gate = new DisclosureGate(present, state, store, scope);
     const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
-    const impressionLine = ownerImpressionReader(store, state, scope, present, parts.now(), parts.environment);
+    const impressionLine = ownerImpressionReader(store, state, scope, present, parts.environment);
     return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
     const experienceOf = (id: string) => {
