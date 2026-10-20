@@ -760,6 +760,7 @@
     "surfaces/minecraft/minecraftControlValidation.ts",
     "surfaces/minecraft/minecraftDropsAdvice.ts",
     "surfaces/minecraft/minecraftFastJudgment.ts",
+    "surfaces/minecraft/minecraftFightOwner.ts",
     "surfaces/minecraft/minecraftFillers.ts",
     "surfaces/minecraft/minecraftGistAdoption.ts",
     "surfaces/minecraft/minecraftIntent.ts",
