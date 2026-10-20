@@ -11,6 +11,8 @@ import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemorySt
 import { PlatformBridgeError, PlatformBridgeService, configuredPlatformBridge, platformBridgeThreadId } from '../src/mind/memory/platformBridge.js';
 import { PlatformPeople } from '../src/mind/memory/platformPeople.js';
 import { PlatformVoiceService, PLATFORM_VOICE_ALLOWANCE, platformVoiceEnabled, validatedVoiceTurn, type VoiceTurnLine } from '../src/surfaces/platform/platformVoice.js';
+import { splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
+import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';
 import { handlePlatformBridgeRequest, isPlatformBridgePath, type PlatformBridgeRouteDependencies } from '../src/surfaces/platform/serverPlatformBridgeRoute.js';
 import type { PlatformVoiceRoutes } from '../src/surfaces/platform/platformVoiceRoute.js';
 import { VoiceMouthQueue } from '../src/surfaces/platform/voiceMouth.js';
@@ -87,7 +89,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_voice_turns');
   const body = new Body();
   const service = new PlatformVoiceService({
-    scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body,
+    scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT),
     environment: () => environment, log: () => undefined,
   });
   let counter = 0;
@@ -164,7 +166,7 @@ describe('POST /v1/platform/voice/turn', () => {
     expect(prompt).toContain('2人いる');
     expect(prompt).not.toContain('いま聞こえているのはライ氏だけ');
     await background.waitForIdle('owner');
-    expect(store.experienceCandidates('owner')[0]?.disclosure?.audience.kind).not.toBe('owner');
+    expect(store.experienceCandidates('owner')[0]?.disclosure?.audience?.kind).not.toBe('owner');
     await close();
   });
 

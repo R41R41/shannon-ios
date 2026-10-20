@@ -321,7 +321,8 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_DC_VOICE', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
-    doc: 'Owner 2026-10-20: a Discord voice channel is answered by her one mind (/v1/platform/voice/*): turn, speech, mouth. Needs SHANNON_PLATFORM_REPLY, the bridge and an ElevenLabs voice. Off: 503 PLATFORM_VOICE_DISABLED, the bot answers as before.',
+    doc: 'Owner 2026-10-20: a Discord voice channel is answered by her one mind (/v1/platform/voice/*): turn, speech, mouth. '
+      + 'Needs SHANNON_PLATFORM_REPLY, the bridge and an ElevenLabs voice. Off: 503 PLATFORM_VOICE_DISABLED, the bot answers as before.',
   },
   {
     name: 'SHANNON_DC_VOICE_FILLER', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
@@ -329,7 +330,8 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_DC_VOICE_MINECRAFT', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
-    doc: 'The owner\'s spoken request in a voice channel reaches her Minecraft body: a message to the task under way, a stop, or (alone) a new task.',
+    doc: 'The owner\'s spoken request in a voice channel reaches her Minecraft body: '
+      + 'a message to the task under way, a stop, or (alone) a new task.',
   },
   {
     name: 'SHANNON_DC_VOICE_MOUTH', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],

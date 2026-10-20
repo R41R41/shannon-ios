@@ -79,7 +79,10 @@ export class VoiceRooms {
   setSituation(key: string, text: string, ttlMilliseconds?: number): void {
     const body = clip(text, VOICE_ROOM_LIMITS.situationCharacters);
     const room = this.room(key);
-    if (!body) { room.situation = null; return; }
+    if (!body) {
+      room.situation = null;
+      return;
+    }
     const ttl = Math.min(VOICE_ROOM_LIMITS.situationMaximumMilliseconds,
       Math.max(1_000, Number.isFinite(ttlMilliseconds) ? ttlMilliseconds! : VOICE_ROOM_LIMITS.situationDefaultMilliseconds));
     room.situation = { text: body, until: this.now() + ttl };
@@ -89,7 +92,10 @@ export class VoiceRooms {
   situation(key: string): string | null {
     const room = this.rooms.get(key);
     if (!room?.situation) return null;
-    if (this.now() > room.situation.until) { room.situation = null; return null; }
+    if (this.now() > room.situation.until) {
+      room.situation = null;
+      return null;
+    }
     return room.situation.text;
   }
 

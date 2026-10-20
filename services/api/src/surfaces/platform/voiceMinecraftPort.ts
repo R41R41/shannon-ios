@@ -1,4 +1,4 @@
-import type { MinecraftIntent } from '../minecraft/minecraftIntent.js';
+import type { MinecraftIntent } from '../../contracts/minecraftBodyContract.js';
 
 /**
  * What a Discord voice channel's turn may ask of her Minecraft body (Syzygy dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、

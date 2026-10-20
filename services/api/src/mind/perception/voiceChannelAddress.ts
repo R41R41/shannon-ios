@@ -1,4 +1,4 @@
-import { guestAddressDecision, type GuestAddressReason } from '../voice/voiceGuestCall.js';
+import { guestAddressDecision, type GuestAddressReason } from '../../surfaces/voice/voiceGuestCall.js';
 
 /**
  * Whether she answers an utterance heard in a Discord voice channel (dc-voice, 2026-10-20). With one person in the channel every

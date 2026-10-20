@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { VoiceMouthQueue, VOICE_MOUTH_LIMITS } from '../src/surfaces/platform/voiceMouth.js';
 import { VOICE_FILLERS, fillerSituation, selectVoiceFiller, voiceFillerById } from '../src/surfaces/platform/voiceFillers.js';
-import { voiceAddress } from '../src/surfaces/platform/voiceAddress.js';
+import { voiceAddress } from '../src/mind/perception/voiceChannelAddress.js';
 import { VOICE_ROOM_LIMITS, VoiceRooms } from '../src/surfaces/platform/voiceRoom.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';

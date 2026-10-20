@@ -26,6 +26,8 @@ import type { PlatformVoiceRoutes } from '../surfaces/platform/platformVoiceRout
 import { voiceMouth } from '../surfaces/platform/voiceMouth.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
 import { createConfiguredElevenSpeechGateway } from '../infra/models/elevenSpeech.js';
+import { splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
+import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 
 export function createConfiguredPlatformBridgeRoute(
   environment: Readonly<Record<string, string | undefined>>,
@@ -58,14 +60,22 @@ export function createConfiguredPlatformBridgeRoute(
   const voice: PlatformVoiceRoutes | null = replies && voiceTurns ? {
     service: new PlatformVoiceService({
       scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns: voiceTurns, now,
-      chatModel, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}), environment: () => environment,
+      chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), environment: () => environment,
+      ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
     }),
     mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,
   } : null;
-  return { configuration, chatModel, service, reply, voice, close: () => { turns?.close(); voiceTurns?.close(); } };
+  return { configuration, chatModel, service, reply, voice, close: () => {
+    turns?.close();
+    voiceTurns?.close();
+  } };
 }
 
 /** Her ElevenLabs voice for the voice channel, or null when it is not configured (the route then answers 503 and the bot says the line in its own voice). */
 function configuredVoiceSpeech(environment: Readonly<Record<string, string | undefined>>) {
-  try { return createConfiguredElevenSpeechGateway(environment); } catch { return null; }
+  try {
+    return createConfiguredElevenSpeechGateway(environment);
+  } catch {
+    return null;
+  }
 }

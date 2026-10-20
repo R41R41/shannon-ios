@@ -37,7 +37,6 @@ import { DisabledAetherProposalStore, type AetherProposalStore } from '../../int
 import { InMemoryAgentTaskStore, type AgentCommandType, type AgentPlanItem, type AgentTask, type AgentTaskStore, type HostAgentEvent } from '../../mind/action/agentTasks/agentTaskStore.js';
 import { validatedPlaceSearchOptions } from '../../integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from '../../mind/perception/chatAudience.js';
-import { validChatStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationToolServer, turnToolResults, type ConversationToolServer, type TracedOperationOutcomes } from '../../mind/tools/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
@@ -82,8 +81,9 @@ import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleText
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
-import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
+import { generateChatTurn, validChatStream, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { feelingText } from '../../mind/emotion/feelingPorts.js';
+import { feelingPortFor } from '../../mind/emotion/textRegisterTurn.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
 import { finishTurn, routeTurn, textTurnThinking, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
@@ -363,7 +363,7 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
-    const feelingTurn = feelingText.start(this.feeling, { scopeKey: body.scopeKey, alone: audience.alone, surface, message, begun }); // 0013
+    const feelingTurn = feelingText.start(feelingPortFor(surface, this.feeling), { scopeKey: body.scopeKey, alone: audience.alone, surface, message, begun });
     // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
     const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
     // Who her tools are offered to, and (ADR-0008 stage 2) her read tools' plan and the turn's Jev call, beside recall (`textToolStart`).

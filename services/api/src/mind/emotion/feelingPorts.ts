@@ -108,8 +108,6 @@ export interface FeelingTurnHandle {
   textRegister?: TextRegisterDirective;
   /** His words of this turn (at 本気, whether they take leave of her). */
   words?: string;
-  /** A voice channel's turn (`TextTurnSurface.voice`): no text register. */
-  voice?: boolean;
   /** `SHANNON_NATURAL_TALK`: the chooser's own stance, and whether the day's touch facts were in the block (`naturalTalk.ts`). */
   jevStance?: string;
   ledgerShown?: boolean;
@@ -238,7 +236,7 @@ export const feelingText = Object.freeze({
     return port;
   },
   /** Started right after the turn begins, beside recall and context: the Jev call runs while they do. */
-  start: (port: FeelingPort | null, input: { scopeKey: string; alone: boolean; surface: boolean | { feelingSpeaker?: FeelingSpeaker; voice?: boolean } | undefined;
+  start: (port: FeelingPort | null, input: { scopeKey: string; alone: boolean; surface: boolean | { feelingSpeaker?: FeelingSpeaker } | undefined;
     message: string; begun: { occurredAt: string; captured: CompanionStateSnapshot } }) => {
     if (!port) return null;
     return safely(() => {
@@ -248,8 +246,6 @@ export const feelingText = Object.freeze({
       const key = feelingActor({ ownerAlone: input.alone && !surface, group: surface, ...(speaker ? { speaker } : {}) });
       const { occurredAt: at, captured: snapshot } = input.begun;
       const handle = begin(port, { scopeKey: input.scopeKey, key, channel: 'text', words: input.message, at, snapshot });
-      // A voice channel's words are heard: a typed reply's form and pacing (the text register) is not hers there.
-      if (typeof input.surface === 'object' && input.surface.voice === true) handle.voice = true;
       const amends = key.audience === 'owner_alone' && holdsAgainstOwner(snapshot, at) ? { amends: true } : {};
       const region = regionOf(handle);
       handle.pending = port.turn ? chooseFeelingTurn(port.chooser, { scopeKey: input.scopeKey, surface: 'text', audience: key.audience,
@@ -272,7 +268,7 @@ export const feelingText = Object.freeze({
     if (chosen?.source === 'jev' && naturalOf(handle)) handle.jevStance = chosen.stance;
     handle.decision = safely(() => spaceDecision(handle, chosen), chosen);
     const lines = sentence ? await sentence : null;
-    const decided = handle.port.textRegister && !handle.voice ? handle.decision : null;
+    const decided = handle.port.textRegister ? handle.decision : null;
     if (decided) handle.textRegister = safely(() => textRegisterOf(decided, registerNow(handle), handle.key.audience), undefined);
     const form = handle.textRegister ? textRegisterLines(handle.textRegister) : '';
     return safely(() => [blockOf(handle, handle.decision), lines ? feelingSentenceBlock(lines) : '', form].filter(Boolean).join('\n\n'), '');
