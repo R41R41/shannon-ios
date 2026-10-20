@@ -1,5 +1,5 @@
 import {
-  bedSearchMemory, followedGists, gistFollowLine, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+  bedSearchMemory, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
 } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
@@ -130,7 +130,10 @@ export function createMinecraftTaskBody(parts: {
   let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
   // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
   const marks = step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown; minecraftVillageSearched?: unknown } | null;
-  const bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched);
+  const bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched),
+    // Daytime decisions in a row that went elsewhere than the step now (`minecraftMilestoneFollow.ts`), kept as the marks are.
+    follow = milestoneFollowMemory((step.snapshot.checkpoint as { minecraftMilestoneDrift?: unknown } | null)?.minecraftMilestoneDrift,
+    decisions => log(`Shannon Minecraft milestone steps task=${step.taskId} decisions=${decisions}`));
   // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
   const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
     began: Date.parse(step.snapshot.task.createdAt), now });
@@ -398,7 +401,7 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) });
+      const situation = follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) }));
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
       pointedSkills = skills.pointed;
@@ -429,6 +432,7 @@ export function createMinecraftTaskBody(parts: {
       decided = true;
       governor.decided(step.taskId, now());
       measured(() => metrics.noteCall(call.name, call.input, gistTools));
+      follow.note(call);
       if (!call.name.startsWith('mc.')) return;
       // Not for a call a session in progress cuts off (`toolSignal` aborts it before it runs): that is no use of the gist.
       if (!active && !closed) noteGistFollowed(call.name, call.input);
@@ -462,7 +466,7 @@ export function createMinecraftTaskBody(parts: {
   const offered = !!parts.selector && !!availableBody() && !!control.frame(availableBody()!) && !control.imagesUnavailable(availableBody()!);
   const tools: FcaExternalTools = { definitions: offered ? [definition] : [],
     checkpoint: () => ({ ...(milestones ? { minecraftMilestones: milestones } : {}), ...(idleWaitMs ? { minecraftIdleWaitMs: idleWaitMs } : {}),
-      ...bedSearch.checkpoint(),
+      ...bedSearch.checkpoint(), ...follow.checkpoint(),
       ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })(),
       ...(() => { try { return paceLedger.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {

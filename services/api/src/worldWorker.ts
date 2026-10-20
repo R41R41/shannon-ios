@@ -1,3 +1,4 @@
+import { unlessBusy } from './infra/sqlite/sqliteBusy.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from './infra/observer/observerContext.js';
 import { startObserverPublisher } from './infra/observer/store/observerStore.js';
@@ -108,7 +109,7 @@ try {
         console.log(`Shannon promise pass failed: ${error instanceof Error ? error.name : 'unknown'}`);
       }
     }
-    const sources = store.dueSources();
+    const sources = unlessBusy('world.dueSources', () => store.dueSources(), []);
     for (const source of sources) {
       if (stopping) break;
       try {
@@ -125,9 +126,10 @@ try {
       }
     }
     if (stopping) break;
-    store.reviewExpiredTrials();
-    store.prune();
-    pushStore.prune();
+    // A busy database skips the upkeep of this pass (run 18: prune threw database is locked and the worker exited).
+    unlessBusy('world.reviewExpiredTrials', () => store.reviewExpiredTrials(), undefined);
+    unlessBusy('world.prune', () => store.prune(), undefined);
+    unlessBusy('world.pushPrune', () => pushStore.prune(), undefined);
     const now = Date.now();
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();

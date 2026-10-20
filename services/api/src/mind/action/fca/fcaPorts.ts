@@ -99,6 +99,11 @@ export interface FcaExternalTools {
   safeToAcknowledgeStop?(): boolean;
   /** Closed executor state committed atomically with the original segment's native history. */
   checkpoint?(): Readonly<Record<string, unknown>>;
+  /**
+   * The tool asks the action lease itself (with its own resource) right before its outside effect: the runner does not ask it again
+   * just before (Minecraft run 18: every body tool asked twice, about 0.12 s each).
+   */
+  permitsItself?(name: string): boolean;
   /** Existing source/audience/action gates still apply. Uncertain failures throw and must never become retryable results. */
   execute(request: { scopeKey: string; taskId: string; operationId: string; name: string; input: unknown; signal: AbortSignal }): Promise<ToolResult>;
 }

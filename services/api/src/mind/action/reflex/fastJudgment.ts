@@ -52,7 +52,11 @@ const WEAPON = /(_sword|_axe|^trident|^mace)$/u;
 export const DEFENSIVE_SKILLS: ReadonlySet<string> = new Set(['attack-continuously', 'attack-nearest', 'retreat-attack', 'flee-from',
   'dig-shelter', 'build-around-self', 'tower-up']);
 
-export interface FastThreat { name: string; distance: number; canReachMe: boolean; ignited: boolean }
+/**
+ * `canReachMe`: the body's word, true or false, or null when it said nothing (Minecraft run 18, 07:23:23 and 07:23:46 JST: a zombie
+ * behind a wall, not marked, was read as reaching her and fought for 15 s twice, cutting off three of her decisions).
+ */
+export interface FastThreat { name: string; distance: number; canReachMe: boolean | null; ignited: boolean }
 export interface FastBodyState {
   health: number | null; threats: readonly FastThreat[]; night: boolean; respawnedRecently: boolean; healthDropped: boolean;
   hasWeapon: boolean;
@@ -96,7 +100,8 @@ export function fastBodyState(observation: { facts: Readonly<Record<string, unkn
   const threats = (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(item => {
     const threat = record(item);
     if (!threat || typeof threat.name !== 'string' || !finite(threat.distance) || threat.distance < 0) return [];
-    return [{ name: threat.name.slice(0, 40), distance: threat.distance, canReachMe: threat.canReachMe !== false, ignited: threat.ignited === true }];
+    const canReachMe = typeof threat.canReachMe === 'boolean' ? threat.canReachMe : null;
+    return [{ name: threat.name.slice(0, 40), distance: threat.distance, canReachMe, ignited: threat.ignited === true }];
   });
   const tick = Number(world.time);
   const night = Number.isFinite(tick) && ((tick % 24000) + 24000) % 24000 >= 13_000 && ((tick % 24000) + 24000) % 24000 < 23_000;
@@ -122,13 +127,23 @@ function carried(inventory: readonly unknown[], test: (name: string) => boolean)
 
 /** Why the judgment opens for this state, or null. */
 export function fastEntry(state: FastBodyState): FastEntry | null {
-  const near = (distance: number) => state.threats.some(threat => threat.canReachMe && threat.distance <= distance);
-  if (state.respawnedRecently && near(FAST_JUDGMENT_LIMITS.respawnDistance)) return 'respawn';
-  if (state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.creeperDistance)) return 'close';
-  if (state.healthDropped && near(FAST_JUDGMENT_LIMITS.damageDistance)) return 'damage';
-  if (near(state.night ? FAST_JUDGMENT_LIMITS.nightDistance : FAST_JUDGMENT_LIMITS.closeDistance)) return 'close';
+  // Health falling or a fresh respawn: one not marked may be what reaches her. Merely near: only one the body says reaches her.
+  const near = (distance: number, unmarked: boolean) => state.threats.some(threat => reaches(threat, unmarked) && threat.distance <= distance);
+  if (state.respawnedRecently && near(FAST_JUDGMENT_LIMITS.respawnDistance, true)) return 'respawn';
+  if (state.threats.some(threat => reaches(threat, false) && threat.name === 'creeper' && threat.distance <= FAST_JUDGMENT_LIMITS.creeperDistance)) {
+    return 'close';
+  }
+  if (state.healthDropped && near(FAST_JUDGMENT_LIMITS.damageDistance, true)) return 'damage';
+  if (near(state.night ? FAST_JUDGMENT_LIMITS.nightDistance : FAST_JUDGMENT_LIMITS.closeDistance, false)) return 'close';
   return null;
 }
+/**
+ * Reaches her: the body says so, or it said nothing either way and (`unmarked`) health falls or she just arrived. A creeper or an
+ * archer the body said nothing of always counts: a blast or an arrow needs no path, and hiding from one behind a wall costs seconds,
+ * not a life (the review of run 18's change).
+ */
+const reaches = (threat: FastThreat, unmarked: boolean) => threat.canReachMe === true
+  || (threat.canReachMe === null && (unmarked || threat.name === 'creeper' || RANGED_ENEMIES.has(threat.name)));
 
 const decision = (kind: FastKind, rule: FastDecision['rule'], target = 'hostile'): FastDecision => ({
   kind, rule, ambiguous: rule === 'ambiguous_shelter',
@@ -169,13 +184,14 @@ function floorMayRun(state: FastBodyState): boolean {
 
 /** The rules after the entry, in the design's order. */
 function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
-  const reachable = state.threats.filter(threat => threat.canReachMe);
+  const reachable = state.threats.filter(threat => reaches(threat, entry !== 'close'));
   const within = (distance: number) => reachable.filter(threat => threat.distance <= distance);
   const health = state.health ?? 0;
   if (entry === 'respawn') return decision('shelter', 'respawn_shelter');
   if (health <= FAST_JUDGMENT_LIMITS.lowHealth) return within(3).length ? decision('shelter', 'low_health_shelter') : decision('flee', 'low_health_flee');
   if (within(6).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');
   if (within(8).length >= 3) return decision('shelter', 'outnumbered_shelter');
+  // Merely near (`close`), a fight only with one the body says reaches her (run 18: twice 15 s against a zombie behind a wall).
   const melee = within(6).filter(threat => !RANGED.has(threat.name));
   if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) return decision('shelter', 'ranged_shelter');
   // Never a fight with a creeper within 10 m (a fight's target is any hostile, the creeper among them): away from it first.
@@ -190,7 +206,7 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
  * times running). A fight that failed: flee. A flee that rests is still sent: nothing else is left.
  */
 function afterFailedShelter(state: FastBodyState, chosen: FastDecision): FastDecision {
-  const creeper = state.threats.some(threat => threat.canReachMe && threat.name === 'creeper' && threat.distance <= 6);
+  const creeper = state.threats.some(threat => threat.canReachMe !== false && threat.name === 'creeper' && threat.distance <= 6);
   // Running from a creeper failed (run 17: 2 m over rough ground): up a pillar it cannot climb, when she has the blocks.
   if (chosen.rule === 'creeper_flee' && state.resting.has(chosen.skill) && state.canTower && !state.resting.has(TOWER.skill)) {
     return decision('flee', 'creeper_tower');

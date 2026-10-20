@@ -172,7 +172,8 @@ describe('the decision metrics line', () => {
       async () => metrics.emit());
     expect(JSON.parse(lines[0]!)).toEqual({ event: 'fca_decision_metrics', task: 'task-1', d: 5, t: 60, obsMode: 'legacy', llmMs: 10, stepMs: 30, selectorMs: 0,
       recallMs: 0, recallStartMs: 0, evidenceMs: 0, summaryMs: 0, tools: ['mc.craft-one', 'other'], toolMs: 10, storedTokens: 100, tailTokens: 20, in: { new: 5, read: 90, write: 10 }, out: 30,
-      loopBlockedMs: 0, other: { startMs: 0, permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0 }, gap: null, inputTransformations: 2 });
+      loopBlockedMs: 0, other: { startMs: 0, permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0, progressMs: 0 },
+      permitAsks: 0, gap: null, inputTransformations: 2 });
   });
   it('names the rest of a step and the time from the previous commit, split by what the scheduler said', async () => {
     const lines: string[] = [];
@@ -190,7 +191,7 @@ describe('the decision metrics line', () => {
     });
     const line = JSON.parse(lines[0]!);
     // The clock read 110 when the step's metrics began, 50 after the step was entered at 60.
-    expect(line.other).toEqual({ startMs: 50, permitMs: 10, guardMs: 10, contextMs: 10, verifyMs: 0, closeMs: 0, commitMs: 0 });
+    expect(line.other).toEqual({ startMs: 50, permitMs: 10, guardMs: 10, contextMs: 10, verifyMs: 0, closeMs: 0, commitMs: 0, progressMs: 0 });
     expect(line.gap).toEqual({ sinceCommitMs: 1_000, afterMs: 300, waitMs: 600, admitMs: 50, startMs: 50 });
     expect(line.skipped).toEqual(['mc.place-block-at']);
     // Without the scheduler's word only the whole is known; a first decision has no gap at all.

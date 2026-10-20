@@ -1,3 +1,4 @@
+import { unlessBusy } from './sqliteBusy.js';
 import type { ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
 import { databaseChangeMark, readKeptWhileUnchanged } from './experienceCandidateReads.js';
@@ -208,11 +209,12 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
     const traceBoundary = toolTraceRetentionBoundary(this.context.now());
-    if (traceBoundary) pruneToolTraces(this.context.database, traceBoundary);
+    // Busy at the start (run 18: the API died here eight times while another connection held the lock): the maintenance timer prunes.
+    if (traceBoundary) unlessBusy('start.pruneToolTraces', () => pruneToolTraces(this.context.database, traceBoundary), undefined);
     if (!options.leavesMoodHistory) {
       ensureMoodHistorySchema(this.context.database);
       // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
-      pruneMoodHistory(this.context.database, this.context.now());
+      unlessBusy('start.pruneMoodHistory', () => pruneMoodHistory(this.context.database, this.context.now()), undefined);
     }
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);

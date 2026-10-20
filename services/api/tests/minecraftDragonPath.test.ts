@@ -25,7 +25,7 @@ const later = (minutes: number) => new Date(Date.parse(at) + minutes * 60_000).t
 const pass = { carries: () => false };
 // By morning the bed's dusk window (the last ten minutes) is shut, so each stage shows its own pointer alone.
 const MORNING = { time: '100', margin: { darkInSeconds: 645 } }, DUSK = { time: '9000', margin: { darkInSeconds: 200 } };
-const FED = `cooked_beef×${FOOD_STOCK}`;
+const FED = `cooked_beef×${FOOD_STOCK}`, WOOD = 'oak_planks×12';
 
 const stack = (item: string) => { const [name, count] = item.split('×'); return { name: name!, count: Number(count ?? 1) }; };
 const counts = (...items: string[]) => carriedItemCounts({ inventory: items.map(stack) }, {});
@@ -68,9 +68,11 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
   it('points each stage at its draft-6 skill', () => {
     expect(pointers({ inventory: ['oak_log×3'] })).toEqual([FIRST]);
     // The bed pointer and the stage-2 pointer are one skill now: named once.
-    expect(pointers({ inventory: ['stone_pickaxe×1'] })).toEqual([FOOD_BED]);
-    expect(pointers({ ...DUSK, inventory: ['stone_pickaxe×1'] })).toEqual([FOOD_BED]);
-    expect(pointers({ inventory: ['stone_pickaxe×1', 'white_bed×1'] })).toEqual([FOOD_BED]);
+    // Wood enough (run 18: under twelve planks the first day's pointer stays at stage 2, beside it).
+    expect(pointers({ inventory: ['stone_pickaxe×1', WOOD] })).toEqual([FOOD_BED]);
+    expect(pointers({ inventory: ['stone_pickaxe×1'] })).toEqual([FOOD_BED, FIRST]);
+    expect(pointers({ ...DUSK, inventory: ['stone_pickaxe×1', WOOD] })).toEqual([FOOD_BED]);
+    expect(pointers({ inventory: ['stone_pickaxe×1', 'white_bed×1', WOOD] })).toEqual([FOOD_BED]);
     expect(pointers({ inventory: ['stone_pickaxe×1', 'white_bed×1', FED] })).toEqual(['mc-iron-and-bucket']);
     expect(pointers({ inventory: ['iron_pickaxe×1', FED] })).toEqual(['mc-iron-and-bucket']);
     expect(pointers({ inventory: ['iron_pickaxe×1', 'bucket×1'] })).toEqual(['mc-iron-and-bucket']);
@@ -96,10 +98,10 @@ describe('the pointers name the draft-6 successor once it can be read, the old s
   it('goes on to iron at stage 2 when the sheep search found none today and the food is enough', () => {
     // Searched this morning (645 s before dark) and found none.
     const marked = { failedStepsInARow: 0, noSheepDarkIn: 645 };
-    expect(pointers({ inventory: ['stone_pickaxe×1', FED] }, ALL, marked)).toEqual(['mc-iron-and-bucket']);
+    expect(pointers({ inventory: ['stone_pickaxe×1', FED, WOOD] }, ALL, marked)).toEqual(['mc-iron-and-bucket']);
     // Not fed: the food pointer stays beside iron (no animals near must not hold her at stage 2 all day).
-    expect(pointers({ inventory: ['stone_pickaxe×1'] }, ALL, marked)).toEqual([FOOD_BED, 'mc-iron-and-bucket']);
-    expect(pointers({ inventory: ['stone_pickaxe×1', FED] }, ALL)).toEqual([FOOD_BED]);
+    expect(pointers({ inventory: ['stone_pickaxe×1', WOOD] }, ALL, marked)).toEqual([FOOD_BED, 'mc-iron-and-bucket']);
+    expect(pointers({ inventory: ['stone_pickaxe×1', FED, WOOD] }, ALL)).toEqual([FOOD_BED]);
   });
 
   it('points the Nether, the eyes, the stronghold and the End by what she carries and where she is', () => {
