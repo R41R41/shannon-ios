@@ -13,7 +13,7 @@ export const TRACE_SURFACES = ['voice', 'autonomy', 'text'] as const;
  * the tier the policy chose) and `recall_beam` (one beam search of tree recall), `docs/skill-and-routing-contract.md`. Syzygy ADR-0013
  * stage 1 adds `feeling_turn` (her stance before a text reply).
  */
-export const TRACE_DECISIONS = ['voice_route', 'autonomy_think', 'tool_menu', 'difficulty', 'recall_beam', 'feeling_turn'] as const;
+export const TRACE_DECISIONS = ['voice_route', 'autonomy_think', 'tool_menu', 'difficulty', 'recall_beam', 'feeling_turn', 'addressed'] as const;
 export const TRACE_DECIDERS = ['jev', 'openai', 'anthropic', 'local', 'model'] as const;
 export const TRACE_OUTCOMES = ['ok', 'timeout', 'error', 'fallback'] as const;
 

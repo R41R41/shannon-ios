@@ -54,6 +54,8 @@ export interface ConversationTurn {
     heard?: ConversationHeardLine[];
     followsShannonTurn?: boolean;
     speakingNow?: boolean;
+    /** How long ago she last finished speaking here, in ms (0: speaking now): the follow-up window of `SHANNON_ADDRESSED`. */
+    shannonSpokeMsAgo?: number;
     situation?: string;
   };
   words: string;

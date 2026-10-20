@@ -21,6 +21,8 @@ import { VOICE_MINECRAFT_REFUSALS } from '../src/surfaces/platform/platformVoice
 import { createConfiguredPlatformBridgeRoute } from '../src/wiring/platformBridgeWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
+import { AddressedJudge } from '../src/mind/perception/addressed.js';
+import type { JevChooser } from '../src/infra/models/jev/jevChoice.js';
 
 const OWNER = '900000000000000001';
 const FRIEND = '900000000000000002';
@@ -81,7 +83,7 @@ class Body implements VoiceMinecraftPort {
 
 interface LiveReader { block(options: { alone: boolean }): string; replying?(on: boolean): void; heard?(): void }
 
-function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader) {
+function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader, addressed?: AddressedJudge) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-voice-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -97,7 +99,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const body = new Body();
   const service = new PlatformVoiceService({
     scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT),
-    environment: () => environment, log: () => undefined,
+    environment: () => environment, log: () => undefined, ...(addressed ? { addressed } : {}),
   });
   let counter = 0;
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
@@ -197,18 +199,18 @@ describe('POST /v1/platform/voice/turn', () => {
     await close();
   });
 
-  it('names a filler for words that take time and tells the reply which one she said; the switch takes it away', async () => {
-    const withFiller = harness({ SHANNON_DC_VOICE: 'on' });
+  it('names no filler unless the switch is turned on (owner 2026-10-21: the recorded fillers are the old voice); on, one for words that take time', async () => {
+    const byDefault = harness({ SHANNON_DC_VOICE: 'on' });
+    const none = await byDefault.say('マイクラのエンドラってどうやって倒すのがいいと思う？');
+    expect((none[0] as Extract<VoiceTurnLine, { type: 'decision' }>).filler).toBeNull();
+    await byDefault.close();
+    const withFiller = harness({ SHANNON_DC_VOICE: 'on', SHANNON_DC_VOICE_FILLER: 'on' });
     const lines = await withFiller.say('マイクラのエンドラってどうやって倒すのがいいと思う？');
     const decision = lines[0] as Extract<VoiceTurnLine, { type: 'decision' }>;
     expect(decision.filler).not.toBeNull();
     expect(promptOf(withFiller.model.requests[0]!)).toContain(`「${decision.filler!.text}」と声に出している`);
     await withFiller.close();
-    const without = harness({ SHANNON_DC_VOICE: 'on', SHANNON_DC_VOICE_FILLER: 'off' });
-    const none = await without.say('マイクラのエンドラってどうやって倒すのがいいと思う？');
-    expect((none[0] as Extract<VoiceTurnLine, { type: 'decision' }>).filler).toBeNull();
-    await without.close();
-    const short = harness();
+    const short = harness({ SHANNON_DC_VOICE: 'on', SHANNON_DC_VOICE_FILLER: 'on' });
     expect(((await short.say('おはよう')) [0] as Extract<VoiceTurnLine, { type: 'decision' }>).filler).toBeNull();
     await short.close();
   });
@@ -573,5 +575,104 @@ describe('her Minecraft body\'s present in a voice reply (dc-live, SHANNON_MINEC
     await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: { scopeKey: 'owner', transcript: 'いまマイクラどうなってる？' } });
     expect(promptOf(model.requests.at(-1)!)).not.toContain('[マイクラの体の今]');
     await close();
+  });
+});
+
+/** 「話しかけられたか」 (owner 2026-10-21, `SHANNON_ADDRESSED`): the voice channel answers words said to her by name and the same person's follow-up. */
+describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
+  const ADDRESSED = { SHANNON_DC_VOICE: 'on', SHANNON_ADDRESSED: 'on' };
+
+  /** A Jev that says "not to her" for talk about her (「ってさ」) and "to her" for everything else it is asked. */
+  function judge() {
+    const asked: string[] = [];
+    const chooser = {
+      decide: async (request: { state: unknown }) => {
+        const state = request.state as { utterance: string };
+        asked.push(state.utterance);
+        const about = /ってさ|だって/u.test(state.utterance);
+        return { value: { addressed: !about, target: about ? 'about_shannon' : 'shannon', noul: about ? 0.05 : 0.95, reason: about ? 'about_her' : /シャノン/u.test(state.utterance) ? 'named' : 'continuation' }, source: 'jev' as const };
+      },
+    } as unknown as Pick<JevChooser, 'decide'>;
+    return { asked, judge: new AddressedJudge({ chooser }) };
+  }
+
+  it('stays quiet for words that do not call her, also with the owner alone, and asks nobody', async () => {
+    const { asked, judge: j } = judge();
+    const { say, model, close } = harness(ADDRESSED, undefined, j);
+    const lines = await say('あー疲れた、今日は早く寝よう');
+    expect(typeOf(lines)).toEqual(['decision', 'done']);
+    expect(lines[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(lines[1]).toMatchObject({ silent: true, reason: 'no_name' });
+    expect(model.requests).toHaveLength(0);
+    expect(asked).toEqual([]);
+    await close();
+  });
+
+  it('answers a call by name, asks Jev once, and stays quiet when the name is only talked about', async () => {
+    const { asked, judge: j } = judge();
+    const { say, model, close } = harness(ADDRESSED, undefined, j);
+    const called = await say('シャノン、今日の予定を教えて');
+    expect(called[0]).toMatchObject({ type: 'decision', respond: true, reason: 'named' });
+    expect(model.requests).toHaveLength(1);
+    const talked = await say('シャノンってさ、昨日エンドラの前で死んだんだって', { participants: [OWNER, FRIEND] });
+    expect(talked[0]).toMatchObject({ respond: false, reason: 'about_her' });
+    expect(model.requests).toHaveLength(1);
+    expect(asked).toEqual(['シャノン、今日の予定を教えて', 'シャノンってさ、昨日エンドラの前で死んだんだって']);
+    await close();
+  });
+
+  it('answers the same person\'s follow-up within about twenty seconds of her reply, and not after', async () => {
+    const { asked, judge: j } = judge();
+    const { say, model, advance, close } = harness(ADDRESSED, undefined, j);
+    await say('シャノン、今日の予定を教えて');
+    advance(5_000);
+    const follow = await say('それってどういう意味？');
+    expect(follow[0]).toMatchObject({ respond: true, reason: 'continuation' });
+    expect(model.requests).toHaveLength(2);
+    advance(40_000);
+    const late = await say('それってどういう意味？');
+    expect(late[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(model.requests).toHaveLength(2);
+    expect(asked).toEqual(['シャノン、今日の予定を教えて', 'それってどういう意味？']);
+    await close();
+  });
+
+  it('does not take a friend\'s words after her reply to the owner as a follow-up, and answers the friend who calls her', async () => {
+    const { asked, judge: j } = judge();
+    const { say, model, close } = harness(ADDRESSED, undefined, j);
+    const together = { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND] };
+    await say('シャノン、今日の予定を教えて', together);
+    const friend = await say('ところでそっちの仕事はどう？', { ...together, sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    expect(friend[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    const named = await say('シャノン、俺にも教えて', { ...together, sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    expect(named[0]).toMatchObject({ respond: true, reason: 'named' });
+    expect(model.requests).toHaveLength(2);
+    expect(asked).toHaveLength(2);
+    await close();
+  });
+
+  it('reads how long ago the body says she spoke, and falls back on the local rules when there is no Jev', async () => {
+    const { asked, judge: j } = judge();
+    const { say, close } = harness(ADDRESSED, undefined, j);
+    expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 3_000 }))[0]).toMatchObject({ respond: true, reason: 'continuation' });
+    expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 30_000 }))[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(asked).toHaveLength(1);
+    await close();
+    const silent = harness(ADDRESSED, undefined, new AddressedJudge({ chooser: null }));
+    expect((await silent.say('シャノン、今日の予定を教えて'))[0]).toMatchObject({ respond: true, reason: 'named' });
+    expect((await silent.say('昨日シャノンがさ、変なこと言っててさ', { participants: [OWNER, FRIEND] }))[0]).toMatchObject({ respond: false, reason: 'about_her' });
+    await silent.close();
+  });
+
+  it('is the shared-table rules as before with the switch off, and refuses a bad time', async () => {
+    const { asked, judge: j } = judge();
+    const off = harness({ SHANNON_DC_VOICE: 'on' }, undefined, j);
+    expect((await off.say('あー疲れた、今日は早く寝よう'))[0]).toMatchObject({ respond: true, reason: 'solo' });
+    expect(asked).toEqual([]);
+    expect(await off.refusal(off.service.turn({
+      platform: 'discord', requestId: 'bad-1', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは', observedAt: off.now(),
+      participants: [OWNER], shannonSpokeMsAgo: -1,
+    }, () => undefined))).toBe('400 BAD_REQUEST');
+    await off.close();
   });
 });

@@ -19,12 +19,17 @@ A voice channel's turn is a turn of the conversation kernel through the platform
 - Several people in the channel: she answers only what is said to her (named, asked, requested, greeted, or a short reaction right
   after she spoke; `voiceChannelAddress.ts`). What she hears and does not answer is kept for three minutes in memory as context,
   never in her memory.
+- With `SHANNON_ADDRESSED` on (owner 2026-10-21, `docs/addressed-contract.md`) the rule is the same for one person and for many: she
+  answers only words that call her by name and are said to her, and the same person's follow-up within ~20 s of her last words;
+  Jev judges, and only in those two cases. A `decision` of `respond: false` has the reasons `no_name`, `about_her`, `not_to_her`,
+  `fragment`; `respond: true` has `named`, `bare_call`, `continuation`.
 
 ## `POST /v1/platform/voice/turn` (NDJSON)
 
 Request: `platform: "discord"`, `requestId`, `conversationId`, `voiceChannelId?`, `sourceUserId`, `sourceDisplayName`, `userMessage`
 (the words heard, 1,000 characters), `observedAt`, `participants` (the humans in the channel, the speaker included), `heard` (up to
-eight lines she did not answer: `userId`, `name`, `text`, `at`), `followsShannonTurn`, `speakingNow`, `fillerId?`, `situation?`
+eight lines she did not answer: `userId`, `name`, `text`, `at`), `followsShannonTurn`, `speakingNow`, `shannonSpokeMsAgo?` (ms since she
+last finished speaking), `fillerId?`, `situation?`
 (what her Minecraft body is doing, 300 characters), `sttMs?`, `utteranceMs?`. Anything else is a 400.
 
 Lines, in order: `decision` (`respond`, `reason`, `filler` or null; always first, before anything is read or paid for), then
@@ -54,7 +59,8 @@ of a device's, and `expression` lines may come before the sentences. Conversatio
 
 ## Switches
 
-`SHANNON_DC_VOICE` (off), `SHANNON_DC_VOICE_FILLER`, `SHANNON_DC_VOICE_MINECRAFT`, `SHANNON_DC_VOICE_MOUTH` (on within the first).
+`SHANNON_DC_VOICE` (off), `SHANNON_DC_VOICE_FILLER` (off since 2026-10-21: the recorded fillers are the old voice), `SHANNON_DC_VOICE_MINECRAFT`,
+`SHANNON_DC_VOICE_MOUTH` (on within the first), `SHANNON_ADDRESSED` (off; whom a line was said to).
 `SHANNON_VOICE_AUDIO_TAGS` decides whether her replies carry audio tags. The voice needs `ELEVENLABS_API_KEY` and
 `SHANNON_ELEVEN_TTS_VOICE_ID`; without them `speech` is 503 and the bot says the line in its own voice.
 

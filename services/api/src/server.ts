@@ -53,6 +53,8 @@ import { createConfiguredVoiceTranscriber } from './infra/models/voiceTranscript
 import { createVoiceTranscriptionRoute } from './surfaces/voice/transcriptionRoute.js';
 import { handlePlatformBridgeRequest, isPlatformBridgePath } from './surfaces/platform/serverPlatformBridgeRoute.js';
 import { createConfiguredPlatformBridgeRoute } from './wiring/platformBridgeWiring.js';
+import { configuredAddressedJudge } from './wiring/addressedWiring.js';
+import { ADDRESSED_PATH, createAddressedRoute } from './surfaces/voice/serverAddressedRoute.js';
 import { SQLitePersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { VOICE_CALL_MEMORY_PATH } from './infra/http/apiPeopleMemoryRoutes.js';
@@ -241,7 +243,10 @@ const kernel = createLocalApiKernel(now, {
   ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null }, memoryPorts?.proposals ?? null, peopleFacts);
+// 「話しかけられたか」 (SHANNON_ADDRESSED, owner 2026-10-21): the one judge of the Discord voice channel and the Windows resident's name call. Off: null.
+const addressedJudge = configuredAddressedJudge(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt });
+const addressedRoute = createAddressedRoute(addressedJudge);
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null }, memoryPorts?.proposals ?? null, peopleFacts, addressedJudge);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
@@ -386,6 +391,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/gemini/cascade/delegations/stream') {
       await liveVoiceStreamRoute(request, response, principal);
+      return;
+    }
+    if (url.pathname === ADDRESSED_PATH) {
+      await addressedRoute(request, response, principal);
       return;
     }
     if (url.pathname === '/v1/voice/vision/snapshots') {

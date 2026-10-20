@@ -50,6 +50,11 @@ export interface VoiceTurnRequest {
   heard: HeardLine[];
   followsShannonTurn: boolean;
   speakingNow: boolean;
+  /**
+   * How long ago she last finished speaking in the channel, as the body measured it (0: she is speaking now). `SHANNON_ADDRESSED` reads
+   * it for the follow-up window (~20 s); without it the head's own record of her last reply is used.
+   */
+  shannonSpokeMsAgo?: number;
   /** The filler the body already began to play (it may start one without waiting for the decision line); she goes on from it. */
   fillerId?: string;
   situation?: string;
@@ -80,7 +85,7 @@ export interface StoredVoiceTurn {
 
 const REQUEST_FIELDS = new Set([
   'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'userMessage', 'observedAt',
-  'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
+  'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
 ]);
 
 export const identifier = (value: unknown, maximum: number): value is string =>
@@ -127,12 +132,13 @@ function validatedHeard(value: unknown): HeardLine[] {
   return list.map(validatedHeardLine);
 }
 
-function validatedExtras(body: Record<string, unknown>): Pick<VoiceTurnRequest, 'situation' | 'sttMs' | 'utteranceMs'> {
+function validatedExtras(body: Record<string, unknown>): Pick<VoiceTurnRequest, 'situation' | 'sttMs' | 'utteranceMs' | 'shannonSpokeMsAgo'> {
   if (body.situation !== undefined && !bodyText(body.situation, 600)) throw badRequest('situation is invalid.');
-  for (const field of ['sttMs', 'utteranceMs'] as const) {
+  for (const field of ['sttMs', 'utteranceMs', 'shannonSpokeMsAgo'] as const) {
     if (body[field] !== undefined && !milliseconds(body[field])) throw badRequest(`${field} is invalid.`);
   }
   return {
+    ...(body.shannonSpokeMsAgo !== undefined ? { shannonSpokeMsAgo: body.shannonSpokeMsAgo as number } : {}),
     ...(body.situation !== undefined ? { situation: clipVoiceText(body.situation as string, VOICE_ROOM_LIMITS.situationCharacters) } : {}),
     ...(body.sttMs !== undefined ? { sttMs: body.sttMs as number } : {}),
     ...(body.utteranceMs !== undefined ? { utteranceMs: body.utteranceMs as number } : {}),

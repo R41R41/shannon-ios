@@ -66,6 +66,7 @@ export function voiceRequestOf(turn: ConversationTurn) {
     ...(turn.where.voiceChannelId !== undefined ? { voiceChannelId: turn.where.voiceChannelId } : {}),
     sourceUserId: turn.who.userId, sourceDisplayName: turn.who.displayName, userMessage: turn.words, observedAt: turn.observedAt,
     participants: presence.participants, heard: presence.heard, followsShannonTurn: presence.followsShannonTurn, speakingNow: presence.speakingNow,
+    ...(presence.shannonSpokeMsAgo !== undefined ? { shannonSpokeMsAgo: presence.shannonSpokeMsAgo } : {}),
     ...(presence.situation !== undefined ? { situation: presence.situation } : {}),
     ...(voice?.fillerId !== undefined ? { fillerId: voice.fillerId } : {}),
     ...(voice?.sttMs !== undefined ? { sttMs: voice.sttMs } : {}), ...(voice?.utteranceMs !== undefined ? { utteranceMs: voice.utteranceMs } : {}),

@@ -336,8 +336,15 @@ export const SWITCHES = [
       + 'Needs SHANNON_PLATFORM_REPLY, the bridge and an ElevenLabs voice. Off: 503 PLATFORM_VOICE_DISABLED, the bot answers as before.',
   },
   {
-    name: 'SHANNON_DC_VOICE_FILLER', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
-    doc: 'A voice channel turn may name a short filler (うん。 えっと、) for the bot to say at once while the reply is written.',
+    name: 'SHANNON_DC_VOICE_FILLER', default: 'off', kind: 'explicit_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
+    doc: 'Owner 2026-10-21: off. A voice channel turn may name a short filler (うん。 えっと、) for the bot to say at once while the reply is written '
+      + '(the recorded fillers are the old voice; with 「話しかけられたか」 on, a filler would also play before a silent decision).',
+  },
+  {
+    name: 'SHANNON_ADDRESSED', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
+    doc: 'Owner 2026-10-21 (「話しかけられたか」): in a voice conversation (Discord voice channel, Windows resident\'s name call, POST /v1/voice/addressed) she answers '
+      + 'only words that call her by name and are said to her, and the same person\'s follow-up within ~20 s of her last words; Jev judges when her name is in '
+      + 'the text or inside that window (400 ms, local rules when it does not answer). Off: the shared-table rules (Discord) and the name match (resident) as before.',
   },
   {
     name: 'SHANNON_DC_VOICE_MINECRAFT', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],

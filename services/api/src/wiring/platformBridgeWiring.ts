@@ -30,6 +30,7 @@ import { createConfiguredElevenSpeechGateway } from '../infra/models/elevenSpeec
 import { ChatSentenceSplitter, splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
+import type { AddressedJudge } from '../mind/perception/addressed.js';
 
 export function createConfiguredPlatformBridgeRoute(
   environment: Readonly<Record<string, string | undefined>>,
@@ -49,6 +50,8 @@ export function createConfiguredPlatformBridgeRoute(
   /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (null: switched off); F6: the people facts' readers (null: off). */
   memory: MemoryProposals | null = null,
   facts: ConstructorParameters<typeof PlatformPeople>[4] = null,
+  /** 「話しかけられたか」 (`SHANNON_ADDRESSED`): the judge of whom a spoken line was said to; null while the switch is off. */
+  addressed: AddressedJudge | null = null,
 ): PlatformBridgeRouteDependencies | null {
   const configuration = configuredPlatformBridge(environment);
   if (!configuration) return null;
@@ -66,7 +69,7 @@ export function createConfiguredPlatformBridgeRoute(
     service: new PlatformVoiceService({
       scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns: voiceTurns, now,
       chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), splitter: () => new ChatSentenceSplitter(VOICE_SENTENCE_CUT),
-      environment: () => environment, rooms: voiceRooms, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
+      environment: () => environment, rooms: voiceRooms, addressed, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
     }),
     mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,
   } : null;

@@ -14,6 +14,8 @@ export interface HeardLine {
 export const VOICE_ROOM_LIMITS = Object.freeze({
   heardLines: 8,
   heardMinutes: 3,
+  exchangeLines: 10,
+  shannonMinutes: 10,
   lineCharacters: 160,
   situationCharacters: 300,
   situationDefaultMilliseconds: 60_000,
@@ -21,8 +23,32 @@ export const VOICE_ROOM_LIMITS = Object.freeze({
   rooms: 64,
 });
 
+/** One line of the talk in a room, said by a person or by her (owner 2026-10-21: the judgement of whom a line was said to reads it). */
+export interface ExchangeLine {
+  role: 'person' | 'shannon';
+  userId: string;
+  name: string;
+  text: string;
+  at: string;
+}
+
+/** Her last words in a room and whom they were for: the follow-up window of 「話しかけられたか」 opens from here. */
+export interface ShannonSaid {
+  /** When the words were written (the reply finished); she is still saying them for `speechMs` after. */
+  at: string;
+  userId: string;
+  text: string;
+  /** About how long saying them takes; the follow-up window is counted from the end of it when the body does not tell. */
+  speechMs?: number;
+}
+
+/** About 130 ms a character for a spoken Japanese reply, at most 30 s. */
+export const spokenMilliseconds = (characters: number): number => Math.min(30_000, Math.max(0, characters) * 130);
+
 interface Room {
   heard: HeardLine[];
+  exchange: ExchangeLine[];
+  shannon: ShannonSaid | null;
   situation: { text: string; until: number } | null;
   fillerId: string | undefined;
   touched: number;
@@ -42,7 +68,7 @@ export class VoiceRooms {
         const oldest = [...this.rooms.entries()].sort((a, b) => a[1].touched - b[1].touched)[0]?.[0];
         if (oldest !== undefined) this.rooms.delete(oldest);
       }
-      room = { heard: [], situation: null, fillerId: undefined, touched: this.now() };
+      room = { heard: [], exchange: [], shannon: null, situation: null, fillerId: undefined, touched: this.now() };
       this.rooms.set(key, room);
     }
     room.touched = this.now();
@@ -74,6 +100,43 @@ export class VoiceRooms {
     if (!room) return [];
     this.trim(room);
     return room.heard.filter(line => line.text !== exceptText);
+  }
+
+  /** A line of the talk, answered or not (people and she), newest last; the same line is kept once. */
+  noteExchange(key: string, line: ExchangeLine): void {
+    const room = this.room(key);
+    const text = clip(line.text, VOICE_ROOM_LIMITS.lineCharacters);
+    const at = Date.parse(line.at);
+    if (!text || !Number.isFinite(at)) return;
+    if (room.exchange.some(known => known.role === line.role && known.userId === line.userId && known.at === new Date(at).toISOString() && known.text === text)) return;
+    room.exchange.push({ role: line.role, userId: line.userId, name: clip(line.name, 40) || '誰か', text, at: new Date(at).toISOString() });
+    room.exchange.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const oldest = this.now() - VOICE_ROOM_LIMITS.heardMinutes * 60_000;
+    room.exchange = room.exchange.filter(item => Date.parse(item.at) >= oldest).slice(-VOICE_ROOM_LIMITS.exchangeLines);
+  }
+
+  /** The talk of the last minutes, oldest first. */
+  exchange(key: string): ExchangeLine[] {
+    const room = this.rooms.get(key);
+    if (!room) return [];
+    const oldest = this.now() - VOICE_ROOM_LIMITS.heardMinutes * 60_000;
+    room.exchange = room.exchange.filter(item => Date.parse(item.at) >= oldest);
+    return [...room.exchange];
+  }
+
+  /** She spoke to `userId` (her reply, told when it is done). */
+  noteShannon(key: string, said: ShannonSaid): void {
+    const room = this.room(key);
+    const text = clip(said.text, VOICE_ROOM_LIMITS.lineCharacters);
+    room.shannon = { at: said.at, userId: said.userId, text, speechMs: said.speechMs ?? spokenMilliseconds(Array.from(said.text).length) };
+    this.noteExchange(key, { role: 'shannon', userId: 'shannon', name: 'シャノン', text, at: said.at });
+  }
+
+  /** What she last said in this room, while it is still the talk of the moment (10 minutes). */
+  lastShannon(key: string): ShannonSaid | null {
+    const last = this.rooms.get(key)?.shannon;
+    if (!last) return null;
+    return this.now() - Date.parse(last.at) <= VOICE_ROOM_LIMITS.shannonMinutes * 60_000 ? last : null;
   }
 
   setSituation(key: string, text: string, ttlMilliseconds?: number): void {

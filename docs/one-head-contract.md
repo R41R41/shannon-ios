@@ -37,7 +37,8 @@ The bridge's service token (`Authorization: Bearer`, as `/v1/platform/*`). 503 `
              "conversationKind": "channel" | "dm", "title": "channel name (optional)", "voiceChannelId": "…" },
   "who": { "userId": "…", "displayName": "…" },
   "presence": { "participants": ["…"], "heard": [{ "userId", "name", "text", "at" }], "followsShannonTurn": false,
-                "speakingNow": false, "situation": "…" },
+                "speakingNow": false, "shannonSpokeMsAgo": 4000 /* optional: since she last finished speaking; docs/addressed-contract.md */,
+                "situation": "…" },
   "words": "…",
   "voice": { "fillerId": "…", "sttMs": 0, "utteranceMs": 0 }
 }

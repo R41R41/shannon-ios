@@ -8,7 +8,8 @@ import {
   type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { voiceAddress, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import type { AddressedJudge, AddressedLine } from '../../mind/perception/addressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -68,6 +69,11 @@ export interface PlatformVoiceDependencies {
   /** One head: the same cut, while the reply is written (wiring: a `ChatSentenceSplitter` with `VOICE_SENTENCE_CUT`); absent, cut at the end. */
   splitter?: () => SentenceSplitter;
   rooms?: VoiceRooms;
+  /**
+   * 「話しかけられたか」 (`SHANNON_ADDRESSED`): the one judge of whom a spoken line was said to (`mind/perception/addressed.ts`). Absent or
+   * the switch off, the shared-table rules of `voiceChannelAddress.ts` decide as before.
+   */
+  addressed?: AddressedJudge | null;
   /** Her Minecraft body's side of an owner's spoken request; null while the part is off. */
   minecraft?: () => VoiceMinecraftPort | null;
   /** The auxiliary model (Haiku) that puts event facts into her words (`wording`). */
@@ -206,7 +212,7 @@ export class PlatformVoiceService {
 
   private async answer(request: VoiceTurnRequest, hash: string, key: string, out: VoiceOut): Promise<void> {
     const seat = this.seat(request);
-    const address = voiceAddress({ transcript: request.userMessage, humans: seat.humans.size, followsShannonTurn: request.followsShannonTurn });
+    const address = await this.addressOf(seat, request);
     if (!address.respond) return this.stayQuiet(seat, request, hash, key, address, out);
     this.admit(seat, request);
     const filler = this.fillerFor(request, address);
@@ -217,6 +223,40 @@ export class PlatformVoiceService {
     const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, out) : await this.ask(seat, request, hash, filler, body, out);
     await this.carryIntent(seat, request, answer, body, out);
     this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler }, out);
+  }
+
+  /**
+   * Whether she answers these words. With `SHANNON_ADDRESSED` on: only words said to her by name, and the same person's follow-up within
+   * ~20 s of her last words (Jev judges; local rules when it does not answer), also with one person in the channel. Off: the shared-table rules.
+   */
+  private async addressOf(seat: ChannelSeat, request: VoiceTurnRequest): Promise<VoiceAddress> {
+    const judge = this.dependencies.addressed ?? null;
+    const humans = seat.humans.size;
+    if (!judge || !switchOn(this.environment, 'SHANNON_ADDRESSED')) {
+      return voiceAddress({ transcript: request.userMessage, humans, followsShannonTurn: request.followsShannonTurn });
+    }
+    const room = request.conversationId;
+    const observed = Date.parse(request.observedAt);
+    // What the body heard of the others and did not send as a turn belongs to the talk the judgement reads.
+    for (const line of request.heard) this.rooms.noteExchange(room, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
+    const last = this.rooms.lastShannon(room);
+    const recent: AddressedLine[] = this.rooms.exchange(room).map(line => ({
+      who: line.role === 'shannon' ? 'シャノン' : line.name, ...(line.role === 'shannon' ? { shannon: true as const } : {}), text: line.text,
+      secondsAgo: Math.max(0, (observed - Date.parse(line.at)) / 1000),
+    }));
+    const spokeAgoMs = request.speakingNow ? 0
+      : request.shannonSpokeMsAgo ?? (last ? Math.max(0, observed - Date.parse(last.at) - (last.speechMs ?? 0)) : request.followsShannonTurn ? 8_000 : null);
+    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through).
+    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgoMs !== null && spokeAgoMs <= judge.windowMilliseconds })) {
+      return { respond: false, reason: 'fragment' };
+    }
+    const verdict = await judge.judge({
+      scopeKey: this.dependencies.scopeKey, transcript: request.userMessage, speaker: { id: request.sourceUserId, name: request.sourceDisplayName }, humans, recent,
+      shannon: { spokeAgoMs, toSpeaker: last && last.userId ? last.userId === request.sourceUserId : null, ...(last ? { line: last.text } : {}) },
+    });
+    this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
+    this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} asked=${verdict.asked} ms=${verdict.ms} humans=${humans}`);
+    return { respond: verdict.addressed, reason: verdict.reason };
   }
 
   /** Heard, not answered: context for a few minutes, nothing in her memory. */
@@ -396,6 +436,8 @@ export class PlatformVoiceService {
     const reply = displayedVoiceText(answer.reply).trim().slice(0, PLATFORM_VOICE_LIMITS.replyCharacters);
     const threadId = seat.policy.threadId;
     const response: StoredVoiceTurn = { reply, threadId, respond: true, reason: facts.address };
+    // Her words are for this speaker: the follow-up window of 「話しかけられたか」 opens from here (`addressOf`).
+    if (reply) this.rooms.noteShannon(request.conversationId, { at: now(), userId: request.sourceUserId, text: reply });
     turns.save(scopeKey, key, request.platform, hash, response as unknown as Record<string, unknown>, now(), PLATFORM_VOICE_LIMITS.replayDays);
     const totalMs = Math.round(performance.now() - seat.startedAt);
     const firstSentenceMs = answer.spoken.firstAt === null ? null : Math.round(answer.spoken.firstAt - seat.startedAt);
