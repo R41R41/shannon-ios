@@ -401,7 +401,8 @@ export function createMinecraftTaskBody(parts: {
       const observation = live() && bound() ? control.observe(bound()!) : null;
       const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation) }));
+      const situation = follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation),
+        elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) }));
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
       pointedSkills = skills.pointed;

@@ -19,6 +19,9 @@ const argumentOf = (call: AdoptionCall, key: string) => {
 /** Making and setting the furnace or the table the iron is smelted and crafted at (the review of run 18: counted as going elsewhere). */
 const ironPrep = (call: AdoptionCall) => (call.name === 'mc.craft-one' && /^(?:furnace|crafting_table|stick)$/u.test(argumentOf(call, 'itemName')))
   || (call.name === 'mc.place-block-at' && /^(?:furnace|crafting_table)$/u.test(argumentOf(call, 'blockName')));
+const BED_STEP = '食料と羊とベッド';
+/** Gravel for the flint of the flint and steel. */
+const gravel = (call: AdoptionCall) => call.name === 'mc.mine-block' && /gravel/u.test(argumentOf(call, 'blockName'));
 const LOG_STEP = 'mc.mine-block（blockName=近くの原木1種類、例 oak_log。「,」で並べない、count=3 以上。原木1個で板4枚、板12枚分まで）';
 /** By the milestone's name (`MILESTONES`); a step not here (from the diamonds on) has no procedure to put first. */
 const PROCEDURES: ReadonlyMap<string, Procedure> = new Map<string, Procedure>([
@@ -28,7 +31,7 @@ const PROCEDURES: ReadonlyMap<string, Procedure> = new Map<string, Procedure>([
   ['石の斧', { tags: WOOD, steps: ['mc.craft-one（itemName=stone_axe。丸石3・棒2）'] }],
   ['木材', { tags: WOOD, steps: [LOG_STEP] }],
   // Not the furnace: run 18 took iron out of it at D34 and D35 while this was the step.
-  ['食料と羊とベッド', { tags: ['sheep_search', 'sheep_hunt', 'bed_craft', 'bed_sleep', 'food_hunt', 'food_cook', 'village_check', 'village_loot', 'village_food'],
+  [BED_STEP, { tags: ['sheep_search', 'sheep_hunt', 'bed_craft', 'bed_sleep', 'food_hunt', 'food_cook', 'village_check', 'village_loot', 'village_food'],
     steps: [
       '羊を探す: mc.find-nearest-entity（entityType=sheep、maxDistance=128）。見えている羊は mc.attack-continuously（entityName=sheep、maxKills=3）',
       '同じ色の羊毛3個と板材3枚で mc.craft-one（itemName=white_bed など羊毛の色の _bed）',
@@ -39,6 +42,16 @@ const PROCEDURES: ReadonlyMap<string, Procedure> = new Map<string, Procedure>([
   ['鉄', { tags: IRON, tools: FURNACE, also: ironPrep,
     steps: ['mc.mine-block（blockName=iron_ore、count=30、searchRadius=48）→ かまど2台で mc.start-smelting（inputItem=raw_iron）→ mc.craft-one（itemName=iron_pickaxe）'] }],
   ['バケツ', { tags: IRON, tools: FURNACE, also: ironPrep, steps: ['mc.craft-one（itemName=bucket。鉄3）'] }],
+  // Owner 2026-10-20 (30 minutes to the Nether): the way from diamonds to the gate, with the body's own tools (Minebot catalog).
+  ['ダイヤ', { tags: ['descend', 'diamond_find', 'diamond_mine', 'diamond_tool_craft'], steps: [
+    'mc.stair-mine（targetY=-58）→ mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）→ mc.craft-one（itemName=diamond_pickaxe）',
+    '見つからなければ mc.stair-mine の direction を変えて横へ約20ブロック進み、また mine-block' ] }],
+  ['黒曜石', { tags: ['lava_find', 'water_pour', 'lava_pour', 'obsidian_mine'], also: gravel, steps: [
+    'mc.find-blocks（blockName=lava、maxDistance=32）→ mc.use-item-on-block（溶岩の座標、itemName=water_bucket）→ mc.mine-block（blockName=obsidian、count=10）',
+    '水はバケツで汲み戻す: mc.use-item-on-block（水の座標、itemName=bucket）。流れる溶岩は丸石になるので、溜まり（源）にかける' ] }],
+  ['ゲート', { tags: ['portal_build', 'portal_enter', 'diamond_tool_craft'], also: gravel, steps: [
+    '火打石: mc.mine-block（blockName=gravel、count=10）→ mc.craft-one（itemName=flint_and_steel）',
+    '平らな地面で mc.build-structure（structureName=nether_portal、x、y、z、facing）→ 点いたか観測で確かめ → mc.enter-portal（枠の内側の座標）' ] }],
   ['鉄の全身の防具', { tags: IRON, tools: [...FURNACE, 'mc.equip-item'], also: ironPrep,
     steps: ['mc.craft-one（itemName=iron_helmet・iron_chestplate・iron_leggings・iron_boots。鉄24）→ mc.equip-item（itemName=iron_chestplate、destination=torso など）'] }],
 ]);
@@ -51,11 +64,15 @@ export function followsMilestone(milestone: string, call: AdoptionCall): boolean
     || ADOPTIONS.some(adoption => procedure.tags.includes(adoption.tag) && adoption.matches(call));
 }
 
-/** The fixed words put first: the step, how many daytime decisions in a row went elsewhere, and its procedure. */
-export function milestoneSteps(milestone: string, decisions: number): string[] {
+/**
+ * The fixed words put first: the step, how many daytime decisions in a row went elsewhere, and its procedure. `lead`: a bed or a
+ * village she knows of (`minecraftBedLead.ts`), first in the bed's step (run 19: an igloo's bed 13 m away was never taken).
+ */
+export function milestoneSteps(milestone: string, decisions: number, lead?: string | null): string[] {
   const procedure = PROCEDURES.get(milestone);
   if (!procedure) return [];
-  return [`今の節目「${milestone}」から${decisions}回続けて別のことをした。いまの作業の区切りで、まずこれを進める:`, ...procedure.steps];
+  const first = milestone === BED_STEP && lead ? [lead] : [];
+  return [`今の節目「${milestone}」から${decisions}回続けて別のことをした。いまの作業の区切りで、まずこれを進める:`, ...first, ...procedure.steps];
 }
 
 type Drift = { milestone: string; decisions: number };
@@ -73,17 +90,17 @@ function driftOf(kept: unknown): Drift | null {
 export function milestoneFollowMemory(kept: unknown, shown?: (decisions: number) => void) {
   const before = driftOf(kept);
   let now: { milestone: string; calm: boolean } | null = null, called = false, followed = false;
-  const context = (milestone: string | null, calm: boolean): string[] => {
+  const context = (milestone: string | null, calm: boolean, lead?: string | null): string[] => {
     now = milestone ? { milestone, calm } : null;
     return calm && milestone && before?.milestone === milestone && before.decisions >= MILESTONE_DRIFT.decisions
-      ? milestoneSteps(milestone, before.decisions) : [];
+      ? milestoneSteps(milestone, before.decisions, lead) : [];
   };
   return {
     /** At the decision's context: the steps to put first (none while the count is short, at night, or for a step without them). */
     context,
     /** The decision's situation with the steps put first (`milestoneSteps`), told to `shown` with the count when there are any. */
-    situate<T extends { milestoneName?: string | null; calm: boolean }>(situation: T): T & { milestoneSteps?: readonly string[] } {
-      const steps = context(situation.milestoneName ?? null, situation.calm);
+    situate<T extends { milestoneName?: string | null; calm: boolean; bedLead?: string | null }>(situation: T): T & { milestoneSteps?: readonly string[] } {
+      const steps = context(situation.milestoneName ?? null, situation.calm, situation.bedLead);
       if (!steps.length) return situation;
       shown?.(before?.decisions ?? 0);
       return { ...situation, milestoneSteps: steps };

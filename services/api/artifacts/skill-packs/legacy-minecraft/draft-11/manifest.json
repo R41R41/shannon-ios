@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-11",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=0e838a78fa1681acc6d418646f57e28301ec96c4006021febe10893b4dd5165d",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-food-and-bed",
+      "path": "mc-food-and-bed/SKILL.md",
+      "sha256": "8b9ac17fa8cd1e81993dfe4da91e99c44a8dbe99c108d11177a5fb12fe09193b",
+      "revises": {
+        "bodySha256": "9cc7c70747575fe0ecb2bacf846a75a4341c5ad67b9e1026d647f1eb39601b49"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-iron-and-bucket",
+      "path": "mc-iron-and-bucket/SKILL.md",
+      "sha256": "47e67cb7a81c0063e2de7f97ba372182e23137f80e3984d7a942d41d34c61233",
+      "revises": {
+        "bodySha256": "a8050d5cd3373e94f03b222b81e6467af6aad62bc0af26ecf373300f146f1b2d"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    },
+    {
+      "name": "mc-diamond-obsidian",
+      "path": "mc-diamond-obsidian/SKILL.md",
+      "sha256": "e9c55b624f772649050bfd88ae397794bc4081f25f81529ca3ac185b343626c8",
+      "revises": {
+        "bodySha256": "8532ce16e4808d2fb0e13a961624b78672d17135fd730a4d57628114b5d2e24a"
+      },
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ],
+      "milestone": "none"
+    }
+  ]
+}

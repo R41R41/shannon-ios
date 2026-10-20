@@ -1,7 +1,7 @@
 import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
 import type { TaskRecord, TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
-import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
+import type { MinecraftBodyDependencies, MinecraftIntentRefusal } from '../surfaces/minecraft/minecraftBody.js';
 import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
@@ -31,7 +31,10 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   sourceVisible(id: string): boolean;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
-}): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>; operator: OperatorMinecraftRequests } {
+  /** Where the content-free lines go (`console.log` when absent). */
+  log?(line: string): void;
+}): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
+  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests } {
   const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -41,6 +44,23 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     }
   };
   const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: MINECRAFT_REQUEST_CONTEXT });
+  const log = parts.log ?? ((line: string) => console.log(line));
+  /** What refuses an in-game request before her reply is made: the scope, someone else known to be present, no frame of the body. */
+  const admission = (input: { scopeKey: string; request: { serverId: string } }): MinecraftIntentRefusal | null =>
+    input.scopeKey !== parts.ownerScope ? 'not_owner_scope' : !parts.ownerAlone() ? 'others_present'
+      : !parts.control.frame(parts.control.bodyId(input.request.serverId)) ? 'body_unavailable' : null;
+  /**
+   * The newest Minecraft request of his (`admittedMinecraftRequest`, not a task that merely touched the body) on this body that can
+   * still take a message and act on it: ready, executing or waiting, and not paused (a stopping task would drop it).
+   */
+  const openRequest = (bodyId: string): TaskView | undefined => bound()
+    .filter(task => ['ready', 'executing', 'waiting'].includes(task.phase) && task.status !== 'paused' && parts.control.store.body(task.id) === bodyId
+      && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+  const refused = (reason: MinecraftIntentRefusal, kind: string) => {
+    log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
+    return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
+  };
   return {
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
@@ -85,14 +105,31 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
         { outcome: stopped.some(task => task.id === targets[0]!.id && task.phase === 'stopped') ? 'applied' : 'queued', action: 'cancel',
           target: { kind: 'minecraft_request', id: targets[0]!.id }, operationId: targets[0]!.id });
     } },
+    admission,
     async intent(input) {
       const { intent, scopeKey } = input;
       if (intent.kind === 'none') return intent;
-      if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || !input.experienceId || !parts.sourceVisible(input.experienceId)) return { kind: 'none', goal: '', rejected: 'queue_unavailable' };
+      // Minecraft run 19 (10:54 JST): four checks gave one `queue_unavailable` and no line; each now has its reason, in the journal too.
+      const early = admission(input);
+      const reason = early && (intent.kind !== 'stop' || early !== 'body_unavailable') ? early
+        : !input.experienceId ? 'no_turn' : !parts.sourceVisible(input.experienceId) ? 'turn_not_visible' : null;
+      if (reason) return refused(reason, intent.kind);
+      const sourceId = input.experienceId!;
       if (intent.kind === 'stop') { for (const task of bound()) await parts.stop(task.id, 'owner_game_stop'); return intent; }
       const bodyId = parts.control.bodyId(input.request.serverId);
-      if (!parts.control.frame(bodyId)) return { kind: 'none', goal: '', rejected: 'queue_unavailable' };
-      const sourceId = input.experienceId;
+      // A Minecraft request of his under way takes the words as a message (「続けて」 in run 19 would have been a second task beside it).
+      const running = openRequest(bodyId);
+      if (running) {
+        try {
+          parts.runtime.observeExternal(scopeKey, running.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId],
+            observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${intent.goal}` });
+          log(`Shannon Minecraft intent delivered task=${running.id} as=message`);
+          return { ...intent, request: { id: running.id } };
+        } catch (error) {
+          // It ended meanwhile (`FCA_TARGET_FINISHED`): a new task, as before. A changed retry of the same request still conflicts.
+          if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
+        }
+      }
       return parts.atomic(() => {
         // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
         const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `mc:${input.request.requestId}`,

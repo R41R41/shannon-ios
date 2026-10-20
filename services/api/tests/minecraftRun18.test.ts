@@ -171,7 +171,10 @@ describe('the step followed, or its procedure put first', () => {
     expect(followsMilestone('鉄', call('mc.craft-one', { itemName: 'furnace' }))).toBe(true);
     expect(followsMilestone('鉄', call('mc.place-block-at', { blockName: 'furnace' }))).toBe(true);
     expect(followsMilestone('鉄', call('mc.place-block-at', { blockName: 'dirt' }))).toBe(false);
-    expect(followsMilestone('ダイヤ', call('mc.mine-block', { blockName: 'diamond_ore' }))).toBe(false);
+    expect(followsMilestone('ネザー要塞', call('mc.mine-block', { blockName: 'diamond_ore' }))).toBe(false);
+    // Run 19: the diamonds, the obsidian and the gate have their procedures too (owner: 30 minutes to the Nether).
+    expect(followsMilestone('ダイヤ', call('mc.mine-block', { blockName: 'deepslate_diamond_ore,diamond_ore' }))).toBe(true);
+    expect(followsMilestone('ゲート', call('mc.mine-block', { blockName: 'gravel' }))).toBe(true);
   });
 
   /** One step of hers: the context, its calls, and what it keeps. */
@@ -199,9 +202,9 @@ describe('the step followed, or its procedure put first', () => {
     expect(decide(fourth.kept, '食料と羊とベッド', true, [call('task.list')]).kept).toEqual({ milestone: '食料と羊とベッド', decisions: 4 });
     expect(decide(fourth.kept, '食料と羊とベッド', true, [call('mc.find-nearest-entity', { entityType: 'sheep', maxDistance: 128 })]).kept).toBeNull();
     expect(decide(fourth.kept, '鉄', true, [call('mc.dig-shelter')]).kept).toEqual({ milestone: '鉄', decisions: 1 });
-    expect(decide({ milestone: 'ダイヤ', decisions: 9 }, 'ダイヤ', true, iron).shown).toEqual([]);
+    expect(decide({ milestone: 'ネザー要塞', decisions: 9 }, 'ネザー要塞', true, iron).shown).toEqual([]);
     // A daytime decision at a step without a procedure ends a count kept from an earlier step.
-    expect(decide(fourth.kept, 'ダイヤ', true, iron).kept).toBeNull();
+    expect(decide(fourth.kept, 'ネザー要塞', true, iron).kept).toBeNull();
   });
 
   it('puts the procedure ahead of the pointers and their gists', () => {

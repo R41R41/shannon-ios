@@ -137,10 +137,30 @@ export function milestoneNow(facts: MilestoneFacts): { now: Milestone; next: Mil
   const next = MILESTONES.findIndex((milestone, index) => index > now && !milestone.optional);
   return { now: MILESTONES[now]!, next: next < 0 ? null : MILESTONES[next]! };
 }
-/** The two lines a decision carries (`milestone`): the step now with its condition and reason, and the next one. Fixed words only. */
-export function milestoneLines(facts: MilestoneFacts): string[] {
+/**
+ * The owner's time budget to the Nether (2026-10-20: 「30分以内にスムーズにネザーに行けるくらいじゃないとダメ」), seconds from the task's
+ * start by which each step should be passed. Run 19: the wooden pickaxe at 79 s, the stone tools at 168 s, the iron pickaxe and bucket
+ * at 535 s, the full iron at 949 s; no bed, no diamond. Shared with the planner of mb-arch (one table, not two).
+ */
+export const MILESTONE_TARGET_SECONDS: Readonly<Record<string, number>> = Object.freeze({
+  '木': 60, '木と石のツルハシ': 150, '石の斧': 150, '木材': 200, '食料と羊とベッド': 600, '鉄': 420, 'バケツ': 420, '鉄の全身の防具': 780,
+  'ダイヤ': 1_200, '黒曜石': 1_500, 'ゲート': 1_650, 'ネザー': 1_800,
+});
+/** What a step that is late cuts first: the detours run 18 and 19 lost their time to. */
+export const MILESTONE_LATE_CUTS = '掘りすぎ（鉄は33まで）・望みの薄い探し（羊の出ない所、同じ方角）・水の中の生き物の追い・かまどの前の待ち';
+
+/**
+ * The lines a decision carries (`milestone`): the step now with its condition and reason, the next one, and, with the seconds since
+ * the task began, the step's time budget (`MILESTONE_TARGET_SECONDS`) and what to cut when it is late. Fixed words only.
+ */
+export function milestoneLines(facts: MilestoneFacts, elapsedSeconds?: number): string[] {
   const { now, next } = milestoneNow(facts);
-  return [`今の節目: ${now.name}（条件: ${now.condition}。なぜ: ${now.why}）`, ...(next ? [`次の節目: ${next.name}（条件: ${next.condition}）`] : [])];
+  const target = MILESTONE_TARGET_SECONDS[now.name];
+  const seconds = elapsedSeconds !== undefined && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0 ? Math.round(elapsedSeconds) : null;
+  const budget = target === undefined || seconds === null ? []
+    : [seconds > target ? `時間の目安: 「${now.name}」は${target}秒までに。いま${seconds}秒で${seconds - target}秒遅れている。寄り道を切る: ${MILESTONE_LATE_CUTS}`
+      : `時間の目安: 「${now.name}」は${target}秒までに（いま${seconds}秒、あと${target - seconds}秒）`];
+  return [`今の節目: ${now.name}（条件: ${now.condition}。なぜ: ${now.why}）`, ...(next ? [`次の節目: ${next.name}（条件: ${next.condition}）`] : []), ...budget];
 }
 
 /** A finished call of hers: the tool and its arguments as she gave them. */
