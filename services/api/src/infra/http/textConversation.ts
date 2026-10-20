@@ -245,6 +245,7 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
       ...(inline && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}),
       ...(inline && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...thinking,
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(this.tier), ...feelingText.route(this.feelingTurn),
+      ...(surface?.voice ? { voiceReply: true as const } : {}), // A platform's voice turn (dc-voice): the voice reply model answers it.
       richBlocks: !surface,
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : parts.deps.conversationStore.needsAutomaticThreadTitle(this.scopeKey, threadId),

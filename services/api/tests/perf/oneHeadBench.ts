@@ -10,6 +10,10 @@
  * added in the report, not here.
  *
  * TURNS=40 TTFT_MS=400 PACE_MS=20 node --import tsx tests/perf/oneHeadBench.ts
+ *
+ * `SHANNON_VOICE_SONNET=on` (owner 2026-10-21): every spoken reply goes through `VoiceReplyChatModel` to a scripted Sonnet whose first
+ * word comes after `SONNET_TTFT_MS` (default `TTFT_MS`), and the apps' first words are cut as the stream route cuts them (its first
+ * clause at once). `REPLY_KIND=clause`: a reply whose first sentence has a long first clause.
  */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,18 +30,25 @@ import { PlatformReplyService } from '../../src/surfaces/platform/platformReply.
 import { ChatSentenceSplitter, splitChatSentences } from '../../src/surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../../src/surfaces/text/chatSentenceStream.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
+import { AnthropicChatModel } from '../../src/infra/models/anthropic/anthropicChatModel.js';
+import { sonnetSettings } from '../../src/infra/models/anthropic/anthropicConfig.js';
+import { VoiceReplyChatModel, VoiceSonnetDay } from '../../src/infra/models/voiceReplyChatModel.js';
+import { FIRST_CLAUSE_CHARACTERS, SpokenSentenceSegmenter } from '../../src/surfaces/voice/spokenSentences.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../../src/infra/models/chatModel.js';
 
 const turns = Number(process.env.TURNS ?? 40);
 const ttftMs = Number(process.env.TTFT_MS ?? 400);
 const paceMs = Number(process.env.PACE_MS ?? 20);
+const voiceSonnet = process.env.SHANNON_VOICE_SONNET === 'on';
+const sonnetTtftMs = Number(process.env.SONNET_TTFT_MS ?? ttftMs);
 const OWNER = '900000000000000001';
 const FRIEND = '900000000000000002';
 const ROOM = 'discord:222:300';
 const TOKEN = 'd'.repeat(40);
 const BINDINGS = [{ platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' }];
 const BRIDGE = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
-const REPLY = 'うん、いまは鉄を探しながら洞窟を下りてるところだよ。体力はまだ大丈夫だから、このまま奥まで行ってみるね。';
+const REPLY = process.env.REPLY_KIND === 'clause' ? 'えっとね、いまいるのは洞窟のいちばん奥のほうで、鉄を探してるところだよ。体力はまだ大丈夫だから、このまま行ってみるね。'
+  : 'うん、いまは鉄を探しながら洞窟を下りてるところだよ。体力はまだ大丈夫だから、このまま奥まで行ってみるね。';
 const FIRST_END = REPLY.indexOf('。') + 1;
 
 /** The model: one first-word wait and one pace for every way of asking, and when it was called and reached its first sentence end. */
@@ -47,10 +58,11 @@ class TimedModel implements ShannonChatModel {
   calledAt = 0;
   firstEndAt = 0;
   way = '';
-  private async speak(way: string, onText: (text: string) => void | Promise<void>): Promise<ShannonChatModelResult> {
+  constructor(private readonly firstWordMs = ttftMs, private readonly label = '') {}
+  async speak(way: string, onText: (text: string) => void | Promise<void>): Promise<ShannonChatModelResult> {
     this.calledAt = performance.now();
-    this.way = way;
-    await delay(ttftMs);
+    this.way = `${this.label}${way}`;
+    await delay(this.firstWordMs);
     for (let at = 0; at < REPLY.length; at += 4) {
       if (at < FIRST_END && at + 4 >= FIRST_END) this.firstEndAt = performance.now();
       await onText(REPLY.slice(at, at + 4));
@@ -65,6 +77,21 @@ class TimedModel implements ShannonChatModel {
 
 interface Sample { preModel: number; emitLag: number; first: number; way: string }
 
+/** Her spoken replies on a scripted Sonnet (`VoiceReplyChatModel`); its timings are written where the bench reads the model's. */
+function onSonnet(timing: TimedModel): ShannonChatModel {
+  const sonnet = new AnthropicChatModel({ apiKey: 'bench-only', settings: sonnetSettings({}) });
+  const timed = new TimedModel(sonnetTtftMs, 'sonnet-');
+  const speak = (way: string) => async (_request: unknown, onText?: (text: string) => void | Promise<void>) => {
+    const result = await timed.speak(way, onText ?? (() => undefined));
+    Object.assign(timing, { calledAt: timed.calledAt, firstEndAt: timed.firstEndAt, way: timed.way });
+    return result;
+  };
+  sonnet.generate = speak('structured');
+  sonnet.generateStreaming = speak('structured-stream');
+  sonnet.generateVoiceStreaming = speak('voice-stream');
+  return new VoiceReplyChatModel(timing, { sonnet, day: new VoiceSonnetDay(100_000, () => 'bench') });
+}
+
 function world() {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-one-head-bench-'));
   const path = join(directory, 'shannon.sqlite');
@@ -73,14 +100,15 @@ function world() {
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
   const model = new TimedModel();
-  const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore });
+  const chatModel = voiceSonnet ? onSonnet(model) : model;
+  const api = createLocalApiKernel(now, { chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore });
   const environment = { SHANNON_DC_VOICE: 'on', ...(process.env.SHANNON_ONE_HEAD ? { SHANNON_ONE_HEAD: process.env.SHANNON_ONE_HEAD } : {}) };
   const bridge = new PlatformBridgeService(configuredPlatformBridge(BRIDGE)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true,
     () => environment.SHANNON_ONE_HEAD === 'on');
   const conversation = { textTurn: api.textTurn.bind(api), seatedVoiceTurn: api.seatedVoiceTurn.bind(api) };
   const voiceTurns = new SQLiteSurfaceTurnLog(path, 'platform_voice_turns');
   const replyTurns = new SQLiteSurfaceTurnLog(path, 'platform_reply_turns');
-  const voice = new PlatformVoiceService({ scopeKey: 'owner', bridge, conversationStore: store, conversation, turns: voiceTurns, now, chatModel: model,
+  const voice = new PlatformVoiceService({ scopeKey: 'owner', bridge, conversationStore: store, conversation, turns: voiceTurns, now, chatModel,
     sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), splitter: () => new ChatSentenceSplitter(VOICE_SENTENCE_CUT),
     environment: () => environment, log: () => undefined });
   const reply = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation, turns: replyTurns, now });
@@ -95,10 +123,12 @@ function world() {
 async function appVoice(w: ReturnType<typeof world>, n: number): Promise<Sample> {
   const startedAt = performance.now();
   let firstOut = 0;
+  // Cut as the stream route cuts: whole sentences, or with her voice on Sonnet, the first clause at once.
+  const segmenter = new SpokenSentenceSegmenter(voiceSonnet ? { firstClauseCharacters: FIRST_CLAUSE_CHARACTERS } : {});
   await w.api.streamLiveVoiceDelegation({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', deviceId: 'bench',
     body: { scopeKey: 'owner', transcript: `ねえ、いまマイクラどうなってる？（${n}）` } }, {
     onPlan: () => undefined,
-    onTextDelta: delta => { if (!firstOut && delta.includes('。')) firstOut = performance.now(); },
+    onTextDelta: delta => { if (!firstOut && segmenter.append(delta).length) firstOut = performance.now(); },
   });
   return { preModel: w.model.calledAt - startedAt, emitLag: firstOut - w.model.firstEndAt, first: firstOut - startedAt, way: w.model.way };
 }
@@ -143,7 +173,7 @@ async function run(label: string, take: (w: ReturnType<typeof world>, n: number)
   console.log(line(label, samples));
 }
 
-console.log(`one head=${process.env.SHANNON_ONE_HEAD ?? 'off'} turns=${turns} ttft=${ttftMs}ms pace=${paceMs}ms (ms; model included only in first)`);
+console.log(`one head=${process.env.SHANNON_ONE_HEAD ?? 'off'} voice sonnet=${voiceSonnet ? `on (first word ${sonnetTtftMs}ms)` : 'off'} turns=${turns} ttft=${ttftMs}ms pace=${paceMs}ms (ms; model included only in first)`);
 await run('apps voice', appVoice);
 await run('discord voice, owner alone', (w, n) => discordVoice(w, n, false));
 await run('discord voice, with friend', (w, n) => discordVoice(w, n, true));

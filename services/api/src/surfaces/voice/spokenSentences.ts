@@ -42,20 +42,60 @@ export function completeSpokenSentences(text: string): string {
   return value.slice(0, end).trim();
 }
 
+const CLAUSE_BREAKS = '、，';
+const QUOTE_OPENERS = '「『（(“';
+const QUOTE_CLOSERS = '」』）)”';
+
+/**
+ * Owner 2026-10-21 (`SHANNON_VOICE_SONNET`): a reply's first sentence is said from its first clause, once that clause is this many
+ * characters long and ends at a 「、」 outside a quotation, so her first words reach the speaker before the sentence is finished (the
+ * Discord voice channel cuts every clause so, `VOICE_SENTENCE_CUT`). Only the first: the rest is said sentence by sentence.
+ */
+export const FIRST_CLAUSE_CHARACTERS = 14;
+
+/** Index just past the first clause break at or after `minimum` characters, outside quotation marks; -1 when there is none yet. */
+export function spokenClauseEnd(text: string, minimum: number): number {
+  let depth = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index] ?? '';
+    if (QUOTE_OPENERS.includes(character)) depth += 1;
+    else if (QUOTE_CLOSERS.includes(character)) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && CLAUSE_BREAKS.includes(character) && index + 1 >= minimum) return index + 1;
+  }
+  return -1;
+}
+
+export interface SpokenSegmenterOptions {
+  /** The first clause is said at once (`FIRST_CLAUSE_CHARACTERS`); absent, every segment is a whole sentence, as before. */
+  firstClauseCharacters?: number;
+}
+
 export class SpokenSentenceSegmenter {
   private pending = '';
+  private said = false;
+
+  constructor(private readonly options: SpokenSegmenterOptions = {}) {}
 
   append(delta: string): string[] {
     this.pending += delta.replace(/\r\n?/gu, '\n');
     const segments: string[] = [];
     while (this.pending) {
-      const boundary = spokenSentenceEnd(this.pending);
+      const boundary = this.boundary();
       if (boundary < 0) break;
       const segment = normalizedSegment(this.pending.slice(0, boundary));
       this.pending = this.pending.slice(boundary);
       if (segment) segments.push(segment);
+      if (segment) this.said = true;
     }
     return segments;
+  }
+
+  /** Where the next segment ends: its sentence's end, or before anything was said, its first clause's (with the option). */
+  private boundary(): number {
+    const end = spokenSentenceEnd(this.pending);
+    const clause = this.options.firstClauseCharacters;
+    if (end >= 0 || this.said || !clause) return end;
+    return spokenClauseEnd(this.pending, clause);
   }
 
   flush(): string[] {

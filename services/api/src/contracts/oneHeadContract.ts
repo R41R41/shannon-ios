@@ -21,6 +21,11 @@ export function oneHeadEnabled(values: SwitchValues = serverEnvironment()): bool
   return switchOn(values, 'SHANNON_ONE_HEAD');
 }
 
+/** Owner 2026-10-21 (`SHANNON_VOICE_SONNET`): her spoken replies are Sonnet's, and a spoken reply's first clause is said at once. */
+export function voiceSonnetEnabled(values: SwitchValues = serverEnvironment()): boolean {
+  return switchOn(values, 'SHANNON_VOICE_SONNET');
+}
+
 export interface ConversationHeardLine {
   userId: string;
   name: string;

@@ -23,7 +23,7 @@ import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedg
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
-import { configuredSonnet } from './wiring/sonnetWiring.js';
+import { configuredSonnet, withVoiceSonnet } from './wiring/sonnetWiring.js';
 import { createModelModeWiring } from './wiring/modelModeWiring.js';
 import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
 import { failureTrail } from './infra/http/failureTrail.js';
@@ -179,7 +179,7 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 // What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
-const chatModel = modelModes.chatModel;
+const chatModel = withVoiceSonnet(process.env, modelModes.chatModel, { timeZone: autonomyConfig.timeZone, now, usageStore: persistentStore, haiku });
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });

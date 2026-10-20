@@ -149,6 +149,7 @@
     "infra/models/tieredChatModel.ts",
     "infra/models/turnChecker.ts",
     "infra/models/voiceAudioTags.ts",
+    "infra/models/voiceReplyChatModel.ts",
     "infra/models/voiceTranscription.ts",
     "infra/models/webResearch.ts",
     "infra/models/webSearch.ts",
@@ -984,6 +985,7 @@
     "wiring/taskTreeWiring.ts",
     "wiring/treeRecallWiring.ts",
     "wiring/turnRoutingWiring.ts",
+    "wiring/voiceSonnetWiring.ts",
     "wiring/withheldStoreWiring.ts",
     "wiring/withheldWiring.ts"
   ],

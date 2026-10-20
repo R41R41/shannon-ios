@@ -48,6 +48,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   naturalTalk?: true;
   /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
   spokenReply?: boolean;
+  /** A platform's voice turn answered as a typed turn (dc-voice): its reply is spoken, so the voice reply model answers it (`VoiceReplyChatModel`). */
+  voiceReply?: true;
   /**
    * The server decided this text turn answers without thinking first (`textTurnThinking`: light or read aloud, never hard or
    * research). The Claude adapter sends Haiku `disabled` (Sonnet `between_tools`); the historical GPT profile ignores it.

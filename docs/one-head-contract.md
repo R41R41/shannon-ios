@@ -61,6 +61,25 @@ kept. The owner's private conversation stays refused to anyone else.
 The apps' routes are unchanged. A voice stream client that sends `expressionEvents: true` also gets `expression` lines; the iPhone's
 reader refuses an unknown line type, so nobody else is sent one (the face is in `voicePlan` as before).
 
+## Her voice on Sonnet (`SHANNON_VOICE_SONNET`, owner 2026-10-21)
+
+Every spoken reply, from every entry and before anyone, is Sonnet 5.5's (`infra/models/voiceReplyChatModel.ts`, wired by
+`wiring/voiceSonnetWiring.ts` around the kernel's model, inside the reply check): the plain spoken stream, a voice turn's structured
+request (`spokenReply`) and a platform's voice turn answered as a typed turn (`voiceReply`, dc-voice). Typed replies, the router (Jev)
+and the small helpers keep their models.
+
+- **Cached prefix**: the Sonnet voice model always uses the voice cache plan (`anthropicVoicePlan.ts`): one system (her identity and
+  the voice's notes, her space's core a fixed text) and one tool pair for every voice turn; the turn's own lines follow the words.
+- **First words early**: Sonnet answers before it thinks (`SHANNON_SONNET_VOICE_THINKING`, `between_tools`), and the apps' stream says
+  a reply's first clause (14 characters or more, at a 「、」 outside quotes) at once (`FIRST_CLAUSE_CHARACTERS`); Discord's voice already
+  cuts every clause.
+- **Guards**: Sonnet's first word or tool call is waited for at most 4 s and never into the turn's last 6 s; past it, or when Sonnet
+  fails before a word, Haiku answers the turn. With less than 1 s for it, Haiku answers without asking Sonnet.
+- **The day's cap** (`SHANNON_VOICE_SONNET_DAILY_CAP`, default 800): counted per server day in the API process (a restart counts from
+  zero); past it voice replies are Haiku's until the day turns, said once in the log. A reply Sonnet did not serve does not count.
+
+Off (the default; a new installation's example sets it on): every voice reply's model is what it was.
+
 ## Rollback
 
 `SHANNON_ONE_HEAD=off` and a restart. No table or column is added; Discord's turns stay in `platform_voice_turns` and
