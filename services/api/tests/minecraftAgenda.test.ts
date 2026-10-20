@@ -17,13 +17,14 @@ function frame(world: Record<string, unknown>): BodyObservation {
 const need = (kind: string, name: string, distance: number, position = { x: Math.round(distance), y: 64, z: 0 }) =>
   ({ id: `${kind}:b:${position.x},${position.y},${position.z}`, need: kind, name, position, distance, canReach: true });
 
-function fixture(world: Record<string, unknown>, options: { advance?: Record<string, number>; judge?: boolean; during?: (name: string) => void } = {}) {
+function fixture(world: Record<string, unknown>, options: { advance?: Record<string, number>; judge?: boolean; during?: (name: string) => void;
+  without?: string[] } = {}) {
   let clock = Date.parse(AT);
   const taskId = `agenda-${++tasks}`;
   const calls: Array<{ name: string; input: unknown; operationId: string }> = [];
   let current = frame(world);
   const inner: FcaExternalTools = {
-    definitions: NAMES.map(name => ({ name, description: name, input: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    definitions: NAMES.filter(name => !options.without?.includes(name)).map(name => ({ name, description: name, input: { type: 'object', properties: {}, required: [], additionalProperties: false },
       domain: 'minecraft_body', effect: name === 'mc.find-blocks' ? 'read' : 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] })) as never,
     async execute(request) {
       calls.push({ name: request.name, input: request.input, operationId: request.operationId });
@@ -36,8 +37,8 @@ function fixture(world: Record<string, unknown>, options: { advance?: Record<str
   };
   const tools = withMinecraftAgenda(inner, { on: true, taskId, observe: () => current, now: () => clock,
     ...(options.judge !== undefined ? { judge: { takeNow: async () => options.judge! } } : {}) });
-  const call = (name: string, input: unknown = {}) => tools.execute({ scopeKey: 'owner', taskId, operationId: `step:${name}`, name, input,
-    signal: new AbortController().signal });
+  const call = (name: string, input: unknown = {}, last = true) => tools.execute({ scopeKey: 'owner', taskId, operationId: `step:${name}`, name, input,
+    signal: new AbortController().signal, last });
   return { taskId, calls, call, setWorld: (next: Record<string, unknown>) => { current = frame({ ...world, ...next }); } };
 }
 
@@ -90,6 +91,33 @@ describe('Minecraft executor (mb-arch)', () => {
     const take = fixture({ nearbyNeeds: [need('food', 'pig', 6)] }, { judge: true });
     await take.call('mc.mine-block', { blockName: 'stone', count: 3 });
     expect(take.calls.map(call => call.name)).toEqual(['mc.mine-block', 'mc.attack-continuously']);
+  });
+
+  it('takes no detour between calls chosen together, at night, or after a shelter; a failed item says only how it failed', async () => {
+    const bed = need('bed', 'red_bed', 20, { x: 20, y: 64, z: 0 });
+    const between = fixture({ nearbyNeeds: [bed] });
+    await between.call('mc.mine-block', { blockName: 'stone' }, false);
+    expect(between.calls.map(call => call.name)).toEqual(['mc.mine-block']);
+    const night = fixture({ nearbyNeeds: [bed], margin: { lightInSeconds: 300 } });
+    await night.call('mc.mine-block', { blockName: 'stone' });
+    expect(night.calls.map(call => call.name)).toEqual(['mc.mine-block']);
+    const shelter = fixture({ nearbyNeeds: [bed] });
+    await shelter.call('mc.dig-shelter');
+    expect(shelter.calls.map(call => call.name)).toEqual(['mc.dig-shelter']);
+  });
+
+  it('never spins on a filler whose tool is not offered, and resumes a timer for what is left of it', async () => {
+    const f = fixture({ nearbyNeeds: [need('food', 'pig', 6)] }, { without: ['mc.attack-continuously'] });
+    // The food animal's tool is not offered: nothing runs, and the wait goes on at once.
+    const result = await Promise.race([f.call('mc.wait-time', { milliseconds: 30_000 }), new Promise(resolve => setTimeout(() => resolve('stuck'), 500))]);
+    expect(result).not.toBe('stuck');
+    expect(f.calls.map(call => call.name)).toEqual(['mc.wait-time']);
+    const bed = need('bed', 'red_bed', 13, { x: 69, y: 66, z: 4 });
+    let stopped = false;
+    const g = fixture({}, { advance: { 'mc.move-to': 10_000 }, during: name => { if (name === 'mc.wait-time' && !stopped) { stopped = true;
+      preemptForNeed(g.taskId, { ...bed, at: AT, data: { x: 69, y: 66, z: 4 } } as never); } } });
+    await g.call('mc.wait-time', { milliseconds: 30_000 });
+    expect(g.calls.at(-1)).toMatchObject({ name: 'mc.wait-time', operationId: 'step:mc.wait-time:resume', input: { milliseconds: 18_000 } });
   });
 
   it('leaves reads alone, does not dig the ore the call itself was digging, and is off with its switch', async () => {

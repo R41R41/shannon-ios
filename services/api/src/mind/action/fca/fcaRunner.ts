@@ -2,7 +2,7 @@ import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskStep, TaskSnapshot } from '../taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS, executeTaskTool } from '../../tools/toolRunnerPorts.js';
 import { observeAsync, observerHandoff, observeSync, withObserverTask } from '../../../infra/observer/observerContext.js';
-import { currentActionExecution } from '../../../infra/context/actionExecution.js';
+import { currentActionExecution, inActionExecution } from '../../../infra/context/actionExecution.js';
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
@@ -19,7 +19,7 @@ import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
-import { startFcaLookahead, type FcaLookahead } from './fcaLookahead.js';
+import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -141,7 +141,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   }, () => ({ allowed: true })));
   await checked();
   // A decision asked while the previous step's last body call ran, still good for this step (`fcaLookahead.ts`): no model call here.
-  const prepared = ports.lookahead?.take(step) ?? null;
+  const taken = ports.lookahead?.take(step) ?? null;
+  // The real result of the call it went on from stands where the running one stood (the model and the next lookahead see it).
+  const prepared = taken ? { ...taken, request: withRealResult(taken.request, step.snapshot.history) } : null;
   // A body task's decision carries no recall packet, in either shape (run 15, 2026-10-19: 2.3–7.3k characters of past episodes in every
   // stored decision, and 2.7 s of each step): what she did before is one `memory.search` away (offered to every task) when it matters.
   const bodyTask = ports.keepBodyTools?.() === true;
@@ -325,9 +327,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       const skipped = !bodyStale && earlierFailed && bodyAction(call.name);
       // The decision's last call, a long body call: the next decision is asked while it runs (`fcaLookahead.ts`).
-      if (ports.lookahead && index === decision.calls.length - 1 && !bodyStale && !skipped && ports.lookahead.wanted(call)) {
+      if (ports.lookahead && index === decision.calls.length - 1 && !bodyStale && !skipped && ports.lookahead.wanted(call, step.taskId)) {
         ahead = startFcaLookahead({ model: ports.model, base: request, history, results, call, signal, permit: ports.permit,
-          afford: () => ports.retryAllowed?.() !== false, now: () => lookaheadContext(ports, request) });
+          afford: () => ports.retryAllowed?.() !== false, isolate: isolatedModelCall, delayMs: ports.lookahead.delayMs });
       }
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
       progress({ operationId, tool: call.name, status: 'running' });
@@ -346,7 +348,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           ports.body?.noteCall?.(call, operationId);
           let operationSignal = ports.body?.toolSignal(call.name, signal) ?? signal;
           for (const observation of ports.observations ?? []) operationSignal = observation.toolSignal(call.name, operationSignal);
-          try { return await ports.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: call.name, input: call.input, signal: operationSignal }); }
+          try {
+            return await ports.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: call.name, input: call.input,
+              signal: operationSignal, ...(index === decision.calls.length - 1 ? { last: true } : {}) });
+          }
           catch (error) {
             if (operationSignal !== signal && operationSignal.aborted && !signal.aborted && !await stillFresh()) {
               bodyStale = true; return staleResult();
@@ -427,7 +432,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (preparedNext && !bodyStale) ports.lookahead?.keep({ taskId: step.taskId, historyLength: saved.history.length,
     lastTurn: JSON.stringify(saved.history.at(-1) ?? null),
-    preparedAt: Date.now(), request: preparedNext.request, output: preparedNext.output, selection: selection ? structuredClone(selection) : null });
+    preparedAt: preparedNext.preparedAt, request: preparedNext.request, output: preparedNext.output, selection: selection ? structuredClone(selection) : null });
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
   if (saved.task.phase === 'waiting') {
     observerHandoff('store', 'wait', { phase: saved.task.phase });
@@ -450,11 +455,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   return saved;
 }
 
-/** The body, its observations and progress as they are now, for a decision asked ahead (`fcaLookahead.ts`). */
-function lookaheadContext(ports: FcaStepPorts, request: FcaModelInput): Partial<FcaModelInput> {
-  return { ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
-    ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(ports.body ? { body: ports.body.context() } : {}),
-    ...(request.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
+/**
+ * A decision asked ahead runs beside the step, not as its model request: under the step's lease and permit, with its own bookkeeping, so
+ * the step's model outcome, usage and metrics stay the step's (a stop during a long call is still a confirmed stop).
+ */
+function isolatedModelCall<T>(work: () => Promise<T>): Promise<T> {
+  const step = currentActionExecution();
+  if (!step) return work();
+  return inActionExecution({ lease: step.lease, signal: step.signal, permit: (resources, signal) => step.permit(resources, signal) }, work);
 }
 
 async function closeFcaMonitors(ports: FcaStepPorts): Promise<void> {

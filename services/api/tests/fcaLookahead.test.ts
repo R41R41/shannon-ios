@@ -24,7 +24,7 @@ function fixture(decisions: FcaDecision[]) {
   const task = runtime.createChild('owner', root.id, { title: 'Body task', goal: 'Do the work', completionCriteria: 'Observed result' }, 'body');
   const inputs: FcaModelInput[] = [];
   const lines: string[] = [];
-  const lookahead = createFcaLookahead({ wanted: call => call.name === 'web.search', log: line => lines.push(line) });
+  const lookahead = createFcaLookahead({ wanted: call => call.name === 'web.search', log: line => lines.push(line), delayMs: 0 });
   const executed: string[] = [];
   let toolOk = true, release: (() => void) | null = null;
   const ports: FcaStepPorts = { runtime, ownerAlone: () => true, permit: async () => true, lookahead,
@@ -86,11 +86,28 @@ describe('FCA lookahead (mb-arch)', () => {
     expect(f.lines).toContain(`Shannon FCA lookahead wasted task=${f.task.id} reason=messages`);
   });
 
+  it('never takes a completion or a wait, nor one asked before the executor acted', () => {
+    const now = Date.parse(at);
+    let acted = false;
+    const lookahead = createFcaLookahead({ wanted: () => true, now: () => now, fresh: () => !acted });
+    const step = { taskId: 't', revision: 9, snapshot: { history: [1, 2], messages: [] } } as never;
+    const prepared = (kind: string) => ({ taskId: 't', historyLength: 2, lastTurn: '2', preparedAt: now, request: {} as never,
+      output: { decision: kind === 'tools' ? { kind, calls: [] } : { kind, summary: 'done' } } as never, selection: null });
+    lookahead.keep(prepared('complete'));
+    expect(lookahead.take(step)).toBeNull();
+    acted = true;
+    lookahead.keep(prepared('tools'));
+    expect(lookahead.take(step)).toBeNull();
+    acted = false;
+    lookahead.keep(prepared('tools'));
+    expect(lookahead.take(step)).not.toBeNull();
+  });
+
   it('takes at most four in a row, then asks the model (and lets the history be summarized)', () => {
     const now = Date.parse(at);
     const lookahead = createFcaLookahead({ wanted: () => true, now: () => now });
     const step = { taskId: 't', revision: 9, snapshot: { history: [1, 2], messages: [] } } as never;
-    const prepared = { taskId: 't', historyLength: 2, lastTurn: '2', preparedAt: now, request: {} as never, output: {} as never, selection: null };
+    const prepared = { taskId: 't', historyLength: 2, lastTurn: '2', preparedAt: now, request: {} as never, output: { decision: { kind: 'tools', calls: [] } } as never, selection: null };
     const taken = Array.from({ length: 5 }, () => { lookahead.keep(prepared); return lookahead.take(step) !== null; });
     expect(taken).toEqual([true, true, true, true, false]);
   });

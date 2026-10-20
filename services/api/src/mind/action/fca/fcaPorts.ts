@@ -105,5 +105,7 @@ export interface FcaExternalTools {
    */
   permitsItself?(name: string): boolean;
   /** Existing source/audience/action gates still apply. Uncertain failures throw and must never become retryable results. */
-  execute(request: { scopeKey: string; taskId: string; operationId: string; name: string; input: unknown; signal: AbortSignal }): Promise<ToolResult>;
+  /** `last`: the decision's last call (a body's executor may take a detour after it, never between calls chosen together). */
+  execute(request: { scopeKey: string; taskId: string; operationId: string; name: string; input: unknown; signal: AbortSignal;
+    last?: boolean }): Promise<ToolResult>;
 }

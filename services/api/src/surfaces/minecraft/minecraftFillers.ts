@@ -1,6 +1,6 @@
 import type { WorkingNeed } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { minecraftFrameNeeds } from './minecraftWorkingArbiter.js';
+import { minecraftCalm, minecraftFrameNeeds } from './minecraftWorkingArbiter.js';
 
 /**
  * The small work of the moment, decided by rules from the latest frame (session mb-arch, owner 2026-10-20: "while the furnace runs, dig
@@ -26,6 +26,8 @@ export interface MinecraftWorkItem {
   key: string;
   /** The next step of a chain (a furnace placed, then filled), from this one's result text; null ends it. */
   then?: (result: string) => MinecraftWorkItem | null;
+  /** How many items the whole chain from here takes (1 when absent): a chain is started only when it fits. */
+  chain?: number;
 }
 
 const RAW_FOOD = ['porkchop', 'beef', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon'];
@@ -101,11 +103,11 @@ function secondFurnace(observation: BodyObservation | null, carried: Map<string,
       count: carried.get(raw) }, why: '2 つ目のかまどで肉を焼く', expectMs: 3_000, key: 'second-furnace:fill' } : null;
   };
   const place: MinecraftWorkItem = { tool: 'mc.place-block-at', input: { blockName: 'furnace' }, why: '2 つ目のかまどを置く', expectMs: 3_000,
-    key: 'second-furnace:place', then: fill };
+    key: 'second-furnace:place', then: fill, chain: 2 };
   if ((carried.get('furnace') ?? 0) > 0) return place;
   if ((carried.get('cobblestone') ?? 0) + (carried.get('cobbled_deepslate') ?? 0) < 8) return null;
   return { tool: 'mc.craft-one', input: { itemName: 'furnace' }, why: '2 つ目のかまどを作る', expectMs: 3_000, key: 'second-furnace:craft',
-    then: () => place };
+    then: () => place, chain: 3 };
 }
 
 /** How to take one need, as one item (a bed: walk to it, then dig it, keeping it). */
@@ -118,7 +120,7 @@ export function takeNeed(need: WorkingNeed): MinecraftWorkItem | null {
       const dig: MinecraftWorkItem = { tool: 'mc.dig-block-at', input: { x: d.x, y: d.y, z: d.z, takeEquipment: true }, why: '置かれたベッドを持つ',
         expectMs: 4_000, key: `${key}:dig` };
       return { tool: 'mc.move-to', input: { x: d.x, y: d.y, z: d.z, goalType: 'block' }, why: '置かれたベッドへ寄る', expectMs: 20_000, key,
-        then: () => dig };
+        then: () => dig, chain: 2 };
     }
     case 'iron': return { tool: 'mc.mine-block', input: { blockName: need.name, count: 3, searchRadius: 16 }, why: 'まだ要る鉄が近い', expectMs: 20_000, key };
     case 'fuel': return { tool: 'mc.mine-block', input: { blockName: need.name, count: 3, searchRadius: 16 }, why: '燃料の石炭が近い', expectMs: 15_000, key };
@@ -146,6 +148,8 @@ export function nextFiller(observation: BodyObservation | null,
   const fits = (item: MinecraftWorkItem | null) => item && item.expectMs + 5_000 <= parts.remainingMs && !parts.recent.has(item.key) ? item : null;
   const done = fits(furnaceDone(observation, parts.waitingCell));
   if (done) return done;
+  // Away from the furnace only by day and with nothing hostile near (a wait at night is often a shelter's).
+  if (!minecraftCalm(observation)) return null;
   const needs = minecraftFrameNeeds(observation).filter(need => need.canReach);
   const bed = IN_A_WAIT.slice(0, 1).flatMap(rule => needs.filter(need => need.need === rule.need && (need.distance ?? Infinity) <= rule.within));
   const bedItem = bed.length ? fits(takeNeed(bed[0]!)) : null;
@@ -160,6 +164,15 @@ export function nextFiller(observation: BodyObservation | null,
   return null;
 }
 
+/** Calls after which she stays where she is: a shelter, sleep, a way out of water or danger, a bed just dug. */
+const AFTER_NONE: ReadonlySet<string> = new Set(['mc.dig-shelter', 'mc.sleep-in-bed', 'mc.build-around-self', 'mc.leave-water', 'mc.tower-up',
+  'mc.flee-from', 'mc.dig-block-at']);
+
+/** Whether a wait's small work would take this need (its kind, near enough): the arbiter leaves such a need to it. */
+export function fillable(need: WorkingNeed): boolean {
+  return IN_A_WAIT.some(rule => rule.need === need.need && (need.distance ?? Infinity) <= rule.within) && need.canReach;
+}
+
 /** After a call she asked for: these are worth one detour right there, each within its distance. */
 const AFTER_A_CALL: ReadonlyArray<{ need: string; within: number; ask?: boolean }> = [
   { need: 'bed', within: 24 }, { need: 'fuel', within: 8 }, { need: 'iron', within: 8 }, { need: 'bed_wool', within: 12 },
@@ -172,7 +185,7 @@ const AFTER_A_CALL: ReadonlyArray<{ need: string; within: number; ask?: boolean 
  */
 export function afterCallWork(observation: BodyObservation | null,
   parts: { call: { name: string; input: unknown }; ok: boolean; recent: ReadonlySet<string> }): { item: MinecraftWorkItem; ask: boolean } | null {
-  if (!parts.ok) return null;
+  if (!parts.ok || AFTER_NONE.has(parts.call.name) || !minecraftCalm(observation)) return null;
   const doing = record(parts.call.input)?.blockName ?? record(parts.call.input)?.entityName;
   const needs = minecraftFrameNeeds(observation).filter(need => need.canReach);
   for (const rule of AFTER_A_CALL) {

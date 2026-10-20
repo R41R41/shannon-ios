@@ -240,14 +240,15 @@ export function createMinecraftWorkingArbiter(parts: {
       const verdict = arbitrate({ now, running: work, progress: log.progress(running.subject), needs: minecraftFrameNeeds(observation),
         calm: minecraftCalm(observation), recentCuts: cuts, cutFor: need => WAIT_WORTH.has(need.need) && fresh.has(need.id) });
       if (verdict.act !== 'cut') return verdict;
-      cuts.push({ at: now, subject: running.topic ?? verdict.subject });
-      if (cuts.length > 8) cuts.shift();
+      // A need the executor takes is no cut: nothing is recorded against the wait's topic, and the task is not told.
       if (verdict.rule === 'need_during_wait' && parts.onWaitNeed?.(verdict.need)) {
         try {
           parts.line(`Shannon Minecraft working take task=${parts.taskId} need=${verdict.need.need} tool=${verdict.tool}`);
         } catch { /* logging never fails a step */ }
         return { act: 'none' };
       }
+      cuts.push({ at: now, subject: running.topic ?? verdict.subject });
+      if (cuts.length > 8) cuts.shift();
       tell(verdict, now, running.startedAt);
       return verdict;
     },
