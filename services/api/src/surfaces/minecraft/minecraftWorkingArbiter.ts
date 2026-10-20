@@ -196,6 +196,11 @@ function freshNeedIds(log: WorkingEventLog, cursor: number | null): Set<string> 
 export function createMinecraftWorkingArbiter(parts: {
   log(): WorkingEventLog | null; now(): number; taskId: string; stepId: string;
   send(text: string, id: string): void; line(text: string): void;
+  /**
+   * The executor's: a need that came into reach during a wait is taken by it and the wait resumed (`preemptForNeed`). True when it
+   * did: then nothing is cut and the task is not told (the call's own result says it).
+   */
+  onWaitNeed?(need: WorkingNeed): boolean;
 }): MinecraftWorkingArbiter {
   let running: Running | null = null;
   const memory = taskMemory(parts.taskId);
@@ -237,6 +242,12 @@ export function createMinecraftWorkingArbiter(parts: {
       if (verdict.act !== 'cut') return verdict;
       cuts.push({ at: now, subject: running.topic ?? verdict.subject });
       if (cuts.length > 8) cuts.shift();
+      if (verdict.rule === 'need_during_wait' && parts.onWaitNeed?.(verdict.need)) {
+        try {
+          parts.line(`Shannon Minecraft working take task=${parts.taskId} need=${verdict.need.need} tool=${verdict.tool}`);
+        } catch { /* logging never fails a step */ }
+        return { act: 'none' };
+      }
       tell(verdict, now, running.startedAt);
       return verdict;
     },

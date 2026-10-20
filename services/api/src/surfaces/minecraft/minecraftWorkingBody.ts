@@ -1,7 +1,14 @@
 import type { FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
 import type { TaskRuntime, TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from './minecraftControl.js';
+import type { WorkingNeed } from '@shannon/mind';
 import { createMinecraftWorkingArbiter } from './minecraftWorkingArbiter.js';
+
+/** The working field with the executor's lines (`agenda`) beside the arbiter's. */
+function withAgenda(fields: { working?: Record<string, unknown> }, agenda: readonly string[]): Record<string, unknown> {
+  if (!agenda.length) return fields;
+  return { working: { ...(fields.working ?? {}), agenda } };
+}
 
 /**
  * A Minecraft task's body with the working events on (session mb-arch, stage 1; `SHANNON_MINECRAFT_WORKING_EVENTS`). It wraps the
@@ -14,6 +21,10 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
   /** The switch: off, the adapter's body is returned as it is. */
   on: boolean;
   control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; now?: () => number; log?(line: string): void; pollMilliseconds?: number;
+  /** The executor's (`minecraftAgenda.ts`): it takes a need that came into reach during a wait, so the wait is not cut. */
+  onWaitNeed?(need: WorkingNeed): boolean;
+  /** The executor's: what it did for her since the last decision, a line each. */
+  agendaLines?(): string[];
 }): Made {
   if (!parts.on) return made;
   const { control, runtime, step } = parts, inner = made.body;
@@ -28,7 +39,7 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
   };
   const arbiter = createMinecraftWorkingArbiter({ log: events,
     now: parts.now ?? Date.now, taskId: step.taskId, stepId: step.id, line: parts.log ?? (line => console.info(line)),
-    send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id) });
+    send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), ...(parts.onWaitNeed ? { onWaitNeed: parts.onWaitNeed } : {}) });
   const aborts = new Set<AbortController>();
   let cuts = 0, closed = false, timer: ReturnType<typeof setInterval> | undefined, fields: Record<string, unknown> = {};
   const watch = () => {
@@ -52,7 +63,7 @@ export function withMinecraftWorking<Made extends { body: FcaBodyLifecycle }>(ma
     revision: () => inner.revision() + cuts,
     context() {
       const value = inner.context();
-      fields = arbiter.fields(frame());
+      fields = withAgenda(arbiter.fields(frame()), parts.agendaLines?.() ?? []);
       return { ...value, revision: value.revision + cuts, ...fields };
     },
     ...(inner.transient ? { transient: () => ({ ...inner.transient!(), ...fields }) } : {}),
