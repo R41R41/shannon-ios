@@ -3,6 +3,7 @@ import { BUCKET_ITEM } from './minecraftStage.js';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { block, carried, cellKey, cellsInText, inPack, largest, nearestNeed, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, COBBLE, craft, digLogs, doing, LOGS, PLANKS, planksFor, sticksFor, stuck, type McMove } from './minecraftProcedureMoves.js';
+import { caveDescent, smithChest } from './minecraftProcedureMap.js';
 
 /**
  * The iron age as one procedure (session mb-arch; 「鉄」「バケツ」「鉄の全身の防具」): the iron still needed dug at once (run 19 dug about
@@ -15,6 +16,8 @@ export interface ProcedureTaskStore {
   furnaces: Cell[];
   /** Where the executor built the gate's frame (`minecraftProceduresDeep.ts`). */
   portal?: Cell;
+  /** The map's places gone to in this task (`minecraftProcedureMap.ts`): a cave's bottom, a chest, a portal, a village. */
+  visited: Set<string>;
 }
 
 const IRON_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe$/u;
@@ -132,6 +135,18 @@ function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMov
   return doing({ tool: 'mc.stair-mine', input: { targetY: Math.max(16, y - 24) }, why: '鉄のある深さへ降りる', expectMs: 60_000, key: `iron:down:${band}` });
 }
 
+/**
+ * Iron from the map before more digging (mb-map): a smith's chest in a village near, then, with no iron in reach and still on the
+ * surface, a cave entrance walked down to the iron's depth (its bottom often shows two or three veins).
+ */
+function fromTheMap(facts: MinecraftProcedureFacts, store: ProcedureTaskStore): McMove | null {
+  if (ironWanted(facts) - ironHeld(facts) <= 0) return null;
+  const chest = smithChest(facts, store);
+  if (chest) return chest;
+  const seen = nearestNeed(facts, 'iron', 24);
+  return seen || !facts.at || facts.at.y < 40 ? null : caveDescent(facts, store, { within: 64, depth: [-10, 48], why: '鉄のある深さへ下りる' });
+}
+
 /** The furnace that finishes first waited on (the executor fills the wait with small work). */
 function waitFurnace(facts: MinecraftProcedureFacts): McMove | null {
   const job = [...facts.jobs].filter(item => /raw_iron|iron_ore/u.test(item.input) && distance(facts, item.position) <= 64)
@@ -144,6 +159,6 @@ function waitFurnace(facts: MinecraftProcedureFacts): McMove | null {
 /** 「鉄」「バケツ」「鉄の全身の防具」: make, take out, smelt, dig, and only then wait. */
 export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
   for (const job of facts.jobs) if (!store.furnaces.some(cell => cellKey(cell) === cellKey(block(job.position)))) store.furnaces.push(block(job.position));
-  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? digIron(facts, memory) ?? waitFurnace(facts)
-    ?? stuck('鉄の手順で次にできる手が無い');
+  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? fromTheMap(facts, store) ?? digIron(facts, memory)
+    ?? waitFurnace(facts) ?? stuck('鉄の手順で次にできる手が無い');
 }

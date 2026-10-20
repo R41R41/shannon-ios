@@ -2,6 +2,7 @@ import type { ProcedureMemory } from '@shannon/mind';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { block, carried, cellKey, cellsInText, inPack, mapPlaces, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { craft, doing, fromFirstCell, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
+import { caveDescent, ruinedPortal, type MapVisits } from './minecraftProcedureMap.js';
 
 /**
  * From the diamonds to the gate (session mb-arch; 「ダイヤ」「黒曜石」「ゲート」), with the body's own tools (Minebot catalog):
@@ -19,11 +20,14 @@ const FLINT_AND_STEEL = /^flint_and_steel$/u;
 const DEEP_Y = -58;
 
 /** 「ダイヤ」: down to Y-58, the diamonds near dug (a wider look, then a tunnel each way), the pickaxe made. */
-export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove {
   const have = carried(facts, DIAMOND);
   if (have >= 3) return toolOf(facts, 'diamond_pickaxe', null);
   const y = facts.at ? Math.floor(facts.at.y) : 64;
   if (y > DEEP_Y + 10) {
+    // A cave entrance whose bottom is lower walked down first (mb-map); the stair goes on from its bottom.
+    const cave = caveDescent(facts, visits, { within: 96, depth: [DEEP_Y - 6, y - 12], why: 'ダイヤの深さへ下りる' });
+    if (cave) return cave;
     return doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる', expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` });
   }
   // The body finds ores in the whole loaded world (its view distance), hidden ones too, and digs its way there: a wider look, not a tunnel.
@@ -97,13 +101,16 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch:
 }
 
 /** 「黒曜石」: ten obsidian, by the body's batch tool when it has one, else one lava source at a time. */
-export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batchObsidian: string | null): McMove {
+export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batchObsidian: string | null, visits: MapVisits): McMove {
   if (!carried(facts, DIAMOND_PICKAXE)) return stuck('黒曜石はダイヤのツルハシでしか掘れない');
   if (!inPack(facts, /^water_bucket$/u)) {
     if (!inPack(facts, /^bucket$/u)) return stuck('水を運ぶバケツが無い');
     return memory.notes.has('water:none') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
   }
   const count = carried(facts, OBSIDIAN);
+  // A ruined portal near (mb-map): its chest and its frame before any lava.
+  const portal = ruinedPortal(facts, visits, { obsidian: 10 - count, flint: !carried(facts, FLINT_AND_STEEL) });
+  if (portal) return portal;
   if (memory.notes.has('lava:none')) {
     return towardMapped(facts, memory, { head: '溶岩の溜まり', note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く' })
       ?? stuck('32m 以内に使える溶岩の溜まりが見えず、地図にも覚えていない');
@@ -112,7 +119,10 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
 }
 
 /** Flint: gravel set down and dug again where it stands (a tenth of the time it drops flint), gravel dug first when none is carried. */
-function flintMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+function flintMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove {
+  // A ruined portal's chest holds a flint and steel about half the time (mb-map): looked into before any gravel.
+  const chest = ruinedPortal(facts, visits, { obsidian: 0, flint: true });
+  if (chest) return chest;
   if (!inPack(facts, /^gravel$/u)) {
     const key = `gravel:${carried(facts, /^flint$/u)}`;
     if (memory.lastFailure(key) === 'target_not_found') return stuck('48m 以内に砂利が見えない');
@@ -156,11 +166,11 @@ function portalMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, sto
 }
 
 /** 「ゲート」: the flint and steel, then the frame, the fire and the way in. */
-export function gateMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: { portal?: Cell }): McMove {
+export function gateMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: { portal?: Cell } & MapVisits): McMove {
   if (!carried(facts, FLINT_AND_STEEL)) {
     if (carried(facts, /^flint$/u) && carried(facts, /^iron_ingot$/u)) return craft('flint_and_steel', '火打石と打ち金を作る');
     if (!carried(facts, /^iron_ingot$/u)) return stuck('火打石と打ち金に鉄インゴットが 1 個要る');
-    return flintMove(facts, memory);
+    return flintMove(facts, memory, store);
   }
   if (carried(facts, OBSIDIAN) < 10 && !store.portal) return stuck('ゲートの枠に黒曜石が 10 個要る');
   return portalMove(facts, memory, store);

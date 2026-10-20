@@ -114,7 +114,8 @@ class SimBody {
   tool_mine_block(input: Input): ToolResult {
     const count = Number(input.count ?? 1), block = String(input.blockName);
     const drop: Array<[RegExp, string, number]> = [[/log/u, 'oak_log', SECONDS.log], [/^stone$/u, 'cobblestone', SECONDS.stone], [/iron_ore/u, 'raw_iron', SECONDS.iron],
-      [/coal_ore/u, 'coal', SECONDS.coal], [/gravel/u, 'gravel', SECONDS.gravel], [/diamond_ore/u, 'diamond', SECONDS.diamond]];
+      [/coal_ore/u, 'coal', SECONDS.coal], [/gravel/u, 'gravel', SECONDS.gravel], [/diamond_ore/u, 'diamond', SECONDS.diamond],
+      [/^obsidian$/u, 'obsidian', SECONDS.obsidianDig]];
     const found = drop.find(([pattern]) => pattern.test(block));
     if (!found) return this.fail('invalid_block');
     if (found[1] === 'diamond' && this.y > -50) return this.fail('target_not_found');
@@ -212,13 +213,24 @@ class SimBody {
     this.portal = `${Number(input.x) + 1}, ${input.y}, ${input.z}`;
     return this.ok(`nether_portal を (${input.x}, ${input.y}, ${input.z}) に建築完了`);
   }
+  /** A chest's contents (`chest`), looked into and taken from. */
+  chest = new Map<string, number>();
+  tool_check_container(): ToolResult { this.spend(1); return this.ok(`chest(1, 2, 3)の中身: ${[...this.chest].map(([name, count]) => `${name} x${count}`).join(', ')}`); }
+  tool_withdraw_from_container(input: Input): ToolResult {
+    const count = this.chest.get(String(input.itemName)) ?? 0;
+    if (!count) return this.fail('not_found');
+    this.chest.delete(String(input.itemName));
+    this.add(String(input.itemName), count);
+    this.spend(1);
+    return this.ok(`${input.itemName}を${count}個取り出しました`);
+  }
   tool_enter_portal(): ToolResult { this.spend(SECONDS.enter); this.dimension = 'the_nether'; return this.ok('ネザーに移動しました'); }
 }
 
 const TOOLS = ['mine-block', 'craft-one', 'place-block-at', 'start-smelting', 'withdraw-from-furnace', 'wait-time', 'equip-item', 'use-item',
   'attack-continuously', 'find-nearest-entity', 'move-to', 'stair-mine', 'find-blocks', 'use-item-on-block', 'dig-block-at', 'build-structure',
-  'enter-portal', 'sleep-in-bed'];
-const READS = new Set(['find-nearest-entity', 'find-blocks']);
+  'enter-portal', 'sleep-in-bed', 'check-container', 'withdraw-from-container'];
+const READS = new Set(['find-nearest-entity', 'find-blocks', 'check-container']);
 let tasks = 0;
 
 function setup(body: SimBody, options: { batch?: boolean } = {}) {
@@ -327,6 +339,33 @@ describe('Minecraft procedures (mb-arch)', () => {
     const result = await call({ milestone: 'ダイヤ' });
     expect(result.text).toContain('最後まで着いた');
     expect(body.calls.filter(name => name === 'mc.mine-block')).toHaveLength(4);
+  });
+  it('walks down a cave entrance the map knows instead of digging down, for the iron (mb-map)', async () => {
+    const body = new SimBody();
+    for (const [name, count] of [['stone_pickaxe', 1], ['oak_log', 6], ['cobblestone', 20], ['crafting_table', 1]] as const) body.add(name, count);
+    body.map = '洞窟の入口 2か所（地表から歩いて地下へ下りられる。鉄・ダイヤへの近道）: 20m 南 (0,64,20) → 底 (5,30,25) 鉄の多い深さ、70m 西 (-70,63,0) → 底 (-72,20,3)';
+    const walks: Input[] = [];
+    const walk = body.tool_move_to.bind(body);
+    body.tool_move_to = (input?: Input) => { walks.push(input!); return walk(); };
+    const { call } = setup(body);
+    await call({ milestone: '鉄' });
+    expect(walks.slice(0, 2)).toEqual([{ x: 0, y: 64, z: 20, goalType: 'near', range: 2 }, { x: 5, y: 30, z: 25, goalType: 'near', range: 3 }]);
+    expect(body.calls.indexOf('mc.move-to')).toBeLessThan(body.calls.indexOf('mc.mine-block'));
+  });
+
+  it('takes a ruined portal\'s chest and frame before any lava, and its flint and steel before any gravel (mb-map)', async () => {
+    const body = new SimBody();
+    for (const [name, count] of [['diamond_pickaxe', 1], ['water_bucket', 1], ['iron_ingot', 1]] as const) body.add(name, count);
+    body.y = -58;
+    body.map = '構造物: 村: 300m 北 (0,70,-300)／荒廃したポータル: 40m 東 (40,64,0)（黒曜石14個・箱 (42,63,1): 火打石と打ち金・黒曜石が入ることがある）';
+    body.chest = new Map([['flint_and_steel', 1], ['obsidian', 3]]);
+    const { call } = setup(body);
+    const result = await call({ milestone: '黒曜石' });
+    expect(result.text).toContain('最後まで着いた');
+    expect(body.pack.get('flint_and_steel')).toBe(1);
+    expect(body.pack.get('obsidian')).toBe(10);
+    expect(body.calls).not.toContain('mc.find-blocks');
+    expect(body.calls.slice(0, 5)).toEqual(['mc.move-to', 'mc.check-container', 'mc.withdraw-from-container', 'mc.withdraw-from-container', 'mc.move-to']);
   });
   it('refuses a milestone it has no procedure for, and a through before the start', async () => {
     const { call } = setup(new SimBody());
