@@ -15,8 +15,8 @@ import {
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
   type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace, CHARACTER_REGIONS,
 } from '@shannon/cognition';
-import { capFor, regionFace, regionOf, routedOrChecked, spaceDecision, spaceIdentity, warnCapped } from './characterSpaceHooks.js';
-import { checkContext, checkFacts, registerNow } from './feelingTurnCheck.js';
+import { capFor, regionFace, regionOf, routedOrChecked, spaceDecision, spaceIdentity, voiceSpaceIdentity, warnCapped } from './characterSpaceHooks.js';
+import { checkContext, checkFacts, registerNow, voiceGuardContext } from './feelingTurnCheck.js';
 import { naturalBlock, naturalLedgerLine, naturalOf, naturalReplyFacts, naturalRequest, playAsked } from './naturalTalk.js';
 import { randomUUID } from 'node:crypto';
 import { switchOn } from '@shannon/switches';
@@ -327,10 +327,13 @@ export const feelingText = Object.freeze({
 /** The voice turn's hooks (`apiLiveVoice.ts`). The feeling questions ride on the router's Jev call (`voice_route.v6`). */
 export const feelingVoice = Object.freeze({
   start: (port: FeelingPort | null | undefined, input: { scopeKey: string; alone: boolean; guest: boolean; threadId: string; transcript: string; at: string;
-    snapshot: CompanionStateSnapshot }): FeelingTurnHandle | null => {
+    snapshot: CompanionStateSnapshot; platform?: { speaker?: FeelingSpeaker } }): FeelingTurnHandle | null => {
     if (!port) return null;
-    // A 「友人も一緒」 call, or the owner's call with someone beside him: the call is the scene; nothing is the owner's.
-    const key = feelingActor({ ownerAlone: input.alone && !input.guest, sceneId: input.alone && !input.guest ? null : `call:${input.threadId}` });
+    // A 「友人も一緒」 call, or the owner's call with someone beside him: the call is the scene; nothing is the owner's. A platform's voice
+    // channel (one head) is keyed as its typed turns are (`feelingText.start`): a group, by who spoke while stage 4 is on.
+    const speaker = port.audience && input.platform?.speaker ? { speaker: input.platform.speaker } : {};
+    const key = input.platform ? feelingActor({ ownerAlone: false, group: true, ...speaker })
+      : feelingActor({ ownerAlone: input.alone && !input.guest, sceneId: input.alone && !input.guest ? null : `call:${input.threadId}` });
     const { scopeKey, transcript: words, at, snapshot } = input;
     if (port.audience && key.sceneId) safely(() => port.events.noteScene(scopeKey, key.sceneId!, at), undefined);
     return safely(() => begin(port, { scopeKey, key, channel: 'voice', words, at, snapshot }), null);
@@ -343,10 +346,11 @@ export const feelingVoice = Object.freeze({
       lines: handle.lines, register: handle.register, mood: snapshot?.emotion ?? { valence: 0, arousal: 0 }, ...amends,
       ...(handle.port.meaning ? { reading: true } : {}) }) };
   },
-  /** The block after the router answered (its feeling, or 「ふつう」 when the router fell back). */
+  /** The block after the router answered (its feeling, or 「ふつう」 when it fell back), leaned by her region (one head) as a text turn's. */
   block: (handle: FeelingTurnHandle | null, decided: FeelingTurnDecision | undefined): string => {
     if (!handle) return '';
-    handle.decision = handle.port.turn ? decided ?? neutralFeelingTurn(handle.register) : null;
+    const routed = handle.port.turn ? decided ?? neutralFeelingTurn(handle.register) : null;
+    handle.decision = safely(() => spaceDecision(handle, routed), routed);
     if (handle.decision) observeSync('emotion', { phase: 'feeling.turn', surface: 'voice', audience: handle.key.audience }, () => handle.decision,
       value => ({ stance: value?.stance ?? null, intensity: value?.intensity ?? null, drawer: value?.drawer ?? null, register: value?.register ?? null,
         source: value?.source ?? null, composure: handle.lines?.ledger.composure ?? 1 }));
@@ -375,6 +379,10 @@ export const feelingVoice = Object.freeze({
     const id = safely(() => port.events.takePresented(turn.scopeKey, turn.utteranceId ?? null, turn.at), null) ?? presentationIdOf(emotion);
     return Object.freeze({ ...emotion, presentationId: id });
   },
+  /** One head: her identity with her space's core in place of v2, as a text turn's (`voiceSpaceIdentity`); as it was without a region. */
+  identity: voiceSpaceIdentity,
+  /** One head: the context each spoken sentence is checked with before it is said (`voiceGuardContext`); null when nothing is checked. */
+  guard: voiceGuardContext,
   ended: (handle: FeelingTurnHandle | null, input: { at: string; transcript: string; reply: string; utteranceId?: string }) => {
     if (handle) safely(() => turnEnded(handle, { at: input.at, words: input.transcript, reply: input.reply, turnId: input.utteranceId ?? input.at,
       sourceId: input.utteranceId ? `utterance:${input.utteranceId}` : null }), undefined);

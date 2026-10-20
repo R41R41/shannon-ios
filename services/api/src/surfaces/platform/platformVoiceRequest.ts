@@ -4,6 +4,7 @@ import { PlatformBridgeError, type ShannonPlatform } from '../../mind/memory/pla
 import type { SurfaceTurnLimits } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { VOICE_ROOM_LIMITS, clipVoiceText, type HeardLine } from './voiceRoom.js';
+import type { ExpressionEvent } from '../../contracts/oneHeadContract.js';
 
 /**
  * The wire form of a Discord voice channel's turn (`POST /v1/platform/voice/turn`, dc-voice, 2026-10-20): what the body sends, what
@@ -54,10 +55,14 @@ export interface VoiceTurnRequest {
   situation?: string;
   sttMs?: number;
   utteranceMs?: number;
+  /** One head (`POST /v1/converse`, never on this route's wire): a DM, and the channel's own name for a conversation nobody bound. */
+  conversationKind?: 'channel' | 'dm';
+  title?: string;
 }
 
 export type VoiceTurnLine =
   | { type: 'decision'; respond: boolean; reason: string; filler: { id: string; text: string } | null }
+  | ExpressionEvent
   | { type: 'sentence'; index: number; text: string; voiceText?: string; correction?: true }
   | { type: 'intent'; kind: 'task_message' | 'task' | 'stop' | 'none'; delivered: boolean; taskId?: string; reason?: string }
   | { type: 'done'; reply: string; threadId: string; duplicate: boolean; silent?: true; reason?: string;

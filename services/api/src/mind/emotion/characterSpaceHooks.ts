@@ -50,6 +50,11 @@ export function spaceIdentity<T extends { systemPrompt: string; prompt: string }
   }
 }
 
+/** One head (`SHANNON_ONE_HEAD`): a voice turn's identity with the space's core (`spaceIdentity`), as a text turn's; as it was otherwise. */
+export function voiceSpaceIdentity(handle: FeelingTurnHandle | null, identity: string): string {
+  return spaceIdentity(handle, { systemPrompt: identity, prompt: identity }).systemPrompt;
+}
+
 /**
  * With her space on every text reply is the stronger model's (owner 2026-10-20: 「返事は Sonnet 5.5 で」); those may take at most this
  * share of the day's cap, so that a refusal or a touch after her no later that day still finds the stronger model (review 8).

@@ -406,10 +406,22 @@ export async function answerTextCommand(dependencies: TextTurnDependencies, inpu
 }
 
 /** The turn as another surface keeps it; what her tools did is linked to it as `recordTurn` links it. */
-export function storedBySurface(dependencies: TextTurnDependencies, surface: TextTurnSurface, turn: CompletedTurn) {
+export function storedBySurface(dependencies: Pick<TextTurnDependencies, 'toolServer'>, surface: Pick<TextTurnSurface, 'store'>, turn: CompletedTurn) {
   const experience = surface.store(turn);
   if (experience) dependencies.toolServer.turns.turnStored(turn.scopeKey, turn.threadId, experience.id, turn.userMessage, !turn.audience, turn.utteranceId);
   return experience;
+}
+
+/**
+ * One head (`SHANNON_ONE_HEAD`): a surface's keeping of a turn the voice turn finished (a platform's spoken turn), linked to her tools'
+ * work and handed to the background work exactly as a surface's text turn is (`storedBySurface`, then `schedule`).
+ */
+export function keptBySurface(dependencies: Pick<TextTurnDependencies, 'toolServer' | 'background'>, store: TextTurnSurface['store']) {
+  return (turn: CompletedTurn): ShannonExperience | null => {
+    const experience = storedBySurface(dependencies, { store }, turn);
+    if (experience) dependencies.background.schedule(turn, experience.id);
+    return experience;
+  };
 }
 
 /**

@@ -6,7 +6,11 @@ import {
 } from '@shannon/cognition';
 import { spaceOf, type SpaceInput, type SpaceLines } from './characterSpaceTurn.js';
 import { observeSync } from '../../infra/observer/observerContext.js';
+import { oneHeadEnabled } from '../../contracts/oneHeadContract.js';
 import type { FeelingDays } from './feelingDays.js';
+
+/** A turn her character space reads: a text turn, and with one head (`SHANNON_ONE_HEAD`) a voice turn as well. */
+const spokenOrWritten = (channel: FeelingEvent['channel'] | undefined): boolean => channel === 'text' || (channel === 'voice' && oneHeadEnabled());
 
 /**
  * Her feeling events and what is folded from them (Syzygy ADR-0013 stage 1, items 1, 3 and 8): the one entrance every touch, word
@@ -157,9 +161,12 @@ export class FeelingEvents {
     }
   }
 
-  /** Her character space in a text turn (`SHANNON_CHARACTER_SPACE`); nothing otherwise, or when it fails (a turn goes on without it). */
+  /**
+   * Her character space in a text turn (`SHANNON_CHARACTER_SPACE`), and with one head (`SHANNON_ONE_HEAD`) in a voice turn too; nothing
+   * otherwise, or when it fails (a turn goes on without it).
+   */
   private spaceFor(input: Omit<SpaceInput, 'timeZone' | 'max' | 'natural'>, channel?: FeelingEvent['channel']): { space?: SpaceLines } {
-    if (!this.options.space || channel !== 'text') return {};
+    if (!this.options.space || !spokenOrWritten(channel)) return {};
     try {
       const { max, natural } = this.options.space;
       return { space: spaceOf({ ...input, timeZone: this.options.timeZone, max, natural: natural === true }) };
@@ -171,7 +178,7 @@ export class FeelingEvents {
 
   /** `SHANNON_NATURAL_TALK`, a text turn of the owner alone: the chooser's last stance and its run (`sameStanceFacts`); nothing otherwise. */
   private runFacts(key: FeelingKey, replies: readonly FeelingEvent[], channel?: FeelingEvent['channel']): Record<string, number | string> {
-    return this.options.space?.natural && channel === 'text' && key.audience === 'owner_alone' ? sameStanceFacts(replies) : {};
+    return this.options.space?.natural && spokenOrWritten(channel) && key.audience === 'owner_alone' ? sameStanceFacts(replies) : {};
   }
 
   /**

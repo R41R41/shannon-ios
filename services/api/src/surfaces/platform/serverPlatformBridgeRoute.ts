@@ -19,6 +19,8 @@ import { PlatformPeople, platformPeopleEnabled } from '../../mind/memory/platfor
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled, type PlatformReplyConversation } from './platformReply.js';
 import { handlePlatformVoiceRequest, isPlatformVoicePath, type PlatformVoiceRoutes } from './platformVoiceRoute.js';
+import { handleConverseRequest, isConversePath } from './platformConverse.js';
+import type { SwitchValues } from '@shannon/switches';
 
 export interface PlatformBridgeRouteDependencies {
   configuration: PlatformBridgeConfiguration;
@@ -28,6 +30,8 @@ export interface PlatformBridgeRouteDependencies {
   reply?: PlatformReplyService | null;
   /** /v1/platform/voice/* (platformVoiceRoute.ts): null while the route is not composed; each answers 503 while SHANNON_DC_VOICE is off. */
   voice?: PlatformVoiceRoutes | null;
+  /** The server's switches (one head: `POST /v1/converse` answers 503 while `SHANNON_ONE_HEAD` is off); absent, the process's. */
+  environment?: () => SwitchValues;
   close?: () => void;
 }
 
@@ -35,7 +39,7 @@ export const SHANNON_PLATFORM_PLACES_PATH = '/v1/platform/places';
 
 export function isPlatformBridgePath(path: string): boolean {
   return path === SHANNON_PLATFORM_TURN_PATH || path === SHANNON_PLATFORM_CONTEXT_PATH
-    || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH || isPlatformVoicePath(path);
+    || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH || isPlatformVoicePath(path) || isConversePath(path);
 }
 
 export async function handlePlatformBridgeRequest(
@@ -44,6 +48,13 @@ export async function handlePlatformBridgeRequest(
   response: ServerResponse,
   dependencies: PlatformBridgeRouteDependencies | null,
 ): Promise<void> {
+  if (isConversePath(path)) {
+    await handleConverseRequest(request, response, dependencies ? {
+      token: dependencies.configuration.token, voice: dependencies.voice?.service ?? null, reply: dependencies.reply ?? null,
+      ...(dependencies.environment ? { environment: dependencies.environment } : {}),
+    } : null);
+    return;
+  }
   if (isPlatformVoicePath(path)) {
     await handlePlatformVoiceRequest(path, request, response, dependencies ? { token: dependencies.configuration.token } : null, dependencies?.voice ?? null);
     return;

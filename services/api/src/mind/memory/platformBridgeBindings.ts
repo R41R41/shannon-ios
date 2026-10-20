@@ -69,6 +69,32 @@ function matchesConversationPrefix(platform: ShannonPlatform, conversationId: st
     && suffix.test(conversationId.slice(prefix.length));
 }
 
+/** A Discord conversation as the body names it: `discord:<guild>:<channel>`, or `discord::<channel>` for a DM. */
+const DISCORD_CONVERSATION = /^discord:(\d{1,32})?:\d{1,32}$/u;
+
+/** The title an open conversation has when the body names none. */
+export const OPEN_CONVERSATION_TITLE = 'Discordの会話';
+
+/**
+ * One head (`SHANNON_ONE_HEAD`, owner 2026-10-20): a Discord conversation nobody bound is still hers to answer, as one the people in it
+ * read (`shared`), never as the owner's own. Who the owner is comes from the Discord bindings, only when they name one account; with
+ * none, or with two, no conversation is opened (null).
+ */
+export function openConversationBinding(
+  configuration: PlatformBridgeConfiguration, platform: ShannonPlatform, conversationId: string,
+): PlatformBridgeBinding | null {
+  if (platform !== 'discord' || !DISCORD_CONVERSATION.test(conversationId)) return null;
+  const owners = new Set([...configuration.bindings.values(), ...configuration.prefixBindings]
+    .filter(binding => binding.platform === 'discord').map(binding => binding.ownerUserId));
+  if (owners.size !== 1) return null;
+  return Object.freeze({ platform, conversationId, ownerUserId: [...owners][0]!, title: OPEN_CONVERSATION_TITLE, audience: 'shared' as const });
+}
+
+/** Whether a Discord conversation id names a DM (no guild). */
+export function discordDirectConversation(conversationId: string): boolean {
+  return conversationId.startsWith('discord::');
+}
+
 function bindingKey(platform: ShannonPlatform, conversationId: string): string {
   return `${platform}\u0000${conversationId}`;
 }

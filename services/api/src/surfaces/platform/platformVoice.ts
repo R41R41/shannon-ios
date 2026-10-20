@@ -9,11 +9,15 @@ import {
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { voiceAddress, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
-import type { ShannonChatModel } from '../../infra/models/chatModel.js';
-import { VoiceSegmentTags, displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
+import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
+import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import type { ChatSentenceSink } from '../../contracts/contracts.js';
+import { oneHeadEnabled } from '../../contracts/oneHeadContract.js';
 import { switchOn, type SwitchValues } from '@shannon/switches';
+import { SpokenSentences, VoiceOut } from './platformVoiceLines.js';
+import { askSeated, platformVoiceSeat, type SeatedVoiceTurn, type SentenceSplitter } from './platformVoiceOneHead.js';
+import { OPEN_CONVERSATION_TITLE } from '../../mind/memory/platformMemoryPorts.js';
 import {
   PLATFORM_VOICE_ALLOWANCE, PLATFORM_VOICE_LIMITS, StoredVoiceTurn, VoiceTurnLine, VoiceTurnRequest, conflict, notBound, validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
@@ -48,6 +52,8 @@ export {
 
 export interface PlatformVoiceConversation {
   textTurn(input: TextTurnInput): Promise<TextTurnResult>;
+  /** One head (`SHANNON_ONE_HEAD`): the one voice turn the apps use, with this channel's seat (`ShannonApiKernel.seatedVoiceTurn`). */
+  seatedVoiceTurn?: SeatedVoiceTurn;
 }
 
 export interface PlatformVoiceDependencies {
@@ -59,6 +65,8 @@ export interface PlatformVoiceDependencies {
   now: CompanionClock;
   /** A reply's sentences, cut as a voice is spoken in (wiring hands over `splitChatSentences` with `VOICE_SENTENCE_CUT`). */
   sentences(text: string): string[];
+  /** One head: the same cut, while the reply is written (wiring: a `ChatSentenceSplitter` with `VOICE_SENTENCE_CUT`); absent, cut at the end. */
+  splitter?: () => SentenceSplitter;
   rooms?: VoiceRooms;
   /** Her Minecraft body's side of an owner's spoken request; null while the part is off. */
   minecraft?: () => VoiceMinecraftPort | null;
@@ -70,74 +78,23 @@ export interface PlatformVoiceDependencies {
 }
 
 /** Who is speaking where, as the platform policy settled it. */
-interface VoiceSeat {
+interface ChannelSeat {
   binding: PlatformBridgeBinding;
   policy: PlatformAudiencePolicy;
   humans: Set<string>;
   owner: boolean;
   startedAt: number;
+  /** The conversation's title: a bound one's, or for one nobody bound (one head) the channel's own name when the body gave it. */
+  title: string;
 }
 
-/** What the model was asked and what came back, for the lines that follow. */
+/** What came back, for the lines that follow. */
 interface VoiceAnswer {
-  result: TextTurnResult;
+  reply: string;
+  minecraftIntent?: ShannonChatModelResult['minecraftIntent'];
+  experienceId?: string;
   spoken: SpokenSentences;
   ignored: string | undefined;
-}
-
-/** Lines out, in order. A reader that left loses lines; the turn goes on. */
-class VoiceOut {
-  count = 0;
-
-  constructor(private readonly write: (line: VoiceTurnLine) => void) {}
-
-  line(line: VoiceTurnLine): void {
-    this.count += 1;
-    try {
-      this.write(line);
-    } catch {
-      /* the reader went away */
-    }
-  }
-}
-
-/** The sentences of one reply: the text shown and the voice's own text (tags) apart, numbered, with when the first went out. */
-class SpokenSentences {
-  private readonly tags = new VoiceSegmentTags();
-  private readonly streamed: string[] = [];
-  private index = 0;
-  firstAt: number | null = null;
-
-  constructor(private readonly out: VoiceOut) {}
-
-  get count(): number { return this.index; }
-
-  /** A sentence that went out while the model wrote. */
-  stream(raw: string): void {
-    this.streamed.push(raw);
-    this.say(raw);
-  }
-
-  say(raw: string, correction = false): void {
-    const spoken = this.tags.take(raw);
-    const text = spoken?.text.trim();
-    if (!spoken || !text) return;
-    this.firstAt ??= performance.now();
-    const voiceText = spoken.voiceText?.trim();
-    this.out.line({
-      type: 'sentence', index: this.index, text,
-      ...(voiceText && voiceText !== text ? { voiceText } : {}),
-      ...(correction ? { correction: true as const } : {}),
-    });
-    this.index += 1;
-  }
-
-  /** What the model wrote after the last sentence that went out while it wrote (an unfinished one, or all of it when it could not stream). */
-  rest(reply: string, split: (text: string) => string[]): void {
-    const sent = this.streamed.join('');
-    if (reply.startsWith(sent)) for (const sentence of split(reply.slice(sent.length))) this.say(sentence);
-    else if (!sent) for (const sentence of split(reply)) this.say(sentence);
-  }
 }
 
 export class PlatformVoiceService {
@@ -170,7 +127,11 @@ export class PlatformVoiceService {
    * for a JSON error); after it, a failure is an `error` line.
    */
   async turn(value: unknown, emit: (line: VoiceTurnLine) => void): Promise<void> {
-    const request = validatedVoiceTurn(value);
+    return this.turnRequest(validatedVoiceTurn(value), emit);
+  }
+
+  /** One spoken turn already in the request's form (one head: `POST /v1/converse` reads the one shape into it). */
+  async turnRequest(request: VoiceTurnRequest, emit: (line: VoiceTurnLine) => void): Promise<void> {
     const hash = voiceHash(request);
     const key = `discord-voice:${request.requestId}`;
     const stored = this.dependencies.turns.find(this.dependencies.scopeKey, key);
@@ -219,7 +180,7 @@ export class PlatformVoiceService {
   }
 
   /** Fresh, bound, and who is there: the policy of the platform, with the channel's members as the audience. */
-  private seat(request: VoiceTurnRequest): VoiceSeat {
+  private seat(request: VoiceTurnRequest): ChannelSeat {
     const { bridge, now } = this.dependencies;
     const age = Date.parse(now()) - Date.parse(request.observedAt);
     if (age > PLATFORM_VOICE_LIMITS.maximumAgeMilliseconds || age < -PLATFORM_VOICE_LIMITS.futureSkewMilliseconds) {
@@ -232,9 +193,15 @@ export class PlatformVoiceService {
     const shared = request.sourceUserId !== binding.ownerUserId || humans.size > 1;
     const policy = bridge.audiencePolicy({
       platform: request.platform, conversationId: request.conversationId, sourceUserId: request.sourceUserId,
-      conversationKind: 'channel', participants: [...humans],
+      conversationKind: request.conversationKind ?? 'channel', participants: [...humans],
     }, { sharedPresence: shared });
-    return { binding, policy, humans, owner: policy.ownerWrote, startedAt: performance.now() };
+    const title = binding.title === OPEN_CONVERSATION_TITLE && request.title ? request.title : binding.title;
+    return { binding, policy, humans, owner: policy.ownerWrote, startedAt: performance.now(), title };
+  }
+
+  /** One head: the turn through the one voice turn the apps use, when the switch is on and the kernel offers it. */
+  private get seated(): SeatedVoiceTurn | null {
+    return oneHeadEnabled(this.environment) ? this.dependencies.conversation.seatedVoiceTurn ?? null : null;
   }
 
   private async answer(request: VoiceTurnRequest, hash: string, key: string, out: VoiceOut): Promise<void> {
@@ -246,13 +213,14 @@ export class PlatformVoiceService {
     out.line({ type: 'decision', respond: true, reason: address.reason, filler: filler ? { id: filler.id, text: filler.text } : null });
     const decisionMs = Math.round(performance.now() - seat.startedAt);
     const body = this.bodyFor(seat);
-    const answer = await this.ask(seat, request, hash, filler, body, out);
+    const seated = this.seated;
+    const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, out) : await this.ask(seat, request, hash, filler, body, out);
     await this.carryIntent(seat, request, answer, body, out);
     this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler }, out);
   }
 
   /** Heard, not answered: context for a few minutes, nothing in her memory. */
-  private stayQuiet(seat: VoiceSeat, request: VoiceTurnRequest, hash: string, key: string, address: VoiceAddress, out: VoiceOut): void {
+  private stayQuiet(seat: ChannelSeat, request: VoiceTurnRequest, hash: string, key: string, address: VoiceAddress, out: VoiceOut): void {
     const { scopeKey, turns, now } = this.dependencies;
     this.rooms.noteHeard(request.conversationId, [
       { userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt },
@@ -264,7 +232,7 @@ export class PlatformVoiceService {
     this.log(`Shannon platform voice turn respond=false reason=${address.reason} humans=${seat.humans.size}`);
   }
 
-  private admit(seat: VoiceSeat, request: VoiceTurnRequest): void {
+  private admit(seat: ChannelSeat, request: VoiceTurnRequest): void {
     if (!seat.owner && !request.sourceDisplayName) {
       throw new PlatformBridgeError('PLATFORM_ACTOR_DENIED', 403, 'This external actor is not bound to the Shannon owner.');
     }
@@ -288,7 +256,7 @@ export class PlatformVoiceService {
   }
 
   /** Her Minecraft body's side for this turn: the port and what it says now; null when the part is off. */
-  private bodyFor(seat: VoiceSeat): { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null {
+  private bodyFor(seat: ChannelSeat): { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null {
     const port = switchOn(this.environment, 'SHANNON_DC_VOICE_MINECRAFT') ? this.dependencies.minecraft?.() ?? null : null;
     if (!port) return null;
     try {
@@ -299,11 +267,11 @@ export class PlatformVoiceService {
   }
 
   /** Whether the intent field is offered: the owner, in a conversation that is not his alone, with the body connected. */
-  private offersIntent(seat: VoiceSeat, body: { state: VoiceMinecraftState } | null): boolean {
+  private offersIntent(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
     return seat.owner && !seat.policy.gate.ownerOnly && body !== null && body.state.connected;
   }
 
-  private promptFor(seat: VoiceSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null): string {
+  private promptFor(seat: ChannelSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null): string {
     const roomKey = request.conversationId;
     this.rooms.noteHeard(roomKey, request.heard);
     const situation = request.situation ?? this.rooms.situation(roomKey) ?? this.rooms.situation('default');
@@ -312,7 +280,7 @@ export class PlatformVoiceService {
     const intent = seat.owner && !ownerTools && body ? voiceIntentInstructions(body.state, seat.humans.size <= 1) : '';
     return [
       platformVoiceInstructions({
-        title: seat.binding.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
+        title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
       }),
       situationBlock(situation, running),
@@ -322,7 +290,7 @@ export class PlatformVoiceService {
   }
 
   private async ask(
-    seat: VoiceSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
+    seat: ChannelSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
   ): Promise<VoiceAnswer> {
     const { scopeKey, conversation } = this.dependencies;
@@ -333,7 +301,7 @@ export class PlatformVoiceService {
     const result = await conversation.textTurn({
       ...platformTextTurnInput({
         scopeKey, policy: seat.policy, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`, rawMessage: transcript,
-        prompt: this.promptFor(seat, request, filler, body), threadTitle: seat.binding.title, voice: true, ownOutreach: false,
+        prompt: this.promptFor(seat, request, filler, body), threadTitle: seat.title, voice: true, ownOutreach: false,
         ...(seat.owner && seat.policy.gate.ownerOnly ? { minecraftTools: true } : {}),
         ...(this.offersIntent(seat, body) ? { offerMinecraftIntent: true } : {}),
         perception: { surface: 'platform', ownerWrote: seat.owner },
@@ -344,11 +312,34 @@ export class PlatformVoiceService {
     });
     if (!result.completion) throw new Error('PLATFORM_VOICE_WITHOUT_COMPLETION');
     spoken.rest(result.completion.reply, this.dependencies.sentences);
-    return { result, spoken, ignored: kept.ignored };
+    const { reply, minecraftIntent } = result.completion;
+    const experience = result.experienceId ? { experienceId: result.experienceId } : {};
+    return { reply, ...(minecraftIntent ? { minecraftIntent } : {}), ...experience, spoken, ignored: kept.ignored };
+  }
+
+  /**
+   * One head (`SHANNON_ONE_HEAD`): the same turn through the one voice turn the apps use (the router, recall when it is wanted, her plain
+   * spoken stream), with this channel's seat: the bridge's policy, the audience's and the channel's blocks, and where the turn is kept.
+   */
+  private async askOneHead(
+    seated: SeatedVoiceTurn, seat: ChannelSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
+    body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
+  ): Promise<VoiceAnswer> {
+    const kept: { ignored: string | undefined } = { ignored: undefined };
+    const transcript = request.userMessage;
+    const voiceSeat = platformVoiceSeat({
+      policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
+      prompt: this.promptFor(seat, request, filler, body), title: seat.title, offerMinecraftIntent: this.offersIntent(seat, body),
+      keep: turn => this.keep(seat, request, hash, turn, kept),
+    });
+    const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
+      sentences: this.dependencies.sentences, ...(this.dependencies.splitter ? { splitter: this.dependencies.splitter } : {}),
+    });
+    return { ...answer, ignored: kept.ignored };
   }
 
   /** The turn where the platform keeps it: the owner's in his platform thread, anyone else's as person memory. Never with the voice's tags. */
-  private keep(seat: VoiceSeat, request: VoiceTurnRequest, hash: string, turn: CompletedTurn, kept: { ignored: string | undefined }) {
+  private keep(seat: ChannelSeat, request: VoiceTurnRequest, hash: string, turn: CompletedTurn, kept: { ignored: string | undefined }) {
     const { conversationStore, bridge } = this.dependencies;
     const heard = { ...turn, shannonReply: displayedVoiceText(turn.shannonReply) };
     const receipt = { platform: request.platform, requestId: `voice:${request.requestId}`, payloadHash: hash };
@@ -357,7 +348,7 @@ export class PlatformVoiceService {
       kept.ignored = rememberPlatformPerson(bridge, {
         platform: request.platform, requestId: receipt.requestId, conversationId: request.conversationId, sourceUserId: request.sourceUserId,
         userMessage: request.userMessage, shannonReply: heard.shannonReply, observedAt: request.observedAt,
-        conversationKind: 'channel', sourceDisplayName: request.sourceDisplayName, sourceKind: 'person',
+        conversationKind: request.conversationKind ?? 'channel', sourceDisplayName: request.sourceDisplayName, sourceKind: 'person',
       });
       return null;
     } catch (error) {
@@ -368,15 +359,15 @@ export class PlatformVoiceService {
 
   /** The owner's spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised. */
   private async carryIntent(
-    seat: VoiceSeat, request: VoiceTurnRequest, answer: VoiceAnswer,
+    seat: ChannelSeat, request: VoiceTurnRequest, answer: VoiceAnswer,
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
   ): Promise<void> {
-    const intent = answer.result.completion?.minecraftIntent;
+    const intent = answer.minecraftIntent;
     if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return;
     const { scopeKey } = this.dependencies;
     const outcome = await body.port.intent({
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent,
-      experienceId: answer.result.experienceId ?? null, allowNew: seat.humans.size <= 1,
+      experienceId: answer.experienceId ?? null, allowNew: seat.humans.size <= 1,
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
     out.line({
       type: 'intent', kind: outcome.as === 'message' ? 'task_message' : intent.kind, delivered: outcome.delivered,
@@ -386,7 +377,7 @@ export class PlatformVoiceService {
     if (!outcome.delivered) this.refuse(seat, request, answer, outcome.reason ?? 'not_owner_scope');
   }
 
-  private refuse(seat: VoiceSeat, request: VoiceTurnRequest, answer: VoiceAnswer, reason: keyof typeof VOICE_MINECRAFT_REFUSALS): void {
+  private refuse(seat: ChannelSeat, request: VoiceTurnRequest, answer: VoiceAnswer, reason: keyof typeof VOICE_MINECRAFT_REFUSALS): void {
     const { scopeKey, conversationStore, now } = this.dependencies;
     const text = VOICE_MINECRAFT_REFUSALS[reason];
     answer.spoken.say(text, true);
@@ -398,12 +389,11 @@ export class PlatformVoiceService {
   }
 
   private finish(
-    seat: VoiceSeat, request: VoiceTurnRequest, hash: string, key: string, answer: VoiceAnswer,
+    seat: ChannelSeat, request: VoiceTurnRequest, hash: string, key: string, answer: VoiceAnswer,
     facts: { decisionMs: number; address: string; filler: VoiceFiller | null }, out: VoiceOut,
   ): void {
     const { scopeKey, turns, now } = this.dependencies;
-    const completion = answer.result.completion!;
-    const reply = displayedVoiceText(completion.reply).trim().slice(0, PLATFORM_VOICE_LIMITS.replyCharacters);
+    const reply = displayedVoiceText(answer.reply).trim().slice(0, PLATFORM_VOICE_LIMITS.replyCharacters);
     const threadId = seat.policy.threadId;
     const response: StoredVoiceTurn = { reply, threadId, respond: true, reason: facts.address };
     turns.save(scopeKey, key, request.platform, hash, response as unknown as Record<string, unknown>, now(), PLATFORM_VOICE_LIMITS.replayDays);

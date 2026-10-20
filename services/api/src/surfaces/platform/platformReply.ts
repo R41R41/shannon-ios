@@ -8,7 +8,7 @@ import {
   PlatformBridgeError, type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService, type ShannonPlatform,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { platformDisplayName, type PlatformConversationKind } from '../../mind/memory/platformPeople.js';
-import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../../mind/memory/platformMemoryPorts.js';
+import { OPEN_CONVERSATION_TITLE, keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../../mind/memory/platformMemoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
@@ -48,6 +48,8 @@ export interface PlatformReplyRequest {
   participants?: readonly string[];
   userMessage: string;
   observedAt: string;
+  /** One head (`POST /v1/converse`, never on this route's wire): the channel's own name for a conversation nobody bound. */
+  title?: string;
 }
 
 export interface PlatformReplyResponse {
@@ -78,7 +80,11 @@ export class PlatformReplyService {
   }) {}
 
   async reply(value: unknown): Promise<PlatformReplyResponse> {
-    const request = validatedPlatformReply(value);
+    return this.replyRequest(validatedPlatformReply(value));
+  }
+
+  /** A reply to a message already in the request's form (one head: `POST /v1/converse` reads the one shape into it). */
+  async replyRequest(request: PlatformReplyRequest): Promise<PlatformReplyResponse> {
     const hash = replyHash(request);
     const { scopeKey, turns, now } = this.dependencies;
     const key = `${request.platform}:${request.requestId}`;
@@ -120,11 +126,13 @@ export class PlatformReplyService {
     const { scopeKey, conversationStore, bridge } = this.dependencies;
     const owner = policy.ownerWrote;
     let ignored: string | undefined;
+    // A conversation nobody bound (one head) is titled by the channel's own name when the body gave it.
+    const binding = request.title && policy.binding.title === OPEN_CONVERSATION_TITLE ? { ...policy.binding, title: request.title } : policy.binding;
     const result = await this.dependencies.conversation.textTurn(platformTextTurnInput({
       scopeKey, policy,
       message: owner ? request.userMessage : `${request.sourceDisplayName}: ${request.userMessage}`, rawMessage: request.userMessage,
-      prompt: platformDeliveryInstructions(request.platform, policy.binding, request.conversationKind, policy.gate.ownerOnly, owner ? null : request.sourceDisplayName!),
-      threadTitle: policy.binding.title,
+      prompt: platformDeliveryInstructions(request.platform, binding, request.conversationKind, policy.gate.ownerOnly, owner ? null : request.sourceDisplayName!),
+      threadTitle: binding.title,
       // Her minecraft.* tools, like all her tools, reach only a conversation the owner alone reads.
       ...(owner && policy.gate.ownerOnly ? { minecraftTools: true } : {}),
       // Not told what she did on her own to reach the owner: a platform conversation is not where that is talked about.

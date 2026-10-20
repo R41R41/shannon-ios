@@ -349,6 +349,11 @@ export const SWITCHES = [
     doc: 'Her mouth in the voice channel: say / poll / result / wording / said, so other parts can make her say a line there.',
   },
   {
+    name: 'SHANNON_ONE_HEAD', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
+    doc: 'Owner 2026-10-20 (one head, entries only hear and speak): POST /v1/converse; Discord voice through the app voice turn; '
+      + 'unbound Discord conversations and strangers answered; her character space and guard lines on voice too.',
+  },
+  {
     name: 'SHANNON_DEVICE_ACTIONS', default: 'on', kind: 'default_on', owner: 'device', requires: [],
     doc: 'Reminders, timers, calendar events and Apple Music done by the owner\'s own app through the device-action outbox.',
   },

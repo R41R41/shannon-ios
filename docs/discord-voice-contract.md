@@ -45,6 +45,13 @@ refusal are the last `sentence` (`correction: true`) and are kept as what she sa
 - `POST say`, `POST mouth/poll`, `POST mouth/result`: her mouth (`voiceMouth.ts`); `POST wording` (event facts into her words);
   `POST said` (what she said by herself, or was heard saying before being talked over, kept in the conversation).
 
+## One head (`SHANNON_ONE_HEAD`)
+
+With `SHANNON_ONE_HEAD` on, the same turn is answered by the one voice turn the apps use (`apiLiveVoice.ts`, the router, recall only when
+it is wanted, her plain spoken stream; the owner's request to her body through the structured stream), with the channel's seat in place
+of a device's, and `expression` lines may come before the sentences. Conversations nobody bound and strangers are answered too, and
+`POST /v1/converse` takes this turn in the one shape (`docs/one-head-contract.md`).
+
 ## Switches
 
 `SHANNON_DC_VOICE` (off), `SHANNON_DC_VOICE_FILLER`, `SHANNON_DC_VOICE_MINECRAFT`, `SHANNON_DC_VOICE_MOUTH` (on within the first).

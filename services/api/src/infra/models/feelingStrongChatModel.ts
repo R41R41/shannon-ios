@@ -183,6 +183,15 @@ const unsendable = (flags: readonly string[]) => privacy(flags) || crossed(flags
 const safe = (result: ShannonChatModelResult, flags: readonly string[]): ShannonChatModelResult =>
   ({ ...result, reply: privacy(flags) ? PRIVATE_SAFE_REPLY : GUARD_SAFE_REPLY });
 
+/**
+ * One head (`SHANNON_ONE_HEAD`): the line a spoken sentence is replaced by when its flags say it is never sent (a private matter told,
+ * a marker read out, a guard line crossed), the same lines as a text draft's; null when it may be said.
+ */
+export function unsendableLine(flags: readonly string[]): string | null {
+  if (!unsendable(flags)) return null;
+  return privacy(flags) ? PRIVATE_SAFE_REPLY : GUARD_SAFE_REPLY;
+}
+
 function plain(request: Marked): ShannonChatModelRequest {
   if (!request.feelingStrong && !request.feelingCheck) return request;
   const { feelingStrong: _strong, feelingCheck: _check, ...rest } = request;

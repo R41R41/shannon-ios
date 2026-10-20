@@ -7,21 +7,13 @@ import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
 import { dispatchVoiceTurn } from '../../surfaces/voice/apiVoiceTurns.js';
 import { dispatchPreferenceRequest } from './apiPreferenceRoutes.js';
-import { dispatchLiveVoiceRequest, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode } from '../../surfaces/voice/apiLiveVoice.js';
 import {
-  badRequest, invalidChatFlag,
-  objectBody,
-  validAgentCommandType,
-  validAgentHostHint,
-  validBoundedString,
-  validEvent,
-  validHostEvents,
-  validMemoryAction,
-  validPlan,
-  validScopeKey,
-  validThreadTitle,
-  validVoyagerTaskProjection,
-  validatedChatAttachments,
+  dispatchLiveVoiceRequest, dispatchSeatedVoiceTurn, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode,
+} from '../../surfaces/voice/apiLiveVoice.js';
+import type { VoiceSeat } from '../../contracts/oneHeadContract.js';
+import {
+  badRequest, invalidChatFlag, objectBody, validAgentCommandType, validAgentHostHint, validBoundedString, validEvent, validHostEvents, validMemoryAction,
+  validPlan, validScopeKey, validThreadTitle, validVoyagerTaskProjection, validatedChatAttachments,
 } from './apiValidation.js';
 import { BackgroundUpdateCoordinator, type TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
 import { LocalStubChatModel, type ShannonChatModel } from '../models/chatModel.js';
@@ -77,7 +69,7 @@ import {
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, markLiveTurn, type LiveBodyReader, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
+import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, keptBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, markLiveTurn, type LiveBodyReader, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -257,6 +249,11 @@ export class ShannonApiKernel {
   async streamLiveVoiceDelegation(request: ApiRequest, observer: LiveVoiceStreamObserver): Promise<ApiResponse> {
     const response = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies(), observer);
     return response ? await response : { status: 404, body: { error: 'NOT_FOUND' } };
+  }
+  /** One head: a platform's spoken turn through the apps' voice turn with its seat, what it keeps kept as a surface's text turn is. */
+  seatedVoiceTurn(turn: { scopeKey: string; transcript: string; seat: VoiceSeat }, observer?: LiveVoiceStreamObserver): Promise<ApiResponse> {
+    const keep = keptBySurface({ toolServer: this.toolServer, background: this.background }, turn.seat.keep);
+    return dispatchSeatedVoiceTurn({ ...turn, seat: { ...turn.seat, keep } }, this.liveVoiceDependencies(), observer);
   }
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
     const preferenceResponse = dispatchPreferenceRequest(request, {
