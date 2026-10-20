@@ -32,8 +32,28 @@ export interface MinecraftConversation {
   textTurn(input: TextTurnInput): Promise<TextTurnResult>;
 }
 
+/**
+ * Why an in-game request of the owner's was not handed to her body (Minecraft run 19, 10:54 JST: four checks gave one
+ * `queue_unavailable`, a reply about "the selected model" that matched none of them, and no line).
+ */
+export type MinecraftIntentRefusal = 'not_owner_scope' | 'others_present' | 'body_unavailable' | 'no_turn' | 'turn_not_visible';
+/** What she says for each, fixed words: never the model or a connection when neither was the cause. */
+export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, string>> = Object.freeze({
+  not_owner_scope: 'この頼みは、いまはマイクラの体に渡せない。',
+  others_present: 'ほかの人がいると分かっている間は、マイクラの体に頼みごとを渡せない。ライ氏だけになったら、もう一度頼んでほしい。',
+  body_unavailable: 'マイクラの体がいまつながっていないので、頼みごとを渡せなかった。体がつながったら、もう一度頼んでほしい。',
+  no_turn: 'いまの頼みを記録できなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',
+  turn_not_visible: 'いまの頼みを記録から確かめられなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',
+});
+/** The prompt line for a refusal known before her reply: she says it herself, so what she keeps is what she said. */
+const intentBlocked = (reason: MinecraftIntentRefusal) => `[マイクラの体への頼みごと: いまは渡せない]\n${MINECRAFT_INTENT_REFUSALS[reason]}`
+  + '\n体への頼みごとをされた時だけ、引き受けたとは言わずにこのことを短く伝える。雑談には普通に答え、このことには触れない。';
+
 export interface MinecraftBodyDependencies {
-  fcaIntent?(input: { scopeKey: string; request: MinecraftTurnRequest; intent: MinecraftIntent; experienceId: string | null }): Promise<MinecraftTurnResponse['intent']>;
+  fcaIntent?(input: { scopeKey: string; request: MinecraftTurnRequest; intent: MinecraftIntent; experienceId: string | null })
+    : Promise<(MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined>;
+  /** The refusal known before her reply (`fcaMinecraftRequests.ts`): who is present, the scope, the body's frame; null when none. */
+  fcaAdmission?(input: { scopeKey: string; request: MinecraftTurnRequest }): MinecraftIntentRefusal | null;
   configuration: MinecraftBodyConfiguration;
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
@@ -50,6 +70,8 @@ export interface MinecraftBodyDependencies {
   memory?: MemoryProposals | null;
   /** F6: the people facts' readers and recorders (absent: switched off). */
   peopleFacts?: ConstructorParameters<typeof PlatformPeople>[4];
+  /** Content-free lines (`console.log` when absent). */
+  log?(line: string): void;
 }
 
 /** A turn is answered only while it is fresh; game chat older than this is past. A retry of an answered turn is replayed whatever its age. */
@@ -126,14 +148,19 @@ export class MinecraftBody {
     const bodyNow = owner || kind === 'channel' ? minecraftBodyStateBlock(owner ? request.body : withoutRequestTask(request.body)) : '';
     let ignored: string | undefined;
     let experienceId: string | null = null;
+    // A refusal known before her reply is hers to say, and no intent is offered (what she keeps is what she said).
+    // Not a body without a frame: a stop is still taken then (the check after her reply lets it through, review of run 19).
+    const admitted = owner && this.dependencies.fcaIntent ? this.dependencies.fcaAdmission?.({ scopeKey, request }) ?? null : null;
+    const blocked = admitted === 'body_unavailable' ? null : admitted;
+    if (blocked) this.log(`Shannon Minecraft intent refused reason=${blocked} kind=- stage=before_reply`);
     const result = await this.dependencies.conversation.textTurn(platformTextTurnInput({
       scopeKey, policy,
       message: owner ? request.message : `${request.speaker.name}: ${request.message}`, rawMessage: request.message,
-      prompt: [minecraftDeliveryInstructions(server, kind, owner ? null : request.speaker.name), bodyNow, owner ? MINECRAFT_INTENT_INSTRUCTIONS : '']
-        .filter(Boolean).join('\n\n'),
+      prompt: [minecraftDeliveryInstructions(server, kind, owner ? null : request.speaker.name), bodyNow,
+        owner ? blocked ? intentBlocked(blocked) : MINECRAFT_INTENT_INSTRUCTIONS : ''].filter(Boolean).join('\n\n'),
       threadTitle: server.title,
       // Game chat asks her body through the turn's intent, not through her tools.
-      ...(owner ? { offerMinecraftIntent: true } : {}),
+      ...(owner && !blocked ? { offerMinecraftIntent: true } : {}),
       // What she did on her own to reach the owner, by the upstream audience rules (others present: times only; owner decision 2026-10-06).
       ownOutreach: true,
       store: turn => {
@@ -146,16 +173,40 @@ export class MinecraftBody {
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
-    const proposed = completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
+    const proposed = blocked ? { kind: 'none' as const, goal: '' } : completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
     // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.
-    const intent: MinecraftTurnResponse['intent'] = owner ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : proposed : undefined;
+    const decided: (MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined = owner
+      ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : proposed : undefined;
+    // The reason stays here (the body's contract is unchanged); what is sent is the intent as before.
+    const { reason, ...intent } = decided ?? {};
+    const said = decided?.rejected ? this.refusedAfterReply(scopeKey, request, threadId, reason)
+      : completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters);
     return {
-      reply: intent?.rejected ? '選択中のモデルでマイクラの体に頼みごとを渡せなかった。体が対応してつながったあとで、もう一度頼んでほしい。' : completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters),
-      ...(intent ? { intent } : {}),
+      reply: said,
+      ...(decided ? { intent: intent as NonNullable<MinecraftTurnResponse['intent']> } : {}),
       threadId,
       duplicate: false,
       ...(ignored ? { ignored } : {}),
     };
+  }
+
+  private log(line: string): void {
+    try { (this.dependencies.log ?? console.log)(line); } catch { /* logging never fails a turn */ }
+  }
+
+  /**
+   * A refusal found after her reply was kept (her own turn not visible, or not kept): the fixed words of its reason are what is sent,
+   * and her platform thread is told the same as a note after the kept turn, so that what she remembers saying is what was said.
+   */
+  private refusedAfterReply(scopeKey: string, request: MinecraftTurnRequest, threadId: string, reason: MinecraftIntentRefusal | undefined): string {
+    const text = MINECRAFT_INTENT_REFUSALS[reason ?? 'not_owner_scope'];
+    // A note that says someone else is present is not one for the owner alone (eedbackSourceProjection.ts).
+    const alone = reason !== 'others_present' && reason !== 'not_owner_scope';
+    try {
+      this.dependencies.conversationStore.appendNoteOnce?.(scopeKey, threadId, `mc-refusal:${request.requestId}`, text, this.dependencies.now(),
+        'minecraft_refusal', alone);
+    } catch { /* the reply is sent all the same */ }
+    return text;
   }
 
   /** Where nobody can be told apart: her identity and the delivery note, no memory read, nothing kept. */

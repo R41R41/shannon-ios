@@ -26,6 +26,7 @@ export function createMinecraftBodyRoute(
     memory?: MemoryProposals | null;
     peopleFacts?: MinecraftBodyDependencies['peopleFacts'];
     fcaIntent?: MinecraftBodyDependencies['fcaIntent'];
+    fcaAdmission?: MinecraftBodyDependencies['fcaAdmission'];
   },
 ): MinecraftBodyRoute {
   const configuration = configuredMinecraftBody(environment);
