@@ -29,7 +29,7 @@
 ## 本番との関係
 
 - 改訂できるのは、現行版に利用が 1 件も無い間だけ（`on_trial`）。次の実走の後に入れる時は、**dry-run で確かめる**。1 本でも `on_trial` があれば、その 1 本を外した版を作り直す。
-- **順番**: 1. 体の be82ca8（codex/shannon/mb-body-r19。dig-block-at の takeEquipment の確かめ、explore-for-structure の structureType=bed）。2. 同じブランチの API コード（`standardSkillPack` が draft-11 を読む）。3. draft-11 の dry-run と取り込み。
+- **順番**: 1. 体の be82ca8 とその後の版（codex/shannon/mb-body-r19。dig-block-at の takeEquipment の確かめ、explore-for-structure の structureType=bed、use-item-on-block の count で黒曜石をまとめて作る）。2. 同じブランチの API コード（`standardSkillPack` が draft-11 を読む）。3. draft-11 の dry-run と取り込み。
 - 本文は道具の呼び方だけを書き、場所の記憶の行の形には頼らない。
 
 ## 導入（本番）
