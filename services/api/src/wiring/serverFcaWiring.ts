@@ -203,7 +203,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending, via);
       }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content,
         // `peek` too: without it the evidence store and the monitor below never saw the foreground guard's verdicts while sleep was on.
-        peek: foregroundVisible.peek,
+        peek: foregroundVisible.peek, withheld: foregroundVisible.withheld,
         // The evidence store's coverage and walk counts are the foreground guard's, as its `sources` (review of 5d492ae8).
         covers: foregroundVisible.covers, residual: foregroundVisible.residual, walks: foregroundVisible.walks });
     }

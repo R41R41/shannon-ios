@@ -25,6 +25,13 @@ export interface SkillTurnPorts {
   open(scopeKey: string, name: string): SkillTurnSkill | null;
   /** Revalidate a retained read under current source, body, withdrawal and forgetting controls. */
   readSource?(scopeKey: string, skillId: string, revisionId?: string): Pick<SkillTurnSkill, 'body' | 'provenance'> | null;
+  /**
+   * The checks `readSource` reads under (made anew when they expire or the state changes, never made again) and her skills' database's
+   * change mark: an answer made under the same checks, the same mark and an unchanged memory is the one `readSource` gives now.
+   * `renew`: the checks a read takes now (made anew here if they have expired, as the read would) and the mark; else the last checks
+   * made, without the mark. Null when it reads none.
+   */
+  readSourceChecks?(scopeKey: string, renew: boolean): { checks: object; mark: string | null } | null;
   /** A use of a skill at the end of its turn, with G; returns the skill's id (the choice ledger's source) or null. */
   used(scopeKey: string, name: string, use: { talk: string; growth: number }, at: string): string | null;
   /** The owner's next turn in a Talk, as S (`nextTurnServe`; null: Jev unsure, G alone): settles the uses of the turn before. */

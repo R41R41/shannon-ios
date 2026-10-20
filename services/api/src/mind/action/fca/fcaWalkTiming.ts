@@ -2,7 +2,7 @@ import type { TaskSource } from '../taskRuntime/taskRuntimePorts.js';
 
 /** Who asked for a check, for the slow-walk line only: a closed set of words, never task or memory content. */
 export type FcaWalkCaller = 'step' | 'tool' | 'body' | 'evidence' | 'memory' | 'conversation' | 'task' | 'progress' | 'skill_read'
-  | 'child' | 'child_monitor' | 'other';
+  | 'child' | 'child_monitor' | 'gate' | 'other';
 type Part = 'epoch' | 'provenance' | 'reads' | 'walk';
 
 /**
