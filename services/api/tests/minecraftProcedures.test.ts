@@ -277,6 +277,20 @@ describe('Minecraft procedures (mb-arch)', () => {
     expect(procedureItem(taskId)).toBeNull();
   });
 
+  it('goes on when the body list changed under one of its calls (a failed call to make again, never an unknown step)', async () => {
+    const body = new SimBody();
+    const { call } = setup(body);
+    let changed = true;
+    const dig = body.tool_mine_block.bind(body);
+    body.tool_mine_block = (input: Input) => {
+      if (!changed) return dig(input);
+      changed = false;
+      return { ok: false, text: '体の道具の一覧が、この判断の後で変わった。', failure: 'unavailable', retryable: true };
+    };
+    const result = await call({ milestone: '木' });
+    expect(result.text).toContain('最後まで着いた');
+    expect(body.calls.filter(name => name === 'mc.mine-block')).toHaveLength(2);
+  });
   it('refuses a milestone it has no procedure for, and a through before the start', async () => {
     const { call } = setup(new SimBody());
     expect((await call({ milestone: 'ネザー要塞' })).failure).toBe('invalid_input');

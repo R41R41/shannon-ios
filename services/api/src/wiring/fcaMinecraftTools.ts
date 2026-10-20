@@ -15,6 +15,25 @@ export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId =
   return { scopeKey: step.scopeKey, taskId: step.taskId, taskRevision: step.revision, bodyId,
     sessionId, generation: step.lease.generation, goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria };
 }
+type Skill = { name: string; description: string; inputSchema: unknown; readOnly: boolean };
+const short = (id: string | undefined) => (id ?? '-').slice(0, 12);
+
+/**
+ * The body's list changed between the decision and the call (a practice-ground run, 2026-10-20: dig-block-at differed mid-step and the
+ * throw left the step unknown). What decides whether the call is still right is the tool's input shape and whether it only reads: a
+ * change of anything else (its description, its time limit) lets the call go; a changed shape lets it go when the input still fits the
+ * new one. Null when nothing changed; else the journal's line (the tool, the keys that differ, the connection before and now).
+ */
+export function catalogDrift(call: { name: string; input: unknown }, before: Skill | undefined, current: Skill | undefined,
+  connectionBefore: string | undefined, connectionNow: string | undefined): { callable: boolean; line: string } | null {
+  if (current && before && JSON.stringify(current) === JSON.stringify(before)) return null;
+  const keys = current && before ? [...new Set([...Object.keys(before), ...Object.keys(current)])]
+    .filter(key => JSON.stringify((before as Record<string, unknown>)[key]) !== JSON.stringify((current as Record<string, unknown>)[key])) : ['missing'];
+  const callable = !!current && !!before && current.readOnly === before.readOnly
+    && (JSON.stringify(current.inputSchema) === JSON.stringify(before.inputSchema) || validSkillInput(call.input, current.inputSchema as never));
+  return { callable, line: `tool=${call.name} keys=${keys.join(',')} connection=${short(connectionBefore)}->${short(connectionNow)} callable=${callable}` };
+}
+
 /** Typed physical tools are ordinary tools in the same FCA loop, selected by the same Jev menu. */
 export function fcaMinecraftTools(parts: { control: MinecraftControl; step: TaskStep; ownerAlone(): boolean; sourcesVisible(): boolean;
   /** A completed `mc.goal-evidence` result: its milestones may settle the task's skill uses (`fcaSkillOutcomes.ts`). */
@@ -46,13 +65,20 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     call.signal.throwIfAborted();
     if (!parts.ownerAlone() || !parts.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     const current = control.frame(bodyId)?.poll.skills?.find(skill => `mc.${skill.name}` === call.name);
-    if (!current || JSON.stringify(current) !== JSON.stringify(skills.find(skill => skill.name === current.name))) throw new Error('FCA_BODY_CATALOG_CHANGED');
+    const drift = catalogDrift(call, skills.find(skill => `mc.${skill.name}` === call.name), current, frame?.poll.connectionId,
+      control.frame(bodyId)?.poll.connectionId);
+    if (drift) {
+      console.info(`Shannon Minecraft catalog changed task=${step.taskId} ${drift.line}`);
+      // Nothing has gone to the body yet: a call the changed list no longer takes is a failed call she may make again, never an unknown step.
+      const words = '体の道具の一覧が、この判断の後で変わった。体にはまだ何も送っていない。新しい観測で道具を確かめて、もう一度呼べる。';
+      if (!drift.callable) return toolFailure('unavailable', words, { retryable: true });
+    }
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
-      skill: current.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current) }, call.signal);
+      skill: current!.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current!) }, call.signal);
     active.stepOutcome = 'acknowledged';
-    if (receipt.outcome === 'completed' && current.name === 'goal-evidence') {
+    if (receipt.outcome === 'completed' && current!.name === 'goal-evidence') {
       try { parts.evidence?.(receipt.result); } catch { /* learning never fails a step */ }
     }
     return minecraftSkillResult(receipt);

@@ -101,7 +101,21 @@ describe('Minecraft common FCA body protocol', () => {
     expect(f.control.poll(f.scope, f.poll({ connectionId: 'new-connection' })).commands).toEqual([]);
     expect(f.store.safe('task')).toBe(false); abort.abort(); await outcome;
   });
-  it('keeps capture only in memory and only across fresh same-connection heartbeats', async () => {
+  it('refuses a connection a newer one replaced while the newer one is alive, so a kept process cannot swap the catalog (mb-arch)', () => {
+    let now = Date.now();
+    const f = fixture({ now: () => now } as never);
+    const older = (skills = [{ name: 'dig', description: 'old dig', readOnly: false, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } }]) =>
+      f.poll({ connectionId: 'connection', skills } as never);
+    f.control.poll(f.scope, f.poll({ connectionId: 'newer' }));
+    expect(() => f.control.poll(f.scope, older())).toThrow('FCA_BODY_RETIRED_CONNECTION');
+    expect(f.control.frame('minecraft:world')?.poll.connectionId).toBe('newer');
+    expect(f.control.frame('minecraft:world')?.poll.skills?.[0]?.description).toBe('dig');
+    // The newer one silent for five seconds: the earlier one is taken again (it may be the only one left).
+    f.control.poll(f.scope, f.poll({ connectionId: 'newer' }));
+    now += 6_000;
+    expect(() => f.control.poll(f.scope, older())).not.toThrow();
+    expect(f.control.frame('minecraft:world')?.poll.connectionId).toBe('connection');
+  });  it('keeps capture only in memory and only across fresh same-connection heartbeats', async () => {
     const f = fixture(), result = f.control.command({ ...f.command, kind: 'capture' });
     f.control.poll(f.scope, f.poll());
     const pixels = 'data:image/jpeg;base64,/9j/2Q==';
