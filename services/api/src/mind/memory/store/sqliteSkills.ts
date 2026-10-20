@@ -1,5 +1,5 @@
 import { prepared } from '../../../infra/sqlite/sqliteOpen.js';
-import { databaseChangeMark } from '../../../infra/sqlite/experienceCandidateReads.js';
+import { sourceRowsMark } from '../../../infra/sqlite/provenanceMark.js';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
@@ -111,8 +111,8 @@ export class SQLiteSkills {
     if (options.createSchema) ensureSkillSchema(database);
   }
 
-  /** This database's change mark (`databaseChangeMark`): equal marks, every skill row reads as it did. Null in a transaction or closed. */
-  changeMark(): string | null { return this.database.isOpen ? databaseChangeMark(this.database) : null; }
+  /** The mark of the rows a source's visibility is read from, in this database (`sourceRowsMark`): equal marks, every such row reads as it did. */
+  changeMark(): string | null { return this.database.isOpen ? sourceRowsMark(this.database) : null; }
 
   importReceipt(scopeKey: string, receiptId: string): SkillImportReceipt | null {
     const row = this.database.prepare('SELECT receipt_json FROM shannon_skill_imports WHERE scope_key = ? AND receipt_id = ?').get(scopeKey, receiptId) as { receipt_json: string } | undefined;

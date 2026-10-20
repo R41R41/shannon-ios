@@ -114,29 +114,40 @@ export function createFcaSourceGuard(parts: {
   type Epoch = { version: number; at: number; mark: string | null; state: CompanionStateSnapshot; candidates: readonly ShannonExperience[];
     withheld: readonly ShannonExperience[]; secrets?: SecretCheck; withholding?: MemoryWithholding;
     /**
+     * The source rows' mark (`provenanceMark`) the state and the remembered turns were read under, while it is still theirs: null once a
+     * source row changed and the epoch was kept (its turns are then older than the rows), or where the mark cannot be read.
+     */
+    rows: string | null;
+    /**
      * The withholding the read receipts of the checks of this epoch are asked under (`recordedReads`). It reads rows lazily (a turn by
-     * id, the knowledge documents) and keeps them, so it lives only as long as the database is unchanged since the epoch's mark: past
-     * a change (`epochFor`) it is dropped. No time bound is added by it; its memos end with each check (`withReadSnapshot`).
+     * id, the knowledge documents) and keeps them, so it lives only as long as the rows it reads from are unchanged since the epoch's
+     * mark: past a change of one (`epochFor`) it is dropped. No time bound is added by it; its memos end with each check (`withReadSnapshot`).
      */
     reads?: MemoryWithholding };
   const epochs = new Map<string, Epoch>();
+  const rowsMark = () => parts.conversations.provenanceMark?.() ?? null;
   /** The snapshot and remembered turns of this moment: one load per state version, reused for `FCA_MEMORY_EPOCH_MS`. */
   const epochFor = (scopeKey: string): Epoch => {
     // While the database is unchanged since the epoch was made (its change mark: every write of any connection moves it) the state has the same
     // version, so the state is not read and parsed again to find that out.
     const mark = parts.conversations.changeMark?.() ?? null, known = epochs.get(scopeKey), now = clock();
     if (known && mark !== null && known.mark === mark && now >= known.at && now - known.at < FCA_MEMORY_EPOCH_MS) return known;
-    const state = parts.state.snapshot(scopeKey), at = clock();
+    const rows = rowsMark(), state = parts.state.snapshot(scopeKey), at = clock();
     if (known && known.version === state.version && at >= known.at && at - known.at < FCA_MEMORY_EPOCH_MS) {
-      // The turns and the state are the epoch's (as before this reuse existed), but the database has changed since `reads` took its rows
-      // (a knowledge document, a turn it read by id): it is made again, so what it holds is never older than the mark it is kept under.
+      // The turns and the state are the epoch's (as before this reuse existed). `reads` keeps the rows it took (a knowledge document, a turn
+      // it read by id) only while no row a source's visibility is read from has changed since (production run 19: every lease renewal and
+      // every step's progress moved the database's own mark, and each dropped it): else it is made again, never older than its rows.
       known.mark = mark;
-      known.reads = undefined;
+      if (rows === null || known.rows !== rows) {
+        known.reads = undefined;
+        known.rows = null;
+      }
       return known;
     }
     const candidates = parts.conversations.experienceCandidates(scopeKey);
     const withheld = new MemoryWithholding(state, parts.conversations, scopeKey, candidates).withheldExperiences();
-    const fresh: Epoch = { version: state.version, at, mark, state, candidates, withheld };
+    // The rows' mark is theirs only when no source row changed while they were read.
+    const fresh: Epoch = { version: state.version, at, mark, state, candidates, withheld, rows: rows !== null && rowsMark() === rows ? rows : null };
     epochs.set(scopeKey, fresh);
     return fresh;
   };
@@ -148,10 +159,14 @@ export function createFcaSourceGuard(parts: {
     // read) is kept under this check's own `walk`, so a later check asks again.
     const withholding = () => epoch.reads ??= new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
     const walk = {};
+    // The rows the withholding's turns were read under, while still theirs: the reader then shares its answers with the next moments'.
+    const rows = () => epoch.rows === null ? {} : { rows: epoch.rows };
     const check = parts.readSourceVisible ? (scope: string, id: string, observedAt: string): boolean => {
       if (scope !== scopeKey) return parts.readSourceVisible!(scope, id, observedAt);
       const key = JSON.stringify([id, observedAt]);
-      if (!seen.has(key)) seen.set(key, [id, observedAt, parts.readSourceVisible!(scope, id, observedAt, { state, withholding: withholding(), walk })]);
+      if (!seen.has(key)) {
+        seen.set(key, [id, observedAt, parts.readSourceVisible!(scope, id, observedAt, { state, withholding: withholding(), walk, ...rows() })]);
+      }
       return seen.get(key)![2];
     } : undefined;
     /** The checks made inside `work` are one synchronous read of the receipts: they share the withholding's memos and its one look at the turns' receipts. */

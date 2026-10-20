@@ -177,6 +177,13 @@ export interface ConversationStore {
   hasReadSourceProvenance?(scopeKey: string): boolean;
   /** A mark that changes whenever any stored row may have (null: unknown, e.g. inside a transaction). Absent: never reuse a read. */
   changeMark?(): string | null;
+  /**
+   * A mark that changes whenever a row a remembered source's visibility is read from may have (state, turns, knowledge, her skills;
+   * `provenanceMark.ts`), and not with other writes. Null: unknown (inside a transaction). Absent: use `changeMark`.
+   */
+  provenanceMark?(): string | null;
+  /** Makes what `provenanceMark` reads (the API, once its schema is made); never throws. */
+  prepareProvenanceMark?(): void;
   /** Current native source visibility, injected by wiring; absent readers withhold derived private task experiences. */
   readSourceVisible?(scopeKey: string, sourceId: string, observedAt: string, shared?: TaskMemoryReadSnapshot): boolean;
   /** Stage5's bounded supplementary self. Read again under current forgetting/disclosure; absent/OFF yields no prompt. */

@@ -24,6 +24,7 @@ if (!path || !taskId) throw new Error('DB and TASK are required');
 const clock = { at: Date.parse(process.env.AT ?? '2026-10-19T22:30:00.000Z') };
 const now = () => new Date(clock.at).toISOString();
 console.info = () => {};
+const answerLines: string[] = [];
 const store = new SQLiteShannonStore({ path, now, moodHistory: null, predictionShadow: false, decisionTraces: false, predictionLedger: false, choiceLedger: false });
 const skillDb = new DatabaseSync(path);
 skillDb.exec('PRAGMA busy_timeout = 5000');
@@ -32,7 +33,8 @@ const skills = skillTurnPorts(memory, scopeKey => store.snapshot(scopeKey), stor
 const ownerAlone = () => true;
 const readSourceVisible = createFcaReadSources({ ownerScope: scope, ownerAlone, state: store, conversations: store, now,
   skill: (scopeKey, id, revision) => skills.readSource?.(scopeKey, id, revision) ?? null,
-  skillChecks: (scopeKey, renew) => skills.readSourceChecks?.(scopeKey, renew) ?? null });
+  skillChecks: (scopeKey, renew) => skills.readSourceChecks?.(scopeKey, renew) ?? null,
+  answerCounts: { log: line => answerLines.push(line), clock: () => clock.at } });
 store.readSourceVisible = readSourceVisible;
 const runtime = createTaskRuntimeWiring({ db: store.fcaDatabase(), actions: actionHarness(now).actions, scopeKey: scope, ownerAlone, now,
   canRunTask: () => false, provenanceRefs: true, model: { async decide() { throw new Error('unused'); }, toolResults: results => ({ results }) } }).runtime;
@@ -53,11 +55,14 @@ const time = (name: string, work: () => unknown) => { const started = performanc
  * the step's sources), and the database changes as it did in run 18 (the lease renewed every 5 s, and `WRITE_MS` between other writes:
  * progress, the body's operations, the evidence). A write is made at the end too (the step's own progress at that point).
  */
-const writeEvery = Number(process.env.WRITE_MS ?? 2_000);
-let nextMonitor = clock.at + 1_000, nextWrite = clock.at + writeEvery;
+const writeEvery = Number(process.env.WRITE_MS ?? 2_000), relevantEvery = Number(process.env.RELEVANT_MS ?? 10_000);
+// A write to a row a source's visibility is read from (the state's, as a feeling or a turn writes it), every `RELEVANT_MS`.
+const relevant = () => store.fcaDatabase().prepare('UPDATE companion_states SET updated_at = updated_at WHERE scope_key = ?').run(scope);
+let nextMonitor = clock.at + 1_000, nextWrite = clock.at + writeEvery, nextRelevant = clock.at + relevantEvery;
 const elapse = (ms: number) => {
   const end = clock.at + ms;
   while (Math.min(nextMonitor, nextWrite) <= end) {
+    if (nextRelevant <= Math.min(nextMonitor, nextWrite)) { clock.at = nextRelevant; nextRelevant += relevantEvery; relevant(); }
     if (nextWrite <= nextMonitor) { clock.at = nextWrite; nextWrite += writeEvery; touch(); continue; }
     clock.at = nextMonitor; nextMonitor += 1_000;
     if (process.env.MONITOR !== '0') for (let read = 0; read < 3; read++) time('monitor', () => monitorVisible());
@@ -69,10 +74,13 @@ const elapse = (ms: number) => {
 const ordered = [...sources].sort((a, b) => a.observedAt.localeCompare(b.observedAt));
 const rounds = Number(process.env.ROUNDS ?? 6), grow = Number(process.env.GROW ?? 2), bodyMs = Number(process.env.BODY_MS ?? 24_000);
 let seen: typeof sources = ordered;
-const peek = () => time('peek', () => guard.peek!(scope, task, seen));
+// `WRITE_EACH=1`: a write to a table no source is read from before every check (production run 19: a lease renewal, a step's progress,
+// a body operation, the evidence between the checks of one decision).
+const before = () => { if (process.env.WRITE_EACH === '1') touch(); };
+const peek = () => { before(); return time('peek', () => guard.peek!(scope, task, seen)); };
 /** The monitor's and the scheduler's gate, as production asks it (`fcaPeekGates.ts`). */
 function monitorVisible() { return peekedVisible(guard, scope, task, seen, () => guard.sources(scope, task, seen, undefined, 'step')); }
-const whole = (via: 'step' | 'evidence' | 'body' | 'memory' | 'tool') => time(via, () => guard.sources(scope, task, seen, undefined, via));
+const whole = (via: 'step' | 'evidence' | 'body' | 'memory' | 'tool') => { before(); return time(via, () => guard.sources(scope, task, seen, undefined, via)); };
 
 /** One decision's checks (production run 18: 35 s a decision, 3.2 s of it the model and 24 s the body). */
 function decision(round: number) {
@@ -107,6 +115,7 @@ console.log(`parts ${JSON.stringify(parts)}`);
 const sum = (list: Array<Record<string, number>>, name: string) => Math.round(list.reduce((total, values) => total + values[name]!, 0));
 for (const [mode, list] of modes) console.log(`  ${mode}: n=${list.length} total=${sum(list, 'total')} epoch=${sum(list, 'epoch')} reads=${sum(list, 'reads')} walk=${sum(list, 'walk')}`);
 if (profile) printProfile('rounds', profile, Number(process.env.TOP ?? 30));
+for (const line of answerLines.slice(-3)) console.log(line);
 // What the moment's parts cost when they are made anew: the skill checks (every 2 s), the state, the remembered turns.
 const renew = skills.readSourceChecks;
 if (renew) {

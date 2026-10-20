@@ -6,12 +6,14 @@ import { segmentClosingId, verifiedSegmentSources } from './fcaSleepSegmentEvide
 import { privateReadIds } from './fcaSkillGistSource.js';
 import { committedEvidenceHistorySources } from '../mind/action/fca/store/fcaEvidenceSegments.js';
 import { requireStoredSources } from '../infra/sqlite/fcaProvenanceSets.js';
+import { taskEvidenceReads } from './fcaTaskEvidenceReads.js';
 
 /** A task outcome is an observation by Shannon, never a statement attributed to the owner. */
 export function createFcaSleepTaskEvidence(db: DatabaseSync) {
   const transferable = createFcaSleepTaskLineage(db);
   return (scope: string, id: string): boolean => {
     if (!id.startsWith('task:')) return false;
+    for (const told of taskEvidenceReads) told();
     try {
       const row = db.prepare("SELECT payload_json,observed_at FROM experience_events WHERE scope_key=? AND event_id=? AND event_type='turn.completed'").get(scope, id);
       if (!row) return false;

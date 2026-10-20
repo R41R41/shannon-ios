@@ -3,6 +3,7 @@ import { createFcaReadSources, type FcaReadSourcesOptions } from '../src/wiring/
 import { skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
 import { MemoryWithholding } from '../src/mind/memory/memoryVisibilityPorts.js';
 import { run6RecallShape } from './support/run6RecallShape.js';
+import { taskEvidenceReads } from '../src/wiring/fcaTaskEvidenceReads.js';
 
 /**
  * A read receipt is answered once per moment and given to every check of it (`fcaReadSourceAnswers.ts`; production run 18: 45.5 s of
@@ -13,8 +14,9 @@ import { run6RecallShape } from './support/run6RecallShape.js';
 const cleanups: Array<() => void> = [];
 afterEach(() => { vi.restoreAllMocks(); for (const close of cleanups.splice(0).reverse()) close(); });
 
-function world() {
+function world(options: { onSkill?: () => void } = {}) {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const lines: string[] = [];
   // Her skills are in a database of their own here (`run6RecallShape`): a skill's change does not move the turns' mark.
   const f = run6RecallShape({ turns: 200, recallingTurns: 10, tasks: 6, recalledPerTask: 10, taskRecallsOfTasks: 2, readsPerTask: 4, skills: 4 });
   cleanups.push(() => f.close());
@@ -25,8 +27,13 @@ function world() {
   const parts = (kept: boolean): FcaReadSourcesOptions => ({ ownerScope: 'owner', ownerAlone: f.ownerAlone, state: f.world.store, conversations: f.world.store,
     aetherAvailable: () => connected,
     folderAvailable: (_scope, host) => { if (kept) counts.folder += 1; return host === 'owner-mac' && connected; },
-    skill: (scope, id, revision) => { if (kept) counts.skill += 1; return skills.readSource!(scope, id, revision); },
-    ...(kept ? { skillChecks: (scope: string, renew: boolean) => skills.readSourceChecks!(scope, renew) } : {}) });
+    skill: (scope, id, revision) => {
+      if (kept) counts.skill += 1;
+      options.onSkill?.();
+      return skills.readSource!(scope, id, revision);
+    },
+    ...(kept ? { skillChecks: (scope: string, renew: boolean) => skills.readSourceChecks!(scope, renew),
+      answerCounts: { log: (line: string) => { lines.push(line); }, clock: () => clock } } : {}) });
   const kept = createFcaReadSources(parts(true));
   f.world.store.readSourceVisible = kept;
   const receipts = [...f.skillSources, 'aether-document://doc-1', `shannon-folder://owner-mac/${'a'.repeat(64)}`];
@@ -35,16 +42,61 @@ function world() {
   /** A new moment, as the guard's epoch is made anew: the state now and a withholding of it. */
   const next = () => { moment = { state: f.world.store.snapshot('owner') }; withholding = new MemoryWithholding(moment.state, f.world.store, 'owner'); };
   /** One walk of every receipt at every time: the kept reader's answers, and a fresh reader's (nothing kept) at the same instant. */
-  const walk = () => {
-    const shared = { state: moment.state, withholding, walk: {} }, fresh = createFcaReadSources(parts(false));
+  const walk = (rows?: string) => {
+    const shared = { state: moment.state, withholding, walk: {}, ...(rows ? { rows } : {}) }, fresh = createFcaReadSources(parts(false));
     const freshShared = { state: moment.state, withholding: new MemoryWithholding(moment.state, f.world.store, 'owner'), walk: {} };
     const answers = receipts.flatMap(id => times.map(at => withholding.withReadSnapshot(() => kept('owner', id, at, shared))));
     const expected = receipts.flatMap(id => times.map(at => freshShared.withholding.withReadSnapshot(() => fresh('owner', id, at, freshShared))));
     return { answers, expected };
   };
   const skillIds = f.skillMemory.store.all('owner').map(skill => skill.skillId);
-  return { f, counts, walk, next, skillIds, receipts, setConnected: (value: boolean) => { connected = value; }, advance: (ms: number) => { clock += ms; } };
+  return { f, counts, walk, next, skillIds, receipts, lines, setConnected: (value: boolean) => { connected = value; }, advance: (ms: number) => { clock += ms; } };
 }
+
+describe('FCA read receipts kept under the source rows\' mark', () => {
+  it('gives answers again across writes to other tables and to new moments, and makes them anew once a source row changes', () => {
+    const w = world(), db = w.f.world.store.fcaDatabase(), mark = () => w.f.world.store.provenanceMark()!;
+    // A schema change is a new mark too: the other table is made first.
+    db.exec('CREATE TABLE IF NOT EXISTS other_rows (x INTEGER)');
+    expect(mark()).toMatch(/^p/u);
+    const first = w.walk(mark());
+    const pins = w.counts.skill;
+    // A lease renewed, a step's progress: other tables. The answers are given again, and still a fresh reader's.
+    db.prepare('INSERT INTO other_rows (x) VALUES (1)').run();
+    const again = w.walk(mark());
+    expect(again.answers).toEqual(again.expected);
+    expect(again.answers).toEqual(first.answers);
+    expect(w.counts.skill).toBe(pins);
+    // A new moment (another withholding) made from the same rows shares them.
+    w.next();
+    expect(w.walk(mark()).answers).toEqual(first.answers);
+    expect(w.counts.skill).toBe(pins);
+    // A source row changed (a turn): made anew, a fresh reader's answers.
+    w.f.world.store.appendTurn('owner', 'thread-0', '次の質問', '次の返答', w.f.world.now());
+    w.next();
+    const moved = w.walk(mark());
+    expect(moved.answers).toEqual(moved.expected);
+    expect(w.counts.skill).toBe(2 * pins);
+  });
+
+  it('keeps no answer made from a task\'s own records (their rows are outside the mark)', () => {
+    const w = world({ onSkill: () => { for (const told of taskEvidenceReads) told(); } });
+    w.walk();
+    const once = w.counts.skill;
+    w.walk();
+    expect(w.counts.skill).toBe(2 * once);
+  });
+
+  it('names its counts once a minute, content-free', () => {
+    const w = world();
+    w.walk();
+    expect(w.lines).toEqual([]);
+    w.advance(61_000);
+    w.walk();
+    expect(w.lines).toHaveLength(1);
+    expect(w.lines[0]).toMatch(/^Shannon FCA receipt answers asked=\d+ given=\d+ kept=\d+ moved=\d+ fresh=\d+ first=\d+ flags=\d+ checks=\d+ outside=\d+ unkept=\d+ transaction=\d+ p=\d+ d=\d+$/u);
+  });
+});
 
 describe('FCA read receipts answered once a moment', () => {
   it('reads each skill once for every check of a moment, and asks a folder again each time', () => {

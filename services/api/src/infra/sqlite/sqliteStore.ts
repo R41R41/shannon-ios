@@ -2,6 +2,8 @@ import { unlessBusy } from './sqliteBusy.js';
 import type { ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
 import { databaseChangeMark, readKeptWhileUnchanged } from './experienceCandidateReads.js';
+import { sourceRowsMark } from './provenanceMark.js';
+import { prepareSourceRowsMark } from './provenanceMarkMigration.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
@@ -359,6 +361,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   hasReadSourceProvenance(scopeKey: string) { return this.conversations.hasReadSourceProvenance(scopeKey); }
   /** The database's change mark (`experienceCandidateReads.ts`): rows read under an equal mark are the rows it holds now. */
   changeMark() { return databaseChangeMark(this.context.database); }
+  /** The change mark of the rows a source's visibility is read from (`provenanceMark.ts`); the database's own where it cannot be told. */
+  provenanceMark() { return sourceRowsMark(this.context.database); }
+  /** Makes that mark's counter and triggers (once, by the API, after every schema is made); a failure leaves the database's own mark. */
+  prepareProvenanceMark() { prepareSourceRowsMark(this.context.database); }
   recentThreadMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, threadId, limit); }
   recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
