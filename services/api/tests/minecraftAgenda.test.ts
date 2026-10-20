@@ -55,11 +55,23 @@ describe('Minecraft executor (mb-arch)', () => {
   });
 
   it('starts a second furnace for raw meat while the first smelts iron: make it, place it, fill it where it stands', async () => {
+    const f = fixture({ jobs: [{ position: { x: 2, y: 64, z: 0 }, remainingEstimateMs: 60_000, input: 'raw_iron', count: 9 }],
+      inventory: [{ name: 'porkchop', count: 5 }, { name: 'coal', count: 3 }, { name: 'cobblestone', count: 12 }] });
+    await f.call('mc.withdraw-from-furnace', { x: 2, y: 64, z: 0, waitForCompletion: true });
+    expect(f.calls.map(call => call.name)).toEqual(['mc.craft-one', 'mc.place-block-at', 'mc.start-smelting', 'mc.withdraw-from-furnace']);
+    expect(f.calls[2]!.input).toEqual({ x: 10, y: 64, z: 2, inputItem: 'porkchop', fuelItem: 'coal', count: 5 });
+  });
+
+  it('rel23: the second furnace is set within 8 m of the first: she walks to the first one before placing it when she stands further than 3 m', async () => {
     const f = fixture({ jobs: [{ position: { x: 5, y: 64, z: 0 }, remainingEstimateMs: 60_000, input: 'raw_iron', count: 9 }],
       inventory: [{ name: 'porkchop', count: 5 }, { name: 'coal', count: 3 }, { name: 'cobblestone', count: 12 }] });
     await f.call('mc.withdraw-from-furnace', { x: 5, y: 64, z: 0, waitForCompletion: true });
-    expect(f.calls.map(call => call.name)).toEqual(['mc.craft-one', 'mc.place-block-at', 'mc.start-smelting', 'mc.withdraw-from-furnace']);
-    expect(f.calls[2]!.input).toEqual({ x: 10, y: 64, z: 2, inputItem: 'porkchop', fuelItem: 'coal', count: 5 });
+    expect(f.calls.map(call => call.name)).toEqual(['mc.craft-one', 'mc.move-to', 'mc.place-block-at', 'mc.start-smelting', 'mc.withdraw-from-furnace']);
+    expect(f.calls[1]!.input).toEqual({ x: 5, y: 64, z: 0, range: 3 });
+    const carried = fixture({ jobs: [{ position: { x: 5, y: 64, z: 0 }, remainingEstimateMs: 60_000, input: 'raw_iron', count: 9 }],
+      inventory: [{ name: 'porkchop', count: 5 }, { name: 'coal', count: 3 }, { name: 'furnace', count: 1 }] });
+    await carried.call('mc.withdraw-from-furnace', { x: 5, y: 64, z: 0, waitForCompletion: true });
+    expect(carried.calls.map(call => call.name)).toEqual(['mc.move-to', 'mc.place-block-at', 'mc.start-smelting', 'mc.withdraw-from-furnace']);
   });
 
   it('does not wait at all when the work used the whole timer', async () => {

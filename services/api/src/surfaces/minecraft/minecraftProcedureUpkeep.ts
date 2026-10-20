@@ -77,8 +77,12 @@ export function minecraftUpkeep(facts: MinecraftProcedureFacts, memory: Procedur
 /** Failures the planner must see at once: the body's night gate, a full pack, no tool or a broken one, a bed that explodes. */
 const FINAL = new Set(['night_unprepared', 'inventory_full', 'missing_tool', 'tool_broke', 'tool_durability_low', 'bed_explodes', 'not_offered']);
 export const finalFailure = (failure: string) => FINAL.has(failure);
-/** The body's reflex cut in (a fight, a fall): the work is tried again once before it counts; a danger that stays is a stop. */
-export const passingFailure = (failure: string) => failure === 'interrupted_by_reflex';
+/**
+ * The body's reflex cut in (a fight, a fall): the work is tried again once before it counts; a danger that stays is a stop. rel23: so is
+ * `not_consumed` (eating refused because she is full): it does not stop the procedure.
+ */
+const PASSING = new Set(['interrupted_by_reflex', 'not_consumed']);
+export const passingFailure = (failure: string) => PASSING.has(failure);
 
 export interface StopParts {
   /** A message came into the task's inbox after the decision that started the run. */

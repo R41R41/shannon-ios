@@ -39,6 +39,11 @@ export interface MinecraftWorkItem {
 
 const RAW_FOOD = ['porkchop', 'beef', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon'];
 const IRON_INPUT = /raw_iron|iron_ore/u;
+/**
+ * rel23: a second furnace is set within 8 m of the first. The body picks the spot within ~4.5 m of where it stands, so standing further
+ * than this (3 m) from the first furnace, she walks to it before placing the second (3 m + 4.5 m reach < 8 m).
+ */
+export const FURNACE_WALK_FROM = 3;
 
 interface Job { position: { x: number; y: number; z: number }; remainingEstimateMs: number; input: string }
 
@@ -111,10 +116,16 @@ function secondFurnace(observation: BodyObservation | null, carried: Map<string,
   };
   const place: MinecraftWorkItem = { tool: 'mc.place-block-at', input: { blockName: 'furnace' }, why: '2 つ目のかまどを置く', expectMs: 3_000,
     key: 'second-furnace:place', then: fill, chain: 2 };
-  if ((carried.get('furnace') ?? 0) > 0) return place;
+  // rel23: the second furnace stands within 8 m of the first (`FURNACE_WALK_FROM`).
+  const first = jobs.find(job => IRON_INPUT.test(job.input) && job.remainingEstimateMs >= 20_000);
+  const walk: MinecraftWorkItem | null = first && distanceTo(observation, first.position) > FURNACE_WALK_FROM
+    ? { tool: 'mc.move-to', input: { ...first.position, range: 3 }, why: '先のかまどの近くへ寄る', expectMs: 10_000, key: 'second-furnace:walk',
+      then: () => place, chain: 3 }
+    : null;
+  if ((carried.get('furnace') ?? 0) > 0) return walk ?? place;
   if ((carried.get('cobblestone') ?? 0) + (carried.get('cobbled_deepslate') ?? 0) < 8) return null;
   return { tool: 'mc.craft-one', input: { itemName: 'furnace' }, why: '2 つ目のかまどを作る', expectMs: 3_000, key: 'second-furnace:craft',
-    then: () => place, chain: 3 };
+    then: () => walk ?? place, chain: walk ? 4 : 3 };
 }
 
 /** How to take one need, as one item (a bed: walk to it, then dig it, keeping it). */

@@ -3,7 +3,7 @@ import type { ToolResult } from '../src/mind/tools/shannonTools.js';
 import { fastBodyState, fastJudgment, type FastBodyState } from '../src/mind/action/reflex/fastJudgment.js';
 import { forgetUnreachableWater, markWaterUnreachable, waterUnreachable } from '../src/surfaces/minecraft/minecraftProcedureWater.js';
 import { minecraftProcedureFacts } from '../src/surfaces/minecraft/minecraftProcedureFacts.js';
-import { minecraftStopWhy, minecraftUpkeep } from '../src/surfaces/minecraft/minecraftProcedureUpkeep.js';
+import { finalFailure, minecraftStopWhy, minecraftUpkeep, passingFailure } from '../src/surfaces/minecraft/minecraftProcedureUpkeep.js';
 import { minecraftProcedureStepParts } from '../src/surfaces/minecraft/minecraftProcedureTool.js';
 import { createRoutePlanning, forgetRoutes, liveRoute } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
 import { minecraftEnemyInSight, minecraftFrameNeeds } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
@@ -170,6 +170,23 @@ describe('the care before a dig', () => {
     expect(minecraftUpkeep(facts, memory)?.item.input).toEqual({ itemName: 'cooked_beef' });
     memory.record('eat:10:cooked_beef', false, 'failed');
     expect(minecraftUpkeep(facts, memory)?.item.input).toEqual({ itemName: 'cooked_mutton' });
+  });
+
+  it('rel23: a meal refused because she is full (not_consumed) passes like a reflex, and does not stop the procedure', () => {
+    expect(passingFailure('not_consumed')).toBe(true);
+    expect(passingFailure('interrupted_by_reflex')).toBe(true);
+    expect(passingFailure('inventory_full')).toBe(false);
+    expect(finalFailure('not_consumed')).toBe(false);
+  });
+
+  it('rel23: the second furnace of the iron is set within reach of the first: she walks to the first one before placing it', async () => {
+    const body = kit(new SimBody(), { raw_iron: 6, coal: 3, furnace: 2, stone_pickaxe: 1, crafting_table: 1, oak_planks: 8 });
+    await setup(body).call({ milestone: '鉄' });
+    const places = body.calls.flatMap((name, index) => name === 'mc.place-block-at' ? [index] : []);
+    expect(places.length).toBeGreaterThanOrEqual(2);
+    const between = body.calls.slice(places[0]! + 1, places[1]);
+    expect(between).toContain('mc.move-to');
+    expect(body.inputs.get('mc.move-to')!.find(input => input.range === 3)).toMatchObject({ x: 11, z: 2, range: 3 });
   });
 
   it('leaves the bed where it stands after the night, and does not offer it as a bed to take', async () => {

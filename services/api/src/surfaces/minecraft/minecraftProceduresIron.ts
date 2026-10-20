@@ -1,6 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import { BUCKET_ITEM } from './minecraftStage.js';
-import type { MinecraftWorkItem } from './minecraftFillers.js';
+import { FURNACE_WALK_FROM, type MinecraftWorkItem } from './minecraftFillers.js';
 import { block, carried, cellKey, cellsInText, inPack, largest, nearestNeed, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, COBBLE, craft, digLogs, doing, LOGS, PLANKS, planksFor, sticksFor, stuck, type McMove } from './minecraftProcedureMoves.js';
 import { caveDescent, smithChest, towardRoute } from './minecraftProcedureMap.js';
@@ -109,10 +109,17 @@ function newFurnace(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, c
   };
   const place: MinecraftWorkItem = { tool: 'mc.place-block-at', input: { blockName: 'furnace' }, why: 'かまどを置く', expectMs: 3_000,
     key: `furnace:place:${store.furnaces.length}`, then: fill, chain: 2 };
-  if (inPack(facts, /^furnace$/u)) return doing(place);
+  // rel23: a second furnace is set within 8 m of the first. The body picks the spot within ~4.5 m of where it stands, so when she stands
+  // further than FURNACE_WALK_FROM from the first (and it is not left far behind) she walks to it first.
+  const first = store.furnaces[0];
+  const walk: MinecraftWorkItem | null = first && distance(facts, first) > FURNACE_WALK_FROM && distance(facts, first) <= 48
+    ? { tool: 'mc.move-to', input: { ...first, range: 3 }, why: '先のかまどの近くへ寄る', expectMs: 15_000, key: `furnace:walk:${store.furnaces.length}`,
+      then: () => place, chain: 3 }
+    : null;
+  if (inPack(facts, /^furnace$/u)) return doing(walk ?? place);
   if (carried(facts, COBBLE) >= 8) {
     return doing({ tool: 'mc.craft-one', input: { itemName: 'furnace', count: 1 }, why: 'かまどを作る', expectMs: 4_000,
-      key: `furnace:craft:${store.furnaces.length}`, then: () => place, chain: 3 });
+      key: `furnace:craft:${store.furnaces.length}`, then: () => walk ?? place, chain: walk ? 4 : 3 });
   }
   return store.furnaces.length ? null : cobbleFor(facts, 8, 8);
 }
