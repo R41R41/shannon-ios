@@ -36,7 +36,7 @@
     {
       "name": "mc-diamond-obsidian",
       "path": "mc-diamond-obsidian/SKILL.md",
-      "sha256": "0490841e0f4b5ee7cf7bb40d1765796bf89cbfc86b5d13b86aabe0a225b02364",
+      "sha256": "82675d24437899fecada411d0586cf31c4df411432ce01a07a99acfec4497d09",
       "revises": {
         "bodySha256": "8532ce16e4808d2fb0e13a961624b78672d17135fd730a4d57628114b5d2e24a"
       },
