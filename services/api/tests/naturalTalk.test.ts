@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import {
-  NATURAL_ORDER_LINE, NATURAL_PLAY_LINE, NATURAL_SHORT_LINE, createInitialCompanionState, type CompanionStateSnapshot, type ReplyCheckContext,
+  CHARACTER_CORE, NATURAL_ORDER_LINE, NATURAL_PLAY_LINE, NATURAL_SHORT_LINE, characterCoreBlock, createInitialCompanionState, shannonIdentityPrompt,
+  type CompanionStateSnapshot, type ReplyCheckContext,
 } from '@shannon/cognition';
 import { SWITCHES, switchOn } from '@shannon/switches';
 import { composedFeeling, feelingDayFeatures, spaceGuarded } from '../src/wiring/feelingWiring.js';
@@ -138,6 +139,16 @@ describe('her talk with the owner alone (SHANNON_NATURAL_TALK)', () => {
     expect(on.handle?.lines?.space?.selection.primary).toBe('flustered');
   });
 
+  it('on: her identity takes the v3-natural core and the block the approved exchanges; off, v3-space and single lines', async () => {
+    const identity = shannonIdentityPrompt('owner', { characterCore: characterCoreBlock(CHARACTER_CORE) });
+    const layered = { systemPrompt: identity, prompt: identity };
+    const on = await say(composed(true).port, 'シャノンがエッチな体してるのがいけない');
+    expect(feelingText.staged(on.handle, layered).systemPrompt).toContain('[ボクの性格の核 v3-natural #');
+    expect(on.block).toContain('掛け合いの手ざわり: 「ライ氏：');
+    const off = await say(composed(false).port, 'シャノンがエッチな体してるのがいけない');
+    expect(feelingText.staged(off.handle, layered).systemPrompt).toContain('[ボクの性格の核 v3-space #');
+    expect(off.block).not.toContain('ライ氏：');
+  });
   it('on: never for anyone else in the turn', async () => {
     const { port } = composed(true);
     const others = start(port, 'エッチな体だね', TODAY, false);

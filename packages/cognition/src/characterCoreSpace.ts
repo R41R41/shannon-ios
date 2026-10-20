@@ -54,10 +54,30 @@ const buildSpaceCore = (): CharacterCore => {
     hash: 'a03c48680754b6804c438c9e53e93670c1282a6dde7022bc06516af86ae8bc2c', summary: CHARACTER_CORE.summary });
 };
 
-let spaceCore: CharacterCore | null | undefined;
+/**
+ * `SHANNON_NATURAL_TALK` (owner 2026-10-20): her tone moves with her mood (his choice 「混ぜる（気分で変わる）」); one line after the examples of §3.
+ * The owner approved this line, with the 34 exchanges (`characterDialogues.ts`), on 2026-10-20 (「このまま入れてよい」, a choice).
+ */
+export const NATURAL_TONE_LINE = `- ${OWNER}と二人の時、ふだん（いつもの・照れ・はしゃぎ・本気）はため口で話す。すねた時と、小悪魔でからかう時は、わざと「です・ます」にして`
+  + '距離を取る。真面目な話や大事な説明は、です・ます。\n';
+const TONE_AFTER = '  - これらは例で、ほかにも色々ある。\n';
 
-/** Her core while her character space is on; v2 itself when v2's sections cannot be found (its text changed; the test fails on that). */
-export function characterCoreForSpace(): CharacterCore {
+const buildNaturalCore = (space: CharacterCore): CharacterCore => {
+  const at = space.text.indexOf(TONE_AFTER);
+  if (at < 0) throw new Error('character core section not found: 3. 話し方');
+  const text = `${space.text.slice(0, at + TONE_AFTER.length)}${NATURAL_TONE_LINE}${space.text.slice(at + TONE_AFTER.length)}`;
+  return Object.freeze({ version: 'v3-natural', status: 'approved' as const, text,
+    hash: 'faaf41d9c4ffafc34b8d59427391c248357514e973809c8213d19db7ad992e19', summary: space.summary });
+};
+
+let spaceCore: CharacterCore | null | undefined;
+let naturalCore: CharacterCore | null | undefined;
+
+/**
+ * Her core while her character space is on; v2 itself when v2's sections cannot be found (its text changed; the test fails on that).
+ * `natural` (`SHANNON_NATURAL_TALK`, the owner alone): v3-space with her tone line (`v3-natural`), else v3-space as it was.
+ */
+export function characterCoreForSpace(natural = false): CharacterCore {
   if (spaceCore === undefined) {
     try {
       spaceCore = buildSpaceCore();
@@ -65,5 +85,13 @@ export function characterCoreForSpace(): CharacterCore {
       spaceCore = null;
     }
   }
-  return spaceCore ?? CHARACTER_CORE;
+  if (!natural || !spaceCore) return spaceCore ?? CHARACTER_CORE;
+  if (naturalCore === undefined) {
+    try {
+      naturalCore = buildNaturalCore(spaceCore);
+    } catch {
+      naturalCore = null;
+    }
+  }
+  return naturalCore ?? spaceCore;
 }

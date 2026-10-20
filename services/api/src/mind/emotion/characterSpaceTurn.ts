@@ -74,5 +74,6 @@ export function spaceOf(input: SpaceInput): SpaceLines {
   const play = natural ? { natural: cues.some(cue => PLAY_CUES.includes(cue)) ? 'play' as const : 'on' as const } : {};
   const selection = selectPersona(position, { ownerAlone: owner, max, ...play, previous: previousRegion(input.events, key, at) });
   // The lines shown turn with the minute of the turn.
-  return { position, selection, block: personaBlock(selection, Math.floor(Date.parse(at) / 60_000)), cues, ...(natural ? { natural: true as const } : {}) };
+  const block = personaBlock(selection, Math.floor(Date.parse(at) / 60_000), natural);
+  return { position, selection, block, cues, ...(natural ? { natural: true as const } : {}) };
 }

@@ -1,5 +1,6 @@
 import { DEFAULT_PERSONALITY, MOOD_AXES, OUTING, type MoodAxis, type SpaceAxis, type SpacePosition } from './characterSpace.js';
 import { CHARACTER_REGIONS, REGION_IDS, type CharacterRegion, type RegionId } from './characterRegions.js';
+import { REGION_EXCHANGES, REGION_TONE_LINES, type Exchange } from './characterDialogues.js';
 import type { FeelingTurnDecision } from './feelingTurn.js';
 
 /**
@@ -25,6 +26,8 @@ export const PERSONA_LIMITS = Object.freeze({
    * Sonnet strung them together as its reply).
    */
   samples: 4, mixedSamples: 2,
+  /** `SHANNON_NATURAL_TALK`: exchanges shown in their place (a line of his and hers; longer, so fewer). */
+  exchanges: 3, mixedExchanges: 1,
 });
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value));
@@ -117,7 +120,7 @@ export const PERSONA_HEADER = '[いまのボク]（いまの気分と、この�
   + '台詞は声の手ざわりの例。同じ言い回しは使わず、いまの話に合わせて自分の言葉で言う。ボクの性格の核と、この番の構えは、いつもどおり守る）';
 
 /** A few of a region's lines, turning with 	urn (any whole number: the turn's minute), so the same few are not shown every turn. */
-function someOf(lines: readonly string[], count: number, turn: number): string[] {
+function someOf<T>(lines: readonly T[], count: number, turn: number): T[] {
   const start = ((Math.trunc(turn) % lines.length) + lines.length) % lines.length;
   return Array.from({ length: Math.min(count, lines.length) }, (_, index) => lines[(start + index) % lines.length]!);
 }
@@ -126,16 +129,30 @@ function someOf(lines: readonly string[], count: number, turn: number): string[]
  * The block of who she is now (the last block's part): the region's portrait and a few of its lines, and a mixed-in one's first line and
  * fewer lines; `turn` turns which lines are shown.
  */
-export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'secondary'>, turn = 0): string {
+export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'secondary'>, turn = 0, natural = false): string {
   const primary = CHARACTER_REGIONS[selection.primary];
   const quoted = (lines: readonly string[]) => lines.map(line => `「${line}」`).join('');
-  const parts = [PERSONA_HEADER, `いまのボク: ${primary.name}`, ...primary.portrait.map(line => `- ${line}`),
-    `声の手ざわり: ${quoted(someOf(primary.samples, PERSONA_LIMITS.samples, turn))}`];
+  const tone = natural ? REGION_TONE_LINES[selection.primary] : undefined;
+  const parts = [PERSONA_HEADER, `いまのボク: ${primary.name}`, ...[...primary.portrait, ...(tone ? [tone] : [])].map(line => `- ${line}`),
+    voiceOf(primary.id, natural, PERSONA_LIMITS.samples, PERSONA_LIMITS.exchanges, turn)];
   if (selection.secondary) {
     const mixed = CHARACTER_REGIONS[selection.secondary];
-    parts.push(`少しまざる: ${mixed.name}（${mixed.portrait[0]}）${quoted(someOf(mixed.samples, PERSONA_LIMITS.mixedSamples, turn))}`);
+    const exchanges = natural ? REGION_EXCHANGES[mixed.id] : undefined;
+    const lines = exchanges ? exchangeWords(someOf(exchanges, PERSONA_LIMITS.mixedExchanges, turn))
+      : quoted(someOf(mixed.samples, PERSONA_LIMITS.mixedSamples, turn));
+    parts.push(`少しまざる: ${mixed.name}（${mixed.portrait[0]}）${lines}`);
   }
   return parts.join('\n');
+}
+
+/** Exchanges as the block shows them: 「ライ氏：…／ボク：…」. */
+const exchangeWords = (exchanges: readonly Exchange[]) => exchanges.map(([his, hers]) => `「ライ氏：${his}／ボク：${hers}」`).join('');
+
+/** A region's voice: its exchanges with `SHANNON_NATURAL_TALK` where it has them, else its single lines. */
+function voiceOf(id: RegionId, natural: boolean, samples: number, exchanges: number, turn: number): string {
+  const own = natural ? REGION_EXCHANGES[id] : undefined;
+  if (own) return `掛け合いの手ざわり: ${exchangeWords(someOf(own, exchanges, turn))}`;
+  return `声の手ざわり: ${someOf(CHARACTER_REGIONS[id].samples, samples, turn).map(line => `「${line}」`).join('')}`;
 }
 
 

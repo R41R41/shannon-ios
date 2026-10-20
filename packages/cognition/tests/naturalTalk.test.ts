@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CHARACTER_REGIONS, FEELING_ORDER_LINE, NATURAL_ORDER_LINE, NATURAL_PLAY_LINE, NATURAL_SHORT_LINE, checkReply, cuesOfWords, feelingTurnBlock,
   neutralFeelingTurn, regionDistance, rewriteFlags, rewriteNote, sameStanceFacts, selectPersona, stancesFor, type ReplyCheckContext,
+  NATURAL_TONE_LINE, PERSONA_HEADER, REGION_EXCHANGES, REGION_TONE_LINES, characterCoreBlock, characterCoreForSpace, characterCoreHashInput, personaBlock,
 } from '../src/index.js';
 
 /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`): 「全然思った通りに乗ってくれない…クリーンすぎて人間らしくない」. */
@@ -68,5 +70,31 @@ describe('her natural talk (pure parts)', () => {
     expect(rewriteFlags(['sexual', 'stance_mismatch'], { ...sweet, natural: true })).toEqual(['sexual']);
     expect(rewriteNote(['repeated_phrase'])).not.toContain('お小言');
     expect(rewriteNote(['repeated_phrase'], true)).toContain('新しい注意やお小言は足さない');
+  });
+
+  it('with it, her core is v3-natural: v3-space with her tone line, approved, its hash pinned', () => {
+    const space = characterCoreForSpace();
+    const natural = characterCoreForSpace(true);
+    expect(space.version).toBe('v3-space');
+    expect(natural.version).toBe('v3-natural');
+    expect(natural.status).toBe('approved');
+    expect(natural.text).toBe(space.text.replace('  - これらは例で、ほかにも色々ある。\n', `  - これらは例で、ほかにも色々ある。\n${NATURAL_TONE_LINE}`));
+    expect(createHash('sha256').update(characterCoreHashInput(natural)).digest('hex')).toBe(natural.hash);
+    expect(characterCoreBlock(natural)).toMatch(new RegExp(`^\\[ボクの性格の核 v3-natural #${natural.hash.slice(0, 8)}\\]\\n`, 'u'));
+  });
+
+  it('with it, the region shows the approved exchanges in place of its single lines, and the tone line where it has one', () => {
+    const exchanges = Object.values(REGION_EXCHANGES).flat();
+    expect(exchanges).toHaveLength(34);
+    const off = personaBlock({ primary: 'imp' }, 0);
+    expect(off).toContain('声の手ざわり:');
+    expect(off).not.toContain('ライ氏：');
+    const on = personaBlock({ primary: 'imp', secondary: 'flustered' }, 0, true);
+    expect(on).toContain(PERSONA_HEADER);
+    expect(on).toContain(`- ${REGION_TONE_LINES.imp}`);
+    expect(on).toContain('掛け合いの手ざわり: 「ライ氏：ささやき声で喋れる？／ボク：（ひそひそ）');
+    expect(on).not.toContain('声の手ざわり:');
+    expect(on).toMatch(/少しまざる: 照れ・てんぱり.*「ライ氏：/u);
+    expect(personaBlock({ primary: 'serious' }, 0, true)).toContain('声の手ざわり:');
   });
 });
