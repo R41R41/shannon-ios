@@ -342,9 +342,10 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_ADDRESSED', default: 'off', kind: 'explicit_on', owner: 'platform', requires: [],
-    doc: 'Owner 2026-10-21 (「話しかけられたか」): in a voice conversation (Discord voice channel, Windows resident\'s name call, POST /v1/voice/addressed) she answers '
-      + 'only words that call her by name and are said to her, and the same person\'s follow-up within ~20 s of her last words; Jev judges when her name is in '
-      + 'the text or inside that window (400 ms, local rules when it does not answer). Off: the shared-table rules (Discord) and the name match (resident) as before.',
+    doc: 'Owner 2026-10-21 (「話しかけられたか」): in a voice conversation (Discord voice channel, Windows resident\'s name call, '
+      + 'POST /v1/voice/addressed) she answers only words that call her by name and are said to her, and the same person\'s follow-up '
+      + 'within ~20 s of her last words; Jev judges when her name is in the text or inside that window (400 ms, local rules when it does '
+      + 'not answer). Off: the shared-table rules (Discord) and the name match (resident) as before.',
   },
   {
     name: 'SHANNON_DC_VOICE_MINECRAFT', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],

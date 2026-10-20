@@ -108,7 +108,9 @@ export function addressedState(input: AddressedInput, name: NameMatch | null, fo
     shannon_last_spoke_to_this_speaker: shannon?.toSpeaker ?? null,
     follows_her_last_words: follows,
     ...(shannon?.line ? { shannon_last_line: clip(shannon.line, 120) } : {}),
-    recent_talk: (input.recent ?? []).slice(-6).map(line => ({ who: line.who, text: clip(line.text, 100), seconds_ago: Math.max(0, Math.round(line.secondsAgo)) })),
+    recent_talk: (input.recent ?? []).slice(-6).map(line => ({
+      who: line.who, text: clip(line.text, 100), seconds_ago: Math.max(0, Math.round(line.secondsAgo)),
+    })),
   };
 }
 
@@ -144,21 +146,27 @@ export function fallbackAddressed(input: AddressedInput, name: NameMatch | null,
   const text = input.transcript.trim();
   const alone = input.humans <= 1;
   const asks = QUESTION_MARK.test(text) || ADDRESS_EVIDENCE.questionWord.test(text) || ADDRESS_EVIDENCE.request.test(text);
-  if (name && name.tier === 'strong') {
-    if (name.atEnd || name.called) return { addressed: true, reason: 'named' };
-    if (name.atHead && !name.topic) return { addressed: true, reason: 'named' };
-    if (name.atHead && name.topic && alone && asks) return { addressed: true, reason: 'named' };
-  }
-  // A likely mishearing (シャノ, 社の, シャロン) is a call only in the form of one: at the head, then a pause or a mark.
-  if (name && name.tier === 'weak' && name.atHead && name.called) return { addressed: true, reason: 'named' };
-  if (follows) {
-    if (alone) return { addressed: true, reason: 'continuation' };
-    const plain = !name || !name.topic;
-    if (plain && (asks || ADDRESS_EVIDENCE.social.test(text) || spoken(text) <= REACTION_MAXIMUM_CHARACTERS)) {
-      return { addressed: true, reason: 'continuation' };
-    }
-  }
+  if (name && isCallByName(name, alone, asks)) return { addressed: true, reason: 'named' };
+  if (follows && isFollowUp(text, name, alone, asks)) return { addressed: true, reason: 'continuation' };
   return { addressed: false, reason: name ? 'about_her' : 'not_to_her' };
+}
+
+/**
+ * A name in the form of a call. Strong: at the end (a vocative), followed by a pause or a mark, or at the head; at the head as the topic
+ * of the sentence (シャノンは...) only with the owner alone and a question or a request. A likely mishearing (シャノ, 社の, シャロン):
+ * at the head, then a pause or a mark.
+ */
+function isCallByName(name: NameMatch, alone: boolean, asks: boolean): boolean {
+  if (name.tier === 'weak') return name.atHead && name.called;
+  if (name.atEnd || name.called) return true;
+  return name.atHead && (!name.topic || (alone && asks));
+}
+
+/** Inside her window: with the owner alone, anything; with several people, a question, a request, a greeting or a short reaction. */
+function isFollowUp(text: string, name: NameMatch | null, alone: boolean, asks: boolean): boolean {
+  if (alone) return true;
+  if (name?.topic) return false;
+  return asks || ADDRESS_EVIDENCE.social.test(text) || spoken(text) <= REACTION_MAXIMUM_CHARACTERS;
 }
 
 /** What Jev's answers make of the question. Both must agree: a yes needs the choice to say her and a probability that backs it. */
@@ -197,7 +205,9 @@ export class AddressedJudge {
     const started = this.clock();
     const done = (verdict: Omit<AddressedVerdict, 'ms'>): AddressedVerdict => {
       const result = { ...verdict, ms: Math.max(0, Math.round(this.clock() - started)) };
-      try { this.options.observe?.({ asked: result.asked, source: result.source, addressed: result.addressed, reason: result.reason, ms: result.ms }); } catch { /* observation never fails a turn */ }
+      try {
+        this.options.observe?.({ asked: result.asked, source: result.source, addressed: result.addressed, reason: result.reason, ms: result.ms });
+      } catch { /* observation never fails a turn */ }
       return result;
     };
     const gate = addressedGate(input, this.windowMilliseconds);

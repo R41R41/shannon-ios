@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ShannonDevicePrincipal } from '../src/infra/auth/deviceAuth.js';
 import type { JevChooser } from '../src/infra/models/jev/jevChoice.js';
 import { AddressedJudge } from '../src/mind/perception/addressed.js';
-import { configuredAddressedJudge } from '../src/wiring/addressedWiring.js';
+import { configuredAddressedJudge, configuredAddressedVoice } from '../src/wiring/addressedWiring.js';
 import { ADDRESSED_PATH, createAddressedRoute } from '../src/surfaces/voice/serverAddressedRoute.js';
 
 /** `POST /v1/voice/addressed` (owner 2026-10-21): the Windows resident asks the head whether the words with her name in them were said to her. */
@@ -92,5 +92,25 @@ describe('configuredAddressedJudge', () => {
     expect([tuned.timeoutMilliseconds, tuned.windowMilliseconds]).toEqual([300, 15_000]);
     const bad = configuredAddressedJudge({ SHANNON_ADDRESSED: 'on', SHANNON_ADDRESSED_TIMEOUT_MS: '5', SHANNON_ADDRESSED_WINDOW_SECONDS: '9999' }, { trace: null })!;
     expect([bad.timeoutMilliseconds, bad.windowMilliseconds]).toEqual([400, 20_000]);
+  });
+});
+
+describe('configuredAddressedVoice (what server.ts holds)', () => {
+  it('serves only its own path for a paired device, and has no judge while the switch is off', async () => {
+    const off = configuredAddressedVoice({}, { trace: null });
+    expect(off.judge).toBeNull();
+    const on = configuredAddressedVoice({ SHANNON_ADDRESSED: 'on' }, { trace: null });
+    expect(on.judge).not.toBeNull();
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      void on.serve(request, response, principal, url).then(served => { if (!served) { response.statusCode = 404; response.end('not mine'); } });
+    });
+    servers.push(server);
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const mine = await fetch(`${base}${ADDRESSED_PATH}`, { method: 'POST', body: JSON.stringify({ text: 'シャノン、いる？' }) });
+    expect(mine.status).toBe(200);
+    expect(await mine.json()).toMatchObject({ addressed: true, source: 'fallback' });
+    expect((await fetch(`${base}/v1/voice/speech/stream`, { method: 'POST', body: '{}' })).status).toBe(404);
   });
 });

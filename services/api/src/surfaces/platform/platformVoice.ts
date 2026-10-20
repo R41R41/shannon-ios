@@ -9,7 +9,8 @@ import {
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
-import type { AddressedJudge, AddressedLine } from '../../mind/perception/addressed.js';
+import type { AddressedJudge } from '../../mind/perception/addressed.js';
+import { addressedInputOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -236,26 +237,18 @@ export class PlatformVoiceService {
       return voiceAddress({ transcript: request.userMessage, humans, followsShannonTurn: request.followsShannonTurn });
     }
     const room = request.conversationId;
-    const observed = Date.parse(request.observedAt);
     // What the body heard of the others and did not send as a turn belongs to the talk the judgement reads.
     for (const line of request.heard) this.rooms.noteExchange(room, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
-    const last = this.rooms.lastShannon(room);
-    const recent: AddressedLine[] = this.rooms.exchange(room).map(line => ({
-      who: line.role === 'shannon' ? 'シャノン' : line.name, ...(line.role === 'shannon' ? { shannon: true as const } : {}), text: line.text,
-      secondsAgo: Math.max(0, (observed - Date.parse(line.at)) / 1000),
-    }));
-    const spokeAgoMs = request.speakingNow ? 0
-      : request.shannonSpokeMsAgo ?? (last ? Math.max(0, observed - Date.parse(last.at) - (last.speechMs ?? 0)) : request.followsShannonTurn ? 8_000 : null);
+    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans });
     // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through).
-    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgoMs !== null && spokeAgoMs <= judge.windowMilliseconds })) {
+    const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
+    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgo !== null && spokeAgo <= judge.windowMilliseconds })) {
       return { respond: false, reason: 'fragment' };
     }
-    const verdict = await judge.judge({
-      scopeKey: this.dependencies.scopeKey, transcript: request.userMessage, speaker: { id: request.sourceUserId, name: request.sourceDisplayName }, humans, recent,
-      shannon: { spokeAgoMs, toSpeaker: last && last.userId ? last.userId === request.sourceUserId : null, ...(last ? { line: last.text } : {}) },
-    });
-    this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
-    this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} asked=${verdict.asked} ms=${verdict.ms} humans=${humans}`);
+    const verdict = await judge.judge(shown);
+    const said = { role: 'person' as const, userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt };
+    this.rooms.noteExchange(room, said);
+    this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
     return { respond: verdict.addressed, reason: verdict.reason };
   }
 

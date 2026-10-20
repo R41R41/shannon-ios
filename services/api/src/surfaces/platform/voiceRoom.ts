@@ -108,8 +108,9 @@ export class VoiceRooms {
     const text = clip(line.text, VOICE_ROOM_LIMITS.lineCharacters);
     const at = Date.parse(line.at);
     if (!text || !Number.isFinite(at)) return;
-    if (room.exchange.some(known => known.role === line.role && known.userId === line.userId && known.at === new Date(at).toISOString() && known.text === text)) return;
-    room.exchange.push({ role: line.role, userId: line.userId, name: clip(line.name, 40) || '誰か', text, at: new Date(at).toISOString() });
+    const when = new Date(at).toISOString();
+    if (room.exchange.some(known => known.role === line.role && known.userId === line.userId && known.at === when && known.text === text)) return;
+    room.exchange.push({ role: line.role, userId: line.userId, name: clip(line.name, 40) || '誰か', text, at: when });
     room.exchange.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const oldest = this.now() - VOICE_ROOM_LIMITS.heardMinutes * 60_000;
     room.exchange = room.exchange.filter(item => Date.parse(item.at) >= oldest).slice(-VOICE_ROOM_LIMITS.exchangeLines);

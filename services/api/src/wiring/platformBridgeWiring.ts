@@ -31,6 +31,7 @@ import { ChatSentenceSplitter, splitChatSentences } from '../surfaces/text/chatS
 import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
 import type { AddressedJudge } from '../mind/perception/addressed.js';
+export { configuredAddressedVoice } from './addressedWiring.js';
 
 export function createConfiguredPlatformBridgeRoute(
   environment: Readonly<Record<string, string | undefined>>,

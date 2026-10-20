@@ -14,6 +14,30 @@ import type { AddressedJudge } from '../../mind/perception/addressed.js';
  */
 export const ADDRESSED_PATH = '/v1/voice/addressed';
 
+interface Asked {
+  text: string;
+  spokeAgoMs: number | null;
+  lastLine: string;
+  guest: boolean;
+}
+
+const isMilliseconds = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 3_600_000;
+const isText = (value: unknown, maximum: number): value is string => typeof value === 'string' && value.length <= maximum && !value.includes('\0');
+
+/** The request body, or null when it is not one: `text` 1-1,000 characters, the other three optional and of the right kind. */
+function validatedAsk(body: unknown): Asked | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const row = body as Record<string, unknown>;
+  const text = isText(row.text, 1_000) ? row.text.trim() : '';
+  if (!text) return null;
+  if (row.shannonSpokeMsAgo !== undefined && !isMilliseconds(row.shannonSpokeMsAgo)) return null;
+  if (row.lastLine !== undefined && !isText(row.lastLine, 400)) return null;
+  if (row.guest !== undefined && typeof row.guest !== 'boolean') return null;
+  return {
+    text, spokeAgoMs: isMilliseconds(row.shannonSpokeMsAgo) ? row.shannonSpokeMsAgo : null,
+    lastLine: isText(row.lastLine, 400) ? row.lastLine.trim() : '', guest: row.guest === true,
+  };
+}
 const PER_MINUTE = 30;
 
 export function createAddressedRoute(judge: AddressedJudge | null, now: () => number = Date.now) {
@@ -33,19 +57,11 @@ export function createAddressedRoute(judge: AddressedJudge | null, now: () => nu
     if (!principal) return sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
     if (!judge) return sendJson(response, 503, { error: 'ADDRESSED_DISABLED', message: '話しかけられたかの判定は切です。' });
     if (!allowed(principal.deviceId)) return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-    const body = await readJson(request, 8 * 1024);
-    const row = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
-    const text = typeof row?.text === 'string' ? row.text.trim() : '';
-    const spoke = row?.shannonSpokeMsAgo;
-    const valid = row !== null && text.length > 0 && text.length <= 1_000 && !text.includes('\0')
-      && (spoke === undefined || (typeof spoke === 'number' && Number.isFinite(spoke) && spoke >= 0 && spoke < 3_600_000))
-      && (row.lastLine === undefined || (typeof row.lastLine === 'string' && row.lastLine.length <= 400))
-      && (row.guest === undefined || typeof row.guest === 'boolean');
-    if (!valid) return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'text is required.' });
-    const spokeAgoMs = typeof spoke === 'number' ? spoke : null;
+    const asked = validatedAsk(await readJson(request, 8 * 1024));
+    if (!asked) return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'text is required.' });
     const verdict = await judge.judge({
-      scopeKey: principal.scopeKey, transcript: text, speaker: { id: 'owner', name: 'owner' }, humans: row.guest === true ? 2 : 1,
-      shannon: { spokeAgoMs, toSpeaker: spokeAgoMs === null ? null : true, ...(typeof row.lastLine === 'string' && row.lastLine.trim() ? { line: row.lastLine.trim() } : {}) },
+      scopeKey: principal.scopeKey, transcript: asked.text, speaker: { id: 'owner', name: 'owner' }, humans: asked.guest ? 2 : 1,
+      shannon: { spokeAgoMs: asked.spokeAgoMs, toSpeaker: asked.spokeAgoMs === null ? null : true, ...(asked.lastLine ? { line: asked.lastLine } : {}) },
     });
     sendJson(response, 200, verdict);
   };
