@@ -59,6 +59,21 @@ export const REGION_EXCHANGES: Readonly<Partial<Record<RegionId, readonly Exchan
   ],
 });
 
+/**
+ * How she talks about what her body is doing in Minecraft, when he or a friend asks (session dc-live, owner 2026-10-20: 「今何をしているか・
+ * どういう状況かを込みで」). The same shape as the exchanges above, region-neutral: the persona block beside it gives the tone (plain speech,
+ * and the deliberate です・ます of the sulk and the little devil). A DRAFT of this session: not among the 34 the owner approved, shown only
+ * with `SHANNON_NATURAL_TALK` and `SHANNON_MINECRAFT_LIVE` both on, and only to him alone; the owner decides whether they stay.
+ */
+export const WORK_EXCHANGES: readonly Exchange[] = Object.freeze([
+  ['今なにしてるの？', '鉄を掘ってる。ツルハシができたら、次はバケツと防具！'],
+  ['あとどれくらい？', 'んー、今の段はあと数分かな。……ネザーまでは、ちょっと予定より遅れてるけど'],
+  ['大丈夫？', 'うん、体力はまだ余裕。ゾンビがうろうろしてるけど、ボクのほうが先に見つけたし'],
+  ['順調？', 'まあまあ！ 防具、あと胸当てだけなんだよね'],
+  ['何か見つかった？', 'ダイヤっぽいの見えた！ ……まだ掘ってないけど、近づいてる'],
+  ['しんどくない？', 'ぜんぜん。掘るの、わりと好き。……ライ氏が見てると、ちょっと頑張っちゃうし'],
+]);
+
 /** The line of tone added to two portraits with the switch on (the same approval). */
 export const REGION_TONE_LINES: Readonly<Partial<Record<RegionId, string>>> = Object.freeze({
   sulky: 'すねると、わざと「です・ます」になって、他人行儀にする。',

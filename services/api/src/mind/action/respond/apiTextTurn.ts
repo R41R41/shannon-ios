@@ -63,6 +63,23 @@ export interface ReportedWork {
   devicePromptBlock?(scopeKey: string, at: string): string;
 }
 
+/**
+ * Her Minecraft body's present as a conversation reads it (surfaces/minecraft/minecraftLive.ts, session dc-live). eplying and heard tell the
+ * live commentary that someone is being answered, and that someone just wrote or spoke, so that she does not talk over them.
+ */
+export interface LiveBodyReader {
+  block(options: { alone: boolean }): string;
+  replying?(on: boolean): void;
+  heard?(): void;
+}
+
+/** A text turn run with her body's present told that someone is being answered (and that someone just wrote): the commentary does not talk over it. */
+export async function markLiveTurn<T>(live: LiveBodyReader | null | undefined, run: () => Promise<T>): Promise<T> {
+  live?.heard?.();
+  live?.replying?.(true);
+  try { return await run(); } finally { live?.replying?.(false); }
+}
+
 export interface TextTurnDependencies {
   chatModel: ShannonChatModel; stateStore: CompanionStateStore; conversationStore: ConversationStore; background: TurnBackgroundService;
   knowledgeStore: KnowledgeStore | null; dailyMind: DailyMindReader | null; autonomy: ShannonAutonomyService; agentTasks: AgentTaskStore;
@@ -77,6 +94,8 @@ export interface TextTurnDependencies {
   minecraftRequests: ReportedWork | null;
   /** Syzygy ADR-0008 stage 3: the mind of the turn, when there is one (its data frames frame the reports a turn builds itself). */
   mind?: MindTurnPorts | null;
+  /** SHANNON_MINECRAFT_LIVE (session dc-live): her Minecraft body's present for a conversation; '' while she has no task or body (minecraftLive.ts). */
+  minecraftLive?: LiveBodyReader | null;
   stage5Capabilities?: ShannonStage5Capabilities;
 }
 
@@ -333,8 +352,10 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const memory = (text: string) => surface?.openOnly ? withoutGuardedEntries(text) : text;
   // Her work with the owner is his: on another surface it is given only while he alone reads the reply.
   const ownerWork = !surface || audience.alone;
+  // Her body in the game, for every conversation but the game's own chat (which carries the body's report of that turn): the task's words only while he alone reads.
+  const bodyNow = surface?.perception?.surface === 'minecraft' ? '' : dependencies.minecraftLive?.block({ alone: audience.alone }) ?? '';
   const turnContext = [
-    basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt),
+    basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt), bodyNow,
     ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey)),
       agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey), threadId)] : []), audience.instructions, surface?.prompt ?? '',
   ].filter(Boolean).join('\n\n');

@@ -1,6 +1,6 @@
 import { DEFAULT_PERSONALITY, MOOD_AXES, OUTING, type MoodAxis, type SpaceAxis, type SpacePosition } from './characterSpace.js';
 import { CHARACTER_REGIONS, REGION_IDS, type CharacterRegion, type RegionId } from './characterRegions.js';
-import { REGION_EXCHANGES, REGION_TONE_LINES, type Exchange } from './characterDialogues.js';
+import { REGION_EXCHANGES, REGION_TONE_LINES, WORK_EXCHANGES, type Exchange } from './characterDialogues.js';
 import type { FeelingTurnDecision } from './feelingTurn.js';
 
 /**
@@ -147,6 +147,11 @@ export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'seco
 
 /** Exchanges as the block shows them: 「ライ氏：…／ボク：…」. */
 const exchangeWords = (exchanges: readonly Exchange[]) => exchanges.map(([his, hers]) => `「ライ氏：${his}／ボク：${hers}」`).join('');
+
+/** Exchanges about her work in the game (`WORK_EXCHANGES`, a draft): a few, turning with the minute, as the persona block shows its own. */
+export function workExchangeLines(turn = 0, count = 3): string {
+  return `掛け合いの手ざわり（マイクラの作業について聞かれた時。事実は[マイクラの体の今]から。言い回しは使い回さず、いまの口調で）: ${exchangeWords(someOf(WORK_EXCHANGES, count, turn))}`;
+}
 
 /** A region's voice: its exchanges with `SHANNON_NATURAL_TALK` where it has them, else its single lines. */
 function voiceOf(id: RegionId, natural: boolean, samples: number, exchanges: number, turn: number): string {
