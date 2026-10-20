@@ -15,9 +15,15 @@ off, every route behaves exactly as before (dc-voice).
   release a protected line), people memory heard by everyone there, feeling turn, her Minecraft body's present (`minecraftLive`) and the
   commentary's quiet while she answers, the owner's request to her body (`minecraftIntent`), her tools by the audience, and her guard
   lines (a text draft checked whole before sending; a spoken reply checked sentence by sentence before each is said, `VoiceSentenceGuard`).
-- **Two ways to speak**: voice is the one voice turn (`apiLiveVoice.ts`): the router decides whether to answer, what to recall and her face,
-  and her plain words stream; the apps and Discord's voice channel go through it. Text is the text turn (`ShannonApiKernel.textTurn`):
-  the apps' Talk, Discord's text and her game chat go through it.
+- **One flow, two modalities** (`mind/action/respond/conversationTurn.ts`, `runConversationTurn`): every turn goes through the same
+  stages in the same order: open (what was said, by whom, the route) → what she remembers (`startTurnMemory`: the deterministic recall,
+  people memory by the seat's audience, the bounded semantic recall) → begin (feeling turn, perception) → who she is (`identifyTurn`:
+  her character core, her own time's projection, stage 5) → what she can read (`startTurnCapability`, bounded) → the prompt
+  (`composedTurnContext`, the replay by `turnReplay`) → speak → close (store, feeling commit, record) or abandon. Only the modality
+  differs: voice (`surfaces/voice/voiceConversation*.ts`: the router decides whether to answer and her face, her plain words stream,
+  each sentence guarded) for the apps' voice and Discord's voice channel; text (`infra/http/textConversation.ts`: structured reply,
+  tools, a draft checked whole) for the apps' Talk, Discord's text and her game chat. The flow is the same with the switch off; the
+  switch only decides which entries reach it and with which seat. Nothing is awaited before the model call when nothing needs to be.
 
 ## `POST /v1/converse` (NDJSON)
 
@@ -47,7 +53,7 @@ that shows one; Discord reads past it), `sentence` (`index`, `text` shown, `voic
 
 With one head a Discord conversation nobody bound is answered as one its people read (`shared`), never as the owner's own; the owner
 is the one Discord account the bindings name (with none or two, no conversation is opened). Its title is the channel's name when the
-body sends it, else 「Discordの会話」. Someone she cannot remember (people memory off) is answered as a stranger and nothing of them is
+body sends it (a typed message's channel; for the voice channel, the text channel it posts to), else 「Discordの会話」. Someone she cannot remember (people memory off) is answered as a stranger and nothing of them is
 kept. The owner's private conversation stays refused to anyone else.
 
 ## The apps

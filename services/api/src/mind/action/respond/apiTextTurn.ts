@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { withCharacterCore, type InnerNotePort } from '../../emotion/innerNotePorts.js';
 import {
   withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore, type FeelingSpeaker,
+  type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from '../../../integrations/aether/aetherContext.js';
@@ -42,7 +43,8 @@ import type { PersonIdentityStore } from '../../memory/memoryPorts.js';
 import type { ShannonBody } from '../../../surfaces/body/shannonBody.js';
 import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../tools/toolsPorts.js';
 import type { ShannonToolRunner } from '../../tools/toolsPorts.js';
-import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
+import type { TurnCognitiveContext } from '../../workspace/contextPorts.js';
+import type { TurnCapabilityAsk, TurnIdentityAsk, TurnMemoryAsk } from './conversationTurn.js';
 import { TurnDeadline } from './turnDeadline.js';
 import { observedStep, textStage } from '../../../infra/observer/observerContext.js';
 import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
@@ -64,7 +66,8 @@ export interface ReportedWork {
 }
 
 /**
- * Her Minecraft body's present as a conversation reads it (surfaces/minecraft/minecraftLive.ts, session dc-live). eplying and heard tell the
+ * Her Minecraft body's present as a conversation reads it (surfaces/minecraft/minecraftLive.ts, session dc-live). 
+eplying and heard tell the
  * live commentary that someone is being answered, and that someone just wrote or spoke, so that she does not talk over them.
  */
 export interface LiveBodyReader {
@@ -209,53 +212,75 @@ export function withoutGuardedEntries(text: string): string {
 }
 
 /**
- * The first stage, all synchronous as it was inline: orchestration, a fixed command, the state, people recall and the
- * deterministic context. The kernel then awaits recall only when it runs, exactly as before the split.
+ * A text turn's opening (the one flow's `open`, `textConversation.ts`): orchestration and a fixed command, before the state is read so
+ * that it shows what a command changed. Another surface (her Minecraft body, a platform) has no commands, organizing, orchestration,
+ * looks or agent-task proposals. Each synchronous step is timed for the turn's steps line (`turnSteps.ts`).
  */
-export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTurnInput) {
+export function openTextTurn(dependencies: TextTurnDependencies, input: TextTurnInput, occurredAt: string): OpenedTextTurn {
   const { audience, threadId, message, surface } = input;
-  const body = input.body;
-  const occurredAt = dependencies.now();
-  // Another surface (her Minecraft body) has no commands, organizing, orchestration, looks or agent-task proposals.
-  // Each synchronous step is timed for the turn's steps line (`turnSteps.ts`), so a blocked loop names its step.
+  const scopeKey = input.body.scopeKey;
   let orchestrationState = surface ? null : observedStep('orchestration', () => observeConversationTurn({
-    previous: dependencies.conversationOrchestration.read(body.scopeKey, threadId),
-    scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode,
-    tasks: dependencies.agentTasks.list(body.scopeKey),
+    previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
+    scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode, tasks: dependencies.agentTasks.list(scopeKey),
   }));
   if (orchestrationState) orchestrationState = observedStep('orchestration', () => dependencies.conversationOrchestration.save(orchestrationState!));
-  const explicitCommand = !audience.alone || surface ? null : observedStep('command', () => executeConversationCommand(body.scopeKey, threadId,
+  const explicitCommand = !audience.alone || surface ? null : observedStep('command', () => executeConversationCommand(scopeKey, threadId,
     { id: randomUUID(), text: message }, occurredAt, {
       stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
       organizeStore: dependencies.organizeStore, aetherProposals: dependencies.aetherProposals, agentTasks: dependencies.agentTasks,
       cognitiveIntents: dependencies.cognitiveIntents, memoryRecall: dependencies.memoryRecall,
     }));
   if (orchestrationState && explicitCommand?.receipt) {
-    orchestrationState = dependencies.conversationOrchestration.save(
-      recordConversationReceipt(orchestrationState, explicitCommand.receipt),
-    );
+    orchestrationState = dependencies.conversationOrchestration.save(recordConversationReceipt(orchestrationState, explicitCommand.receipt));
   }
-  const captured = observedStep('snapshot', () => dependencies.stateStore.snapshot(body.scopeKey));
   const provisionalIntent = audience.alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
-  // What she talked about with other people is recalled here too; alone with the owner all of it may be used. On a surface
-  // with others (anyone's turn in a shared chat, someone's whisper, the owner's shared-chat turn) only what everyone here
-  // already heard, or what the owner made ordinary himself (`heardByEveryoneHere`), as the platform context gives it: one
-  // person's whisper never reaches another's turn.
-  const recalledPeople = observedStep('people', () => dependencies.people.recall(body.scopeKey, captured, message, audience.present));
-  const peopleRecall = surface && !audience.alone ? { ...recalledPeople,
-    candidates: recalledPeople.candidates.filter(candidate => heardByEveryoneHere(captured, candidate.id, candidate.disclosure, audience.present)) } : recalledPeople;
-  const deterministicContext = observedStep('deterministic', () => prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
-    scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
-    threadId, additionalCandidates: peopleRecall.candidates,
-    intents: dependencies.cognitiveIntents.list(body.scopeKey, 'active'),
-    provisionalIntent, ...(surface?.openOnly ? { openOnly: true } : {}),
-    participants: dependencies.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
-  }));
   const organizeTurn = !surface && audience.alone && isOrganizeCommand(message);
-  return { occurredAt, orchestrationState, explicitCommand, captured, provisionalIntent, peopleRecall, deterministicContext, organizeTurn };
+  return { occurredAt, orchestrationState, explicitCommand, provisionalIntent, organizeTurn };
 }
 
-export type BegunTextTurn = ReturnType<typeof beginTextTurn>;
+export interface OpenedTextTurn {
+  occurredAt: string;
+  orchestrationState: ReturnType<ConversationOrchestrationStore['save']> | null;
+  explicitCommand: ReturnType<typeof executeConversationCommand>;
+  provisionalIntent: ReturnType<typeof extractExplicitUserIntent>;
+  organizeTurn: boolean;
+}
+
+/**
+ * What a text turn remembers (the one flow's shared `startTurnMemory`). What she talked about with other people is recalled here too;
+ * alone with the owner all of it may be used. On a surface with others (anyone's turn in a shared chat, someone's whisper, the owner's
+ * shared-chat turn) only what everyone here already heard, or what the owner made ordinary himself (`heardByEveryoneHere`): one person's
+ * whisper never reaches another's turn. The model-assisted recall runs on every turn but a fixed command or organizing.
+ */
+export function textMemoryAsk(dependencies: TextTurnDependencies, input: TextTurnInput, opened: OpenedTextTurn): TurnMemoryAsk {
+  const { audience, threadId, message, surface } = input;
+  const scopeKey = input.body.scopeKey;
+  const people = (captured: BegunTextTurn['captured']) => {
+    const recalled = dependencies.people.recall(scopeKey, captured, message, audience.present);
+    return surface && !audience.alone ? { ...recalled, candidates: recalled.candidates.filter(candidate =>
+      heardByEveryoneHere(captured, candidate.id, candidate.disclosure, audience.present)) } : recalled;
+  };
+  const semantic = !opened.explicitCommand && !opened.organizeTurn
+    ? { options: {}, span: {}, bounded: <T>(work: Promise<T>) => textStage<T | null>('recall_timeout', work, () => null) } : null;
+  return {
+    scopeKey, threadId, message, occurredAt: opened.occurredAt, channel: 'text', present: audience.present, surface: surface ? 'platform' : 'text',
+    intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent: opened.provisionalIntent,
+    participants: namedParticipants(dependencies.personIdentities, scopeKey, message), ...(surface?.openOnly ? { openOnly: true } : {}),
+    people, semantic,
+  };
+}
+
+/** The people he named in his words, as her identities know them. */
+export function namedParticipants(identities: Pick<PersonIdentityStore, 'list'> | undefined, scopeKey: string, message: string): string[] | undefined {
+  return identities?.list(scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName);
+}
+
+/** A text turn as the stages after its opening read it: what it opened with, and what the one flow remembered. */
+export interface BegunTextTurn extends OpenedTextTurn {
+  captured: CompanionStateSnapshot;
+  peopleRecall: ReturnType<PeopleMemory['recall']>;
+  deterministicContext: TurnCognitiveContext;
+}
 
 /**
  * Syzygy ADR-0008 stage 3, step F2: the turn handed to the mind through its surface's normalizer, which copies `audience.present`
@@ -295,32 +320,27 @@ export function textTurnWorkspace(mind: MindTurnPorts | null, input: TextTurnInp
   } catch { return ''; }
 }
 
-/** Her identity, then what she may read this turn: a promise only when a read is asynchronous (`conversationCapabilityContext`). */
-export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, collectReadSources = false) {
-  const { audience, message, surface } = input;
-  const body = input.body;
-  const { captured, explicitCommand } = begun;
+/** Her identity's source for a text turn's audience (the one flow's shared `identifyTurn`): the owner's profile, or the audience's own. */
+export function textIdentityAsk(dependencies: TextTurnDependencies, input: TextTurnInput, captured: BegunTextTurn['captured']): TurnIdentityAsk {
+  const scopeKey = input.body.scopeKey;
   // Her Minecraft body's capability line is added to the model request when its tools include `minecraft.request`.
-  const projected = audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(body.scopeKey) ?? companionIdentityPrompt(captured));
-  const identity = withCharacterCore(projected, dependencies.innerNote); // Syzygy ADR-0012 D6: her character core, behind the switch.
-  const basePrompt: LayeredIdentityPrompt = { ...identity, identity: withStage5Capabilities(dependencies.autonomy.identityProjection(body.scopeKey, identity.identity), audience.alone ? dependencies.stage5Capabilities : undefined) };
-  const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
-    { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
-      ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities, collectReadSources);
-  return { basePrompt, capabilityContext };
+  return { scopeKey, alone: input.audience.alone, projected: true,
+    parts: () => input.audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured)) };
 }
 
 /**
- * `textTurnIdentityAndCapability`, started before the turn awaits semantic recall so that the capability reads run beside it
- * (2026-10-13: they waited for recall). An asynchronous read keeps its stage bound and never rejects unhandled while the turn
- * waits for something else first; a synchronous one is handed back as it is.
+ * What a text turn may read (the one flow's shared `startTurnCapability`, started before recall is awaited so that the reads run beside
+ * it, 2026-10-13); nothing for a fixed command.
  */
-export function startTextIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, collectReadSources: boolean) {
-  const { basePrompt, capabilityContext } = observedStep('identity', () => textTurnIdentityAndCapability(dependencies, input, begun, collectReadSources));
-  if (!(capabilityContext instanceof Promise)) return { basePrompt, capability: capabilityContext }; // Nothing to wait for: no tick.
-  const capability = textStage('capability_timeout', capabilityContext, noCapabilityContext);
-  capability.catch(() => {});
-  return { basePrompt, capability };
+export function textCapabilityAsk(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn,
+  collectReadSources: boolean): TurnCapabilityAsk | null {
+  if (begun.explicitCommand) return null;
+  const { audience, message, surface } = input;
+  const readers = { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion,
+    upcoming: dependencies.upcoming, ownOutreach: dependencies.ownOutreach };
+  const selection = surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities;
+  return { scopeKey: input.body.scopeKey, message, readers, selection, collectReadSources,
+    bounded: work => textStage('capability_timeout', work, noCapabilityContext) };
 }
 
 /**

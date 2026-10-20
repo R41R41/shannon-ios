@@ -722,8 +722,9 @@ describe('the frame is never kept', () => {
     const names = apiSourceNames();
     expect(names.length).toBeGreaterThanOrEqual(300);
     const callers = names.filter(name => /\.turnLooks\.turn\(|this\.body\.turn\(|offerRoomLook: true/u.test(source(name)));
-    // The chat turn asks `conversationLooks.ts`, which passes every turn to her body first (and then, for a turn from an app, to `appLook.ts`).
-    expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts', 'conversationLooks.ts']);
+    // The chat turn (one head's one flow: its text modality, `textConversation.ts`) asks `conversationLooks.ts`, which passes every turn to her body first
+    // (and then, for a turn from an app, to `appLook.ts`).
+    expect(callers.sort()).toEqual(['bodyLook.ts', 'conversationLooks.ts', 'textConversation.ts']);
     const voiceCallers = names.filter(name => /\.voiceTurn\(/u.test(source(name)));
     expect(voiceCallers.sort()).toEqual(['voiceRoomLook.ts']);
     const openers = names.filter(name => /looks\.open\(|store\.open\(/u.test(source(name)));
@@ -732,10 +733,12 @@ describe('the frame is never kept', () => {
     // The voice router was split in Syzygy ADR-0008 stage 3 (S3) into the local, Jev and OpenAI routers, unchanged: they count as it.
     const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice|jevVoice|openAIVoice|localVoice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
-    expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
-      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']);
+    // (One head: the spoken turn's look moved from `apiLiveVoice.ts` into its modality, `voiceConversation*.ts`.)
+    expect(aware.sort()).toEqual(['apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
+      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceConversation.ts', 'voiceConversationPrompt.ts', 'voiceConversationSpeak.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts',
+      'voiceRecallScope.ts', 'voiceRoomLook.ts']);
     // The voice side handles words and a probability: it has no room for a frame either.
-    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']) {
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceConversation.ts', 'voiceConversationPrompt.ts', 'voiceConversationSpeak.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRecallScope.ts', 'voiceRoomLook.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.

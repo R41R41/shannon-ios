@@ -11,6 +11,8 @@ import {
   dispatchLiveVoiceRequest, dispatchSeatedVoiceTurn, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode,
 } from '../../surfaces/voice/apiLiveVoice.js';
 import type { VoiceSeat } from '../../contracts/oneHeadContract.js';
+import { runConversationTurn } from '../../mind/action/respond/conversationTurn.js';
+import { TextConversation, textTurnStages, type TextConversationParts } from './textConversation.js';
 import {
   badRequest, invalidChatFlag, objectBody, validAgentCommandType, validAgentHostHint, validBoundedString, validEvent, validHostEvents, validMemoryAction,
   validPlan, validScopeKey, validThreadTitle, validVoyagerTaskProjection, validatedChatAttachments,
@@ -69,10 +71,10 @@ import {
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, keptBySurface, startTextIdentityAndCapability, textTurnClock, textTurnSystemPrompt, markLiveTurn, type LiveBodyReader, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
+import { NO_LOOK, answerTextCommand, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, keptBySurface, textTurnClock, textTurnSystemPrompt, markLiveTurn, type LiveBodyReader, type ReportedWork, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observedStep, observerHandoff, textStage } from '../observer/observerContext.js';
-import { commitReplyEmotionLater, innerNoteText, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
+import { innerNoteText } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, validChatStream, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { feelingText } from '../../mind/emotion/feelingPorts.js';
 import { feelingPortFor } from '../../mind/emotion/textRegisterTurn.js';
@@ -353,127 +355,16 @@ export class ShannonApiKernel {
     const model = this.chatModel.forTurn?.(input.body.scopeKey) ?? this.chatModel;
     return markLiveTurn(this.minecraftLive, () => withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input, model)) : this.performTextTurn(input, model)));
   }
-  private async performTextTurn(input:TextTurnInput, model: ShannonChatModel):Promise<TextTurnResult> {
-    const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
-    const body = input.body; const fca = !surface && audience.alone ? this.fcaConversation?.() : null;
-    const deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now()));
-    const deps = this.textTurnDependencies();
-    const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
-    const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
-    const feelingTurn = feelingText.start(feelingPortFor(surface, this.feeling), { scopeKey: body.scopeKey, alone: audience.alone, surface, message, begun });
-    // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
-    const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
-    // Who her tools are offered to, and (ADR-0008 stage 2) her read tools' plan and the turn's Jev call, beside recall (`textToolStart`).
-    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, commonFca: !surface && audience.alone && Boolean(this.fcaConversation?.()), readTools: this.readTools, toolHints: this.toolHints });
-    const { basePrompt, capability: capabilityPending } = startTextIdentityAndCapability(deps, input, begun, Boolean(fca)); // Beside recall.
-    const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
-      ? await textStage('recall_timeout', observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})), () => begun.deterministicContext) : begun.deterministicContext;
-    const capability = capabilityPending instanceof Promise ? await capabilityPending : capabilityPending;
-    const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});
-    let layered = observeSync('context',{threadId},()=>textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook }),value=>({contextCharacters:value.turnContext.length}));
-    let systemPrompt = layered.prompt;
-    if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
-    let { orchestrationState } = begun;
-    // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
-    const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
-    const fcaTurn = fca?.begin({ scopeKey: body.scopeKey, threadId, observedAt: occurredAt,
-      recalledMemoryIds: conversationFcaProvenance(captured, this.conversationStore, body.scopeKey, threadId,
-        [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall.ids]),
-      readSourceIds: capability.readSourceIds, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) });
-    try {
-    // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
-    let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
-    // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
-    const settled = choices ? await textStage('tool_menu_timeout', settleTextTools(toolOffer, choices), () => null) : null;
-    const work = admitConversationWork(fcaTurn, { message, research: body.webSearch === true || Boolean(placeOptions.placeSearch) || settled?.web === true, places: placeOptions.placeSearch, at: occurredAt });
-    const placeSkill = !work && placeOptions.placeSearch ? await textStage('places_timeout', optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch), () => null) : null;
-    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await textStage('tool_select_timeout', fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }), () => toolOffer.tools!) };
-    toolOffer = { ...toolOffer, tools: conversationHintMenu(toolOffer.tools, Boolean(work)) };
-    if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
-    layered = feelingText.staged(feelingTurn, turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true)); // Step 6: her skills' index; her character space's core (owner 2026-10-20; none: as it was).
-    systemPrompt = layered.prompt;
-    // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing). ADR-0013: her feeling turn, ≤200 ms more.
-    const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
-    if(this.mind?.sync)await this.mind.sync();
-    const feelingBlock = feelingTurn ? await feelingText.block(feelingTurn) : ''; // Without a port, not even a tick.
-    const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null, ...(surface?.voice ? { voice: true } : feelingText.paced(feelingTurn, message)) }, withToolCapabilityLines({
-      // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
-      scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
-      // The history is a character budget (the replay summary covers the rest). Stage 3's blocks, then ADR-0013's, follow the turn's context.
-      ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', observedStep('fcaContext', () => fcaTurn?.context() ?? ''), admittedWorkContext(work), reactionTurnLine(this.conversationExtras(), { scopeKey: body.scopeKey, threadId, alone: audience.alone, surface, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) }), innerNoteText.context(this.innerNote, body.scopeKey, audience.alone, Boolean(surface), occurredAt)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null})), feelingBlock),
-      ...(priorThreadSummary ? { priorThreadSummary } : {}),
-      message, threadKey: threadId, ...textTurnClock(occurredAt),
-      ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...textTurnThinking({ tier, tools: toolOffer.tools, readAloud: body.readAloud, answer: settled?.answer, research: [work, placeSkill, placeOptions.placeSearch, attachments.length, body.webSearch, settled?.web] }),
-      ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier), ...feelingText.route(feelingTurn), richBlocks: !surface,
-      // A surface's conversation has its own fixed title.
-      generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
-    })));
-    const answered = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
-    const finished = this.turnRouting ? await finishTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, presence: audience.alone ? 'alone' : 'others', reply: answered,
-      outOfTime: completion.outOfTime === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt, answeredBy: completion.mode, servedTier: completion.servedTier }) : null;
-    const reply = finished?.reply ?? answered;
-    // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
-    const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
-    // Her feeling for this reply, from state already in hand; it is stored after the response.
-    const { messageEmotion, expressiveEmotion } = feelingText.face(feelingTurn, innerNoteText.reply(this.innerNote, body.scopeKey, occurredAt, resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone), captured, message, completion, audience.alone, turnToolResults(toolOffer.tools).some(call => !call.ok)), captured, occurredAt);
-    const response: ChatResponse = {
-      mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
-      snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
-      state: presentCompanionState(captured, occurredAt, expressiveEmotion),
-      ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-      ...feelingText.register(feelingTurn, message, reply, completion, turnToolResults(toolOffer.tools)), // ADR-0013 item 10
-    };
-    if (placeSkill?.places.length) response.uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
-    const completedTurn = {
-      scopeKey: body.scopeKey, threadId,
-      capturedState: captured,
-      userMessage: message,
-      shannonReply: reply,
-      ...(surface ? { threadTitle: surface.threadTitle } : completion.threadTitle ? { threadTitle: completion.threadTitle } : {}),
-      ...(completion.threadSummary ? { threadSummary: completion.threadSummary } : {}), ...audience.turnLabel,
-      messageEmotion: response.messageEmotion,
-      ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
-      ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-      completedAt: occurredAt, recalledMemoryIds: [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall.ids], summaryContinuesChain: Boolean(priorThreadSummary && completion.threadSummary),
-    };
-    // Another surface decides where its turn is kept (her Minecraft body: the owner's platform thread, or person memory).
-    observerHandoff('decode','store',{reply});
-    const experience = observeSync('store',{threadId,reply},()=>surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn),value=>({experienceId:value?.id??null}));
-    if (experience) fcaTurn?.commit(experience.id); else fcaTurn?.abort();
-    if (experience) { response.turnId = experience.id; const feedback = bindCompletedFeedback(this.feedback,body.scopeKey,finished?.feedbackRecordId,threadId,experience.id,reply); if (feedback) response.feedback=feedback; }
-    if (experience && perceived) this.mind?.bind?.(body.scopeKey, perceived.itemId, `experience:${experience.id}`); // Stage 3: re-read at render.
-    const completedIntent = experience ? recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
-      threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
-    }, provisionalIntent ? completion.intentPlan : undefined) : null;
-    if (completion.taskProposal && !suppressAgentTaskProposal) {
-      if (orchestrationState) {
-        orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
-          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey),
-        ));
-      }
-      response.uiBlocks = [...(response.uiBlocks ?? []), {
-        type: 'agent_task_proposal',
-        proposalId: orchestrationState?.resumeToken ?? randomUUID(),
-        ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),
-        ...completion.taskProposal,
-      }];
-    }
-    response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
-    Object.assign(response, roomLook.decide({ ...completion, reply }, threadId)); // One look, only if this turn offered it (conversationLooks.ts).
-    if (experience) {this.background.schedule(completedTurn, experience.id);observerHandoff('store','memory',{experienceId:experience.id,status:'scheduled'});}
-    // Her stored feeling toward the owner moves only on a turn that is his alone.
-    if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
-    innerNoteText.ended(this.innerNote, body.scopeKey, audience.alone && !surface, occurredAt, message, reply, expressiveEmotion, experience?.id);
-    feelingText.ended(feelingTurn, { at: occurredAt, message, reply, ...(experience ? { experienceId: experience.id } : {}) }); // ADR-0013
-    this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
-    return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
-    } catch (error) {
-      try { fcaTurn?.abort(); } catch { /* Unbound source references remain ineligible for research admission. */ }
-      throw error;
-    }
+  /** The one flow (`conversationTurn.ts`) with a written turn's modality (`textConversation.ts`). */
+  private performTextTurn(input: TextTurnInput, model: ShannonChatModel): Promise<TextTurnResult> {
+    const parts = this.textConversationParts(model);
+    return runConversationTurn(textTurnStages(parts), new TextConversation(parts, input));
+  }
+  private textConversationParts(model: ShannonChatModel): TextConversationParts {
+    return { deps: this.textTurnDependencies(), model, auxiliaryChatModel: this.auxiliaryChatModel, fcaConversation: this.fcaConversation, mind: this.mind,
+      feeling: this.feeling, innerNote: this.innerNote, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints, skills: this.skills,
+      turnRouting: this.turnRouting, feedback: this.feedback, turnLooks: this.body.turnLooks, extras: () => this.conversationExtras(),
+      ownerAlone: scopeKey => this.ownerAloneForFeedback(scopeKey) };
   }
   private textTurnDependencies() {
     return { ...this.liveVoiceDependencies(), background: this.background, organizeExtractor: this.organizeExtractor, body: this.body, minecraftRequests: this.minecraftRequests };
