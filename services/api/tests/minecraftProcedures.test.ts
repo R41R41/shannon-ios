@@ -325,7 +325,8 @@ describe('Minecraft procedures (mb-arch)', () => {
     const body = new SimBody();
     for (const [name, count] of [['iron_pickaxe', 1], ['stick', 4], ['crafting_table', 1]] as const) body.add(name, count);
     body.y = -58;
-    body.map = '鉱石: coal_ore 12m 北 (5,-50,-12)、diamond_ore 150m 東 (150,-58,3)\n溶岩の溜まり 1 か所: 40m 南 (0,-58,40)';
+    // The body's own words (mb-map places.ts): the ores by the map's names, a part each, split by ／.
+    body.map = '鉱石: 石炭 1か所（12m 北 (5,-50,-12)）／ダイヤ 2か所（150m 東 (150,-58,3)、250m 西 (-250,-58,0)）\n溶岩の溜まり 1か所: 40m 南 (0,-58,40) 地下';
     let walked = false;
     const dig = body.tool_mine_block.bind(body);
     body.tool_mine_block = (input: Input) => walked ? dig(input) : { ok: false, text: '見つかりません', failure: 'failed', bodyFailure: 'target_not_found', retryable: true } as ToolResult;

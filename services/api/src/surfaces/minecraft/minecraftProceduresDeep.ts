@@ -1,8 +1,11 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
-import { block, carried, cellKey, cellsInText, inPack, mapPlaces, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { block, carried, cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { craft, doing, fromFirstCell, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
-import { caveDescent, ruinedPortal, type MapVisits } from './minecraftProcedureMap.js';
+import { caveDescent, lavaPlaces, orePlaces, ruinedPortal, towardMapped, type MapVisits } from './minecraftProcedureMap.js';
+
+/** How many lava pools of the map she has walked to in this task. */
+const lavaWalks = (visits: MapVisits) => [...visits.visited].filter(key => key.startsWith('lava:')).length;
 
 /**
  * From the diamonds to the gate (session mb-arch; 「ダイヤ」「黒曜石」「ゲート」), with the body's own tools (Minebot catalog):
@@ -26,42 +29,22 @@ export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMem
   const y = facts.at ? Math.floor(facts.at.y) : 64;
   if (y > DEEP_Y + 10) {
     // A cave entrance whose bottom is lower walked down first (mb-map); the stair goes on from its bottom.
-    const cave = caveDescent(facts, visits, { within: 96, depth: [DEEP_Y - 6, y - 12], why: 'ダイヤの深さへ下りる' });
+    const cave = caveDescent(facts, visits, memory, { within: 96, depth: [DEEP_Y - 6, y - 12], why: 'ダイヤの深さへ下りる' });
     if (cave) return cave;
     return doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる', expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` });
   }
   // The body finds ores in the whole loaded world (its view distance), hidden ones too, and digs its way there: a wider look, not a tunnel.
-  const moves = (memory.notes.get('diamond:moves') as number | undefined) ?? 0;
-  for (const radius of [32, 64, 128]) {
+  // After a walk to a diamond the map remembers, a near look only (the walk ends within four blocks of it).
+  const moves = [...visits.visited].filter(key => key.startsWith('diamond:')).length;
+  for (const radius of moves ? [32] : [32, 64, 128]) {
     const key = `diamond:${have}:${radius}:${moves}`;
     if (memory.lastFailure(key) === 'target_not_found') continue;
     return doing({ tool: 'mc.mine-block', input: { blockName: 'diamond_ore', count: 3 - have, searchRadius: radius }, why: 'ダイヤを掘る',
       expectMs: 90_000 + radius * 1_000, key });
   }
-  return towardMapped(facts, memory, { head: '鉱石', name: /diamond/u, note: 'diamond', why: '地図で覚えているダイヤの所へ行く' })
-    ?? stuck('Y-58 の周り 128m にダイヤが見えず、地図にも覚えていない');
+  return towardMapped(facts, visits, memory, { places: orePlaces(facts, 'ダイヤ'), note: 'diamond', why: '地図で覚えているダイヤの所へ行く' })
+    ?? stuck('Y-58 の周り 128m にダイヤが見えず、地図にも覚えていない（200m 以内）');
 }
-
-/**
- * A place the body's map remembers (mb-body's `mapSummary`) and the procedure has not gone to yet, walked to; the procedure looks again
- * from there (`<note>:moves` counts the walks, so the next looks are new work). Null when the map has none left.
- */
-function towardMapped(facts: MinecraftProcedureFacts, memory: ProcedureMemory,
-  place: { head: string; name?: RegExp; note: string; why: string }): McMove | null {
-  const visited = (memory.notes.get(`${place.note}:visited`) as Set<string> | undefined) ?? new Set<string>();
-  memory.notes.set(`${place.note}:visited`, visited);
-  const cell = mapPlaces(facts, place.head, place.name).find(item => !visited.has(cellKey(item)));
-  if (!cell) return null;
-  visited.add(cellKey(cell));
-  const arrived = () => {
-    memory.notes.set(`${place.note}:moves`, ((memory.notes.get(`${place.note}:moves`) as number | undefined) ?? 0) + 1);
-    memory.notes.delete(`${place.note}:none`);
-    return null;
-  };
-  return doing({ tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 4 }, why: place.why, expectMs: 120_000,
-    key: `${place.note}:map:${cellKey(cell)}`, then: arrived });
-}
-
 /** Water in the bucket: the nearest water source found, walked to, scooped. */
 function fillBucket(memory: ProcedureMemory): McMove {
   const scoop = (cell: Cell): MinecraftWorkItem => ({ tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'bucket' }, why: '水を汲む', expectMs: 3_000,
@@ -76,14 +59,14 @@ function fillBucket(memory: ProcedureMemory): McMove {
  * Obsidian from the nearest lava pool not tried yet: found, walked to, the water poured on it. One at a time, the obsidian is dug after;
  * with the body's batch (`batch`: how many), the body pours, digs and takes the water back itself, that many times at that pool.
  */
-function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch: number | null): McMove {
+function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch: number | null, visits: MapVisits): McMove {
   const count = carried(facts, OBSIDIAN);
   const tried = (memory.notes.get('lava:tried') as Set<string> | undefined) ?? new Set<string>();
   memory.notes.set('lava:tried', tried);
   const pick = (text: string): MinecraftWorkItem | null => {
     const cell = cellsInText(text).find(item => !tried.has(cellKey(item)));
     if (!cell) {
-      memory.notes.set('lava:none', true);
+      memory.notes.set('lava:none', lavaWalks(visits));
       return null;
     }
     tried.add(cellKey(cell));
@@ -97,7 +80,7 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch:
       then: () => pour, chain: 3 };
   };
   return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 32, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
-    key: `obsidian:${count}:${memory.notes.get('lava:moves') ?? 0}`, then: pick, chain: 4 });
+    key: `obsidian:${count}:${lavaWalks(visits)}`, then: pick, chain: 4 });
 }
 
 /** 「黒曜石」: ten obsidian, by the body's batch tool when it has one, else one lava source at a time. */
@@ -109,19 +92,20 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
   }
   const count = carried(facts, OBSIDIAN);
   // A ruined portal near (mb-map): its chest and its frame before any lava.
-  const portal = ruinedPortal(facts, visits, { obsidian: 10 - count, flint: !carried(facts, FLINT_AND_STEEL) });
+  const portal = ruinedPortal(facts, visits, memory, { obsidian: 10 - count, flint: !carried(facts, FLINT_AND_STEEL) });
   if (portal) return portal;
-  if (memory.notes.has('lava:none')) {
-    return towardMapped(facts, memory, { head: '溶岩の溜まり', note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く' })
-      ?? stuck('32m 以内に使える溶岩の溜まりが見えず、地図にも覚えていない');
+  // None in sight since the last walk: a pool the map remembers (near her height), walked to, and a look from there.
+  if (memory.notes.get('lava:none') === lavaWalks(visits)) {
+    return towardMapped(facts, visits, memory, { places: lavaPlaces(facts), note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く', rise: 24 })
+      ?? stuck('32m 以内に使える溶岩の溜まりが見えず、地図にも覚えていない（200m 以内）');
   }
-  return castOne(facts, memory, batchObsidian ? 10 - count : null);
+  return castOne(facts, memory, batchObsidian ? 10 - count : null, visits);
 }
 
 /** Flint: gravel set down and dug again where it stands (a tenth of the time it drops flint), gravel dug first when none is carried. */
 function flintMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove {
   // A ruined portal's chest holds a flint and steel about half the time (mb-map): looked into before any gravel.
-  const chest = ruinedPortal(facts, visits, { obsidian: 0, flint: true });
+  const chest = ruinedPortal(facts, visits, memory, { obsidian: 0, flint: true });
   if (chest) return chest;
   if (!inPack(facts, /^gravel$/u)) {
     const key = `gravel:${carried(facts, /^flint$/u)}`;

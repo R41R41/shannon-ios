@@ -113,22 +113,3 @@ const CELL_IN_TEXT = new RegExp(`\\(${COORD},\\s*${COORD},\\s*${COORD}\\)`, 'gu'
 export function cellsInText(text: string): Cell[] {
   return [...text.matchAll(CELL_IN_TEXT)].slice(0, 16).map(match => block({ x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) }));
 }
-
-/**
- * The places of one line of the body's map (the line that starts with `head`, e.g. `溶岩の溜まり` or `鉱石`), nearest first as the body
- * lists them; with `name`, only the places whose entry names it (an ore's id). Cells only: the map's words are never passed on.
- */
-export function mapPlaces(facts: MinecraftProcedureFacts, head: string, name?: RegExp): Cell[] {
-  const line = facts.map.split('\n').find(item => item.trimStart().startsWith(head));
-  if (!line) return [];
-  const body = line.slice(line.indexOf(head) + head.length);
-  const out: Cell[] = [];
-  let from = 0;
-  for (const match of body.matchAll(CELL_IN_TEXT)) {
-    const entry = body.slice(from, match.index);
-    from = (match.index ?? 0) + match[0].length;
-    if (!name || name.test(entry)) out.push(block({ x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) }));
-    if (out.length >= 8) break;
-  }
-  return out;
-}

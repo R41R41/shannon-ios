@@ -73,7 +73,7 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits
       ...(colour ? { color: colour } : {}) }, why: 'ベッドの羊毛を取る', expectMs: 30_000, key: `wool:${colour ?? 'any'}:${have}` });
   }
   // A village the map knows near (mb-map): its beds, before a search for sheep.
-  const village = villageVisit(facts, visits);
+  const village = villageVisit(facts, visits, memory);
   if (village) return village;
   const key = `sheep:find:${inPack(facts, WOOL)}`;
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).

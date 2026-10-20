@@ -136,15 +136,14 @@ function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMov
 }
 
 /**
- * Iron from the map before more digging (mb-map): a smith's chest in a village near, then, with no iron in reach and still on the
+ * Iron from the map before more digging (mb-map), with no iron in reach: a smith's chest in a village near, then, still on the
  * surface, a cave entrance walked down to the iron's depth (its bottom often shows two or three veins).
  */
-function fromTheMap(facts: MinecraftProcedureFacts, store: ProcedureTaskStore): McMove | null {
-  if (ironWanted(facts) - ironHeld(facts) <= 0) return null;
-  const chest = smithChest(facts, store);
+function fromTheMap(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, memory: ProcedureMemory): McMove | null {
+  if (ironWanted(facts) - ironHeld(facts) <= 0 || nearestNeed(facts, 'iron', 24)) return null;
+  const chest = smithChest(facts, store, memory);
   if (chest) return chest;
-  const seen = nearestNeed(facts, 'iron', 24);
-  return seen || !facts.at || facts.at.y < 40 ? null : caveDescent(facts, store, { within: 64, depth: [-10, 48], why: '鉄のある深さへ下りる' });
+  return !facts.at || facts.at.y < 40 ? null : caveDescent(facts, store, memory, { within: 64, depth: [-10, 48], why: '鉄のある深さへ下りる' });
 }
 
 /** The furnace that finishes first waited on (the executor fills the wait with small work). */
@@ -159,6 +158,6 @@ function waitFurnace(facts: MinecraftProcedureFacts): McMove | null {
 /** 「鉄」「バケツ」「鉄の全身の防具」: make, take out, smelt, dig, and only then wait. */
 export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
   for (const job of facts.jobs) if (!store.furnaces.some(cell => cellKey(cell) === cellKey(block(job.position)))) store.furnaces.push(block(job.position));
-  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? fromTheMap(facts, store) ?? digIron(facts, memory)
+  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? fromTheMap(facts, store, memory) ?? digIron(facts, memory)
     ?? waitFurnace(facts) ?? stuck('鉄の手順で次にできる手が無い');
 }
