@@ -42,7 +42,7 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
     move: pickaxeMove }],
   ['石の斧', { say: ['mc.craft-one（itemName=stone_axe。丸石3・棒2）'], move: axeMove }],
   ['木材', { say: [LOG_STEP], move: storeMove }],
-  ['食料と羊とベッド', { say: BED_WORDS, move: bedAndFoodMove }],
+  ['食料と羊とベッド', { say: BED_WORDS, move: (facts, memory, context) => bedAndFoodMove(facts, memory, context.store) }],
   ['鉄', { say: IRON_WORDS, move: (facts, memory, context) => ironMove(facts, memory, context.store) }],
   ['バケツ', { say: ['mc.craft-one（itemName=bucket。鉄3）'], move: (facts, memory, context) => ironMove(facts, memory, context.store) }],
   ['鉄の全身の防具', { say: ['mc.craft-one（itemName=iron_helmet・iron_chestplate・iron_leggings・iron_boots。鉄24）'
@@ -51,13 +51,13 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
   // Owner 2026-10-20 (30 minutes to the Nether): the way from diamonds to the gate, with the body's own tools (Minebot catalog).
   ['ダイヤ', { say: [
     'mc.stair-mine（targetY=-58）→ mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）→ mc.craft-one（itemName=diamond_pickaxe）',
-    '見つからなければ mc.stair-mine の direction を変えて横へ約20ブロック進み、また mine-block'], move: diamondMove }],
+    '見つからなければ mc.stair-mine の direction を変えて横へ約20ブロック進み、また mine-block'], move: (facts, memory, context) => diamondMove(facts, memory, context.store) }],
   // mb-body 2026-10-20: the body casts many at a time (use-item-on-block with a count); the words go out with or after that body.
   ['黒曜石', { say: [
     'mc.find-blocks（blockName=lava、maxDistance=32）→ 遠ければ mc.move-to → mc.use-item-on-block（溶岩の溜まりの座標、itemName=water_bucket、count=10）',
     '体が「水をかける→掘る→水を回収→次の溶岩」を繰り返して黒曜石を10個まで集める（diamond_pickaxe と water_bucket が要る。1回で最大300秒）。'
       + '途中で終わったら、返る文の残りの数と続け方に従う'],
-  move: (facts, memory, context) => obsidianMove(facts, memory, context.batchObsidian) }],
+  move: (facts, memory, context) => obsidianMove(facts, memory, context.batchObsidian, context.store) }],
   ['ゲート', { say: [
     '火打石: mc.mine-block（blockName=gravel、count=10）→ mc.craft-one（itemName=flint_and_steel）',
     '平らな地面で mc.build-structure（structureName=nether_portal、x、y、z、facing）→ 点いたか観測で確かめ → mc.enter-portal（枠の内側の座標）'],

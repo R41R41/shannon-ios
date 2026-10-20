@@ -45,7 +45,7 @@ const states = new Map<string, TaskProcedureState>();
 function stateOf(taskId: string): TaskProcedureState {
   let state = states.get(taskId);
   if (!state) {
-    state = { store: { furnaces: [] }, toldLate: new Set(), item: null, handedBack: null };
+    state = { store: { furnaces: [], visited: new Set() }, toldLate: new Set(), item: null, handedBack: null };
     states.set(taskId, state);
     if (states.size > 32) states.delete(states.keys().next().value as string);
   }

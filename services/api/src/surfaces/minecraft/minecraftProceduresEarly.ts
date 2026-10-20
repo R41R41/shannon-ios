@@ -2,6 +2,7 @@ import type { ProcedureMemory } from '@shannon/mind';
 import { BED_ITEM, EDIBLE_FOOD } from './minecraftItems.js';
 import { fed } from './minecraftStage.js';
 import { takeNeed } from './minecraftFillers.js';
+import { villageVisit, type MapVisits } from './minecraftProcedureMap.js';
 import { carried, inPack, nearestNeed, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, craft, digLogs, doing, fromFirstCell, planksFor, plankWorth, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
 
@@ -57,7 +58,7 @@ function sheepSearch(memory: ProcedureMemory, key: string): McMove {
 }
 
 /** The bed: a standing one taken, else one made from wool carried, else sheep in reach, else sheep searched for; null when she has one. */
-function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
+function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove | null {
   if (carried(facts, BED_ITEM) || facts.milestone.bedPlaced) return null;
   const standing = nearestNeed(facts, 'bed', 96);
   const take = standing ? takeNeed(standing) : null;
@@ -71,6 +72,9 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMov
     return doing({ tool: 'mc.attack-continuously', input: { entityName: 'sheep', maxKills: Math.max(1, 3 - have), maxDistance: 48,
       ...(colour ? { color: colour } : {}) }, why: 'ベッドの羊毛を取る', expectMs: 30_000, key: `wool:${colour ?? 'any'}:${have}` });
   }
+  // A village the map knows near (mb-map): its beds, before a search for sheep.
+  const village = villageVisit(facts, visits, memory);
+  if (village) return village;
   const key = `sheep:find:${inPack(facts, WOOL)}`;
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
   const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
@@ -93,8 +97,8 @@ function foodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMo
 }
 
 /** 「食料と羊とベッド」: the bed first; food while the bed waits on a search the planner must decide. */
-export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
-  const bed = bedMove(facts, memory);
+export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove {
+  const bed = bedMove(facts, memory, visits);
   if (bed?.kind === 'do') return bed;
   const food = foodMove(facts, memory);
   if (food?.kind === 'do' || !bed) return food ?? { kind: 'done' };

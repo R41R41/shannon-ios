@@ -763,6 +763,7 @@
     "surfaces/minecraft/minecraftOutcome.ts",
     "surfaces/minecraft/minecraftPaceLedger.ts",
     "surfaces/minecraft/minecraftProcedureFacts.ts",
+    "surfaces/minecraft/minecraftProcedureMap.ts",
     "surfaces/minecraft/minecraftProcedureMoves.ts",
     "surfaces/minecraft/minecraftProcedureTool.ts",
     "surfaces/minecraft/minecraftProcedureUpkeep.ts",
