@@ -3,15 +3,15 @@ import { placeReply, wantsNearbyPlaces, wantsPlaceDiscovery } from '../../integr
 import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '../../integrations/places/placeDiscoverySkill.js';
 import {
   OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, buildExpressiveEmotionPrompt, guardedShannonSeenPrompt, isOwnerOnly, projectEmotionReaction,
-  resolveShannonEmotionState, shannonIdentityPrompt, type CompanionClock, type CompanionStateStore, type MemoryAudience,
+  resolveShannonEmotionState, shannonIdentityPrompt, withStage5Capabilities, type CompanionClock, type CompanionStateStore, type MemoryAudience,
+  type ShannonStage5Capabilities,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
-import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
+import type { ConversationStore, KnowledgeStore, PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
-import { type KnowledgeStore } from '../../mind/memory/memoryPorts.js';
 import { companionIdentityPrompt, identityOnly } from '../../mind/memory/identityPrompt.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js'; // Her audio tags are the voice's: shown, stored, felt without.
@@ -25,7 +25,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind
 import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cognitiveCycle.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../mind/action/respond/conversationCapabilities.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
-import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
+import { markLiveTurn, type LiveBodyReader } from '../../mind/action/respond/apiTextTurn.js';
 import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import { commandOnce } from './voiceContinuation.js';
 import {
@@ -57,7 +57,6 @@ import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnToolResults, turnWroteHerOwnThings, weatherToolAvailable, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
-import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
@@ -99,7 +98,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities;
   /** Syzygy ADR-0008 stage 3: what the turn hands the mind (`voicePerception` copies `present`); absent, nothing is perceived. */
   mind?: MindTurnPorts;
-  fcaVoice?: () => FcaVoicePort | null; deviceId?: string;
+  fcaVoice?: () => FcaVoicePort | null; deviceId?: string; minecraftLive?: LiveBodyReader | null; // dc-live: her body in the game.
 }
 export interface LiveVoiceStreamObserver extends Pick<AckStream, 'flushSpoken'> {
   readonly signal?: AbortSignal;
@@ -139,8 +138,8 @@ export function dispatchLiveVoiceRequest(
   const chatModel = dependencies.chatModel.forTurn?.(scopeKey) ?? dependencies.chatModel;
   const timing = observer?.timing ?? new TurnTiming('voice', turnTimingId(deviceContext?.userUtterance?.id)); // A stream writes its own line.
   timing.note('trigger', deviceContext?.userUtterance?.trigger ?? ''); // What opened the microphone (`wake`): a closed code or nothing.
-  const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
-    reaction?.text ?? null, { ...dependencies, chatModel, deviceId: request.deviceId, looks: dependencies.looks?.of(request) }, observer, timing);
+  const complete=()=>markLiveTurn(dependencies.minecraftLive,()=>completeLiveVoiceDelegation(scopeKey,requestedThreadId,transcript,participantMode,
+    deviceContext, reaction?.text ?? null, {...dependencies,chatModel,deviceId:request.deviceId,looks:dependencies.looks?.of(request)}, observer, timing));
   return finishTurnTiming(withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
   () => dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete()), observer?.timing ? null : timing);
 }
@@ -337,6 +336,7 @@ async function completeLiveVoiceDelegation(
     temporaryGuest ? '' : alone ? dependencies.autonomy?.pursuitPrompt(scopeKey)
       : guardedShannonSeenPrompt(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '', focusGate.unlabelledMarker),
     taskPrompt, dependencies.reactions?.voiceTouchContext?.(scopeKey, occurredAt, reactionLine, alone && !temporaryGuest) ?? '', // Her body (2026-10-14).
+    dependencies.minecraftLive?.block({ alone: alone && !temporaryGuest }), // Her body in the game: his request only while he alone hears the reply.
     capabilityPrompt, innerNoteVoice.context(dependencies.innerNote, scopeKey, alone, temporaryGuest, occurredAt), // ADR-0012: her inner note.
     [
       '[Voice route]',

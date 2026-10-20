@@ -79,7 +79,9 @@ class Body implements VoiceMinecraftPort {
   async intent(input: VoiceMinecraftIntentInput) { this.calls.push(input); return this.outcome; }
 }
 
-function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }) {
+interface LiveReader { block(options: { alone: boolean }): string; replying?(on: boolean): void; heard?(): void }
+
+function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-voice-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -89,7 +91,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
   const model = new Model();
-  const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore });
+  const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore, ...(live ? { minecraftLive: live } : {}) });
   const bridge = new PlatformBridgeService(configuredPlatformBridge(BRIDGE)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_voice_turns');
   const body = new Body();
@@ -534,5 +536,42 @@ describe('/v1/platform/voice/*', () => {
     expect(on.voice?.speech).toBeNull();
     on.close?.();
     await h.close();
+  });
+});
+
+describe('her Minecraft body\'s present in a voice reply (dc-live, SHANNON_MINECRAFT_LIVE)', () => {
+  const reader = (marks: string[]): LiveReader => ({
+    block: ({ alone }) => `[マイクラの体の今]\n${alone ? 'エンドラを倒す作業の最中' : '頼まれた作業の最中'}`,
+    replying: on => { marks.push(on ? 'on' : 'off'); },
+    heard: () => { marks.push('heard'); },
+  });
+
+  it('is in the prompt of a channel turn with the request left out while others are there, and in the owner\'s own room with it', async () => {
+    const marks: string[] = [];
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' }, reader(marks));
+    await say('シャノン、いま何してる？', { participants: [OWNER, FRIEND] });
+    expect(promptOf(model.requests[0]!)).toContain('頼まれた作業の最中');
+    expect(promptOf(model.requests[0]!)).not.toContain('エンドラを倒す作業');
+    await say('いま何してるの？', { participants: [OWNER] });
+    expect(promptOf(model.requests[1]!)).toContain('エンドラを倒す作業の最中');
+    expect(marks).toEqual(['heard', 'on', 'off', 'heard', 'on', 'off']);
+    await close();
+  });
+
+  it('is in the app\'s live voice reply too, marked begun and ended', async () => {
+    const marks: string[] = [];
+    const { api, model, close } = harness({ SHANNON_DC_VOICE: 'on' }, reader(marks));
+    const result = await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: { scopeKey: 'owner', transcript: 'いまマイクラどうなってる？' } });
+    expect(result.status).toBe(200);
+    expect(promptOf(model.requests.at(-1)!)).toContain('エンドラを倒す作業の最中');
+    expect(marks).toEqual(['heard', 'on', 'off']);
+    await close();
+  });
+
+  it('adds nothing without the reader', async () => {
+    const { api, model, close } = harness();
+    await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: { scopeKey: 'owner', transcript: 'いまマイクラどうなってる？' } });
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('[マイクラの体の今]');
+    await close();
   });
 });

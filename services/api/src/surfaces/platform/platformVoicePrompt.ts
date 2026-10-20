@@ -63,7 +63,7 @@ export function heardBlock(lines: readonly HeardLine[]): string {
 export function situationBlock(situation: string | null, runningGoal: string | null): string {
   if (!situation && !runningGoal) return '';
   return [
-    '[マイクラの体のいま]',
+    '[マイクラの体の様子（ボイスチャンネルの側からの説明）]',
     ...(situation ? [situation] : []),
     ...(runningGoal ? [`${SHANNON_OWNER_NAME}に頼まれて、体はいま「${runningGoal}」をしている。`] : []),
     '- これは、いまの様子の説明。書かれていないことは分からないと言う。体を動かすのは別の仕組みで、この返事だけで終わったことにしない。',
