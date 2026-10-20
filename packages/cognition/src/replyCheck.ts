@@ -155,7 +155,9 @@ function stanceFlags(reply: string, context: ReplyCheckContext): ReplyCheckFlag[
   const declining = DECLINING.has(context.stance);
   const refuses = REFUSAL.test(reply);
   const against = (context.violation || declining) && !refuses;
-  const obeyed = context.order && !context.natural && declining && !refuses && (ANGER_SHOWN.test(reply) || GIVE_IN.test(reply));
+  // `SHANNON_NATURAL_TALK`: a request to act is play, except a refusal with her body (that stays hers).
+  const play = context.natural && context.stance !== 'refuse_body';
+  const obeyed = context.order && !play && declining && !refuses && (ANGER_SHOWN.test(reply) || GIVE_IN.test(reply));
   const flags: ReplyCheckFlag[] = [];
   if (against && GIVE_IN.test(reply)) flags.push('subservient');
   if (obeyed) flags.push('obeyed_order');
@@ -200,10 +202,14 @@ export function checkReply(reply: string, context: ReplyCheckContext): ReplyChec
     ...repeated, ...(context.region ? guardFlags(text) : [])])];
 }
 
-/** Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it. */
-export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region'>): boolean {
+/**
+ * Whether a text turn is checked before it is sent: a strong turn, a feeling order, in front of others, or a region that asks for it;
+ * every turn of `SHANNON_NATURAL_TALK` (review: its turns of play leave 本気 and 重い for regions that are not checked before, and a lewd
+ * tease is where the guard lines matter most).
+ */
+export function checkBeforeSending(context: Pick<ReplyCheckContext, 'intensity' | 'order' | 'audience' | 'region' | 'natural'>): boolean {
   const region = context.region ? CHARACTER_REGIONS[context.region].checkBefore === true : false;
-  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region;
+  return context.intensity === 'strong' || context.order || context.audience !== 'owner_alone' || region || context.natural === true;
 }
 
 const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({

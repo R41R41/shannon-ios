@@ -13,7 +13,7 @@ import { NATURAL_TALK_STYLE_INSTRUCTIONS, SHANNON_RESPONSE_STYLE_INSTRUCTIONS, p
 import { chatTurnInstructions } from '../src/infra/models/chatModelTurn.js';
 import { ChatReplyStreamDecoder } from '../src/infra/models/chatReplyStreamDecoder.js';
 import { replyBreaks } from '../src/infra/models/replyBreaks.js';
-import { SQLiteReplyDraftStore } from '../src/mind/emotion/store/replyDraftStore.js';
+import { SQLiteReplyDraftStore, WITHHELD_DRAFT } from '../src/mind/emotion/store/replyDraftStore.js';
 import { VoiceSegmentTags, displayedVoiceText, elevenVoiceText, withoutStrayEnglish } from '../src/infra/models/voiceAudioTags.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { fakeFeelingJev } from './support/feelingHarness.js';
@@ -84,6 +84,8 @@ describe('her talk with the owner alone (SHANNON_NATURAL_TALK)', () => {
     expect(block).toContain(NATURAL_SHORT_LINE);
     expect(route.naturalTalk).toBe(true);
     expect(checkContext(handle!)).toMatchObject({ natural: true });
+    // Every natural turn is checked before sending (review: its turns of play leave the regions that are).
+    expect(route.feelingCheck).toMatchObject({ natural: true, region: 'flustered' });
   });
 
   it('on: a request to act is play (the natural order line), and a request is not answered short', async () => {
@@ -94,6 +96,7 @@ describe('her talk with the owner alone (SHANNON_NATURAL_TALK)', () => {
     expect(request.block).not.toContain(NATURAL_SHORT_LINE);
     expect(casualWords('お風呂入ってる？')).toBe(true);
     expect(casualWords('マイクラの改善点を調べて')).toBe(false);
+    expect(casualWords('PythonでリストをsortするにはHow？')).toBe(false);
   });
 
   it('on: keeps Jev\'s own stance on her reply and tells Jev how long one stance has run', async () => {
@@ -117,6 +120,8 @@ describe('her talk with the owner alone (SHANNON_NATURAL_TALK)', () => {
     expect(fresh.block).toContain('事実: 今日の');
     const again = await say(port, 'それでさ', later(4));
     expect(again.block).not.toContain('事実: 今日の');
+    const words = await say(port, '満足した、具体的にはあの体調の話', later(30));
+    expect(words.block).not.toContain('事実: 今日の');
   });
 
   it('off: the touch facts are in every turn, as before', async () => {
@@ -178,6 +183,17 @@ describe('the reply model in a natural turn', () => {
     const kept = new FeelingReplyChatModel(second.inner, { ranTool: () => false, drafted: (scope, draft) => drafts.keep(scope, draft) });
     await kept.generate({ ...request(), feelingCheck: context({ stance: 'sulky', violation: true, natural: true }) });
     expect(drafts.recent('owner')).toMatchObject([{ turn: 't1', first: 'ボクは平気です、気にしてません。', second: 'むう。' }]);
+    drafts.keep('owner', { turn: 't2', flags: ['sexual'], first: 'ないしょ', second: 'むう。' });
+    expect(drafts.recent('owner')[0]).toMatchObject({ turn: 't2', first: WITHHELD_DRAFT, second: WITHHELD_DRAFT });
+  });
+
+  it('starts no rewrite when nothing is left of the turn', async () => {
+    const { inner, asked } = model(['ボクは平気です、気にしてません。', 'むう。']);
+    const tools = { deadline: { left: () => 1_000 } } as unknown as ShannonChatModelRequest['tools'];
+    const reply = new FeelingReplyChatModel(inner, { ranTool: () => false });
+    const result = await reply.generate({ ...request(), tools, feelingCheck: context({ stance: 'sulky', violation: true }) });
+    expect(result.reply).toBe('ボクは平気です、気にしてません。');
+    expect(asked).toHaveLength(1);
   });
 
   it('cuts the rewrite\'s wait to what is left of the turn', async () => {
@@ -212,13 +228,17 @@ describe('a line break written as 「\\」「n」', () => {
 describe('an English sentence in a Japanese spoken reply', () => {
   const english = 'Doesn\'t matter if it\'s a joke; I\'m not going to make a big deal of it right now.';
   it('is dropped where Japanese is around it; a reply all in English, a name and a tag stay', () => {
-    expect(withoutStrayEnglish(`ふーん。${english} べつにいいけど。`)).toBe('ふーん。 べつにいいけど。');
-    expect(displayedVoiceText(`ふーん、${english}`)).toBe('ふーん、');
-    expect(elevenVoiceText(`[whispers] ねえ。${english}`)).toBe('[whispers] ねえ。');
+    const said = 'もう、いきなりそういうこと言うの、やめてください。びっくりするじゃないですか。';
+    expect(withoutStrayEnglish(`ふーん。${english} ${said}`)).toBe(`ふーん。 ${said}`);
+    expect(displayedVoiceText(`${said}${english}`)).toBe(said);
+    expect(elevenVoiceText(`[whispers] ${said}${english}`)).toBe(`[whispers] ${said}`);
     expect(withoutStrayEnglish(english)).toBe(english);
     expect(withoutStrayEnglish('Shannon Live Voice Stream の話です')).toBe('Shannon Live Voice Stream の話です');
+    expect(withoutStrayEnglish('英語だと、I really love you so much. だよ')).toBe('英語だと、I really love you so much. だよ');
+    expect(withoutStrayEnglish('この曲、『Hello, is it me you are looking for』って知ってる？')).toBe('この曲、『Hello, is it me you are looking for』って知ってる？');
+    expect(withoutStrayEnglish('Sakura (桜) is the flower that I like the most.')).toBe('Sakura (桜) is the flower that I like the most.');
     const tags = new VoiceSegmentTags();
-    expect(tags.take('うん。')).toEqual({ text: 'うん。' });
+    expect(tags.take(said)).toEqual({ text: said });
     expect(tags.take(english)).toBeNull();
   });
 });

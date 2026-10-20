@@ -92,14 +92,26 @@ const LATIN_RUN = /[A-Za-z][A-Za-z0-9 ,;:'’-]*[A-Za-z0-9][.!?]?/gu;
 /** Words a sentence has and a name or a product hardly does. */
 const SENTENCE_WORD = /\b(?:the|an?|is|are|was|it|it's|i|i'm|not|to|of|and|you|if|that|this|do|don't|doesn't|be|going|just)\b/iu;
 
+/** A reply that speaks of English (he asked for it): its English stays. */
+const ENGLISH_ASKED = /英語|英文|English/iu;
+/** A quoted or bracketed span (a title, a song, his words): never dropped. */
+const QUOTED = /(「[^」]*」|『[^』]*』|“[^”]*”|"[^"]*"|（[^）]*）|\([^)]*\))/u;
+
+/** How much of a text is Japanese and how much Latin letters (a reply mostly in Japanese is one with an English sentence in it). */
+export function scriptCounts(text: string): { japanese: number; latin: number } {
+  return { japanese: (text.match(new RegExp(JAPANESE.source, 'gu')) ?? []).length, latin: (text.match(/[A-Za-z]/gu) ?? []).length };
+}
+
 /**
  * An English sentence in a Japanese spoken reply is not hers (owner 2026-10-20 08:03: 「Doesn't matter if it's a joke; I'm not going to make a
  * big deal of it right now.」 said and shown in the middle of a Japanese reply; the spoken-delivery lines are English): a run of five
- * Latin words or more with a word only a sentence has is dropped, where Japanese is around it. A reply all in English stays.
+ * Latin words or more with a word only a sentence has is dropped, outside quotes and brackets, where the reply (`around`, the text by
+ * default) is mostly Japanese (a Japanese character for every four Latin letters or more) and does not speak of English (he asked for it).
  */
-export function withoutStrayEnglish(text: string, japanese = JAPANESE.test(text)): string {
-  if (!japanese || !/[A-Za-z]/u.test(text)) return text;
-  const kept = text.replace(LATIN_RUN, run => (run.trim().split(/\s+/u).length >= 5 && SENTENCE_WORD.test(run) ? '' : run));
+export function withoutStrayEnglish(text: string, around: { japanese: number; latin: number } = scriptCounts(text)): string {
+  if (!around.japanese || around.japanese * 4 < around.latin || ENGLISH_ASKED.test(text) || !/[A-Za-z]/u.test(text)) return text;
+  const kept = text.split(QUOTED).map(part => (QUOTED.test(part) ? part
+    : part.replace(LATIN_RUN, run => (run.trim().split(/\s+/u).length >= 5 && SENTENCE_WORD.test(run) ? '' : run)))).join('');
   return kept === text ? text : kept.replace(/[ \t]{2,}/gu, ' ').trim();
 }
 
@@ -167,12 +179,14 @@ export function geminiVoiceRequest(text: string, style: string | undefined): { t
  */
 export class VoiceSegmentTags {
   private held = '';
-  /** Japanese came in this reply (an English sentence after it is dropped). */
-  private japanese = false;
+  /** The reply so far, as Japanese characters and Latin letters (a segment is judged with the reply around it). */
+  private readonly seen = { japanese: 0, latin: 0 };
 
   take(said: string): { text: string; voiceText?: string } | null {
-    this.japanese ||= JAPANESE.test(said);
-    const segment = withoutStrayEnglish(said, this.japanese);
+    const counts = scriptCounts(said);
+    this.seen.japanese += counts.japanese;
+    this.seen.latin += counts.latin;
+    const segment = withoutStrayEnglish(said, this.seen);
     const text = displayedVoiceText(segment);
     const voice = `${this.held}${segment}`;
     if (!text) {

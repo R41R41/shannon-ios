@@ -265,7 +265,7 @@ export const feelingText = Object.freeze({
     if (!handle) return '';
     const sentence = handle.sentence ? feelingSentenceWithin(handle.sentence) : null;
     const chosen = handle.pending ? await feelingTurnWithin(handle.pending, handle.register) : null;
-    if (chosen && naturalOf(handle)) handle.jevStance = chosen.stance;
+    if (chosen?.source === 'jev' && naturalOf(handle)) handle.jevStance = chosen.stance;
     handle.decision = safely(() => spaceDecision(handle, chosen), chosen);
     const lines = sentence ? await sentence : null;
     const decided = handle.port.textRegister ? handle.decision : null;

@@ -118,8 +118,9 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const { tools: _tools, ...words } = request;
     const note = { ...words, turnContext: [request.turnContext ?? '', rewriteNote(rewriting, context.natural === true)].filter(Boolean).join('\n\n') };
     // Review L-b: the rewrite is the same model's, but outside the strong turn's release, so a failed rewrite never frees the cap twice.
-    const rewrite = request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
-    const second = await within(rewrite, this.deadlineFor(request));
+    // No time left in the turn: no rewrite is started at all (it would be paid for and dropped).
+    const deadline = this.deadlineFor(request);
+    const second = deadline > 0 ? await within(this.rewrite(request, note), deadline) : null;
     this.keepDraft(request.scopeKey, context, { flags, first: first.reply, second });
     if (!second || second.outOfTime) {
       this.options.log?.('Shannon reply check: the rewrite was late or failed; the first draft goes out unless it told a private matter or crossed a line');
@@ -142,6 +143,11 @@ export class FeelingReplyChatModel implements ShannonChatModel {
     const wait = request.feelingStrong && this.strong && request.feelingCheck?.region ? STRONG_REWRITE_DEADLINE_MILLISECONDS : REWRITE_DEADLINE_MILLISECONDS;
     const left = turnLeft(request);
     return left === null ? wait : Math.max(0, Math.min(wait, left - REWRITE_TURN_MARGIN_MILLISECONDS));
+  }
+
+  /** The rewrite: the same model as the draft's. */
+  private rewrite(request: Marked, note: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    return request.feelingStrong && this.strong ? this.strong.generate(asSonnet(note)) : this.inner.generate(plain(note));
   }
 
   /** A rewritten draft of a natural turn, kept for diagnosis (never fails the turn). */

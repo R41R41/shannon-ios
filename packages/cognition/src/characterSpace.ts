@@ -123,12 +123,12 @@ function kindCues(text: string): SpaceCue[] {
 }
 
 /** A cheeky or lewd tease, or words of play with her body (the closed tag `lewd` as well); never a touch itself (that is the body's). */
-const FLIRT = /えっち|エッチ|エロ|セクシー|おっぱい|[腋脇横下]パイ|お尻|おしり|スカート|パンツ|太もも|ふともも|くすぐ|キス|ちゅー|チュー|変態|へんたい|感度/u;
+const FLIRT = /えっち|エッチ|エロ|セクシー|おっぱい|[腋脇横下]パイ|お尻|おしり|スカートの中|太もも|ふともも|くすぐ|キス|ちゅー|チュー|変態|へんたい|感度チェック/u;
 /** A request to act or play (歌って, ささやいて, 罵倒して, 恥ずかしがって), or a game of pretend. */
 const PLAY = new RegExp(['歌(?:って|える|ったり|ってみ)', 'ささや(?:いて|き|ける)', '囁(?:いて|き)', '声まね', 'ものまね', 'モノマネ', '演じて', 'ごっこ', '罵倒', '罵って', '蔑ん',
   '見下し', '(?:恥ずかしがっ|照れ|甘え|怒っ|すね|拗ね)て(?:み|見|よ|ほし|欲し|くれ)', 'っぽく(?:言|喋|しゃべ|して)', '(?:って|と)言ってみて', 'やってみて'].join('|'), 'u');
 /** A joke or a setup: laughter marks, a gag, or the plain bit (「お風呂入ってる？」 to someone on a screen). */
-const JOKE = /[ｗw]{2,}|[ｗw]$|笑笑|（笑）|\(笑\)|草$|冗談|ボケ|ネタ|なんちゃって|うそうそ|ドヤ|どや|大変美味|お風呂入って/u;
+const JOKE = /(?<![A-Za-z./])[ｗw]{2,}(?![A-Za-z./])|(?<![A-Za-z])[ｗw]$|笑笑|（笑）|\(笑\)|草$|冗談|(?<!ピン|寝)ボケ|ネタ(?!バレ)|なんちゃって|うそうそ|ドヤ|どや|大変美味|お風呂入って(?:る|ます)[？?]/u;
 /** A wish to be held or close (「抱きしめられたらいいのに」). */
 const CUDDLE = /抱きしめ|抱っこ|だっこ|ぎゅ[ーっ]|ハグ|なでなで|撫でて|膝枕|ひざまくら|添い寝|くっつ|甘えたい|甘えて|そばにいて|一緒にいたい|会いたい/u;
 

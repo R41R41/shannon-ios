@@ -17,7 +17,8 @@ export const naturalOf = (handle: Pick<FeelingTurnHandle, 'lines'> | null): bool
 
 /** Words of a request or of work: not talk (「小説とか作ってほしい」 is a request; 「お風呂入ってる？」 is talk). */
 const REQUEST = new RegExp(['調べ', '検索', '作って', '作れる', '書いて', '直して', '実装', '修正', 'まとめて', '教えて', '説明して', '翻訳', '計算', '予定', '天気', 'リマインド',
-  'タイマー', '設定して', '送って', '開いて', '探して', '比べて', 'レビュー', 'コード', '小説', 'ブランチ', 'デプロイ', 'お願い(?:できる|します)'].join('|'), 'u');
+  'タイマー', '設定して', '送って', '開いて', '探して', '比べて', 'レビュー', 'コード', '小説', 'ブランチ', 'デプロイ', 'お願い(?:できる|します)', 'どうやって', 'どうすれば',
+  '方法', 'やり方', 'って何', 'とは[？?]', '[A-Za-z]{3,}'].join('|'), 'u');
 
 /** His words are talk (short, and no request in them): she answers short. */
 export function casualWords(words: string): boolean {
@@ -26,11 +27,21 @@ export function casualWords(words: string): boolean {
 }
 
 /** His words are about her body or touching her, or an apology (the ledger says whether he apologised). */
-const BODY = /触|さわ|なで|撫で|つつ|くすぐ|体|身体|胸|髪|脚|足|腋|脇|お尻|スカート|ほっぺ|頬|手を|ぎゅ|抱|嫌がっ|ごめん|謝/u;
+const BODY = new RegExp(['触(?:ら|っ|り|る|れ)', 'さわ(?:ら|っ|り|る|れ)', '撫で', 'なで(?:て|た|る|なで)', 'つつ(?:い|か|く|け)', 'くすぐ',
+  '(?<![全具団主大物一立個液気媒天固正])(?:身体|体)(?![調験育力制系重温型格操裁])', '胸(?![中騒焼])', '髪(?:の毛|を|に|が|は)', '脚(?![本色注])', '足(?:を|に|が|の裏)',
+  '腋', '脇(?:を|に|の下|腹)', 'お尻', 'スカート', 'ほっぺ', '頬', 'ぎゅ[ーっ]', '抱き', '嫌がっ', 'ごめん', '謝'].join('|'), 'u');
 
 /** The day's touch facts for this turn: as they were without the switch; with it, only when they matter (see above). */
 export function naturalLedgerLine(handle: FeelingTurnHandle, line: string): string {
   if (!line || !naturalOf(handle)) return line;
+  try {
+    return freshLedgerLine(handle, line);
+  } catch {
+    return line; // a read that fails keeps the facts, as without the switch
+  }
+}
+
+function freshLedgerLine(handle: FeelingTurnHandle, line: string): string {
   if (BODY.test(handle.words ?? '')) return line;
   const day = handle.port.events.today(handle.scopeKey, handle.at, handle.snapshot)
     .filter(event => event.personKey === handle.key.personKey && event.audience === handle.key.audience);

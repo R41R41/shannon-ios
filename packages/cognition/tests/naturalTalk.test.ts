@@ -14,6 +14,10 @@ describe('her natural talk (pure parts)', () => {
     expect(cuesOfWords('シャノン、ちゃんとお風呂入ってる？', { natural: true })).toContain('joke');
     expect(cuesOfWords('抱きしめられたらいいのに', { natural: true })).toContain('cuddle');
     expect(cuesOfWords('アップルパイ食べた', { natural: true })).not.toContain('flirt');
+    expect(cuesOfWords('カメラの感度を上げた', { natural: true })).not.toContain('flirt');
+    expect(cuesOfWords('いまからお風呂入ってくる', { natural: true })).not.toContain('joke');
+    expect(cuesOfWords('ネタバレしないで、これ見て now', { natural: true })).not.toContain('joke');
+    expect(cuesOfWords('いまのはボケだよｗ', { natural: true })).toContain('joke');
     expect(cuesOfWords('相談があるんだけど、歌って気分転換したい', { natural: true })).not.toContain('play');
   });
 
@@ -55,6 +59,7 @@ describe('her natural talk (pure parts)', () => {
     const context: ReplyCheckContext = { stance: 'not_play_along', intensity: 'moderate', audience: 'owner_alone', order: true, violation: false };
     expect(checkReply('わかりました、怒ってますよ！', context)).toContain('obeyed_order');
     expect(checkReply('わかりました、怒ってますよ！', { ...context, natural: true })).not.toContain('obeyed_order');
+    expect(checkReply('わかりました、どうぞ', { ...context, stance: 'refuse_body', natural: true })).toContain('obeyed_order');
     const sweet = { ...context, stance: 'sulky' as const, order: false };
     const flags = checkReply('えへへ、うれしい', sweet);
     expect(flags).toContain('stance_mismatch');
