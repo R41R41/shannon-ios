@@ -3,7 +3,10 @@ import { BUCKET_ITEM } from './minecraftStage.js';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { block, carried, cellKey, cellsInText, inPack, largest, nearestNeed, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, COBBLE, craft, digLogs, doing, LOGS, PLANKS, planksFor, sticksFor, stuck, type McMove } from './minecraftProcedureMoves.js';
-import { caveDescent, smithChest } from './minecraftProcedureMap.js';
+import { caveDescent, smithChest, towardRoute } from './minecraftProcedureMap.js';
+import type { RouteLeg } from './minecraftRoutePlanner.js';
+import { dropJunk, guardOutward, healFirst, noteSurface, pickaxeReserve } from './minecraftProcedureCare.js';
+import { waterOnTheSurface } from './minecraftProcedureWater.js';
 
 /**
  * The iron age as one procedure (session mb-arch; 「鉄」「バケツ」「鉄の全身の防具」): the iron still needed dug at once (run 19 dug about
@@ -18,6 +21,12 @@ export interface ProcedureTaskStore {
   portal?: Cell;
   /** The map's places gone to in this task (`minecraftProcedureMap.ts`): a cave's bottom, a chest, a portal, a village. */
   visited: Set<string>;
+  /** Where the task began (the first place a frame gave): the sheep search keeps within reach of it (`minecraftProceduresEarly.ts`). */
+  origin?: Cell;
+  /** The surface a descent began at (mb-r20): the stair she dug is the way back up for water or a portal. */
+  surface?: Cell;
+  /** Stops for low health with an enemy near that the task has made (`minecraftProcedureCare.ts`). */
+  careStops?: number;
 }
 
 const IRON_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe$/u;
@@ -25,6 +34,8 @@ const piece = (name: string) => new RegExp(`^(?:chainmail|iron|diamond|netherite
 interface Planned { item: string; iron: number; have(facts: MinecraftProcedureFacts): boolean; sticks?: boolean }
 export const IRON_PLAN: readonly Planned[] = Object.freeze([
   { item: 'iron_pickaxe', iron: 3, sticks: true, have: facts => carried(facts, IRON_PICKAXE) >= 1 },
+  // mb-r20: run 20's first half hour ended with a stone axe against two zombies; the sword (two ingots) comes before the bucket.
+  { item: 'iron_sword', iron: 2, sticks: true, have: facts => carried(facts, /^(?:iron|diamond|netherite)_sword$/u) >= 1 },
   { item: 'bucket', iron: 3, have: facts => carried(facts, BUCKET_ITEM) >= 1 },
   { item: 'iron_chestplate', iron: 8, have: facts => carried(facts, piece('chestplate')) >= 1 },
   { item: 'iron_leggings', iron: 7, have: facts => carried(facts, piece('leggings')) >= 1 },
@@ -48,8 +59,12 @@ export const ironHeld = (facts: MinecraftProcedureFacts) => carried(facts, IRON_
 const distance = (facts: MinecraftProcedureFacts, cell: Cell) =>
   facts.at ? Math.hypot(cell.x - facts.at.x, cell.y - facts.at.y, cell.z - facts.at.z) : Infinity;
 
-/** The next piece made when its ingots are there (sticks first for a pickaxe; planks for a table after the body had none). */
-function makePiece(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
+/**
+ * The next piece made when its ingots are there (sticks first for a pickaxe; planks for a table after the body had none). Exported for
+ * the steps before the iron: the pieces whose ingots are in hand are made before more wood is dug or a sheep is hunted (run 20: seven
+ * ingots in hand at 516 s, the pickaxe at 665 s, after a step of wood, a bed's night and a hunt for beef).
+ */
+export function makePiece(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
   const next = IRON_PLAN.find(planned => !planned.have(facts));
   if (!next || carried(facts, INGOT) < next.iron) return null;
   const key = `craft:${next.item}:${carried(facts, IRON_PICKAXE)}`;
@@ -121,16 +136,23 @@ function smelt(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, memory
 }
 
 /** The iron still needed dug at once (12 a call at most); deeper when none is in reach. */
-function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
+function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, leg?: RouteLeg): McMove | null {
   const short = ironWanted(facts) - ironHeld(facts);
   if (short <= 0) return null;
   const y = facts.at ? Math.floor(facts.at.y) : 64;
   const band = Math.floor(y / 16);
   const key = `iron:${ironHeld(facts)}:${band}`;
+  // Before the dig: the pack cleared of rock, a pickaxe that is about to break replaced, health made up (`minecraftProcedureCare.ts`).
+  const ready = dropJunk(facts, memory) ?? pickaxeReserve(facts) ?? healFirst(facts, memory);
+  if (ready) return ready;
+  noteSurface(facts, store);
   if (memory.lastFailure(key) !== 'target_not_found') {
     return doing({ tool: 'mc.mine-block', input: { blockName: 'iron_ore', count: Math.min(short, 12), searchRadius: 48 }, why: 'まだ要る鉄を掘る',
       expectMs: 60_000, key });
   }
+  // None within 48 m: the place the route named for the iron, before a stair dug down where she happens to stand.
+  const named = towardRoute(facts, store, memory, leg, 'ルートが示した鉄の場所へ行く');
+  if (named) return named;
   if (y <= 16) return stuck('48m 以内に鉄鉱石が見えない（Y16 まで降りた）');
   return doing({ tool: 'mc.stair-mine', input: { targetY: Math.max(16, y - 24) }, why: '鉄のある深さへ降りる', expectMs: 60_000, key: `iron:down:${band}` });
 }
@@ -156,8 +178,10 @@ function waitFurnace(facts: MinecraftProcedureFacts): McMove | null {
 }
 
 /** 「鉄」「バケツ」「鉄の全身の防具」: make, take out, smelt, dig, and only then wait. */
-export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
+export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, leg?: RouteLeg): McMove {
   for (const job of facts.jobs) if (!store.furnaces.some(cell => cellKey(cell) === cellKey(block(job.position)))) store.furnaces.push(block(job.position));
-  return makePiece(facts, memory) ?? takeOut(facts) ?? smelt(facts, store, memory) ?? fromTheMap(facts, store, memory) ?? digIron(facts, memory)
-    ?? waitFurnace(facts) ?? stuck('鉄の手順で次にできる手が無い');
+  const guard = (move: McMove | null) => move ? guardOutward(facts, store, move) : null;
+  // The bucket filled the moment it is made, while she is still on the surface (mb-r20): water down below cost run 20 325 s and the Nether.
+  return makePiece(facts, memory) ?? guard(takeOut(facts)) ?? smelt(facts, store, memory) ?? waterOnTheSurface(facts, memory)
+    ?? guard(fromTheMap(facts, store, memory)) ?? guard(digIron(facts, memory, store, leg)) ?? waitFurnace(facts) ?? stuck('鉄の手順で次にできる手が無い');
 }

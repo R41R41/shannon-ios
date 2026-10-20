@@ -3,7 +3,7 @@ import { BED_ITEM, EDIBLE_FOOD } from './minecraftItems.js';
 import { fed } from './minecraftStage.js';
 import { takeNeed } from './minecraftFillers.js';
 import { villageVisit, type MapVisits } from './minecraftProcedureMap.js';
-import { carried, inPack, nearestNeed, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
+import { carried, inPack, nearestNeed, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, craft, digLogs, doing, fromFirstCell, planksFor, plankWorth, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
 
 /**
@@ -47,28 +47,53 @@ function woolColor(facts: MinecraftProcedureFacts): string | null {
   return null;
 }
 
-/** Sheep searched for when none is in reach: the nearest within 128 m, walked to, three of them taken. */
-function sheepSearch(memory: ProcedureMemory, key: string): McMove {
+/**
+ * How far from where the task began a sheep may be walked to (mb-r20). Run 20's hunt took three walks of 117, 91 and 107 m after one
+ * another and ended 400 m south of where it began, past the cave, the iron and the obsidian the route had named near the start; a
+ * search beyond this goes back to the planner, who can take the iron first and spend the night in a shelter.
+ */
+export const SHEEP_REACH = 160;
+
+/** Sheep searched for when none is in reach: the nearest within 128 m, walked to, three of them taken; not past `SHEEP_REACH` of the start. */
+function sheepSearch(memory: ProcedureMemory, key: string, origin: Cell | undefined): McMove {
   const attack = { tool: 'mc.attack-continuously', input: { entityName: 'sheep', maxKills: 3, maxDistance: 32 }, why: '羊毛を取る', expectMs: 30_000,
     key: `${key}:hunt` };
-  const walk = fromFirstCell(memory, 'sheep:none', cell => ({ tool: 'mc.move-to', input: { ...cell, range: 6 }, why: '羊のところへ行く',
-    expectMs: 30_000, key: `${key}:walk`, then: () => attack, chain: 2 }));
+  const walk = fromFirstCell(memory, 'sheep:none', cell => {
+    if (origin && Math.hypot(cell.x - origin.x, cell.z - origin.z) > SHEEP_REACH) {
+      memory.notes.set('sheep:far', true);
+      return null;
+    }
+    return { tool: 'mc.move-to', input: { ...cell, range: 6 }, why: '羊のところへ行く', expectMs: 30_000, key: `${key}:walk`, then: () => attack, chain: 2 };
+  });
   return doing({ tool: 'mc.find-nearest-entity', input: { entityType: 'sheep', maxDistance: 128 }, why: '羊を探す', expectMs: 2_000,
     key, then: walk, chain: 3 });
 }
 
+/**
+ * The sheep in reach to hunt for the bed: of the colours she already holds, the one with the most wool (a bed needs three of a colour:
+ * run 20 held white 2, black 2 and light gray 1 and walked on for a white one, 80 s for nothing); else the nearest. Its colour, how
+ * many she holds of it, and the sheep.
+ */
+function sheepToHunt(facts: MinecraftProcedureFacts) {
+  const sheep = facts.needs.filter(need => need.need === 'bed_wool' && need.canReach && (need.distance ?? Infinity) <= 48)
+    .map(need => {
+      const colour = typeof need.data.color === 'string' ? need.data.color : null;
+      return { need, colour, have: colour ? inPack(facts, new RegExp(`^${colour}_wool$`, 'u')) : 0 };
+    });
+  return sheep.sort((a, b) => b.have - a.have || (a.need.distance ?? Infinity) - (b.need.distance ?? Infinity))[0] ?? null;
+}
+
 /** The bed: a standing one taken, else one made from wool carried, else sheep in reach, else sheep searched for; null when she has one. */
-function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove | null {
+function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, origin?: Cell): McMove | null {
   if (carried(facts, BED_ITEM) || facts.milestone.bedPlaced) return null;
   const standing = nearestNeed(facts, 'bed', 96);
   const take = standing ? takeNeed(standing) : null;
   if (take) return doing(take);
   const color = woolColor(facts);
   if (color) return planksFor(facts, 3) ?? craft(`${color}_bed`, 'ベッドを作る');
-  const sheep = nearestNeed(facts, 'bed_wool', 48);
+  const sheep = sheepToHunt(facts);
   if (sheep) {
-    const colour = typeof sheep.data.color === 'string' ? sheep.data.color : null;
-    const have = colour ? inPack(facts, new RegExp(`^${colour}_wool$`, 'u')) : 0;
+    const { colour, have } = sheep;
     return doing({ tool: 'mc.attack-continuously', input: { entityName: 'sheep', maxKills: Math.max(1, 3 - have), maxDistance: 48,
       ...(colour ? { color: colour } : {}) }, why: 'ベッドの羊毛を取る', expectMs: 30_000, key: `wool:${colour ?? 'any'}:${have}` });
   }
@@ -76,9 +101,10 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits
   const village = villageVisit(facts, visits, memory);
   if (village) return village;
   const key = `sheep:find:${inPack(facts, WOOL)}`;
+  if (memory.notes.has('sheep:far')) return stuck(`羊が出発点から${SHEEP_REACH}m の外にしか見えない（先へ流れない）。鉄を先にして、夜は囲いで過ごす手がある`);
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
   const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
-  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key);
+  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, origin);
 }
 
 /** Food enough to go on (`fed`): an animal in reach, else any food animal near; null when fed. */
@@ -97,8 +123,8 @@ function foodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMo
 }
 
 /** 「食料と羊とベッド」: the bed first; food while the bed waits on a search the planner must decide. */
-export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits): McMove {
-  const bed = bedMove(facts, memory, visits);
+export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, origin?: Cell): McMove {
+  const bed = bedMove(facts, memory, visits, origin);
   if (bed?.kind === 'do') return bed;
   const food = foodMove(facts, memory);
   if (food?.kind === 'do' || !bed) return food ?? { kind: 'done' };

@@ -42,9 +42,16 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
       if (queued?.state === 'queued') await parts.actions.stop(draft.scopeKey, queued.id, `lifecycle-withdrawn:${queued.id}`).catch(() => []);
       return null;
     },
-    /** Takes the body under the operation's own lease, once; when another holds it the action closes as never started. */
-    async takeBody(active: RunningAction): Promise<boolean> {
+    /**
+     * Takes the body under the operation's own lease, once; when another holds it the action closes as never started. `onlyLostSteps`
+     * (the operator's start, login, logout and stop, `operatorLifecycleWiring.ts`): when it says the only holders are steps whose
+     * outcome was lost and the body is not in the server, the operation goes on without the body resource. Nothing is moving then,
+     * and the operation is what brings the body back for the re-check that frees it (run 20: twice a lost step kept the body, the
+     * body could not come back for the re-check, and every start, login and logout was refused with `lease_conflict`).
+     */
+    async takeBody(active: RunningAction, onlyLostSteps?: () => boolean): Promise<boolean> {
       if (await parts.actions.dispatch(active.execution.lease, [body]).catch(() => false)) return true;
+      if (onlyLostSteps?.()) return true;
       await active.finish('cancelled', 'lifecycle_body_unavailable').catch(() => {});
       return false;
     },

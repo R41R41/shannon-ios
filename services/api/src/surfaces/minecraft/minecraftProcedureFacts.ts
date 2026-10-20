@@ -31,6 +31,12 @@ export interface MinecraftProcedureFacts {
   milestone: MilestoneFacts;
   /** The body's map of the world it has seen (`world.mapSummary`, mb-body): a line a kind, each place `<m>m <方角> (x,y,z)`. */
   map: string;
+  /** The tools of the pack that say how much they have left (`{name, count, durability: {left, max}}`, mb-r20: a stone pickaxe broke in the iron dig). */
+  tools: Array<{ name: string; left: number; max: number }>;
+  /** How many of the four armour slots hold something (`world.worn`: `頭: iron_helmet(残り…)、胴: なし、…`). */
+  armorPieces: number;
+  /** The slots of the pack in use (one a stack), or null when the body lists the pack as counts only. */
+  stacks: number | null;
   observation: BodyObservation | null;
 }
 
@@ -69,6 +75,22 @@ function smeltingOf(world: Record<string, unknown>): Map<string, number> {
   return out;
 }
 
+/** The pack's tools that report their wear: the most that is left of each name is not summed, each stack is one entry. */
+function toolsOf(world: Record<string, unknown>): MinecraftProcedureFacts['tools'] {
+  return (Array.isArray(world.inventory) ? world.inventory.slice(0, 64) : []).flatMap(item => {
+    const stack = record(item), durability = record(stack?.durability);
+    const left = number(durability?.left), max = number(durability?.max);
+    const name = typeof stack?.name === 'string' ? stack.name.replace(/^minecraft:/u, '') : '';
+    return stack && NAME.test(name) && left !== null && max !== null && max > 0 ? [{ name, left, max }] : [];
+  });
+}
+
+/** The armour slots filled, from the body's one line of what she wears (`頭`, `胴`, `脚`, `足`). */
+function armorPiecesOf(worn: unknown): number {
+  if (typeof worn !== 'string') return 0;
+  return [...worn.slice(0, 400).matchAll(/(?:頭|胴|脚|足):\s*([a-z][a-z0-9_]*)/gu)].length;
+}
+
 /** The facts of a frame; `netherReached` from the pace when known (a way back to the overworld leaves no item of it). */
 export function minecraftProcedureFacts(observation: BodyObservation | null, netherReached = false): MinecraftProcedureFacts {
   const world = record(observation ? (observation.state as { world?: unknown }).world : null) ?? {};
@@ -85,6 +107,7 @@ export function minecraftProcedureFacts(observation: BodyObservation | null, net
     threats: threatsOf(world),
     milestone: { counts, dimension, netherReached: reached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' },
     map: typeof world.mapSummary === 'string' ? world.mapSummary.slice(0, 3_000) : '',
+    tools: toolsOf(world), armorPieces: armorPiecesOf(world.worn), stacks: Array.isArray(world.inventory) ? world.inventory.length : null,
     observation,
   };
 }

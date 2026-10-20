@@ -4,6 +4,7 @@ import { adoptionTags, adoptionTools, fed, milestoneLines, milestoneNow, minecra
 export { milestoneFollowMemory } from './minecraftMilestoneFollow.js';
 export { createRoutePlanning } from './minecraftRoutePlanner.js';
 import { bedLead } from './minecraftBedLead.js';
+import { dropsAdvice, dropsList, dropsReminder } from './minecraftDropsAdvice.js';
 
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
@@ -46,6 +47,8 @@ export interface MinecraftSituation {
   furnaceDue?: string | null;
   /** What she dropped at her latest death and can still pick up (`recoverableDrops`), the first few as `name×n`, or null. */
   dropsLeft?: string | null;
+  /** How far the death place is and what the drops are worth beside the walk (`dropsAdvice`, mb-r20), or null. */
+  dropsWorth?: string | null;
   /** One more hit of a threat near takes her down (`world.margin.hitsLeft` at most 1): who hits that hard, or null. */
   oneHitFrom?: string | null;
   /** Food enough for iron (`fed`, `minecraftStage.ts`). */
@@ -239,7 +242,8 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
     ...dark,
     threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
     ...stepNow(observation, world, items, dimension, pace.milestones?.netherReached === true, pace.elapsedSeconds),
-    oneHitFrom: threatNear ? oneHitFrom(world.margin) : null, dropsLeft: dropsLine(world),
+    oneHitFrom: threatNear ? oneHitFrom(world.margin) : null,
+    dropsLeft: dropsList(recoverableDrops(world)), dropsWorth: dropsAdvice(world, recoverableDrops(world)),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
     stalled: pace.failedStepsInARow >= STALLED_STEPS, idleWaiting: (pace.recentIdleWaits ?? 0) >= RECENT_IDLE_WAITS,
     inNether: nether, inEnd: dimension === 'the_end', elapsedSeconds: pace.elapsedSeconds ?? null,
@@ -290,16 +294,12 @@ function laterPath(items: ItemCounts, dimension: string, stage: MinecraftStage |
  * job left uncollected.
  */
 function reminders(situation: MinecraftSituation): { reminders?: string[] } {
-  const lines = [...(situation.dropsLeft ? [`死んだ所に落とし物が残っている（${situation.dropsLeft}）。消える前に拾いに戻る（recall-places の死亡地点、pickup-nearest-item）`] : []),
+  const lines = [...(situation.dropsLeft ? [dropsReminder(situation.dropsLeft, situation.dropsWorth ?? null)] : []),
     // By day with no threat near: the bed or the village to go to before the sheep (run 19).
     ...(situation.calm && situation.bedLead ? [situation.bedLead] : []),
     ...(situation.oneHitFrom ? [`あと1撃で倒れる（${situation.oneHitFrom}）。開けた所で待たない: 離れる（flee-from）・3段上る（tower-up）・囲う（build-around-self）のどれか`] : []),
     ...(situation.furnaceDue ? [`かまどの${situation.furnaceDue}は焼き上がりの時刻を過ぎた。離れる前に withdraw-from-furnace で取り出す`] : [])];
   return lines.length ? { reminders: lines } : {};
-}
-function dropsLine(world: Record<string, unknown>): string | null {
-  const drops = recoverableDrops(world);
-  return drops ? [...drops].slice(0, 4).map(([name, count]) => `${name}×${count}`).join('・') : null;
 }
 /** Who takes her down with one more hit (`margin.hitsLeft`: `{from, hits}`), or null. */
 export function oneHitFrom(margin: unknown): string | null {

@@ -5,7 +5,7 @@ import type { ToolResult } from '../../mind/tools/shannonTools.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { milestoneNow } from './minecraftStage.js';
-import { keptRoute } from './minecraftRoutePlanner.js';
+import { keptRoute, liveRoute } from './minecraftRoutePlanner.js';
 import { bodyFailureOf } from './minecraftOutcome.js';
 import { minecraftProcedureFacts, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain } from './minecraftProcedures.js';
@@ -72,8 +72,9 @@ export function cutProcedureItem(taskId: string): boolean {
 export function minecraftProcedureStepParts(runtime: Pick<TaskRuntime, 'pendingMessageIds'>, step: TaskStep)
   : { pending(): boolean; taskStartedAt?: number; targetSeconds(milestone: string): number | undefined } {
   const started = Date.parse(step.snapshot.task.createdAt);
-  const route = keptRoute((step.snapshot.checkpoint as Record<string, unknown> | null | undefined)?.minecraftRoute);
-  const targetSeconds = (milestone: string) => route?.legs.find(leg => leg.milestone === milestone)?.targetSeconds;
+  const kept = keptRoute((step.snapshot.checkpoint as Record<string, unknown> | null | undefined)?.minecraftRoute);
+  // The route as the task holds it at the moment of asking (an answer that came during the run counts from the next look), else the kept one.
+  const targetSeconds = (milestone: string) => (liveRoute(step.taskId) ?? kept)?.legs.find(leg => leg.milestone === milestone)?.targetSeconds;
   const pending = () => {
     try {
       return (runtime.pendingMessageIds?.(step.scopeKey, step.taskId) ?? []).some(id => !step.messageIds.includes(id));
@@ -153,6 +154,10 @@ async function runLink(parts: ProcedureRunParts, call: Call, state: TaskProcedur
   return controller.signal.aborted && !call.signal.aborted && !result.ok ? { ...result, failure: 'cut' } : result;
 }
 
+/** A walk that ran out of time and was getting nearer (the body says so, `moveTo.ts`): to be made again, not a failure (mb-r20). */
+const GETTING_NEARER = /目標へ近づいているので、同じ目標で再実行すれば続きから進めます/u;
+const OUT_OF_TIME = new Set(['movement_incomplete', 'timeout']);
+
 /** One item and its chain, each a body call with an operation id of its own. */
 async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedureState, item: MinecraftWorkItem, index: number): Promise<ProcedureItemResult> {
   let result: ProcedureItemResult = { ok: false, text: '', failure: 'not_offered' };
@@ -161,7 +166,14 @@ async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedur
     if (!parts.offered(next.tool)) return { ok: false, text: '', failure: 'not_offered' };
     result = await runLink(parts, call, state, next, `${call.operationId}:p${index}.${link}`);
     await freshFrame(parts);
-    next = result.ok && next.then ? next.then(result.text) : null;
+    let nearer = false;
+    if (!result.ok) {
+      nearer = next.resumable === true && OUT_OF_TIME.has(result.failure ?? '') && GETTING_NEARER.test(result.text);
+      if (nearer) result = { ok: true, text: result.text, failure: null };
+      else try { next.onFail?.(result.failure ?? 'failed', result.text); } catch { /* the procedure's own note never fails a run */ }
+    }
+    // The chain after a walk waits for its arrival: the procedure reads the world again and makes the walk once more.
+    next = result.ok && !nearer && next.then ? next.then(result.text) : null;
   }
   return result;
 }
@@ -177,11 +189,19 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
     return { ok: false, text: `milestone は次のどれか（through はそれ以降）: ${PROCEDURE_MILESTONES.join('・')}`, failure: 'invalid_input', retryable: false };
   }
   const state = stateOf(parts.taskId);
-  const chain = minecraftProcedureChain(asked.from, asked.through, { store: state.store, batchObsidian: parts.batchObsidian ?? null });
-  const facts = () => minecraftProcedureFacts(parts.observe());
+  const chain = minecraftProcedureChain(asked.from, asked.through, { store: state.store, batchObsidian: parts.batchObsidian ?? null,
+    leg: milestone => (liveRoute(parts.taskId))?.legs.find(item => item.milestone === milestone) });
+  const facts = () => {
+    const current = minecraftProcedureFacts(parts.observe());
+    // Where the task began (the sheep search's limit): the first place a frame gave.
+    if (!state.store.origin && current.at) state.store.origin = { x: Math.floor(current.at.x), y: Math.floor(current.at.y), z: Math.floor(current.at.z) };
+    return current;
+  };
+  // The steps this run found late when it first came to them are not told late (`StopParts.lateAtStart`).
+  const lateAtStart = new Map<string, boolean>();
   const run = await runProcedures(chain, {
     facts, now: parts.now, signal: call.signal, upkeep: minecraftUpkeep, final: finalFailure, passing: passingFailure,
-    stopWhy: (current, at) => minecraftStopWhy(current, at.procedure, { ...parts, toldLate: state.toldLate }),
+    stopWhy: (current, at) => minecraftStopWhy(current, at.procedure, { ...parts, toldLate: state.toldLate, lateAtStart }),
     run: (item, step) => runItem(parts, call, state, item, step.index),
   });
   const text = resultText(asked.through ? `「${asked.from}」→「${asked.through}」` : `「${asked.from}」`, run, facts());

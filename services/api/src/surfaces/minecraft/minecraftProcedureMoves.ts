@@ -61,6 +61,15 @@ export function toolOf(facts: MinecraftProcedureFacts, itemName: string, materia
   return material ?? sticksFor(facts) ?? craft(itemName, `${itemName}を作る`);
 }
 
+/**
+ * The way a stair is dug or built toward a place (`stair-mine`'s `direction`): the axis it is farther off along. A stair up builds a
+ * block sideways for every one up (1 : 1), so a climb of 120 lands about 120 m along its way; it is aimed at where she wants to be.
+ */
+export function cardinal(from: { x: number; z: number }, to: { x: number; z: number }): 'north' | 'south' | 'east' | 'west' {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  return Math.abs(dx) >= Math.abs(dz) ? (dx >= 0 ? 'east' : 'west') : (dz >= 0 ? 'south' : 'north');
+}
+
 /** The step a chain of a found block's coordinates takes: the first cell the result names, made into the next item; null when none. */
 export function fromFirstCell(memory: ProcedureMemory, note: string, make: (cell: { x: number; y: number; z: number }) => MinecraftWorkItem | null) {
   return (text: string): MinecraftWorkItem | null => {

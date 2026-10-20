@@ -47,6 +47,13 @@ export function createOperatorLifecycle(parts: {
   setDaySettleMs?: number; setDayStepMs?: number;
   /** 「新しいワールドで始める」 (`freshWorldWiring.ts`), decided when an operator's start is admitted. Absent: never. */
   freshWorld?: FreshWorldAdmission;
+  /**
+   * Whether the body is held only by steps whose outcome was lost, with the body itself out of the server (mb-r20): then a start,
+   * login, logout or stop goes on without the body resource, since it is the way to bring the body back for the re-check that frees
+   * it (`minecraftLifecycleWiring.ts` answers from the lease records and the operator's own state). Absent: the body is taken as before.
+   */
+  onlyLostSteps?(serverId: string, ownActionId: string): boolean;
+  log?(line: string): void;
 }) {
   const refused = (code: Exclude<OperatorLifecycleAdmission, { ok: true }>['code'], message: string): OperatorLifecycleAdmission =>
     ({ ok: false, code, message });
@@ -85,7 +92,13 @@ export function createOperatorLifecycle(parts: {
         await own.finish('cancelled', 'lifecycle_not_allowed').catch(() => {});
         return refused('refused', '実行権・停止設定・現在の入力条件を確認できません。');
       }
-      if (!await parts.runner.takeBody(own)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
+      const goesWithoutBody = request.action !== 'set_day' && parts.onlyLostSteps
+        ? () => {
+          const lost = parts.onlyLostSteps!(request.serverId, own.execution.lease.id);
+          if (lost) parts.log?.(`Shannon Minecraft operator ${request.action} goes on without the body: only lost steps hold it, the body is out`);
+          return lost;
+        } : undefined;
+      if (!await parts.runner.takeBody(own, goesWithoutBody)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
       // `--keep-world` is the operator's opt-out; the switch is followed by default.
       const { keepWorld, ...operation } = request;
       const options = parts.freshWorld?.({ ...operation, origin: authority.origin, via: 'operator', keepWorld: keepWorld === true });

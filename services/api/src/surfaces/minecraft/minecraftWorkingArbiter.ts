@@ -61,6 +61,18 @@ export function minecraftCalm(observation: BodyObservation | null): boolean {
   return typeof world?.margin?.darkInSeconds === 'number' && world.margin.darkInSeconds > 0;
 }
 
+/**
+ * A hostile within `calmThreatDistance` + 8 m whether or not it can reach her (in a shelter a spider at the slit cannot), or the body's
+ * danger flag: a wait is then not ended for a need in reach (the executor does not go out to a pig or an ore with an enemy at the door).
+ */
+export function minecraftEnemyInSight(observation: BodyObservation | null): boolean {
+  if (!observation) return false;
+  if (observation.facts.danger === true) return true;
+  const world = (observation.state as { world?: { nearbyThreats?: unknown } }).world;
+  const threats = Array.isArray(world?.nearbyThreats) ? world!.nearbyThreats as Array<{ distance?: unknown }> : [];
+  return threats.some(threat => typeof threat.distance === 'number' && threat.distance <= MINECRAFT_WORKING.calmThreatDistance + 8);
+}
+
 /** The needs in reach now, as one line with the tool that takes each kind (once); null when none can be got at. */
 export function minecraftNeedsLine(needs: readonly WorkingNeed[]): string | null {
   // A standing bed first, however far: four runs in a row ended without a bed (runs 16 to 19), the nearer logs can wait.
@@ -104,9 +116,21 @@ function frameNeed(item: unknown, at: string): (WorkingNeed & { distance: number
  * restart or a new connection, and with whether each can still be got at. The events only say what changed, for the decision's lines.
  */
 export function minecraftFrameNeeds(observation: BodyObservation | null): WorkingNeed[] {
-  const world = observation ? (observation.state as { world?: { nearbyNeeds?: unknown } }).world : undefined;
+  const world = observation ? (observation.state as { world?: { nearbyNeeds?: unknown; rememberedPlaces?: unknown } }).world : undefined;
   const list = Array.isArray(world?.nearbyNeeds) ? (world!.nearbyNeeds as unknown[]).slice(0, 16) : [];
-  return list.flatMap(item => frameNeed(item, observation!.stateAt) ?? []).sort((a, b) => a.distance - b.distance);
+  const own = respawnCell(world?.rememberedPlaces);
+  return list.flatMap(item => frameNeed(item, observation!.stateAt) ?? [])
+    // The bed she slept in and left standing is her respawn point, not a bed to take (mb-r20: the procedures leave it where it stands).
+    .filter(need => !(own && need.need === 'bed' && typeof need.data.x === 'number' && typeof need.data.y === 'number' && typeof need.data.z === 'number'
+      && Math.hypot(need.data.x - own.x, need.data.z - own.z) <= 3 && Math.abs(need.data.y - own.y) <= 2))
+    .sort((a, b) => a.distance - b.distance);
+}
+
+/** The cell of her respawn bed (`rememberedPlaces.respawn`: `<n>m <方角> (x,y,z)`), or null. */
+function respawnCell(places: unknown): { x: number; y: number; z: number } | null {
+  const row = places && typeof places === 'object' ? (places as Record<string, unknown>).respawn : null;
+  const found = typeof row === 'string' ? /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(row) : null;
+  return found ? { x: Number(found[1]), y: Number(found[2]), z: Number(found[3]) } : null;
 }
 
 /**
@@ -242,8 +266,11 @@ export function createMinecraftWorkingArbiter(parts: {
       const now = parts.now();
       const work = { ...running, remainingMs: running.waiting ? remaining(running, observation, now) : null };
       const fresh = running.waiting ? freshNeedIds(log, running.cursor) : new Set<string>();
+      // A wait in a shelter, or with an enemy in sight (reaching her or not), is not cut for a thing in reach (mb-r20: a wait for a
+      // furnace in a slit shelter, a spider at the door, was cut for a pig 22 m off; the next decision built the shelter again).
+      const sheltered = minecraftEnemyInSight(observation);
       const verdict = arbitrate({ now, running: work, progress: log.progress(running.subject), needs: minecraftFrameNeeds(observation),
-        calm: minecraftCalm(observation), recentCuts: cuts, cutFor: need => WAIT_WORTH.has(need.need) && fresh.has(need.id) });
+        calm: minecraftCalm(observation), recentCuts: cuts, cutFor: need => !sheltered && WAIT_WORTH.has(need.need) && fresh.has(need.id) });
       if (verdict.act !== 'cut') return verdict;
       // A need the executor takes is no cut: nothing is recorded against the wait's topic, and the task is not told.
       if (verdict.rule === 'need_during_wait' && parts.onWaitNeed?.(verdict.need)) {

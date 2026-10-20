@@ -28,6 +28,13 @@ export interface MinecraftWorkItem {
   then?: (result: string) => MinecraftWorkItem | null;
   /** How many items the whole chain from here takes (1 when absent): a chain is started only when it fits. */
   chain?: number;
+  /**
+   * A walk that may take more than one call (mb-r20): when it ran out of time and the body says it was getting nearer ("同じ目標で再実行すれば
+   * 続きから進めます"), the procedure does not count it as a failure and makes it again (the chain after it waits for the arrival).
+   */
+  resumable?: boolean;
+  /** Called when the item failed for good (not a walk that was getting nearer): the procedure's own memory of what cannot be reached. */
+  onFail?(failure: string, text: string): void;
 }
 
 const RAW_FOOD = ['porkchop', 'beef', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon'];

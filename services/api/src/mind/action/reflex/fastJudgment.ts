@@ -33,6 +33,12 @@ export const FAST_JUDGMENT_LIMITS = Object.freeze({
    * creeper at 6 m was fought, the flee from 6.2 m moved 2 m and failed, and it blew up at her side from full health).
    */
   creeperDistance: 10,
+  /**
+   * Two melee enemies or more at her, with health at this or lower or fewer than `bareArmor` pieces of armour on, are not fought
+   * standing: she goes up a pillar or walls herself in first (run 20, 2026-10-20: a stone axe, no armour and 13 of 20 against two
+   * zombies took her to 7 in 26 s and then to 0 while the cage was being built).
+   */
+  outnumberedHealth: 14, bareArmor: 2,
 });
 /** Three blocks up a pillar of her own blocks: what a creeper cannot reach when running from it failed (`tower-up`). */
 const TOWER = Object.freeze({ skill: 'tower-up', height: 3, blocks: 3 });
@@ -73,6 +79,11 @@ export interface FastBodyState {
   canCage: boolean;
   /** She carries the blocks of a pillar (`TOWER`). */
   canTower: boolean;
+  /**
+   * How many of the four armour slots hold something (`world.worn`, the body's one line of what she wears); absent when the body says
+   * nothing of it (the rules then read her as armoured, as before).
+   */
+  armorPieces?: number;
 }
 export type FastKind = 'fight' | 'flee' | 'shelter';
 export type FastEntry = 'close' | 'damage' | 'respawn';
@@ -80,7 +91,8 @@ export interface FastDecision {
   kind: FastKind; skill: string; arguments: Record<string, string | number | boolean>;
   /** The closed rule that chose it; `ambiguous` when only the default decided (an image-free arbiter may later choose). */
   rule: 'respawn_shelter' | 'low_health_shelter' | 'low_health_flee' | 'creeper_flee' | 'outnumbered_shelter' | 'ranged_shelter'
-    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee' | 'creeper_tower';
+    | 'melee_fight' | 'ambiguous_shelter' | 'shelter_failed_flee' | 'shelter_failed_cage' | 'fight_resting_flee' | 'creeper_tower'
+    | 'outnumbered_tower' | 'outnumbered_cage' | 'low_health_tower';
   ambiguous: boolean;
 }
 export type FastHold = 'no_threat' | 'floor_active' | 'floor_unknown' | 'floor_creeper';
@@ -88,6 +100,12 @@ export type FastVerdict = { entry: FastEntry; decision: FastDecision } | { entry
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+/** The armour slots filled, from the body's one line of what she wears (`頭: iron_helmet(残り…)、胴: なし、…`); nothing when the body says none. */
+function armorOf(worn: unknown): { armorPieces?: number } {
+  if (typeof worn !== 'string') return {};
+  return { armorPieces: [...worn.slice(0, 400).matchAll(/(?:頭|胴|脚|足):\s*[a-z][a-z0-9_]*/gu)].length };
+}
 
 /**
  * The state the judgment reads from a frame (`state.world`, `facts`), with what the caller remembers: the health `healthWindowMs`
@@ -107,7 +125,7 @@ export function fastBodyState(observation: { facts: Readonly<Record<string, unkn
   const night = Number.isFinite(tick) && ((tick % 24000) + 24000) % 24000 >= 13_000 && ((tick % 24000) + 24000) % 24000 < 23_000;
   const inventory = Array.isArray(world.inventory) ? world.inventory : [];
   const resting = memory.resting ?? new Set<string>();
-  return { health, threats, night,
+  return { health, threats, night, ...armorOf(world.worn),
     respawnedRecently: memory.sinceArrivalMs !== null && memory.sinceArrivalMs < FAST_JUDGMENT_LIMITS.respawnWindowMs,
     healthDropped: health !== null && memory.earlierHealth !== null && health < memory.earlierHealth,
     hasWeapon: inventory.some(item => typeof record(item)?.name === 'string' && WEAPON.test(String(record(item)!.name))),
@@ -147,10 +165,10 @@ const reaches = (threat: FastThreat, unmarked: boolean) => threat.canReachMe ===
 
 const decision = (kind: FastKind, rule: FastDecision['rule'], target = 'hostile'): FastDecision => ({
   kind, rule, ambiguous: rule === 'ambiguous_shelter',
-  ...(rule === 'creeper_tower' ? { skill: TOWER.skill, arguments: { height: TOWER.height } }
+  ...(rule === 'creeper_tower' || rule === 'outnumbered_tower' || rule === 'low_health_tower' ? { skill: TOWER.skill, arguments: { height: TOWER.height } }
     : kind === 'fight' ? { skill: 'attack-continuously', arguments: { entityName: 'hostile', maxAttacks: 12 } }
     : kind === 'flee' ? { skill: 'flee-from', arguments: { target, minDistance: 16, timeout: 6000 } }
-      : rule === 'shelter_failed_cage' ? { skill: CAGE.skill, arguments: { structureName: CAGE.structureName } }
+      : rule === 'shelter_failed_cage' || rule === 'outnumbered_cage' ? { skill: CAGE.skill, arguments: { structureName: CAGE.structureName } }
         : { skill: 'dig-shelter', arguments: {} }),
 });
 
@@ -182,17 +200,42 @@ function floorMayRun(state: FastBodyState): boolean {
     || (RANGED.has(threat.name) && threat.distance <= FLOOR_UNKNOWN_HOLDS.rangedDistance));
 }
 
+/** She has the blocks for a pillar and has not climbed one within `restMs`. */
+const towerFree = (state: FastBodyState) => state.canTower && !state.resting.has(TOWER.skill);
+
+/**
+ * At the floor of the rules: with one at her, a pillar if she can climb (a second or two) before a cage (five seconds of blows;
+ * run 20: dead with the cage half built).
+ */
+function atTheFloor(state: FastBodyState, atHer: boolean): FastDecision {
+  if (!atHer) return decision('flee', 'low_health_flee');
+  return towerFree(state) ? decision('flee', 'low_health_tower') : decision('shelter', 'low_health_shelter');
+}
+
+/**
+ * Two melee enemies at her, hurt or unarmoured: up a pillar or into the cage before the blows, while there is health to build with (a
+ * cage at 10, not at 3). Null when the fight stands (armoured and healthy, or neither way is open).
+ */
+function outnumbered(state: FastBodyState, melee: readonly FastThreat[], health: number): FastDecision | null {
+  const bare = (state.armorPieces ?? FAST_JUDGMENT_LIMITS.bareArmor) < FAST_JUDGMENT_LIMITS.bareArmor;
+  if (melee.length < 2 || !(bare || health <= FAST_JUDGMENT_LIMITS.outnumberedHealth)) return null;
+  if (towerFree(state)) return decision('flee', 'outnumbered_tower');
+  return state.canCage && !state.resting.has(CAGE.skill) ? decision('shelter', 'outnumbered_cage') : null;
+}
+
 /** The rules after the entry, in the design's order. */
 function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   const reachable = state.threats.filter(threat => reaches(threat, entry !== 'close'));
   const within = (distance: number) => reachable.filter(threat => threat.distance <= distance);
   const health = state.health ?? 0;
   if (entry === 'respawn') return decision('shelter', 'respawn_shelter');
-  if (health <= FAST_JUDGMENT_LIMITS.lowHealth) return within(3).length ? decision('shelter', 'low_health_shelter') : decision('flee', 'low_health_flee');
+  if (health <= FAST_JUDGMENT_LIMITS.lowHealth) return atTheFloor(state, within(3).length > 0);
   if (within(6).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');
   if (within(8).length >= 3) return decision('shelter', 'outnumbered_shelter');
   // Merely near (`close`), a fight only with one the body says reaches her (run 18: twice 15 s against a zombie behind a wall).
   const melee = within(6).filter(threat => !RANGED.has(threat.name));
+  const before = outnumbered(state, melee, health);
+  if (before) return before;
   if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) return decision('shelter', 'ranged_shelter');
   // Never a fight with a creeper within 10 m (a fight's target is any hostile, the creeper among them): away from it first.
   if (within(FAST_JUDGMENT_LIMITS.creeperDistance).some(threat => threat.name === 'creeper')) return decision('flee', 'creeper_flee', 'creeper');

@@ -224,8 +224,18 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   const recovery = parts.actions ? createMinecraftLifecycleRecovery({ db, service, actions: parts.actions, deviceId: configuration.deviceId }) : null;
   const ops = parts.ops && serverIds.includes('shannon-home') ? createOpsMinecraftLifecycle({ ...parts.ops, service, scopeKey: configuration.ownerScopeKey,
     deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone, freshWorld }) : null;
+  const bodyKey = actionResource(configuration.deviceId, 'minecraft-body');
   const operator = createOperatorLifecycle({ service, runner, scopeKey: configuration.ownerScopeKey, serverIds, ownerAlone: parts.ownerAlone, allowed,
-    freshWorld });
+    freshWorld, log: line => console.info(line),
+    onlyLostSteps: (serverId, ownActionId) => {
+      try {
+        // Not in the server by the operator's fresh state (joined or not known: the body may be moving), a step of the owner's whose
+        // outcome was lost holds the body, and nothing else live does.
+        const state = service.status(configuration.ownerScopeKey).find(item => item.serverId === serverId);
+        return state?.bot === 'absent' && leases.retainedUnknownSteps(bodyKey).some(step => step.scopeKey === configuration.ownerScopeKey)
+          && leases.liveHolders(bodyKey, ownActionId).length === 0;
+      } catch { return false; }
+    } });
   return { service, ops, operator, recover: () => recovery?.recover() ?? Promise.resolve(),
     async close() { await ops?.close(); await runner?.close(); await recovery?.close(); db.close(); } };
 }
