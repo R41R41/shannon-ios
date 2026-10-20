@@ -188,7 +188,7 @@ describe('the time budget to the Nether and the steps from the diamonds on', () 
   });
   it('has the diamonds, the obsidian and the gate as procedures with the body\'s tools', () => {
     expect(milestoneSteps('ダイヤ', 3).join('\n')).toContain('mc.stair-mine（targetY=-58）');
-    expect(milestoneSteps('黒曜石', 3).join('\n')).toContain('mc.use-item-on-block（溶岩の座標、itemName=water_bucket）');
+    expect(milestoneSteps('黒曜石', 3).join('\n')).toContain('mc.use-item-on-block（溶岩の溜まりの座標、itemName=water_bucket、count=10）');
     expect(milestoneSteps('ゲート', 3).join('\n')).toContain('mc.build-structure（structureName=nether_portal、x、y、z、facing）');
   });
 });

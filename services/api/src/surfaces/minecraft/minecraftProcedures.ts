@@ -52,9 +52,11 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
   ['ダイヤ', { say: [
     'mc.stair-mine（targetY=-58）→ mc.mine-block（blockName=deepslate_diamond_ore,diamond_ore、count=3、searchRadius=32）→ mc.craft-one（itemName=diamond_pickaxe）',
     '見つからなければ mc.stair-mine の direction を変えて横へ約20ブロック進み、また mine-block'], move: diamondMove }],
+  // mb-body 2026-10-20: the body casts many at a time (use-item-on-block with a count); the words go out with or after that body.
   ['黒曜石', { say: [
-    'mc.find-blocks（blockName=lava、maxDistance=32）→ mc.use-item-on-block（溶岩の座標、itemName=water_bucket）→ mc.mine-block（blockName=obsidian、count=10）',
-    '水はバケツで汲み戻す: mc.use-item-on-block（水の座標、itemName=bucket）。流れる溶岩は丸石になるので、溜まり（源）にかける'],
+    'mc.find-blocks（blockName=lava、maxDistance=32）→ 遠ければ mc.move-to → mc.use-item-on-block（溶岩の溜まりの座標、itemName=water_bucket、count=10）',
+    '体が「水をかける→掘る→水を回収→次の溶岩」を繰り返して黒曜石を10個まで集める（diamond_pickaxe と water_bucket が要る。1回で最大300秒）。'
+      + '途中で終わったら、返る文の残りの数と続け方に従う'],
   move: (facts, memory, context) => obsidianMove(facts, memory, context.batchObsidian) }],
   ['ゲート', { say: [
     '火打石: mc.mine-block（blockName=gravel、count=10）→ mc.craft-one（itemName=flint_and_steel）',
