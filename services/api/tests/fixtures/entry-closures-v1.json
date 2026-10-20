@@ -782,6 +782,7 @@
     "surfaces/minecraft/minecraftObservationSummary.ts",
     "surfaces/minecraft/minecraftOpportunityJudge.ts",
     "surfaces/minecraft/minecraftOutcome.ts",
+    "surfaces/minecraft/minecraftPace.ts",
     "surfaces/minecraft/minecraftPaceLedger.ts",
     "surfaces/minecraft/minecraftProcedureCare.ts",
     "surfaces/minecraft/minecraftProcedureFacts.ts",
