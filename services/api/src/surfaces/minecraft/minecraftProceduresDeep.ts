@@ -10,7 +10,7 @@ import { craft, doing, fromFirstCell, stuck, toolOf, type McMove } from './minec
  * flint from gravel (dug again where it was set down: a tenth of the time it drops flint), the frame built and lit at once
  * (`build-structure nether_portal` lights it when the flint and steel is carried), and the portal block found and entered.
  *
- * `batchObsidian`: the body's own tool that casts and digs many at once, when its catalog offers one (mb-body is making it).
+ * `batchObsidian`: the body casts and digs many at once (`use-item-on-block` with a count, mb-body), when its tool takes a count.
  */
 const DIAMOND_PICKAXE = /^(?:diamond|netherite)_pickaxe$/u;
 const DIAMOND = /^diamond$/u;
@@ -46,8 +46,11 @@ function fillBucket(memory: ProcedureMemory): McMove {
     then: walk, chain: 3 });
 }
 
-/** One obsidian: the nearest lava source found, walked to, the water poured on it, the obsidian dug. */
-function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove {
+/**
+ * Obsidian from the nearest lava pool not tried yet: found, walked to, the water poured on it. One at a time, the obsidian is dug after;
+ * with the body's batch (`batch`: how many), the body pours, digs and takes the water back itself, that many times at that pool.
+ */
+function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch: number | null): McMove {
   const count = carried(facts, OBSIDIAN);
   const tried = (memory.notes.get('lava:tried') as Set<string> | undefined) ?? new Set<string>();
   memory.notes.set('lava:tried', tried);
@@ -59,8 +62,11 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMov
     }
     tried.add(cellKey(cell));
     const dig = { tool: 'mc.dig-block-at', input: { ...cell }, why: '黒曜石を掘る', expectMs: 12_000, key: `obsidian:dig:${cellKey(cell)}` };
-    const pour = { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket' }, why: '溶岩に水をかける', expectMs: 4_000,
-      key: `obsidian:pour:${cellKey(cell)}`, then: (result: string) => /黒曜石に変換/u.test(result) ? dig : null, chain: 2 };
+    const pour = batch === null
+      ? { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket' }, why: '溶岩に水をかける', expectMs: 4_000,
+        key: `obsidian:pour:${cellKey(cell)}`, then: (result: string) => /黒曜石に変換/u.test(result) ? dig : null, chain: 2 }
+      : { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket', count: batch }, why: '溶岩の溜まりで黒曜石をまとめて作る',
+        expectMs: 25_000 * batch, key: `obsidian:batch:${cellKey(cell)}` };
     return { tool: 'mc.move-to', input: { ...cell, goalType: 'block' }, why: '溶岩のそばへ行く', expectMs: 20_000, key: `obsidian:walk:${cellKey(cell)}`,
       then: () => pour, chain: 3 };
   };
@@ -76,11 +82,8 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
     return memory.notes.has('water:none') ? stuck('48m 以内に水が見えない') : fillBucket(memory);
   }
   const count = carried(facts, OBSIDIAN);
-  if (batchObsidian && !memory.failed(`obsidian:batch:${count}`)) {
-    return doing({ tool: batchObsidian, input: { count: 10 - count }, why: '黒曜石をまとめて作る', expectMs: 180_000, key: `obsidian:batch:${count}` });
-  }
   if (memory.notes.has('lava:none')) return stuck('32m 以内に使える溶岩の溜まりが見えない');
-  return castOne(facts, memory);
+  return castOne(facts, memory, batchObsidian ? 10 - count : null);
 }
 
 /** Flint: gravel set down and dug again where it stands (a tenth of the time it drops flint), gravel dug first when none is carried. */

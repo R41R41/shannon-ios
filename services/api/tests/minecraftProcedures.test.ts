@@ -189,6 +189,11 @@ class SimBody {
   tool_use_item_on_block(input: Input): ToolResult {
     this.spend(SECONDS.pour);
     if (input.itemName === 'bucket') { this.take('bucket', 1); this.add('water_bucket', 1); return this.ok('water_bucketを入手しました'); }
+    if (input.itemName === 'water_bucket' && Number(input.count ?? 1) > 1) {
+      this.spend(Number(input.count) * 18);
+      this.add('obsidian', Number(input.count));
+      return this.ok(`黒曜石を${input.count}個作って掘りました。水はwater_bucketへ回収済み。`);
+    }
     if (input.itemName === 'water_bucket') return this.ok('✅ マグマが黒曜石に変換されました。水はwater_bucketへ回収済み');
     return this.ok('使用しました');
   }
@@ -214,11 +219,12 @@ const TOOLS = ['mine-block', 'craft-one', 'place-block-at', 'start-smelting', 'w
 const READS = new Set(['find-nearest-entity', 'find-blocks']);
 let tasks = 0;
 
-function setup(body: SimBody) {
+function setup(body: SimBody, options: { batch?: boolean } = {}) {
   const taskId = `procedure-${++tasks}`;
   const inner: FcaExternalTools = {
     definitions: TOOLS.map(name => ({ name: `mc.${name}`, description: name, input: { type: 'object', properties: {}, required: [], additionalProperties: false },
-      domain: 'minecraft_body', effect: READS.has(name) ? 'read' : 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] })) as never,
+      domain: 'minecraft_body', effect: READS.has(name) ? 'read' : 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'],
+      ...(options.batch && name === 'use-item-on-block' ? { nativeInputSchema: { type: 'object', properties: { x: {}, y: {}, z: {}, itemName: {}, count: {} } } } : {}) })) as never,
     async execute(request) { return body.run(request.name, request.input as Input); },
   };
   const tools = withMinecraftAgenda(inner, { on: true, taskId, observe: () => body.observation(), now: () => body.clock, taskStartedAt: AT });
@@ -290,6 +296,16 @@ describe('Minecraft procedures (mb-arch)', () => {
     const result = await call({ milestone: '木' });
     expect(result.text).toContain('最後まで着いた');
     expect(body.calls.filter(name => name === 'mc.mine-block')).toHaveLength(2);
+  });
+  it('casts the obsidian with the body\'s batch when its use-item-on-block takes a count (mb-body)', async () => {
+    const body = new SimBody();
+    for (const [name, count] of [['diamond_pickaxe', 1], ['water_bucket', 1]] as const) body.add(name, count);
+    body.y = -58;
+    const { call } = setup(body, { batch: true });
+    const result = await call({ milestone: '黒曜石' });
+    expect(result.text).toContain('最後まで着いた');
+    expect(body.pack.get('obsidian')).toBe(10);
+    expect(body.calls).toEqual(['mc.find-blocks', 'mc.move-to', 'mc.use-item-on-block']);
   });
   it('refuses a milestone it has no procedure for, and a through before the start', async () => {
     const { call } = setup(new SimBody());

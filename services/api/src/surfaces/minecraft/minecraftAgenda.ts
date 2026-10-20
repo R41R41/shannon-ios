@@ -111,8 +111,15 @@ export function withMinecraftAgenda(tools: FcaExternalTools, parts: Parts): FcaE
     execute: call => call.name === MINECRAFT_PROCEDURE_TOOL && body ? procedure(tools, parts, call, one) : one(call) };
 }
 
-/** The body's own tool that casts obsidian many at a time, when its catalog offers one (mb-body). */
-const batchObsidianOf = (tools: FcaExternalTools) => tools.definitions.find(tool => /^mc\.[a-z-]*obsidian[a-z-]*$/u.test(tool.name))?.name ?? null;
+/**
+ * Whether the body casts obsidian many at a time (mb-body, 2026-10-20): `use-item-on-block` with a `count` (water on a lava pool,
+ * the obsidian dug, the water taken back, count times). Read from the tool's own input shape, so an older body is used one at a time.
+ */
+function batchObsidianOf(tools: FcaExternalTools): string | null {
+  const tool = tools.definitions.find(definition => definition.name === 'mc.use-item-on-block');
+  const schema = tool?.nativeInputSchema as { properties?: Record<string, unknown> } | undefined;
+  return schema?.properties && 'count' in schema.properties ? 'mc.use-item-on-block' : null;
+}
 
 /** `mc.run-procedure`: each item a call of the executor's (its waits filled, a detour after it), told in the agenda as the procedure's. */
 function procedure(tools: FcaExternalTools, parts: Parts, call: Call, one: (call: Call) => Promise<ToolResult>): Promise<ToolResult> {
