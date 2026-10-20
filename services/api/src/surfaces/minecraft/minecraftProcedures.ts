@@ -7,7 +7,7 @@ import { axeMove, bedAndFoodMove, pickaxeMove, storeMove, woodMove } from './min
 import { IRON_PLAN, ironHeld, ironMove, makePiece, type ProcedureTaskStore } from './minecraftProceduresIron.js';
 import { diamondMove, gateMove, obsidianMove } from './minecraftProceduresDeep.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
-import { carried } from './minecraftProcedureFacts.js';
+import { carried, type Cell } from './minecraftProcedureFacts.js';
 
 /**
  * The milestones' procedures, one place for both forms (session mb-arch, owner 2026-10-20: the planner chooses the procedure, the
@@ -33,7 +33,14 @@ interface Step {
 /** The next piece of the iron plan, when the ingots for it are carried (null: none are, or nothing is ready). */
 const readyPiece = (facts: MinecraftProcedureFacts, memory: ProcedureMemory) => carried(facts, /^iron_ingot$/u) > 0 ? makePiece(facts, memory) : null;
 
-const LOG_STEP ='mc.mine-block（blockName=近くの原木1種類、例 oak_log。「,」で並べない、count=3 以上。原木1個で板4枚、板12枚分まで）';
+/** The places a sheep hunt keeps within reach of: where the task began, and the place the route names for the step. */
+function sheepAnchors(context: ProcedureContext): Cell[] {
+  const leg = context.leg?.('食料と羊とベッド');
+  const named = leg && leg.x !== undefined && leg.y !== undefined && leg.z !== undefined ? [{ x: leg.x, y: leg.y, z: leg.z }] : [];
+  return [...(context.store.origin ? [context.store.origin] : []), ...named];
+}
+
+const LOG_STEP = 'mc.mine-block（blockName=近くの原木1種類、例 oak_log。「,」で並べない、count=3 以上。原木1個で板4枚、板12枚分まで）';
 const BED_WORDS = [
   '羊を探す: mc.find-nearest-entity（entityType=sheep、maxDistance=128）。見えている羊は mc.attack-continuously（entityName=sheep、maxKills=3）',
   '同じ色の羊毛3個と板材3枚で mc.craft-one（itemName=white_bed など羊毛の色の _bed）',
@@ -52,7 +59,7 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
   // ingots to the pickaxe, which the step back to wood and the night and a beef hunt came between).
   ['木材', { say: [LOG_STEP], move: (facts, memory) => readyPiece(facts, memory) ?? storeMove(facts) }],
   ['食料と羊とベッド', { say: BED_WORDS, move: (facts, memory, context) => readyPiece(facts, memory)
-    ?? bedAndFoodMove(facts, memory, context.store, context.store.origin) }],
+    ?? bedAndFoodMove(facts, memory, context.store, sheepAnchors(context)) }],
   ['鉄', { say: IRON_WORDS, move: (facts, memory, context) => ironMove(facts, memory, context.store, context.leg?.('鉄')) }],
   ['バケツ', { say: ['mc.craft-one（itemName=bucket。鉄3）。作ったら地上で水を汲む（mc.use-item-on-block、itemName=bucket、水の座標）'],
     move: (facts, memory, context) => ironMove(facts, memory, context.store, context.leg?.('バケツ') ?? context.leg?.('鉄')) }],

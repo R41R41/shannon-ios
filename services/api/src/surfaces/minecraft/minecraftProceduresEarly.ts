@@ -48,18 +48,19 @@ function woolColor(facts: MinecraftProcedureFacts): string | null {
 }
 
 /**
- * How far from where the task began a sheep may be walked to (mb-r20). Run 20's hunt took three walks of 117, 91 and 107 m after one
- * another and ended 400 m south of where it began, past the cave, the iron and the obsidian the route had named near the start; a
- * search beyond this goes back to the planner, who can take the iron first and spend the night in a shelter.
+ * How far from where the task began, or from the place the route names for the step, a sheep may be walked to (mb-r20). Run 20's
+ * hunt took three walks of 117, 91 and 107 m after one another and ended 400 m south of where it began, past the cave, the iron and
+ * the obsidian the route had named near the start; a search beyond this goes back to the planner, who can take the iron first and
+ * spend the night in a shelter.
  */
 export const SHEEP_REACH = 160;
 
 /** Sheep searched for when none is in reach: the nearest within 128 m, walked to, three of them taken; not past `SHEEP_REACH` of the start. */
-function sheepSearch(memory: ProcedureMemory, key: string, origin: Cell | undefined): McMove {
+function sheepSearch(memory: ProcedureMemory, key: string, anchors: readonly Cell[]): McMove {
   const attack = { tool: 'mc.attack-continuously', input: { entityName: 'sheep', maxKills: 3, maxDistance: 32 }, why: '羊毛を取る', expectMs: 30_000,
     key: `${key}:hunt` };
   const walk = fromFirstCell(memory, 'sheep:none', cell => {
-    if (origin && Math.hypot(cell.x - origin.x, cell.z - origin.z) > SHEEP_REACH) {
+    if (anchors.length && anchors.every(anchor => Math.hypot(cell.x - anchor.x, cell.z - anchor.z) > SHEEP_REACH)) {
       memory.notes.set('sheep:far', true);
       return null;
     }
@@ -84,7 +85,7 @@ function sheepToHunt(facts: MinecraftProcedureFacts) {
 }
 
 /** The bed: a standing one taken, else one made from wool carried, else sheep in reach, else sheep searched for; null when she has one. */
-function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, origin?: Cell): McMove | null {
+function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, anchors: readonly Cell[]): McMove | null {
   if (carried(facts, BED_ITEM) || facts.milestone.bedPlaced) return null;
   const standing = nearestNeed(facts, 'bed', 96);
   const take = standing ? takeNeed(standing) : null;
@@ -104,7 +105,7 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits
   if (memory.notes.has('sheep:far')) return stuck(`羊が出発点から${SHEEP_REACH}m の外にしか見えない（先へ流れない）。鉄を先にして、夜は囲いで過ごす手がある`);
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
   const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
-  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, origin);
+  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, anchors);
 }
 
 /** Food enough to go on (`fed`): an animal in reach, else any food animal near; null when fed. */
@@ -123,8 +124,8 @@ function foodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMo
 }
 
 /** 「食料と羊とベッド」: the bed first; food while the bed waits on a search the planner must decide. */
-export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, origin?: Cell): McMove {
-  const bed = bedMove(facts, memory, visits, origin);
+export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, anchors: readonly Cell[] = []): McMove {
+  const bed = bedMove(facts, memory, visits, anchors);
   if (bed?.kind === 'do') return bed;
   const food = foodMove(facts, memory);
   if (food?.kind === 'do' || !bed) return food ?? { kind: 'done' };

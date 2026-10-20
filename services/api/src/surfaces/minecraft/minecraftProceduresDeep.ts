@@ -198,8 +198,9 @@ function surfaceObsidian(facts: MinecraftProcedureFacts, memory: ProcedureMemory
 /** The bucket without water: filled where water is near, else the stair back up to the surface; stuck when there is no bucket or no water at all. */
 function getWater(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
   if (!inPack(facts, /^bucket$/u)) return stuck('水を運ぶバケツが無い');
-  if (!waterGivenUp(memory)) return fillBucket(facts, memory);
-  return onSurface(facts) ? stuck('地上にも水が見えない') : upForWater(facts, memory, store);
+  const below = !onSurface(facts);
+  if (!waterGivenUp(memory, below)) return fillBucket(facts, memory);
+  return below ? upForWater(facts, memory, store) : stuck('地上にも水が見えない');
 }
 
 /** No lava in sight: a pool the map remembers (by the surface when it is far), the route's place, and last the rock far off. */

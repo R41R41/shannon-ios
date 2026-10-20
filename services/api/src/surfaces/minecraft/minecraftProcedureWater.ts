@@ -39,7 +39,8 @@ const giveUp = (cell: Cell, failure: string) => { if (failure !== 'cut' && failu
 export const onSurface = (facts: MinecraftProcedureFacts) => facts.dimension === 'overworld' && facts.at !== null && facts.at.y >= SURFACE_Y;
 /** An empty bucket and no water in one. */
 export const needsWater = (facts: MinecraftProcedureFacts) => inPack(facts, /^bucket$/u) > 0 && inPack(facts, /^water_bucket$/u) === 0;
-export const waterGivenUp = (memory: ProcedureMemory) => memory.notes.has('water:none');
+/** No water found where she looked: below (within reach of the stair) or on the surface; a look in the other place is not given up. */
+export const waterGivenUp = (memory: ProcedureMemory, below: boolean) => memory.notes.get('water:none') === (below ? 'below' : 'surface');
 
 /**
  * Water found, the nearest cell not given up on walked to (a walk that was getting nearer is made again, not counted), and scooped. Deep
@@ -54,7 +55,7 @@ export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemo
     const cell = cellsInText(text).find(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
       && (!deep || !from || Math.hypot(candidate.x - from.x, candidate.y - from.y, candidate.z - from.z) <= NEAR_BELOW));
     if (!cell) {
-      memory.notes.set('water:none', true);
+      memory.notes.set('water:none', deep ? 'below' : 'surface');
       return null;
     }
     return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 2 }, why: '水のそばへ行く', expectMs: 30_000, key: `water:walk:${cellKey(cell)}`,
@@ -69,7 +70,7 @@ export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemo
  * nothing to do (no bucket, already full, down below, no water in sight).
  */
 export function waterOnTheSurface(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
-  if (!needsWater(facts) || !onSurface(facts) || waterGivenUp(memory)) return null;
+  if (!needsWater(facts) || !onSurface(facts) || waterGivenUp(memory, false)) return null;
   return fillBucket(facts, memory);
 }
 
