@@ -378,5 +378,13 @@
    "plains": 257,
    "snowyPlains": 0
   }
- ]
+ ],
+ "variants": {
+  "r17-village": {
+   "world": "r17",
+   "near": "village",
+   "offset": 48,
+   "note": "実走17 の種で、村（spawn から 266m、(-144, -224)）の 48m 手前から始める。村あり（羊・ベッド・食べ物）の条件"
+  }
+ }
 }

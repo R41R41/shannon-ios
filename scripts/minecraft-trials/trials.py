@@ -815,7 +815,19 @@ def tracked_items(section):
     return sorted(items)
 
 
-def setup_body(r, section, spawn):
+def variant_start(variant, facts):
+    """[x, z] to start at instead of the world spawn: `offset` blocks short of a located structure, on the way from spawn."""
+    if not variant.get('near'): return None
+    target = ((facts.get('locate') or {}).get(variant['near']) or {}).get('at')
+    if not target: raise Stop(f'no {variant["near"]} located for {variant.get("world")}')
+    sx, _, sz = facts['spawn']
+    tx, tz = target[0], target[2]
+    d = math.dist((sx, sz), (tx, tz)) or 1
+    k = max(0.0, (d - variant.get('offset', 48)) / d)
+    return [round(sx + (tx - sx) * k), round(sz + (tz - sz) * k)]
+
+
+def setup_body(r, section, start_at):
     r.cmd(f'clear {BODY}')
     for item, count in section['start'].get('give', {}).items():
         r.cmd(f'give {BODY} {item} {count}')
@@ -823,8 +835,8 @@ def setup_body(r, section, spawn):
         r.cmd(f'item replace entity {BODY} {slot} with {item}')
     if section['start'].get('hold'):
         r.cmd(f'item replace entity {BODY} weapon.mainhand with {section["start"]["hold"]}')
-    x, y, z = section['start'].get('pos') or spawn
-    if section['start'].get('pos'): r.cmd(f'tp {BODY} {x} {y} {z}')
+    if start_at:   # on the ground there (spreadplayers finds the top block; the chunks generate as she arrives)
+        r.cmd(f'spreadplayers {start_at[0]} {start_at[1]} 0 6 false {BODY}')
     r.cmd(f'effect clear {BODY}')
     r.cmd(f'effect give {BODY} minecraft:instant_health 1 10 true')
     r.cmd(f'effect give {BODY} minecraft:saturation 1 10 true')
@@ -842,8 +854,11 @@ def wait_body_online(seconds=90):
 
 def run_trial(section, seed_key, batch, cfg, dry_run):
     trial_id = f'{batch}-s{section["id"]}-{seed_key}'
-    pristine = os.path.join(PRISTINE, seed_key, 'world')
-    facts = load_json(os.path.join(PRISTINE, seed_key, 'facts.json'), {})
+    variant = (load_json(os.path.join(HERE, 'seeds.json'), {}).get('variants') or {}).get(seed_key, {})
+    world_key = variant.get('world', seed_key)
+    pristine = os.path.join(PRISTINE, world_key, 'world')
+    facts = load_json(os.path.join(PRISTINE, world_key, 'facts.json'), {})
+    start_at = variant_start(variant, facts)
     result = {'trial': trial_id, 'batch': batch, 'section': section['id'], 'sectionName': section['name'], 'seedKey': seed_key,
               'seed': facts.get('seed'), 'targetSeconds': section['targetSeconds'], 'limitMinutes': section['limitMinutes'],
               'capYen': cfg['trialCapYen'], 'startedAt': now_iso(), 'ok': False, 'reason': None, 'seconds': None, 'milestones': {}}
@@ -871,9 +886,10 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
         result['reason'] = f'login_failed:{login.get("code")}'; return result
     time.sleep(8)
     r = Rcon()
-    setup_body(r, section, facts.get('spawn') or [0, 64, 0])
+    setup_body(r, section, start_at)
     time.sleep(4)
     result['startState'] = body_state(r)
+    result['startAt'] = start_at or 'spawn'
     r.close()
     request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cfg['trialCapYen']), GOAL)
     task_id = request.get('taskId')

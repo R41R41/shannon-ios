@@ -46,7 +46,7 @@
         { "name": "ベッド", "any": ["#minecraft:beds"], "orRespawn": true, "end": true },
         { "name": "鉄の全身", "all": ["minecraft:iron_helmet", "minecraft:iron_chestplate", "minecraft:iron_leggings", "minecraft:iron_boots"], "end": true }
       ],
-      "seeds": ["r19-snowy", "x2", "r18"]
+      "seeds": ["r19-snowy", "x2", "r18", "r17-village"]
     },
     {
       "id": 4, "name": "鉄の全身→ダイヤのツルハシ", "targetSeconds": 420, "limitMinutes": 12,
