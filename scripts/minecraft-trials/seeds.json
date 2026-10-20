@@ -377,6 +377,42 @@
    "nearestSheep": null,
    "plains": 257,
    "snowyPlains": 0
+  },
+  {
+   "key": "v160",
+   "seed": "2336550045790902932",
+   "source": "ランダムな候補 q8（10/20 速い下見で村 160m）",
+   "tags": [
+    "forest",
+    "村 160m",
+    "地表の溶岩 73m",
+    "原木 6m",
+    "羊 10（96m）"
+   ],
+   "spawn": [
+    0,
+    63,
+    0
+   ],
+   "spawnBiome": "minecraft:forest",
+   "village": 160,
+   "igloo": 2784,
+   "ruinedPortal": 724,
+   "surfaceLava": 72.7,
+   "nearestLog": 6.0,
+   "logsWithin32": 207,
+   "ironOreWithin48": 2133,
+   "coalOreWithin48": 2678,
+   "deepLavaChunks": 35,
+   "animals": {
+    "sheep": 10,
+    "cow": 4,
+    "chicken": 4,
+    "pig": 1
+   },
+   "nearestSheep": 32.6,
+   "plains": 45,
+   "snowyPlains": 2652
   }
  ],
  "variants": {
