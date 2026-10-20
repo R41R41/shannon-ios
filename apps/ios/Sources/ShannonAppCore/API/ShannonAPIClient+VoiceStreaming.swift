@@ -33,7 +33,7 @@ extension ShannonAPIClient {
                 deviceContext: deviceContext
             )
             for segment in ShannonGeminiCascadeSpeech.segments(legacy.reply) {
-                await onSegment(segment, legacy.voicePlan)
+                await onSegment(segment, legacy.voicePlan, nil)
             }
             return legacy
         }
@@ -66,7 +66,8 @@ enum ShannonVoiceStreamReader {
             case .segment:
                 guard let text = event.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !text.isEmpty else { throw ShannonAPIError.invalidResponse }
-                await onSegment(text, event.voicePlan)
+                let voiceText = event.voiceText?.trimmingCharacters(in: .whitespacesAndNewlines)
+                await onSegment(text, event.voicePlan, voiceText?.isEmpty == false ? voiceText : nil)
             case .completed:
                 // Completion is the protocol boundary. A later EOF/reset must not
                 // turn an already completed (and possibly spoken) reply into failure.

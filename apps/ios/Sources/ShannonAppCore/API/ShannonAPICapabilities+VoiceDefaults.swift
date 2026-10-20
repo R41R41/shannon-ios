@@ -114,7 +114,7 @@ public extension ShannonAPIClientProtocol {
             deviceContext: deviceContext
         )
         for segment in ShannonGeminiCascadeSpeech.segments(response.reply) {
-            await onSegment(segment, response.voicePlan)
+            await onSegment(segment, response.voicePlan, nil)
         }
         return response
     }

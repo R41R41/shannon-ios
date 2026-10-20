@@ -58,8 +58,23 @@ struct ShannonVoiceResponseDeliveryTests {
             continuation.yield(#"{"type":"completed","response":{"threadId":"thread","model":"test","reply":"できました。"}}"#)
             continuation.finish(throwing: URLError(.networkConnectionLost))
         }
-        let answer = try await ShannonVoiceStreamReader.read(lines: lines) { _, _ in }
+        let answer = try await ShannonVoiceStreamReader.read(lines: lines) { _, _, _ in }
         #expect(answer.reply == "できました。")
+    }
+
+    /// Owner 2026-10-20: a sentence's audio tags come apart from the shown text, for her voice only.
+    @Test func aSentenceForHerVoiceComesWithItsAudioTagsApartFromTheShownOne() async throws {
+        let lines = AsyncThrowingStream<String, Error> { continuation in
+            continuation.yield(#"{"type":"segment","text":"ねえ、これは内緒だよ。","voiceText":"ねえ、 [whispers] これは内緒だよ。"}"#)
+            continuation.yield(#"{"type":"segment","text":"ほんと。"}"#)
+            continuation.yield(#"{"type":"completed","response":{"threadId":"thread","model":"test","reply":"ねえ、これは内緒だよ。ほんと。"}}"#)
+            continuation.finish()
+        }
+        var received: [String] = []
+        _ = try await ShannonVoiceStreamReader.read(lines: lines) { text, _, voiceText in
+            received.append("\(text) | \(voiceText ?? "-")")
+        }
+        #expect(received == ["ねえ、これは内緒だよ。 | ねえ、 [whispers] これは内緒だよ。", "ほんと。 | -"])
     }
 
     @Test func aReplyCutAtItsLengthLimitIsAFinishedReplyThatPlaysAndIsSaved() async throws {
@@ -71,7 +86,7 @@ struct ShannonVoiceResponseDeliveryTests {
             continuation.finish()
         }
         var spoken: [String] = []
-        let answer = try await ShannonVoiceStreamReader.read(lines: lines) { text, _ in spoken.append(text) }
+        let answer = try await ShannonVoiceStreamReader.read(lines: lines) { text, _, _ in spoken.append(text) }
         #expect(spoken == ["むかしむかし。", "灯台がありました。"])
         #expect(answer.truncated == true)
         // Completion acknowledges the input, so the reply is written to Talk and nothing is re-sent.
@@ -103,14 +118,14 @@ struct ShannonVoiceResponseDeliveryTests {
             continuation.finish()
         }
         await #expect(throws: ShannonVoiceReplyWithheld.self) {
-            try await ShannonVoiceStreamReader.read(lines: withheld) { _, _ in }
+            try await ShannonVoiceStreamReader.read(lines: withheld) { _, _, _ in }
         }
         let failed = AsyncThrowingStream<String, Error> { continuation in
             continuation.yield(#"{"type":"error","status":502}"#)
             continuation.finish()
         }
         await #expect(throws: ShannonAPIError.rejected(status: 502)) {
-            try await ShannonVoiceStreamReader.read(lines: failed) { _, _ in }
+            try await ShannonVoiceStreamReader.read(lines: failed) { _, _, _ in }
         }
     }
 
@@ -223,7 +238,7 @@ struct ShannonVoiceResponseDeliveryTests {
             continuation.finish()
         }
         await #expect(throws: ShannonAPIError.self) {
-            try await ShannonVoiceStreamReader.read(lines: lines) { _, _ in }
+            try await ShannonVoiceStreamReader.read(lines: lines) { _, _, _ in }
         }
     }
 

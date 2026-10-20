@@ -57,7 +57,7 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         }
         model.performAppLook = { _ in await withCheckedContinuation { lookResult = $0 } }
         model.performStreamingDelegation = { _, _, _, onSegment in
-            await onSegment("見てみますね。", nil)
+            await onSegment("見てみますね。", nil, nil)
             var response = ShannonLiveVoiceDelegationResponseDTO(threadId: "t", model: "m", reply: "見てみますね。")
             response.appLook = ShannonAppLookAskDTO(id: "look", camera: .front, expiresAt: "2099-01-01T00:00:00Z")
             return response
@@ -86,7 +86,7 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
             let model = liveModel()
             model.streamSpeech = { _, _ in throw Refused() }
             model.performStreamingDelegation = { [unowned model] _, _, _, onSegment in
-                await onSegment("はじめまして、ミキさん。", nil)
+                await onSegment("はじめまして、ミキさん。", nil, nil)
                 model.responseDelivery.spoken.played("はじめまして、ミキさん。")
                 throw Refused()
             }

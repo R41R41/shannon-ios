@@ -70,6 +70,34 @@ describe('Eleven v4 Turbo speech', () => {
     expect(socket.listenerCount()).toBe(0);
   });
 
+  it('keeps her listed audio tags inside the sentence and drops any other bracketed direction', async () => {
+    const socket = new FakeSocket();
+    const gateway = new ElevenSpeechGateway('test-secret', 'testvoice123', { socketFactory: () => socket });
+    const speech = await gateway.stream({ ...request, text: 'ねえ、[whispers] 内緒だよ。[smiles] [laughs] ほんと。' });
+    const next = speech.chunks[Symbol.asyncIterator]().next();
+    socket.emit('open');
+    await Promise.resolve();
+    expect(JSON.parse(socket.sent[1] ?? '{}').inputs[0].text)
+      .toBe('[playful, lightly mischievous] ねえ、 [whispers] 内緒だよ。 [laughs] ほんと。');
+    socket.emit('message', JSON.stringify({ audio: Buffer.from([1, 2]).toString('base64') }));
+    socket.emit('message', JSON.stringify({ is_final: true }));
+    await next;
+  });
+
+  it('says a tag once when the sentence opens with one the acting tags already have', async () => {
+    const socket = new FakeSocket();
+    const gateway = new ElevenSpeechGateway('test-secret', 'testvoice123', { socketFactory: () => socket });
+    const speech = await gateway.stream({ ...request, style: '[anime character] [whispers]', text: '[whispers] [giggles] 内緒だよ。' });
+    const next = speech.chunks[Symbol.asyncIterator]().next();
+    socket.emit('open');
+    await Promise.resolve();
+    expect(JSON.parse(socket.sent[1] ?? '{}').inputs[0].text).toBe('[anime character] [whispers] [giggles] 内緒だよ。');
+    expect(JSON.parse(socket.sent[1] ?? '{}').inputs[0].text).not.toContain('[whispers] [whispers]');
+    socket.emit('message', JSON.stringify({ audio: Buffer.from([1, 2]).toString('base64') }));
+    socket.emit('message', JSON.stringify({ is_final: true }));
+    await next;
+  });
+
   it('accepts acting tags only, keeping instructions and markup out of spoken text', () => {
     expect(validatedElevenTags('[bright, warm conversational voice]')).toBe('[bright, warm conversational voice] ');
     expect(() => validatedElevenTags('Speak with a smile.')).toThrow(ElevenSpeechError);

@@ -250,4 +250,34 @@ describe('live voice request ownership', () => {
     await currentRun;
     expect(current.status).toBe(0);
   });
+
+  // Owner 2026-10-20: her audio tags are for the voice only (`voiceAudioTags.ts`).
+  it('shows each sentence without its audio tags and gives the voice its tags, a lone tag before the next sentence', async () => {
+    let output = '';
+    const kernel = {
+      streamLiveVoiceDelegation: async (_request: unknown, observer: { onPlan(plan: Record<string, unknown>): Promise<void>;
+        onTextDelta(delta: string): Promise<void> }) => {
+        await observer.onPlan({ shouldRespond: true });
+        await observer.onTextDelta('ねえ、[whis');
+        await observer.onTextDelta('pers] これは内緒だよ。[laughs]\n');
+        await observer.onTextDelta('[smiles] ほんとだよ。');
+        return { status: 200, body: { threadId: 'thread', reply: 'ねえ、これは内緒だよ。ほんとだよ。' } };
+      },
+    } as unknown as ShannonApiKernel;
+    const request = Readable.from([JSON.stringify({ transcript: 'なになに？' })]) as IncomingMessage;
+    request.method = 'POST';
+    const response = Object.assign(new EventEmitter(), {
+      headersSent: false,
+      writeHead() { this.headersSent = true; return this; },
+      write(value: string) { output += value; return true; },
+      end() {},
+    }) as unknown as ServerResponse;
+    await createLiveVoiceStreamRoute(kernel, () => true)(request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal);
+    const segments = output.trim().split('\n').map(line => JSON.parse(line) as { type: string; text?: string; voiceText?: string })
+      .filter(event => event.type === 'segment');
+    expect(segments.map(({ text, voiceText }) => ({ text, voiceText }))).toEqual([
+      { text: 'ねえ、これは内緒だよ。', voiceText: 'ねえ、 [whispers] これは内緒だよ。' },
+      { text: 'ほんとだよ。', voiceText: '[laughs] ほんとだよ。' },
+    ]);
+  });
 });

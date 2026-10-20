@@ -14,6 +14,7 @@ import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import { type KnowledgeStore } from '../../mind/memory/memoryPorts.js';
 import { companionIdentityPrompt, identityOnly } from '../../mind/memory/identityPrompt.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
+import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js'; // Her audio tags are the voice's: shown, stored, felt without.
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from '../../mind/selectors/voiceDecision.js';
 import { prepareTurnCognitiveContext } from '../../mind/workspace/turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
@@ -400,7 +401,7 @@ async function completeLiveVoiceDelegation(
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;
   let streamedReplyPrefix = '';
-  observer?.signal?.addEventListener('abort', () => roomLook.cutOff(threadId, streamedReplyPrefix), { once: true });
+  observer?.signal?.addEventListener('abort', () => roomLook.cutOff(threadId, displayedVoiceText(streamedReplyPrefix)), { once: true });
   let streamedEmotionUpdated = false;
   const requiresStructuredTaskDecision = voiceTurnSetsImplementation(orchestrationState, transcript, occurredAt);
   const completion = await observeFcaConversation(fcaTurn, () => placeSkill || (!work && provisionalIntent) || requiresStructuredTaskDecision || confirmedImplementationRequest
@@ -416,7 +417,7 @@ async function completeLiveVoiceDelegation(
           await observer.onTextDelta(researchSaid(delta, work));
           if (!streamedEmotionUpdated && /[。！？!?\n]/u.test(streamedReplyPrefix)) {
             streamedEmotionUpdated = true;
-            expressiveEmotion = emotionWith(streamedReplyPrefix);
+            expressiveEmotion = emotionWith(displayedVoiceText(streamedReplyPrefix));
             voicePlan = planFor(expressiveEmotion);
             await observer.onPlan(voicePlan);
           }
@@ -433,7 +434,7 @@ async function completeLiveVoiceDelegation(
   orchestrationState = settleVoiceTaskDecision(dependencies, orchestrationState, requiresStructuredTaskDecision, completion.taskDecision);
   const { acknowledged, heard } = await researchAfterAck(fcaTurn, next.admitted, completion, observer);
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? { title: '依頼された機能の実装', goal: confirmedImplementationRequest } : undefined);
-  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : `${researchSaid(acknowledged, work)}${heard}`;
+  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : displayedVoiceText(`${researchSaid(acknowledged, work)}${heard}`);
   let feedbackRecordId: string | undefined;
   const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, feedbackReplySuffix: placeReply('', placeSkill?.places ?? []), completion, tier, tools: toolOffer.tools, deadline, at: occurredAt, onFeedbackRecord: id=>{feedbackRecordId=id;} }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.

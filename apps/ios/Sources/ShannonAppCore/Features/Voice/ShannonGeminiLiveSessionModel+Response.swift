@@ -65,7 +65,7 @@ extension ShannonGeminiLiveSessionModel {
                 )
                 let localReply = mode == .owner ? batch.localReply : nil
                 let onSegment: ShannonVoiceSegmentHandler = {
-                    [weak self] segment, plan in
+                    [weak self] segment, plan, voiceText in
                     guard let self, self.responseGenerationID == generation, !Task.isCancelled else { return }
                     // Provisional with the first sentence, reconciled with later ones: the Eye follows the voice.
                     if let face = plan?.face { self.callFace = face }
@@ -81,7 +81,8 @@ extension ShannonGeminiLiveSessionModel {
                     if self.mayShowReply(of: mode) { self.shannonTranscript += segment }
                     // The echo guard and the spoken part learn the sentence when it is played (`consumeResponseSpeech`).
                     self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase, emotion: plan?.turnEmotion)
-                    await coordinator.enqueue(segment, plan: plan)
+                    // Her voice says the sentence with its audio tags (owner 2026-10-20); the screen and the echo guard keep `segment`.
+                    await coordinator.enqueue(segment, voiceText: voiceText, plan: plan)
                 }
                 if localReply == nil { voiceObservation?.delegating(id: batch.id, utteranceIDs: batch.turns.map(\.id)) }
                 let response = if let localReply {
@@ -132,7 +133,7 @@ extension ShannonGeminiLiveSessionModel {
                 if response.voicePlan?.shouldRespond != false {
                     failureStage = "synthesis_stream"
                     // What she saw is her next utterance, spoken behind this reply and known to the echo guard.
-                    if let seen = await ShannonAppLookSpeech.spoken(look) { await onSegment(seen, response.voicePlan) }
+                    if let seen = await ShannonAppLookSpeech.spoken(look) { await onSegment(seen, response.voicePlan, nil) }
                     try await coordinator.finish()
                     try requireCurrentResponse(generation)
                     failureStage = "playback"
