@@ -65,12 +65,16 @@ const CAVE_LEVEL = 60, CAVE_PENALTY = 40;
  */
 export function cheapestWater(from: Cell | null, cells: readonly Cell[], anchors: readonly Cell[] = []): Cell | undefined {
   if (!from) return cells[0];
-  const cost = (cell: Cell) => Math.hypot(cell.x - from.x, cell.z - from.z) + HEIGHT_WEIGHT * Math.abs(cell.y - from.y) + (cell.y < CAVE_LEVEL ? CAVE_PENALTY : 0)
+  const cost = (cell: Cell) => Math.hypot(cell.x - from.x, cell.z - from.z) + HEIGHT_WEIGHT * Math.abs(cell.y - from.y)
+    + (cell.y < CAVE_LEVEL ? CAVE_PENALTY : 0)
     + (anchors.length ? ANCHOR_WEIGHT * Math.min(...anchors.map(anchor => Math.hypot(cell.x - anchor.x, cell.y - anchor.y, cell.z - anchor.z))) : 0);
   let best: Cell | undefined, bestCost = Infinity;
   for (const cell of cells) {
     const value = cost(cell);
-    if (value < bestCost) { best = cell; bestCost = value; }
+    if (value < bestCost) {
+      best = cell;
+      bestCost = value;
+    }
   }
   return best;
 }
@@ -81,7 +85,8 @@ export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemo
   const scoop = (cell: Cell): MinecraftWorkItem => ({ tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'bucket' }, why: '水を汲む', expectMs: 3_000,
     key: `water:scoop:${cellKey(cell)}`, onFail: failure => giveUp(cell, failure) });
   const pick = (text: string): MinecraftWorkItem | null => {
-    const cell = cheapestWater(from, cellsInText(text).filter(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
+    const cell = cheapestWater(from, cellsInText(text).filter(candidate => !waterUnreachable(candidate)
+      && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
       && (!deep || !from || Math.hypot(candidate.x - from.x, candidate.y - from.y, candidate.z - from.z) <= NEAR_BELOW)),
     facts.jobs.map(job => block(job.position)));
     if (!cell) {

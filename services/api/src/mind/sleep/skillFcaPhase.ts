@@ -138,8 +138,12 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
       const pages = skills.patterns(scope).filter(page => gate(page.sources) || (left.pages.push(page.patternId), false));
       const currentSkills = skills.store.all(scope).filter(skill => gate(skill.sources) || (left.skills.push(skill.skillId), false));
       const hidden = new Set([...left.pages, ...left.skills]);
-      plan.withheld = left.seeds.length + hidden.size; plan.hidden = hidden;
-      if (plan.withheld) log(`Shannon skill sleep withheld seeds=${left.seeds.length} pages=${left.pages.length} skills=${left.skills.length} reason=source_not_visible ids=${[...left.seeds, ...hidden].slice(0, 12).join(',')}`);
+      plan.withheld = left.seeds.length + hidden.size;
+      plan.hidden = hidden;
+      if (plan.withheld) {
+        log(`Shannon skill sleep withheld seeds=${left.seeds.length} pages=${left.pages.length} skills=${left.skills.length} `
+          + `reason=source_not_visible ids=${[...left.seeds, ...hidden].slice(0, 12).join(',')}`);
+      }
       plan.sources = expandSources(scope, [...seeds.list.map(seed => seed.source), ...pages.flatMap(page => page.sources), ...currentSkills.flatMap(skill => skill.sources)]);
       await observe(scope, plan.sources, signal);
       signal.throwIfAborted();
@@ -164,12 +168,15 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
           return [[ref.id, page] as const];
         }));
         const bases = new Map<string, Base>();
-        const evidenceOf = (id: string, revisionId: string) => skills.store.revisions(scope, id).find(revision => revision.revisionId === revisionId)?.evidence ?? [];
+        const evidenceOf = (id: string, revisionId: string) =>
+          skills.store.revisions(scope, id).find(revision => revision.revisionId === revisionId)?.evidence ?? [];
         /** A branch (an older revision of a skill) is shown only if the skill is, and the sources it was built from are visible. */
         const usableBase = (id: string, revisionId: string) => {
           if (hidden.has(id)) return false;
           if (gate(evidenceOf(id, revisionId))) return true;
-          left.skills.push(id); hidden.add(id); plan.withheld = (plan.withheld ?? 0) + 1;
+          left.skills.push(id);
+          hidden.add(id);
+          plan.withheld = (plan.withheld ?? 0) + 1;
           log(`Shannon skill sleep withheld seeds=0 pages=0 skills=1 reason=base_source_not_visible ids=${id}`);
           return false;
         };
@@ -178,17 +185,21 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
           const node = skills.lineage(scope, ref.id).find(node => node.revisionId === ref.revisionId);
           const revision = skills.store.revisions(scope, ref.id).find(item => item.revisionId === ref.revisionId);
           if (!node || !revision) throw new Error('SKILL_FCA_BASE_CHANGED');
-          if (usableBase(ref.id, ref.revisionId)) bases.set(ref.id, { revisionId: node.revisionId, version: node.version, body: revision.body, uses: node.uses, successes: node.successes });
+          if (usableBase(ref.id, ref.revisionId)) {
+            bases.set(ref.id, { revisionId: node.revisionId, version: node.version, body: revision.body, uses: node.uses, successes: node.successes });
+          }
         }
         plan.bases = bases;
-        plan.sources = expandSources(scope, [...plan.sources, ...parts.revertedSources(scope), ...[...bases].flatMap(([id, base]) => evidenceOf(id, base.revisionId))]);
+        plan.sources = expandSources(scope, [...plan.sources, ...parts.revertedSources(scope),
+          ...[...bases].flatMap(([id, base]) => evidenceOf(id, base.revisionId))]);
         await observe(scope, plan.sources, signal);
         plan.state = { ...state, bases: [...bases].map(([id, base]) => ({ id, revisionId: base.revisionId })) };
         if (!reserve(scope, 'proposer', at, model.model)) return { ...plan, kind: 'done' } satisfies Planned;
         plan.answer = await model.json(scope, 'shannon_skill_proposal', PROPOSER_INSTRUCTIONS,
           parts.proposerInput(scope, state.round, bounds, opened, bases, hidden), PROPOSER_SCHEMA, signal);
       }
-      signal.throwIfAborted(); await verify(scope, plan.sources, signal);
+      signal.throwIfAborted();
+      await verify(scope, plan.sources, signal);
       return plan;
     },
     async apply(raw, { job, signal }) {
@@ -207,9 +218,16 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
         let gate: SourceGate;
         try { gate = makeGate(scope); } catch { gate = visibleOnly(scope); }
         const retired: string[] = [], deprecated: string[] = [];
-        for (const skill of skills.store.all(scope)) if (!gate(skill.sources) && skills.retire(scope, skill.skillId, 'source_forgotten', at)) retired.push(skill.skillId);
-        for (const page of skills.patterns(scope)) if (!gate(page.sources) && skills.deprecatePattern(scope, page.patternId, null, at)) deprecated.push(page.patternId);
-        if (retired.length + deprecated.length) log(`Shannon skill sleep withdrew skills=${retired.length} pages=${deprecated.length} reason=source_not_visible ids=${[...retired, ...deprecated].slice(0, 12).join(',')}`);
+        for (const skill of skills.store.all(scope)) {
+          if (!gate(skill.sources) && skills.retire(scope, skill.skillId, 'source_forgotten', at)) retired.push(skill.skillId);
+        }
+        for (const page of skills.patterns(scope)) {
+          if (!gate(page.sources) && skills.deprecatePattern(scope, page.patternId, null, at)) deprecated.push(page.patternId);
+        }
+        if (retired.length + deprecated.length) {
+          log(`Shannon skill sleep withdrew skills=${retired.length} pages=${deprecated.length} reason=source_not_visible `
+            + `ids=${[...retired, ...deprecated].slice(0, 12).join(',')}`);
+        }
         const result = skills.lifecycle(scope, at, check);
         return { done: false, state: { ...plan.state, stage: 'maintain' }, summary: summary('lifecycle', { settled, accepted: result.accepted.length, reverted: result.reverted.length,
           retired: result.retired.length + retired.length, withheld: retired.length + deprecated.length }) };
@@ -222,7 +240,8 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
         const result = { patterns: { created: 0, edited: 0, merged: 0, deprecated: 0 } };
         if (plan.answer !== undefined) parts.applyMaintenance(plan.answer as { operations?: unknown }, scope, plan.seeds!,
           Math.min(plan.limit ?? 0, bounds.patterns), check, at, result, why => { rejected.push(why); });
-        return { done: false, state: { ...plan.state, stage: 'propose' }, summary: summary('maintain', { ...result.patterns, rejected: rejected.length, withheld: plan.withheld ?? 0 }) };
+        return { done: false, state: { ...plan.state, stage: 'propose' },
+          summary: summary('maintain', { ...result.patterns, rejected: rejected.length, withheld: plan.withheld ?? 0 }) };
       }
       const answer = plan.answer as Partial<ProposerAnswer>;
       if (!isProposerAnswer(answer)) return { done: true, summary: summary('no_proposal', {}) };
@@ -234,7 +253,8 @@ export function createSkillSleepFcaPhase(parts: SkillFcaParts, options: SkillFca
       if (answer.action !== 'propose') return { done: true, summary: summary('no_proposal', {}) };
       const result = parts.applyProposal(answer, scope, bounds, check, plan.seeds!.texts, at, why => { rejected.push(why); }, plan.bases!, plan.hidden);
       const state = nextRun(plan.state);
-      return { done: state.run > SKILL_LIFECYCLE.proposerRuns, state, summary: summary('propose', { result, rejected: rejected.length, withheld: plan.withheld ?? 0 }) };
+      return { done: state.run > SKILL_LIFECYCLE.proposerRuns, state,
+        summary: summary('propose', { result, rejected: rejected.length, withheld: plan.withheld ?? 0 }) };
     },
   };
 }

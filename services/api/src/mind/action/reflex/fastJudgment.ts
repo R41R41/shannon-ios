@@ -255,6 +255,11 @@ function shooterFight(state: FastBodyState, reachable: readonly FastThreat[], he
     && shooters.every(threat => WALK_UP_SHOOTERS.has(threat.name));
 }
 
+/** Archers only, none in melee: armed and armoured against one or two that can be walked up to, the fight first (never with a creeper within 10 m). */
+function rangedDecision(state: FastBodyState, near: readonly FastThreat[], health: number, creeperNear: boolean): FastDecision {
+  return !creeperNear && shooterFight(state, near, health) ? decision('fight', 'shooter_fight') : decision('shelter', 'ranged_shelter');
+}
+
 /** The rules after the entry, in the design's order. */
 function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   const reachable = state.threats.filter(threat => reaches(threat, entry !== 'close'));
@@ -270,8 +275,7 @@ function ruled(state: FastBodyState, entry: FastEntry): FastDecision {
   if (before) return before;
   const creeperNear = within(FAST_JUDGMENT_LIMITS.creeperDistance).some(threat => threat.name === 'creeper');
   if (!melee.length && state.threats.some(threat => RANGED.has(threat.name) && threat.distance <= 16)) {
-    // Armed and armoured against one or two archers that can be walked up to: the fight first (never with a creeper within 10 m).
-    return !creeperNear && shooterFight(state, within(16), health) ? decision('fight', 'shooter_fight') : decision('shelter', 'ranged_shelter');
+    return rangedDecision(state, within(16), health, creeperNear);
   }
   // Never a fight with a creeper within 10 m (a fight's target is any hostile, the creeper among them): away from it first.
   if (creeperNear) return decision('flee', 'creeper_flee', 'creeper');

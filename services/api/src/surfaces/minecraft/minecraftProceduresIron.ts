@@ -70,7 +70,10 @@ export const IRON_DIG_AT_ONCE = 16;
 const SMELT_ITEM_MS = 10_000;
 /** A furnace this far from her is not walked back to for a piece (the body's `withdraw-from-furnace` walks, and a long walk costs more than the dig). */
 const FURNACE_REACH = 48;
-/** The ingots of a furnace this soon from being ready for the next piece keep her from a dig that would leave them waiting (run 21: 100 s from the batch to the pickaxe). */
+/**
+ * The ingots of a furnace this soon from being ready for the next piece keep her from a dig that would leave them waiting
+ * (run 21: 100 s from the batch to the pickaxe).
+ */
 const HOLD_FOR_FURNACE_MS = 40_000;
 /** The furnaces at most that hold iron at once (a third when the first two are full of the food the body queues behind a batch). */
 const FURNACES = 3;
@@ -105,7 +108,8 @@ function takeOut(facts: MinecraftProcedureFacts): McMove | null {
 type Job = MinecraftProcedureFacts['jobs'][number];
 const IRON_JOB = /raw_iron|iron_ore/u;
 /** The furnaces within reach that smelt iron. */
-const ironJobs = (facts: MinecraftProcedureFacts): Job[] => facts.jobs.filter(job => IRON_JOB.test(job.input) && distance(facts, job.position) <= FURNACE_REACH);
+const ironJobs = (facts: MinecraftProcedureFacts): Job[] =>
+  facts.jobs.filter(job => IRON_JOB.test(job.input) && distance(facts, job.position) <= FURNACE_REACH);
 /** Whether a furnace within reach holds iron she smelted (what it made is still to be taken out). */
 export const ironInFurnaces = (facts: MinecraftProcedureFacts) => ironJobs(facts).length > 0;
 /** The ingots a batch has made `ms` from now: its size less what is left to smelt by then (none when the body names no size). */

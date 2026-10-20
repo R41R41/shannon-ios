@@ -158,6 +158,18 @@ async function runLink(parts: ProcedureRunParts, call: Call, state: TaskProcedur
 const GETTING_NEARER = /目標へ近づいているので、同じ目標で再実行すれば続きから進めます/u;
 const OUT_OF_TIME = new Set(['movement_incomplete', 'timeout']);
 
+/**
+ * A failed call of an item as the procedure takes it: one the item accepts (`accepts`), or a walk that ran out of time getting nearer
+ * (`nearer`: made again), is done; any other failure goes to the item's own note (`onFail`).
+ */
+function settleFailure(next: MinecraftWorkItem, result: ProcedureItemResult): { result: ProcedureItemResult; nearer: boolean } {
+  if (result.ok) return { result, nearer: false };
+  if (next.accepts?.(result.failure ?? 'failed', result.text)) return { result: { ok: true, text: result.text, failure: null }, nearer: false };
+  const nearer = next.resumable === true && OUT_OF_TIME.has(result.failure ?? '') && GETTING_NEARER.test(result.text);
+  if (nearer) return { result: { ok: true, text: result.text, failure: null }, nearer };
+  try { next.onFail?.(result.failure ?? 'failed', result.text); } catch { /* the procedure's own note never fails a run */ }
+  return { result, nearer };
+}
 /** One item and its chain, each a body call with an operation id of its own. */
 async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedureState, item: MinecraftWorkItem, index: number): Promise<ProcedureItemResult> {
   let result: ProcedureItemResult = { ok: false, text: '', failure: 'not_offered' };
@@ -166,15 +178,10 @@ async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedur
     if (!parts.offered(next.tool)) return { ok: false, text: '', failure: 'not_offered' };
     result = await runLink(parts, call, state, next, `${call.operationId}:p${index}.${link}`);
     await freshFrame(parts);
-    let nearer = false;
-    if (!result.ok && next.accepts?.(result.failure ?? 'failed', result.text)) result = { ok: true, text: result.text, failure: null };
-    if (!result.ok) {
-      nearer = next.resumable === true && OUT_OF_TIME.has(result.failure ?? '') && GETTING_NEARER.test(result.text);
-      if (nearer) result = { ok: true, text: result.text, failure: null };
-      else try { next.onFail?.(result.failure ?? 'failed', result.text); } catch { /* the procedure's own note never fails a run */ }
-    }
+    const settled = settleFailure(next, result);
+    result = settled.result;
     // The chain after a walk waits for its arrival: the procedure reads the world again and makes the walk once more.
-    next = result.ok && !nearer && next.then ? next.then(result.text) : null;
+    next = result.ok && !settled.nearer && next.then ? next.then(result.text) : null;
   }
   return result;
 }

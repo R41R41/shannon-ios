@@ -73,7 +73,11 @@ function sleep(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | 
     if (at && !memory.failed(`sleep:move:${moved}`)) {
       return doing({ tool: 'mc.move-to', input: { x: Math.floor(at.x) + dx, y: Math.floor(at.y), z: Math.floor(at.z) + dz, goalType: 'near', range: 3 },
         why: 'ベッドを置ける場所を変える', expectMs: 20_000, key: `sleep:move:${moved}`,
-        then: () => { memory.notes.set('bed:moved', moved + 1); memory.notes.delete('bed:noplace'); return null; } });
+        then: () => {
+          memory.notes.set('bed:moved', moved + 1);
+          memory.notes.delete('bed:noplace');
+          return null;
+        } });
     }
   }
   // A sleep that failed otherwise (an enemy near) is the planner's, at the night's stop below.
@@ -97,7 +101,10 @@ function clearBedroom(facts: MinecraftProcedureFacts, memory: ProcedureMemory, n
   const fought = Number(memory.notes.get('bed:fights') ?? 0);
   if (fought >= 2 || memory.failed(`sleep:clear:${fought}`)) return null;
   return doing({ tool: 'mc.attack-continuously', input: { entityName: 'hostile', maxKills: 3 }, why: '寝る前に近くの敵を倒す', expectMs: 20_000,
-    key: `sleep:clear:${fought}`, then: () => { memory.notes.set('bed:fights', fought + 1); return null; } });
+    key: `sleep:clear:${fought}`, then: () => {
+      memory.notes.set('bed:fights', fought + 1);
+      return null;
+    } });
 }
 
 /** The moment's upkeep, each kind left for the rest of the run once it failed (an upkeep never ends a run). */

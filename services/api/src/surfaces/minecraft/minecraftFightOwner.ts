@@ -31,9 +31,16 @@ export function createBodyRevisions() {
   return {
     get revision() { return revision; },
     /** Her own tool was cut off, or an explicit session ran: every decision made earlier is stale. */
-    hard() { revision += 1; hard = revision; return revision; },
+    hard() {
+      revision += 1;
+      hard = revision;
+      return revision;
+    },
     /** A reflex acted beside her tool: a decision made earlier is stale unless it is a fight she chose. */
-    soft() { revision += 1; return revision; },
+    soft() {
+      revision += 1;
+      return revision;
+    },
     /** Whether a decision made at `version` is current: exactly, or (a fight she chose) with only soft touches since. */
     current(version: number, fight = false) { return version === revision || (fight && version >= hard); },
     /** How many touches have come since `version`. */
@@ -47,9 +54,15 @@ export function createFightOwner(now: () => number) {
     /** The check that lets a fight go on to its call. */
     claim() { claimedAt = now(); },
     /** The fight's call began. */
-    began() { running = true; startedAt = now(); },
+    began() {
+      running = true;
+      startedAt = now();
+    },
     /** The fight's call ended (whatever the result). */
-    ended() { running = false; endedAt = now(); },
+    ended() {
+      running = false;
+      endedAt = now();
+    },
     owned(): boolean {
       const at = now();
       return (running && at - startedAt < FIGHT_OWNER.longestMs) || at - endedAt < FIGHT_OWNER.afterMs || at - claimedAt < FIGHT_OWNER.claimMs;

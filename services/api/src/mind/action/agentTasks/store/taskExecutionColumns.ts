@@ -218,3 +218,18 @@ export function failedWithUnknownOutcome(db: DatabaseSync, taskId: string): bool
   if (!tableColumns(db, 'agent_tasks').has('unknown_since')) return false;
   return Boolean(db.prepare("SELECT 1 AS found FROM agent_tasks WHERE task_id = ? AND status = 'failed' AND unknown_since IS NOT NULL").get(taskId));
 }
+
+/**
+ * Whether a task bound to a body (`fca_body_bindings`, Minecraft) is working in this scope: ready for its next step, in a step, or being
+ * stopped. One that waits (for a word of his, for the body to come back), is paused or has finished is not taking the API's thread.
+ * The night waits while one is working (`wiring/fcaSleepJobs.ts`). The table exists once a body has been bound; before that, false.
+ */
+export function bodyTaskWorking(db: DatabaseSync, scope: string): boolean {
+  try {
+    const row = db.prepare(`SELECT 1 FROM fca_body_bindings b JOIN agent_tasks t ON t.task_id=b.task_id
+      WHERE t.scope_key=? AND t.exec_state IN ('ready','active','stopping') LIMIT 1`).get(scope);
+    return !!row;
+  } catch {
+    return false;
+  }
+}

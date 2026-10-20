@@ -150,6 +150,14 @@ async function runOne<Facts, Item>(state: RunState<Facts, Item>, procedure: stri
   return state.failures >= state.limits.failures ? ended(state, 'failed', procedure, `失敗が${state.failures}回になった（最後は${failure}）`) : null;
 }
 
+/** Cut between items: one that would not end inside the time bound waits for the next run (the first item of a run always goes). */
+function cutBefore<Facts, Item>(state: RunState<Facts, Item>, procedure: string, item: Item | null): ProcedureRunResult | null {
+  const expected = item === null ? 0 : state.ports.expectMs?.(item) ?? 0;
+  const elapsedMs = state.ports.now() - state.started;
+  if (state.items.length === 0 || expected <= 0 || elapsedMs + expected <= state.limits.ms) return null;
+  return ended(state, 'limit', procedure, `一度に流す上限（${state.limits.items}手・${Math.round(state.limits.ms / 1000)}秒）の手前で、`
+    + `次の手（約${Math.round(expected / 1000)}秒）を始めずに区切った`);
+}
 /** One procedure to its end: null when it is done, else the run's result. */
 async function throughOne<Facts, Item>(state: RunState<Facts, Item>, procedure: Procedure<Facts, Item>): Promise<ProcedureRunResult | null> {
   for (;;) {
@@ -164,13 +172,8 @@ async function throughOne<Facts, Item>(state: RunState<Facts, Item>, procedure: 
     if (move.kind === 'stuck') return ended(state, 'stuck', procedure.id, move.why);
     const blocked = refused(state, procedure.id, move);
     if (blocked) return blocked;
-    // Cut between items: one that would not end inside the time bound waits for the next run (the first item of a run always goes).
-    const expected = move === upkeep ? 0 : state.ports.expectMs?.(move.item) ?? 0;
-    const elapsedMs = state.ports.now() - state.started;
-    if (state.items.length > 0 && expected > 0 && elapsedMs + expected > state.limits.ms) {
-      return ended(state, 'limit', procedure.id, `一度に流す上限（${state.limits.items}手・${Math.round(state.limits.ms / 1000)}秒）の手前で、`
-        + `次の手（約${Math.round(expected / 1000)}秒）を始めずに区切った`);
-    }
+    const cut = cutBefore(state, procedure.id, move === upkeep ? null : move.item);
+    if (cut) return cut;
     const end = await runOne(state, procedure.id, move);
     if (end) return end;
   }

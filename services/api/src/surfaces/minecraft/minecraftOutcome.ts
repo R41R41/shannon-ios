@@ -145,8 +145,8 @@ function rangedFightRefusal(name: string, input: unknown, observation: BodyObser
   if (health === null || health > 10 || holdingPosition(input)) return null;
   const shooters = reaching(world?.nearbyThreats).filter(threat => RANGED_ENEMIES.has(threat.name));
   // mb-r21 (run 21): with a sword in hand and armour on, one or two archers she can walk up to are fought down to the floor of the rules.
-  if (health > FAST_JUDGMENT_LIMITS.lowHealth && shooters.length <= FAST_JUDGMENT_LIMITS.shooterFightMax && shooters.every(threat => WALK_UP_SHOOTERS.has(threat.name))
-    && armedAndArmoured(world)) return null;
+  if (health > FAST_JUDGMENT_LIMITS.lowHealth && shooters.length <= FAST_JUDGMENT_LIMITS.shooterFightMax
+    && shooters.every(threat => WALK_UP_SHOOTERS.has(threat.name)) && armedAndArmoured(world)) return null;
   const ranged = shooters.length > 0;
   const target = String((input as Record<string, unknown> | null)?.[FIGHTS[name]!] ?? 'hostile').toLowerCase();
   const atRanged = RANGED_ENEMIES.has(target) || target === 'hostile' || target === '';

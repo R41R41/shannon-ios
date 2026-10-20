@@ -120,6 +120,11 @@ export function createMinecraftFastJudgment(parts: {
     return (health ?? 0) <= FAST_JUDGMENT_LIMITS.lowHealth && decision.kind !== 'fight' && FIGHT_SKILLS.has(running) ? null : running;
   };
   /**
+   * The fight is hers (she chose one, or has just finished one): the judgment does not take the body from it, unless health is at the
+   * floor of the rules (then it may, as it may cut off a fight she is in).
+   */
+  const fightHeld = (health: number | null) => parts.fightOwned?.() === true && (health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth;
+  /**
    * The end of a sent fast skill: its rest, the interrupt it spent, and its line. A skill cut off before its time was up (the FCA's own
    * interrupt cancels the command) did not fail: only a refusal, a failure or a run to its deadline does. The design only says "if
    * hiding failed, flee next" and does not cover interrupts. So is one the body's own reflex took the body from (a meal, a step back
@@ -231,9 +236,7 @@ export function createMinecraftFastJudgment(parts: {
       if (frames < 2) return null;
       const { decision } = verdict, running = defending(state.health, decision);
       if (running) return parts.hold('fca_defending', { skill: running }), null;
-      // The fight is hers (she chose one, or has just finished one): the judgment does not take the body from it, unless health is at the
-      // floor of the rules (then it may, as it may cut off a fight she is in).
-      if (parts.fightOwned?.() && (state.health ?? 0) > FAST_JUDGMENT_LIMITS.lowHealth) return parts.hold('fca_fight_owned', { kind: decision.kind }), null;
+      if (fightHeld(state.health)) return parts.hold('fca_fight_owned', { kind: decision.kind }), null;
       if (!hasSkill(bodyId, decision.skill)) {
         return parts.hold('fast_skill_missing', { skill: decision.skill }), null;
       }

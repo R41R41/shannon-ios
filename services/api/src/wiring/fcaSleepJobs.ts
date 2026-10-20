@@ -3,7 +3,7 @@ import type { TaskRuntime, TaskSleepTicket, TaskView } from '../mind/action/task
 import type { SleepFcaJob } from '../mind/sleep/sleepFcaPorts.js';
 import { underWriteLock } from '../infra/sqlite/lockWaits.js';
 import { parseBackgroundJobPayload } from '../infra/sqlite/sqliteStoreCodecs.js';
-import { failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
+import { bodyTaskWorking, failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskExecutionColumns.js';
 
 /**
  * The old nightly schedule is the authority. The binding never grants owner task privileges. A bound night's job row carries
@@ -15,20 +15,15 @@ import { failedWithUnknownOutcome } from '../mind/action/agentTasks/store/taskEx
  * (Minecraft run 21); the model-free part of the night is not worth that, and a body task that runs through the morning does not hold it for good.
  */
 export const SLEEP_BODY_DEFER_MS = 6 * 3_600_000;
-/**
- * The exec states of a task that is working (ready for its next step, in a step, or being stopped). One that waits (for a word of his,
- * for the body to come back), is paused or has finished is not taking the thread, and does not hold the night back.
- */
-const WORKING = "('ready','active','stopping')";
 
 export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = () => new Date().toISOString(),
-  options: { /** Whether a body task is working now; its tasks (`fca_body_bindings`) by default. */ bodyWorking?: () => boolean; deferMs?: number; log?: (line: string) => void } = {}) {
+  options: {
+    /** Whether a body task is working now; its tasks (`fca_body_bindings`, `bodyTaskWorking`) by default. */
+    bodyWorking?: () => boolean; deferMs?: number; log?: (line: string) => void;
+  } = {}) {
   const owner = (taskId: string) => `fca-sleep:${taskId}`;
   const deferMs = options.deferMs ?? SLEEP_BODY_DEFER_MS, log = options.log ?? ((line: string) => console.warn(line));
-  const bodyWorking = options.bodyWorking ?? (() => {
-    // The table exists once a body has been bound; before that no body task can be working.
-    try { return !!db.prepare(`SELECT 1 FROM fca_body_bindings b JOIN agent_tasks t ON t.task_id=b.task_id WHERE t.scope_key=? AND t.exec_state IN ${WORKING} LIMIT 1`).get(ownerScope); } catch { return false; }
-  });
+  const bodyWorking = options.bodyWorking ?? (() => bodyTaskWorking(db, ownerScope));
   /** The nights already named as postponed (once each, not every second). */
   const postponed = new Set<string>();
   function ticket(scope: string, jobId: string): TaskSleepTicket | null {
@@ -103,7 +98,10 @@ export function createFcaSleepJobs(db: DatabaseSync, ownerScope: string, now = (
       // A night does not start while a body task is working: it stays pending, and is asked again at the next wake, until the body
       // ends or `deferMs` has passed since the night became available (then it starts).
       if (Date.parse(now()) - Date.parse(String(row.available_at)) < deferMs && bodyWorking()) {
-        if (!postponed.has(String(row.job_id))) { postponed.add(String(row.job_id)); log(`Shannon FCA sleep postponed job=${row.job_id} reason=body_task_working`); }
+        if (!postponed.has(String(row.job_id))) {
+          postponed.add(String(row.job_id));
+          log(`Shannon FCA sleep postponed job=${row.job_id} reason=body_task_working`);
+        }
         return null;
       }
       if (postponed.delete(String(row.job_id))) log(`Shannon FCA sleep starting job=${row.job_id} after postponement`);
