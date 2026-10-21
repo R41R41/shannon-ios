@@ -3,6 +3,7 @@ import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { block, cellKey, cellsInText, inPack, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cardinal, doing, stuck, type McMove } from './minecraftProcedureMoves.js';
 import { waterPlaces } from './minecraftProcedureMap.js';
+import { bestWater } from './minecraftProcedureTrip.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 
 /**
@@ -12,7 +13,6 @@ import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
  * not reach is remembered across tasks (a task's extension began the count again and went to the same lake); and with no water down below,
  * the way up she dug herself is the way to the water.
  */
-const NEAR_BELOW = 30;
 /** A cell this far from one she could not reach is the same water (a lake lists its cells side by side). */
 const SAME_WATER = 8;
 const UNREACHABLE_MS = 20 * 60_000;
@@ -42,10 +42,6 @@ export const needsWater = (facts: MinecraftProcedureFacts) => inPack(facts, /^bu
 /** No water found where she looked: below (within reach of the stair) or on the surface; a look in the other place is not given up. */
 export const waterGivenUp = (memory: ProcedureMemory, below: boolean) => memory.notes.get('water:none') === (below ? 'below' : 'surface');
 
-/**
- * Water found, the nearest cell not given up on walked to (a walk that was getting nearer is made again, not counted), and scooped. Deep
- * down only a cell within `NEAR_BELOW` m counts: a walk through rock takes two to eight seconds a metre.
- */
 /** What a step of height weighs against a metre along the ground (a walk down into rock and back up is the slowest there is). */
 const HEIGHT_WEIGHT = 3;
 /** What a metre of a water's distance from the furnaces (where the next steps are) weighs against one from her. */
@@ -79,25 +75,68 @@ export function cheapestWater(from: Cell | null, cells: readonly Cell[], anchors
   return best;
 }
 
-export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemory, maxDistance = 64): McMove {
+/** The most seconds of detour a water is worth: on the surface, under ground on the way down, and for the obsidian (it cannot be made without). */
+const SURFACE_DETOUR_S = 120, UNDERGROUND_DETOUR_S = 90, OBSIDIAN_DETOUR_S = 400;
+/** How far the body looks for water (blocks): the same under ground as above (mb-r22; under ground it looked 48 and the cell listed was dropped past 30). */
+const WATER_LOOK = 64;
+
+export interface FillOptions {
+  /** The most seconds of detour the water may cost (`waterDetour`). */
+  maxSeconds?: number;
+  /** Where the next steps are (the furnaces by default): the water on the way to them costs least. */
+  after?: readonly Cell[];
+}
+
+const cellsOnce = (cells: readonly Cell[]): Cell[] => [...new Map(cells.map(cell => [cellKey(cell), cell] as const)).values()];
+
+/**
+ * The bucket filled: the water the body finds within `WATER_LOOK` and the water the map remembers, together, the one that costs the least
+ * detour walked to (`bestWater`: height and rock count, a walk that was getting nearer is made again, not counted) and scooped.
+ */
+export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemory, options: FillOptions = {}): McMove {
   const deep = !onSurface(facts);
   const from = facts.at;
+  const after = options.after ?? facts.jobs.map(job => block(job.position));
   const scoop = (cell: Cell): MinecraftWorkItem => ({ tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'bucket' }, why: '水を汲む', expectMs: 3_000,
     key: `water:scoop:${cellKey(cell)}`, onFail: failure => giveUp(cell, failure) });
   const pick = (text: string): MinecraftWorkItem | null => {
-    const cell = cheapestWater(from, cellsInText(text).filter(candidate => !waterUnreachable(candidate)
-      && memory.failed(`water:walk:${cellKey(candidate)}`) === 0
-      && (!deep || !from || Math.hypot(candidate.x - from.x, candidate.y - from.y, candidate.z - from.z) <= NEAR_BELOW)),
-    facts.jobs.map(job => block(job.position)));
-    if (!cell) {
+    const known = cellsOnce([...cellsInText(text), ...waterPlaces(facts).map(place => place.at)])
+      .filter(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0);
+    const choice = bestWater(from, known, after, options.maxSeconds ?? SURFACE_DETOUR_S);
+    if (!choice) {
       memory.notes.set('water:none', deep ? 'below' : 'surface');
       return null;
     }
-    return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 2 }, why: '水のそばへ行く', expectMs: 30_000, key: `water:walk:${cellKey(cell)}`,
+    const cell = choice.cell;
+    return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: 2 }, why: '水のそばへ行く', key: `water:walk:${cellKey(cell)}`,
+      expectMs: Math.min(240_000, Math.max(30_000, Math.round(choice.seconds * 1_500))),
       resumable: true, onFail: failure => giveUp(cell, failure), then: () => scoop(cell), chain: 2 };
   };
-  return doing({ tool: 'mc.find-blocks', input: { blockName: 'water', maxDistance: deep ? NEAR_BELOW + 18 : maxDistance, count: 16 }, why: '水を探す',
-    expectMs: 2_000, key: `water:find:${memory.succeeded('water:find')}:${unreachable.length}`, then: pick, chain: 3 });
+  // Nothing found in sight is not a failure: the map's memory is looked at all the same (`pick`).
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'water', maxDistance: WATER_LOOK, count: 16 }, why: '水を探す',
+    expectMs: 2_000, key: `water:find:${memory.succeeded('water:find')}:${unreachable.length}`, then: pick, chain: 3,
+    accepts: failure => failure === 'target_not_found' });
+}
+
+/**
+ * Before the stair goes down (mb-r22, owner 2026-10-21: 「30分以内にスムーズにネザー」): the bucket must hold water, whatever the height she
+ * stands at. Run 22 made the bucket 40 blocks under ground, found no water on the surface (`waterOnTheSurface` needs it) and went down to
+ * Y-58 with it empty; the water cost 229 s there. The water of least detour toward the depth is taken, the body's find (64 m, the surface
+ * water seen from under ground too) and the map's together; with none known the descent goes on in legs that look again for water at the
+ * foot of each (`descentLeg`), and the obsidian's own step fetches it last of all (`getWater`). Null when the bucket is full or none is worth it.
+ */
+export function waterBeforeDescent(facts: MinecraftProcedureFacts, memory: ProcedureMemory, deepY: number): McMove | null {
+  const at = facts.at;
+  if (!needsWater(facts) || !at || facts.dimension !== 'overworld') return null;
+  const below = !onSurface(facts);
+  if (waterGivenUp(memory, below)) return null;
+  const toward = { x: Math.floor(at.x), y: deepY, z: Math.floor(at.z) };
+  return fillBucket(facts, memory, { maxSeconds: below ? UNDERGROUND_DETOUR_S : SURFACE_DETOUR_S, after: [toward] });
+}
+
+/** The bucket for the obsidian: the water that costs least on the way to the lava the map knows (the pool's own water is the best). */
+export function waterForObsidian(facts: MinecraftProcedureFacts, memory: ProcedureMemory, lava: readonly Cell[]): McMove {
+  return fillBucket(facts, memory, { maxSeconds: OBSIDIAN_DETOUR_S, after: lava });
 }
 
 /**

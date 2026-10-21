@@ -94,6 +94,8 @@ interface Parts {
   taskStartedAt?: number;
   /** A step's time budget from the task's route (mb-head), when it has one. */
   targetSeconds?(milestone: string): number | undefined;
+  /** When the body last arrived (login, reconnection, respawn), or null (a procedure waits for a body that just came back to be steady). */
+  arrivedAt?(): number | null;
 }
 
 const short = (text: string) => text.replace(/\s+/gu, ' ').slice(0, 120);
@@ -138,7 +140,7 @@ function procedure(tools: FcaExternalTools, parts: Parts, call: Call, one: (call
   return runMinecraftProcedure({ taskId: parts.taskId, observe: parts.observe, execute, now,
     offered: name => tools.definitions.some(tool => tool.name === name), batchObsidian: batchObsidianOf(tools),
     ...(parts.pending ? { pending: parts.pending } : {}), ...(parts.taskStartedAt !== undefined ? { taskStartedAt: parts.taskStartedAt } : {}),
-    ...(parts.targetSeconds ? { targetSeconds: parts.targetSeconds } : {}) }, call);
+    ...(parts.targetSeconds ? { targetSeconds: parts.targetSeconds } : {}), ...(parts.arrivedAt ? { arrivedAt: parts.arrivedAt } : {}) }, call);
 }
 
 /** Whether an error of a sub-command must end the call (an outcome not known, a stop); any other is told as a failed item. */

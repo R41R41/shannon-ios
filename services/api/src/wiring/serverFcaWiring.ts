@@ -211,7 +211,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             sourcesVisible: () => check.whole('tool') ?? false,
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
             { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
-              ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
+              ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? ''),
+              arrivedAt: () => minecraft.control.arrivedAt(minecraft.control.store.body(step.taskId) ?? '') }),
             ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,

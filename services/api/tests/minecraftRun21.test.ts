@@ -217,7 +217,8 @@ describe('the iron procedure (run 21: the iron armour at 1,074 s instead of abou
     expect(item).toMatchObject({ tool: 'mc.withdraw-from-furnace', input: { x: 12, y: 64, z: 2, waitForCompletion: false } });
     // The body answers a part taken as `waiting_external` with the words of what it gave: that is done, anything else is not.
     expect(item.accepts!('waiting_external', '完成済みのiron_ingot×5を回収しました。材料3個の精錬は未完了です。')).toBe(true);
-    expect(item.accepts!('waiting_external', '完成品はまだありません（材料3個が残っています）')).toBe(false);
+    // mb-r22: a furnace that has nothing ready yet is not a failed call either (the batch still smelts); it is noted and not asked again at once.
+    expect(item.accepts!('waiting_external', '完成品はまだありません（材料3個が残っています）')).toBe(true);
     expect(item.accepts!('failed', '完成済みのiron_ingot×5を回収しました')).toBe(false);
   });
 

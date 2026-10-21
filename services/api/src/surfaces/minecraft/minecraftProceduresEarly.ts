@@ -1,7 +1,7 @@
 import type { ProcedureMemory } from '@shannon/mind';
-import { BED_ITEM, EDIBLE_FOOD } from './minecraftItems.js';
-import { fed } from './minecraftStage.js';
+import { BED_ITEM } from './minecraftItems.js';
 import { takeNeed } from './minecraftFillers.js';
+import { foodMove } from './minecraftProcedureFood.js';
 import { villageVisit, type MapVisits } from './minecraftProcedureMap.js';
 import { carried, inPack, nearestNeed, type Cell, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { cobbleFor, craft, digLogs, doing, fromFirstCell, planksFor, plankWorth, stuck, toolOf, type McMove } from './minecraftProcedureMoves.js';
@@ -106,21 +106,6 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
   const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
   return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, anchors);
-}
-
-/** Food enough to go on (`fed`): an animal in reach, else any food animal near; null when fed. */
-function foodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
-  if (fed(facts.counts)) return null;
-  const food = carried(facts, EDIBLE_FOOD);
-  const animal = nearestNeed(facts, 'food', 48);
-  if (animal) {
-    return doing({ tool: 'mc.attack-continuously', input: { entityName: animal.name, maxKills: 2, maxDistance: 32 }, why: '食べ物の動物を取る',
-      expectMs: 20_000, key: `food:${animal.name}:${food}` });
-  }
-  const key = `food:any:${food}`;
-  if (memory.lastFailure(key) === 'target_not_found') return stuck('食べ物の動物が近くに見えない');
-  return doing({ tool: 'mc.attack-continuously', input: { entityName: 'food_animals', maxKills: 3, maxDistance: 48 }, why: '食べ物の動物を探して取る',
-    expectMs: 40_000, key });
 }
 
 /** 「食料と羊とベッド」: the bed first; food while the bed waits on a search the planner must decide. */

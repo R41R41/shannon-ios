@@ -5,7 +5,8 @@ import { cardinal, craft, doing, fromFirstCell, stuck, toolOf, type McMove } fro
 import { caveDescent, lavaPlaces, mappedObsidian, obsidianAhead, orePlaces, portalAhead, ruinedPortal, towardMapped, towardRoute, type MapPlace,
   type MapVisits } from './minecraftProcedureMap.js';
 import { dropJunk, guardOutward, healFirst, noteSurface, pickaxeReserve } from './minecraftProcedureCare.js';
-import { fillBucket, onSurface, upForWater, waterGivenUp, waterOnTheSurface } from './minecraftProcedureWater.js';
+import { needsWater, onSurface, upForWater, waterBeforeDescent, waterForObsidian, waterGivenUp } from './minecraftProcedureWater.js';
+import { tripSeconds } from './minecraftProcedureTrip.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 
@@ -46,14 +47,29 @@ export function diamondMove(facts: MinecraftProcedureFacts, memory: ProcedureMem
 
 /** Before the stair goes down: water in the bucket (down there it cannot be had), the pack clear, the pickaxe sound, health made up. */
 function goDownForDiamonds(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, y: number): McMove {
-  const ready = waterOnTheSurface(facts, memory) ?? dropJunk(facts, memory) ?? pickaxeReserve(facts) ?? healFirst(facts, memory);
-  if (ready) return ready;
   noteSurface(facts, store);
+  // mb-r22: the water first, from wherever she stands (run 22 went down empty from 40 blocks under ground and paid 229 s for it).
+  const ready = waterBeforeDescent(facts, memory, DEEP_Y) ?? dropJunk(facts, memory) ?? pickaxeReserve(facts) ?? healFirst(facts, memory);
+  if (ready) return ready;
   // A cave entrance whose bottom is lower walked down first (mb-map); the stair goes on from its bottom.
   const cave = caveDescent(facts, store, memory, { within: 96, depth: [DEEP_Y - 6, y - 12], why: 'ダイヤの深さへ下りる' });
   if (cave) return guardOutward(facts, store, cave);
-  return guardOutward(facts, store, doing({ tool: 'mc.stair-mine', input: { targetY: DEEP_Y }, why: 'ダイヤの深さ（Y-58）へ降りる',
-    expectMs: 4_000 * (y - DEEP_Y), key: `diamond:down:${y}` }));
+  return guardOutward(facts, store, descentLeg(facts, memory, y));
+}
+
+/** With the bucket still empty and no water known, the stair goes down in legs and looks for water at the foot of each (mb-r22). */
+const DESCENT_LEG = 32;
+
+/** The stair down to the diamonds: the whole way, or a leg of it while the bucket is empty (the water looked for again from there). */
+function descentLeg(facts: MinecraftProcedureFacts, memory: ProcedureMemory, y: number): McMove {
+  const legs = needsWater(facts) && y - DEEP_Y > DESCENT_LEG;
+  const targetY = legs ? y - DESCENT_LEG : DEEP_Y;
+  return doing({ tool: 'mc.stair-mine', input: { targetY }, why: legs ? 'ダイヤの深さへ降りる（水を探しながら区切って）' : 'ダイヤの深さ（Y-58）へ降りる',
+    expectMs: 1_500 * (y - targetY), key: `diamond:down:${y}`,
+    then: () => {
+      if (legs) memory.notes.delete('water:none');
+      return null;
+    } });
 }
 
 /** At the depth: the pack cleared, the diamonds near dug (a wider look, then the places the map and the route name). */
@@ -107,6 +123,9 @@ function lavaBySurface(facts: MinecraftProcedureFacts, store: ProcedureTaskStore
   const lava = mappedLava(facts, visits, memory);
   if (!lava || !facts.at || lava.sideways <= LAVA_UNDER_GROUND || lava.place.at.y >= 50) return null;
   const target = lava.place.at;
+  // mb-r22 (owner 2026-10-21): a pool near the diamonds' depth is walked to under ground when that is the shorter way (run 22: 56 m sideways
+  // and 73 up, about 110 s through the rock, against 230 s up to the surface, across and down).
+  if (!onSurface(facts) && tripSeconds(block(facts.at), target) <= surfaceRouteSeconds(facts.at, target, store)) return null;
   if (!onSurface(facts)) return wayUp(facts, store, 64, '遠い溶岩の溜まりへは、階段を上がって地上から行く', target);
   const dive = (): McMove => doing({ tool: 'mc.stair-mine', input: { targetY: target.y + 3 }, why: '溶岩の溜まりのそばへ縦穴を掘って降りる',
     expectMs: 1_500 * Math.max(1, facts.at!.y - target.y), key: `lava:dive:${cellKey(target)}`,
@@ -144,8 +163,21 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch:
     return { tool: 'mc.move-to', input: { ...cell, goalType: 'block' }, why: '溶岩のそばへ行く', expectMs: 20_000, key: `obsidian:walk:${cellKey(cell)}`,
       resumable: true, then: () => pour, chain: 3 };
   };
-  return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 32, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
+  return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 48, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
     key: `obsidian:${count}:${lavaWalks(visits)}`, then: pick, chain: 4 });
+}
+
+/** Seconds by the surface to a pool far off: up the stair she dug, across the ground above it, and a shaft down beside it. */
+function surfaceRouteSeconds(at: Cell, target: Cell, store: ProcedureTaskStore): number {
+  const top = { x: at.x, y: store.surface?.y ?? 64, z: at.z };
+  const above = { x: target.x, y: top.y, z: target.z };
+  return tripSeconds(block(at), top) + tripSeconds(top, above) + tripSeconds(above, target);
+}
+
+/** Seconds to the nearest lava pool the map names (Infinity when none): what a pool under ground weighs against the obsidian on the surface. */
+function lavaSeconds(facts: MinecraftProcedureFacts): number {
+  const at = facts.at;
+  return at ? Math.min(Infinity, ...lavaPlaces(facts).map(place => tripSeconds(block(at), place.at))) : Infinity;
 }
 
 /** The nearest of two places by distance (the walk they need is the same kind). */
@@ -167,9 +199,10 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
   const junk = dropJunk(facts, memory);
   if (junk) return junk;
   noteSurface(facts, store);
-  // A lava pool in reach below with the water in the bucket is cheaper than any walk, and goes first.
-  const lavaNear = water && !onSurface(facts) && lavaPlaces(facts).some(place => place.distance <= 32);
-  const surface = lavaNear ? null : surfaceObsidian(facts, memory, store, count);
+  // A lava pool under ground that is nearer, by the seconds it takes, than the obsidian on the surface goes first (mb-r22: the pools near
+  // the diamonds' depth, 230 s of climbing and descending saved); with no water in the bucket the water is fetched on the way to it.
+  const lavaFirst = !onSurface(facts) ? lavaSeconds(facts) : Infinity;
+  const surface = surfaceObsidian(facts, memory, store, count, lavaFirst);
   if (surface) return guardOutward(facts, store, surface);
   if (!water) return getWater(facts, memory, store);
   // None in sight since the last walk: a pool the map remembers (by the surface when it is far), and a look from there.
@@ -181,13 +214,15 @@ export function obsidianMove(facts: MinecraftProcedureFacts, memory: ProcedureMe
  * What the map remembers on the surface, nearest first: a ruined portal's chest and frame, other obsidian seen above ground. Below, the
  * stair up first (aimed at it); null when there is none within reach.
  */
-function surfaceObsidian(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, count: number): McMove | null {
+function surfaceObsidian(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, count: number,
+  lavaBelow = Infinity): McMove | null {
   const y = facts.at ? Math.floor(facts.at.y) : 64;
   const flint = !carried(facts, FLINT_AND_STEEL);
   const portal = portalAhead(facts, store, memory, { obsidian: 10 - count, flint });
   const mapped = count < 10 ? obsidianAhead(facts, store, memory) : null;
   const target = nearest([portal ? { place: portal, kind: 'portal' } : null, mapped ? { place: mapped, kind: 'mapped' } : null]);
   if (!target || target.place.at.y - y > MOST_UP) return null;
+  if (facts.at && tripSeconds(block(facts.at), target.place.at) >= lavaBelow) return null;
   if (!onSurface(facts) && target.place.at.y - y > 25) {
     const up = wayUp(facts, store, target.place.at.y, '地上の黒曜石・荒廃したポータルへ、階段を上がって行く', target.place.at);
     if (up) return up;
@@ -199,7 +234,7 @@ function surfaceObsidian(facts: MinecraftProcedureFacts, memory: ProcedureMemory
 function getWater(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore): McMove {
   if (!inPack(facts, /^bucket$/u)) return stuck('水を運ぶバケツが無い');
   const below = !onSurface(facts);
-  if (!waterGivenUp(memory, below)) return fillBucket(facts, memory);
+  if (!waterGivenUp(memory, below)) return waterForObsidian(facts, memory, lavaPlaces(facts).map(place => place.at));
   return below ? upForWater(facts, memory, store) : stuck('地上にも水が見えない');
 }
 
@@ -207,7 +242,7 @@ function getWater(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store
 function lavaOrRock(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, count: number, leg?: RouteLeg): McMove {
   const guard = (move: McMove | null) => move ? guardOutward(facts, store, move) : null;
   const walk = lavaBySurface(facts, store, store, memory)
-    ?? towardMapped(facts, store, memory, { places: lavaPlaces(facts), note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く', rise: 24 })
+    ?? towardMapped(facts, store, memory, { places: lavaPlaces(facts), note: 'lava', why: '地図で覚えている溶岩の溜まりへ行く', rise: onSurface(facts) ? 24 : 100 })
     ?? towardRoute(facts, store, memory, leg, 'ルートが示した黒曜石の場所へ行く');
   if (walk) return guard(walk)!;
   // The rock far off, last: the body digs its way to the obsidian it finds in the loaded world.
