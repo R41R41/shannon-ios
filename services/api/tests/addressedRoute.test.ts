@@ -13,8 +13,8 @@ afterEach(async () => { await Promise.all(servers.splice(0).map(server => new Pr
 
 const principal = { deviceId: 'desk-1', scopeKey: 'owner' } as unknown as ShannonDevicePrincipal;
 
-async function serve(judge: AddressedJudge | null, device: ShannonDevicePrincipal | null = principal, now?: () => number) {
-  const route = createAddressedRoute(judge, now);
+async function serve(judge: AddressedJudge | null, device: ShannonDevicePrincipal | null = principal, now?: () => number, bodyRunning?: () => boolean) {
+  const route = createAddressedRoute(judge, now, bodyRunning);
   const server = createServer((request, response) => { void route(request, response, device); });
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
@@ -78,6 +78,22 @@ describe('POST /v1/voice/addressed', () => {
     expect((await limited({ text: 'シャノン、いる？' })).status).toBe(429);
     clock += 61_000;
     expect((await limited({ text: 'シャノン、いる？' })).status).toBe(200);
+  });
+});
+
+describe('stop words on the route', () => {
+  it('pass without a name from the owner while she speaks or her body works, and not from a guest call', async () => {
+    const { asked, judge } = talkAboutIsNo();
+    let running = false;
+    const call = await serve(judge, principal, undefined, () => running);
+    expect(await (await call({ text: '止めて' })).json()).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(await (await call({ text: '止めて', speaking: true })).json()).toMatchObject({ addressed: true, reason: 'stop', source: 'rule', asked: false });
+    expect(await (await call({ text: '待って', shannonSpokeMsAgo: 0 })).json()).toMatchObject({ addressed: true, reason: 'stop' });
+    running = true;
+    expect(await (await call({ text: 'ストップ' })).json()).toMatchObject({ addressed: true, reason: 'stop' });
+    expect(await (await call({ text: 'ストップ', guest: true })).json()).toMatchObject({ addressed: false });
+    expect((await call({ text: '止めて', speaking: 'yes' })).status).toBe(400);
+    expect(asked).toEqual([]);
   });
 });
 

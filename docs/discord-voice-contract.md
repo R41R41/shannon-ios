@@ -22,7 +22,7 @@ A voice channel's turn is a turn of the conversation kernel through the platform
 - With `SHANNON_ADDRESSED` on (owner 2026-10-21, `docs/addressed-contract.md`) the rule is the same for one person and for many: she
   answers only words that call her by name and are said to her, and the same person's follow-up within ~20 s of her last words;
   Jev judges, and only in those two cases. A `decision` of `respond: false` has the reasons `no_name`, `about_her`, `not_to_her`,
-  `fragment`; `respond: true` has `named`, `bare_call`, `continuation`.
+  `fragment`; `respond: true` has `named`, `bare_call`, `continuation`, `stop` (止めて, 待って... from the owner while she speaks or her body works, without her name).
 
 ## `POST /v1/platform/voice/turn` (NDJSON)
 

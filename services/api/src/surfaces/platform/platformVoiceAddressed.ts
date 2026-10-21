@@ -19,7 +19,9 @@ export function shannonSpokeAgoMs(rooms: VoiceRooms, request: VoiceTurnRequest):
 }
 
 /** What the judge is shown of this turn: the words, who is there, the talk of the last minutes, and her last words and whom they were for. */
-export function addressedInputOf(rooms: VoiceRooms, request: VoiceTurnRequest, input: { scopeKey: string; humans: number }): AddressedInput {
+export function addressedInputOf(
+  rooms: VoiceRooms, request: VoiceTurnRequest, input: { scopeKey: string; humans: number; owner: boolean; bodyRunning: boolean },
+): AddressedInput {
   const room = request.conversationId;
   const observed = Date.parse(request.observedAt);
   const last = rooms.lastShannon(room);
@@ -31,7 +33,8 @@ export function addressedInputOf(rooms: VoiceRooms, request: VoiceTurnRequest, i
   }));
   return {
     scopeKey: input.scopeKey, transcript: request.userMessage, speaker: { id: request.sourceUserId, name: request.sourceDisplayName },
-    humans: input.humans, recent,
+    humans: input.humans, recent, owner: input.owner, bodyRunning: input.bodyRunning,
+    shannonSpeaking: request.speakingNow || request.shannonSpokeMsAgo === 0,
     shannon: {
       spokeAgoMs: shannonSpokeAgoMs(rooms, request),
       // Her words to the room (a line from her mouth) were for nobody in particular: unknown, not "someone else".

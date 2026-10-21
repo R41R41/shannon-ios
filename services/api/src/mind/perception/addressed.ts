@@ -1,6 +1,6 @@
 import { JEV_QUESTION_SETS, jevChoice, jevNoul, stallTolerantTimeout, type JevChooser, type JevQuestion } from '../../infra/models/jev/jevChoice.js';
 import { ADDRESS_EVIDENCE } from '../../surfaces/voice/voiceGuestCall.js';
-import { nameMatch, type NameMatch } from './addressedName.js';
+import { isStopRequest, nameMatch, type NameMatch } from './addressedName.js';
 
 /**
  * Was it said to her? (owner decision 2026-10-21, 「作る・続きの言葉も通す」). One place for every voice entry (the Discord voice channel
@@ -19,7 +19,7 @@ export const ADDRESSED_TIMEOUT_MILLISECONDS = 400;
 /** A reaction right after she spoke is short; a longer statement in a room of several is people explaining to each other. */
 const REACTION_MAXIMUM_CHARACTERS = 28;
 
-export type AddressedReason = 'named' | 'bare_call' | 'continuation' | 'no_name' | 'about_her' | 'not_to_her';
+export type AddressedReason = 'named' | 'bare_call' | 'stop' | 'continuation' | 'no_name' | 'about_her' | 'not_to_her';
 export type AddressedSource = 'rule' | 'jev' | 'fallback';
 
 /** One line of the recent talk, oldest first. */
@@ -39,6 +39,13 @@ export interface AddressedInput {
   /** People in the room, the speaker included: 1 is the speaker alone with her. */
   humans: number;
   recent?: readonly AddressedLine[];
+  /**
+   * Stop words (止めて, 待って, ストップ...) are heard without her name when the speaker is the owner (`owner`) and she is speaking
+   * (`shannonSpeaking`) or her Minecraft body has a task running (`bodyRunning`). Owner 2026-10-21, Discord and the resident alike.
+   */
+  owner?: boolean;
+  shannonSpeaking?: boolean;
+  bodyRunning?: boolean;
   shannon?: {
     /** How long ago she last spoke (0: she is speaking), or null when she has not lately. */
     spokeAgoMs: number | null;
@@ -126,6 +133,11 @@ type Gate =
   | { kind: 'yes'; reason: AddressedReason }
   | { kind: 'ask'; name: NameMatch | null; follows: boolean };
 
+/** Stop words from the owner while she speaks or her body works: heard without her name, whoever they were said to. */
+export function stopsHer(input: AddressedInput): boolean {
+  return input.owner === true && (input.shannonSpeaking === true || input.bodyRunning === true) && isStopRequest(input.transcript);
+}
+
 /** The part that needs no model: nothing to ask about, or a call that cannot be anything else. */
 export function addressedGate(input: AddressedInput, windowMilliseconds = ADDRESSED_WINDOW_MILLISECONDS): Gate {
   const name = nameMatch(input.transcript);
@@ -210,6 +222,7 @@ export class AddressedJudge {
       } catch { /* observation never fails a turn */ }
       return result;
     };
+    if (stopsHer(input)) return done({ addressed: true, reason: 'stop', source: 'rule', asked: false });
     const gate = addressedGate(input, this.windowMilliseconds);
     if (gate.kind === 'quiet') return done({ addressed: false, reason: gate.reason, source: 'rule', asked: false });
     if (gate.kind === 'yes') return done({ addressed: true, reason: gate.reason, source: 'rule', asked: false });

@@ -13,6 +13,20 @@ The judgement is one piece of the head (`services/api/src/mind/perception/addres
 ("one head; the entries only hear and speak"): the Discord voice channel (`PlatformVoiceService`, both `/v1/platform/voice/turn` and
 `/v1/converse`) and the Windows resident (`POST /v1/voice/addressed`).
 
+## Stop words (owner 2026-10-21)
+
+止めて・待って・ストップ・やめて・静かに・黙って (the same row as the resident's `echoGuard.ts` STOP_WORDS) are heard **without her name**, in the Discord voice
+channel and in the Windows call alike, but only when both hold: the speaker is the owner (not a friend, not a guest call), and she is speaking or her
+Minecraft body has a task running. Then `respond: true`, `reason: stop`, no question to Jev; the owner's spoken stop for the body goes on through
+the existing `minecraftIntent` (`stop`). Anything else without her name stays "not said to her".
+
+## What is sent, and what is kept
+
+The words judged are used for that one judgement only. From the Windows resident only one sentence is sent, the one in which her name was heard
+(and, inside a call, the utterance being asked about); the head does not write it to the conversation, to her memory, or to a trace (a trace holds the
+target, the probability, a salted digest of the state and whether the name was exact, never the words), and Jev's cache is keyed by the digest. The
+Discord channel's talk of the last three minutes (`voiceRoom.ts`) stays in the server's memory only and is lost on a restart.
+
 ## How it decides
 
 1. **The name.** The transcript is normalised (NFKC, lower case, katakana to hiragana, no spaces, marks or long-vowel marks) and searched
@@ -40,8 +54,8 @@ whether it was inside the window; never the words) and one log line (`Shannon pl
 
 ## `POST /v1/voice/addressed` (the Windows resident)
 
-The device's token, like the other `/v1/voice/*` routes. Request: `{ "text": "…", "shannonSpokeMsAgo": 4000, "lastLine": "…", "guest": false }`
-(`text` 1-1,000 characters; the other three optional; `guest` means others are listening). Answer 200:
+The device's token, like the other `/v1/voice/*` routes. Request: `{ "text": "…", "shannonSpokeMsAgo": 4000, "lastLine": "…", "guest": false, "speaking": false }`
+(`text` 1-1,000 characters; the others optional; `guest` means others are listening, `speaking` that she is speaking now). Answer 200:
 `{ "addressed": true, "reason": "named", "source": "jev", "asked": true, "ms": 210 }`. `source` is `rule`, `jev` or `fallback`.
 503 `ADDRESSED_DISABLED` while the switch is off (the resident then goes on as it did, by the name match alone); 403 without a device; 400 for a bad
 body; 429 over 30 a minute per device. The words are judged and dropped.

@@ -232,3 +232,23 @@ describe('the local rules alone over the cases', () => {
     expect(accuracy).toBeGreaterThanOrEqual(0.7);
   });
 });
+
+describe('stop words (止めて, 待って, ストップ...) without her name (owner 2026-10-21)', () => {
+  const base = { scopeKey: 'owner', speaker: { id: 'o', name: 'ライ氏' }, humans: 1 };
+  it('pass from the owner while she speaks or her body works, without asking Jev', async () => {
+    const calls = { count: 0, bodies: [] as unknown[] };
+    const judge = judgeWith(standInJev({ calls }));
+    for (const transcript of ['止めて', 'ちょっと待って', 'ストップ！', 'やめて、危ない', '静かにして', 'とまって']) {
+      expect(await judge.judge({ ...base, transcript, owner: true, shannonSpeaking: true }), transcript).toMatchObject({ addressed: true, reason: 'stop', source: 'rule', asked: false });
+      expect(await judge.judge({ ...base, transcript, owner: true, bodyRunning: true }), transcript).toMatchObject({ addressed: true, reason: 'stop' });
+    }
+    expect(calls.count).toBe(0);
+  });
+
+  it('do not pass for a friend, when neither she speaks nor her body works, or for other words', async () => {
+    const judge = judgeWith(standInJev());
+    expect(await judge.judge({ ...base, transcript: '止めて', owner: false, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(await judge.judge({ ...base, transcript: '止めて', owner: true })).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(await judge.judge({ ...base, transcript: '今日は疲れたな', owner: true, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false });
+  });
+});

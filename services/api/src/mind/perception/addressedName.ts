@@ -75,3 +75,13 @@ export function nameMatch(text: string): NameMatch | null {
 export function hasName(text: string): boolean {
   return nameMatch(text) !== null;
 }
+
+/**
+ * Words that stop her (owner 2026-10-21; the same row as the resident's `echoGuard.ts` STOP_WORDS): 止めて, 待って, ストップ, やめて, 静かに...
+ * They are heard without her name, but only from the owner while she is speaking or her Minecraft body has a task running (`addressed.ts`).
+ */
+const STOP_WORDS = /とめて|止めて|ストップ|すとっぷ|まって|待って|やめて|止まって|とまって|ちょっと待|ちょっとまって|しずかに|静かに|黙って|だまって/u;
+
+export function isStopRequest(text: string): boolean {
+  return STOP_WORDS.test(normalizedForName(text)) || STOP_WORDS.test(text);
+}

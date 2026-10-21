@@ -33,10 +33,10 @@ export function configuredAddressedJudge(
  */
 export function configuredAddressedVoice(
   environment: Readonly<Record<string, string | undefined>>,
-  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; salt?: string },
+  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; salt?: string; bodyRunning?: () => boolean },
 ) {
   const judge = configuredAddressedJudge(environment, options);
-  const route = createAddressedRoute(judge);
+  const route = createAddressedRoute(judge, Date.now, options.bodyRunning);
   return {
     judge,
     serve: async (request: IncomingMessage, response: ServerResponse, principal: ShannonDevicePrincipal | null, url: URL): Promise<boolean> => {

@@ -664,6 +664,22 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     await silent.close();
   });
 
+  it('hears 止めて without her name from the owner while she speaks or her body works, and from nobody else', async () => {
+    const { asked, judge: j } = judge();
+    const { say, body, model, close } = harness(ADDRESSED, undefined, j);
+    expect((await say('止めて'))[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect((await say('止めて', { speakingNow: true }))[0]).toMatchObject({ respond: true, reason: 'stop' });
+    expect((await say('止めて', { shannonSpokeMsAgo: 0 }))[0]).toMatchObject({ respond: true, reason: 'stop' });
+    body.running = { id: 'task-1', goal: '鉄を掘る' };
+    expect((await say('ちょっと待って'))[0]).toMatchObject({ respond: true, reason: 'stop' });
+    const friend = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speakingNow: true });
+    // A friend's 止めて is no stop word for her: it is judged like any other words (here she was speaking, so Jev is asked).
+    expect(friend[0]).not.toMatchObject({ reason: 'stop' });
+    expect(asked).toEqual(['止めて']);
+    expect(model.requests.length).toBeGreaterThanOrEqual(3);
+    await close();
+  });
+
   it('is the shared-table rules as before with the switch off, and refuses a bad time', async () => {
     const { asked, judge: j } = judge();
     const off = harness({ SHANNON_DC_VOICE: 'on' }, undefined, j);

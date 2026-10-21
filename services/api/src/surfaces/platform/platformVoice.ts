@@ -239,7 +239,8 @@ export class PlatformVoiceService {
     const room = request.conversationId;
     // What the body heard of the others and did not send as a turn belongs to the talk the judgement reads.
     for (const line of request.heard) this.rooms.noteExchange(room, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
-    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans });
+    const bodyRunning = seat.owner && (this.bodyFor(seat)?.state.running ?? null) !== null;
+    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning });
     // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through).
     const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
     if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgo !== null && spokeAgo <= judge.windowMilliseconds })) {
