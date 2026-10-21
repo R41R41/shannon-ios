@@ -3,9 +3,9 @@ import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './m
 import { adoptionTags, adoptionTools, fed, milestoneLines, milestoneNow, minecraftStage, type MinecraftStage } from './minecraftStage.js';
 export { milestoneFollowMemory } from './minecraftMilestoneFollow.js';
 export { createRoutePlanning } from './minecraftRoutePlanner.js';
+export { routeWatcher } from './minecraftRouteWatch.js';
 import { bedLead } from './minecraftBedLead.js';
 import { dropsAdvice, dropsList, dropsReminder } from './minecraftDropsAdvice.js';
-
 /**
  * Situational pointers to her Minecraft skills (the old Minebot TAUGHT_SLOTS, Minecraft run 9 of 2026-10-14: none of the six legacy
  * trial skills was read in 57 steps, though `skill.read` and the index were offered every step, and she waited idle through the

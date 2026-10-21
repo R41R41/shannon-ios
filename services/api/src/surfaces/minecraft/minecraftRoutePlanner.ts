@@ -230,6 +230,13 @@ export function createRoutePlanning(parts: {
       }
       return slot.route ? routeLines(slot.route, milestone, world) : woodLines(milestone, world);
     },
+    /**
+     * Between decisions (`minecraftRouteWatch.ts`): a plan asked when the route held is late now. Only a route that is held can be late;
+     * the first plan is the first decision's. Nothing is returned: the lines are read at the next decision.
+     */
+    watch(world: Record<string, unknown> | null, milestone: string | null, elapsedSeconds: number): void {
+      if (slot.route) this.context(world, milestone, elapsedSeconds);
+    },
     /** The decision's situation with the route's lines (`route`), asking a plan when one is wanted; the seconds come from the situation. */
     situate<T extends { milestoneName?: string | null; elapsedSeconds?: number | null }>(situation: T, world: unknown): T & { route?: readonly string[] } {
       const lines = this.context(record(world), situation.milestoneName ?? null, situation.elapsedSeconds ?? Number.NaN);

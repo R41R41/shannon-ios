@@ -13,6 +13,7 @@ import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 import { finalFailure, minecraftStopWhy, minecraftUpkeep, passingFailure } from './minecraftProcedureUpkeep.js';
 import { settledBody } from './minecraftProcedureSettle.js';
+import { purposeOfItem, waterCandidateLines, WATER_PURPOSE } from './minecraftProcedureRepeat.js';
 import { cutByFastJudgment } from '../../mind/action/reflex/fastJudgment.js';
 
 /**
@@ -208,7 +209,9 @@ async function runItem(parts: ProcedureRunParts, call: Call, state: TaskProcedur
 }
 function resultText(chainText: string, run: ProcedureRunResult, facts: MinecraftProcedureFacts): string {
   const now = milestoneNow(facts.milestone).now.name;
-  return [`手順 ${chainText}`, ...procedureRunLines(run), `今の節目: ${now}`].join('\n');
+  // mb-r25: a run that ended for one purpose failing again and again tells the decision what the choices are (the water, laid out).
+  const choices = run.repeated?.purpose === WATER_PURPOSE ? waterCandidateLines(facts) : [];
+  return [`手順 ${chainText}`, ...procedureRunLines(run), ...choices, `今の節目: ${now}`].join('\n');
 }
 
 /** `mc.run-procedure`: the chain from the milestone named, run through; its result in fixed words. */
@@ -238,6 +241,7 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
     facts, now: parts.now, signal: call.signal, upkeep: minecraftUpkeep, final: finalFailure, passing: passingFailure,
     stopWhy: (current, at) => minecraftStopWhy(current, at.procedure, { ...parts, toldLate: state.toldLate, lateAtStart }),
     run: (item, step) => runItem(parts, call, state, item, step.index),
+    purpose: (item: MinecraftWorkItem, failure: string) => purposeOfItem(item, failure),
     // The whole chain of an item is cut between items too (`chain` items follow, each short: the first's time is what is asked of the bound).
     expectMs: item => item.expectMs,
   });

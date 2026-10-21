@@ -20,7 +20,11 @@ const HUNGRY = 6;
 /** A death a frame showed and the body's list entry for it, by the two clocks (the body's may differ from the API's by 30 s). */
 const SAME_DEATH_MS = 60_000;
 
-export interface MinecraftTaskMetricsParts { taskId: string; createdAt: string; kept: unknown; now(): number; log(line: string): void }
+export interface MinecraftTaskMetricsParts {
+  taskId: string; createdAt: string; kept: unknown; now(): number; log(line: string): void;
+  /** Read for each sampled frame after the measuring (the route's lateness, `minecraftRouteWatch.ts`); it may throw, the caller swallows it. */
+  onFrame?(observation: BodyObservation): void;
+}
 export interface MinecraftDecisionFields { skillPointers?: readonly string[]; skillGists?: ReadonlyArray<{ skill: string }> }
 type Gap = { biome: 'set' | 'empty' | 'absent'; omitted: number; landmarks: boolean };
 
@@ -62,16 +66,21 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
     if (!tags.includes(value)) tags.push(value);
   };
 
+  /** The milestones this frame shows that were not shown before, written with the time they are seen at (the decision they belong to is `d`). */
+  function reach(counts: ItemCounts, dimension: string | null, tick: number | null, d: number): void {
+    for (const name of newlyReached(milestonesShown(counts, dimension), new Set(state.reached))) {
+      state.reached.push(name);
+      if (logOnce(`${taskId}:${name}`)) emit(milestoneLine(taskId, name, elapsed(), tick, d));
+    }
+  }
+
   /** Called when the decision's body context is built (once per decision): milestones, stage, gaps, gist windows. */
   function context(observation: BodyObservation | null, summary: BodyObservation | null, fields: MinecraftDecisionFields): void {
     if (decision) return;
     const d = begin();
     if (!observation) return;
     const facts = frameFacts(observation, summary), { counts } = facts;
-    for (const name of newlyReached(milestonesShown(counts, facts.dimension), new Set(state.reached))) {
-      state.reached.push(name);
-      if (logOnce(`${taskId}:${name}`)) emit(milestoneLine(taskId, name, elapsed(), facts.tick, d));
-    }
+    reach(counts, facts.dimension, facts.tick, d);
     stage = minecraftStage(counts);
     const pointed = (fields.skillPointers ?? []).map(pointer => pointer.split('（')[0]!);
     const offered = (fields.skillGists ?? []).map(gist => gist.skill);
@@ -91,6 +100,13 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
    */
   function sample(observation: BodyObservation): void {
     const world = record(observation.state.world);
+    // mb-r25 (run 25: the iron pickaxe was made at 319 s and written at 545, the bucket at 549 and 1,034): the milestones were read only
+    // when a decision began, and a procedure's run is one call of 400 s and more. Every frame is read, so a milestone is written when seen.
+    if (observation.facts.alive !== false) {
+      const seen = frameFacts(observation, null);
+      reach(seen.counts, seen.dimension, seen.tick, decision || state.d + 1);
+    }
+    try { parts.onFrame?.(observation); } catch { /* the route's lateness is a read of the frame; measuring never fails a step */ }
     if (observation.facts.alive === false) {
       // The frame first, then the list in the same frame (its entry for this death is absorbed); a death the list already gave is
       // not counted again by the frame that shows it.
@@ -184,7 +200,7 @@ export type MinecraftTaskMetrics = ReturnType<typeof createMinecraftTaskMetrics>
 
 /** The measurement of one step of a task, from the step's own checkpoint; its lines go to `log` (the journal when absent). */
 export function stepMetrics(step: { taskId: string; snapshot: { task: { createdAt: unknown }; checkpoint: unknown } }, now: () => number,
-  log: (line: string) => void = line => console.info(line)): MinecraftTaskMetrics {
+  log: (line: string) => void = line => console.info(line), onFrame?: (observation: BodyObservation) => void): MinecraftTaskMetrics {
   const kept = (step.snapshot.checkpoint as { minecraftMetrics?: unknown } | null)?.minecraftMetrics;
-  return createMinecraftTaskMetrics({ taskId: step.taskId, createdAt: String(step.snapshot.task.createdAt), kept, now, log });
+  return createMinecraftTaskMetrics({ taskId: step.taskId, createdAt: String(step.snapshot.task.createdAt), kept, now, log, ...(onFrame ? { onFrame } : {}) });
 }

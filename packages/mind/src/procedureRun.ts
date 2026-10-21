@@ -12,7 +12,11 @@
  * store: the service hands the facts, the clock and the runner in.
  */
 export const PROCEDURE_RUN_V1 = 'procedure.run.v1';
-export interface ProcedureLimits { items: number; ms: number; failuresPerKey: number; failures: number; repeatsPerKey: number }
+export interface ProcedureLimits {
+  items: number; ms: number; failuresPerKey: number; failures: number; repeatsPerKey: number;
+  /** Failures for one purpose (`ProcedureRunPorts.purpose`) that end the run so the planner looks at the cause; absent: no such rule. */
+  failuresPerPurpose?: number;
+}
 export const PROCEDURE_LIMITS: Readonly<ProcedureLimits> = Object.freeze({
   /** Items in one run at most. */
   items: 60,
@@ -24,6 +28,11 @@ export const PROCEDURE_LIMITS: Readonly<ProcedureLimits> = Object.freeze({
   failures: 6,
   /** The same work done this often without the procedure moving on: the rules are going round. */
   repeatsPerKey: 6,
+  /**
+   * mb-r25 (Minecraft run 25: seven tries at water in one procedure, each failing for the same cause, 483 s before the planner saw any of
+   * it): the same purpose failing this often ends the run, and the planner is told which and why.
+   */
+  failuresPerPurpose: 3,
 });
 
 export type ProcedureMove<Item> =
@@ -75,6 +84,11 @@ export interface ProcedureRunPorts<Facts, Item> {
   passing?(failure: string): boolean;
   run(item: Item, step: ProcedureStepInfo): Promise<ProcedureItemResult>;
   /**
+   * What an item is for, in a few words (`水を汲む`), or null for a failure that does not count (a search that found nothing is an answer,
+   * not a failure of the work): failures of one purpose are counted together (`ProcedureLimits.failuresPerPurpose`).
+   */
+  purpose?(item: Item, failure: string): string | null;
+  /**
    * About how long an item takes (ms), when known. An item that would carry the run past its time bound is not begun: the run is
    * cut between items, never in the middle of a dig (mb-r21, run 21: the last iron dig began at 525 s of 600 and ran 180 s).
    */
@@ -85,6 +99,8 @@ export interface ProcedureRunPorts<Facts, Item> {
 
 export type ProcedureOutcome = 'done' | 'stopped' | 'stuck' | 'failed' | 'limit' | 'cancelled';
 export interface ProcedureRunItem { procedure: string; key: string; why: string; ok: boolean; failure: string | null; ms: number }
+/** The words a run's reason begins with when it ended for failures of one purpose (the planner's failure review looks for them). */
+export const PURPOSE_REPEATED = '同じ目的の手が続けて失敗した';
 export interface ProcedureRunResult {
   outcome: ProcedureOutcome;
   /** The procedure the run ended in; null when every one was done. */
@@ -95,6 +111,8 @@ export interface ProcedureRunResult {
   why: string;
   items: ProcedureRunItem[];
   elapsedMs: number;
+  /** Set when the run ended for failures of one purpose: the purpose and the kinds of failure, in order. */
+  repeated?: { purpose: string; failures: string[] };
 }
 
 interface RunState<Facts, Item> {
@@ -105,6 +123,8 @@ interface RunState<Facts, Item> {
   passed: string[];
   items: ProcedureRunItem[];
   failures: number;
+  /** The kinds of failure of each purpose so far. */
+  purposes: Map<string, string[]>;
 }
 
 function ended<Facts, Item>(state: RunState<Facts, Item>, outcome: ProcedureOutcome, at: string | null, why: string): ProcedureRunResult {
@@ -147,7 +167,19 @@ async function runOne<Facts, Item>(state: RunState<Facts, Item>, procedure: stri
   if (result.ok) return null;
   state.failures += 1;
   if (state.ports.final?.(failure)) return ended(state, 'failed', procedure, `${move.why}ができなかった（${failure}）`);
-  return state.failures >= state.limits.failures ? ended(state, 'failed', procedure, `失敗が${state.failures}回になった（最後は${failure}）`) : null;
+  return repeatedPurpose(state, procedure, move.item, failure)
+    ?? (state.failures >= state.limits.failures ? ended(state, 'failed', procedure, `失敗が${state.failures}回になった（最後は${failure}）`) : null);
+}
+
+/** The run ended when one purpose has failed `failuresPerPurpose` times: the planner decides what to do about the cause. */
+function repeatedPurpose<Facts, Item>(state: RunState<Facts, Item>, procedure: string, item: Item, failure: string): ProcedureRunResult | null {
+  const purpose = state.ports.purpose?.(item, failure) ?? null, limit = state.limits.failuresPerPurpose;
+  if (purpose === null || limit === undefined) return null;
+  const failures = [...(state.purposes.get(purpose) ?? []), failure];
+  state.purposes.set(purpose, failures);
+  if (failures.length < limit) return null;
+  const why = `${PURPOSE_REPEATED}（${purpose}が${failures.length}回: ${failures.join('・')}）`;
+  return { ...ended(state, 'failed', procedure, why), repeated: { purpose, failures } };
 }
 
 /** Cut between items: one that would not end inside the time bound waits for the next run (the first item of a run always goes). */
@@ -182,7 +214,8 @@ async function throughOne<Facts, Item>(state: RunState<Facts, Item>, procedure: 
 /** Runs the procedures in order, each until it is done, and says how the run ended. A runner that throws ends it with that error. */
 export async function runProcedures<Facts, Item>(chain: readonly Procedure<Facts, Item>[], ports: ProcedureRunPorts<Facts, Item>,
   limits: ProcedureLimits = PROCEDURE_LIMITS): Promise<ProcedureRunResult> {
-  const state: RunState<Facts, Item> = { ports, limits, memory: new ProcedureMemory(), started: ports.now(), passed: [], items: [], failures: 0 };
+  const state: RunState<Facts, Item> = { ports, limits, memory: new ProcedureMemory(), started: ports.now(), passed: [], items: [], failures: 0,
+    purposes: new Map() };
   for (const procedure of chain) {
     const end = await throughOne(state, procedure);
     if (end) return end;

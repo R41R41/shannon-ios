@@ -238,10 +238,14 @@ export class SimBody {
     return this.ok('ベッドで寝て朝になりました');
   }
   tool_drop_item(input: Input): ToolResult {
-    const name = String(input.itemName), count = Math.min(Number(input.count ?? 1), this.pack.get(name) ?? 0);
-    this.take(name, count);
+    // The body's list form ("dirt:35,granite:27,diorite": a kind with no count is all of it), thrown in one go (mb-r25).
+    const kinds = String(input.itemName).includes(',') || String(input.itemName).includes(':')
+      ? String(input.itemName).split(',').map(part => { const [name = '', count] = part.split(':'); return { name, count: count === undefined ? Infinity : Number(count) }; })
+      : [{ name: String(input.itemName), count: Number(input.count ?? 1) }];
+    const done = kinds.map(kind => ({ name: kind.name, count: Math.min(kind.count, this.pack.get(kind.name) ?? 0) }));
+    for (const kind of done) this.take(kind.name, kind.count);
     this.spend(2);
-    return this.ok(`${name}を${count}個捨てました`);
+    return this.ok(done.map(kind => `${kind.name}を${kind.count}個`).join('・') + '捨てました');
   }
   tool_enter_portal(): ToolResult { this.spend(SECONDS.enter); this.dimension = 'the_nether'; return this.ok('ネザーに移動しました'); }
 }

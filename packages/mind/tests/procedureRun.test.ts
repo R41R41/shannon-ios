@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { procedureRunLines, runProcedures, type Procedure, type ProcedureRunPorts } from '../src/procedureRun.js';
+import { PURPOSE_REPEATED, procedureRunLines, runProcedures, type Procedure, type ProcedureRunPorts } from '../src/procedureRun.js';
 
 /** mb-arch: a procedure run through by the executor until it is done or the planner must decide. */
 interface World { logs: number; planks: number; night: boolean; upkeepDue: boolean }
@@ -60,6 +60,23 @@ describe('procedure run (mb-arch)', () => {
     const result = await runProcedures([round], ports({ logs: 0, planks: 0, night: false, upkeepDue: false }));
     expect(result).toMatchObject({ outcome: 'stuck', why: '同じ手を6回しても先へ進まない' });
     expect(result.items).toHaveLength(6);
+  });
+
+  it('ends the run when one purpose has failed three times, whatever the keys, and says which and how (mb-r25, run 25: seven tries at water)', async () => {
+    let tries = 0;
+    const water: Procedure<World, string> = { id: '水', done: () => false, next: () => ({ kind: 'do', item: 'scoop', key: `water:${(tries += 1)}`, why: '水を汲む' }) };
+    const failures = ['stuck', 'timeout', 'failed'];
+    let at = 0;
+    const base = ports({ logs: 0, planks: 0, night: false, upkeepDue: false });
+    const result = await runProcedures([water], { ...base, purpose: () => '水を汲む', async run() { return { ok: false, text: '', failure: failures[at++] }; } });
+    expect(at).toBe(3);
+    expect(result).toMatchObject({ outcome: 'failed', why: `${PURPOSE_REPEATED}（水を汲むが3回: stuck・timeout・failed）`,
+      repeated: { purpose: '水を汲む', failures: ['stuck', 'timeout', 'failed'] } });
+    // A purpose is counted only for the items that name one; the failures then end the run at the sixth, as before.
+    at = 0;
+    const plain = await runProcedures([water], { ...base, async run() { return { ok: false, text: '', failure: failures[at++ % 3] }; } });
+    expect(plain).toMatchObject({ outcome: 'failed', why: '失敗が6回になった（最後はfailed）' });
+    expect(plain.repeated).toBeUndefined();
   });
 
   it('keeps to its bounds and to a stop', async () => {

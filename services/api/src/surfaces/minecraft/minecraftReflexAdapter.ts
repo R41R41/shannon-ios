@@ -1,5 +1,6 @@
 import {
-  bedSearchMemory, createRoutePlanning, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, type SkillGistsPort,
+  bedSearchMemory, createRoutePlanning, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, routeWatcher,
+  type SkillGistsPort,
 } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
 import { createHash } from 'node:crypto';
@@ -127,7 +128,8 @@ export function createMinecraftTaskBody(parts: {
   const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
   const log = parts.log ?? ((line: string) => console.info(line));
   // Measurement only (observation redesign P1): it reads this body's frames and writes journal lines; no decision depends on it.
-  const metrics = stepMetrics(step, now, parts.metricsLog);
+  // mb-r25: every frame also tells the route whether its step is late now (`minecraftRouteWatch.ts`), not only the decisions.
+  const metrics = stepMetrics(step, now, parts.metricsLog, routeWatcher({ plan: routePlan, createdAt: step.snapshot.task.createdAt, now }));
   const measured = (work: () => void) => { try { work(); } catch { /* measuring never fails a step */ } };
   // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
   // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).

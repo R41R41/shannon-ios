@@ -56,7 +56,10 @@ describe('the water, before the stair goes down', () => {
   it('remembers the water she could not reach across tasks, and does not walk to the same lake again', async () => {
     const first = kit(new SimBody(), { iron_pickaxe: 1, bucket: 1, stick: 4, crafting_table: 1 });
     first.tool_move_to = () => ({ ok: false, text: '経路がありません', failure: 'failed', bodyFailure: 'no_path', retryable: true }) as ToolResult;
-    await setup(first).call({ milestone: 'ダイヤ' });
+    // mb-r25: a run ends at the third failure to fill the bucket and the decision calls again; the second call covers the rest of the lake.
+    const { call } = setup(first);
+    await call({ milestone: 'ダイヤ' });
+    await call({ milestone: 'ダイヤ' });
     expect(first.calls.filter(name => name === 'mc.move-to').length).toBeGreaterThan(0);
     expect(waterUnreachable({ x: 60, y: 64, z: 5 })).toBe(true);
     // The task's extension: a new task, the same world, the same lake.

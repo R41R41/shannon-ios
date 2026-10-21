@@ -21,30 +21,52 @@ const KEEP_BLOCKS = 128, PACK_FULL = 26, LEAST_DROP = 16;
 /** A pickaxe with fewer uses left than this is not trusted for the dig ahead. */
 const LOW_USES = 40;
 
+/** How many stacks a pack that is full lets go of at once (the smallest stacks of rock), so the next dig has room. */
+const STACKS_FREED = 3;
+type Drop = { name: string; count: number };
+
 /**
- * The rock to drop before a dig, one kind and how many: what is beyond `KEEP_BLOCKS` (the biggest stack of junk first), else the
- * smallest stack when the pack is full.
+ * The rock to drop before a dig, every kind in one list (mb-r25, Minecraft run 25: five to eight drops of one kind each, 20-25 s, where the
+ * body throws a list in one go -- one pit, one walk away): what is beyond `KEEP_BLOCKS`, the biggest stack of junk first and cobblestone
+ * last, and, when the pack is full, the smallest stacks of rock whole.
  */
-function junkToDrop(facts: MinecraftProcedureFacts): { name: string; count: number } | null {
+function junkToDrop(facts: MinecraftProcedureFacts): Drop[] {
   const blocks = [...facts.pack].filter(([name]) => COBBLE.test(name) || JUNK.test(name));
   const total = blocks.reduce((sum, [, count]) => sum + count, 0);
   const junk = blocks.filter(([name]) => JUNK.test(name)).sort((a, b) => b[1] - a[1]);
-  if (total - KEEP_BLOCKS >= LEAST_DROP) {
-    const heaviest = junk[0] ?? blocks.filter(([name]) => COBBLE.test(name)).sort((a, b) => b[1] - a[1])[0];
-    if (heaviest) return { name: heaviest[0], count: Math.min(heaviest[1], total - KEEP_BLOCKS) };
+  const drops = new Map<string, number>();
+  let excess = total - KEEP_BLOCKS;
+  if (excess >= LEAST_DROP) {
+    const order = [...junk, ...blocks.filter(([name]) => COBBLE.test(name)).sort((a, b) => b[1] - a[1])];
+    for (const [name, count] of order) {
+      const take = Math.min(count, excess);
+      if (take <= 0) break;
+      drops.set(name, take);
+      excess -= take;
+    }
   }
-  const full = facts.stacks !== null && facts.stacks >= PACK_FULL;
-  const smallest = junk.at(-1);
-  return full && smallest ? { name: smallest[0], count: smallest[1] } : null;
+  if (facts.stacks !== null && facts.stacks >= PACK_FULL) {
+    for (const [name, count] of junk.slice(-STACKS_FREED)) drops.set(name, count);
+  }
+  return [...drops].map(([name, count]) => ({ name, count }));
 }
 
-/** The junk dropped before a dig, one kind a move. A drop the body refused (a narrow place) is not asked again at the same count. */
+/** The body's list form of several kinds in one drop: `dirt:35,granite:27` (it throws them all from one place, in one go). */
+const dropList = (drops: readonly Drop[]) => drops.map(drop => `${drop.name}:${drop.count}`).join(',');
+
+/**
+ * The junk dropped before a dig, all kinds in one move. A drop the body refused or had to take back (a narrow place, thrown at her feet
+ * and picked up again) ends the dropping for the run: the same drop again only throws the same stones twice (run 25: 40 dirt and 25
+ * diorite thrown and picked up three times).
+ */
 export function dropJunk(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McDo | null {
-  const junk = junkToDrop(facts);
-  if (!junk) return null;
-  const key = `junk:${junk.name}:${junk.count}`;
+  const drops = junkToDrop(facts);
+  if (!drops.length || memory.notes.get('junk:refused') === true) return null;
+  const key = `junk:${dropList(drops)}`;
   if (memory.failed(key) > 0) return null;
-  return doing({ tool: 'mc.drop-item', input: { itemName: junk.name, count: junk.count }, why: `掘る前に要らない石（${junk.name}）を捨てる`, expectMs: 8_000, key });
+  const input = drops.length === 1 ? { itemName: drops[0]!.name, count: drops[0]!.count } : { itemName: dropList(drops) };
+  return doing({ tool: 'mc.drop-item', input, why: `掘る前に要らない石（${drops.map(drop => drop.name).join('・')}）を捨てる`, expectMs: 8_000 + 2_000 * (drops.length - 1),
+    key, onFail: failure => { if (failure === 'picked_up_again' || failure === 'no_room_to_drop') memory.notes.set('junk:refused', true); } });
 }
 
 /** A stone pickaxe made when every pickaxe she carries has fewer than `LOW_USES` left (the stone, sticks and a table by the usual moves). */

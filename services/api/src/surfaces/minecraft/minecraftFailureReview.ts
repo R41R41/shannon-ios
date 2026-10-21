@@ -1,3 +1,4 @@
+import { PURPOSE_REPEATED } from '@shannon/mind';
 import { FAILURE_HARD_LIMIT, FAILURE_REVIEW_AT, FAILURE_STALL_MS, FAILURE_STOP_AFTER } from '../../mind/action/fca/fcaFailureLadder.js';
 
 /**
@@ -42,14 +43,25 @@ export function repeatedFailure(recent: Recent): { tool: string; times: number }
 /** The same failure this often among the latest results is a review, though a call that worked came between (run 24: 0 obsidian at one pool twice). */
 export const REPEATED_FAILURES = 2;
 
+/**
+ * mb-r25 (Minecraft run 25): a procedure's run that ended because one purpose failed again and again inside it (`PURPOSE_REPEATED`) is one
+ * failed call to the decision above it, so neither three failed steps nor two alike came: the review is given for that one result, with
+ * the words the executor ended the run with (the purpose, how many times, and each failure's kind).
+ */
+export function failureInsideProcedure(recent: Recent): string | null {
+  const last = recent.at(-1), at = last && !last.ok ? last.summary.indexOf(PURPOSE_REPEATED) : -1;
+  return last && at >= 0 ? last.summary.slice(at).split('\n')[0]!.replace(/（\d+手・\d+秒）\s*$/u, '').slice(0, 160) : null;
+}
+
 export function failureReview(failures: number, recent: Recent): Record<string, unknown> | null {
-  const repeated = repeatedFailure(recent);
-  if (!Number.isSafeInteger(failures) || (failures < FAILURE_REVIEW_AT && !repeated)) return null;
-  const shown = Math.min(Math.max(failures, repeated?.times ?? 0), 4);
+  const repeated = repeatedFailure(recent), inside = failureInsideProcedure(recent);
+  if (!Number.isSafeInteger(failures) || (failures < FAILURE_REVIEW_AT && !repeated && !inside)) return null;
+  const shown = Math.min(Math.max(failures, repeated?.times ?? 0, inside ? 2 : 0), 4);
   const failed = recent.filter(result => !result.ok).slice(-shown).map(result => ({ tool: result.name, result: cut(result.summary) }));
   return {
     failedStepsInARow: failures,
     ...(repeated ? { repeatedFailure: `${repeated.tool} が同じ失敗で進みなしのまま${repeated.times}回（間に成功した手があっても数える）。同じ場所・同じ手をもう一度しない` } : {}),
+    ...(inside ? { failureInsideProcedure: `手順の中で ${inside}。同じ手順をそのまま呼び直さず、原因を1つに決めてから、別の場所・別の手で進める` } : {}),
     stops: `連続失敗が${FAILURE_STOP_AFTER + 1}回以上になり、持ち物・節目・場所が${Math.round(FAILURE_STALL_MS / 1000)}秒動かない時。`
       + `${FAILURE_HARD_LIMIT}回続けば動いていても止まる。進みのある手（持ち物が増えた・節目に着いた）は失敗に数えない`,
     failuresLeft: Math.max(0, FAILURE_HARD_LIMIT - failures),

@@ -146,7 +146,9 @@ export function takeNeed(need: WorkingNeed): MinecraftWorkItem | null {
       if (typeof d.x !== 'number' || typeof d.y !== 'number' || typeof d.z !== 'number') return null;
       const dig: MinecraftWorkItem = { tool: 'mc.dig-block-at', input: { x: d.x, y: d.y, z: d.z, takeEquipment: true }, why: '置かれたベッドを持つ',
         expectMs: 4_000, key: `${key}:dig` };
-      return { tool: 'mc.move-to', input: { x: d.x, y: d.y, z: d.z, goalType: 'block' }, why: '置かれたベッドへ寄る', expectMs: 20_000, key,
+      // mb-r25 (run 25): the bed's own cell is a block the body protects, so a walk to it stopped there twice (14 s, a decision more); the
+      // walk is to a place beside it, and `dig-block-at` that follows reaches the bed itself.
+      return { tool: 'mc.move-to', input: { x: d.x, y: d.y, z: d.z, goalType: 'near', range: 2 }, why: '置かれたベッドへ寄る', expectMs: 20_000, key,
         then: () => dig, chain: 2 };
     }
     case 'iron': return { tool: 'mc.mine-block', input: { blockName: need.name, count: 3, searchRadius: 16 }, why: 'まだ要る鉄が近い', expectMs: 20_000, key };
