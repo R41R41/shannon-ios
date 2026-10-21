@@ -2,7 +2,8 @@ import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskStep, TaskSnapshot } from '../taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS, executeTaskTool } from '../../tools/toolRunnerPorts.js';
 import { observeAsync, observerHandoff, observeSync, withObserverTask } from '../../../infra/observer/observerContext.js';
-import { currentActionExecution, inActionExecution } from '../../../infra/context/actionExecution.js';
+import { currentActionExecution } from '../../../infra/context/actionExecution.js';
+import { detachedModelCall, isolatedModelCall } from './fcaModelIsolation.js';
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
@@ -25,7 +26,7 @@ import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince 
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import { planInput, type FcaPlanPort } from './fcaPlanTools.js';
 import { permitDue } from './fcaStepCost.js';
-import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
+import type { FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
 /** How old a lease grant may be reused for a check between outside calls (`checked`). */
 export const FCA_PERMIT_REUSE_MS = 250;
@@ -58,7 +59,9 @@ export interface FcaStepPorts {
   evidence?: FcaEvidence;
   observeMemory?(ids: readonly string[]): boolean;
   tools?: FcaExternalTools;
-  history?: { codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer; policy?: Partial<FcaHistoryPolicy> };
+  history?: { codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer; policy?: Partial<FcaHistoryPolicy>;
+    /** mb-llmc r3: the summary is made beside the steps (`prepareFcaHistory`); absent: it is made in the step that needs it. */
+    ahead?: Pick<FcaHistoryAheadOptions, 'port' | 'hard' | 'waitMs'> };
   /** Rechecks only the sources pinned to this admitted step, never newly pending inbox input. */
   sourcesVisible?(): boolean;
   /** Disclosure for another task's list/get/send projection. */
@@ -154,6 +157,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   // A body task's decision carries no recall packet, in either shape (run 15, 2026-10-19: 2.3–7.3k characters of past episodes in every
   // stored decision, and 2.7 s of each step): what she did before is one `memory.search` away (offered to every task) when it matters.
   const bodyTask = ports.keepBodyTools?.() === true;
+  // mb-llmc r3 (run 27: a creeper stopped her act at 3.9 m and the next decision came 12.8 s later): an urgent step asks the model at once,
+  // with no summary while the replay fits its bound and no recall (`FcaBodyLifecycle.urgent`).
+  const urgent = bodyTask && !prepared && ports.body?.urgent?.() === true;
+  if (urgent) metrics.urgent();
   const recallContext = ports.recall && !bodyTask && !isFcaTransientTask(prior, ports) ? fcaRecallContext(step, prior, signal) : null;
   // The recall's deterministic part runs on the API's one thread. Minecraft run 6 (2026-10-14): started while a body had just logged
   // in, it blocked the thread while a stop was being handed over. Pending I/O (the body's polls) goes first; while the body is still
@@ -170,10 +177,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const cutLast = prior.fcaStateCut === true;
   const forceEpoch = transient && (transient.stale || cutLast) && ports.history?.summarizer
     ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
+  const historyAhead = ports.history?.ahead && ports.history.summarizer ? { ...ports.history.ahead, detach: detachedModelCall, urgent,
+    note: (what: string) => metrics.ahead(what) } : undefined;
   const replay = ports.history && !prepared ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked('fresh'); return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, transient?.policy ?? ports.history!.policy, forceEpoch ? { forceEpoch } : undefined)) : null;
+  }, signal, transient?.policy ?? ports.history!.policy, { ...(forceEpoch ? { forceEpoch } : {}), ...(historyAhead ? { ahead: historyAhead } : {}) })) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = metrics.timedSync('contextMs', () => observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {
@@ -228,7 +237,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) }));
   // A body task's recall (`bodyTaskRecall.ts`): a few memories for the situation the body was just read in (`recallCues`), none when
   // nothing fits; its sources are pinned like the recall packet's before anything is sent.
-  if (bodyTask && ports.bodyRecall && !prepared && ports.body?.recallWanted?.() !== false) {
+  if (bodyTask && ports.bodyRecall && !prepared && !urgent && ports.body?.recallWanted?.() !== false) {
     const found = await metrics.timed('recallMs', () => ports.bodyRecall!.packet({ scopeKey: step.scopeKey, taskId: step.taskId,
       goal: step.snapshot.task.goal, cues: ports.body?.recallCues?.() ?? { words: [], tags: [] }, present: OWNER_AUDIENCE, signal }));
     metrics.bodyRecall(found.measure);
@@ -479,16 +488,6 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;
-}
-
-/**
- * A decision asked ahead runs beside the step, not as its model request: under the step's lease and permit, with its own bookkeeping, so
- * the step's model outcome, usage and metrics stay the step's (a stop during a long call is still a confirmed stop).
- */
-function isolatedModelCall<T>(work: () => Promise<T>): Promise<T> {
-  const step = currentActionExecution();
-  if (!step) return work();
-  return inActionExecution({ lease: step.lease, signal: step.signal, permit: (resources, signal) => step.permit(resources, signal) }, work);
 }
 
 async function closeFcaMonitors(ports: FcaStepPorts): Promise<void> {

@@ -91,6 +91,19 @@ export interface ActHand {
   rel?: boolean;
   /** A few words for the plan's "next hand" in the mod (at most 40 characters). */
   note?: string;
+  /**
+   * r3 (run 27: [equip stone_sword, walk away] stopped at the equip, "持っていない", and the walk away from a creeper never ran): when this
+   * hand fails by itself, `continue` writes it as `failed` and goes on to the next hand; `stop` ends the act there. A reflex, a `stopIf`, a
+   * full pack, a cancel and the deadline end the act whatever this says. Default (`handContinuesOnFail`): continue for the quick hands
+   * that leave the world as it was (equip, eat, look, sneak, jump), stop for every other kind.
+   */
+  onFail?: 'continue' | 'stop';
+}
+/** The kinds whose failure does not end the act unless the hand says `onFail: 'stop'` (r3). */
+export const HAND_CONTINUES_BY_DEFAULT: ReadonlySet<HandKind> = new Set(['equip', 'eat', 'look', 'sneak', 'jump']);
+/** Whether the act goes on past this hand when it fails by itself (`ActHand.onFail`, or its kind's default). */
+export function handContinuesOnFail(hand: Pick<ActHand, 'do' | 'onFail'>): boolean {
+  return hand.onFail ? hand.onFail === 'continue' : HAND_CONTINUES_BY_DEFAULT.has(hand.do);
 }
 /** Stop the whole act when one holds (checked between hands and every 250 ms inside a long one). */
 export interface ActStopIf {
@@ -114,7 +127,8 @@ export interface ActInput { hands: readonly ActHand[]; stopIf?: ActStopIf; why?:
 /** One line a hand, in order: what was done, or where and why it stopped, or that it did not run. */
 export interface ActHandLine {
   i: number; do: HandKind;
-  status: 'done' | 'stopped' | 'skipped';
+  /** `failed` (r3): the hand failed by itself and the act went on past it (`onFail: 'continue'`); its line is written as a stop's. */
+  status: 'done' | 'stopped' | 'skipped' | 'failed';
   /**
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped: the place and the
    * reason in closed words first (`届かない`, `一歩ではない`, `掘れない`, `置けない`, `無い`, `満杯`, `見られる`, `守られた物`, `溶岩が流れ込む`,
@@ -142,7 +156,7 @@ export interface EnderEyeFlight {
 }
 export interface ActResult {
   v: typeof ACT_CONTRACT_VERSION;
-  /** Every hand done. */
+  /** Every hand done. False too when every hand ran but one or more `failed` (then `stoppedBy` is absent). */
   ok: boolean;
   /** Hands done, of the hands asked. */
   done: number; of: number;
@@ -265,6 +279,8 @@ export const ACT_DESCRIPTION = [
   'stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。',
   'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
+  'onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、ほかは stop。'
+    + '急ぐ act（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
   'ずれた時は、返った行（止まった場所・理由・そのマスの今の中身）と地図から次の手を直す。同じ手を同じまま繰り返さない。',
 ].join('\n');
 /** The definition text of `mc.view`. */
@@ -320,6 +336,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         takeOk: { type: 'boolean' },
         rel: { type: 'boolean' },
         note: { type: 'string', maxLength: 40 },
+        onFail: { type: 'string', enum: ['continue', 'stop'] },
       } } },
     stopIf: { type: 'object', additionalProperties: false, required: [], properties: {
       hostileWithin: { type: 'number', minimum: 1, maximum: 32 },
@@ -367,11 +384,11 @@ const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly string[
   pickup: { needs: [], may: ['target', 'range'] },
   wait: { needs: [['seconds']], may: [] },
 };
-const COMMON = new Set(['do', 'rel', 'note']);
+const COMMON = new Set(['do', 'rel', 'note', 'onFail']);
 /** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */
 export function handFieldNames(kind: HandKind): string[] {
   const fields = HAND_FIELDS[kind];
-  return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note'] : [];
+  return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note', 'onFail'] : [];
 }
 const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot', 'drop']);
 

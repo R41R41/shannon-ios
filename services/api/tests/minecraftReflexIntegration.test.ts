@@ -309,6 +309,15 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     expect(f.commands.filter(command => ['stop', 'capture', 'release'].includes(command.kind))).toEqual([]);
     answer.resolve(wait());
   });
+  it.each([false, true])('the LLM-centric mode builds no old-path context and walks no source for it (r3; llmc=%s)', async llmc => {
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => answer.promise, { llmc });
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
+    // Run 27: the old context walked the task's sources at every decision (via=body, 38 walks). minecraft.reflex: llmcMenuTool.
+    expect(f.sourceChecks() > 0).toBe(!llmc);
+    answer.resolve(wait());
+  });
   it('with the fast judgment on, meets a zombie right after arrival by taking shelter: no stop, no picture, no image reflex (ADR-0011 stage 2)', async () => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => f.modelInputs.length === 1 ? answer.promise : wait(), { fast: true });

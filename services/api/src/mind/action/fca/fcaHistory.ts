@@ -1,7 +1,8 @@
 import { observeAsync, observeSync, observerHandoff } from '../../../infra/observer/observerContext.js';
 import { renderedCompaction, type CompactionMessage } from '@shannon/mind';
 import type { TaskHistoryWindow, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
-import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryReplay, FcaHistorySummaryInput } from './fcaHistoryPorts.js';
+import type { FcaHistoryAhead, FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryPrepared,
+  FcaHistoryReplay, FcaHistorySummarizer, FcaHistorySummaryInput } from './fcaHistoryPorts.js';
 
 export const FCA_HISTORY_POLICY: Readonly<FcaHistoryPolicy> = Object.freeze({
   maximumNativeCharacters: 64_000, maximumRounds: 24, recentRounds: 6,
@@ -300,7 +301,8 @@ function summaryFallback(step: TaskStep, ports: FcaHistoryPorts, policy: FcaHist
  * way the tools a signed prefix binds can change (`fcaCoreTools.ts`).
  */
 export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, signal: AbortSignal,
-  overrides: Partial<FcaHistoryPolicy> = {}, options: { forceEpoch?: (replay: readonly unknown[]) => boolean } = {}): Promise<FcaHistoryReplay> {
+  overrides: Partial<FcaHistoryPolicy> = {},
+  options: { forceEpoch?: (replay: readonly unknown[]) => boolean; ahead?: FcaHistoryAheadOptions } = {}): Promise<FcaHistoryReplay> {
   const policy = policyOf(overrides);
   const checked = async () => {
     signal.throwIfAborted();
@@ -308,13 +310,16 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     signal.throwIfAborted();
     if (!ports.sourcesVisible() || ports.runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_HISTORY_HELD');
   };
+  const aheadState = { installed: false, waited: false };
   for (let batches = 0; ; batches++) {
     await checked();
     const window = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
     if (!window) throw new Error('FCA_TASK_NOT_FOUND');
     // A second batch may follow only to settle the bootstrap, and only while another batch remains (`maximumBatches`).
-    const settling = batches > 0 && batches + 1 < policy.maximumBatches;
-    const plan = planFcaHistory(window, ports.codec, policy, settling, batches === 0 ? options.forceEpoch : undefined);
+    const settling = batches > 0 && batches + 1 < policy.maximumBatches, forceEpoch = batches === 0 ? options.forceEpoch : undefined;
+    // mb-llmc r3: with `ahead`, a summary made beside the steps (`aheadTurn`); a turn with no plan goes round again.
+    const { plan } = await aheadTurn({ step, ports, window, policy, ahead: options.ahead, state: aheadState, checked, settling, forceEpoch });
+    if (!plan) continue;
     if (plan.kind === 'ready') {
       if (batches > 0) observerHandoff('compact', 'context', { phase: 'history_replay', compactedBatches: batches });
       const clippedMessages = plan.replay.clippedMessages;
@@ -338,4 +343,111 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     if (!observeSync('compact', { phase: 'commit', roundCount: plan.input.rounds.length },
       () => ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible), committed => ({ committed }))) throw new Error('FCA_HISTORY_COMMIT_FENCED');
   }
+}
+
+/** How long a step past the hard bounds waits for a summary already asked beside the steps (mb-llmc r3). */
+const AHEAD_WAIT_MS = 30_000;
+/** After a summary asked beside the steps came back unusable, the rounds that must follow before another is asked. */
+const AHEAD_RETRY_ROUNDS = 3;
+
+/**
+ * One turn of `prepareFcaHistory` with a summary made beside the steps (mb-llmc r3): a ready one is committed first (no model call; its
+ * bootstrap holds every round since it was asked, so it is not settled again); then the plan, and past the policy `aheadStep`.
+ */
+async function aheadTurn(parts: { step: TaskStep; ports: FcaHistoryPorts; window: TaskHistoryWindow; policy: FcaHistoryPolicy;
+  ahead: FcaHistoryAheadOptions | undefined; state: { installed: boolean; waited: boolean }; checked(): Promise<void>; settling: boolean;
+  forceEpoch: ((replay: readonly unknown[]) => boolean) | undefined }): Promise<{ plan?: FcaHistoryPlan }> {
+  const { step, ports, window, policy, ahead, state } = parts;
+  if (!ahead || !ports.summarizer) return { plan: planFcaHistory(window, ports.codec, policy, parts.settling, parts.forceEpoch) };
+  if (!state.installed && await installAhead(step, ports, window, ahead, parts.checked)) {
+    state.installed = true;
+    ahead.note?.('installed');
+    return {};
+  }
+  const plan = planFcaHistory(window, ports.codec, policy, parts.settling && !state.installed, parts.forceEpoch);
+  if (plan.kind === 'ready' || parts.forceEpoch) return { plan };
+  const next = await aheadStep(step.taskId, window, plan, policy, ahead, ports, state.waited);
+  if (next.waited) state.waited = true;
+  return next.replay ? { plan: { kind: 'ready', replay: next.replay } } : next.waited ? {} : { plan };
+}
+
+/**
+ * Past the policy (mb-llmc r3): within the hard bounds, the whole replay, with the summary asked beside the step when none is pending
+ * (or the last came back unusable `AHEAD_RETRY_ROUNDS` rounds ago); past them, one wait for a pending one. Else nothing: the step summarizes.
+ */
+async function aheadStep(taskId: string, window: TaskHistoryWindow, plan: Extract<FcaHistoryPlan, { kind: 'compact' }>, policy: FcaHistoryPolicy,
+  ahead: FcaHistoryAheadOptions, ports: FcaHistoryPorts, waited: boolean): Promise<{ replay?: FcaHistoryReplay; waited?: boolean }> {
+  const conversation = ahead.urgent ? { maximumConversationTokens: Math.max(policy.maximumReplayTokens, ahead.hard.maximumConversationTokens ?? 0) } : {};
+  const hard = planFcaHistory(window, ports.codec, { ...policy, ...ahead.hard, ...conversation }, false);
+  const prepared = ahead.port.get(taskId);
+  if (hard.kind === 'ready') {
+    if (!prepared || (prepared.state === 'failed' && window.tailSequence - prepared.tail >= AHEAD_RETRY_ROUNDS)) {
+      startAhead(taskId, plan, window, ahead, ports.summarizer!);
+      ahead.note?.('started');
+    }
+    return { replay: hard.replay };
+  }
+  if (prepared?.state !== 'pending' || waited) return {};
+  ahead.note?.('waited');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([prepared.done, new Promise<void>(resolve => { timer = setTimeout(resolve, ahead.waitMs ?? AHEAD_WAIT_MS); })]);
+  clearTimeout(timer);
+  return { waited: true };
+}
+
+/** The summaries made beside the steps, by task (in memory, at most 32 tasks). */
+export function createFcaHistoryAhead(): FcaHistoryAhead {
+  const kept = new Map<string, FcaHistoryPrepared>();
+  return {
+    get: taskId => kept.get(taskId),
+    set(taskId, prepared) {
+      kept.delete(taskId);
+      kept.set(taskId, prepared);
+      if (kept.size > 32) kept.delete(kept.keys().next().value as string);
+    },
+    clear: taskId => { kept.delete(taskId); },
+  };
+}
+
+/** Asks the summary of `plan`'s rounds apart from the step; the step does not wait for it. Its outcome is logged content-free. */
+function startAhead(taskId: string, plan: Extract<FcaHistoryPlan, { kind: 'compact' }>, window: TaskHistoryWindow, ahead: FcaHistoryAheadOptions,
+  summarizer: FcaHistorySummarizer): void {
+  let settle: () => void = () => undefined;
+  const prepared: FcaHistoryPrepared = { revision: window.revision, sequences: plan.input.rounds.map(round => round.sequence),
+    tail: window.tailSequence, state: 'pending', done: new Promise<void>(resolve => { settle = resolve; }) };
+  ahead.port.set(taskId, prepared);
+  const began = Date.now();
+  void ahead.detach(signal => summarizer.summarize(plan.input, signal)).then(template => {
+    prepared.template = template;
+    prepared.state = 'ready';
+    console.log(`Shannon FCA history summary ahead task=${taskId} outcome=ready rounds=${prepared.sequences.length} ms=${Date.now() - began}`);
+  }, error => {
+    prepared.state = 'failed';
+    const code = error instanceof Error && /^[A-Z0-9_]{1,64}$/u.test(error.message) ? error.message : 'other';
+    console.log(`Shannon FCA history summary ahead task=${taskId} outcome=failed code=${code} ms=${Date.now() - began}`);
+  }).finally(() => settle());
+}
+
+/**
+ * Commits the summary made beside an earlier step when it is ready and still covers the oldest rounds of this window (the same summary
+ * revision): every round after them is kept whole in the new epoch's bootstrap. A stale one (another summary came first) is dropped.
+ */
+async function installAhead(step: TaskStep, ports: FcaHistoryPorts, window: TaskHistoryWindow, ahead: FcaHistoryAheadOptions,
+  checked: () => Promise<void>): Promise<boolean> {
+  const prepared = ahead.port.get(step.taskId);
+  if (!prepared || prepared.state === 'pending') return false;
+  const fits = prepared.revision === window.revision && prepared.sequences.length < window.rounds.length
+    && prepared.sequences.every((sequence, index) => window.rounds[index]?.sequence === sequence);
+  if (!fits) {
+    ahead.port.clear(step.taskId);
+    return false;
+  }
+  // A failed one is kept for its mark (`AHEAD_RETRY_ROUNDS`).
+  if (prepared.state !== 'ready') return false;
+  ahead.port.clear(step.taskId);
+  const projected = projectedRounds(window, ports.codec);
+  await checked();
+  return observeSync('compact', { phase: 'commit_ahead', roundCount: prepared.sequences.length }, () => ports.runtime.commitCompaction(step, {
+    baseRevision: window.revision, sourceRevision: window.sourceRevision, tailSequence: window.tailSequence, sequences: prepared.sequences,
+    retained: projected.slice(prepared.sequences.length), template: prepared.template }, ports.sourcesVisible), committed => ({ committed }));
 }

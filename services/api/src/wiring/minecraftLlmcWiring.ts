@@ -7,8 +7,9 @@ import { DEFAULT_HAIKU_MODEL, isHaikuModel, OPUS_MODEL } from '../infra/models/a
 import { claudeClient } from '../infra/models/claude/claudeClient.js';
 import { structuredBody } from '../infra/models/claude/claudeStructured.js';
 import { closedUsage, estimatedAnthropicCostUsd, knownCount, unknownCostUpperBound } from '../infra/models/claude/claudeUsage.js';
-import type { FcaModel } from '../mind/action/fca/fcaPorts.js';
-import type { FcaHistoryPolicy } from '../mind/action/fca/fcaHistoryPorts.js';
+import type { FcaExternalTools, FcaModel, FcaToolDefinition } from '../mind/action/fca/fcaPorts.js';
+import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHistoryPorts.js';
+import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaLookahead } from '../mind/action/fca/fcaLookahead.js';
@@ -40,6 +41,35 @@ export const LLMC_PERMIT_WINDOW_MS = 30_000;
 export const LLMC_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({
   maximumRounds: 46, recentRounds: 6, maximumConversationTokens: 40_000, compactedConversationTokens: 8_000,
 });
+/**
+ * r3 (run 27: eight summaries waited for in their steps, 169 s, up to 36 s): past `LLMC_HISTORY_POLICY` the summary is asked beside the
+ * steps and installed when ready; a step waits for it (at most 30 s) only past these bounds.
+ */
+export const LLMC_HISTORY_HARD: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({ maximumRounds: 70, maximumConversationTokens: 56_000 });
+/** The summarizer's output ceiling (run 27: three summaries cut at 4,000 tokens, `FCA_MODEL_TRUNCATED`, each a fallback epoch). */
+export const LLMC_SUMMARY_OUTPUT_TOKENS = 8_000;
+
+/**
+ * The tools of the mode's menu (r3; run 27: 48 tools of her other work, study, folders, music, the web, were declared inline at every
+ * epoch's start, 81,619 characters, and the catalog listed them in every full state, 8,977): the body's (`mc.*`, `minecraft.observe`),
+ * the plan's and the goal's, and the memory reads. The task tools are the runner's. `minecraft.reflex` (the image reflex) and
+ * `skill.read` (her skills for the old tools) are not the mode's.
+ */
+export function llmcMenuTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>): boolean {
+  if (tool.name === 'minecraft.reflex' || tool.name === 'skill.read') return false;
+  return /^(mc|plan|goal)\./u.test(tool.name) || tool.name === 'minecraft.observe' || tool.domain === 'memory_read';
+}
+/**
+ * A body task's tools in the mode: the menu above, no skill index, and the goal progress without its list of failed calls (run 27: the
+ * list grew with every failed act and the whole progress was stated again in the history each time, about 2,800 characters a round; each
+ * act's own result says how it failed).
+ */
+export function llmcTools(tools: FcaExternalTools): FcaExternalTools {
+  const { skillIndex: _index, ...rest } = tools;
+  const progress = tools.progress;
+  return { ...rest, definitions: tools.definitions.filter(llmcMenuTool),
+    ...(progress ? { progress: { ...progress, context: () => ({ ...progress.context(), failures: [], replans: [] }) } } : {}) };
+}
 
 const MODELS = new Set([DEFAULT_HAIKU_MODEL, 'claude-sonnet-5-5', OPUS_MODEL]);
 const known = (value: string | undefined, fallback: string) => {
@@ -93,6 +123,8 @@ export interface LlmcWiring {
   planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
   /** The one lookahead of the mode (kept across every task's steps): the next decision asked while a long act runs. */
   lookahead: FcaLookahead;
+  /** r3: the summaries made beside the steps, by task. */
+  historyAhead: FcaHistoryAhead;
 }
 
 /**
@@ -116,8 +148,10 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}`);
   return { names, models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
-      ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true }) : null,
-    policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client) };
+      ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
+        maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
+    policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
+    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client) };
 }
 
 /**
@@ -136,15 +170,22 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view() };
   return {
-    body: { llmc: bodyParts, fastJudgment: false },
+    // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
+    body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
     tools: { llmc: { plan: display } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
-      observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }) }),
+      observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log }),
+    /** The step's ports with the mode's menu (`llmcTools`). */
+    menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, lookahead: llmc.lookahead, selector: LLMC_CATALOG_SELECTOR,
-      history: { codec: anthropicFcaHistoryCodec, ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy } },
+      history: { codec: anthropicFcaHistoryCodec, ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
+        ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },
+      // r3: the old path's evidence (its expectations, appraisals and shared context) is not the mode's: in run 27 it walked the task's
+      // sources 114 times (about 51 s of the API's one thread) and wrote 1,600 characters of shared context into every live state.
+      evidence: undefined },
   };
 }
 /** A body task's lifecycle: wrapped for the mode when the task is one of it. */

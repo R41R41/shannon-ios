@@ -14,12 +14,21 @@ export const LLMC_RULES = [
   '- 地図を先に読む: 足（@）の層と上下の層を見て、歩ける道（. と *）・掘る所・置く所を座標で出す。高さの差・水（w）・溶岩（L）・未ロード（?）に気をつける。'
     + '層の外の上下は「縦」の行（頭の上・足の下に何が何段あるか）と、目印の「上7」などで読む。縦穴を上るのは walk ではなく pillarUp（空気の段数だけ）。',
   '- 水の溜まり（足の下か周りの層に w が多い、縦の下に w）の中や真上では下へ掘らない（周りを塞いでも下が水なら同じ）。水の無い固い所（8 マス以上離れた所）へ walk してから dig の階段で下りる。',
+  '- 地図の読み方の例: 見出しの「足=(201,45,277)」が自分の足のマスで、頭のマスはその 1 つ上 (201,46,277)。この 2 マスには place できない（自分の体のマス）。'
+    + '足の下は (201,44,277)。行の頭が z、列の見出しは x の下 1 桁: 行 277 の列「3」は x=203。'
+    + 'rel: true の手では {x:1,y:0,z:0} が足の東隣、{x:0,y:-1,z:0} が足の下、{x:0,y:1,z:-1} が頭の北隣。',
+  '- place の置くマスは空気（. か *）で、6 面のどれかが固いブロックのマス。自分の体のマス・レール（=）・草花（,）・水（w）のマスや、周りが全部 . の空中には置けない。'
+    + '置けなかった時は、返った行の「近くの置ける所」から選ぶ。',
   '- 止まったら、返った行の理由と「そのマスの今の中身」と地図で原因を見つけて直す。同じ手を同じまま出さない。'
     + '「一歩ではない」は段差が2以上（pillarUp か dig で段を作る）、「届かない」は 4.5m 以内へ walk してから、「掘れない」は道具か X。',
-  '- 分からない時・詰まった時は mc.view（slice で縦の断面、top で広く、only で探す物だけ）で広く見てから決める。遠くの種類の座標は find-blocks。',
+  '- 分からない時・詰まった時は mc.view（slice で縦の断面、top で広く、only で探す物だけ）で広く見てから決める。遠くの種類の座標は find-blocks。'
+    + '同じ所で同じ止まりが 2 回・落ちた・溺れかけた時は、次の act の前に必ず mc.view で見る（live.look に出る）。',
+  '- 長い結果（mc.view の地図・observe・find-blocks・計画）と止まった手の「周り」は、この次の判断の live.lastResults に一度だけ全文が出る。'
+    + '履歴には頭の 1 行だけ残るので、後で要る座標は計画（plan.update の where・reason）か act の why に書き留める。',
+  '- live.urgent があれば急ぎの判断: 考えを短くし、離れる・食べる・囲う手を先に出す。',
   '- 長い移動（40m 以上）は walk に地図の外の座標を渡してよい。掘る所で止まるので、そこから dig を混ぜる。下へは dig の列で階段（1段ずつ前と下）。',
-  '- 急ぐ手（離れる walk・食べる）は act の先頭に置く。持っているか分からない物の equip・craft を前に置くと、そこで止まって後の手が動かない'
-    + '（実走27: 「stone_sword を持っていない」で止まり、クリーパーから離れる walk が動かなかった）。',
+  '- 急ぐ手（離れる walk・食べる）は act の先頭に置く。前に失敗しそうな手を置くなら onFail: "continue"（equip・eat・look は既定で continue）。'
+    + '既定の stop の手（walk・dig・craft など）が失敗すると後の手は動かない（実走27: 剣の equip で止まり、クリーパーから離れる walk が動かなかった）。',
   '- stopIf を付ける: 夜・洞窟・ネザーでは hostileWithin 8〜12、体力の低い時は hpBelow。待つ・焼く間は blockChanged でかまどを見張ってもよい。',
   '- 体の反射（溶岩・溺れ・落下・クリーパー・矢・火の玉・視線・盾・体力8以下で敵が近い時の逃走・満腹3以下か体力6以下の食事）は体が自分でする。'
     + '反射が動くと act は止まり、何をしたかが返る。それ以外の食事・睡眠・戦うか逃げるか・片づけ・道具作りはあなたが手で出す。',
@@ -29,6 +38,29 @@ export const LLMC_RULES = [
   '- plan.update: 計画は自分のもの。節が済んだら set state=done、止まったら blocked と reason、順番を変える・足す・割る。毎回は要らない。'
     + '最初の計画はルートの見立てで、見えている近い物（地図・find-blocks）があればそちらを先に使う。',
   '- 時間が限られている。体を止めない: 焼く・待つ間は、近くでできる手（掘る・集める・作る）を入れる。考える間も体は前の act を続けている。',
+].join('\n');
+
+/**
+ * Danger (r3, run 27: a creeper's blast at 3.6 health left and a spider; the low-health flight found no way and she stood 4 s; she fought
+ * on at health 8 twice and hid by placing blocks on her own cell). Knowledge, not an order.
+ */
+export const DANGER_KNOWLEDGE = [
+  '## 危ない時（低体力・夜・敵の多い所・クリーパー）',
+  '- 低体力（体力 8 以下）では戦わない。敵から離れる walk（sprint）→ 敵の来ない所で囲う（足の周り 4 面と頭の上に place）→ eat → 満腹 18 以上で wait して回復。',
+  '- 夜（time 13000〜23000）と敵の多い所（threats 2 体以上・洞窟・暗い所）では、先に囲う（2 マスの高さで 4 面と頭の上）か、敵の居ない向きへ避けてから作業する。ベッドがあれば寝る。',
+  '- クリーパー: 爆発は約 7m まで届く（防具なしで 3m 内なら 15 以上）。見えたら stopIf hostileWithin 10 を付ける。近づいたら 8m 以上離れる walk を act の最初の手に。'
+    + '火の付いたクリーパーからは体が自分で 7m まで離れる。戦うなら剣で 1〜2 打ちして離れる（打つと下がる）。',
+  '- 逃げ道が無いほど囲まれた低体力の時だけ、体が最後の手（近い敵を打ち返す・足元を 1 つ掘って下がる・1 段積んで上がる）をして act を止める。その後の囲う・食べる・離れるはあなたが出す。',
+].join('\n');
+
+/** No wood near (r3, run 27: a desert village and grassland, 96 m of no tree; she dug straight down with bare hands for 305 s and fell 20 blocks). */
+export const WOOD_KNOWLEDGE = [
+  '## 木が無い時（砂漠・草原・海の上）',
+  '- 素手で真下へ掘らない（石は素手で 1 マス 7〜8 秒で何も落ちない。下の空洞・地下水へ落ちる）。',
+  '- 木の探し方の順番: (1) 地表の木（目印・find-blocks の oak_log・birch_log など、mc.view top radius 32 で遠くの W と %）へ走る。'
+    + '(2) 村の木の物: 家の扉（D）・柵（+）・ベッド（B）・作業台（T）・板の壁や床（P）を素手で掘る（板は素手で 1 マス 3 秒、takeOk）。'
+    + '(3) 難破船（海辺、find-structure）の板。(4) 廃坑（地下の板・柵・レール）。',
+  '- 地下の廃坑へは縦穴でなく dig の階段（1 段ずつ前と下、2 マスの高さ）で下りる。足の下が空気か水（縦の行で見る）なら掘らない。',
 ].join('\n');
 
 /** Food: points, use, and when (design 1.6, 2.6; owner 2026-10-21 「最初の夜を迎える前に（鉄をとる前に）とっておくべき」). */
@@ -49,7 +81,7 @@ export const VILLAGE_KNOWLEDGE = [
   '- 村が見えたら（目印に村・鐘・村のベッド・箱・干し草・畑）、鉄より前に 128m 内を回って取る。村の物は takeOk: true で取れる。',
   '- ベッド: 全部掘って持つ（予備・リスポーン・ネザーとエンドでの爆発に使う。エンドのドラゴンに 4〜6 個）。',
   '- 干し草（H）: 1 個で小麦 9 本＝パン 3 個（33 点）。3 個あればネザーの先の半分。作業台で小麦→パン（小麦3でパン1）。',
-  '- 畑（w）: 育った小麦・じゃがいも・にんじんを掘る（dig）。じゃがいもは焼くとベイクドポテト 11 点。',
+  '- 畑（k）: 育った小麦・じゃがいも・にんじんを掘る（dig）。じゃがいもは焼くとベイクドポテト 11 点。',
   '- 箱（C）: 家・鍛冶屋・司書の家の箱を全部 chest op=look で見て、パン・りんご・鉄・黒曜石・ダイヤ・金・エメラルド・本を takeAll か take。',
   '- 鍛冶屋の箱は鉄の延べ棒・黒曜石・ダイヤが出やすい。荒廃したポータルの箱は金・火打ち金・金のリンゴ。枠の黒曜石も掘れる（ダイヤのツルハシが要る）。',
   '- 鉄ゴーレムを殴らない。村人を殴らない。',
@@ -125,4 +157,5 @@ export const DRAGON_KNOWLEDGE = [
 ].join('\n');
 
 /** The whole appendix of the mode's instructions: rules, the map legend, the knowledge. */
-export const LLMC_SYSTEM_APPENDIX = [LLMC_RULES, MAP_LEGEND, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, ORDER_KNOWLEDGE, DRAGON_KNOWLEDGE].join('\n\n');
+export const LLMC_SYSTEM_APPENDIX = [LLMC_RULES, MAP_LEGEND, DANGER_KNOWLEDGE, WOOD_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, ORDER_KNOWLEDGE,
+  DRAGON_KNOWLEDGE].join('\n\n');

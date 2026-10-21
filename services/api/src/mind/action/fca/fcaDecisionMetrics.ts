@@ -48,6 +48,9 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   let toolMs = 0, permitAsks = 0;
   const tools: string[] = [], skipped: string[] = [];
   let recalled: BodyRecallMeasure | null = null;
+  /** mb-llmc r3: an urgent step (`FcaBodyLifecycle.urgent`), and what the history did beside the decision (`prepareFcaHistory`'s `ahead`). */
+  let urgent = false;
+  const ahead: string[] = [];
   /** The time before this step, from the previous decision's commit (`gap` above). */
   const gap = () => {
     if (committedBefore === null) return null;
@@ -79,6 +82,10 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     skipped(name: string): void { skipped.push(toolName(name)); },
     /** What a body task's recall did (`bodyTaskRecall.ts`: pool, groups, shown, characters, cue tags, Jev). Content-free. */
     bodyRecall(measure: BodyRecallMeasure): void { recalled = measure; },
+    /** The step was urgent (mb-llmc r3). */
+    urgent(): void { urgent = true; },
+    /** What the history's summary ahead did in this step: `started`, `installed`, `waited` (mb-llmc r3). Content-free. */
+    ahead(what: string): void { if (ahead.length < 4) ahead.push(/^[a-z_]{1,24}$/u.test(what) ? what : 'other'); },
     /** `fcaCommittedAt`: when this decision committed (epoch ms), the start of the next one's `gap`. */
     checkpoint: (): Record<string, unknown> => ({ fcaDecisionIndex: index, fcaCommittedAt: now() }),
     /** Writes the line (the decision has committed). Never throws. */
@@ -95,6 +102,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
           other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), permitAsks, gap: gap(),
           ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
+          ...(urgent ? { urgent } : {}), ...(ahead.length ? { summaryAhead: ahead } : {}),
           ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
       } catch { /* measuring never fails a step */ }
     },

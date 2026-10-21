@@ -83,6 +83,12 @@ export interface FcaBodyLifecycle {
   recallWanted?(): boolean;
   /** True while the body is in its first frames after a login or respawn: heavy local work (the recall) waits for the decision. */
   settling?(): boolean;
+  /**
+   * An urgent step (mb-llmc r3; run 27: a creeper stopped her act at 3.9 m and the next decision came 12.8 s later, after the blast): a
+   * hostile close, low health beside one, or the last act cut by a reflex or a hostile. The step then asks the model at once: no history
+   * summary while the replay still fits (`prepareFcaHistory`), no recall. Absent: never urgent.
+   */
+  urgent?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

@@ -138,6 +138,28 @@ export interface LlmcLiveParts {
   events: readonly string[];
   /** The external jobs the frame reports (a furnace and its finish time), as given. */
   jobs?: BodyValue;
+  /** r3: the whole texts of the last step's results the history keeps short (`llmcStoredResult`), shown this once. */
+  lastResults?: readonly string[];
+  /** r3: why this step is urgent (`urgentReasons`), when it is. */
+  urgent?: readonly string[];
+  /** r3: health lost since the last decision (a fall, a blast), for the hint to look round (`lookHint`). */
+  healthLost?: number;
+}
+
+/** The longest the shown results may be together (characters; a view's map is about 2,500). */
+const LAST_RESULTS_CHARS = 8_000;
+/**
+ * A hint to look round with mc.view before the next act (r3; run 27: mc.view was never used, though she fell 20 blocks into a mine
+ * and stopped six times at the same walls): the same stop twice or more at one place, or a fall or water that took her health or air.
+ */
+export function lookHint(world: Record<string, unknown>, healthLost = 0): string | null {
+  const repeated = strings(world.recentStops, STOPS).some(line => Number(/×(\d+)/u.exec(line)?.[1] ?? 1) >= 2);
+  if (repeated) return '同じ所で同じ止まりが続いている: 次の act の前に mc.view（slice で縦の断面か layers、radius 6〜10）で周りを広く見て、別の道・別の手を決める';
+  const oxygen = finite(world.oxygen);
+  if ((oxygen !== null && oxygen < 10) || healthLost >= 6) {
+    return '落ちた・溺れかけた・大きく打たれた: 動く前に mc.view（slice で上下、layers で周り）で今いる所を見る（地図の外の空洞・水・敵）';
+  }
+  return null;
 }
 
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
@@ -148,10 +170,14 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const state = stateOf(world, observation);
   parts.trend.note(finite(world.food), finite(world.saturation));
   const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS);
+  // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
+  const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
+    ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     landmarks: strings(world.mapLandmarks, LANDMARKS),
     stops: strings(world.recentStops, STOPS),
+    ...(look ? { look } : {}),
     state: { ...state, ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     food: { points: food.points, items: food.items, lostIn5min: parts.trend.lostIn5min() },
     inventory: stacks(world.inventory).slice(0, INVENTORY),
@@ -160,7 +186,15 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
     ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
   };
-  return fitLive(live, planTokens);
+  // r3: outside the bound (never cut, at most `LAST_RESULTS_CHARS`): the results shown this once.
+  const shown: string[] = [];
+  let room = LAST_RESULTS_CHARS;
+  for (const text of parts.lastResults ?? []) {
+    if (room <= 0) break;
+    shown.push(text.length <= room ? text : `${text.slice(0, room)}…（長いため後略）`);
+    room -= text.length;
+  }
+  return { ...fitLive(live, planTokens), ...(shown.length ? { lastResults: shown } : {}) };
 }
 
 /** The tokens of a live body as the decision sends it (its JSON). */

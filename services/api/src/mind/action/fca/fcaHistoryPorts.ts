@@ -61,6 +61,39 @@ export interface FcaHistoryReplay {
 export type FcaHistoryPlan =
   | { kind: 'ready'; replay: FcaHistoryReplay }
   | { kind: 'compact'; input: FcaHistorySummaryInput; request: Omit<TaskHistoryCommit, 'template'> };
+/**
+ * A summary made beside the steps (mb-llmc r3; Minecraft run 27, 2026-10-22: eight summaries were waited for before their decisions,
+ * 169 s in all, up to 36 s, and each new epoch was written to the cache twice): asked when the history passes its policy, while the step
+ * goes on with the whole replay; installed at the first step after it is ready (no model call then). Kept per task, in memory.
+ */
+export interface FcaHistoryPrepared {
+  /** The summary revision and the oldest rounds it covers; `tail`: the newest round when it was asked. */
+  revision: number; sequences: readonly number[]; tail: number;
+  state: 'pending' | 'ready' | 'failed';
+  template?: unknown;
+  /** Settles when the summary call ends, however it ends. */
+  done: Promise<void>;
+}
+export interface FcaHistoryAhead {
+  get(taskId: string): FcaHistoryPrepared | undefined;
+  set(taskId: string, prepared: FcaHistoryPrepared): void;
+  clear(taskId: string): void;
+}
+export interface FcaHistoryAheadOptions {
+  port: FcaHistoryAhead;
+  /**
+   * The bounds the replay may reach while a summary is made beside the steps: within them a step never waits for one. Past them a step
+   * waits for the one asked (at most `waitMs`), else summarizes as before.
+   */
+  hard: Partial<FcaHistoryPolicy>;
+  waitMs?: number;
+  /** Runs the summary call apart from the step (its own signal and model bookkeeping), so that the step need not wait for it. */
+  detach<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  /** An urgent step: the conversation may reach the whole replay's bound before it waits for anything. */
+  urgent?: boolean;
+  /** What happened (content-free): `started`, `installed`, `waited`. */
+  note?(what: 'started' | 'installed' | 'waited'): void;
+}
 export interface FcaHistoryPorts {
   runtime: TaskRuntime; codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer;
   permit(): Promise<boolean>;

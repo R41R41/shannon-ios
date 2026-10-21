@@ -75,12 +75,18 @@ export function feetOf(observation: BodyObservation | null): ActPos | null {
     ? { x: at.x as number, y: at.y as number, z: at.z as number } : null;
 }
 
+/** How a stopped hand's 3×3×3 starts in a result (r3: it is shown once, in the next decision's live state, not kept in the history). */
+export const AROUND_PREFIX = '  周り（上の層から、北が上・西が左）';
 /** An act's result in the lines the model reads (no map: the live state carries the newest one). */
 export function actResultText(result: ActResult): string {
+  // r3: an act whose hands all ran, one or more of them `failed` (onFail continue), did not stop.
+  const failed = result.lines.filter(line => line.status === 'failed').length;
   const head = result.ok ? `act 全部済み（${result.done}/${result.of}、${(result.ms / 1000).toFixed(1)}秒）`
-    : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
-  const lines = result.lines.flatMap(line => [`${line.i} ${line.do} ${line.status === 'done' ? '済' : line.status === 'stopped' ? '止' : '未'} ${line.line}`,
-    ...(line.status === 'stopped' && line.around ? [`  周り（上の層から、北が上・西が左）${line.around.slice(0, 160)}`] : [])]);
+    : !result.stoppedBy && failed ? `act 最後まで動いた（済み ${result.done}/${result.of}、失敗して続けた手 ${failed}、${(result.ms / 1000).toFixed(1)}秒）`
+      : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
+  const mark = { done: '済', stopped: '止', failed: '失', skipped: '未' } as const;
+  const lines = result.lines.flatMap(line => [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`,
+    ...((line.status === 'stopped' || line.status === 'failed') && line.around ? [`${AROUND_PREFIX}${line.around.slice(0, 160)}`] : [])]);
   const extras = [
     `今 (${result.at.x},${result.at.y},${result.at.z}) 体力${result.hp} 満腹${result.food}`,
     ...(result.eye ? [`アイ: (${result.eye.from.x},${result.eye.from.z}) から方位 ${result.eye.bearingDeg}° に ${result.eye.flew} 飛んだ`
@@ -90,6 +96,27 @@ export function actResultText(result: ActResult): string {
     ...(result.arrowsLeft !== undefined ? [`矢の残り ${result.arrowsLeft}`] : []),
   ];
   return [head, ...lines, ...extras].join('\n');
+}
+
+/** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next live state (r3). */
+export const LLMC_KEPT_RESULT_CHARS = 400;
+const SHOWN_RESULT_CHARS = 6_000;
+/**
+ * What the history keeps of one result in the mode, and what the next decision's live state shows once (`lastResults`): r3, run 27
+ * (2026-10-22): every round's results stayed in the replay to the end of its epoch (an observation 5,066 characters, a plan 2,842, a
+ * view's map about 2,500), read again by every later decision. An act's result is kept whole but for its stopped hands' 3×3×3
+ * (`around`, for the next decision only); any other result past `LLMC_KEPT_RESULT_CHARS` is kept as its first line and says where the
+ * whole was. The stored text never changes afterwards (the replay stays byte for byte the same: the cache holds).
+ */
+export function llmcStoredResult(name: string, text: string): { stored: string; shown: string | null } {
+  if (name === MC_ACT_TOOL) {
+    const lines = text.split('\n'), kept = lines.filter(line => !line.startsWith(AROUND_PREFIX));
+    return kept.length === lines.length ? { stored: text, shown: null }
+      : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: text.slice(0, SHOWN_RESULT_CHARS) };
+  }
+  if (text.length <= LLMC_KEPT_RESULT_CHARS) return { stored: text, shown: null };
+  const first = (text.split('\n')[0] ?? '').slice(0, 200);
+  return { stored: `${first}…（全文 ${text.length}字は、この次の判断の live.lastResults に一度だけ出した）`, shown: text.slice(0, SHOWN_RESULT_CHARS) };
 }
 
 /** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */

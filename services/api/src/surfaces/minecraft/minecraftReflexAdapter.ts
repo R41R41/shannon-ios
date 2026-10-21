@@ -30,6 +30,7 @@ import { bedDeferredNow } from './minecraftProcedureTool.js';
 import { minecraftTransientBody } from './minecraftTransientBody.js';
 import { storedBodyResult } from './minecraftStoredResult.js';
 import { minecraftRecallCues } from './minecraftRecallCues.js';
+import { llmcBodyContext } from './minecraftLlmcContext.js';
 import { minecraftMilestones, minecraftPace, waitTimeMilliseconds, withNetherCare } from './minecraftPace.js';
 export { minecraftMilestones, minecraftPace, waitTimeMilliseconds, type PaceMilestones } from './minecraftPace.js';
 
@@ -87,10 +88,9 @@ export function createMinecraftTaskBody(parts: {
   llmc?: { plan(): BodyPlanView | undefined };
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
-  const governor = parts.governor ?? createReflexGovernor();
-  const monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(), claims = new Set<string>();
-  const releasedSessions = new Set<string>();
-  const captures = new Map<string, number>(), modes = new Map<string, 'explicit' | 'danger' | 'stuck' | 'visual'>();
+  const governor = parts.governor ?? createReflexGovernor(), monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(),
+    claims = new Set<string>();
+  const releasedSessions = new Set<string>(), captures = new Map<string, number>(), modes = new Map<string, 'explicit' | 'danger' | 'stuck' | 'visual'>();
   const cleanupListeners = new Set<() => void>();
   const prior = step.snapshot.checkpoint as { fcaToolSelection?: { recentResults?: Array<{ name: string; ok: boolean; summary: string }> } } | null;
   let recentResults = (prior?.fcaToolSelection?.recentResults ?? []).slice(-6).map(value => ({ name: value.name.slice(0, 160), ok: value.ok, summary: value.summary.slice(0, 1000) }));
@@ -130,8 +130,7 @@ export function createMinecraftTaskBody(parts: {
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
-  const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS;
-  const log = parts.log ?? ((line: string) => console.info(line));
+  const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS, log = parts.log ?? ((line: string) => console.info(line));
   // Measurement only (observation redesign P1): it reads this body's frames and writes journal lines; no decision depends on it.
   // mb-r25: every frame also tells the route whether its step is late now (`minecraftRouteWatch.ts`), not only the decisions.
   const metrics = stepMetrics(step, now, parts.metricsLog, routeWatcher({ plan: routePlan, createdAt: step.snapshot.task.createdAt, now }));
@@ -148,8 +147,7 @@ export function createMinecraftTaskBody(parts: {
   const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
   const live = () => leaseMatches() && parts.ownerAlone() && parts.sourcesVisible() && !monitorAbort.signal.aborted
     && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
-  const bound = () => control.store.body(step.taskId);
-  const availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
+  const bound = () => control.store.body(step.taskId), availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
   const context = (bodyId: string, sessionId: string): BodyTaskContext => ({ scopeKey: step.scopeKey, taskId: step.taskId,
     taskRevision: step.revision, bodyId, sessionId, generation: step.lease.generation,
     goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria,
@@ -381,6 +379,8 @@ export function createMinecraftTaskBody(parts: {
     settling: () => !!availableBody() && control.settling(availableBody()!, spawnGrace),
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
+      if (parts.llmc) return llmcBodyContext({ observation: bound() ? control.observe(bound()!) : null, step, recentResults, now: now(), milestones, idleWaitMs,
+        revision: revisions.revision, keep: value => { latest = value; } });
       const observation = live() && bound() ? control.observe(bound()!) : null;
       // From three failed steps in a row the decision looks back before it acts, and before the task may stop (`minecraftFailureReview.ts`).
       const pace = withFailureReview(minecraftPace(step, recentResults, now(), milestones, idleWaitMs), recentResults);

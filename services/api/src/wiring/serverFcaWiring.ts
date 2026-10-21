@@ -172,7 +172,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled command (`minecraftWorkingBody.ts`).
         const body = minecraft ? withMinecraftWorking(createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
           // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
-          ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') ? bodySkillGists(step, parts.skillOpen,
+          ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') && !small ? bodySkillGists(step, parts.skillOpen,
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
@@ -203,10 +203,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
-        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        // A body task of the LLM-centric mode has the mode's menu (`llmcTools`, r3).
+        const stepParts = ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
-        taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
-        observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
+        taskVisible: (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
+        observeTasks: (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
         history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision }) },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(fcaResearchTools({ tools: parts.tools,
           state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
@@ -227,7 +228,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             { observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
             ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
         ...small?.ports,
-      }); } });
+      });
+        return small ? small.menu(stepParts) : stepParts; } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
       readSourceVisible }) : undefined;
