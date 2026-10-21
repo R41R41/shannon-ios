@@ -9,6 +9,8 @@ import { minecraftObservationSummary, MINECRAFT_OBSERVATION_SUMMARY_CHARACTERS }
  * number of characters left out. The tool's own result, its evidence and its measurements keep the whole text; only the round does not.
  */
 export const STORED_BODY_RESULT_CHARACTERS = 2_000;
+/** `mc.view`: its whole map (the body's bound is 6,000 cells, about 13,000 characters). */
+export const STORED_VIEW_CHARACTERS = 16_000;
 const marked = (original: string, kept: string) => kept.length < original.length ? `${kept}…(${original.length - kept.length}文字省略)` : kept;
 
 /** The first `limit` characters, never ending between the halves of a surrogate pair (a lone half is refused by the provider). */
@@ -44,6 +46,9 @@ function cutBodyResult(text: string): string {
 /** A body tool is one of `mc.*` and `minecraft.*`; any other tool's result is stored as it is. */
 export function storedBodyResult(name: string, text: string): string {
   if (!name.startsWith('mc.') && !name.startsWith('minecraft.')) return text;
+  // A view (design mb-llm-centric 2.2) is read once, whole: the map it asked for is the reason it was called.
+  if (name === 'mc.view') return marked(text, head(text, STORED_VIEW_CHARACTERS));
+  if (name === 'mc.act') return marked(text, head(text, 2 * STORED_BODY_RESULT_CHARACTERS));
   if (name === 'minecraft.observe') {
     const frame = observation(text);
     const summary = frame ? JSON.stringify(minecraftObservationSummary(frame)) : text;

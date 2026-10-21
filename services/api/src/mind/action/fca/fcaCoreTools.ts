@@ -26,7 +26,7 @@ export function fcaObsMode(value: string | undefined): FcaObsMode {
 export function isFcaCoreTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>): boolean {
   if (tool.name === 'minecraft.reflex') return false;
   return tool.domain === 'minecraft_body' || tool.domain === 'task_runtime' || tool.domain === 'memory_read'
-    || tool.name === 'skill.read' || /^(task|goal)\./u.test(tool.name);
+    || tool.name === 'skill.read' || /^(task|goal|plan)\./u.test(tool.name);
 }
 
 /**

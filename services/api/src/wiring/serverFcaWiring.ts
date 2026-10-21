@@ -33,6 +33,7 @@ import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
+import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts } from './minecraftLlmcWiring.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -138,9 +139,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
     // A Minecraft task's skill reads, settled by what the task then does (`fcaSkillOutcomes.ts`).
     // SHANNON_MINECRAFT_AGENDA (mb-arch): the next decision asked while the body works, and the executor around its tools.
-    const minecraft = withMinecraftAgendaParts(withSkillOutcomes(
+    // SHANNON_MINECRAFT_LLM_CENTRIC (design mb-llm-centric): a body task decides in small steps from a map; no agenda, procedure or fast judgment.
+    const llmc = configuredMinecraftLlmc(values, { recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
+        compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS }),
+      minecraft = withMinecraftAgendaParts(withSkillOutcomes(
       configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions }),
-      parts.skills, parts.now), switchOn(values, 'SHANNON_MINECRAFT_AGENDA'));
+      parts.skills, parts.now), switchOn(values, 'SHANNON_MINECRAFT_AGENDA') && !llmc);
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
@@ -162,6 +166,9 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
         // `check.whole` names its caller for the slow-walk line; `check.peek` is the observation monitor's, which walks nothing (`fcaPeekGates.ts`).
         const check = stepVisibility(() => visible, step);
+        // A body task of the LLM-centric mode (`minecraftLlmcWiring.ts`): its plan, its small steps and its own menu.
+        const small = llmc && minecraft && (minecraft.control.store.body(step.taskId) || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA)
+          ? llmcStepParts(llmc, step, minecraft.control) : null;
         // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled command (`minecraftWorkingBody.ts`).
         const body = minecraft ? withMinecraftWorking(createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, skillNames,
           // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
@@ -170,7 +177,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             minecraft.skillOutcomes) : {}),
           fastJudgment: switchOn(values, 'SHANNON_MINECRAFT_FAST_JUDGMENT'),
           // Owner 2026-10-20: her route to the Nether from a strong model, charged as a decision is (`minecraftRouteWiring.ts`).
-          ...minecraftRoutePlannerPart(values, recordUsage),
+          // The LLM-centric mode has its first plan tree instead (`minecraftFirstPlan.ts`).
+          ...(small ? small.body : minecraftRoutePlannerPart(values, recordUsage)),
           sourcesVisible: () => check.whole('body') ?? false }),
           { on: minecraft.agenda.on || switchOn(values, 'SHANNON_MINECRAFT_WORKING_EVENTS'), control: minecraft.control, runtime: _runtime, step,
             ...(minecraft.agenda.on
@@ -195,7 +203,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
-        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        return ({ ...(minecraft?.agenda.lookahead && keepBodyTools() ? { lookahead: minecraft.agenda.lookahead } : {}), selector, observations, waitCounterpart, keepBodyTools, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible,
         taskVisible: id => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
@@ -208,8 +216,9 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
           sourcesVisible: () => check.whole('tool') ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) }),
+          ...(small ? [small.planTools] : []),
           ...(minecraft ? [withMinecraftProgress(withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
-            sourcesVisible: () => check.whole('tool') ?? false,
+            sourcesVisible: () => check.whole('tool') ?? false, ...(small ? small.tools : {}),
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
             { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
               ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? ''),
@@ -217,6 +226,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             // A failed call that made something is not a failed step (`minecraftProgress.ts`, mb-r23).
             { observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
             ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
+        ...small?.ports,
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,

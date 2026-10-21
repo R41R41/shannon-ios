@@ -25,7 +25,7 @@ import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
-  renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
+  appendixOf, planField, renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -76,6 +76,7 @@ export interface AnthropicFcaOptions {
    * unknown exit three minutes later. Its answer is still discarded; only its usage is recorded and the step can stop as known.
    */
   stopGraceMilliseconds?: number;
+  /** Words after a transient body task's instructions (the LLM-centric body's rules, `minecraftKnowledge.ts`). */ systemAppendix?: string;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -157,7 +158,7 @@ export class AnthropicFcaModel implements FcaModel {
     this.system = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n${STEP_INSTRUCTIONS}`;
     this.transientSystem = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n`
       + `${stepInstructions(FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING)}\n\nownerClock: ${OWNER_CLOCK_RULE}\nwaiting: ${WAIT_RULE}\nbody: ${BODY_RULE}\n`
-      + `${FCA_TRANSIENT_BODY_RULE}\n\n${FCA_CONTEXT_INSTRUCTIONS}\n\n${SHANNON_FCA_PROGRESS_CAPABILITY.text}`;
+      + `${FCA_TRANSIENT_BODY_RULE}\n\n${FCA_CONTEXT_INSTRUCTIONS}\n\n${SHANNON_FCA_PROGRESS_CAPABILITY.text}${appendixOf(options)}`;
   }
 
   async decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput> {
@@ -423,7 +424,7 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
     ...(input.catalog ? { catalog: input.catalog.filter(tool => !core.has(tool.name) && !core.has(providerToolName(tool.name)))
       .map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
     ...(input.sharedContext ? { sharedContext: input.body !== undefined ? bodySharedContext(input.sharedContext, input.task.id) : input.sharedContext,
-      contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
+      contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}), ...planField(input),
     ...(input.recall ? { recall: input.body !== undefined ? bodyRecallView(input.recall) : modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
     ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
 }

@@ -58,6 +58,11 @@ export interface ActHand {
   target?: string;
   /** attack: go on until it is dead (default true); false with `seconds`: hit for that long. */
   untilDead?: boolean;
+  /**
+   * attack: hold the place (run 26, the blaze spawner): stand where she is, face the nearest `target` and hit it whenever it comes within
+   * reach, for `seconds` (or until `stopIf`); never chase. Without it an attack chases by walk's rules (no digging: it stops and says so).
+   */
+  hold?: boolean;
   /** wait: seconds (0.5–30); attack: the most seconds (default 20). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
@@ -98,7 +103,13 @@ export interface ActStopIf {
   /** Any of these blocks changed (a furnace's state counts only as its block; at most 4). */
   blockChanged?: readonly ActPos[];
 }
-export interface ActInput { hands: readonly ActHand[]; stopIf?: ActStopIf; why?: string }
+/**
+ * `accept`: the hostile kinds she takes on in this act (`blaze`, `enderman`, `piglin`…; run 26: the fast judgment's shelter and flee cut
+ * 27% of her calls at the spawner). For those kinds, while the act runs, the body does not back off, flee, dodge by moving, refuse an
+ * exposed dig, or stop on `stopIf.hostileWithin`; the shield's guard and a fireball's deflection still act without stopping the act.
+ * The reflexes of section 6 of the shared note stay (lava, drowning, falling, a lit creeper, and the low-health flight at health 8).
+ */
+export interface ActInput { hands: readonly ActHand[]; stopIf?: ActStopIf; why?: string; accept?: readonly string[] }
 
 /** One line a hand, in order: what was done, or where and why it stopped, or that it did not run. */
 export interface ActHandLine {
@@ -174,8 +185,14 @@ export interface ViewResult {
 export interface LlmCentricWorld {
   /** The map of this frame (format below): redrawn when she moved a block or a block in it changed, at most every 500 ms. */
   localMap?: string;
-  /** Off-map landmarks, at most 12 lines: `記号 名前 (x,y,z) 方角距離・上下 注記`, nearest and most useful first. */
+  /**
+   * Off-map landmarks, at most 12 lines: `記号 名前 (x,y,z) 方角距離・上下 注記`, nearest and most useful first. Only places of the dimension
+   * she is in (run 26: an overworld crafting table read as 3 m away in the Nether); a place of another dimension, when worth saying (the
+   * gate back, her base), starts with that dimension in brackets and gives no distance: `[overworld] T 作業台 (10,35,15) 拠点`.
+   */
   mapLandmarks?: readonly string[];
+  /** The structure she is in or beside (run 26): `ネザー要塞の中`, `砦の遺跡（bastion）の脇`, `ストロングホールドの中`, `村の中`, `エンドシティ`; absent: none. */
+  inside?: string;
   /** The recent stops, at most 5 lines, newest first: `(x,y,z)→(x,y,z) 理由 ×回数 N秒前`. Counted by the body, never acted on by it. */
   recentStops?: readonly string[];
   /** The hidden food saturation (0–20). */
@@ -224,10 +241,13 @@ export const ACT_DESCRIPTION = [
     + 'use(item, at, face, target: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）) / '
     + 'look(to か yaw・pitch) / jump(n) / sneak(on) / equip(item, slot) / craft(item, count: 作業台が4.5m内に要る) / '
     + 'furnace(at, op=put: item・count・fuel・fuelCount | op=take) / chest(at, op=look|take|put|takeAll, items) / '
-    + 'attack(target: #id か名前, untilDead, seconds) / shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
+    + 'attack(target: #id か名前, untilDead, seconds, hold: その場で待って届いたら打つ・追わない) / '
+    + 'shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
     + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30)。',
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
   'stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。',
+  'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
+    + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
   'ずれた時は、返った行（止まった場所・理由・そのマスの今の中身）と地図から次の手を直す。同じ手を同じまま繰り返さない。',
 ].join('\n');
 /** The definition text of `mc.view`. */
@@ -267,6 +287,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         op: { type: 'string', enum: ['put', 'take', 'look', 'takeAll'] },
         target: { type: 'string', maxLength: 64, description: '生き物（#id か名前）' },
         untilDead: { type: 'boolean' },
+        hold: { type: 'boolean' },
         seconds: { type: 'number', minimum: 0.5, maximum: 30 },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
         n: { type: 'integer', minimum: 1, maximum: 16 },
@@ -290,6 +311,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
       blockChanged: { type: 'array', minItems: 1, maxItems: 4, items: pos('見張るブロック') },
     } },
     why: { type: 'string', maxLength: 120, description: 'この手の組のねらい（短く）' },
+    accept: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'この act で戦うと決めた敵の種類（体はそれから逃げない）' },
   },
 });
 
@@ -321,7 +343,7 @@ const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly string[
   craft: { needs: [['item']], may: ['count'] },
   furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount'] },
   chest: { needs: [['at'], ['op']], may: ['items'] },
-  attack: { needs: [['target']], may: ['untilDead', 'seconds'] },
+  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold'] },
   shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
   eat: { needs: [], may: ['item'] },
   drop: { needs: [['items']], may: ['target', 'at'] },
@@ -334,21 +356,28 @@ const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot
 /** What is wrong with an act's hands beyond the schema (a field a kind does not take, a missing one), or null. Closed words, Japanese. */
 export function actProblem(input: ActInput): string | null {
   for (const [index, hand] of input.hands.entries()) {
-    const fields = HAND_FIELDS[hand.do];
-    if (!fields) return `手${index + 1}: do が分からない`;
-    const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
-    const extra = Object.keys(hand).filter(key => !allowed.has(key));
-    if (extra.length) return `手${index + 1}（${hand.do}）: ${extra.join('・')} は使えない`;
-    const missing = fields.needs.find(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
-    if (missing) return `手${index + 1}（${hand.do}）: ${missing.join(' か ')} が要る`;
-    if (ONE_AT.has(hand.do) && hand.at && hand.at.length !== 1) return `手${index + 1}（${hand.do}）: at は 1 つ`;
-    if (hand.do === 'furnace' && !['put', 'take'].includes(hand.op!)) return `手${index + 1}（furnace）: op は put か take`;
-    if (hand.do === 'furnace' && hand.op === 'put' && !hand.item && !hand.fuel) return `手${index + 1}（furnace）: put には item か fuel`;
-    if (hand.do === 'chest' && hand.op === 'put' && !hand.items?.length) return `手${index + 1}（chest）: put には items`;
-    if (hand.do === 'wait' && (hand.seconds! < 0.5 || hand.seconds! > 30)) return `手${index + 1}（wait）: seconds は 0.5〜30`;
+    const problem = handProblem(hand);
+    if (problem) return `手${index + 1}（${hand.do}）: ${problem}`;
   }
   return null;
 }
+/** One hand's fields against its kind, then the checks a kind adds. */
+function handProblem(hand: ActHand): string | null {
+  const fields = HAND_FIELDS[hand.do];
+  if (!fields) return 'do が分からない';
+  const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
+  const extra = Object.keys(hand).filter(key => !allowed.has(key));
+  if (extra.length) return `${extra.join('・')} は使えない`;
+  const missing = fields.needs.find(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
+  if (missing) return `${missing.join(' か ')} が要る`;
+  if (ONE_AT.has(hand.do) && hand.at && hand.at.length !== 1) return 'at は 1 つ';
+  return KIND_CHECKS[hand.do]?.(hand) ?? null;
+}
+const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> = {
+  furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
+  chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
+  wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
+};
 
 /** An act's result as the body sent it (`ActResult`), or null when it is not one. */
 export function readActResult(text: string | undefined): ActResult | null {
@@ -369,38 +398,24 @@ export function readViewResult(text: string | undefined): ViewResult | null {
 }
 
 /** How long an act may run on the body: the sum of each hand's ceiling, within 5 s and 120 s (the command's deadline adds its own margin). */
+type HandTime = (hand: ActHand) => number;
+const cells = (hand: ActHand) => hand.at?.length ?? 1, times = (hand: ActHand) => hand.n ?? 1;
+const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
+  walk: hand => 2_000 + 400 * (hand.path?.length ?? 24), dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
+  pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
+  shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
+  pickup: () => 6_000, use: () => 4_000,
+};
+const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
+  walk: hand => 300 * (hand.path?.length ?? 8), dig: hand => 700 * cells(hand), pillarUp: hand => 600 * times(hand),
+  attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1), eat: () => 1_600,
+  pickup: () => 2_000, use: () => 1_000, shoot: hand => 1_200 * times(hand),
+};
 export function actMilliseconds(input: ActInput): number {
-  const each = (hand: ActHand): number => {
-    switch (hand.do) {
-      case 'walk': return 2_000 + 400 * (hand.path?.length ?? 24);
-      case 'dig': return 10_000 * (hand.at?.length ?? 1);
-      case 'place': return 1_500 * (hand.at?.length ?? 1);
-      case 'pillarUp': return 1_200 * (hand.n ?? 1);
-      case 'attack': return 1_000 * (hand.seconds ?? 20) + 2_000;
-      case 'shoot': return 1_500 * (hand.n ?? 1) + 1_000 * (hand.charge ?? 1) * (hand.n ?? 1);
-      case 'wait': return 1_000 * (hand.seconds ?? 1) + 500;
-      case 'pickup': return 6_000;
-      case 'use': return 4_000;
-      default: return 2_000;
-    }
-  };
-  return Math.max(5_000, Math.min(120_000, input.hands.reduce((sum, hand) => sum + each(hand), 0)));
+  const total = input.hands.reduce((sum, hand) => sum + (CEILING_MS[hand.do]?.(hand) ?? 2_000), 0);
+  return Math.max(5_000, Math.min(120_000, total));
 }
-/** How long an act is likely to take (for asking the next decision while it runs): a quarter of its ceiling, at least 1 s a hand. */
+/** How long an act is likely to take (for asking the next decision while it runs). */
 export function actExpectedMilliseconds(input: ActInput): number {
-  const typical = (hand: ActHand): number => {
-    switch (hand.do) {
-      case 'walk': return 300 * (hand.path?.length ?? 8);
-      case 'dig': return 700 * (hand.at?.length ?? 1);
-      case 'pillarUp': return 600 * (hand.n ?? 1);
-      case 'attack': return Math.min(8_000, 1_000 * (hand.seconds ?? 6));
-      case 'wait': return 1_000 * (hand.seconds ?? 1);
-      case 'eat': return 1_600;
-      case 'pickup': return 2_000;
-      case 'use': return 1_000;
-      case 'shoot': return 1_200 * (hand.n ?? 1);
-      default: return 400;
-    }
-  };
-  return input.hands.reduce((sum, hand) => sum + typical(hand), 0);
+  return input.hands.reduce((sum, hand) => sum + (TYPICAL_MS[hand.do]?.(hand) ?? 400), 0);
 }

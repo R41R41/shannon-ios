@@ -198,6 +198,12 @@ export const SWITCHES = [
     doc: 'A Minecraft task plans ahead while its body works, fills waits, takes nearby needs and resumes (mb-arch); with the working events.',
   },
   {
+    name: 'SHANNON_MINECRAFT_LLM_CENTRIC', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
+    doc: 'Design mb-llm-centric (2026-10-21): a Minecraft task decides in small steps from a map of the blocks around her (mc.act, mc.view), '
+      + 'keeps its own plan tree (plan.update), and runs no procedure, agenda detour or fast judgment. Models: SHANNON_MINECRAFT_LLMC_MODEL, '
+      + '_ESCALATE_MODEL, _PLAN_MODEL. The body must run MINEBOT_LLM_CENTRIC=on. Off: as before.',
+  },
+  {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
       + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',

@@ -48,6 +48,11 @@ export interface TaskCommit {
   history?: readonly unknown[]; checkpoint?: unknown;
   disposition: 'continue' | 'wait' | 'complete' | 'fail'; summary?: string;
   consumedMessageIds?: readonly string[];
+  /**
+   * The task's plan tree changed in this step (`fcaPlanTools.ts`): its flat copy for the app's task list (`agent_tasks.plan_json`),
+   * written with the step, and an event `fca_plan_updated`. Absent: the plan is as it was.
+   */
+  plan?: readonly { id: string; title: string; status: 'pending' | 'running' | 'completed' }[];
 }
 /** Delivery outbox for an already committed segment; retry only its original execution acknowledgement. */
 export interface TaskSegmentReceipt { id: string; taskId: string; lease: ActionLease; state: 'completed' | 'cancelled' }

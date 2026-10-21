@@ -101,15 +101,23 @@ export function liveObject(supplied: Record<string, unknown>, body: Readonly<Rec
   if (supplied.sharedContext) live.sharedContext = supplied.sharedContext;
   // A body task's recall is chosen for this situation (`bodyTaskRecall.ts`): read this turn, never stored.
   if (supplied.recall) live.recall = supplied.recall;
+  // The plan's path (design mb-llm-centric 2.7) moves with every node done: read this turn only, before the body's state.
+  if (supplied.plan) live.plan = supplied.plan;
   if (body && Object.keys(body).length) live.body = body;
   return live;
 }
 /** The decision's fields a stored state reads (`storedState`): everything but what the live state says (`liveObject`). */
 export function storedFields(supplied: Record<string, unknown>): Record<string, unknown> {
-  const { sharedContext: _shared, ...stored } = supplied;
+  const { sharedContext: _shared, plan: _plan, ...stored } = supplied;
   return stored;
 }
-export const liveState = (supplied: Record<string, unknown>, body: Readonly<Record<string, unknown>> | undefined): string =>
+/** The fixed words a model adds after a transient task's instructions (`AnthropicFcaOptions.systemAppendix`), or none. */
+export const appendixOf = (options: { systemAppendix?: string }): string => options.systemAppendix ? `\n\n${options.systemAppendix}` : '';
+/** The plan's path (design mb-llm-centric 2.7), when the task keeps a plan: a transient task reads it in the live state only. */
+export function planField(input: { plan?: Readonly<Record<string, unknown>> }): { plan?: Readonly<Record<string, unknown>> } {
+  return input.plan ? { plan: input.plan } : {};
+}
+export const liveState =(supplied: Record<string, unknown>, body: Readonly<Record<string, unknown>> | undefined): string =>
   JSON.stringify(liveObject(supplied, body));
 
 /** The pointers and gists a body's live state names, as counts (content-free; for the request's size line). */

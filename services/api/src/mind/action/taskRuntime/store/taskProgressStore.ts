@@ -1,6 +1,6 @@
 import { normalizedPlaceContext, validatedPlaces, type PlaceSearchContext } from '../../../../integrations/places/placeDiscovery.js';
 import type { DatabaseSync } from 'node:sqlite';
-import type { TaskAuthority, TaskRecord, TaskStep } from '../taskRuntimePorts.js';
+import type { TaskAuthority, TaskCommit, TaskRecord, TaskStep } from '../taskRuntimePorts.js';
 import { isPauseNotice, PAUSE_NOTICE_PREFIX, type TaskProgress, type TaskProgressEvent } from '../taskProgressPorts.js';
 
 export { PAUSE_NOTICE_PREFIX };
@@ -17,6 +17,18 @@ type Stored = TaskProgress & { resume?: Stashed };
 /** Subordinate to the same task, step and action lease. No scheduler or alternate status authority. */
 export class TaskProgressStore {
   constructor(private readonly db: DatabaseSync, private readonly authority: TaskAuthority, private readonly now: () => string) {
+  }
+  /**
+   * The plan tree changed in a step (`TaskCommit.plan`, design mb-llm-centric 2.7): its flat copy for the app's task list
+   * (`agent_tasks.plan_json`, at most 64 items) and the event `fca_plan_updated`, inside the step's commit transaction.
+   */
+  plan(step: TaskStep, plan: NonNullable<TaskCommit['plan']>): void {
+    const items = plan.slice(0, 64).map(item => ({ id: String(item.id).slice(0, 40), title: String(item.title).slice(0, 80),
+      status: ['pending', 'running', 'completed'].includes(item.status) ? item.status : 'pending' }));
+    this.db.prepare('UPDATE agent_tasks SET plan_json=? WHERE task_id=?').run(JSON.stringify(items), step.taskId);
+    const current = items.find(item => item.status === 'running')?.id ?? null;
+    this.authority.event(step.scopeKey, step.taskId, 'fca_plan_updated', this.now(), {},
+      { stepId: step.id, nodes: items.length, done: items.filter(item => item.status === 'completed').length, current });
   }
   admitPlaces(taskId: string, context: PlaceSearchContext, valid: () => boolean): boolean {
     return this.authority.transaction(() => {

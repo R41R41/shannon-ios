@@ -23,10 +23,13 @@ const HAIKU_LONG_PRICES: AnthropicPrices = { input: 0.5, output: 2.5, cacheWrite
 // Sonnet 5.5 and the older Sonnet 5 share the published rates: cache reads are 10% of input ($0.20; ADR-0009 stage 1, quick fix 3).
 const SONNET_PRICES: AnthropicPrices = { input: 2, output: 10, cacheWrite: 2.5, cacheWrite1h: 4, cacheRead: 0.2, searchUsd: 0.01 };
 const UNKNOWN_PRICES: AnthropicPrices = { input: 10, output: 50, cacheWrite: 12.5, cacheWrite1h: 20, cacheRead: 1, searchUsd: 0.01 };
+// Opus 5.5 (2026-10-21, the API's model table): $4 in, $20 out, cache reads $0.20; writes at 1.25× (5 min) and 2× (1 h) of input.
+const OPUS_55_PRICES: AnthropicPrices = { input: 4, output: 20, cacheWrite: 5, cacheWrite1h: 8, cacheRead: 0.2, searchUsd: 0.01 };
 
 export function anthropicPrices(model: string, inputTokens = 0): AnthropicPrices {
   if (model === 'claude-haiku-5-5') return { ...(inputTokens > 100_000 ? HAIKU_LONG_PRICES : HAIKU_PRICES) };
   if (model.startsWith('claude-sonnet-5')) return { ...SONNET_PRICES };
+  if (model === 'claude-opus-5-5') return { ...OPUS_55_PRICES };
   return { ...UNKNOWN_PRICES };
 }
 
@@ -44,7 +47,8 @@ function writeCost(model: string, usage: AnthropicUsageCounts, price: AnthropicP
   const detailed = usage.cacheWrite5m !== undefined && usage.cacheWrite1h !== undefined
     && usage.cacheWrite5m >= 0 && usage.cacheWrite1h >= 0 && usage.cacheWrite5m + usage.cacheWrite1h === usage.cacheWrite;
   if (detailed) return usage.cacheWrite5m! * price.cacheWrite + usage.cacheWrite1h! * price.cacheWrite1h;
-  return usage.cacheWrite * (model === 'claude-haiku-5-5' || model === 'claude-sonnet-5-5' ? price.cacheWrite1h : price.cacheWrite);
+  const hour = model === 'claude-haiku-5-5' || model === 'claude-sonnet-5-5' || model === 'claude-opus-5-5';
+  return usage.cacheWrite * (hour ? price.cacheWrite1h : price.cacheWrite);
 }
 
 export function estimatedAnthropicCostUsd(model: string, usage: AnthropicUsageCounts): number {

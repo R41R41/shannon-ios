@@ -4,7 +4,6 @@ import { TaskMaintenanceStore } from './taskMaintenanceStore.js';
 import { TaskRuntimeRecovery } from './taskRuntimeRecovery.js';
 import { bounded, json, taskRuntimeLimits as limits } from './taskRuntimeValidation.js';
 import { observeExternalEvent } from './taskExternalEventStore.js';
-import type { TaskExternalEvent } from '../taskExternalEventPorts.js';
 import { TaskConversationDeliveryStore } from './taskConversationDeliveryStore.js';
 import type { TaskConversationDeliveryInput, TaskConversationDeliveryStage } from '../taskConversationDeliveryPorts.js';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +12,7 @@ import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaStep
 import { FCA_TASK_RUNTIME_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import type { ActionLease } from '@shannon/mind';
 import type { TaskAuthority, TaskChildOptions, TaskCommit, TaskConversationSource, TaskHistoryCommit, TaskHistoryWindow, TaskMessage, TaskQuery, TaskRecord, TaskRuntime, TaskRuntimeOptions, TaskSource, TaskSourceObservation,
-  TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView } from '../taskRuntimePorts.js';
+  TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView, TaskExternalEvent } from '../taskRuntimePorts.js';
 import { TaskSourceStore } from './taskSourceStore.js';
 import { TaskHistoryStore } from './taskHistoryStore.js';
 import { TaskProgressStore } from './taskProgressStore.js';
@@ -327,6 +326,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
         .run(waiting ? awaitingSource && commit.disposition === 'complete' ? 'source' : 'message' : null, step.taskId);
       this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: task.origin === 'maintenance' ? this.maintenance.summary(task) : commit.summary ?? (this.options.pausedSummary?.(task.summary) ? '' : undefined) },
         { stepId: step.id, actionId: step.lease.id, generation: step.lease.generation, disposition: commit.disposition });
+      if (commit.plan) this.progressStore.plan(step, commit.plan);
       if (terminal({ ...task, status }) && task.origin === 'maintenance') this.maintenance.report(task, status, step.id);
       else if (terminal({ ...task, status }) && task.parentId && task.origin !== 'own_time') {
         const parent = this.required(step.scopeKey, task.parentId);

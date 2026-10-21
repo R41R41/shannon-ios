@@ -47,6 +47,11 @@ export interface FcaModelInput {
   observations?: readonly { revision: number; observation: FcaObservation | null }[];
   /** Present only when nobody can answer this task: a wait is turned away (`fcaWaitGate.ts`). Closed values only. */
   waiting?: FcaWaitFact;
+  /**
+   * The task's plan tree as a decision reads it (`fcaPlanTools.ts`): the path to the current node, it, the next few and the blocked ones.
+   * A transient task reads it in the live state, never stored. Absent: the task keeps no plan.
+   */
+  plan?: Readonly<Record<string, unknown>>;
 }
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
 export interface FcaBodyLifecycle {
@@ -71,6 +76,11 @@ export interface FcaBodyLifecycle {
   storedResult?(call: FcaToolCall, text: string): string;
   /** What a body task's recall looks for now (`bodyTaskRecall.ts`), from the state `context()` last read. Absent: the goal alone. */
   recallCues?(): BodyRecallCues;
+  /**
+   * Whether something happened since the last decision that a recall may help with (a failure, a reflex, a death, another dimension):
+   * a body that says false is not recalled for (design mb-llm-centric 2.3, recall only on an event). Absent: recalled every step.
+   */
+  recallWanted?(): boolean;
   /** True while the body is in its first frames after a login or respawn: heavy local work (the recall) waits for the decision. */
   settling?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */

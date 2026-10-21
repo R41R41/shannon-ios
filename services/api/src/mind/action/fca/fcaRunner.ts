@@ -23,6 +23,8 @@ import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLooka
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince } from './fcaFailureLadder.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
+import { planInput, type FcaPlanPort } from './fcaPlanTools.js';
+import { permitDue } from './fcaStepCost.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
 /** How old a lease grant may be reused for a check between outside calls (`checked`). */
@@ -81,6 +83,10 @@ export interface FcaStepPorts {
   retryAllowed?(): boolean;
   /** The next decision asked while the last body call runs, and taken by the next step (`fcaLookahead.ts`); absent: none. */
   lookahead?: FcaLookahead;
+  /** The task's plan tree (`fcaPlanTools.ts`): read into each decision, its flat copy committed with the step. Absent: no plan. */
+  plan?: FcaPlanPort;
+  /** Design mb-llm-centric 2.3: how long one lease grant serves every check of the step (`permitDue`, `fcaPlanTools.ts`). */
+  permitWindowMs?: number;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -132,7 +138,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   };
   const checked = (mode: 'fresh' | 'reuse' | 'local' = 'reuse') => metrics.timed('permitMs', () => observeAsync('gate', { phase: 'step_permit' }, async () => {
     local();
-    if (mode === 'fresh' || (mode === 'reuse' && performance.now() - permittedAt > FCA_PERMIT_REUSE_MS)) {
+    if (permitDue(mode, performance.now() - permittedAt, ports.permitWindowMs)) {
       metrics.asked();
       if (!await ports.permit()) throw held('permit_denied');
       permittedAt = performance.now();
@@ -215,14 +221,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
     ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
     ...(ports.body ? { body: ports.body.context() } : {}), ...(waiting ? { waiting } : {}), ...(recall ? { recall } : {}),
-    ...(sharedContext ? { sharedContext } : {}),
+    ...(sharedContext ? { sharedContext } : {}), ...planInput(ports.plan),
     ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}),
     ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
       ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) }));
   // A body task's recall (`bodyTaskRecall.ts`): a few memories for the situation the body was just read in (`recallCues`), none when
   // nothing fits; its sources are pinned like the recall packet's before anything is sent.
-  if (bodyTask && ports.bodyRecall && !prepared) {
+  if (bodyTask && ports.bodyRecall && !prepared && ports.body?.recallWanted?.() !== false) {
     const found = await metrics.timed('recallMs', () => ports.bodyRecall!.packet({ scopeKey: step.scopeKey, taskId: step.taskId,
       goal: step.snapshot.task.goal, cues: ports.body?.recallCues?.() ?? { words: [], tags: [] }, present: OWNER_AUDIENCE, signal }));
     metrics.bodyRecall(found.measure);
@@ -250,7 +256,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     return { ...asked,
       ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
       ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}),
-      ...(ports.body ? { body: ports.body.context() } : {}),
+      ...(ports.body ? { body: ports.body.context() } : {}), ...planInput(ports.plan),
       ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
   };
   /** The request in hand (the one last sent, rebuilt by every `freshen`) and when it was built: a fallback starts from this, never from the first one. */
@@ -442,8 +448,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   }
   await checked('local');
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
+  const planCommit = ports.plan?.committed();
   const saved = metrics.timedSync('commitMs', () => observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...failureSinceCheckpoint(failureSince, prior), ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, ...(planCommit ? { plan: planCommit } : {}), checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...failureSinceCheckpoint(failureSince, prior), ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null })));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (preparedNext && !bodyStale) ports.lookahead?.keep({ taskId: step.taskId, historyLength: saved.history.length,

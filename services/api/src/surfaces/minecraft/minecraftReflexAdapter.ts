@@ -20,7 +20,7 @@ import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGo
 import { observerHandoff } from '../../infra/observer/observerContext.js';
 import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
 import { createBodyRevisions, createFightOwner, fightCall } from './minecraftFightOwner.js';
-import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
@@ -80,6 +80,11 @@ export function createMinecraftTaskBody(parts: {
   log?(line: string): void;
   /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
   metricsLog?(line: string): void;
+  /**
+   * SHANNON_MINECRAFT_LLM_CENTRIC (design mb-llm-centric): a reflex session's context carries the plan. The live state and the recall's
+   * events are the wrapper's (`withLlmcBody`, `minecraftLlmcBody.ts`). Absent: as before.
+   */
+  llmc?: { plan(): BodyPlanView | undefined };
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor();
@@ -149,7 +154,7 @@ export function createMinecraftTaskBody(parts: {
     taskRevision: step.revision, bodyId, sessionId, generation: step.lease.generation,
     goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria,
     taskState: { phase: runtime.get(step.scopeKey, step.taskId)?.phase ?? 'unknown', progress: step.snapshot.task.summary.slice(0, 2000),
-      ...(activeAction ? { activeAction } : {}), recentResults } });
+      ...(activeAction ? { activeAction } : {}), recentResults }, ...(parts.llmc ? { plan: parts.llmc.plan() } : {}) });
   const permit = async (signal?: AbortSignal) => !signal?.aborted && live()
     && Boolean(await execution!.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) && !signal?.aborted && live();
   const ackUnknown = (request: BodyStopRequest): BodyStopAcknowledgement => ({ bodyId: request.context.bodyId, sessionId: request.context.sessionId,

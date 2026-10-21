@@ -8,13 +8,17 @@ export function isHaikuModel(model: string): boolean { return model.startsWith('
 
 /** Supported native 5.5 sessions require an append-only signed prefix and by-value inline tool definitions. */
 export function isAppendOnlyAnthropicModel(model: string): boolean {
-  return model === DEFAULT_HAIKU_MODEL || model === 'claude-sonnet-5-5';
+  return model === DEFAULT_HAIKU_MODEL || model === 'claude-sonnet-5-5' || model === OPUS_MODEL;
 }
 
-/** Preserve historical overrides while making the owner-selectable Sonnet 5.5 use the same mandatory 1h cache. */
+/**
+ * Preserve historical overrides while making the owner-selectable Sonnet 5.5 use the same mandatory 1h cache. Opus 5.5 joins them for the
+ * LLM-centric Minecraft body (design mb-llm-centric, owner 2026-10-21: the main model is chosen after a scene replay of Haiku, Sonnet, Opus).
+ */
 export function usesOneHourAnthropicCache(model: string): boolean {
-  return isHaikuModel(model) || model === 'claude-sonnet-5-5';
+  return isHaikuModel(model) || model === 'claude-sonnet-5-5' || model === OPUS_MODEL;
 }
+export const OPUS_MODEL = 'claude-opus-5-5';
 
 /** Preserve deliberate overrides; only the replaced Luna family and an absent setting select Haiku. */
 export function replacementModel(value?: string): string {
