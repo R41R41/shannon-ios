@@ -1,6 +1,6 @@
 import type { Procedure, ProcedureMemory } from '@shannon/mind';
 import type { MinecraftWorkItem } from './minecraftFillers.js';
-import { MILESTONES } from './minecraftStage.js';
+import { FOOD_STOCK, MILESTONES } from './minecraftStage.js';
 import type { MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import type { McMove } from './minecraftProcedureMoves.js';
 import { axeMove, bedAndFoodMove, pickaxeMove, storeMove, woodMove } from './minecraftProceduresEarly.js';
@@ -46,9 +46,9 @@ const BED_WORDS = [
   '同じ色の羊毛3個と板材3枚で mc.craft-one（itemName=white_bed など羊毛の色の _bed）',
   '128 m に羊が居なければ探しに出る: mc.explore-for-structure（structureType=sheep、持っている羊毛の色を color に）か、'
     + '村 mc.explore-for-structure（structureType=village、maxDistance=160）。村なら家のベッドを壊して持つ',
-  '焼いた食料が6個に足りなければ mc.attack-continuously（entityName=food_animals、maxKills=4）→ mc.start-smelting（inputItem=beef など）',
+  `食べ物が${FOOD_STOCK}個に足りなければ mc.attack-continuously（entityName=food_animals、maxKills=4）→ mc.start-smelting（inputItem=beef など）`,
 ];
-const IRON_WORDS = ['mc.mine-block（blockName=iron_ore、count=30、searchRadius=48）→ かまど2台で mc.start-smelting（inputItem=raw_iron）'
+const IRON_WORDS = ['mc.mine-block（blockName=iron_ore、count=24、searchRadius=48。焼く間に残りの12を続けて掘る）→ かまど2台で mc.start-smelting（inputItem=raw_iron）'
   + '→ mc.craft-one（itemName=iron_pickaxe、続けて iron_sword）'];
 const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
   ['木', { say: [LOG_STEP], move: woodMove }],

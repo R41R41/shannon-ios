@@ -7,6 +7,7 @@ import type { MinecraftWorkItem } from './minecraftFillers.js';
 import { milestoneNow } from './minecraftStage.js';
 import { keptRoute, liveRoute } from './minecraftRoutePlanner.js';
 import { bodyFailureOf } from './minecraftOutcome.js';
+import { bedMayWait } from './minecraftBedDefer.js';
 import { minecraftProcedureFacts, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain } from './minecraftProcedures.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
@@ -53,6 +54,15 @@ function stateOf(taskId: string): TaskProcedureState {
   return state;
 }
 
+/** Whether the task's procedure left the bed for later (the sheep are far, `minecraftBedDefer.ts`): the planner's lines go on to the iron. */
+export function bedWaiting(taskId: string): boolean {
+  return states.get(taskId)?.store.bedWaits === true;
+}
+/** Whether the bed waits now: left for later, by day (`bedMayWait`), from the world frame. */
+export function bedDeferredNow(taskId: string, observation: BodyObservation | null): boolean {
+  return bedMayWait(bedWaiting(taskId), (observation?.state as { world?: Record<string, unknown> } | undefined)?.world);
+}
+
 /** The procedure's item running now in this task (the arbiter watches it as the running command), or null. */
 export function procedureItem(taskId: string): { name: string; input: unknown; operationId: string } | null {
   const item = states.get(taskId)?.item;
@@ -87,7 +97,7 @@ export function minecraftProcedureStepParts(runtime: Pick<TaskRuntime, 'pendingM
 /** The decision's line that names the procedure of the step now, when there is one (the planner does what it is shown, run 19). */
 export function minecraftProcedureHint(taskId: string, observation: BodyObservation | null): string[] {
   if (!observation) return [];
-  const now = milestoneNow(minecraftProcedureFacts(observation).milestone).now.name;
+  const now = milestoneNow(minecraftProcedureFacts(observation, false, bedWaiting(taskId)).milestone).now.name;
   if (!PROCEDURE_MILESTONES.includes(now) || states.get(taskId)?.handedBack === now) return [];
   return [`手順: ${MINECRAFT_PROCEDURE_TOOL}（milestone=${now}、through=先の節目）で「${now}」から先をまとめて流せる`];
 }
@@ -138,7 +148,8 @@ async function freshFrame(parts: ProcedureRunParts): Promise<void> {
 
 /** A body call's result as a procedure item's: the body's own failure kind when it named one (`target_not_found`), else the tool's. */
 function itemResult(told: ToolResult): ProcedureItemResult {
-  if (told.ok) return { ok: true, text: told.text, failure: null };
+  // mb-r23: a skill that made part of what it was asked (`partial_completion`) is done as far as it went: the next look at the pack decides what is left.
+  if (told.ok || told.progressed) return { ok: true, text: told.text, failure: null };
   return { ok: false, text: told.text, failure: told.bodyReflex ? 'interrupted_by_reflex' : bodyFailureOf(told) ?? told.failure ?? 'failed' };
 }
 
@@ -211,7 +222,7 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
   const chain = minecraftProcedureChain(asked.from, asked.through, { store: state.store, batchObsidian: parts.batchObsidian ?? null,
     leg: milestone => (liveRoute(parts.taskId))?.legs.find(item => item.milestone === milestone) });
   const facts = () => {
-    const current = minecraftProcedureFacts(parts.observe());
+    const current = minecraftProcedureFacts(parts.observe(), false, state.store.bedWaits === true);
     // Where the task began (the sheep search's limit): the first place a frame gave.
     if (!state.store.origin && current.at) state.store.origin = { x: Math.floor(current.at.x), y: Math.floor(current.at.y), z: Math.floor(current.at.z) };
     return current;
@@ -229,5 +240,7 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
   state.handedBack = run.outcome === 'done' || run.outcome === 'limit' ? null : run.at;
   // A hand-back for a reason is the call working as meant; only a failure or a stop is a failed call.
   const ok = run.outcome !== 'failed' && run.outcome !== 'cancelled';
-  return ok ? { ok, text, retryable: false } : { ok, text, failure: 'failed', retryable: run.outcome === 'failed' };
+  // mb-r23: a run that passed a milestone before it failed made something (run 23: the diamond pickaxe, then two failed moves).
+  return ok ? { ok, text, retryable: false }
+    : { ok, text, failure: 'failed', retryable: run.outcome === 'failed', ...(run.passed.length ? { progressed: true as const } : {}) };
 }

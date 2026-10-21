@@ -21,6 +21,7 @@ import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
+import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince } from './fcaFailureLadder.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
@@ -294,6 +295,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
   const priorToolFailures = consecutiveToolFailures;
+  // When the failures in a row began (`fcaFailureLadder.ts`): a body task stops on how long nothing has moved, not on the count alone.
+  const stepStartedAt = Date.now(), priorFailureSince = failureSinceOf(prior);
+  let failureSince = priorFailureSince;
   const priorReflexRun = reflexCutRunOf(prior);
   let reflexRun = priorReflexRun;
   /** Whether the step that took the failure count to its present value counted a reflex cut as the failure (the stop reason below). */
@@ -311,6 +315,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     /** Calls the body's own reflex cut off: no fault of the model or the tool, so they neither add to nor clear the failure count
      * (until the bound of `fcaReflexCuts.ts`). */
     const reflexCuts = new Set<string>();
+    /** Calls that failed but made something (`ToolResult.progressed`): not failed steps of a body task (`fcaFailureLadder.ts`). */
+    const progressedCalls = new Set<string>();
     /**
      * The guard that goes with the batch rule of `BODY_RULE` (the old Minebot's `earlier_action_failed`, ShannonExecutor.ts:971-974; L104:
      * 14 of 239 body calls): once a body action of this response has failed, the body actions after it are not run, since each was chosen
@@ -384,9 +390,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const stored = selection?.obsMode === 'transient' && ports.body?.storedResult ? ports.body.storedResult(call, result.text) : result.text;
       results.push({ id: call.id, text: stored, ok: result.ok });
       if (result.bodyReflex) reflexCuts.add(call.id);
+      if (result.progressed) progressedCalls.add(call.id);
       if (selection) {
         if (!result.ok && failureRefreshes(selection, call.name)) selection.refresh = true;
-        selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
+        // Past 1,000 characters the start and the end are kept: a body result says what to do first at its end (the failure review reads it).
+        const summary = result.text.length <= 1_000 ? result.text : `${result.text.slice(0, 560)}…${result.text.slice(-439)}`;
+        selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary }].slice(-8);
       }
     }
     if (!bodyStale) {
@@ -395,8 +404,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       // A cut call does not count until the same tool (or any) has been cut off too many times in a row; any outcome of its own ends the
       // run, but a read that worked beside or between cuts does not (`fcaReflexCuts.ts`, M2).
       ({ failures: consecutiveToolFailures, run: reflexRun, byCuts: failedByCuts } = settleReflexStep(consecutiveToolFailures, reflexRun, outcomes.map(outcome => ({
-        name: outcome.call.name, ok: outcome.result.ok, cut: reflexCuts.has(outcome.call.id),
+        // A call that failed but made something (the pack grew, a milestone was passed) is not a failed step (`fcaFailureLadder.ts`).
+        name: outcome.call.name, ok: outcome.result.ok || (bodyTask && progressedCalls.has(outcome.call.id)), cut: reflexCuts.has(outcome.call.id),
         read: catalog.find(tool => tool.name === outcome.call.name)?.effect === 'read' }))));
+      failureSince = nextFailureSince(priorFailureSince, priorToolFailures, consecutiveToolFailures, stepStartedAt);
     }
     // Kept for the next step only when the call it went on from ended well (`fcaLookahead.ts`).
     if (ahead) preparedNext = await ahead.settle(results.at(-1)?.ok === true && !bodyStale && reflexCuts.size === 0);
@@ -426,11 +437,13 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (!await stillFresh()) bodyStale = true;
   await metrics.timed('closeMs', () => closeFcaMonitors(ports));
   if (!await stillFresh()) bodyStale = true;
-  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; }
+  if (bodyStale) {
+    disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; failureSince = priorFailureSince;
+  }
   await checked('local');
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = metrics.timedSync('commitMs', () => observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...failureSinceCheckpoint(failureSince, prior), ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null })));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (preparedNext && !bodyStale) ports.lookahead?.keep({ taskId: step.taskId, historyLength: saved.history.length,
@@ -451,8 +464,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     runtime.stop(step.scopeKey, step.taskId, FCA_WAIT_WITHOUT_COUNTERPART);
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
-  if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
-    runtime.stop(step.scopeKey, step.taskId, consecutiveToolFailures >= 5 ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
+  // A body task stops on a failure after the fifth was read, and when nothing has moved for a while (`failureStops`).
+  const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
+    since: failureSince, now: Date.now() });
+  if (toolFailuresStop || completionVerificationFailures >= 5) {
+    runtime.stop(step.scopeKey, step.taskId, toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;

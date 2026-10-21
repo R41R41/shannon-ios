@@ -179,7 +179,10 @@ export function createBodyTaskRecall(parts: {
 
   function build(input: Search): Pool {
     const shared = parts.memory.readSnapshot?.(input.scopeKey);
-    const search = (query: string) => parts.memory.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared);
+    // No provenance: the pool only picks records, and what is shown is read again with its sources (`shownOf`). Listing the whole lineage of
+    // up to 1,200 candidates, three times, was 3.0 s of the API's thread at the first decision of run 23 (poolMs 3,029; mb-r23).
+    const search = (query: string) => parts.memory.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared,
+      { provenance: false });
     const work = () => [search(input.goal), search(`マイクラ ${input.goal}`), search('ゲームの記憶 マイクラ')];
     const lists = shared ? shared.withholding.withReadSnapshot(work) : work();
     // A search that came back full may have left more of the same record out: its counts are lower bounds ("×N+").

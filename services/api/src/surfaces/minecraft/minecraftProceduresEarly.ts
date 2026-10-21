@@ -1,5 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import { BED_ITEM } from './minecraftItems.js';
+import { BED_DEFER } from './minecraftBedDefer.js';
 import { takeNeed } from './minecraftFillers.js';
 import { foodMove } from './minecraftProcedureFood.js';
 import { villageVisit, type MapVisits } from './minecraftProcedureMap.js';
@@ -56,10 +57,17 @@ function woolColor(facts: MinecraftProcedureFacts): string | null {
 export const SHEEP_REACH = 160;
 
 /** Sheep searched for when none is in reach: the nearest within 128 m, walked to, three of them taken; not past `SHEEP_REACH` of the start. */
-function sheepSearch(memory: ProcedureMemory, key: string, anchors: readonly Cell[]): McMove {
+interface BedWaits { store: { bedWaits?: boolean }; at: Cell | null; daylight: boolean }
+type BedStore = MapVisits & { bedWaits?: boolean };
+function sheepSearch(memory: ProcedureMemory, key: string, anchors: readonly Cell[], defer: BedWaits): McMove {
   const attack = { tool: 'mc.attack-continuously', input: { entityName: 'sheep', maxKills: 3, maxDistance: 32 }, why: '羊毛を取る', expectMs: 30_000,
     key: `${key}:hunt` };
   const walk = fromFirstCell(memory, 'sheep:none', cell => {
+    // mb-r23: the nearest sheep is far and the day is long: the walk and the hunt wait, the iron comes first (`minecraftBedDefer.ts`).
+    if (defer.daylight && defer.at && Math.hypot(cell.x - defer.at.x, cell.z - defer.at.z) > BED_DEFER.sheepFar) {
+      defer.store.bedWaits = true;
+      return null;
+    }
     if (anchors.length && anchors.every(anchor => Math.hypot(cell.x - anchor.x, cell.z - anchor.z) > SHEEP_REACH)) {
       memory.notes.set('sheep:far', true);
       return null;
@@ -85,8 +93,17 @@ function sheepToHunt(facts: MinecraftProcedureFacts) {
 }
 
 /** The bed: a standing one taken, else one made from wool carried, else sheep in reach, else sheep searched for; null when she has one. */
-function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, anchors: readonly Cell[]): McMove | null {
+function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: BedStore, anchors: readonly Cell[]): McMove | null {
   if (carried(facts, BED_ITEM) || facts.milestone.bedPlaced) return null;
+  const daylight = facts.dimension === 'overworld' && facts.darkIn !== null && facts.darkIn >= BED_DEFER.darkInSeconds;
+  // Dusk: the bed left for later is wanted again.
+  if (visits.bedWaits && !daylight) visits.bedWaits = false;
+  return standingBed(facts, memory, visits, anchors, daylight);
+}
+
+/** The bed from what is at hand (a standing one, wool, a sheep in reach, a village); else it waits (far sheep, daylight) or the sheep are searched for. */
+function standingBed(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: BedStore, anchors: readonly Cell[],
+  daylight: boolean): McMove | null {
   const standing = nearestNeed(facts, 'bed', 96);
   const take = standing ? takeNeed(standing) : null;
   if (take) return doing(take);
@@ -101,15 +118,17 @@ function bedMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits
   // A village the map knows near (mb-map): its beds, before a search for sheep.
   const village = villageVisit(facts, visits, memory);
   if (village) return village;
+  // The bed was left for later and the day is still long (the sheep were far): nothing to do for it now. A sheep within reach is hunted above.
+  if (visits.bedWaits && daylight) return null;
   const key = `sheep:find:${inPack(facts, WOOL)}`;
   if (memory.notes.has('sheep:far')) return stuck(`羊が出発点から${SHEEP_REACH}m の外にしか見えない（先へ流れない）。鉄を先にして、夜は囲いで過ごす手がある`);
   // Only none in sight counts as none: a walk or a hunt that failed is tried again (the run's own counts end it).
   const none = memory.notes.has('sheep:none') || memory.lastFailure(key) === 'target_not_found';
-  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, anchors);
+  return none ? stuck('ベッドも羊も近くに見えない（128m）') : sheepSearch(memory, key, anchors, { store: visits, at: facts.at, daylight });
 }
 
 /** 「食料と羊とベッド」: the bed first; food while the bed waits on a search the planner must decide. */
-export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: MapVisits, anchors: readonly Cell[] = []): McMove {
+export function bedAndFoodMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory, visits: BedStore, anchors: readonly Cell[] = []): McMove {
   const bed = bedMove(facts, memory, visits, anchors);
   if (bed?.kind === 'do') return bed;
   const food = foodMove(facts, memory);

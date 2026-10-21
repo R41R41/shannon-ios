@@ -1,3 +1,5 @@
+import { BED_HEIGHT_REACH } from './minecraftWorkingArbiter.js';
+
 /**
  * A bed or a village she already knows of, put ahead of the sheep (owner 2026-10-20, Minecraft run 19): an igloo's bed was in her
  * remembered places as 「bed: 72m 東 (69,66,4) ×2」 from D1 on, 13 m away at D10, and a village from D35 (171 m east), yet in 64
@@ -38,7 +40,10 @@ function sheepInSight(world: Record<string, unknown>): boolean {
 export function bedLead(world: Record<string, unknown>): string | null {
   const places = record(world.rememberedPlaces) ?? {};
   const bed = place(places.bed), village = place(places.village);
-  if (bed && bed.distance <= BED_LEAD.bedDistance) {
+  // mb-r23 (run 23): a bed 83 m below her, in a structure under the rock, is not one to walk to; only a bed near her own height leads.
+  const height = record(world.position)?.y;
+  const level = !bed || typeof height !== 'number' || Math.abs(bed.y - height) <= BED_HEIGHT_REACH;
+  if (bed && level && bed.distance <= BED_LEAD.bedDistance) {
     return `置かれたベッドが場所の記憶にある（${bed.distance}m ${bed.direction}、${bed.x},${bed.y},${bed.z}）。羊を探すより先に取りに行く: `
       + `mc.move-to（${at(bed)}、goalType=near、range=2）→ mc.dig-block-at（${at(bed)}、takeEquipment=true）。壊すとベッドが手に入る（イグルーや村の家のベッドも同じ）`;
   }

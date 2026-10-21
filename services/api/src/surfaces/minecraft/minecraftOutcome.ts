@@ -59,8 +59,27 @@ function bedWoolWords(text: string): string {
  * `retry_same`, and it does not count as a failed step (`ToolResult.bodyReflex`, read by the FCA runner).
  */
 export const BODY_REFLEX_FAILURE = 'interrupted_by_reflex';
+/**
+ * A skill that made part of what it was asked (mb-r23, agreed with the body lane on 2026-10-21: `success: false`, `failureType`
+ * `partial_completion`, only when at least one was made; its text holds `［進み: <物> <作れた数>/<目標>］`, the body's other notes may follow
+ * it). It is progress, not a failed step (`ToolResult.progressed`), and it can simply be asked again for the rest (`retry_same`).
+ */
+export const PARTIAL_COMPLETION = 'partial_completion';
+const PARTIAL_PROGRESS = /［進み:\s*([^\s／］]{1,64})\s+(\d{1,5})\/(\d{1,5})］/gu;
+/** What a partial result says it made: the last mark in the text (a note after it does not hide it), or null. */
+export function partialProgressOf(text: string): { item: string; made: number; goal: number } | null {
+  const last = [...text.matchAll(PARTIAL_PROGRESS)].at(-1);
+  return last ? { item: last[1]!, made: Number(last[2]), goal: Number(last[3]) } : null;
+}
+/** Whether a failed skill made part of its work: the body's `partial` flag, or `partial_completion` whose mark does not say none was made. */
+function madePartly(receipt: Pick<MinecraftControlReceipt, 'partial' | 'failureType'>, text: string): boolean {
+  if (receipt.partial === true) return true;
+  if (receipt.failureType !== PARTIAL_COMPLETION) return false;
+  const mark = partialProgressOf(text);
+  return mark === null || mark.made >= 1;
+}
 const RETRY_SAME = new Set(['interrupted', BODY_REFLEX_FAILURE, 'timeout', 'movement_incomplete', 'position_verification_failed',
-  'placement_unconfirmed', 'not_ready', 'BODY_DEADLINE']);
+  'placement_unconfirmed', 'not_ready', 'BODY_DEADLINE', PARTIAL_COMPLETION]);
 const NEED_MATERIAL = new Set(['material_missing', 'missing_item', 'missing_tool', 'wrong_tool', 'tool_durability_low', 'tool_broke',
   BED_WOOL_FAILURE]);
 const INVALID_INPUT = new Set(['unsupported_target', 'protected_target']);
@@ -180,14 +199,15 @@ export function bodyFailureOf(result: ToolResult): string | null {
 }
 
 /**
- * The body's note that a cheaper tool would do the digging, when the cheaper one is gold (mb-r22, run 22: 道具の補充: stone を iron_pickaxe で
+ * The body's note that a cheaper tool would do the digging, when the cheaper one is gold or copper (mb-r22, run 22: 道具の補充: stone を iron_pickaxe で
  * 掘っています。より安く済む golden_pickaxe は材料が足りず作れません（不足: gold_ingot×3）。 on nearly every result, naming the one tool that
- * cannot be had in the first half hour while the stone pickaxe was the one to make). It is not told to the planner or the procedures: gold
- * is not looked for, and the stone pickaxe is made by the procedures' own rules (pickaxeReserve).
+ * cannot be had in the first half hour while the stone pickaxe was the one to make; mb-r23, run 23: with the gold gone the same note named
+ * copper_pickaxe, which is no more to be had, since the stone and wooden types were dropped for their wear). It is not told to the planner or
+ * the procedures: gold and copper are not looked for, and the stone pickaxe is made by the procedures' own rules (pickaxeReserve).
  */
-const GOLD_PICKAXE_ADVICE = /道具の補充:[^。\n]*。\s*より安く済む\s*golden_[a-z_]+\s*は[^。\n]*。?\n?/gu;
+const GOLD_PICKAXE_ADVICE = /道具の補充:[^。\n]*。\s*より安く済む\s*(?:golden|copper)_[a-z_]+\s*は[^。\n]*。?\n?/gu;
 export function withoutGoldAdvice(text: string): string {
-  if (!text.includes('golden_')) return text;
+  if (!text.includes('golden_') && !text.includes('copper_')) return text;
   const kept = text.replace(GOLD_PICKAXE_ADVICE, '').replace(/[ \t]+\n/gu, '\n').trim();
   return kept === text.trim() ? text : kept || '（道具の補充の知らせだけの結果）';
 }
@@ -198,9 +218,11 @@ export function minecraftSkillResult(receipt: MinecraftControlReceipt): ToolResu
   const hint = minecraftRetryHint(receipt.failureType);
   // The body's kind as it named it (a closed id), for the executor's procedures (session mb-arch).
   const kind = typeof receipt.failureType === 'string' && /^[a-z_]{1,40}$/u.test(receipt.failureType) ? { bodyFailure: receipt.failureType } : {};
-  if (!hint) return { ...toolFailure('failed', text, { retryable: false }), ...kind };
+  // mb-r23: a body that says the failed skill made part of what it was asked (`partial`) has made progress: not a failed step of the run.
+  const made = madePartly(receipt, text) ? { progressed: true as const } : {};
+  if (!hint) return { ...toolFailure('failed', text, { retryable: false }), ...kind, ...made };
   const words = hint === 'prepare_first' ? nightGateWords(text) : receipt.failureType === BED_WOOL_FAILURE ? bedWoolWords(text) : HINT_WORDS[hint];
   const failure = { ...toolFailure('failed', `${text}\n［再試行の目安: ${hint}｜${words}］`,
-    { retryable: hint === 'retry_same' || hint === 'change_situation' }), ...kind };
+    { retryable: hint === 'retry_same' || hint === 'change_situation' }), ...kind, ...made };
   return receipt.failureType === BODY_REFLEX_FAILURE ? Object.freeze({ ...failure, bodyReflex: true as const }) : failure;
 }

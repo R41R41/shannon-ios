@@ -173,15 +173,15 @@ describe('the iron procedure (run 21: the iron armour at 1,074 s instead of abou
   const allOf = (extra: Record<string, number> = {}) => pack({ stone_pickaxe: 1, coal: 8, cobblestone: 20, oak_planks: 12, stick: 8, crafting_table: 1, ...extra });
   const job = (x: number, remainingEstimateMs: number, count: number, input = 'raw_iron') => ({ position: { x, y: 64, z: 2 }, remainingEstimateMs, input, count });
 
-  it('digs the 32 iron of the pieces (36 with the spare pickaxe and the flint) in a first dig of 16 and a second of what is left', () => {
+  it('digs the 32 iron of the pieces (36 with the spare pickaxe and the flint) in a first dig of 24 and a second of what is left (mb-r23; 16 and 20 before)', () => {
     const none = factsOf({ inventory: allOf() });
     expect(coreIronWanted(none)).toBe(32);
     expect(ironShort(none)).toBe(36);
-    expect(IRON_DIG_AT_ONCE).toBe(16);
-    expect(move(ironMove(none, new ProcedureMemory(), store()))).toMatchObject({ tool: 'mc.mine-block', input: { blockName: 'iron_ore', count: 16 } });
-    // 16 held in a furnace: the second dig takes the 20 left, the spare's and the flint's with it, not a third trip.
-    const half = factsOf({ inventory: allOf(), jobs: [job(10, 90_000, 16)] });
-    expect(ironShort(half)).toBe(20);
+    expect(IRON_DIG_AT_ONCE).toBe(24);
+    expect(move(ironMove(none, new ProcedureMemory(), store()))).toMatchObject({ tool: 'mc.mine-block', input: { blockName: 'iron_ore', count: 24 } });
+    // 24 held in the furnaces: the second dig takes the 12 left, the spare's and the flint's with it, not a third trip.
+    const half = factsOf({ inventory: allOf(), jobs: [job(10, 90_000, 24)] });
+    expect(ironShort(half)).toBe(12);
     const enough = factsOf({ inventory: allOf({ iron_ingot: 36 }) });
     expect(ironShort(enough)).toBe(0);
     // Every piece made: the spare pickaxe's 3 and the flint's 1 are what is left to dig.

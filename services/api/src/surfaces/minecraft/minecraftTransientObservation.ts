@@ -1,5 +1,6 @@
 import type { BodyFact, BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import { reflexesLine } from './minecraftObservationReflexes.js';
+import { tidyContext, tidyWorldPart } from './minecraftWorldTidy.js';
 
 /**
  * The body's observation as a transient decision reads it (observation redesign P3, `SHANNON_FCA_OBS_MODE=transient`): the old Minebot
@@ -222,8 +223,10 @@ export function minecraftTransientObservation(observation: BodyObservation, opti
   const omitted: string[] = [];
   const world = record(observation.state.world) ? observation.state.world as Rec : {};
   const out: Record<string, BodyValue> = { connected: observation.connected };
+  // mb-r23: the remembered places and the descent kit are told as the head's own rules want them (`minecraftWorldTidy.ts`).
+  const tidy = tidyContext(world, observation.facts);
   for (const [raw, item] of Object.entries(world)) {
-    if (!OWN.has(raw) && !options.leave?.includes(raw)) copyWorldPart(out, omitted, raw, item);
+    if (!OWN.has(raw) && !options.leave?.includes(raw)) copyWorldPart(out, omitted, raw, tidyWorldPart(raw, item, tidy));
   }
   const { inventory, represented } = inventoryOf(world.inventory, observation.facts);
   out.inventory = inventory;

@@ -167,9 +167,9 @@ describe('a village looked for once in the task, by day, even when the night too
 describe('the iron taken all at once (milestone and draft-9)', () => {
   const pack9 = () => standardSkillPack('legacy-minecraft', 'draft-9')!, pack8 = () => standardSkillPack('legacy-minecraft', 'draft-8')!;
   const gistOf = (name: string) => skillGist(pack9().skills.find(entry => entry.name === name)!.body, observeOnlyStep);
-  it('says in the milestone to take thirty at once', () => {
+  it('says in the milestone to take 24 first and the rest next (36 in all), not to go back for it later (mb-r23; thirty at once before)', () => {
     const counts = carriedItemCounts({ inventory: [{ name: 'stone_pickaxe', count: 1 }, { name: 'white_bed', count: 1 }, { name: 'cooked_beef', count: 6 }] }, {});
-    expect(milestoneLines({ counts, dimension: 'overworld', netherReached: false })[0]).toMatch(/鉄鉱石は一度に30個掘る/u);
+    expect(milestoneLines({ counts, dimension: 'overworld', netherReached: false })[0]).toMatch(/鉄鉱石は最初に24個、続けて残りを掘る（全部で36個/u);
   });
   it('revises five draft-8 skills, not the night retreat (used in run 17: on trial)', () => {
     expect(pack9().skills.map(entry => entry.name)).toEqual(['mc-first-day', 'mc-food-and-bed', 'mc-iron-and-bucket', 'mc-diamond-obsidian', 'mc-food-and-pace', 'mc-night-shelter']);

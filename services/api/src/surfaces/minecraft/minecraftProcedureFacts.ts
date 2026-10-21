@@ -4,6 +4,7 @@ import { carriedItemCounts, countMatching } from './minecraftItems.js';
 import type { MilestoneFacts } from './minecraftStage.js';
 import { minecraftFrameNeeds } from './minecraftWorkingArbiter.js';
 import { jobsOf } from './minecraftFillers.js';
+import { bedMayWait } from './minecraftBedDefer.js';
 
 /**
  * What the executor's procedures read from one frame (session mb-arch, `minecraftProcedures.ts`): what she carries (worn armour too,
@@ -92,7 +93,7 @@ function armorPiecesOf(worn: unknown): number {
 }
 
 /** The facts of a frame; `netherReached` from the pace when known (a way back to the overworld leaves no item of it). */
-export function minecraftProcedureFacts(observation: BodyObservation | null, netherReached = false): MinecraftProcedureFacts {
+export function minecraftProcedureFacts(observation: BodyObservation | null, netherReached = false, bedWaits = false): MinecraftProcedureFacts {
   const world = record(observation ? (observation.state as { world?: unknown }).world : null) ?? {};
   const counts = carriedItemCounts(world, record(observation?.facts) ?? null);
   const margin = record(world.margin);
@@ -105,7 +106,8 @@ export function minecraftProcedureFacts(observation: BodyObservation | null, net
     dimension,
     health: number(world.health), food: number(world.food), night: light !== null && light > 0, darkIn: number(margin?.darkInSeconds),
     threats: threatsOf(world),
-    milestone: { counts, dimension, netherReached: reached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' },
+    milestone: { counts, dimension, netherReached: reached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string',
+      bedDeferred: bedMayWait(bedWaits, world) },
     map: typeof world.mapSummary === 'string' ? world.mapSummary.slice(0, 3_000) : '',
     tools: toolsOf(world), armorPieces: armorPiecesOf(world.worn), stacks: Array.isArray(world.inventory) ? world.inventory.length : null,
     observation,

@@ -231,8 +231,14 @@ describe('the sheep, kept near the start and hunted by the colour she holds', ()
     expect(body.inputs.get('mc.attack-continuously')![0]).toMatchObject({ entityName: 'sheep', color: 'white', maxKills: 1 });
   });
 
-  it('does not walk to sheep beyond 160 m of where the task began, and says so', async () => {
+  it('does not walk to sheep beyond 160 m of where the task began, and says so (at dusk: by day the bed waits, mb-r23)', async () => {
     const body = kit(new SimBody(), { stone_pickaxe: 1, porkchop: 6, oak_planks: 4 });
+    const look = body.observation.bind(body);
+    body.observation = () => {
+      const frame = look();
+      (frame.state.world as { margin: unknown }).margin = { darkInSeconds: 100 };
+      return frame;
+    };
     body.tool_find_nearest_entity = () => ({ ok: true, text: 'sheepを発見: 座標(300.5, 64, 3.2), 距離110m', retryable: false });
     const result = await setup(body).call({ milestone: '食料と羊とベッド' });
     expect(result.text).toContain('羊が出発点から160m の外にしか見えない');

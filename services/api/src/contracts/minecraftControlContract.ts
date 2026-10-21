@@ -20,6 +20,11 @@ export interface MinecraftControlReceipt {
   inputsReleased: boolean; observedAt: string; result?: string;
   /** Why a skill failed, as the body's closed code (`minecraftRetryHint`), and whether it thinks it can recover; both optional. */
   failureType?: string; recoverable?: boolean;
+  /**
+   * A failed skill that made part of what it was asked (mb-r23: `use-item-on-block` with a count made 6 of 10 obsidian). Optional; a body
+   * that does not send it is read from the frames (`minecraftProgress.ts`). `true` makes the failure no failed step of the run.
+   */
+  partial?: boolean;
   action?: BodyActionReceipt; stop?: BodyStopAcknowledgement;
   /** Ephemeral pixels only: the companion stores an expiring reference, never this field in SQLite. */
   image?: { dataUrl: string; capturedAt: string };

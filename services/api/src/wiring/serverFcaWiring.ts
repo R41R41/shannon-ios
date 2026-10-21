@@ -11,6 +11,7 @@ import type { MinecraftLiveSink } from '../surfaces/minecraft/minecraftLive.js';
 import { withMinecraftLive } from '../surfaces/minecraft/minecraftLiveBody.js';
 import { withMinecraftWorking } from '../surfaces/minecraft/minecraftWorkingBody.js';
 import { withMinecraftAgenda } from '../surfaces/minecraft/minecraftAgenda.js';
+import { withMinecraftProgress } from '../surfaces/minecraft/minecraftProgress.js';
 import { minecraftProcedureStepParts } from '../surfaces/minecraft/minecraftProcedureTool.js';
 import { minecraftAgendaBodyParts, withMinecraftAgendaParts } from '../surfaces/minecraft/minecraftLookahead.js';
 import { minecraftOpportunityJudge } from '../surfaces/minecraft/minecraftOpportunityJudge.js';
@@ -207,12 +208,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone,
           sourcesVisible: () => check.whole('tool') ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) }),
-          ...(minecraft ? [withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
+          ...(minecraft ? [withMinecraftProgress(withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
             sourcesVisible: () => check.whole('tool') ?? false,
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
             { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
               ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? ''),
               arrivedAt: () => minecraft.control.arrivedAt(minecraft.control.store.body(step.taskId) ?? '') }),
+            // A failed call that made something is not a failed step (`minecraftProgress.ts`, mb-r23).
+            { observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
             ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
       }); } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,

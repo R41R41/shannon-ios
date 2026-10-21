@@ -257,7 +257,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const recalled = experienceOf(id)?.recalledMemoryIds ?? [], scalar = scalars.get(id);
     return scalar?.sourceExperienceId && !memoryControlFor(state, id)?.overrideText ? [...recalled, scalar.sourceExperienceId] : recalled;
   };
-  const search: TaskMemory['search'] = (scope, query, present, limit = 8, options, shared) => {
+  const search: TaskMemory['search'] = (scope, query, present, limit = 8, options, shared, readOptions) => {
     if (!available(scope, present)) return [];
     const state = shared?.state ?? parts.state.snapshot(scope);
     const candidates = [...state.userFacts, ...state.relationships].map(item => ({ id: item.id, text: item.statement, observedAt: item.observedAt }));
@@ -266,10 +266,10 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     candidates.push(...state.prospectiveMemories.map(item => ({ id: item.id, text: item.summary, observedAt: item.updatedAt })));
     const ids = [...(parts.conversations.searchMemory?.(scope, query, options ? 1200 : 40, options ? { ...options, offset: 0 } : undefined) ?? []).map(hit => hit.id),
       ...searchMemoryDocuments(query, candidates, 20).map(item => item.id)];
-    if (!options) return read(scope, ids, present, shared).slice(0, Math.max(1, Math.min(12, limit)));
+    if (!options) return read(scope, ids, present, shared, readOptions).slice(0, Math.max(1, Math.min(12, limit)));
     const unique = [...new Set(ids)], found: TaskMemoryItem[] = [];
-    for (let offset = 0; offset < unique.length; offset += 40) found.push(...read(scope, unique.slice(offset, offset + 40), present, shared));
-    const visible = found.filter(item => (!options.kind || (options.kind === 'thread' ? item.id.startsWith('thread:') : options.kind === 'knowledge' ? item.id.startsWith('knowledge:') : !item.id.startsWith('thread:') && !item.id.startsWith('knowledge:') && Boolean(parts.conversations.experiencesById?.(scope, [item.id]).length)))
+    for (let offset = 0; offset < unique.length; offset += 40) found.push(...read(scope, unique.slice(offset, offset + 40), present, shared, readOptions));
+    const visible = found.filter(item => (!options.kind || (options.kind === 'thread' ? item.id.startsWith('thread:') : options.kind === 'knowledge' ? item.id.startsWith('knowledge:') : !item.id.startsWith('thread:') && !item.id.startsWith('knowledge:') && Boolean(shared?.experience ? shared.experience(item.id) : parts.conversations.experiencesById?.(scope, [item.id]).length)))
       && withinSearchRange(item.observedAt, options) && (!options.match || matchesSearch(item.summary, query, options)));
     if (options.order === 'newest' || options.order === 'oldest') visible.sort((a, b) => (options.order === 'oldest' ? (Date.parse(a.observedAt) - Date.parse(b.observedAt)) : (Date.parse(b.observedAt) - Date.parse(a.observedAt))) || a.id.localeCompare(b.id));
     return visible.slice(options.offset ?? 0, (options.offset ?? 0) + Math.max(1, Math.min(40, limit)));

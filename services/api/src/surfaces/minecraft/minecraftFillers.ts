@@ -1,6 +1,7 @@
 import type { WorkingNeed } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { EDIBLE_FOOD } from './minecraftItems.js';
+import { BED_ITEM, EDIBLE_FOOD } from './minecraftItems.js';
+import { BED_DEFER } from './minecraftBedDefer.js';
 import { FOOD_STOCK } from './minecraftStage.js';
 import { minecraftCalm, minecraftFrameNeeds } from './minecraftWorkingArbiter.js';
 
@@ -192,8 +193,11 @@ export function nextFiller(observation: BodyObservation | null,
   if (bedItem) return bedItem;
   const furnace = fits(secondFurnace(observation, carriedOf(observation)));
   if (furnace) return furnace;
+  // mb-r23: with no bed carried, the sheep of a furnace's wait are taken from further (the bed was left for later, `minecraftBedDefer.ts`).
+  const bedless = ![...carriedOf(observation).keys()].some(name => BED_ITEM.test(name));
   for (const rule of IN_A_WAIT.slice(1)) {
-    const need = needs.find(item => item.need === rule.need && (item.distance ?? Infinity) <= rule.within);
+    const within = rule.need === 'bed_wool' && bedless ? Math.max(rule.within, BED_DEFER.fillerReach) : rule.within;
+    const need = needs.find(item => item.need === rule.need && (item.distance ?? Infinity) <= within);
     const item = need ? fits(takeNeed(need)) : null;
     if (item) return item;
   }
@@ -210,8 +214,10 @@ export function fillable(need: WorkingNeed): boolean {
 }
 
 /** After a call she asked for: these are worth one detour right there, each within its distance. */
+// mb-r23 (run 23): the sheep before the coal. The detour after the walk to a sheep took 3 coal first (26 s) with the sheep at hand and the
+// bed the thing waited for; coal is dug by the iron procedure's own step (`coalFirst`) and in the furnaces' waits.
 const AFTER_A_CALL: ReadonlyArray<{ need: string; within: number; ask?: boolean }> = [
-  { need: 'bed', within: 24 }, { need: 'fuel', within: 8 }, { need: 'iron', within: 8 }, { need: 'bed_wool', within: 12 },
+  { need: 'bed', within: 24 }, { need: 'bed_wool', within: 12 }, { need: 'fuel', within: 8 }, { need: 'iron', within: 8 },
   { need: 'food', within: 8, ask: true },
 ];
 

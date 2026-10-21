@@ -35,6 +35,8 @@ const WATER_BUCKET = /^water_bucket$/u;
 const DEEP_Y = -58;
 /** A lava pool this close (horizontally) is walked to under ground; a farther one is gone to by the surface and a shaft dug above it. */
 const LAVA_UNDER_GROUND = 40;
+/** How near a lava pool she is walked to before the water is poured: a place to stand within this many blocks of it. */
+export const LAVA_REACH = 3;
 /** A way up this high or less is taken for a surface obsidian. */
 const MOST_UP = 150;
 
@@ -160,8 +162,10 @@ function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch:
         key: `obsidian:pour:${cellKey(cell)}`, then: (result: string) => /黒曜石に変換/u.test(result) ? dig : null, chain: 2 }
       : { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket', count: batch }, why: '溶岩の溜まりで黒曜石をまとめて作る',
         expectMs: 25_000 * batch, key: `obsidian:batch:${cellKey(cell)}` };
-    return { tool: 'mc.move-to', input: { ...cell, goalType: 'block' }, why: '溶岩のそばへ行く', expectMs: 20_000, key: `obsidian:walk:${cellKey(cell)}`,
-      resumable: true, then: () => pour, chain: 3 };
+    // mb-r23: near, not `block`: the body wants a place from which the block can be dug, and lava cannot be dug (run 23: it stopped 2.6 m
+    // from the pool with "no place to stand", 32 s and 23 s, and the procedure failed). Water is poured from a few blocks off.
+    return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: LAVA_REACH }, why: '溶岩のそばへ行く', expectMs: 20_000,
+      key: `obsidian:walk:${cellKey(cell)}`, resumable: true, then: () => pour, chain: 3 };
   };
   return doing({ tool: 'mc.find-blocks', input: { blockName: 'lava', maxDistance: 48, count: 10 }, why: '溶岩の溜まりを探す', expectMs: 2_000,
     key: `obsidian:${count}:${lavaWalks(visits)}`, then: pick, chain: 4 });

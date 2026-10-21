@@ -24,7 +24,13 @@ export interface TaskMemoryReadSnapshot {
 export interface TaskMemory {
   available(scopeKey: string, present: MemoryAudience): boolean;
   search(scopeKey: string, query: string, present: MemoryAudience, limit?: number, options?: MemorySearchOptions,
-    shared?: TaskMemoryReadSnapshot): TaskMemoryItem[];
+    shared?: TaskMemoryReadSnapshot,
+    /**
+     * `provenance: false` as in `read`: the items come without their provenance. A body task's recall pool (up to 1,200 candidates read three
+     * times at the task's first decision) only picks records and reads the ones it shows again; listing every candidate's whole lineage held
+     * the API's thread for 3.0 s there (Minecraft run 23, mb-r23).
+     */
+    readOptions?: { provenance?: boolean }): TaskMemoryItem[];
   /**
    * A state and withholding for reads that belong together (one FCA step's recall: its context, `memory.search` and the packet),
    * the same objects while the database is unchanged. Pass it to `read`/`search` inside one `withholding.withReadSnapshot`.

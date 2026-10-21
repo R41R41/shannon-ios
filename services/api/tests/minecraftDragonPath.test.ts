@@ -48,10 +48,11 @@ describe('the stages after iron (diamonds before obsidian), from what she carrie
     expect(minecraftStage(counts('iron_pickaxe×1', 'bucket×1', 'iron_chestplate×1', 'iron_helmet×1'))).toBe(4);
     expect(minecraftStage(counts('diamond_pickaxe×1'))).toBe(6);
     expect(minecraftStage(counts('netherite_pickaxe×1', 'blue_bed×1'))).toBe(6);
-    // Stage 3 wants food enough beside the bed: six things she can eat, raw or cooked.
+    // Stage 3 wants food enough beside the bed: four things she can eat, raw or cooked (`FOOD_STOCK`; six before mb-r23, four in the procedure).
+    expect(FOOD_STOCK).toBe(4);
     expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1'))).toBe(2);
-    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'beef×3', 'bread×2'))).toBe(2);
-    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'beef×3', 'bread×3'))).toBe(3);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'beef×2', 'bread×1'))).toBe(2);
+    expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'beef×2', 'bread×2'))).toBe(3);
     expect(minecraftStage(counts('stone_pickaxe×1', FED))).toBe(2);
     // With iron in hand three are enough to stay (one meal in the mine does not send her back to the sheep); without, not.
     expect(minecraftStage(counts('stone_pickaxe×1', 'red_bed×1', 'bread×3', 'raw_iron×2'))).toBe(3);

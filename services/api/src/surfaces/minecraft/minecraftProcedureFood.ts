@@ -1,6 +1,6 @@
 import type { ProcedureMemory } from '@shannon/mind';
 import { EDIBLE_FOOD } from './minecraftItems.js';
-import { fed } from './minecraftStage.js';
+import { FOOD_STOCK, fed } from './minecraftStage.js';
 import { carried, type MinecraftProcedureFacts } from './minecraftProcedureFacts.js';
 import { doing, type McMove } from './minecraftProcedureMoves.js';
 import { finalFailure } from './minecraftProcedureUpkeep.js';
@@ -12,7 +12,7 @@ import { finalFailure } from './minecraftProcedureUpkeep.js';
  * detours after a call (`minecraftFillers.ts`) bring the rest. An animal that cannot be reached or hit is given up at once and the next
  * kind tried; a kind that fails is not asked again in the run, and the hunt ends without a stop of the run (it is small work).
  */
-export const FOOD_ENOUGH = 4;
+export const FOOD_ENOUGH = FOOD_STOCK;
 /** Food short of this is looked for further off than the near animals. */
 const FOOD_LOW = 3;
 /** How far an animal is walked to for food: near when the pack holds some, further when it holds little. */

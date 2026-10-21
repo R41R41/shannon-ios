@@ -28,6 +28,8 @@ export interface ProcedureTaskStore {
   surface?: Cell;
   /** Stops for low health with an enemy near that the task has made (`minecraftProcedureCare.ts`). */
   careStops?: number;
+  /** The sheep search showed them far in daylight, and the bed was left for later (`minecraftBedDefer.ts`, mb-r23). */
+  bedWaits?: boolean;
 }
 
 const IRON_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe$/u;
@@ -65,8 +67,13 @@ export const coreIronWanted = (facts: MinecraftProcedureFacts) =>
 /** The iron she has: carried in any form, and the raw iron in the furnaces. */
 export const ironHeld = (facts: MinecraftProcedureFacts) => carried(facts, IRON_HELD) + (facts.smelting.get('raw_iron') ?? 0);
 
-/** Raw iron dug in the first call (run 21: 12 a call made three digs of 36; the first of 16 and the second of what is left, 20, do). */
-export const IRON_DIG_AT_ONCE = 16;
+/**
+ * Raw iron dug in the first call (run 21: 12 a call made three digs of 36; the first of 16 and the second of what is left, 20, did). Run 23
+ * dug 16 and then 19 at another place: the 19 were dug after a 155 s errand for water, 20 m deeper, with 30 s to come back, and the last
+ * furnace was lit at 798 s. 24 are the first five pieces of the plan (pickaxe 3, sword 2, bucket 3, chestplate 8, leggings 7 = 23); they
+ * smelt in three furnaces in about 80 s while the rest, 12, is dug next to them.
+ */
+export const IRON_DIG_AT_ONCE = 24;
 /** A furnace smelts an item in ten seconds. */
 const SMELT_ITEM_MS = 10_000;
 /** A furnace this far from her is not walked back to for a piece (the body's `withdraw-from-furnace` walks, and a long walk costs more than the dig). */
@@ -220,7 +227,9 @@ function smelt(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, memory
   // sat in the pack from 366 s to 614 s behind sheep and pork). A third furnace takes the iron when the two are full of the food.
   const partner = ironJobs(facts).length > 0;
   const capacity = free.length + Math.min(2, FURNACES - store.furnaces.length);
-  const count = raw < 4 ? raw : !partner && capacity >= 2 ? Math.ceil(raw / 2) : Math.min(raw, MOST_IN_A_FURNACE);
+  // mb-r23: a dig of 24 goes in thirds (8, then 10 and 6) when three furnaces can take it, not 12 and 10 and 2.
+  const thirds = raw >= 20 && free.length + FURNACES - store.furnaces.length >= 3;
+  const count = raw < 4 ? raw : !partner && capacity >= 2 ? Math.ceil(raw / (thirds ? 3 : 2)) : Math.min(raw, MOST_IN_A_FURNACE);
   const coal = coalFirst(facts, raw);
   if (coal) return coal;
   const fuel = fuelOf(facts);

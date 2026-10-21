@@ -27,11 +27,13 @@ export const ARMOR_PIECES: readonly RegExp[] = Object.freeze(['helmet', 'chestpl
 export const fullArmor = (counts: ItemCounts) => ARMOR_PIECES.every(piece => countMatching(counts, piece) > 0);
 /**
  * Food enough to go on to iron (owner 2026-10-19, Minecraft run 15: at night with no food and no bed she died four times to zombies):
- * six items she can eat, raw or cooked. Below it the opening stays at stage 2, the food and the bed, whatever else she carries.
+ * items she can eat, raw or cooked (six until mb-r23, run 23: the procedure of the opening stopped hunting at four, `FOOD_ENOUGH`, while this
+ * and the milestone's words said six, and the planner went after a cow and chickens for 18 s with the food already enough; one number now).
+ * Below it the opening stays at stage 2, the food and the bed, whatever else she carries.
  * Once iron is in hand (ore or ingots, before the pickaxe) `FOOD_KEPT` is enough, so that one meal in the mine does not send her back
  * to the sheep: the stage is stateless, and the iron she carries stands for "already on to iron".
  */
-export const FOOD_STOCK = 6, FOOD_KEPT = 3;
+export const FOOD_STOCK = 4, FOOD_KEPT = 3;
 const IRON_IN_HAND = /^(?:raw_iron|iron_ingot|(?:deepslate_)?iron_ore)$/u;
 
 /**
@@ -58,6 +60,8 @@ export interface MilestoneFacts {
   counts: ItemCounts; dimension: string; netherReached: boolean;
   /** A respawn bed of hers is set and remembered (`world.rememberedPlaces.respawn`): her bed stands, though she does not carry it. */
   bedPlaced?: boolean;
+  /** The bed waits (`minecraftBedDefer.ts`): the sheep are far and the day is long enough; the step goes on without it. */
+  bedDeferred?: boolean;
 }
 /**
  * One step of the owner's order to the dragon (owner 2026-10-19): its name, when it is reached (`done`, from `MilestoneFacts`), the
@@ -77,6 +81,8 @@ export interface Milestone {
 const has = (facts: MilestoneFacts, pattern: RegExp, least = 1) => countMatching(facts.counts, pattern) >= least;
 const sum = (facts: MilestoneFacts, ...weighted: Array<[RegExp, number]>) =>
   weighted.reduce((total, [pattern, weight]) => total + countMatching(facts.counts, pattern) * weight, 0);
+/** A bed carried or set, or left for later while the sheep are far and the day is long (`minecraftBedDefer.ts`). */
+const bedSettled = (facts: MilestoneFacts) => has(facts, BED_ITEM) || facts.bedPlaced === true || facts.bedDeferred === true;
 const EYE = /^ender_eye$/u, BLAZE = /^blaze_(?:rod|powder)$/u;
 /** Been to the Nether: the pace's milestone (set by `mc.goal-evidence`), being there or past it, or carrying what only it gives. */
 const nether = (facts: MilestoneFacts) => facts.netherReached || facts.dimension === 'the_nether' || facts.dimension === 'the_end'
@@ -89,12 +95,13 @@ export const MILESTONES: readonly Milestone[] = Object.freeze([
   { name: '木と石のツルハシ', condition: 'stone_pickaxe を持つ', why: '石が掘れ、丸石で道具とかまどが作れる', done: facts => has(facts, STONE_TIER_PICKAXE), anchor: true },
   { name: '石の斧', condition: 'stone_axe 以上を持つ', why: '木を早く集められる', done: facts => has(facts, /^(?:stone|iron|diamond|netherite)_axe$/u) },
   { name: '木材', condition: '板材にして12枚分以上', why: '作業台・棒・ベッド・チェストに要る', done: facts => sum(facts, [/_log$/u, 4], [/_planks$/u, 1]) >= 12 },
-  { name: '食料と羊とベッド', condition: 'ベッドと食べ物6個', why: '夜を飛ばせ、空腹で回復が止まらない（鉄より先）',
-    kept: facts => (has(facts, BED_ITEM) || facts.bedPlaced === true) && countMatching(facts.counts, EDIBLE_FOOD) >= FOOD_KEPT,
-    done: facts => has(facts, STONE_TIER_PICKAXE) && (has(facts, BED_ITEM) || facts.bedPlaced === true) && fed(facts.counts), anchor: true },
+  { name: '食料と羊とベッド', condition: `ベッドと食べ物${FOOD_STOCK}個`, why: '夜を飛ばせ、空腹で回復が止まらない（鉄より先）',
+    kept: facts => bedSettled(facts) && countMatching(facts.counts, EDIBLE_FOOD) >= FOOD_KEPT,
+    done: facts => has(facts, STONE_TIER_PICKAXE) && bedSettled(facts) && fed(facts.counts), anchor: true },
   { name: '村の回収', condition: '持ち物では見えない', why: '村があればベッド・食料・鉄が早い', done: null, optional: true },
   // Run 17 mined iron 3, 8, 8 and 13 at a time and smelted and waited each time: the step says to take it all at once.
-  { name: '鉄', condition: 'iron_pickaxe を持つ', why: '鉄鉱石は一度に30個掘る（ツルハシ3・バケツ3・防具24）', done: facts => has(facts, IRON_TIER_PICKAXE), anchor: true },
+  { name: '鉄', condition: 'iron_pickaxe を持つ', anchor: true, done: facts => has(facts, IRON_TIER_PICKAXE),
+    why: '鉄鉱石は最初に24個、続けて残りを掘る（全部で36個＝ツルハシ3・剣2・バケツ3・防具24・予備3・火打ち金1）。別の場所へ後で戻らない' },
   { name: 'バケツ', condition: 'bucket を持つ', why: '黒曜石を作る水を運ぶ', done: facts => has(facts, IRON_TIER_PICKAXE) && has(facts, BUCKET_ITEM), anchor: true },
   // Run 16: down for diamonds at night with no armour. The bucket is part of it, or armour made first would pass the bucket.
   { name: '鉄の全身の防具', condition: '兜・胸当て・脚・靴を鉄で着る（鉄24）', why: '受ける傷が約6割減る。余裕があれば予備のツルハシ（鉄3）も',

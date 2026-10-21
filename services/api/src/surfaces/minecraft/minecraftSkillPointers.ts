@@ -145,7 +145,7 @@ export interface MinecraftPaceFacts {
   /** Her `mc.wait-time` calls among her latest tool results (at most six): only recent waits count, never the task's total. */
   recentIdleWaits?: number;
   /** Seconds to dark when `mc.find-nearest-entity` for sheep last found none (`noSheepNearby`), kept while the same day goes on (`bedSearchMark`). */
-  noSheepDarkIn?: number;
+  noSheepDarkIn?: number; bedDeferred?: boolean; // bedDeferred: the bed waits, the sheep are far (`minecraftBedDefer.ts`, mb-r23)
   /**
    * Whether she has looked for a village in this task (`villageSearch`, kept in the checkpoint). False: not yet, and the village
    * pointer is offered by day; absent (a caller that does not track it): never offered.
@@ -241,7 +241,7 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
   return {
     ...dark,
     threatNear, stage, calm: day && !threatNear, villageUnsearched: overworld && pace.villageSearched === false, furnaceDue: furnaceDue(world.jobs),
-    ...stepNow(observation, world, items, dimension, pace.milestones?.netherReached === true, pace.elapsedSeconds),
+    ...stepNow(observation, world, items, dimension, pace),
     oneHitFrom: threatNear ? oneHitFrom(world.margin) : null,
     dropsLeft: dropsList(recoverableDrops(world)), dropsWorth: dropsAdvice(world, recoverableDrops(world)),
     lowHealth: atMost(world.health, HALF_HEALTH), hungry: atMost(world.food, HUNGRY),
@@ -254,12 +254,12 @@ export function minecraftSituation(observation: BodyObservation | null, pace: Mi
 }
 
 /** The owner's order now (its lines and its name), and the wood short of the step 「木材」. */
-function stepNow(observation: BodyObservation | null, world: Record<string, unknown>, items: ItemCounts, dimension: string, netherReached: boolean,
-  elapsedSeconds?: number)
+function stepNow(observation: BodyObservation | null, world: Record<string, unknown>, items: ItemCounts, dimension: string, pace: MinecraftPaceFacts)
   : Pick<MinecraftSituation, 'milestone' | 'milestoneName' | 'woodShort' | 'bedLead'> {
-  const facts = { counts: items, dimension, netherReached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' };
+  const facts = { counts: items, dimension, netherReached: pace.milestones?.netherReached === true, bedDeferred: pace.bedDeferred === true,
+    bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string' };
   const bedless = dimension === 'overworld' && !facts.bedPlaced && countMatching(items, BED_ITEM) === 0;
-  return { milestone: observation ? milestoneLines(facts, elapsedSeconds) : [], milestoneName: observation ? milestoneNow(facts).now.name : null,
+  return { milestone: observation ? milestoneLines(facts, pace.elapsedSeconds) : [], milestoneName: observation ? milestoneNow(facts).now.name : null,
     woodShort: dimension === 'overworld' && countMatching(items, /_log$/u) * 4 + countMatching(items, /_planks$/u) < WOOD_PLANKS,
     bedLead: bedless ? bedLead(world) : null };
 }

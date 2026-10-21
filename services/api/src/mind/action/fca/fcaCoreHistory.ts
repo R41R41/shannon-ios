@@ -85,8 +85,16 @@ function staleness(pin: FcaCorePin, current: FcaCorePin, catalog: readonly FcaTo
   // it is turned away as not offered. Pinning again would pin a core without the body.
   const bodyHere = current.tools.some(tool => tool.domain === 'minecraft_body' && tool.name !== 'minecraft.observe');
   if (!bodyHere) return null;
-  if (pin.hash !== current.hash) return 'definitions_changed';
+  // mb-r23 (run 23: 83 core tools at the first decision, 78 at the fifth, a summary of 6.2 s and a rewrite of 44.7k cached tokens at d5): a
+  // catalog that only lost tools leaves the pinned set valid. A call to a tool gone is turned away as not offered (`FCA_BODY_TOOL_ABSENT`),
+  // and the epoch goes on with its cache; a tool changed or added still ends the epoch.
+  if (pin.hash !== current.hash && !onlyLost(pin, current)) return 'definitions_changed';
   return conflictingProviderNames(pin, catalog).length ? 'name_conflict' : null;
+}
+/** Whether every core tool of the catalog is in the pin as it is (the catalog only lost tools; none is new or changed). */
+export function onlyLost(pin: FcaCorePin, current: FcaCorePin): boolean {
+  const pinned = new Map(pin.tools.map(tool => [tool.name, JSON.stringify(tool)]));
+  return current.tools.every(tool => pinned.get(tool.name) === JSON.stringify(tool));
 }
 /**
  * The provider names a catalog tool shares with a pinned core tool of another name that the catalog no longer has: pinning again

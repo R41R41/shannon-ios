@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import { WORKING_ARBITER_V0, arbitrate, cutNote, runningLine, workingEventLines,
   type ArbiterVerdict, type RunningWork, type WorkingEventLog, type WorkingNeed } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { EDIBLE_FOOD, carriedItemCounts, countMatching } from './minecraftItems.js';
+import { FOOD_STOCK } from './minecraftStage.js';
+
+/** A placed bed this many blocks above or below her is not "in reach" (a basement or a roof: the way there is rock or a climb, not a walk). */
+export const BED_HEIGHT_REACH = 12;
 
 /**
  * The Minecraft side of the arbiter (session mb-arch, stage 1; `SHANNON_MINECRAFT_WORKING_EVENTS`). The body tells, while a command
@@ -116,10 +121,18 @@ function frameNeed(item: unknown, at: string): (WorkingNeed & { distance: number
  * restart or a new connection, and with whether each can still be got at. The events only say what changed, for the decision's lines.
  */
 export function minecraftFrameNeeds(observation: BodyObservation | null): WorkingNeed[] {
-  const world = observation ? (observation.state as { world?: { nearbyNeeds?: unknown; rememberedPlaces?: unknown } }).world : undefined;
+  type World = { nearbyNeeds?: unknown; rememberedPlaces?: unknown; position?: unknown };
+  const world = observation ? (observation.state as { world?: World }).world : undefined;
   const list = Array.isArray(world?.nearbyNeeds) ? (world!.nearbyNeeds as unknown[]).slice(0, 16) : [];
   const own = respawnCell(world?.rememberedPlaces);
+  // mb-r23 (run 23): no food animal is offered while the pack holds the stock (the opening's procedure stops hunting there, and the planner
+  // chased a cow and chickens for 18 s on the line "attack-continuously で寄って取れる"); a bed far above or below her stands in rock or on a roof.
+  const food = observation ? countMatching(carriedItemCounts(world as Record<string, unknown>, observation.facts), EDIBLE_FOOD) : 0;
+  const height = typeof (world?.position as { y?: unknown } | undefined)?.y === 'number' ? (world!.position as { y: number }).y : null;
   return list.flatMap(item => frameNeed(item, observation!.stateAt) ?? [])
+    .filter(need => !(need.need === 'food' && food >= FOOD_STOCK))
+    .map(need => need.need === 'bed' && height !== null && typeof need.data.y === 'number' && Math.abs(need.data.y - height) > BED_HEIGHT_REACH
+      ? { ...need, canReach: false } : need)
     // The bed she slept in and left standing is her respawn point, not a bed to take (mb-r20: the procedures leave it where it stands).
     .filter(need => !(own && need.need === 'bed' && typeof need.data.x === 'number' && typeof need.data.y === 'number' && typeof need.data.z === 'number'
       && Math.hypot(need.data.x - own.x, need.data.z - own.z) <= 3 && Math.abs(need.data.y - own.y) <= 2))

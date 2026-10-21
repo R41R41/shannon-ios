@@ -24,6 +24,8 @@ import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './min
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
 import { createPaceLedger } from './minecraftPaceLedger.js';
+import { withFailureReview } from './minecraftFailureReview.js';
+import { bedDeferredNow } from './minecraftProcedureTool.js';
 import { minecraftTransientBody } from './minecraftTransientBody.js';
 import { storedBodyResult } from './minecraftStoredResult.js';
 import { minecraftRecallCues } from './minecraftRecallCues.js';
@@ -370,9 +372,11 @@ export function createMinecraftTaskBody(parts: {
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
       const observation = live() && bound() ? control.observe(bound()!) : null;
-      const pace = minecraftPace(step, recentResults, now(), milestones, idleWaitMs);
+      // From three failed steps in a row the decision looks back before it acts, and before the task may stop (`minecraftFailureReview.ts`).
+      const pace = withFailureReview(minecraftPace(step, recentResults, now(), milestones, idleWaitMs), recentResults);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
       const situation = routePlan.situate(follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation),
+        bedDeferred: bedDeferredNow(step.taskId, observation),
         elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) })), observation?.state.world);
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
