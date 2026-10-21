@@ -5,8 +5,9 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
   ACT_DESCRIPTION, ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, LLMC_READ_SKILLS, MC_ACT_SKILL, MC_ACT_TOOL,
-  MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActResult,
+  MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
+import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { validSkillInput } from './minecraftControlValidation.js';
 
 /**
@@ -38,24 +39,48 @@ export function llmcSchema(name: string): Readonly<Record<string, unknown>> | un
   return name === MC_ACT_TOOL ? ACT_INPUT_SCHEMA : name === MC_VIEW_TOOL ? VIEW_INPUT_SCHEMA : undefined;
 }
 
-/** Why an input is refused before the body sees it (the schema, then each hand's fields), or null. */
+/**
+ * Why an input is refused before the body sees it, or null: where it leaves the schema (`schemaProblem`: the field, what it must be,
+ * what it is), then each hand's fields (`actProblem`). One line, so the next decision can mend exactly that.
+ */
 export function llmcInputProblem(name: string, input: unknown): string | null {
   const schema = llmcSchema(name);
   if (!schema) return null;
-  if (!validSkillInput(input, schema)) return '引数が mc の形に合わない（手は do と、その手の欄だけ）。';
+  if (!validSkillInput(input, schema)) return `引数が ${name} の形に合わない: ${schemaProblem(input, schema) ?? '形が違う'}`;
   return name === MC_ACT_TOOL ? actProblem(input as ActInput) : null;
 }
 
-/** How long the body runs it and how long the head waits for its receipt. */
-export function llmcMilliseconds(name: string, input: unknown): number {
-  return name === MC_ACT_TOOL ? actMilliseconds(input as ActInput) + COMMAND_MARGIN_MS : VIEW_MS;
+/**
+ * An input made ready for the body: put into the contract's shape where what the model meant is plain (`normalizeActInput`; a view's
+ * `only` as a list), then checked. `fixes` are said in the result the model reads.
+ */
+export function llmcPrepare(name: string, input: unknown): { input: unknown; fixes: string[]; problem: string | null } {
+  let prepared = input, fixes: string[] = [];
+  if (name === MC_ACT_TOOL) ({ input: prepared, fixes } = normalizeActInput(input));
+  else if (name === MC_VIEW_TOOL && typeof (input as { only?: unknown } | null)?.only === 'string') {
+    prepared = { ...(input as object), only: [(input as { only: string }).only] };
+    fixes = ['only を配列にした'];
+  }
+  return { input: prepared, fixes, problem: llmcInputProblem(name, prepared) };
+}
+
+/** How long the body runs it and how long the head waits for its receipt (`from`: her feet now, for the walks' lengths). */
+export function llmcMilliseconds(name: string, input: unknown, from: ActPos | null = null): number {
+  return name === MC_ACT_TOOL ? actMilliseconds(input as ActInput, from) + COMMAND_MARGIN_MS : VIEW_MS;
+}
+/** Her feet in a frame, or null. */
+export function feetOf(observation: BodyObservation | null): ActPos | null {
+  const at = (observation?.state.world as { position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined)?.position;
+  return at && [at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isFinite(value))
+    ? { x: at.x as number, y: at.y as number, z: at.z as number } : null;
 }
 
 /** An act's result in the lines the model reads (no map: the live state carries the newest one). */
 export function actResultText(result: ActResult): string {
   const head = result.ok ? `act 全部済み（${result.done}/${result.of}、${(result.ms / 1000).toFixed(1)}秒）`
     : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
-  const lines = result.lines.map(line => `${line.i} ${line.do} ${line.status === 'done' ? '済' : line.status === 'stopped' ? '止' : '未'} ${line.line}`);
+  const lines = result.lines.flatMap(line => [`${line.i} ${line.do} ${line.status === 'done' ? '済' : line.status === 'stopped' ? '止' : '未'} ${line.line}`,
+    ...(line.status === 'stopped' && line.around ? [`  周り（上の層から、北が上・西が左）${line.around.slice(0, 160)}`] : [])]);
   const extras = [
     `今 (${result.at.x},${result.at.y},${result.at.z}) 体力${result.hp} 満腹${result.food}`,
     ...(result.eye ? [`アイ: (${result.eye.from.x},${result.eye.from.z}) から方位 ${result.eye.bearingDeg}° に ${result.eye.flew} 飛んだ`
@@ -67,9 +92,10 @@ export function actResultText(result: ActResult): string {
   return [head, ...lines, ...extras].join('\n');
 }
 
-/** The tool result of an act or a view from the body's receipt. */
-export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null): ToolResult {
-  return name === MC_VIEW_TOOL ? viewResult(receipt) : actResult(receipt, urgent);
+/** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */
+export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = []): ToolResult {
+  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : actResult(receipt, urgent);
+  return fixes.length ? { ...result, text: `（頭が形を直して送った: ${fixes.join('、')}）\n${result.text}` } : result;
 }
 function viewResult(receipt: MinecraftControlReceipt): ToolResult {
   const view = readViewResult(receipt.result);
@@ -129,12 +155,21 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   return { signal: controller.signal, reason: () => reason, stop };
 }
 
-/** An act whose hands take long enough that the next decision is asked while it runs. */
-export function llmcLongCall(call: Pick<FcaToolCall, 'name' | 'input'>): boolean {
+/** An act whose hands take long enough that the next decision is asked while it runs (`from`: her feet now, for the walks). */
+export function llmcLongCall(call: Pick<FcaToolCall, 'name' | 'input'>, from: ActPos | null = null): boolean {
   if (call.name !== MC_ACT_TOOL || !call.input || typeof call.input !== 'object') return false;
-  try { return actExpectedMilliseconds(call.input as ActInput) >= LLMC_LOOKAHEAD_MS; } catch { return false; }
+  try { return actExpectedMilliseconds(normalizeActInput(call.input).input as ActInput, from) >= LLMC_LOOKAHEAD_MS; } catch { return false; }
+}
+/** Each task's way to read her feet now (set by the task's step parts), for a walk's length in the lookahead. */
+const feetOfTask = new Map<string, () => ActPos | null>();
+export function noteLlmcFeet(taskId: string, read: () => ActPos | null): void {
+  feetOfTask.delete(taskId);
+  feetOfTask.set(taskId, read);
+  if (feetOfTask.size > 32) feetOfTask.delete(feetOfTask.keys().next().value as string);
 }
 /** The mode's lookahead: no agenda acts between the steps, so a decision asked ahead is fresh while the step's history is. */
 export function createLlmcLookahead(log: (line: string) => void): FcaLookahead {
-  return createFcaLookahead({ wanted: llmcLongCall, log });
+  return createFcaLookahead({ wanted: (call, taskId) => { let from: ActPos | null = null;
+    try { from = feetOfTask.get(taskId)?.() ?? null; } catch { /* unknown: a walk counts its default length */ }
+    return llmcLongCall(call, from); }, log });
 }

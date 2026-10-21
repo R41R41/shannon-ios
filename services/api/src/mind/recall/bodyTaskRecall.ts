@@ -177,14 +177,22 @@ export function createBodyTaskRecall(parts: {
   const keyOf = (scopeKey: string, taskId: string) => `${scopeKey}\u0000${taskId}`;
   const cancel = (scopeKey: string, taskId: string) => { pools.delete(keyOf(scopeKey, taskId)); };
 
-  function build(input: Search): Pool {
-    const shared = parts.memory.readSnapshot?.(input.scopeKey);
+  async function build(input: Search): Promise<Pool> {
     // No provenance: the pool only picks records, and what is shown is read again with its sources (`shownOf`). Listing the whole lineage of
     // up to 1,200 candidates, three times, was 3.0 s of the API's thread at the first decision of run 23 (poolMs 3,029; mb-r23).
-    const search = (query: string) => parts.memory.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared,
-      { provenance: false });
-    const work = () => [search(input.goal), search(`マイクラ ${input.goal}`), search('ゲームの記憶 マイクラ')];
-    const lists = shared ? shared.withholding.withReadSnapshot(work) : work();
+    // Run 27 (2026-10-22): the three searches in one go still held the thread 3.1 s (poolMs 3,076, the event loop blocked 4,960 ms at the
+    // first recall); each search now runs on its own turn of the loop (its own read snapshot), so the body's frames and the other requests
+    // get through between them.
+    const lists: TaskMemoryItem[][] = [];
+    let shared: ReturnType<NonNullable<TaskMemory['readSnapshot']>> | undefined;
+    for (const query of [input.goal, `マイクラ ${input.goal}`, 'ゲームの記憶 マイクラ']) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      input.signal?.throwIfAborted();
+      shared = parts.memory.readSnapshot?.(input.scopeKey);
+      const search = () => parts.memory.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared,
+        { provenance: false });
+      lists.push(shared ? shared.withholding.withReadSnapshot(search) : search());
+    }
     // A search that came back full may have left more of the same record out: its counts are lower bounds ("×N+").
     const pool: Pool = { groups: [], size: 0, builtAt: clock(), decisions: 0,
       capped: lists.some(list => list.length >= BODY_RECALL.poolSearch) };
@@ -207,12 +215,12 @@ export function createBodyTaskRecall(parts: {
   }
 
   /** The pool of this task, made again when it is old. */
-  function poolFor(input: Search & { taskId: string }, measure: BodyRecallMeasure): Pool {
+  async function poolFor(input: Search & { taskId: string }, measure: BodyRecallMeasure): Promise<Pool> {
     const key = keyOf(input.scopeKey, input.taskId);
     const held = pools.get(key);
     if (held && clock() - held.builtAt <= BODY_RECALL.poolMilliseconds && held.decisions < BODY_RECALL.poolDecisions) return held;
     const started = clock();
-    const pool = build(input);
+    const pool = await build(input);
     measure.poolMs = Math.round(clock() - started);
     pools.set(key, pool);
     if (pools.size > 64) pools.delete(pools.keys().next().value!);
@@ -277,7 +285,9 @@ export function createBodyTaskRecall(parts: {
       }
       let items: TaskMemoryItem[], sources: readonly string[];
       try {
-        const pool = poolFor(input, measure);
+        const pool = await poolFor(input, measure);
+        // The read of what is shown (with its sources) on a turn of its own too.
+        await new Promise<void>(resolve => setImmediate(resolve));
         pool.decisions += 1;
         Object.assign(measure, { pool: pool.size, groups: pool.groups.length });
         const ranked = scored(pool.groups, input.cues);

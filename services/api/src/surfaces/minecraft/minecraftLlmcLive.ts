@@ -1,6 +1,5 @@
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
-import { estimatedAnthropicTokens } from '../../infra/models/anthropic/anthropicFcaHistory.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 
@@ -8,15 +7,37 @@ import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
  * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the map first, then what is
  * off it (landmarks), the recent stops, her state, her food in points, the pack, what is near, and what happened since the last decision.
  * Everything else the old live state carried (skill pointers and gists, milestone and route lines, phase facts, the pace ledger) is
- * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part together), by leaving out
- * the farther entities, then the later landmarks, then the pack's tail; the map is never cut.
+ * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part together): the map first and
+ * never cut, then the rest cut in the order of `SHRINK` (the farther creatures, the pack's tail, the later landmarks, …).
  *
- * Token estimate: the map is counted at `MAP_CHARS_PER_TOKEN` (one symbol and a space a cell, about one token a cell; calibrate with
- * `scripts/minecraft-llmc-count.ts`, which asks the provider's count_tokens), the rest by `estimatedAnthropicTokens`.
+ * Token count: `llmcTokens`, fitted to the provider's count_tokens (scene replay r2, 2026-10-22: 149 texts of six scenes' live states,
+ * maps, layers and parts, and probes of each map symbol; `services/api/scripts/minecraft-llmc-scene.ts --count` measures it again).
+ * The first estimate (a map at 1.8 characters a token, the rest by `estimatedAnthropicTokens`) counted 10–48% short: water (`~ `) was
+ * three tokens a cell, `; @ ! $` two, a letter one; so the map now writes water `w` and sand and gravel `s` (minecraftActContract.ts).
  */
 export const LLMC_LIVE_TOKENS = 3_000;
-export const MAP_CHARS_PER_TOKEN = 1.8;
 const THREATS = 8, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 36, EVENTS = 6;
+
+/**
+ * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
+ * 1.4, a digit 0.67, a space 0.43, a line break (or its JSON escape) 3.2, any other 0.48; with 8% to spare (the fit was within −6%…+4%
+ * of the count on the scenes, and −13% on a plan path).
+ */
+export function llmcTokens(text: string): number {
+  let wide = 0, tilde = 0, heavy = 0, digits = 0, spaces = 0, breaks = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0)!;
+    if (code > 0x7f) wide += 1;
+    else if (character === '~') tilde += 1;
+    else if (character === ';' || character === '@' || character === '!' || character === '$') heavy += 1;
+    else if (code >= 48 && code <= 57) digits += 1;
+    else if (character === ' ') spaces += 1;
+    else if (character === '\n') breaks += 1;
+  }
+  breaks += text.split('\\n').length - 1;
+  const other = [...text].length - wide - tilde - heavy - digits - spaces - breaks;
+  return Math.ceil(1.08 * (wide * 1.25 + tilde * 2.45 + heavy * 1.4 + digits * 0.67 + spaces * 0.43 + breaks * 3.2 + Math.max(0, other) * 0.48));
+}
 
 /** Food points of one item (hunger + saturation it restores), design 1.6. */
 export const FOOD_POINTS: Readonly<Record<string, number>> = Object.freeze({
@@ -142,23 +163,44 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   return fitLive(live, planTokens);
 }
 
-/** The estimated tokens of a live body (the map at `MAP_CHARS_PER_TOKEN`). */
+/** The tokens of a live body as the decision sends it (its JSON). */
 export function llmcLiveTokens(live: Record<string, unknown>): number {
-  const map = typeof live.map === 'string' ? live.map : '';
-  return Math.ceil(map.length / MAP_CHARS_PER_TOKEN) + estimatedAnthropicTokens({ ...live, map: '' });
+  return llmcTokens(JSON.stringify(live));
 }
+/** The tokens of the plan's path as the decision reads it (counted against the same bound). */
+export function llmcPlanTokens(plan: unknown): number {
+  return plan ? llmcTokens(JSON.stringify(plan)) : 0;
+}
+
+/**
+ * What is cut, in order, until the live body fits (the map is never cut; it comes first): a list kept to its first `keep` lines, or
+ * (keep -1) a field left out. The farther creatures go first, the landmarks and the pack last: the furnace seven up and the stone to
+ * craft with are what a decision needs most.
+ */
+const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2],
+  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['food.items', -1], ['jobs', -1], ['inventory', 10], ['landmarks', 3],
+  ['threats', 2], ['stops', 1], ['events', 1],
+  // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
+  ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
 
 /** Leaves out the parts that matter least until the live body fits beside the plan. */
 function fitLive(live: Record<string, unknown>, planTokens: number): Record<string, unknown> {
-  const out = { ...live };
+  const out: Record<string, unknown> = { ...live };
   const budget = LLMC_LIVE_TOKENS - planTokens;
-  const shrink: Array<[string, number]> = [['near', 3], ['landmarks', 6], ['inventory', 20], ['threats', 4], ['stops', 2], ['near', 0],
-    ['landmarks', 3], ['inventory', 12]];
-  for (const [key, keep] of shrink) {
+  for (const [key, keep] of SHRINK) {
     if (llmcLiveTokens(out) <= budget) break;
-    if (Array.isArray(out[key]) && (out[key] as unknown[]).length > keep) {
-      const list = out[key] as unknown[];
-      out[key] = [...list.slice(0, keep), `ほか${list.length - keep}件（長いため略）`];
+    if (key === 'food.items') {
+      const food = out.food as Record<string, unknown> | undefined;
+      if (food && 'items' in food) out.food = Object.fromEntries(Object.entries(food).filter(([name]) => name !== 'items'));
+      continue;
+    }
+    if (keep < 0) {
+      delete out[key];
+      continue;
+    }
+    const whole = live[key];
+    if (Array.isArray(whole) && whole.length > keep && Array.isArray(out[key])) {
+      out[key] = [...whole.slice(0, keep), `ほか${whole.length - keep}件（長いため略）`];
     }
   }
   return out;

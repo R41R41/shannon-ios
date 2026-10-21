@@ -123,6 +123,11 @@ export interface ActHandLine {
   line: string;
   /** stopped: the block or point where it stopped, when there is one. */
   where?: ActPos;
+  /**
+   * stopped with `where`: the 3×3×3 round it in the map's symbols (r2, 2026-10-22), the top layer first, rows north to south and cells
+   * west to east, the middle cell `where` itself: `x=200..202 z=276..278 y=49: #.#/#.#/### y=48: … y=47: …`. At most 120 characters.
+   */
+  around?: string;
 }
 /** `use` of an ender eye thrown (not put in a frame): which way it flew and how far. */
 export interface EnderEyeFlight {
@@ -208,28 +213,37 @@ export interface LlmCentricWorld {
  *   270 # # # # # # # # # # # # # # #
  *   …
  *   y=45
- *   277 # # # ~ . . @ * * # # # # # #
+ *   277 # # # w . . @ * * # # # # # #
  *
  * - Columns are x (west on the left), rows are z (north on top); the header row gives each column's last digit of x, and every row
  *   starts with its whole z. One cell is one symbol and a space.
- * - layers (underground, or no sky above her): 15×15 (±7), y from feet −2 to feet +2.
+ * - layers (underground, or no sky above her): y from feet −2 to feet +2; feet −1 … +1 at 15×15 (±7), feet ±2 at 11×11 (±5), a
+ *   narrower layer's line naming its range (`y=47 x=196..206 z=272..282`). Where a hostile's feet or a spawner is 3–6 above her within
+ *   ±5, the layer of the lowest one and the one over it (11×11) come first (r2, 2026-10-22: run 26's blazes and spawner were 3–4 up,
+ *   off the map; the outer layers went to 11×11 for the tokens: the map was about 2,000, twice the design).
  * - surface (sky above her): `方式=surface`: one 21×21 grid (±10) of the top block with its height against her feet as a second
- *   character (cell = symbol + height + space: `#0 :1 ~a`), then the 3 layers feet −1 … +1 at 11×11 (±5) as in layers.
+ *   character (cell = symbol + height + space: `#0 :1 wa`), then the 3 layers feet −1 … +1 at 11×11 (±5) as in layers.
  *   Height: 0–9 that many above her feet, + ten or more above, a–i one to nine below, v ten or more below.
+ * - Last, in both, her column (`縦`, r2): from the head's cell up and from the cell under her feet down, at most 4 runs of one symbol
+ *   within 16 cells, `…` when it goes on: `縦 (201,277) 上: y=46〜53 .×8 / y=54〜61 #×8 …` (run 25: the furnace seven up a shaft).
+ * - Water a source is `w`, sand and gravel `s`, crops `k` (r2, 2026-10-22: count_tokens put `~ ` at three tokens a cell and `; ` at two,
+ *   a letter at one; a map of a lake was half again as long).
  * - `@` is her feet in its own layer; a hostile's feet `!`, an animal's `m` (in an air cell only); `*` an air cell she walked in the last
  *   60 s. A lowercase/uppercase symbol is not interchangeable.
  */
 export const MAP_LEGEND = [
   '地図の記号（1字。地図は上が北・左が西。行の頭は z、列の見出しは x の下 1 桁）:',
   '@ 自分の足 / ! 敵の足 / m 動物の足 / * 60秒以内に歩いた空気 / . 空気 / , 通れる草花・雪 / ? 未ロード / X 掘れない（岩盤・バリア）',
-  '# 石の類（石・深層岩・安山岩・閃緑岩・花崗岩・凝灰岩・丸石・石レンガ）/ : 土・草・雪・粘土 / ; 砂・砂利 / I 氷',
-  '~ 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / f 火 / x クモの巣',
+  '# 石の類（石・深層岩・安山岩・閃緑岩・花崗岩・凝灰岩・丸石・石レンガ）/ : 土・草・雪・粘土 / s 砂・砂利 / I 氷',
+  'w 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / f 火 / x クモの巣',
   'i 鉄 / c 石炭 / d ダイヤ / g 金 / r レッドストーン / o ほかの鉱石（銅・ラピス・エメラルド・石英・古代の残骸）',
   'W 原木（ネザーの幹も）/ % 葉・ネザーの葉ブロック / P 板・木の建物 / D 扉 / + 柵・壁・鉄格子・ガラス / h はしご・つた / t 松明 / = レール',
-  'F かまど（溶鉱炉・燻製器も）/ T 作業台 / C チェスト・樽 / B ベッド / H 干し草 / w 畑の作物（ネザーウォートも）/ S スポナー',
+  'F かまど（溶鉱炉・燻製器も）/ T 作業台 / C チェスト・樽 / B ベッド / H 干し草 / k 畑の作物（ネザーウォートも）/ S スポナー',
   'O 黒曜石（泣く黒曜石も）/ p ネザーポータル / n ネザーラック / u ソウルサンド・ソウルソイル / N ネザーレンガ（要塞）/ M マグマ / G グロウストーン',
   'E エンドストーン / Q エンドポータルの枠（空）/ R 枠（アイ入り）/ e エンドポータル・エンドゲートウェイ / $ ほかの固いブロック',
   '方式=surface のマスは「記号＋高さ」: 0〜9 は足より上、+ は10以上上、a〜i は1〜9下、v は10以上下。',
+  '方式=layers の層: 足 −1〜+1 は 15×15、足 ±2 は 11×11（「y=47 x=196..206 z=272..282」のように範囲を書く）。足の 3〜6 上に敵（!）かスポナー（S）があれば、その高さの層（11×11）を一番上に足す。',
+  '縦: 足の列の上（頭のマスから上へ）と下（足の下のマスから下へ）を、同じ記号の続きでまとめる。「上: y=46〜51 .×6 / y=52 #」は頭から空気が 6 段、その上が石。… はその先も続く。',
 ].join('\n');
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
@@ -245,6 +259,9 @@ export const ACT_DESCRIPTION = [
     + 'shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
     + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30)。',
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
+  '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
+  'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',
+  'use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石 1 枚の向こうの水は、その石を dig してから use bucket）。',
   'stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。',
   'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
@@ -351,6 +368,11 @@ const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly string[
   wait: { needs: [['seconds']], may: [] },
 };
 const COMMON = new Set(['do', 'rel', 'note']);
+/** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */
+export function handFieldNames(kind: HandKind): string[] {
+  const fields = HAND_FIELDS[kind];
+  return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note'] : [];
+}
 const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot', 'drop']);
 
 /** What is wrong with an act's hands beyond the schema (a field a kind does not take, a missing one), or null. Closed words, Japanese. */
@@ -367,7 +389,7 @@ function handProblem(hand: ActHand): string | null {
   if (!fields) return 'do が分からない';
   const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
   const extra = Object.keys(hand).filter(key => !allowed.has(key));
-  if (extra.length) return `${extra.join('・')} は使えない`;
+  if (extra.length) return `${extra.join('・')} は使えない（${hand.do} の欄: ${handFieldNames(hand.do).join('・')}）`;
   const missing = fields.needs.find(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
   if (missing) return `${missing.join(' か ')} が要る`;
   if (ONE_AT.has(hand.do) && hand.at && hand.at.length !== 1) return 'at は 1 つ';
@@ -397,25 +419,57 @@ export function readViewResult(text: string | undefined): ViewResult | null {
   } catch { return null; }
 }
 
-/** How long an act may run on the body: the sum of each hand's ceiling, within 5 s and 120 s (the command's deadline adds its own margin). */
-type HandTime = (hand: ActHand) => number;
+/**
+ * The time of each hand, from what it is asked (r2, 2026-10-22; run 27: a walk of 80 m west had a ceiling of 11.6 s whatever its length,
+ * and 4 of the first 5 acts were cut at their deadline; its 2.4 s guess never asked the next decision ahead):
+ * - walk: the way's length from where she will stand when it begins (her feet, then each hand's end) through `path` or to `to`,
+ *   across and up; typical at 4.3 m/s, the ceiling at half that (a way round) plus 3 s; 32 m when where she stands is not known;
+ * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
+ */
+const WALK_MPS = 4.3, SPRINT_MPS = 5.6, UNKNOWN_WALK_M = 32;
+/** The longest act (the body's own bound is 180 s; the command adds its margin). */
+export const ACT_MAX_MS = 170_000;
+type HandTime = (hand: ActHand, metres: number) => number;
 const cells = (hand: ActHand) => hand.at?.length ?? 1, times = (hand: ActHand) => hand.n ?? 1;
+const walkMs = (hand: ActHand, metres: number) => 1_000 * metres / (hand.sprint ? SPRINT_MPS : WALK_MPS);
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
-  walk: hand => 2_000 + 400 * (hand.path?.length ?? 24), dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
+  walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
-  pickup: () => 6_000, use: () => 4_000,
+  pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: () => 4_000, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
+  jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
-  walk: hand => 300 * (hand.path?.length ?? 8), dig: hand => 700 * cells(hand), pillarUp: hand => 600 * times(hand),
-  attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1), eat: () => 1_600,
-  pickup: () => 2_000, use: () => 1_000, shoot: hand => 1_200 * times(hand),
+  walk: (hand, metres) => 500 + walkMs(hand, metres), dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
+  pillarUp: hand => 600 * times(hand), attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1),
+  eat: () => 1_700, pickup: hand => 1_000 + 300 * (hand.range ?? 6), use: () => 1_000, shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
+  craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: () => 1_200,
+  equip: () => 300, look: () => 200, sneak: () => 200, drop: hand => 300 * (hand.items?.length ?? 1),
 };
-export function actMilliseconds(input: ActInput): number {
-  const total = input.hands.reduce((sum, hand) => sum + (CEILING_MS[hand.do]?.(hand) ?? 2_000), 0);
-  return Math.max(5_000, Math.min(120_000, total));
+const distance = (from: ActPos, to: ActPos) => Math.hypot(to.x - from.x, to.z - from.z) + Math.abs(to.y - from.y);
+/** Each hand with the metres it walks: from `from` (her feet when the act begins), each hand starting where the one before ended. */
+function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand; metres: number }> {
+  let at: ActPos | null = from ? { x: Math.floor(from.x), y: Math.floor(from.y), z: Math.floor(from.z) } : null;
+  return input.hands.map(hand => {
+    if (hand.do === 'pillarUp' && at) at = { ...at, y: at.y + times(hand) };
+    if (hand.do !== 'walk') return { hand, metres: 0 };
+    const points = (hand.path?.length ? hand.path : hand.to ? [hand.to] : []).map(point => hand.rel && at
+      ? { x: at.x + point.x, y: at.y + point.y, z: at.z + point.z } : point);
+    if (!points.length) return { hand, metres: 0 };
+    let metres = 0;
+    if (hand.rel && !at) metres = points.reduce((sum, point, index) => sum + distance(index ? points[index - 1]! : { x: 0, y: 0, z: 0 }, point), 0);
+    else if (!at) metres = UNKNOWN_WALK_M + points.slice(1).reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
+    else metres = points.reduce((sum, point, index) => sum + distance(index ? points[index - 1]! : at!, point), 0);
+    at = hand.rel && !at ? null : points[points.length - 1]!;
+    return { hand, metres };
+  });
+}
+/** How long an act may run on the body: the sum of each hand's ceiling, within 5 s and `ACT_MAX_MS` (the command adds its own margin). */
+export function actMilliseconds(input: ActInput, from: ActPos | null = null): number {
+  const total = handMetres(input, from).reduce((sum, { hand, metres }) => sum + (CEILING_MS[hand.do]?.(hand, metres) ?? 2_000), 0);
+  return Math.round(Math.max(5_000, Math.min(ACT_MAX_MS, total)));
 }
 /** How long an act is likely to take (for asking the next decision while it runs). */
-export function actExpectedMilliseconds(input: ActInput): number {
-  return input.hands.reduce((sum, hand) => sum + (TYPICAL_MS[hand.do]?.(hand) ?? 400), 0);
+export function actExpectedMilliseconds(input: ActInput, from: ActPos | null = null): number {
+  return Math.round(handMetres(input, from).reduce((sum, { hand, metres }) => sum + (TYPICAL_MS[hand.do]?.(hand, metres) ?? 400), 0));
 }

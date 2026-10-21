@@ -24,7 +24,7 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 const move = (): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'move', name: 'mc.move', input: {} }] }, history: [{ role: 'assistant', call: 'move' }] });
 const wait = (): FcaModelOutput => ({ decision: { kind: 'wait', summary: 'Current observation checked' }, history: [{ role: 'assistant', text: 'wait' }] });
-function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean; logs?: string[]; retryDelay?: number } = {}) {
+function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | FcaModelOutput, options: { unknownStop?: boolean; unknownRelease?: boolean; holdSkill?: boolean; denyEntry?: boolean; sessionMilliseconds?: number; onStopAcknowledged?(): void; noImage?: boolean; spawnGraceMilliseconds?: number; evidence?: boolean; dangerHealth?: number; choose?: 'action' | 'return' | 'hold'; fast?: boolean; llmc?: boolean; logs?: string[]; retryDelay?: number } = {}) {
   let clock = Date.parse('2026-10-09T00:00:00.000Z'), sequence = 0, danger = false, sourcesVisible = true, sourceChecks = 0;
   let extraFacts: Record<string, boolean> = options.noImage ? { imageAvailable: false } : {};
   let threatList: unknown[] = [];
@@ -93,7 +93,7 @@ function fixture(decide: (input: FcaModelInput) => Promise<FcaModelOutput> | Fca
     stepPorts(runtime, step) {
       // The mechanics below start right after login; the spawn grace has tests of its own (`spawnGraceMilliseconds`).
       const body = createMinecraftTaskBody({ control, runtime, step, evidence, now: () => clock, pollMilliseconds: 1, spawnGraceMilliseconds: options.spawnGraceMilliseconds ?? 0,
-        limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 }, fastJudgment: options.fast === true, log: line => { options.logs?.push(line); },
+        limits: { maxDurationMs: options.sessionMilliseconds ?? 20_000 }, fastJudgment: options.fast === true, log: line => { options.logs?.push(line); }, ...(options.llmc ? { llmc: { plan: () => ({ revision: 1, current: 'p1', nodes: [{ id: 'p1', parentId: null, title: '木', state: 'continue' as const }] }) } } : {}),
         ownerAlone: () => true, sourcesVisible: () => { sourceChecks += 1; return sourcesVisible; },
         entry: { async evaluate(input) { entryCalls += 1; return { sessionId: input.context.sessionId, generation: input.context.generation,
           decision: options.denyEntry ? 'continue' : 'enter', reason: 'danger' }; } },
@@ -298,6 +298,17 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     answer.resolve(wait()); await f.driver.drain();
   });
 
+  it('the LLM-centric mode starts no reflex session of the head: no stop, capture or release cuts her act (run 27)', async () => {
+    const answer = deferred<FcaModelOutput>();
+    const f = fixture(() => answer.promise, { llmc: true });
+    cleanups.push(async () => answer.resolve(wait()));
+    await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
+    f.danger(true);
+    for (let index = 0; index < 500 && f.entryCalls() === 0; index++) { f.pump(); await delay(1); }
+    expect(f.entryCalls()).toBe(0);
+    expect(f.commands.filter(command => ['stop', 'capture', 'release'].includes(command.kind))).toEqual([]);
+    answer.resolve(wait());
+  });
   it('with the fast judgment on, meets a zombie right after arrival by taking shelter: no stop, no picture, no image reflex (ADR-0011 stage 2)', async () => {
     const answer = deferred<FcaModelOutput>();
     const f = fixture(() => f.modelInputs.length === 1 ? answer.promise : wait(), { fast: true });

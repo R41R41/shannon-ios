@@ -17,7 +17,7 @@ import { firstPlanInbox, startFirstPlan } from '../surfaces/minecraft/minecraftF
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
-import { createLlmcLookahead } from '../surfaces/minecraft/minecraftLlmc.js';
+import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { LLMC_SYSTEM_APPENDIX } from '../surfaces/minecraft/minecraftKnowledge.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA } from '../surfaces/minecraft/minecraftFirstPlan.js';
@@ -128,6 +128,7 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
 export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
   const bodyId = () => control.store.body(step.taskId) ?? '';
   const observe = () => control.observe(bodyId());
+  noteLlmcFeet(step.taskId, () => feetOf(observe()));
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log });
   const world = observe()?.state.world;
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log,
@@ -159,7 +160,7 @@ function firstPlanner(values: Readonly<Record<string, string | undefined>>, mode
   if (!apiKey && !given) return {};
   const client = given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: FIRST_PLAN.giveUpMs });
   return { planner: async (system, input, signal) => {
-    const body = structuredBody(model, system, input, FIRST_PLAN_SCHEMA, 'medium', FIRST_PLAN.outputTokens);
+    const body = structuredBody(model, system, input, FIRST_PLAN_SCHEMA, 'low', FIRST_PLAN.outputTokens);
     const began = Date.now();
     let message: Anthropic.Message;
     try { message = await client.messages.create(body, { signal }); } catch (error) {

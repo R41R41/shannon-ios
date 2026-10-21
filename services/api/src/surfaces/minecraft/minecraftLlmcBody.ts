@@ -1,7 +1,6 @@
 import type { BodyObservation, BodyPlanView, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
-import { estimatedAnthropicTokens } from '../../infra/models/anthropic/anthropicFcaHistory.js';
-import { createFoodTrend, minecraftLlmcLive, type FoodTrend } from './minecraftLlmcLive.js';
+import { createFoodTrend, llmcPlanTokens, minecraftLlmcLive, type FoodTrend } from './minecraftLlmcLive.js';
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the task's plan (for the
@@ -72,7 +71,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
   return minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}) },
-    plan ? estimatedAnthropicTokens(plan) : 0);
+    llmcPlanTokens(plan));
 }
 
 /**

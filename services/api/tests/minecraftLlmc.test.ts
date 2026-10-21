@@ -71,9 +71,10 @@ describe('the contract (mc.act, mc.view)', () => {
     expect(llmcInputProblem(MC_ACT_TOOL, { hands: [{ do: 'fly' }] })).toContain('形に合わない');
   });
 
-  it('an act runs within its hands\' ceilings, 5 s to 120 s', () => {
+  it('an act runs within its hands\' ceilings, 5 s to 170 s (r2: the body\'s bound is 180 s)', () => {
     expect(actMilliseconds({ hands: [{ do: 'eat' }] })).toBe(5_000);
-    expect(actMilliseconds({ hands: [{ do: 'dig', at: Array.from({ length: 16 }, () => ({ x: 0, y: 0, z: 0 })) }] })).toBe(120_000);
+    expect(actMilliseconds({ hands: [{ do: 'dig', at: Array.from({ length: 16 }, () => ({ x: 0, y: 0, z: 0 })) }] })).toBe(160_000);
+    expect(actMilliseconds({ hands: Array.from({ length: 12 }, () => ({ do: 'dig' as const, at: Array.from({ length: 16 }, () => ({ x: 0, y: 0, z: 0 })) })) })).toBe(170_000);
   });
 });
 
@@ -175,10 +176,10 @@ describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens'
     expect(live.events).toEqual(['反射が mc.act を止めた']);
   });
 
-  it('a 15×15×5 map is counted at about 1,500 tokens (one a cell and its row heads, on the safe side until count_tokens calibrates it)', () => {
+  it('a 15×15×5 map of stone and air is counted at about 1,800 tokens (r2: count_tokens put such a map at 1,480–1,760)', () => {
     const tokens = llmcLiveTokens({ map: layersMap() });
-    expect(tokens).toBeGreaterThan(1_000);
-    expect(tokens).toBeLessThan(1_600);
+    expect(tokens).toBeGreaterThan(1_500);
+    expect(tokens).toBeLessThan(2_100);
   });
 
   it('food: points per item, and what went in the last five minutes', () => {

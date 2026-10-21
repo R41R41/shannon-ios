@@ -787,6 +787,7 @@
     "surfaces/minecraft/minecraftLlmc.ts",
     "surfaces/minecraft/minecraftLlmcBody.ts",
     "surfaces/minecraft/minecraftLlmcLive.ts",
+    "surfaces/minecraft/minecraftLlmcShape.ts",
     "surfaces/minecraft/minecraftLookahead.ts",
     "surfaces/minecraft/minecraftMapRead.ts",
     "surfaces/minecraft/minecraftMetricsState.ts",

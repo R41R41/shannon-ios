@@ -46,7 +46,7 @@ export interface FcaLookahead {
 }
 
 export function createFcaLookahead(options: {
-  wanted(call: FcaToolCall): boolean; now?: () => number; log?(line: string): void; maxAgeMs?: number; maxChain?: number; delayMs?: number;
+  wanted(call: FcaToolCall, taskId: string): boolean; now?: () => number; log?(line: string): void; maxAgeMs?: number; maxChain?: number; delayMs?: number;
   /** Whether nothing else acted for the task since `preparedAt` (the surface's executor). Absent: nothing else acts. */
   fresh?(taskId: string, preparedAt: number): boolean;
 }): FcaLookahead {
@@ -69,7 +69,7 @@ export function createFcaLookahead(options: {
   };
   return {
     delayMs: options.delayMs ?? FCA_LOOKAHEAD.delayMs,
-    wanted: (call, taskId) => (chains.get(taskId) ?? 0) < maxChain && options.wanted(call),
+    wanted: (call, taskId) => (chains.get(taskId) ?? 0) < maxChain && options.wanted(call, taskId),
     keep(prepared) {
       kept.set(prepared.taskId, prepared);
       if (kept.size > 32) kept.delete(kept.keys().next().value as string);

@@ -3,7 +3,7 @@ import type { FcaExternalTools, FcaToolDefinition } from '../mind/action/fca/fca
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { BodyPlanView, BodyTaskContext } from '../contracts/bodyControlContract.js';
 import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
-import { llmcBodyDefinitions, llmcInputProblem, llmcMilliseconds, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
+import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
@@ -66,11 +66,13 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const denied = authorizeToolCall(offered ?? null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!bodyId || !control.frame(bodyId)) return toolFailure('unavailable', 'マイクラの体の最新観測が届いていない。');
+    // The mode's own tools: put into shape where the model's meaning is plain, then checked field by field (r2: one line says where).
+    const prepared = parts.llmc && llmcSchema(call.name) ? llmcPrepare(call.name, call.input) : null;
+    if (prepared?.problem) return toolFailure('invalid_input', prepared.problem, { retryable: false });
+    if (prepared) call = { ...call, input: prepared.input as typeof call.input };
     const schema = call.name === 'minecraft.observe' ? EMPTY
       : (parts.llmc ? llmcSchema(call.name) : undefined) ?? skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;
     if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
-    const problem = parts.llmc ? llmcInputProblem(call.name, call.input) : null;
-    if (problem) return toolFailure('invalid_input', problem, { retryable: false });
     const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
     if (refused) return refused;
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
@@ -91,7 +93,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     }
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     if (parts.llmc && llmcSchema(call.name)) {
-      return runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan() });
+      return runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
     }
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
@@ -117,16 +119,18 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
  * act is watched for a hostile come near (`urgentWatch`), which cuts it and lets the next decision run at once.
  */
 async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; bodyId: string; id: string; skill: string;
-  call: Parameters<FcaExternalTools['execute']>[0]; active: NonNullable<ReturnType<typeof currentActionExecution>>; plan: BodyPlanView | undefined }) {
+  call: Parameters<FcaExternalTools['execute']>[0]; active: NonNullable<ReturnType<typeof currentActionExecution>>; plan: BodyPlanView | undefined;
+  fixes: readonly string[] }) {
   const { control, step, bodyId, call, active } = parts;
   const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal) : null;
   active.stepOutcome = 'unknown';
   try {
+    // An act's deadline from its hands, a walk's from its length from where she stands now (run 27: 80 m cut at 17 s).
+    const milliseconds = llmcMilliseconds(call.name, call.input, feetOf(control.observe(bodyId)));
     const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
-      kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds: llmcMilliseconds(call.name, call.input) },
-    watch?.signal ?? call.signal);
+      kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, watch?.signal ?? call.signal);
     active.stepOutcome = 'acknowledged';
-    return llmcResult(call.name, receipt, watch?.reason() ?? null);
+    return llmcResult(call.name, receipt, watch?.reason() ?? null, parts.fixes);
   } finally { watch?.stop(); }
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {

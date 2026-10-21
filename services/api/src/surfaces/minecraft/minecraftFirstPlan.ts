@@ -11,7 +11,13 @@ import { DRAGON_KNOWLEDGE, FOOD_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE } 
  * cave, the lava are). Its answer replaces the tree at the next read, the nodes already done carried over by title or `doneWhen`
  * (`FcaPlanInbox`); from then the plan is hers alone (`plan.update`).
  */
-export const FIRST_PLAN = Object.freeze({ inputCharacters: 6_000, giveUpMs: 120_000, outputTokens: 8_000 });
+/**
+ * Run 27 (2026-10-22): the first plan took 46 s and 5,221 output tokens for 54 nodes, each with a long where, doneWhen and note. The
+ * answer is now asked shorter (40 nodes, short fields, no note) at low effort: about half the tokens and the time. The 4.96 s the API's
+ * event loop was blocked just before it came back was not this answer (its parse is well under a millisecond) but the body recall's
+ * first pool (odyTaskRecall.ts, poolMs 3,076), now built over several turns of the loop.
+ */
+export const FIRST_PLAN = Object.freeze({ inputCharacters: 6_000, giveUpMs: 120_000, outputTokens: 6_000, nodes: 40 });
 
 type Goal = 'dragon' | 'nether' | null;
 /** What the goal asks the whole game for (the dragon, the End) or the way to the Nether; null: a goal of another kind (no seed). */
@@ -62,13 +68,13 @@ export const FIRST_PLAN_SCHEMA = Object.freeze({
   type: 'object', additionalProperties: false, required: ['nodes'],
   properties: { nodes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'parent', 'title', 'where', 'doneWhen'],
     properties: { id: { type: 'string' }, parent: { type: 'string' }, title: { type: 'string' }, where: { type: 'string' },
-      doneWhen: { type: 'string' }, note: { type: 'string' } } } } },
+      doneWhen: { type: 'string' } } } } },
 });
 
 export const FIRST_PLAN_SYSTEM = [
   'あなたはマイクラの体を動かすシャノンの、最初の計画ツリーを立てる係。依頼（goal）を、済ませる順の節の木にする。',
-  '- 節は全部で64まで、深さ4まで（親1つに子は8まで）。id は p1, p1.2 のような短い文字。parent は親の id、一番上は ""。並びは済ませる順。',
-  '- title は30字以内で、する事。where はその場所（座標と方角・距離、分からなければ ""）。doneWhen は済んだと分かる観測（持ち物・場所、無ければ ""）。',
+  `- 節は全部で${FIRST_PLAN.nodes}まで、深さ3まで（親1つに子は6まで）。id は p1, p1.2 のような短い文字。parent は親の id、一番上は ""。並びは済ませる順。`,
+  '- title は20字以内で、する事。where はその場所（座標だけ、分からなければ ""）。doneWhen は済んだと分かる観測（持ち物の名前と数、20字以内、無ければ ""）。note は書かない。説明の文は要らない。',
   '- 入力の地図・目印・場所の記憶・通ったバイオームにある物だけを場所に使う。無い物を作り出さない。座標は見立て。',
   '- 食料の節は鉄より前（最初の夜の前）。村が見えていれば、最初に近い節で村を回ってベッド・干し草・畑・箱を取る。',
   '- 依頼がエンドラ討伐なら、ネザー・要塞・ブレイズ・パール・アイ・ストロングホールド・エンドまで全部入れる。ネザーまでなら、ネザーに入るまで。',

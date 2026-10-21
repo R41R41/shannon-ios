@@ -296,7 +296,10 @@ export function createMinecraftTaskBody(parts: {
       const job = fast.consider(bodyId, observation, live, monitorAbort.signal);
       if (job) return startFast(job);
     }
-    if (!parts.entry || !parts.selector || attempts >= 4) return;
+    // The LLM-centric mode has no reflex session of the head (design mb-llm-centric 2.4, contract 6: the body's own reflexes stay, the
+    // head's fast judgment and image reflex go). Run 27 (2026-10-22): with the fast judgment off, a `stuck` or `danger` frame still
+    // entered this image reflex: a stop that cut her act, captures, gpt-6-luna-decisions three times with no answer, and a release.
+    if (parts.llmc || !parts.entry || !parts.selector || attempts >= 4) return;
     // Every session requires a picture; without one it could only end `observation_unavailable` after the entry call.
     if (bodyId && control.imagesUnavailable(bodyId)) return;
     if (!observation || observation.sequence === lastSequence) return;
@@ -407,7 +410,9 @@ export function createMinecraftTaskBody(parts: {
       if (active) await active;
       if (fault) throw fault;
       if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
-      if (revisions.current(version)) return true;
+      // The LLM-centric mode: the body checks each hand of an act against the world as it is then and stops at the first that does not
+      // fit, so only a cut of her own tool makes the decision stale (run 27: ten acts came back "身体の状態が変わりました" while she drowned).
+      if (revisions.current(version) || (parts.llmc && call.name.startsWith('mc.') && revisions.current(version, true))) return true;
       if (!fightCall(call.name)) return false;
       fightOwner.claim();
       const kept = revisions.current(version, true);
