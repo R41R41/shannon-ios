@@ -1,5 +1,7 @@
 import type { WorkingNeed } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { EDIBLE_FOOD } from './minecraftItems.js';
+import { FOOD_STOCK } from './minecraftStage.js';
 import { minecraftCalm, minecraftFrameNeeds } from './minecraftWorkingArbiter.js';
 
 /**
@@ -158,6 +160,16 @@ export function takeNeed(need: WorkingNeed): MinecraftWorkItem | null {
   }
 }
 
+/**
+ * The needs in reach, without the food animals while the pack holds FOOD_STOCK pieces (mb-r22, run 22: a chicken was chased, 62 s, with
+ * the food already enough: nothing is hunted for food that is not wanted).
+ */
+function reachableNeeds(observation: BodyObservation | null): WorkingNeed[] {
+  let food = 0;
+  for (const [name, count] of carriedOf(observation)) if (EDIBLE_FOOD.test(name)) food += count;
+  return minecraftFrameNeeds(observation).filter(need => need.canReach && !(need.need === 'food' && food >= FOOD_STOCK));
+}
+
 /** The order needs are taken in a wait, and how near each must be. */
 const IN_A_WAIT: ReadonlyArray<{ need: string; within: number }> = [
   { need: 'bed', within: 24 }, { need: 'iron', within: 16 }, { need: 'fuel', within: 16 }, { need: 'food', within: 12 }, { need: 'bed_wool', within: 16 },
@@ -174,7 +186,7 @@ export function nextFiller(observation: BodyObservation | null,
   if (done) return done;
   // Away from the furnace only by day and with nothing hostile near (a wait at night is often a shelter's).
   if (!minecraftCalm(observation)) return null;
-  const needs = minecraftFrameNeeds(observation).filter(need => need.canReach);
+  const needs = reachableNeeds(observation);
   const bed = IN_A_WAIT.slice(0, 1).flatMap(rule => needs.filter(need => need.need === rule.need && (need.distance ?? Infinity) <= rule.within));
   const bedItem = bed.length ? fits(takeNeed(bed[0]!)) : null;
   if (bedItem) return bedItem;
@@ -211,7 +223,7 @@ export function afterCallWork(observation: BodyObservation | null,
   parts: { call: { name: string; input: unknown }; ok: boolean; recent: ReadonlySet<string> }): { item: MinecraftWorkItem; ask: boolean } | null {
   if (!parts.ok || AFTER_NONE.has(parts.call.name) || !minecraftCalm(observation)) return null;
   const doing = record(parts.call.input)?.blockName ?? record(parts.call.input)?.entityName;
-  const needs = minecraftFrameNeeds(observation).filter(need => need.canReach);
+  const needs = reachableNeeds(observation);
   for (const rule of AFTER_A_CALL) {
     const need = needs.find(item => item.need === rule.need && (item.distance ?? Infinity) <= rule.within && item.name !== doing);
     const item = need ? takeNeed(need) : null;

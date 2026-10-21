@@ -11,6 +11,7 @@ import { minecraftProcedureFacts, type MinecraftProcedureFacts } from './minecra
 import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain } from './minecraftProcedures.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 import { finalFailure, minecraftStopWhy, minecraftUpkeep, passingFailure } from './minecraftProcedureUpkeep.js';
+import { settledBody } from './minecraftProcedureSettle.js';
 
 /**
  * The planner's one call for a whole procedure (session mb-arch, owner 2026-10-20: 「30分でスムーズにネザーに行く」; run 19 took 64
@@ -103,6 +104,10 @@ export interface ProcedureRunParts {
   pending?(): boolean;
   taskStartedAt?: number;
   targetSeconds?(milestone: string): number | undefined;
+  /** When the body last arrived (login, reconnection, respawn), or null: a procedure waits for a body that just came back to be steady. */
+  arrivedAt?(): number | null;
+  /** A pause (tests give their own clock's). */
+  sleep?(milliseconds: number): Promise<void>;
   now(): number;
 }
 
@@ -197,6 +202,12 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
     return { ok: false, text: `milestone は次のどれか（through はそれ以降）: ${PROCEDURE_MILESTONES.join('・')}`, failure: 'invalid_input', retryable: false };
   }
   const state = stateOf(parts.taskId);
+  const unsteady = await settledBody(parts, call.signal);
+  if (unsteady) {
+    state.handedBack = asked.from;
+    const held = { outcome: 'stopped' as const, at: asked.from, passed: [], why: unsteady, items: [], elapsedMs: 0 };
+    return { ok: true, text: [`手順 ${asked.from}`, ...procedureRunLines(held)].join('\n'), retryable: false };
+  }
   const chain = minecraftProcedureChain(asked.from, asked.through, { store: state.store, batchObsidian: parts.batchObsidian ?? null,
     leg: milestone => (liveRoute(parts.taskId))?.legs.find(item => item.milestone === milestone) });
   const facts = () => {

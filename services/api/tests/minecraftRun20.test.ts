@@ -48,7 +48,8 @@ describe('the water, before the stair goes down', () => {
     for (let again = 0; (body.pack.get('obsidian') ?? 0) < 10 && again < 3; again += 1) results.push(await call({ milestone: '黒曜石' }));
     expect(body.pack.get('obsidian'), results.map(item => item.text).join('\n---\n')).toBe(10);
     const ups = body.inputs.get('mc.stair-mine')!.map(input => input.targetY);
-    expect(ups).toEqual([-58, 64]);
+    // mb-r22: with no water known the stair goes down in legs of 32 that look again for water, and the climb for it is the last resort.
+    expect(ups).toEqual([32, 0, -32, -58, 64]);
     expect(body.calls.indexOf('mc.use-item-on-block')).toBeGreaterThan(body.calls.lastIndexOf('mc.stair-mine'));
   });
 

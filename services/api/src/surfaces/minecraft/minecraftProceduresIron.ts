@@ -7,6 +7,7 @@ import { caveDescent, smithChest, towardRoute } from './minecraftProcedureMap.js
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 import { dropJunk, guardOutward, healFirst, noteSurface, pickaxeReserve } from './minecraftProcedureCare.js';
 import { waterOnTheSurface } from './minecraftProcedureWater.js';
+import { afterRefusal, refusals, refusedWait } from './minecraftProcedureWaits.js';
 
 /**
  * The iron age as one procedure (session mb-arch; 「鉄」「バケツ」「鉄の全身の防具」): the iron still needed dug at once (run 19 dug about
@@ -97,12 +98,23 @@ export function makePiece(facts: MinecraftProcedureFacts, memory: ProcedureMemor
   return table ?? (next.sticks ? sticksFor(facts, 4) : null) ?? craft(next.item, `${next.item}を作る`, 1, key);
 }
 
+/**
+ * A furnace that answers waiting_external has given what was ready, or nothing yet: either way the batch is still smelting and the
+ * procedure goes on (mb-r22, run 22: four parts taken out were counted as failed calls, and a furnace taken from a beat early too).
+ */
+const notYet = (memory: ProcedureMemory, key: string) => (failure: string, text: string): boolean => {
+  if (failure !== 'waiting_external') return false;
+  if (!/回収しました/u.test(text)) memory.notes.set('withdraw:none', key);
+  return true;
+};
+
 /** A furnace done (or nearly) within reach: what it made taken out, without waiting. */
-function takeOut(facts: MinecraftProcedureFacts): McMove | null {
+function takeOut(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
   const job = facts.jobs.find(item => item.remainingEstimateMs <= 500 && distance(facts, item.position) <= 48);
-  if (!job) return null;
+  const key = job ? `withdraw:${cellKey(job.position)}:${carried(facts, INGOT)}` : '';
+  if (!job || memory.notes.get('withdraw:none') === key) return null;
   return doing({ tool: 'mc.withdraw-from-furnace', input: { ...job.position, waitForCompletion: false }, why: 'かまどの鉄を取り出す', expectMs: 6_000,
-    key: `withdraw:${cellKey(job.position)}:${carried(facts, INGOT)}` });
+    key, accepts: notYet(memory, key) });
 }
 
 type Job = MinecraftProcedureFacts['jobs'][number];
@@ -135,16 +147,17 @@ function msUntilIngots(facts: MinecraftProcedureFacts, need: number): number | n
  * was done at 305 s and the pickaxe came at 404 s; the pickaxe needs three, and three are smelted in 30 s). The body answers a part
  * taken with `waiting_external` and "完成済みの…を回収しました": that is a part taken, not a failure (`accepts`).
  */
-function takeOutPart(facts: MinecraftProcedureFacts): McMove | null {
+function takeOutPart(facts: MinecraftProcedureFacts, memory: ProcedureMemory): McMove | null {
   const need = ingotsLacking(facts);
   if (need <= 0) return null;
   const ready = ironJobs(facts).map(job => ({ job, made: ingotsBy(job, 0) })).filter(item => item.made > 0 && item.job.remainingEstimateMs > 500)
     .sort((a, b) => b.made - a.made);
   if (ready.reduce((sum, item) => sum + item.made, 0) < need || ready[0]!.made < 2) return null;
   const { job, made } = ready[0]!;
+  const key = `withdraw:part:${cellKey(job.position)}:${carried(facts, INGOT)}:${made}`;
+  if (memory.notes.get('withdraw:none') === key) return null;
   return doing({ tool: 'mc.withdraw-from-furnace', input: { ...job.position, waitForCompletion: false }, why: 'かまどの焼けた分の鉄を先に取り出す', expectMs: 6_000,
-    key: `withdraw:part:${cellKey(job.position)}:${carried(facts, INGOT)}:${made}`,
-    accepts: (failure, text) => failure === 'waiting_external' && /回収しました/u.test(text) });
+    key, accepts: notYet(memory, key) });
 }
 
 /** What to burn: coal first; planks or logs when there is none (the body itself prefers coal). */
@@ -267,22 +280,33 @@ const BODY_WAITS_MS = 20_000;
  * else a short wait for the part the body does not refuse. `cell` is the furnace waited for.
  */
 function waiting(facts: MinecraftProcedureFacts, memory: ProcedureMemory, remainingMs: number, cell: Cell, untilMs = remainingMs): McMove | null {
-  if (remainingMs <= BODY_WAITS_MS) {
+  // mb-r22: once the body has refused a wait in this run, no more are asked of it (`minecraftProcedureWaits.ts`).
+  const refused = refusals(memory) > 0;
+  if (remainingMs <= BODY_WAITS_MS && !refused) {
     return doing({ tool: 'mc.withdraw-from-furnace', input: { ...cell, waitForCompletion: true }, why: 'かまどを待って取り出す',
-      expectMs: remainingMs + 6_000, key: `wait:${cellKey(cell)}:${carried(facts, INGOT)}` });
+      expectMs: remainingMs + 6_000, key: `wait:${cellKey(cell)}:${carried(facts, INGOT)}`, accepts: refusedWait(memory) });
   }
-  const recent = new Set<string>();
-  for (let tries = 0; tries < 4; tries += 1) {
-    const item = nextFiller(facts.observation, { remainingMs: untilMs, recent, waitingCell: cellKey(cell) });
-    if (!item) break;
-    if (memory.succeeded(item.key) + memory.failed(item.key) === 0) return doing(item);
-    recent.add(item.key);
-  }
+  const filler = freshFiller(facts, memory, untilMs, cell);
+  if (filler) return doing(filler);
+  if (refused) return afterRefusal(memory, remainingMs);
   const milliseconds = Math.max(2_500, Math.min(untilMs, remainingMs - BODY_WAITS_MS, 30_000));
   return doing({ tool: 'mc.wait-time', input: { milliseconds: Math.round(milliseconds) }, why: 'かまどの焼ける間を待つ', expectMs: milliseconds + 2_000,
     key: `furnace:idle:${Math.round(remainingMs / 5_000)}:${carried(facts, INGOT)}`,
-    // The body refuses a wait when it has something definite to do meanwhile: the hold is off, and the dig goes on.
-    onFail: () => { memory.notes.set('hold:off', true); } });
+    // The body refuses a wait when it has something definite to do meanwhile: that is not a failure of the work, it is noted, the hold
+    // is off, and the ore it names is dug (`refusedWait`).
+    accepts: refusedWait(memory), onFail: () => { memory.notes.set('hold:off', true); } });
+}
+
+/** The small work of the moment (`nextFiller`) that this run has not done yet, or null. */
+function freshFiller(facts: MinecraftProcedureFacts, memory: ProcedureMemory, untilMs: number, cell: Cell): MinecraftWorkItem | null {
+  const recent = new Set<string>();
+  for (let tries = 0; tries < 4; tries += 1) {
+    const item = nextFiller(facts.observation, { remainingMs: untilMs, recent, waitingCell: cellKey(cell) });
+    if (!item) return null;
+    if (memory.succeeded(item.key) + memory.failed(item.key) === 0) return item;
+    recent.add(item.key);
+  }
+  return null;
 }
 
 /** The furnace that finishes first waited on. */
@@ -316,7 +340,7 @@ export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory
   // The bucket filled the moment it is made, while she is still on the surface (mb-r20): water down below cost run 20 325 s and the Nether.
   // mb-r21: what the furnaces have made comes out (whole, then the part the next piece needs) before the next dig, the raw iron goes in
   // before food, and the dig is not begun while the next ingots are this near.
-  return makePiece(facts, memory) ?? guard(takeOut(facts)) ?? guard(takeOutPart(facts)) ?? smelt(facts, store, memory) ?? waterOnTheSurface(facts, memory)
-    ?? guard(holdForFurnace(facts, memory)) ?? guard(fromTheMap(facts, store, memory)) ?? guard(digIron(facts, memory, store, leg))
-    ?? waitFurnace(facts, memory) ?? stuck('鉄の手順で次にできる手が無い');
+  return makePiece(facts, memory) ?? guard(takeOut(facts, memory)) ?? guard(takeOutPart(facts, memory)) ?? smelt(facts, store, memory)
+    ?? waterOnTheSurface(facts, memory) ?? guard(holdForFurnace(facts, memory)) ?? guard(fromTheMap(facts, store, memory))
+    ?? guard(digIron(facts, memory, store, leg)) ?? waitFurnace(facts, memory) ?? stuck('鉄の手順で次にできる手が無い');
 }

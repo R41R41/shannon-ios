@@ -179,9 +179,22 @@ export function bodyFailureOf(result: ToolResult): string | null {
   return typeof kind === 'string' ? kind : null;
 }
 
+/**
+ * The body's note that a cheaper tool would do the digging, when the cheaper one is gold (mb-r22, run 22: 道具の補充: stone を iron_pickaxe で
+ * 掘っています。より安く済む golden_pickaxe は材料が足りず作れません（不足: gold_ingot×3）。 on nearly every result, naming the one tool that
+ * cannot be had in the first half hour while the stone pickaxe was the one to make). It is not told to the planner or the procedures: gold
+ * is not looked for, and the stone pickaxe is made by the procedures' own rules (pickaxeReserve).
+ */
+const GOLD_PICKAXE_ADVICE = /道具の補充:[^。\n]*。\s*より安く済む\s*golden_[a-z_]+\s*は[^。\n]*。?\n?/gu;
+export function withoutGoldAdvice(text: string): string {
+  if (!text.includes('golden_')) return text;
+  const kept = text.replace(GOLD_PICKAXE_ADVICE, '').replace(/[ \t]+\n/gu, '\n').trim();
+  return kept === text.trim() ? text : kept || '（道具の補充の知らせだけの結果）';
+}
+
 export function minecraftSkillResult(receipt: MinecraftControlReceipt): ToolResult {
-  if (receipt.outcome === 'completed') return toolOk(receipt.result ?? '操作の実行結果を受け取った。目的の達成は新しい観測で確認する。');
-  const text = receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`;
+  if (receipt.outcome === 'completed') return toolOk(withoutGoldAdvice(receipt.result ?? '操作の実行結果を受け取った。目的の達成は新しい観測で確認する。'));
+  const text = withoutGoldAdvice(receipt.result ?? `操作は${receipt.outcome}になった。現在の観測からやり直し方を判断する。`);
   const hint = minecraftRetryHint(receipt.failureType);
   // The body's kind as it named it (a closed id), for the executor's procedures (session mb-arch).
   const kind = typeof receipt.failureType === 'string' && /^[a-z_]{1,40}$/u.test(receipt.failureType) ? { bodyFailure: receipt.failureType } : {};
