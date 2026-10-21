@@ -1,4 +1,4 @@
-/** How old a lease grant may be reused between checks of a step by default (`FCA_PERMIT_REUSE_MS` of `fcaRunner.ts`). */
+/** How old a lease grant may be reused between checks of a step by default (`FCA_PERMIT_REUSE_MS` of `fcaRunnerWords.ts`). */
 export const FCA_PERMIT_REUSE_DEFAULT_MS = 250;
 
 /**

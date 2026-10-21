@@ -23,18 +23,32 @@ export { LLMC_PROBE } from './minecraftLlmcProbeInput.js';
  * body says the dangerous fact as it is (「下 7 段は空気（落差 7）」), and the head adds only the coordinates a hand can use (a path's points,
  * where to stand, what is in between), never a word of its own about what to dig.
  */
-/** One surprise of a step: its closed code (for the metrics line), its line, and its fixed probes. */
-export interface Surprise { code: 'health' | 'oxygen' | 'fall' | 'repeat' | 'dig' | 'miss' | 'found'; line: string; probes: ProbeInput[] }
-/** What the watch reads of a frame. */
-export interface SurpriseFrame { health: number | null; oxygen: number | null; feet: ActPos | null; dimension: string | null; arrival: number | null }
+/**
+ * One surprise of a step: its closed code (for the metrics line), its line, and its fixed probes. r5: `nth`, how many times this same one
+ * has come (the second notes its fact as a caution, `minecraftLlmcCaution.ts`), and the stopped hand it came from.
+ */
+export interface Surprise { code: 'health' | 'oxygen' | 'fall' | 'repeat' | 'dig' | 'miss' | 'found'; line: string; probes: ProbeInput[];
+  nth?: number; hand?: { do: string; aim: ActPos | null; line: string } | null }
+/** What the watch reads of a frame; r5: `items`, the dropped items near her, nearest first (a pickup's surprise looks at one). */
+export interface SurpriseFrame { health: number | null; oxygen: number | null; feet: ActPos | null; dimension: string | null; arrival: number | null;
+  items?: ActPos[] }
 export function surpriseFrame(observation: BodyObservation | null, arrival: number | null): SurpriseFrame {
   const world = plain(observation?.state.world) ?? {};
   const at = plain(world.position);
   const feet = at && [at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isFinite(value))
     ? { x: at.x as number, y: at.y as number, z: at.z as number } : null;
   const dimension = world.dimension ?? observation?.facts.dimension;
-  return { health: finite(world.health), oxygen: finite(world.oxygen), feet, arrival,
+  return { health: finite(world.health), oxygen: finite(world.oxygen), feet, arrival, items: droppedItems(world.nearbyEntities),
     dimension: typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null };
+}
+/** The dropped items of a frame's entities (`name: item`), nearest first, as whole blocks (at most 4). */
+function droppedItems(entities: unknown): ActPos[] {
+  return (Array.isArray(entities) ? entities : []).flatMap(item => {
+    const entity = plain(item), at = plain(entity?.position);
+    const x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
+    return entity?.name === 'item' && x !== null && y !== null && z !== null
+      ? [{ at: { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }, distance: finite(entity.distance) ?? 99 }] : [];
+  }).sort((left, right) => left.distance - right.distance).slice(0, 4).map(item => item.at);
 }
 
 /** The stop words that are no surprise of the decision's own (a reflex or a stopIf cut it: the urgent step's; a full pack says itself). */
@@ -44,8 +58,10 @@ const NO_HIT = /(?:^|[^\d])0回当たった|当てた 0回|(?:^|[^\d])0回打っ
 interface ActRecord {
   /** `do:reason` of the stopped (or failed) hand, or of a refusal; null for an act that went as asked. */
   key: string | null; reason: string | null; dig: boolean; miss: boolean;
-  /** Where the stopped hand went (a walk's) or what it aimed at (a dig's, a use's, an attack's). */
+  /** Where the stopped hand went (a walk's) or what it aimed at (a dig's, a use's, an attack's; r5: a pickup's drop its line names). */
   dest: ActPos | null; target: ActPos | string | null;
+  /** r5: the stopped hand's kind and its line as the result said it (for the fact noted at a second surprise). */
+  hand?: { do: string; line: string } | null;
 }
 /** The act's hands as the body ran them (the model's input in the contract's shape). */
 function handsOf(input: unknown): readonly ActHand[] {
@@ -75,7 +91,10 @@ export function readActRecord(ok: boolean, text: string, input: unknown): ActRec
     if (NOT_A_STOP.has(reason)) continue;
     const hand = hands[Number(match[1]) - 1];
     const aim = aimOf(hand);
-    return { key: `${match[2]}:${reason}`, reason, dig: match[2] === 'dig', miss, dest: aim.dest, target: aim.target ?? missAim };
+    // r5: a pickup names no place in its input; the drop is where its line says (the body's r5 words), when it does.
+    const target = aim.target ?? (match[2] === 'pickup' ? firstPos(match[3]!) : null) ?? missAim;
+    return { key: `${match[2]}:${reason}`, reason, dig: match[2] === 'dig', miss, dest: aim.dest, target,
+      hand: { do: match[2]!, line: match[3]!.slice(0, 160) } };
   }
   // A refusal before the body (not a shape the result already names: the act's own fields say how to mend it).
   if (!ok && !/^(act |急ぎ: |（頭が形を直して送った)/u.test(text) && !/^引数が|^手\d+（/u.test(text)) {
@@ -88,12 +107,14 @@ export function readActRecord(ok: boolean, text: string, input: unknown): ActRec
 const WINDOW = 6, REPEAT_COOLDOWN = 4, OXYGEN_COOLDOWN = 3, FOUND_METERS = 24;
 interface WatchState {
   last: SurpriseFrame | null; acts: ActRecord[]; fresh: ActRecord[]; found: ActPos | null; step: number; probed: Map<string, number>;
+  /** r5: how many times each surprise (its probe key) has come. */
+  fired: Map<string, number>;
 }
 const watches = new Map<string, WatchState>();
 function watchOf(taskId: string): WatchState {
   let state = watches.get(taskId);
   if (!state) {
-    state = { last: null, acts: [], fresh: [], found: null, step: 0, probed: new Map() };
+    state = { last: null, acts: [], fresh: [], found: null, step: 0, probed: new Map(), fired: new Map() };
     watches.set(taskId, state);
     if (watches.size > 32) watches.delete(watches.keys().next().value as string);
   }
@@ -135,9 +156,18 @@ export function createSurpriseWatch(taskId: string) {
         if (at !== undefined && state.step - at < every) return false;
         state.probed.set(key, state.step);
         if (state.probed.size > 32) state.probed.delete(state.probed.keys().next().value as string);
+        state.fired.set(key, (state.fired.get(key) ?? 0) + 1);
+        if (state.fired.size > 64) state.fired.delete(state.fired.keys().next().value as string);
         return true;
       };
-      return [...bodySurprises(prev, frame, due), ...actSurprises(state.acts, fresh, frame, due), ...foundSurprise(found, planWhere)];
+      const nth = (key: string) => state.fired.get(key) ?? 1;
+      const foundOne = foundSurprise(found, planWhere);
+      if (foundOne.length && found) {
+        const key = `found:${posText(found)}`;
+        state.fired.set(key, (state.fired.get(key) ?? 0) + 1);
+        foundOne[0]!.nth = nth(key);
+      }
+      return [...bodySurprises(prev, frame, due), ...actSurprises(state.acts, fresh, frame, due, nth), ...foundOne];
     },
   };
 }
@@ -167,19 +197,25 @@ function fallSurprise(prev: SurpriseFrame, feet: ActPos): Surprise[] {
   return [{ code: 'fall', line: `1 判断で ${from - to} 段下がった（y ${from}→${to}）`, probes: [column(feet, COLUMN_DOWN), around()] }];
 }
 /** The same stop twice, the same dig stopped three times, no hit: from the acts since the last decision and the window before. */
-function actSurprises(acts: readonly ActRecord[], fresh: readonly ActRecord[], frame: SurpriseFrame, due: Due): Surprise[] {
+function actSurprises(acts: readonly ActRecord[], fresh: readonly ActRecord[], frame: SurpriseFrame, due: Due,
+  nth: (key: string) => number = () => 1): Surprise[] {
   const out: Surprise[] = [], latest = fresh.at(-1);
   const sight = (target: ActPos | string | null): ProbeInput[] => target ? [{ kind: 'sight', target }] : [];
+  const hand = (record: ActRecord) => record.hand
+    ? { ...record.hand, aim: record.dest ?? (typeof record.target === 'object' ? record.target : null) } : null;
   if (latest?.key) {
     const same = acts.filter(item => item.key === latest.key).length;
     const digs = latest.dig ? same : 0;
     if (digs >= 3 && due(`dig:${latest.key}`, REPEAT_COOLDOWN)) {
-      out.push({ code: 'dig', line: `同じ掘りの中止が ${digs} 回: 「${latest.reason}」`, probes: [...sight(latest.target), around()] });
+      out.push({ code: 'dig', line: `同じ掘りの中止が ${digs} 回: 「${latest.reason}」`, probes: [...sight(latest.target), around()],
+        nth: nth(`dig:${latest.key}`), hand: hand(latest) });
     } else if (same >= 2 && due(`repeat:${latest.key}`, REPEAT_COOLDOWN)) {
       const [kind, reason] = latest.key.startsWith('拒否:') ? ['拒否', latest.reason] : latest.key.split(':');
-      const next: ProbeInput[] = latest.dest ? [{ kind: 'path', to: latest.dest }] : sight(latest.target);
+      const next: ProbeInput[] = latest.dest ? [{ kind: 'path', to: latest.dest }] : latest.key.startsWith('pickup:')
+        ? dropProbe(latest.target, frame) : sight(latest.target);
       out.push({ code: 'repeat', line: `同じ止まりの ${same} 回目: ${kind}「${reason}」`,
-        probes: [...(frame.feet ? [{ kind: 'history' as const, at: block(frame.feet), radius: 4 }] : []), ...next] });
+        probes: [...(frame.feet ? [{ kind: 'history' as const, at: block(frame.feet), radius: 4 }] : []), ...next],
+        nth: nth(`repeat:${latest.key}`), hand: hand(latest) });
     }
   }
   if (fresh.some(item => item.miss) && due('miss', 2)) {
@@ -187,6 +223,18 @@ function actSurprises(acts: readonly ActRecord[], fresh: readonly ActRecord[], f
     out.push({ code: 'miss', line: '攻撃が 1 度も当たらなかった（当たり 0）', probes: [...sight(aimed), around()] });
   }
   return out;
+}
+/** A drop within this many blocks of her feet is looked at (sight: a wall, a hole between); farther, the way to it (path). */
+const DROP_SIGHT_METERS = 6;
+/**
+ * r5 (run 28: 19 pickups stopped with 「無い」, the drop behind a wall or where her head did not fit, and the repeat's probe was the history
+ * alone, a pickup naming no place): the drop its line names, else the nearest dropped item of the frame; a sight to it when near, else a path.
+ */
+function dropProbe(named: ActPos | string | null, frame: SurpriseFrame): ProbeInput[] {
+  const drop = typeof named === 'object' && named ? named : frame.items?.[0] ?? null;
+  if (!drop) return [];
+  const near = !frame.feet || Math.hypot(drop.x - frame.feet.x, drop.y - frame.feet.y, drop.z - frame.feet.z) <= DROP_SIGHT_METERS;
+  return [near ? { kind: 'sight', target: drop } : { kind: 'path', to: drop }];
 }
 /** A find-blocks far from the current plan node's place. */
 function foundSurprise(found: ActPos | null, planWhere: string | null): Surprise[] {
@@ -219,7 +267,7 @@ export const INVESTIGATION_TAIL = '→ 調べた事実で前提（道・高さ�
  */
 export async function runInvestigation(parts: { surprises: readonly Surprise[]; probes: readonly ProbeInput[]; feet: ActPos | null;
   run: ((input: ProbeInput, index: number) => Promise<string | null>) | null; budgetMs: number; tokens?: number; now?: () => number }):
-  Promise<{ lines: string[]; answered: number; ms: number }> {
+  Promise<{ lines: string[]; answered: number; ms: number; answers: Array<string | null | undefined> }> {
   const now = parts.now ?? (() => performance.now()), began = now(), tokens = parts.tokens ?? LLMC_PROBE.tokens;
   const head = parts.surprises.slice(0, 3).map(item => `驚き: ${item.line}`);
   const answers: Array<string | null | undefined> = parts.probes.map(() => undefined);
@@ -238,7 +286,8 @@ export async function runInvestigation(parts: { surprises: readonly Surprise[]; 
     if (answer === undefined) return `${label}: 時間切れ（添えずに進めた。要るなら mc.probe で）`;
     return answer === null ? `${label}: 答えが無かった` : `${label}: ${probeAnswerText(answer, true)}`;
   }).filter((line): line is string => line !== null);
-  return { lines: fitInvestigation([...head, ...lines, ...(head.length ? [INVESTIGATION_TAIL] : [])], tokens), answered, ms: Math.round(now() - began) };
+  return { lines: fitInvestigation([...head, ...lines, ...(head.length ? [INVESTIGATION_TAIL] : [])], tokens), answered, ms: Math.round(now() - began),
+    answers: [...answers] };
 }
 /** The lines within `tokens` (`llmcTokens` of their JSON): the longest line cut first, by halves, never under 40 characters. */
 export function fitInvestigation(lines: readonly string[], tokens: number): string[] {
@@ -262,7 +311,8 @@ export function scanLines(scan: unknown, shownAt: string | null): { lines: strin
   const value = plain(scan) as Partial<WorldScan> | null;
   if (!value || typeof value.at !== 'string' || typeof value.text !== 'string' || value.at === shownAt) return null;
   const portal = value.trigger === 'portal';
-  const rows = (Array.isArray(value.rows) ? value.rows : []).filter(row => typeof row === 'string').slice(0, portal ? 7 : 8).map(row => row.slice(0, 120));
+  // r5: the body's first row says the range it read (「範囲 読み込み …」), so one row more is shown (still 10 lines at most).
+  const rows = (Array.isArray(value.rows) ? value.rows : []).filter(row => typeof row === 'string').slice(0, portal ? 8 : 9).map(row => row.slice(0, 120));
   const words = { login: 'ログイン', reconnect: '再接続', respawn: 'リスポーン', portal: '次元の移動' } as Record<string, string>;
   return { at: value.at, lines: [`走査（${words[value.trigger ?? ''] ?? '体'}の後${value.dimension ? `・${String(value.dimension).replace(/^minecraft:/u, '')}` : ''}`
     + `${typeof value.reach === 'number' ? `・${Math.round(value.reach)}m 内` : ''}）: ${value.text.slice(0, 300)}`, ...rows,

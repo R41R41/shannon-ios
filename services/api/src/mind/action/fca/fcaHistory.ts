@@ -347,6 +347,19 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
 
 /** How long a step past the hard bounds waits for a summary already asked beside the steps (mb-llmc r3). */
 const AHEAD_WAIT_MS = 30_000;
+/**
+ * mb-llmc r5 (run 28: five summaries, 14–16.6 s each, were all made in their steps and none beside them): the hard bounds raised only
+ * the rounds and the conversation's tokens, while the replay passed the policy by its characters (64,000 native: a body round is mostly
+ * ASCII, about two characters a token). Every bound a replay may pass gets room past the policy unless `hard` names it: the characters
+ * half as much again, the whole replay's tokens a fifth (still below the 100,000-token price step with the instructions and a decision).
+ */
+export const FCA_AHEAD_ROOM = Object.freeze({ characters: 1.5, tokens: 1.2 });
+function aheadRoom(policy: FcaHistoryPolicy): Partial<FcaHistoryPolicy> {
+  return { maximumNativeCharacters: Math.ceil(policy.maximumNativeCharacters * FCA_AHEAD_ROOM.characters),
+    maximumReplayCharacters: Math.ceil(policy.maximumReplayCharacters * FCA_AHEAD_ROOM.characters),
+    maximumToolDefinitionCharacters: Math.ceil(policy.maximumToolDefinitionCharacters * FCA_AHEAD_ROOM.characters),
+    maximumReplayTokens: Math.ceil(policy.maximumReplayTokens * FCA_AHEAD_ROOM.tokens) };
+}
 /** After a summary asked beside the steps came back unusable, the rounds that must follow before another is asked. */
 const AHEAD_RETRY_ROUNDS = 3;
 
@@ -378,7 +391,7 @@ async function aheadTurn(parts: { step: TaskStep; ports: FcaHistoryPorts; window
 async function aheadStep(taskId: string, window: TaskHistoryWindow, plan: Extract<FcaHistoryPlan, { kind: 'compact' }>, policy: FcaHistoryPolicy,
   ahead: FcaHistoryAheadOptions, ports: FcaHistoryPorts, waited: boolean): Promise<{ replay?: FcaHistoryReplay; waited?: boolean }> {
   const conversation = ahead.urgent ? { maximumConversationTokens: Math.max(policy.maximumReplayTokens, ahead.hard.maximumConversationTokens ?? 0) } : {};
-  const hard = planFcaHistory(window, ports.codec, { ...policy, ...ahead.hard, ...conversation }, false);
+  const hard = planFcaHistory(window, ports.codec, { ...policy, ...aheadRoom(policy), ...ahead.hard, ...conversation }, false);
   const prepared = ahead.port.get(taskId);
   if (hard.kind === 'ready') {
     if (!prepared || (prepared.state === 'failed' && window.tailSequence - prepared.tail >= AHEAD_RETRY_ROUNDS)) {

@@ -43,6 +43,11 @@ export interface FcaLookahead {
   take(step: TaskStep): FcaPrepared | null;
   /** mb-llmc r4: the decision prepared for this task is not taken (a surprise came since it was asked); `reason` closed. Absent: none. */
   drop?(taskId: string, reason: string): void;
+  /**
+   * mb-llmc r5 (run 28: about 40 asked, 12 taken, 8 written down as wasted): a decision asked ahead and thrown away when its call ended
+   * (`failed`: the call did not end well; `late`: no answer within the settle time) is written down as wasted too. Absent: not written.
+   */
+  wasted?(taskId: string, reason: string): void;
   /** How long a call must have run before the next decision is asked (`FCA_LOOKAHEAD.delayMs`). */
   delayMs: number;
 }
@@ -82,6 +87,10 @@ export function createFcaLookahead(options: {
       chains.set(taskId, 0);
       if (prepared) log(`Shannon FCA lookahead wasted task=${taskId} reason=${/^[a-z_]{1,24}$/u.test(reason) ? reason : 'other'}`);
     },
+    wasted(taskId, reason) {
+      chains.set(taskId, 0);
+      log(`Shannon FCA lookahead wasted task=${taskId} reason=${/^[a-z_]{1,24}$/u.test(reason) ? reason : 'other'}`);
+    },
     take(step) {
       const prepared = kept.get(step.taskId);
       kept.delete(step.taskId);
@@ -114,6 +123,8 @@ export function startFcaLookahead(parts: {
   model: FcaModel; base: FcaModelInput; history: readonly unknown[]; results: ReadonlyArray<{ id: string; text: string; ok: boolean }>;
   call: FcaToolCall; permit(): Promise<boolean>; afford(): boolean; signal: AbortSignal;
   isolate?<T>(work: () => Promise<T>): Promise<T>; delayMs?: number; now?: () => number;
+  /** r5: a decision that was asked and is not handed on (`failed`: the call ended badly; `late`: no answer in time). */
+  wasted?(reason: 'failed' | 'late'): void;
 }): { settle(ok: boolean, timeoutMs?: number): Promise<{ request: FcaModelInput; output: FcaModelOutput; preparedAt: number } | null> } {
   const running = parts.model.toolResults([...parts.results, { id: parts.call.id, text: FCA_LOOKAHEAD_RUNNING, ok: true }]);
   const { recall: _recall, waiting: _waiting, ...base } = parts.base;
@@ -131,13 +142,20 @@ export function startFcaLookahead(parts: {
   return {
     async settle(ok, timeoutMs = FCA_LOOKAHEAD.settleMs) {
       clearTimeout(timer);
-      if (!ok || !job) return null;
+      if (!job) return null;
+      const say = (reason: 'failed' | 'late') => { try { parts.wasted?.(reason); } catch { /* a note never fails a step */ } };
+      if (!ok) {
+        say('failed');
+        return null;
+      }
       let late: ReturnType<typeof setTimeout> | undefined;
       const giveUp = new Promise<null>(resolve => {
         late = setTimeout(() => resolve(null), timeoutMs);
       });
       try {
-        return await Promise.race([job, giveUp]);
+        const answer = await Promise.race([job, giveUp]);
+        if (!answer) say('late');
+        return answer;
       } finally { clearTimeout(late); }
     },
   };

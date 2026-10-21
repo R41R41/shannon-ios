@@ -1,0 +1,19 @@
+import type Anthropic from '@anthropic-ai/sdk';
+
+/** The receipt `AnthropicFcaModel.decide` appends for a wait or a completion (`{"received":true,"requestedDecision":…}`). */
+const RECEIPT = '{"received":true,"requestedDecision":';
+
+/**
+ * mb-llmc r5 (`FcaCompletionMistake.amend`): the native message that answers a wait or a completion, with `text` in place of its receipt,
+ * as an error; null when `turn` is not one (or `text` is empty). The rest of the message stays as it was.
+ */
+export function amendAnthropicControl(turn: unknown, text: string): Anthropic.MessageParam | null {
+  const message = turn && typeof turn === 'object' && !Array.isArray(turn) ? turn as { role?: unknown; content?: unknown } : null;
+  if (message?.role !== 'user' || !Array.isArray(message.content) || typeof text !== 'string' || !text.trim()) return null;
+  const blocks = message.content as Anthropic.ContentBlockParam[];
+  const index = blocks.findIndex(block => block?.type === 'tool_result' && typeof block.content === 'string' && block.content.startsWith(RECEIPT));
+  if (index < 0) return null;
+  const content = [...blocks];
+  content[index] = { ...(blocks[index] as Anthropic.ToolResultBlockParam), content: text, is_error: true };
+  return { role: 'user', content };
+}

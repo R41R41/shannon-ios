@@ -201,7 +201,7 @@ export const SWITCHES = [
     name: 'SHANNON_MINECRAFT_LLM_CENTRIC', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Design mb-llm-centric (2026-10-21): a Minecraft task decides in small steps from a map of the blocks around her (mc.act, mc.view), '
       + 'keeps its own plan tree (plan.update), and runs no procedure, agenda detour or fast judgment. Models: SHANNON_MINECRAFT_LLMC_MODEL, '
-      + '_ESCALATE_MODEL, _PLAN_MODEL. The body must run MINEBOT_LLM_CENTRIC=on. Off: as before.',
+      + '_ESCALATE_MODEL (r5: unset is no raise; a model name, or next), _PLAN_MODEL. The body must run MINEBOT_LLM_CENTRIC=on. Off: as before.',
   },
   {
     name: 'SHANNON_MINECRAFT_LLMC_PROBE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LLM_CENTRIC'],

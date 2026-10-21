@@ -98,7 +98,7 @@ const WAIT_RULE = 'Nobody can send this task a message or answer a question: it 
  * With a body (`body`, its `pace` from `minecraftPace`): the L101–L103 lessons of the Minebot campaign (a run of steps without progress,
  * and idle waits while nobody could answer, used up the run). Restated only when it changed, as the other elided parts are.
  *
- * Its batch rule goes with the runner's guard (`FCA_EARLIER_ACTION_FAILED`, `fcaRunner.ts`), never without it: the old Minebot said
+ * Its batch rule goes with the runner's guard (`FCA_EARLIER_ACTION_FAILED`, `fcaRunnerWords.ts`), never without it: the old Minebot said
  * "body actions can be called in order in the same response" (ShannonExecutor.ts:757) and stopped the rest after a failure; L104 made 1.38
  * calls a response (52 of its 66 multi-call responses body after body) and reached an iron pickaxe in 16 decisions; production run 15
  * (2026-10-19) made 1.13 and took 24, 21 of them a single call (a craft or a place the decision before could have sent among them). The lines on recall

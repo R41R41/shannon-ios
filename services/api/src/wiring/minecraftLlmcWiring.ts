@@ -14,14 +14,17 @@ import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaLookahead } from '../mind/action/fca/fcaLookahead.js';
 import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
-import { firstPlanInbox, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
-import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R5 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
+import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
+import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
 import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
 import { MC_PROBE_SKILL, type ProbeInput } from '../contracts/minecraftProbeContract.js';
 import { abortedRouteUsage } from './minecraftRouteWiring.js';
@@ -35,7 +38,8 @@ import { currentActionExecution } from '../infra/context/actionExecution.js';
  * Sonnet and Opus, so each is set by the environment):
  * - `SHANNON_MINECRAFT_LLMC_MODEL`: the main model of a decision (default claude-sonnet-5-5).
  * - `SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL`: the model a decision is raised to while the task is stuck (`LLMC_ESCALATE_FAILURES` failed
- *   steps in a row); default the next one up (Haiku → Sonnet, Sonnet → Opus), `none` for never.
+ *   steps in a row): a model's name, or `next` (`on`) for the next one up (Haiku → Sonnet, Sonnet → Opus). r5 (run 28: raised 9 times,
+ *   23% of the cost, and the same stops went on: they were the body's faults): unset or `none`, never.
  * - `SHANNON_MINECRAFT_LLMC_PLAN_MODEL`: the first plan's model (default claude-opus-5-5).
  * Each decision model carries the mode's rules, map legend and knowledge in its cached instructions (`LLMC_SYSTEM_APPENDIX`).
  */
@@ -89,7 +93,7 @@ export interface LlmcModelNames { main: string; escalate: string | null; plan: s
 export function llmcModelNames(values: Readonly<Record<string, string | undefined>>): LlmcModelNames {
   const main = known(values.SHANNON_MINECRAFT_LLMC_MODEL, LLMC_MAIN_MODEL);
   const raised = values.SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL?.trim();
-  const escalate = raised === 'none' ? null : raised && MODELS.has(raised) && raised !== main ? raised : nextUp(main);
+  const escalate = raised === 'next' || raised === 'on' ? nextUp(main) : raised && MODELS.has(raised) && raised !== main ? raised : null;
   return { main, escalate, plan: known(values.SHANNON_MINECRAFT_LLMC_PLAN_MODEL, OPUS_MODEL) };
 }
 
@@ -111,6 +115,16 @@ export function llmcModelRouter(models: { main: FcaModel; escalate: FcaModel | n
     try { log?.(`Shannon Minecraft model raised task=${taskId} failures=${failures}`); } catch { /* logging never fails a step */ }
   }
   return raised ? models.escalate! : models.main;
+}
+
+/**
+ * r5: the one line a turned-back completion is answered with (`FcaStepPorts.completionMistake`; run 28: the receipt said only "received", and
+ * the next decisions asked again, three in 11 s): what it was, what a completion is for this goal, and to go on.
+ */
+export function llmcCompletionMistake(goal: string): FcaCompletionMistake {
+  const seen = planGoal(goal) === 'dragon' ? 'ドラゴンの死を見た時だけ' : planGoal(goal) === 'nether' ? 'ネザーに入った時だけ' : '依頼の目的を観測した時だけ';
+  return { line: inARow => `完了の誤り（続けて ${inARow} 回目）: 依頼の達成は、まだ観測で確かめられない。完了は${seen}。`
+    + '時間や遠さで区切らない。届かないと思ったら、計画を見直して続ける（時間と費用の上限は運用者が止める）。', amend: amendAnthropicControl };
 }
 
 /** The mode's menu is fixed (the body's tools of the mode, plan, goal and task tools): no selector call between decisions. */
@@ -201,14 +215,15 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const bodyId = () => control.store.body(step.taskId) ?? '';
   const observe = () => control.observe(bodyId());
   noteLlmcFeet(step.taskId, () => feetOf(observe()));
+  // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    ...(llmc.probe ? { rules: true } : {}) });
+    ...(llmc.probe ? { rules: true } : {}), seen: tree => seenDoneUpdate(tree, observe()) });
   const worldOf = () => {
     const world = observe()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
   };
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R5 } } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
@@ -224,10 +239,13 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log,
-      ...(llmc.probe ? { r4: { probe: llmcProbeRunner(control, step), planWhere } } : {}) }),
+      // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
+      ...(llmc.probe ? { r4: { probe: llmcProbeRunner(control, step), planWhere,
+        caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } } : {}) }),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
+      completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, lookahead: llmc.lookahead, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodec, ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
         ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },

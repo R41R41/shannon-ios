@@ -96,7 +96,8 @@ describe('the switch off: as before', () => {
     expect(configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} })).toBeNull();
     expect(configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on' }, { recordUsage() {} }, { log: () => {} })).toBeNull();
     const on = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {} })!;
-    expect(on.names).toEqual({ main: 'claude-sonnet-5-5', escalate: 'claude-opus-5-5', plan: 'claude-opus-5-5' });
+    expect(on.names).toEqual({ main: 'claude-sonnet-5-5', escalate: null, plan: 'claude-opus-5-5' });
+    expect(on.models.escalate).toBeNull();
     expect(on.planner).toBeTypeOf('function');
     expect(on.summarizer).not.toBeNull();
   });

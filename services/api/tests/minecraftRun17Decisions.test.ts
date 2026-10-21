@@ -8,7 +8,7 @@ import { bedSearchMemory, minecraftSituation, minecraftSkillContext, minecraftSk
 import { milestoneNow } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { fastJudgment, type FastBodyState } from '../src/mind/action/reflex/fastJudgment.js';
-import { FCA_BODY_TOOL_ABSENT } from '../src/mind/action/fca/fcaRunner.js';
+import { FCA_BODY_TOOL_ABSENT } from '../src/mind/action/fca/fcaRunnerWords.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { SkillImporter } from '../src/mind/memory/skillImport.js';
 import { standardSkillPack } from '../src/infra/config/standardSkillPack.js';

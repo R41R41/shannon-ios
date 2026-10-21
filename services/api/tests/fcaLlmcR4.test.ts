@@ -159,8 +159,10 @@ describe('the models of the mode with Sonnet as its main one (shared note 6)', (
     const lines: string[] = [], planned: Array<Record<string, unknown>> = [];
     const client = { messages: { async create(body: unknown) { planned.push(body as Record<string, unknown>);
       return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"nodes":[]}' }], usage: { input_tokens: 1, output_tokens: 1 } } as never; } } };
+    // r5: the raise is off unless the environment asks for it (`next`: the one above the main model).
     const llmc = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', ANTHROPIC_API_KEY: 'k',
-      SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5' }, { recordUsage() {}, fetcher: fixture.fetcher }, { log: line => lines.push(line), client })!;
+      SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }, { recordUsage() {}, fetcher: fixture.fetcher },
+    { log: line => lines.push(line), client })!;
     await llmc.planner!('system', 'input', new AbortController().signal);
     expect(planned[0]!.model).toBe('claude-opus-5-5');
     expect(JSON.stringify(planned[0])).toContain('"forbid"');

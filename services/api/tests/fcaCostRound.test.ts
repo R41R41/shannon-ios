@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FcaModelOutput, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import type { FcaSharedContext } from '../src/mind/action/fca/fcaEvidencePorts.js';
-import { FCA_EARLIER_ACTION_FAILED } from '../src/mind/action/fca/fcaRunner.js';
+import { FCA_EARLIER_ACTION_FAILED } from '../src/mind/action/fca/fcaRunnerWords.js';
 import { failureRefreshes } from '../src/mind/action/fca/fcaToolState.js';
 import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { bodySharedContext } from '../src/infra/models/anthropic/anthropicFcaContext.js';

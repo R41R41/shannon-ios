@@ -250,7 +250,7 @@ describe('the lifecycle investigates before the decision and says it first in th
     lifecycle.context();
     expect(lifecycle.transient!()).not.toHaveProperty('scan');
     expect(scanLines(scan, null)!.lines.length).toBeLessThanOrEqual(10);
-    expect(scanLines({ ...scan, trigger: 'login', rows: Array.from({ length: 20 }, (_, index) => `row${index}`) }, null)!.lines).toHaveLength(9);
+    expect(scanLines({ ...scan, trigger: 'login', rows: Array.from({ length: 20 }, (_, index) => `row${index}`) }, null)!.lines).toHaveLength(10); // r5: the range row and 9 rows
   });
 
   it('without r4 the lifecycle has no investigate and shows no scan (switch off: as r3)', () => {
@@ -406,7 +406,7 @@ describe('the body\'s scan to the first plan (shared note 3; arch-check 6: run 2
   });
 
   it('with no scan yet, the plan waits for one (16 s at most: the body scans within 15 s of a spawn) and is asked with r4\'s words and the scan', async () => {
-    expect(SCAN_WAIT.ms).toBe(16_000);
+    expect(SCAN_WAIT.ms).toBe(20_000); // r5: the body's r5 scan comes up to 15 s after the spawn, later than its r4 did
     let world: Record<string, unknown> = { position: at(0, 64, 0) };
     const asked: Array<{ system: string; input: string }> = [];
     const planner = async (system: string, input: string) => { asked.push({ system, input }); return { nodes: [] }; };
@@ -439,7 +439,8 @@ describe('the knowledge r4 adds (shared note 5)', () => {
       expect(NETHER_ENTRY_KNOWLEDGE).toContain(words);
     expect(LLMC_SYSTEM_APPENDIX_R4.startsWith(LLMC_SYSTEM_APPENDIX)).toBe(true);
     expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
-    expect(llmcSystemAppendix(true)).toBe(LLMC_SYSTEM_APPENDIX_R4);
+    // r5 follows r4's words with its own (`R5_KNOWLEDGE`).
+    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R4)).toBe(true);
     expect(LLMC_SYSTEM_APPENDIX).not.toContain('mc.probe');
   });
 });

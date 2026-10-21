@@ -82,6 +82,11 @@ export interface FcaPlanPort {
   /** The flat copy, when the tree changed in this step (the commit writes `plan_json` and the event then). */
   committed(): ReturnType<typeof flatPlan> | null;
   tree(): PlanTree;
+  /**
+   * mb-llmc r5: a change the head's code makes to the plan (a node seen done, a fact noted as a caution), all or nothing, said in the log by
+   * `why` (closed words). True when the tree changed. Absent: only the model changes the plan.
+   */
+  amend?(update: PlanUpdate, why: string): boolean;
 }
 
 /** The plan part of a decision's input (`FcaModelInput.plan`), when the task keeps a plan. */
@@ -92,11 +97,33 @@ export function planInput(plan: FcaPlanPort | undefined): { plan?: Record<string
 
 export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void;
   /** mb-llmc r4: offer the tool with forbid and caution (`PLAN_UPDATE_RULES_DEFINITION`). Absent: as before. */
-  rules?: boolean }):
+  rules?: boolean;
+  /**
+   * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
+   * the decision reads the path. Absent: none.
+   */
+  seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[] } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
   const say = (line: string) => { try { parts.log?.(line); } catch { /* logging never fails a step */ } };
+  /** r5: a change of the head's own, all or nothing; logged with what is done now and the current node. */
+  const amend = (update: PlanUpdate, why: string, detail = ''): boolean => {
+    const result = applyPlanUpdate(tree, update);
+    if (result.problem || !result.changed) return false;
+    tree = result.tree;
+    changed = true;
+    const done = orderedPlan(tree.nodes).filter(node => node.state === 'done').length;
+    say(`Shannon FCA plan ${/^[a-z_]{1,16}$/u.test(why) ? why : 'amended'} task=${parts.taskId} revision=${tree.revision} done=${done}${detail} `
+      + `current=${tree.current ?? '-'}`);
+    return true;
+  };
+  /** r5: the nodes the frame shows done, marked so before the path is read. */
+  const settle = () => {
+    let seen: ReturnType<NonNullable<typeof parts.seen>> = null;
+    try { seen = tree.nodes.length ? parts.seen?.(tree) ?? null : null; } catch { seen = null; }
+    if (seen) amend(seen.update, 'settled', ` seen=${seen.ids.slice(0, 8).join(',')}`);
+  };
   /** A tree handed in (the first plan) replaces the one held, its done nodes carried over (`inbox.take`). */
   const adopt = () => {
     const handed = parts.inbox?.take(parts.taskId, tree);
@@ -109,11 +136,16 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   const port: FcaPlanPort = {
     view() {
       adopt();
+      settle();
       return tree.nodes.length ? { revision: tree.revision, ...planPath(tree), ...(note ? { note } : {}) } : null;
     },
     display: () => tree.nodes.length ? planDisplay(tree) : undefined,
     committed: () => changed ? flatPlan(tree) : null,
     tree: () => tree,
+    amend(update, why) {
+      adopt();
+      return amend(update, why);
+    },
   };
   const tools: FcaExternalTools = {
     definitions: [parts.rules ? PLAN_UPDATE_RULES_DEFINITION : PLAN_UPDATE_DEFINITION],

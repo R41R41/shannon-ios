@@ -97,6 +97,11 @@ export interface FcaBodyLifecycle {
    * asked ahead (the lookahead) is not taken after a surprise: it was asked without it. Null: no surprise. Absent: never.
    */
   investigate?(signal: AbortSignal): Promise<FcaBodyInvestigation | null>;
+  /**
+   * mb-llmc r5 (run 28: of about 40 decisions asked ahead 12 were taken, and most of the rest were thrown away because the act failed): the
+   * body's last result failed, so the act chosen now is not followed by a decision asked ahead (`fcaLookahead.ts`). Absent: never.
+   */
+  troubled?(): boolean;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

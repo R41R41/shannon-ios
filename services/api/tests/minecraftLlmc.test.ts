@@ -303,10 +303,14 @@ describe('the scene replay (one decision of any model on a frozen scene)', () =>
 });
 
 describe('the models (owner: chosen after the scene replay, each by the environment)', () => {
-  it('main Sonnet, raised to Opus, the first plan by Opus by default; each name from the environment', () => {
-    expect(llmcModelNames({})).toEqual({ main: 'claude-sonnet-5-5', escalate: 'claude-opus-5-5', plan: 'claude-opus-5-5' });
-    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-haiku-5-5' })).toMatchObject({ main: 'claude-haiku-5-5', escalate: 'claude-sonnet-5-5' });
-    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-opus-5-5' }).escalate).toBeNull();
+  it('main Sonnet, no raise (r5), the first plan by Opus by default; each name from the environment', () => {
+    expect(llmcModelNames({})).toEqual({ main: 'claude-sonnet-5-5', escalate: null, plan: 'claude-opus-5-5' });
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' })).toMatchObject({ escalate: 'claude-opus-5-5' });
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-haiku-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'on' }))
+      .toMatchObject({ main: 'claude-haiku-5-5', escalate: 'claude-sonnet-5-5' });
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-haiku-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'claude-opus-5-5' }).escalate)
+      .toBe('claude-opus-5-5');
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-opus-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }).escalate).toBeNull();
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'none' }).escalate).toBeNull();
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'gpt-x', SHANNON_MINECRAFT_LLMC_PLAN_MODEL: 'claude-sonnet-5-5' }))
       .toMatchObject({ main: 'claude-sonnet-5-5', plan: 'claude-sonnet-5-5' });

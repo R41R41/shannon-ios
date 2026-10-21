@@ -28,31 +28,38 @@ export function planGoal(goal: string): Goal {
 }
 
 const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => ({ title, ...extra });
+/** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
 const TO_NETHER: readonly PlanSeed[] = [
-  node('木と石の道具', { doneWhen: 'stone_pickaxe を持つ', children: [node('原木を集める', { doneWhen: '原木6以上' }),
-    node('作業台と木のツルハシ'), node('丸石で石のツルハシ・斧・剣', { doneWhen: 'stone_pickaxe・stone_axe・stone_sword' })] }),
-  node('食料とベッド（最初の夜の前・鉄より前）', { doneWhen: '食料点40以上・ベッド', children: [
+  node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
+    node('原木を集める', { doneWhen: 'have:log>=6|have:planks>=24|have:crafting_table' }),
+    node('作業台と木のツルハシ', { doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
+    node('丸石で石のツルハシ・斧・剣', { doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
+  node('食料とベッド（最初の夜の前・鉄より前）', { doneWhen: 'food>=40&have:bed', children: [
     node('村を回る（ベッド全部・干し草・畑・箱）', { note: '村が見えなければ飛ばす' }),
-    node('無ければ動物を4〜6体狩る'), node('かまどで肉を焼く・パンを作る', { doneWhen: '食料点40〜60' })] }),
-  node('鉄（24〜36）', { doneWhen: 'iron_ingot 24以上か作り終え', children: [node('鉄を掘る（y=16前後・洞窟）'),
-    node('焼いて鉄のツルハシ・バケツ・盾', { doneWhen: 'iron_pickaxe・bucket・shield' }), node('鉄の全身の防具', { doneWhen: '兜・胸・脚・靴' })] }),
-  node('水入りバケツ', { doneWhen: 'water_bucket' }),
-  node('ダイヤ（y=-58）', { doneWhen: 'diamond_pickaxe', children: [node('ダイヤ3以上を掘る'), node('ダイヤのツルハシ（剣も）')] }),
-  node('黒曜石10とゲート', { doneWhen: 'ネザーへ入る', children: [node('溶岩源に水で黒曜石10'), node('火打ち金（火打石は砂利）'),
-    node('食料100点以上に足す'), node('ゲートを組んで火をつける')] }),
+    node('無ければ動物を4〜6体狩る'), node('かまどで肉を焼く・パンを作る', { doneWhen: 'food>=40' })] }),
+  node('鉄（24〜36）', { doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', children: [node('鉄を掘る（y=16前後・洞窟）'),
+    node('焼いて鉄のツルハシ・バケツ・盾', { doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
+    node('鉄の全身の防具', { doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
+  node('水入りバケツ', { doneWhen: 'have:water_bucket' }),
+  node('ダイヤ（y=-58）', { doneWhen: 'have:diamond_pickaxe', children: [node('ダイヤ3以上を掘る', { doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
+    node('ダイヤのツルハシ（剣も）', { doneWhen: 'have:diamond_pickaxe' })] }),
+  node('黒曜石10とゲート', { doneWhen: 'dim:the_nether', children: [node('溶岩源に水で黒曜石10', { doneWhen: 'have:obsidian>=10|dim:the_nether' }),
+    node('火打ち金（火打石は砂利）', { doneWhen: 'have:flint_and_steel|dim:the_nether' }),
+    node('食料100点以上に足す', { doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { doneWhen: 'dim:the_nether' })] }),
 ];
 /** Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past the gate starts with a check. */
 const BEYOND: readonly PlanSeed[] = [
-  node('出発の点検（ネザーの奥へ）', { doneWhen: '食料100点・作業台・盾・ハーフブロック12・足場64', note: '足りない物はゲートのそばで作る',
-    children: [node('ネザーの幹で作業台（持ち歩く）'), node('深層岩の丸石でハーフブロック12'), node('かまどで鉄を焼き盾'),
-      node('食料が100点に足りなければ戻って狩る')] }),
+  node('出発の点検（ネザーの奥へ）', { doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12', note: '足りない物はゲートのそばで作る',
+    children: [node('ネザーの幹で作業台（持ち歩く）', { doneWhen: 'have:crafting_table' }), node('深層岩の丸石でハーフブロック12', { doneWhen: 'have:slab>=12' }),
+      node('かまどで鉄を焼き盾', { doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { doneWhen: 'food>=100' })] }),
   node('ネザー要塞を探す', { note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'ネザーレンガ（N）が見える' }),
-  node('ブレイズロッド7以上', { doneWhen: 'blaze_rod 7', children: [node('スポナーから3〜5マスに隙間つきの待ち場'),
+  node('ブレイズロッド7以上', { doneWhen: 'have:blaze_rod>=7', children: [node('スポナーから3〜5マスに隙間つきの待ち場'),
     node('accept blaze で14体ほど倒す'), node('棒を拾う（ブレイズがいない時）')] }),
-  node('エンダーパール12前後', { doneWhen: 'ender_pearl 12', children: [node('歪んだ森のエンダーマン（天井2）'), node('金で交換（金塊→延べ棒・砦の遺跡）')] }),
-  node('エンダーアイ12〜14', { doneWhen: 'ender_eye 12', children: [node('粉と真珠で作る'), node('オーバーワールドへ戻る')] }),
-  node('出発の点検（エンドへ）', { doneWhen: '食料80点・ベッド4・弓と矢30・足場64・アイ12',
-    children: [node('ベッドを作る（羊毛3と板3）'), node('弓と矢（糸・棒・火打石・羽根）')] }),
+  node('エンダーパール12前後', { doneWhen: 'have:ender_pearl>=12|have:ender_eye>=12',
+    children: [node('歪んだ森のエンダーマン（天井2）'), node('金で交換（金塊→延べ棒・砦の遺跡）')] }),
+  node('エンダーアイ12〜14', { doneWhen: 'have:ender_eye>=12', children: [node('粉と真珠で作る'), node('オーバーワールドへ戻る')] }),
+  node('出発の点検（エンドへ）', { doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12',
+    children: [node('ベッドを作る（羊毛3と板3）', { doneWhen: 'have:bed>=4' }), node('弓と矢（糸・棒・火打石・羽根）', { doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { children: [node('2地点で投げて三角測量'), node('交点で地下へ'), node('ポータルの部屋で枠に12個')] }),
   node('エンドでドラゴン', { children: [node('クリスタルを弓で壊す'), node('止まり木で剣・ベッドの爆発'), node('奈落に落ちない')] }),
 ];
@@ -60,7 +67,7 @@ const BEYOND: readonly PlanSeed[] = [
 export function seedPlan(goal: string): PlanTree | null {
   const kind = planGoal(goal);
   if (!kind) return null;
-  const seeds = kind === 'dragon' ? [...TO_NETHER, ...BEYOND] : [...TO_NETHER, node('ネザーに入る', { doneWhen: 'ディメンションが nether' })];
+  const seeds = kind === 'dragon' ? [...TO_NETHER, ...BEYOND] : [...TO_NETHER, node('ネザーに入る', { doneWhen: 'dim:the_nether' })];
   return planFromSeeds(seeds);
 }
 
@@ -106,10 +113,25 @@ export const FIRST_PLAN_SYSTEM_R4 = [
   NETHER_ENTRY_KNOWLEDGE,
 ].join('\n');
 /**
- * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
- * spawn: 2 s at least, 15 s at most, then about 30 ms). The plan is asked in the background; the seed plan holds meanwhile.
+ * r5 (run 28: Sonnet never called plan.update and the plan's "now" stayed on its first node; owner 2026-10-22 「止めて直す」): each doneWhen an
+ * observation can show is written as a predicate, which the head checks at every decision (`minecraftPlanDone.ts`).
  */
-export const SCAN_WAIT = Object.freeze({ ms: 16_000, everyMs: 250 });
+export const FIRST_PLAN_SYSTEM_R5 = [
+  FIRST_PLAN_SYSTEM_R4,
+  '済みの形（r5）:',
+  '- doneWhen は、観測で確かめられる形で書く（頭のコードが毎判断に確かめて、その節を済みにし、今の節を次へ進める）。'
+    + 'have:物 か have:物>=数（持ち物・着ている物。物は id か、log・planks・bed・bucket・slab のような id の末尾）、dim:the_nether か dim:the_end（次元）、'
+    + 'at:x,y,z~半径（その近くに立つ）、food>=点（持っている食料点）。& で全部、| でどれか（& が先）。この形は 20 字を超えてよい（120 字まで）。',
+  '- 例: "have:stone_pickaxe&have:stone_sword"、"have:log>=6"、"food>=40&have:bed"、"have:iron_ingot>=24|have:iron_chestplate"、"dim:the_nether"、'
+    + '"at:196,69,237~6"。観測で確かめようのない節（探す・回る・見る）は ""。',
+].join('\n');
+/**
+ * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
+ * spawn: 2 s at least, 15 s at most, then about 30 ms). The plan is asked in the background; the seed plan holds meanwhile. r5 (the
+ * body's r5 waits for 8 tenths of the server's view to load, up to 15 s after the spawn, and the head's first decision may come a few
+ * seconds before it): 20 s, not 16.
+ */
+export const SCAN_WAIT = Object.freeze({ ms: 20_000, everyMs: 250 });
 
 const text = (value: unknown, limit: number) => typeof value === 'string' ? value.replace(/[\r\n\t]+/gu, ' ').trim().slice(0, limit) : '';
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -212,7 +234,9 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
    * r4: the body's world now (`world()`), read again for its scan; with no scan yet, the plan waits for one (`SCAN_WAIT`, in the
    * background) and is asked with r4's words (`FIRST_PLAN_SYSTEM_R4`) and the scan in its input. Absent: as before.
    */
-  r4?: { world(): Record<string, unknown> | null; waitMs?: number; everyMs?: number } }): void {
+  r4?: { world(): Record<string, unknown> | null; waitMs?: number; everyMs?: number;
+    /** r5: the words asked with (`FIRST_PLAN_SYSTEM_R5`, doneWhen as predicates). Absent: r4's. */
+    system?: string } }): void {
   const slot = slotOf(parts.taskId);
   if (slot.asked || parts.held.revision > 1) return;
   slot.asked = true;
@@ -227,7 +251,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
   const r4 = parts.r4;
   const ask = r4 ? withScan(r4, parts.world).then(world => {
     say(`Shannon Minecraft first plan scan task=${parts.taskId} scan=${world?.scan ? 'yes' : 'none'} waitedMs=${Date.now() - began}`);
-    return planner(FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world, { scan: true }), abort.signal);
+    return planner(r4.system ?? FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world, { scan: true }), abort.signal);
   }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
   ask.then(answer => {
     const tree = abort.signal.aborted ? null : planFromAnswer(answer);

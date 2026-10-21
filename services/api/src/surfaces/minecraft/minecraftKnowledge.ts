@@ -204,5 +204,27 @@ export const NETHER_ENTRY_KNOWLEDGE = [
 
 /** r4: the appendix with `INVESTIGATE_KNOWLEDGE` (the same bytes at every decision). */
 export const LLMC_SYSTEM_APPENDIX_R4 = [LLMC_SYSTEM_APPENDIX, INVESTIGATE_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r4's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R4 : LLMC_SYSTEM_APPENDIX; }
+
+/**
+ * r5 (run 28, owner 2026-10-22 「止めて直す」): when a completion is one (Sonnet asked to complete five times, "not reached in this run", and
+ * the task stopped 263 s early), how a stair goes down (31 digs stopped at a block not yet in sight, two ahead), and what the head's code now
+ * does to the plan by itself (a node done when its doneWhen is seen; a fact noted as a caution at the second same surprise).
+ */
+export const R5_KNOWLEDGE = [
+  '## 完了・階段・計画の自動の進み',
+  '- 完了（fca_complete）は、依頼の目的を観測した時だけ（エンドラ討伐なら、ドラゴンの死を見た時だけ）。時間や遠さで区切らない。'
+    + '届かないと思ったら、計画を見直して続ける。時間と費用の上限は運用者が止める。目的の前の完了は「完了の誤り」として返る。',
+  '- 階段は 1 段ずつ。足の前の 2 マス（頭と足）を掘ってから 1 歩下りる。2 マス先は掘らない。'
+    + '見えない（sight が「見えない」「間に stone (x,y,z)」と言った）時は、間のブロックを先に掘る。',
+  '- 計画の節の doneWhen が観測の形（have:物>=数・dim:次元・at:x,y,z~半径・food>=点、& と |）なら、頭のコードが毎判断に観測で確かめて'
+    + '節を済みにし、今の節を次へ進める（plan.update は要らない）。',
+  '- 同じ驚きの 2 回目は、頭のコードが今の節の caution に事実を書く（例「(174,54,197) の stone の向こうは見えない」）。'
+    + '判断ではなく事実のメモ: 次の手の前提にする。前提が変わったら lift で消す。',
+  '- 体の止まりの文: 「一歩ではない」は段差 2 以上のほか、「着いていない」（今の足・的までの距離・通れない所が続く）、「そのものには立てない」'
+    + '（立てる隣が続く）、「iron_door」（手では開かない）。walk は木の扉・ゲート・トラップドアを開け、道の足と頭の高さの葉を壊して進む。'
+    + '「掘れない」の「見えない：間に (x,y,z)」は、その間のブロックを先に掘る。pickup の「無い」には落とし物の座標と間のブロックが続く。',
+].join('\n');
+/** r5: r4's appendix and `R5_KNOWLEDGE` (the same bytes at every decision). */
+export const LLMC_SYSTEM_APPENDIX_R5 = [LLMC_SYSTEM_APPENDIX_R4, R5_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r5's (r4's and `R5_KNOWLEDGE`) when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R5 : LLMC_SYSTEM_APPENDIX; }

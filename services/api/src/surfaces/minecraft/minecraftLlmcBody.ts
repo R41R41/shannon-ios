@@ -4,7 +4,8 @@ import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import type { ProbeInput } from '../../contracts/minecraftProbeContract.js';
 import { createFoodTrend, llmcPlanTokens, minecraftLlmcLive, type FoodTrend } from './minecraftLlmcLive.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
-import { createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame } from './minecraftLlmcProbe.js';
+import { createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise } from './minecraftLlmcProbe.js';
+import { cautionFact } from './minecraftLlmcCaution.js';
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the task's plan (for the
@@ -25,12 +26,15 @@ interface TaskEvents {
   cut: string | null;
   /** r3: her health at the last decision, for what a fall or a blast took since. */
   health: number | null;
+  /** r5: the last act did not go as asked (no decision is asked ahead of the next one). */
+  actFailed: boolean;
 }
 const tasks = new Map<string, TaskEvents>();
 function eventsOf(taskId: string): TaskEvents {
   let state = tasks.get(taskId);
   if (!state) {
-    state = { lines: [], seq: 0, read: 0, arrival: null, failed: false, trend: createFoodTrend(), pending: [], cut: null, health: null };
+    state = { lines: [], seq: 0, read: 0, arrival: null, failed: false, trend: createFoodTrend(), pending: [], cut: null, health: null,
+      actFailed: false };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
   }
@@ -93,8 +97,13 @@ export function createLlmcEvents(taskId: string) {
     result(name: string, ok: boolean, bodyReflex: boolean, text = '') {
       if (bodyReflex) note(`反射が ${name} を止めた`);
       state.failed = !ok;
-      if (name === MC_ACT_TOOL) state.cut = cutOf(text, bodyReflex);
+      if (name === MC_ACT_TOOL) {
+        state.cut = cutOf(text, bodyReflex);
+        state.actFailed = !ok;
+      }
     },
+    /** r5: whether the last act failed (`FcaBodyLifecycle.troubled`). */
+    actFailed: () => state.actFailed,
     /** r3: a result's whole text the history keeps short, for the next decision's live state. */
     keep(text: string) {
       state.pending.push(text);
@@ -139,6 +148,25 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
 export interface LlmcProbeParts {
   probe(): ((input: ProbeInput, index: number) => Promise<string | null>) | null;
   planWhere(): string | null;
+  /** r5: a fact noted on the current plan node's caution (true when the plan took it). Absent: none noted. */
+  caution?(text: string): boolean;
+}
+/**
+ * r5: the facts of the surprises met again this step (`cautionFact`), each from its own probes' answers, noted through `note`; how many
+ * the plan took.
+ */
+export function noteCautions(surprises: readonly Surprise[], probes: readonly ProbeInput[], answers: ReadonlyArray<string | null | undefined>,
+  note: ((text: string) => boolean) | undefined): number {
+  if (!note) return 0;
+  let noted = 0;
+  for (const surprise of surprises) {
+    const own = probes.flatMap((probe, index) => surprise.probes.some(item => JSON.stringify(item) === JSON.stringify(probe))
+      ? [{ probe, answer: answers[index] }] : []);
+    const fact = cautionFact({ code: surprise.code, nth: surprise.nth ?? 1, hand: surprise.hand ?? null }, own.map(item => item.probe),
+      own.map(item => item.answer));
+    try { if (fact && note(fact)) noted += 1; } catch { /* a note never fails a step */ }
+  }
+  return noted;
 }
 /** The shown scan's time, by task (a new scan is shown once). */
 const scansShown = new Map<string, string>();
@@ -206,11 +234,18 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
         investigation = done.lines;
         const codes = surprises.map(item => item.code);
         const sent = run ? probes.length : 0;
-        say(`Shannon Minecraft surprise task=${parts.taskId} surprises=${codes.join(',')} probes=${sent} answered=${done.answered} ms=${done.ms}`);
+        // r5: a surprise met the second time has its fact noted on the current node (shown in this decision's plan.rules).
+        const noted = noteCautions(surprises, run ? probes : [], done.answers, r4.caution ? text => r4.caution!(text) : undefined);
+        say(`Shannon Minecraft surprise task=${parts.taskId} surprises=${codes.join(',')} probes=${sent} answered=${done.answered} ms=${done.ms}`
+          + `${noted ? ` noted=${noted}` : ''}`);
         return { surprises: codes, probes: sent, answered: done.answered, ms: done.ms };
       },
     } : {}),
     recallWanted: () => events.wanted(),
+    // r5: no decision asked ahead of an act chosen right after a failed one (run 28: 73% of acts failed within seconds).
+    troubled: () => events.actFailed(),
+    // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before this task is marked.
+    recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {
       reasons = urgentReasons(parts.observe(), events.cut());
       if (reasons.length) {

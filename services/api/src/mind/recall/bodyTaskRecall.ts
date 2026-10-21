@@ -29,7 +29,15 @@ export interface BodyRecallCues {
   words: readonly string[]; tags: readonly string[];
   /** Words of a danger now (night, a threat, low health, a death): a record holding one counts twice as much. */
   urgent?: readonly string[];
+  /**
+   * mb-llmc r5 (run 28: a plan row of run 27's task, its places in another world, was shown with its coordinates): when this task began
+   * (ISO). A record from before it that names a place is shown marked as another task's, whose world may be another (`ELSEWHERE`).
+   */
+  since?: string;
 }
+/** r5: the mark of a record from before the task that names a place (`BodyRecallCues.since`). */
+export const ELSEWHERE = '［前のタスクの記録: 別のワールドかもしれない。座標はこのワールドの物と限らない］';
+const PLACE = /\(-?\d+,\s*-?\d+,\s*-?\d+\)/u;
 
 /** Content-free: what one decision's recall did (`fca_decision_metrics.bodyRecall`). */
 export interface BodyRecallMeasure {
@@ -92,7 +100,9 @@ export function recordEssence(summary: string): { text: string; value: boolean }
   const { name, target, said, segment } = actionOf(action);
   const result = (said || observed).replace(/［再試行の目安[^］]*］/gu, '').replace(CARRIED, '').replace(/💡/gu, '').replace(/\s+/gu, ' ').trim();
   const call = `${name.replace(/^(?:mc|minecraft|fca)\./u, '') || '行動'}${target ? `(${target})` : ''}`;
-  return { text: `[${status}] ${call}${segment ? ` ${segment}` : ''}: ${result}`, value: !(status === 'success' && LOOKS.has(name) && !said) };
+  // r5: a plan's own rows (`plan.update`) are that task's plan, held in its tree; to another task they are only its places.
+  return { text: `[${status}] ${call}${segment ? ` ${segment}` : ''}: ${result}`,
+    value: !(status === 'success' && LOOKS.has(name) && !said) && name !== 'plan.update' && !/^(?:変化なし )?計画 rev\d+/u.test(result) };
 }
 
 /** The same record, dates, ids and numbers aside: the call and the start of its result (the same failure elsewhere is one record). */
@@ -260,7 +270,7 @@ export function createBodyTaskRecall(parts: {
     return { groups: kept.slice(0, BODY_RECALL.items), jev: { ms, source: decision.source, kept: kept.length } };
   }
   /** What the decision shows, read again through memory's own gate: what was forgotten or withheld since the pool was made is not shown. */
-  function shownOf(input: Search, chosen: readonly Group[], capped: boolean): { items: TaskMemoryItem[]; sources: readonly string[] } {
+  function shownOf(input: Search, chosen: readonly Group[], capped: boolean, since?: string): { items: TaskMemoryItem[]; sources: readonly string[] } {
     const shared = parts.memory.readSnapshot?.(input.scopeKey);
     const read = () => {
       const items = parts.memory.read(input.scopeKey, chosen.map(group => group.id), input.present, shared, { provenance: false });
@@ -268,8 +278,11 @@ export function createBodyTaskRecall(parts: {
     };
     const { items, sources } = shared ? shared.withholding.withReadSnapshot(read) : read();
     const byId = new Map(chosen.map(group => [group.id, group]));
-    return { items: items.map(item => Object.freeze({ ...item, summary: viewText({ ...byId.get(item.id)!, text: recordEssence(item.summary).text }, capped) })),
-      sources };
+    return { items: items.map(item => {
+      const text = viewText({ ...byId.get(item.id)!, text: recordEssence(item.summary).text }, capped);
+      const elsewhere = since !== undefined && Date.parse(item.observedAt) < Date.parse(since) && PLACE.test(text);
+      return Object.freeze({ ...item, summary: elsewhere ? `${ELSEWHERE}${text}` : text });
+    }), sources };
   }
 
   return {
@@ -297,7 +310,7 @@ export function createBodyTaskRecall(parts: {
           measure.jev = judgedBy.jev;
           if (judgedBy.jev.source === 'jev') chosen = judgedBy.groups;
         }
-        ({ items, sources } = shownOf(input, chosen, pool.capped));
+        ({ items, sources } = shownOf(input, chosen, pool.capped, input.cues.since));
       } catch (error) {
         // Recall never stops a decision: a read that failed (a lineage past its bound, a store error) gives none this time. A pool that could
         // not be made is held empty, so that the next decisions do not make it again at once.

@@ -22,6 +22,7 @@ import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
 import { investigateFcaBody } from './fcaBodyInvestigation.js';
+import { FCA_COMPLETION_MISTAKES_STOP, sayCompletionMistake, type FcaCompletionMistake } from './fcaCompletionMistake.js';
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince } from './fcaFailureLadder.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
@@ -29,15 +30,7 @@ import { planInput, type FcaPlanPort } from './fcaPlanTools.js';
 import { permitDue } from './fcaStepCost.js';
 import type { FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
-/** How old a lease grant may be reused for a check between outside calls (`checked`). */
-export const FCA_PERMIT_REUSE_MS = 250;
-/** The result of a body action left unrun because an earlier body action of the same response failed (the guard in `executeFcaStep`). */
-export const FCA_EARLIER_ACTION_FAILED = '同じ応答で先に呼んだ体の操作が失敗したため、この操作は実行していません。先の結果と新しい観測から判断し直してください。';
-/**
- * A body tool absent from this decision's menu (Minecraft run 17: it came while the body's reflex held the body, and read as "not
- * a tool of this task"): the body is busy or its catalog changed, so a later decision may call it.
- */
-export const FCA_BODY_TOOL_ABSENT = 'この判断の道具一覧にこの体の道具が無い（体の反射が体を使用中か、体の目録が変わった）。少し待ってから、新しい観測で決め直す。';
+import { FCA_BODY_TOOL_ABSENT, FCA_EARLIER_ACTION_FAILED } from './fcaRunnerWords.js';
 
 export interface FcaStepPorts {
   runtime: TaskRuntime; model: FcaModel;
@@ -91,6 +84,7 @@ export interface FcaStepPorts {
   plan?: FcaPlanPort;
   /** Design mb-llm-centric 2.3: how long one lease grant serves every check of the step (`permitDue`, `fcaPlanTools.ts`). */
   permitWindowMs?: number;
+  completionMistake?: FcaCompletionMistake; // mb-llmc r5: a turned-back completion, told in one line, counted only in a row
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -156,6 +150,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const bodyTask = ports.keepBodyTools?.() === true;
   const surprised = bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal);
   if (surprised) await checked();
+  const unsettled = surprised || (bodyTask && ports.body?.troubled?.() === true); // r5: then no decision is asked ahead
   // A decision asked while the last body call ran, still good for this step (`fcaLookahead.ts`): no model call; none after a surprise (r4).
   const taken = surprised ? null : ports.lookahead?.take(step) ?? null;
   // The real result of the call it went on from stands where the running one stood (the model and the next lookahead see it).
@@ -324,6 +319,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
   let completionRejected = false;
   const decision = output.decision;
+  if (ports.completionMistake && decision.kind === 'tools') completionVerificationFailures = 0;
   let disposition: 'continue' | 'wait' | 'complete' = decision.kind === 'tools' ? 'continue' : decision.kind;
   let ahead: ReturnType<typeof startFcaLookahead> | null = null;
   let preparedNext: Awaited<ReturnType<ReturnType<typeof startFcaLookahead>['settle']>> = null;
@@ -354,9 +350,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       const skipped = !bodyStale && earlierFailed && bodyAction(call.name);
       // The decision's last call, a long body call: the next decision is asked while it runs (`fcaLookahead.ts`).
-      if (ports.lookahead && index === decision.calls.length - 1 && !bodyStale && !skipped && ports.lookahead.wanted(call, step.taskId)) {
+      if (ports.lookahead && index === decision.calls.length - 1 && !bodyStale && !skipped && !unsettled && ports.lookahead.wanted(call, step.taskId)) {
+        const lookahead = ports.lookahead, wasted = (reason: string) => lookahead.wasted?.(step.taskId, reason);
         ahead = startFcaLookahead({ model: ports.model, base: request, history, results, call, signal, permit: ports.permit,
-          afford: () => ports.retryAllowed?.() !== false, isolate: isolatedModelCall, delayMs: ports.lookahead.delayMs });
+          afford: () => ports.retryAllowed?.() !== false, isolate: isolatedModelCall, delayMs: lookahead.delayMs, wasted });
       }
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
       progress({ operationId, tool: call.name, status: 'running' });
@@ -450,6 +447,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       else completionVerificationFailures = 0;
     }
   });
+  if (completionRejected && ports.completionMistake) sayCompletionMistake(history, ports.completionMistake, completionVerificationFailures);
   // No detached recall may keep spending after the segment's completion receipt becomes visible.
   await metrics.timed('closeMs', async () => ports.recall?.finishSegment(step.scopeKey, step.taskId));
   if (!await stillFresh()) bodyStale = true;
@@ -468,6 +466,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (preparedNext && !bodyStale) ports.lookahead?.keep({ taskId: step.taskId, historyLength: saved.history.length,
     lastTurn: JSON.stringify(saved.history.at(-1) ?? null),
     preparedAt: preparedNext.preparedAt, request: preparedNext.request, output: preparedNext.output, selection: selection ? structuredClone(selection) : null });
+  else if (preparedNext) ports.lookahead?.wasted?.(step.taskId, 'stale');
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
   if (saved.task.phase === 'waiting') {
     observerHandoff('store', 'wait', { phase: saved.task.phase });
@@ -486,7 +485,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   // A body task stops on a failure after the fifth was read, and when nothing has moved for a while (`failureStops`).
   const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
     since: failureSince, now: Date.now() });
-  if (toolFailuresStop || completionVerificationFailures >= 5) {
+  if (toolFailuresStop || completionVerificationFailures >= FCA_COMPLETION_MISTAKES_STOP) {
     runtime.stop(step.scopeKey, step.taskId, toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
