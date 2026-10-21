@@ -1,6 +1,7 @@
-import { orderedPlan, planFromSeeds, type PlanSeed, type PlanTree } from '@shannon/mind';
+import { orderedPlan, planFromSeeds, PLAN_LIMITS, type PlanSeed, type PlanTree } from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
-import { DRAGON_KNOWLEDGE, FOOD_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE } from './minecraftKnowledge.js';
+import { DRAGON_KNOWLEDGE, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE } from './minecraftKnowledge.js';
+import { scanForPlan } from './minecraftLlmcProbe.js';
 
 /**
  * The first plan tree of a Minecraft task (design mb-llm-centric 2.5, 2.6: the route becomes the first plan, asked of a strong model once;
@@ -83,22 +84,61 @@ export const FIRST_PLAN_SYSTEM = [
   ORDER_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, DRAGON_KNOWLEDGE,
 ].join('\n');
 
+/**
+ * r4 (SHANNON_MINECRAFT_LLMC_PROBE; arch-check 6: run 26 went on to the fortress with no table while a Nether stem stood 4 m away; run 27's
+ * 160 m held no tree at all and the plan had to choose which way to look): the body's scan of the land goes into the input, and a node may
+ * carry what not to do and what to mind there (`forbid`, `caution`; arch-check 23: of a supervisor's words, these held longest).
+ */
+const rulesField = { type: 'array', items: { type: 'string' } };
+export const FIRST_PLAN_SCHEMA_R4 = Object.freeze({
+  type: 'object', additionalProperties: false, required: ['nodes'],
+  properties: { nodes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'parent', 'title', 'where', 'doneWhen'],
+    properties: { id: { type: 'string' }, parent: { type: 'string' }, title: { type: 'string' }, where: { type: 'string' },
+      doneWhen: { type: 'string' }, forbid: rulesField, caution: rulesField } } } },
+});
+export const FIRST_PLAN_SYSTEM_R4 = [
+  FIRST_PLAN_SYSTEM,
+  '走査と禁止・注意（r4）:',
+  '- 入力の「走査」は、体が読み込み済みの範囲（約 160m）を数えた物。原木・村・水・溶岩・構造物・ネザーの幹・要塞・ポータルの座標を where に使う。'
+    + '走査に無い物は 160m の外にある: 探しに出る向き（走査の地形・バイオームから）を節にする。',
+  '- 節の forbid（してはいけない事）・caution（気をつける事）は、その節で特に守る事だけ書く（無ければ書かない）。各 2 つまで、30 字以内。'
+    + '例: forbid「素手で真下を掘らない」「村の鉄ゴーレムを殴らない」、caution「水の溜まりの上で掘らない」「溶岩の隣を掘らない」。',
+  NETHER_ENTRY_KNOWLEDGE,
+].join('\n');
+/**
+ * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
+ * spawn: 2 s at least, 15 s at most, then about 30 ms). The plan is asked in the background; the seed plan holds meanwhile.
+ */
+export const SCAN_WAIT = Object.freeze({ ms: 16_000, everyMs: 250 });
+
 const text = (value: unknown, limit: number) => typeof value === 'string' ? value.replace(/[\r\n\t]+/gu, ' ').trim().slice(0, limit) : '';
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
 /** The input: the goal, where and when she is, what she carries, and what the body knows of the land (cut to `inputCharacters`). */
-export function firstPlanInput(goal: string, world: Record<string, unknown> | null): string {
+export function firstPlanInput(goal: string, world: Record<string, unknown> | null, options: { scan?: boolean } = {}): string {
   const part = (label: string, value: unknown, limit: number) => {
     const shown = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
     return shown ? [`${label}: ${shown.slice(0, limit)}`] : [];
   };
+  // r4: the body's scan of the land it holds (its words and every row), before the rest is cut to the bound.
+  const scan = options.scan ? scanForPlan(world?.scan) : null;
   return [`依頼: ${text(goal, 400)}`, ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
     ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...part('持ち物', world?.inventory, 800),
+    ...(scan ? [`走査（読み込み済みの範囲の目印）:\n${scan.slice(0, 2_400)}`] : []),
     ...part('目印', world?.mapLandmarks, 1_500), ...part('地図の要約', world?.mapSummary, 1_500),
     ...part('場所の記憶', world?.rememberedPlaces, 1_000), ...part('通ったバイオーム', world?.biomesSeen, 400)]
     .join('\n').slice(0, FIRST_PLAN.inputCharacters);
 }
 
+/** A node's texts from the answer; r4: its forbid and caution too (within the tree's bounds; an answer without them is as before). */
+function seedFields(item: Record<string, unknown>): Omit<PlanSeed, 'title' | 'children' | 'id'> {
+  const rules = (value: unknown) => [...new Set((Array.isArray(value) ? value : []).map(line => text(line, PLAN_LIMITS.rule)).filter(Boolean))]
+    .slice(0, PLAN_LIMITS.rules);
+  const forbid = rules(item.forbid), caution = rules(item.caution);
+  return { ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
+    ...(text(item.doneWhen, 120) ? { doneWhen: text(item.doneWhen, 120) } : {}), ...(text(item.note, 120) ? { note: text(item.note, 120) } : {}),
+    ...(forbid.length ? { forbid } : {}), ...(caution.length ? { caution } : {}) };
+}
 /** The answer as a tree (null when it does not fit: no node, a parent not before its child, past the bounds). */
 export function planFromAnswer(answer: unknown): PlanTree | null {
   const rows = Array.isArray(record(answer)?.nodes) ? record(answer)!.nodes as unknown[] : [];
@@ -106,8 +146,7 @@ export function planFromAnswer(answer: unknown): PlanTree | null {
   for (const row of rows.slice(0, 64)) {
     const item = record(row), id = text(item?.id, 32), title = text(item?.title, 60);
     if (!item || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/u.test(id) || !title || seeds.has(id)) continue;
-    const seed = { id, title, children: [] as PlanSeed[], ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
-      ...(text(item.doneWhen, 120) ? { doneWhen: text(item.doneWhen, 120) } : {}), ...(text(item.note, 120) ? { note: text(item.note, 120) } : {}) };
+    const seed = { id, title, children: [] as PlanSeed[], ...seedFields(item) };
     const parent = text(item.parent, 32);
     if (parent && !seeds.has(parent)) continue;
     seeds.set(id, seed);
@@ -168,22 +207,47 @@ export const firstPlanInbox: FcaPlanInbox = {
  * taken at the next read). `planner` absent: the seed alone. Never throws, never waits.
  */
 export function startFirstPlan(parts: { taskId: string; goal: string; held: PlanTree; world: Record<string, unknown> | null;
-  planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>; log(line: string): void }): void {
+  planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>; log(line: string): void;
+  /**
+   * r4: the body's world now (`world()`), read again for its scan; with no scan yet, the plan waits for one (`SCAN_WAIT`, in the
+   * background) and is asked with r4's words (`FIRST_PLAN_SYSTEM_R4`) and the scan in its input. Absent: as before.
+   */
+  r4?: { world(): Record<string, unknown> | null; waitMs?: number; everyMs?: number } }): void {
   const slot = slotOf(parts.taskId);
   if (slot.asked || parts.held.revision > 1) return;
   slot.asked = true;
   if (!parts.held.nodes.length) slot.seed = seedPlan(parts.goal);
   if (!parts.planner) return;
+  const planner = parts.planner;
   const abort = new AbortController(), began = Date.now();
   const timer = setTimeout(() => abort.abort(), FIRST_PLAN.giveUpMs);
   timer.unref?.();
   const say = (line: string) => { try { parts.log(line); } catch { /* logging never fails a step */ } };
   say(`Shannon Minecraft first plan asked task=${parts.taskId}`);
-  parts.planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal).then(answer => {
+  const r4 = parts.r4;
+  const ask = r4 ? withScan(r4, parts.world).then(world => {
+    say(`Shannon Minecraft first plan scan task=${parts.taskId} scan=${world?.scan ? 'yes' : 'none'} waitedMs=${Date.now() - began}`);
+    return planner(FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world, { scan: true }), abort.signal);
+  }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
+  ask.then(answer => {
     const tree = abort.signal.aborted ? null : planFromAnswer(answer);
     if (tree) slot.answer = tree;
     say(`Shannon Minecraft first plan ${tree ? 'planned' : 'missing'} task=${parts.taskId} nodes=${tree?.nodes.length ?? 0} ms=${Date.now() - began}`);
   }, () => say(`Shannon Minecraft first plan failed task=${parts.taskId} ms=${Date.now() - began}`)).finally(() => clearTimeout(timer));
+}
+
+/** r4: the world with the body's scan: as it is when it holds one, else read again until one comes or `SCAN_WAIT.ms` passes. */
+async function withScan(r4: { world(): Record<string, unknown> | null; waitMs?: number; everyMs?: number },
+  first: Record<string, unknown> | null): Promise<Record<string, unknown> | null> {
+  if (first?.scan) return first;
+  const until = Date.now() + (r4.waitMs ?? SCAN_WAIT.ms);
+  let world = first;
+  while (Date.now() < until) {
+    await new Promise(resolve => setTimeout(resolve, r4.everyMs ?? SCAN_WAIT.everyMs));
+    try { world = r4.world() ?? world; } catch { /* the frame as it was */ }
+    if (world?.scan) return world;
+  }
+  return world;
 }
 
 /** For tests: no task holds a first plan. */

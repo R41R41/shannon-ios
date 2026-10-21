@@ -9,7 +9,12 @@
  * is done and no new current is named, the next node not done (in order, depth first) becomes current.
  */
 export const PLAN_TREE_SCHEMA = 'shannon.plan-tree.v1' as const;
-export const PLAN_LIMITS = Object.freeze({ nodes: 64, depth: 4, title: 60, text: 120, reason: 80, ops: 24, split: 8, next: 3 });
+/**
+ * `rules`: a node's forbid and caution lines each (mb-llmc r4: `forbid`, `caution`), `rule` their length, `shownRules` how many of them the
+ * path shows (the current node's and its parents', `planPath`).
+ */
+export const PLAN_LIMITS = Object.freeze({ nodes: 64, depth: 4, title: 60, text: 120, reason: 80, ops: 24, split: 8, next: 3, rules: 4, rule: 80,
+  shownRules: 8 });
 export type PlanNodeState = 'done' | 'blocked' | 'continue' | 'wait';
 export const PLAN_NODE_STATES: readonly PlanNodeState[] = ['done', 'blocked', 'continue', 'wait'];
 
@@ -22,17 +27,29 @@ export interface PlanNode {
   note?: string;
   /** Why it is blocked. */
   reason?: string;
+  /**
+   * mb-llmc r4 (owner 2026-10-22; arch-check 23: of what a supervisor wrote, the forbids and cautions held longest and worked): what not to
+   * do (`forbid`) and what to mind (`caution`) while this node or one under it is the current one; at most `PLAN_LIMITS.rules` each.
+   */
+  forbid?: readonly string[];
+  caution?: readonly string[];
 }
 export interface PlanTree { schema: typeof PLAN_TREE_SCHEMA; revision: number; current: string | null; nodes: readonly PlanNode[] }
 
 /** A node's fields as an op gives them. */
-export interface PlanNodeDraft { id?: string; title: string; where?: string; doneWhen?: string; note?: string; state?: PlanNodeState }
+export interface PlanNodeDraft { id?: string; title: string; where?: string; doneWhen?: string; note?: string; state?: PlanNodeState;
+  forbid?: readonly string[]; caution?: readonly string[] }
 export type PlanOp =
   | ({ op: 'add'; parent?: string | null; after?: string | null } & PlanNodeDraft)
   | { op: 'split'; id: string; into: readonly PlanNodeDraft[] }
   | { op: 'set'; id: string; state?: PlanNodeState; title?: string; where?: string; doneWhen?: string; note?: string; reason?: string }
   | { op: 'move'; id: string; parent?: string | null; after?: string | null }
-  | { op: 'drop'; id: string };
+  | { op: 'drop'; id: string }
+  /**
+   * mb-llmc r4: `forbid` / `caution` add one line to node `id` (absent: the current node; the oldest goes past `PLAN_LIMITS.rules`, the same
+   * line is not added twice); `lift` takes a line off node `id`'s forbid and caution (the same text, or the one line that contains it).
+   */
+  | { op: 'forbid' | 'caution' | 'lift'; id?: string; text: string };
 export interface PlanUpdate { ops?: readonly PlanOp[]; current?: string | null }
 export interface PlanUpdateResult { tree: PlanTree; changed: boolean; problem: string | null }
 
@@ -66,7 +83,46 @@ function treeShaped(tree: PlanTree): boolean {
 function nodeFits(node: PlanNode): boolean {
   if (!node || !ID.test(String(node.id)) || !isText(node.title, PLAN_LIMITS.title)) return false;
   if (!PLAN_NODE_STATES.includes(node.state) || !Number.isSafeInteger(node.order) || node.order < 0) return false;
-  return [node.where, node.doneWhen, node.note].every(value => optionalText(value, PLAN_LIMITS.text)) && optionalText(node.reason, PLAN_LIMITS.reason);
+  return [node.where, node.doneWhen, node.note].every(value => optionalText(value, PLAN_LIMITS.text)) && optionalText(node.reason, PLAN_LIMITS.reason)
+    && rulesFit(node.forbid) && rulesFit(node.caution);
+}
+/** A node's forbid or caution: absent, or at most `PLAN_LIMITS.rules` lines, each a text within `PLAN_LIMITS.rule`. */
+function rulesFit(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.length <= PLAN_LIMITS.rules && value.every(item => isText(item, PLAN_LIMITS.rule)));
+}
+/** What is wrong with a draft's own fields (its id's form, title, texts, state), or null. */
+function draftProblem(draft: PlanNodeDraft, id: string): string | null {
+  if (!ID.test(id)) return `id ${id} の形が合わない`;
+  if (!isText(draft.title, PLAN_LIMITS.title)) return `${id} の title が無いか長すぎる（${PLAN_LIMITS.title}字まで）`;
+  if (![draft.where, draft.doneWhen, draft.note].every(value => optionalText(value, PLAN_LIMITS.text))) return `${id} の文が長すぎる`;
+  return draft.state !== undefined && !PLAN_NODE_STATES.includes(draft.state) ? `${id} の state が合わない` : null;
+}
+/** A node from a draft whose fields fit (`draftProblem`), with its forbid and caution as kept (`draftRules`). */
+function draftNode(draft: PlanNodeDraft, id: string, parent: string | null, forbid?: string[], caution?: string[]): PlanNode {
+  return { id, parentId: parent, order: 0, title: draft.title.trim(), state: draft.state ?? 'continue',
+    ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}),
+    ...(forbid ? { forbid } : {}), ...(caution ? { caution } : {}) };
+}
+/** r4: takes `text` off a node's forbid and caution (the same line, or else the one line that contains it), or says why not. */
+function liftRule(node: PlanNode, id: string, text: string): string | null {
+  const all = [...(node.forbid ?? []), ...(node.caution ?? [])];
+  const exact = all.filter(line => line === text), within = all.filter(line => line.includes(text));
+  const gone = exact.length ? exact : within.length === 1 ? within : [];
+  if (!gone.length) return within.length > 1 ? `${id} に「${text}」を含む行が ${within.length} つある（全文で書く）` : `${id} に「${text}」の禁止・注意は無い`;
+  for (const key of ['forbid', 'caution'] as const) {
+    const kept = (node[key] ?? []).filter(line => !gone.includes(line));
+    if (kept.length) node[key] = kept;
+    else delete node[key];
+  }
+  return null;
+}
+/** A draft's forbid or caution as the node keeps it (trimmed, no repeats), or a problem. */
+function draftRules(value: unknown, id: string, label: string): { rules?: string[]; problem?: string } {
+  if (value === undefined) return {};
+  if (!Array.isArray(value)) return { problem: `${id} の ${label} は文の配列` };
+  const rules = [...new Set(value.map(item => typeof item === 'string' ? item.trim() : item))];
+  if (!rulesFit(rules)) return { problem: `${id} の ${label} は ${PLAN_LIMITS.rules} 行まで・1 行 ${PLAN_LIMITS.rule}字まで` };
+  return rules.length ? { rules: rules as string[] } : {};
 }
 /** A node's depth (1 at the top), or Infinity in a cycle. */
 function depthOf(byId: ReadonlyMap<string, PlanNode>, id: string): number {
@@ -143,14 +199,35 @@ class PlanEdit {
   }
   draft(draft: PlanNodeDraft, parent: string | null, after?: string | null): string | null {
     const id = draft.id ?? this.freshId();
-    if (!ID.test(id)) return `id ${id} の形が合わない`;
-    if (this.nodes.has(id)) return `id ${id} はもうある`;
-    if (!isText(draft.title, PLAN_LIMITS.title)) return `${id} の title が無いか長すぎる（${PLAN_LIMITS.title}字まで）`;
-    if (![draft.where, draft.doneWhen, draft.note].every(value => optionalText(value, PLAN_LIMITS.text))) return `${id} の文が長すぎる`;
-    if (draft.state !== undefined && !PLAN_NODE_STATES.includes(draft.state)) return `${id} の state が合わない`;
-    const node: PlanNode = { id, parentId: parent, order: 0, title: draft.title.trim(), state: draft.state ?? 'continue',
-      ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}) };
-    return this.place(node, parent, after);
+    const problem = this.nodes.has(id) && ID.test(id) ? `id ${id} はもうある` : draftProblem(draft, id);
+    if (problem) return problem;
+    const forbid = draftRules(draft.forbid, id, 'forbid'), caution = draftRules(draft.caution, id, 'caution');
+    if (forbid.problem || caution.problem) return forbid.problem ?? caution.problem!;
+    return this.place(draftNode(draft, id, parent, forbid.rules, caution.rules), parent, after);
+  }
+  /** r4: the node an op names for its forbid or caution (absent id: the current one), or why there is none. */
+  ruleNode(id: string | undefined, op: string): { node: PlanNode; id: string } | { problem: string } {
+    const named = id ?? this.current;
+    const node = named === null ? undefined : this.nodes.get(named);
+    return node ? { node, id: node.id } : { problem: named === null ? `${op} の id が無く、今の節も無い` : `${named} が無い` };
+  }
+  /** r4: one forbid or caution line added to a node (absent id: the current one), the oldest dropped past the bound. */
+  rule(op: { op: 'forbid' | 'caution'; id?: string; text: string }): string | null {
+    const target = this.ruleNode(op.id, op.op);
+    if ('problem' in target) return target.problem;
+    const text = typeof op.text === 'string' ? op.text.trim() : '';
+    if (!isText(text, PLAN_LIMITS.rule)) return `${op.op} の text が無いか長すぎる（${PLAN_LIMITS.rule}字まで）`;
+    const lines = [...target.node[op.op] ?? []].filter(line => line !== text);
+    lines.push(text);
+    target.node[op.op] = lines.slice(-PLAN_LIMITS.rules);
+    return null;
+  }
+  /** r4: a forbid or caution line taken off a node: the same text, or else the one line that contains it. */
+  lift(op: { id?: string; text: string }): string | null {
+    const target = this.ruleNode(op.id, 'lift');
+    if ('problem' in target) return target.problem;
+    const text = typeof op.text === 'string' ? op.text.trim() : '';
+    return text ? liftRule(target.node, target.id, text) : 'lift の text が無い';
   }
   drop(id: string): void {
     for (const child of this.children(id)) this.drop(child.id);
@@ -197,7 +274,9 @@ class PlanEdit {
       case 'set': return this.set(op);
       case 'move': return this.move(op);
       case 'drop': return this.dropOne(op);
-      default: return 'op は add・split・set・move・drop';
+      case 'forbid': case 'caution': return this.rule(op as { op: 'forbid' | 'caution'; id?: string; text: string });
+      case 'lift': return this.lift(op);
+      default: return 'op は add・split・set・move・drop・forbid・caution・lift';
     }
   }
   /** A parent whose children are all done is done (deepest first). */
@@ -250,8 +329,24 @@ function settleCurrent(edit: PlanEdit, named: string | null | undefined): string
   return null;
 }
 
-/** The part of the plan a decision reads every turn: the way down to the current node, it, the next few, and what is blocked. */
-export interface PlanPathView { done: string; path: readonly string[]; now: string | null; next: readonly string[]; blocked: readonly string[] }
+/**
+ * The part of the plan a decision reads every turn: the way down to the current node, it, the next few, and what is blocked; r4: `rules`,
+ * the forbid and caution lines of the current node and of every node above it (the nearest node first, each node's forbids before its cautions, at most
+ * `PLAN_LIMITS.shownRules`), present only when there is one.
+ */
+export interface PlanPathView { done: string; path: readonly string[]; now: string | null; next: readonly string[]; blocked: readonly string[];
+  rules?: readonly string[] }
+/** The forbid and caution lines that hold at `now`: its own, then its parents' up to the top. */
+export function planRules(tree: PlanTree, now: PlanNode | null = tree.current ? tree.nodes.find(node => node.id === tree.current) ?? null : null): string[] {
+  const byId = new Map(tree.nodes.map(node => [node.id, node]));
+  const lines: string[] = [];
+  for (let node: PlanNode | undefined = now ?? undefined; node; node = node.parentId ? byId.get(node.parentId) : undefined) {
+    const own = node.id === now?.id ? '' : `（${node.id}）`;
+    for (const line of node.forbid ?? []) lines.push(`禁止${own}: ${line}`);
+    for (const line of node.caution ?? []) lines.push(`注意${own}: ${line}`);
+  }
+  return lines.slice(0, PLAN_LIMITS.shownRules);
+}
 const nodeLine = (node: PlanNode) => [`${node.id} ${node.title}`, node.where ? `＠${node.where}` : '', node.doneWhen ? `（済み: ${node.doneWhen}）` : '',
   node.note ? ` ${node.note}` : ''].join('');
 export function planPath(tree: PlanTree): PlanPathView {
@@ -262,18 +357,22 @@ export function planPath(tree: PlanTree): PlanPathView {
   const order = orderedPlan(tree.nodes), from = now ? order.findIndex(node => node.id === now.id) + 1 : 0;
   const next = order.slice(from).filter(node => node.state === 'continue' || node.state === 'wait')
     .filter(node => !order.some(other => other.parentId === node.id && other.state !== 'done')).slice(0, PLAN_LIMITS.next);
+  const rules = planRules(tree, now);
   return { done: `${tree.nodes.filter(node => node.state === 'done').length}/${tree.nodes.length}`, path,
     now: now ? nodeLine(now) : null, next: next.map(nodeLine),
-    blocked: tree.nodes.filter(node => node.state === 'blocked').slice(0, 3).map(node => `${node.id} ${node.title}${node.reason ? ` — ${node.reason}` : ''}`) };
+    blocked: tree.nodes.filter(node => node.state === 'blocked').slice(0, 3).map(node => `${node.id} ${node.title}${node.reason ? ` — ${node.reason}` : ''}`),
+    ...(rules.length ? { rules } : {}) };
 }
 
 const MARK: Readonly<Record<PlanNodeState, string>> = { done: '済', blocked: '止', continue: '・', wait: '待' };
 /** The whole tree as text, one node a line, indented by depth; the current node marked ▶. */
 export function planText(tree: PlanTree): string {
   const byId = new Map(tree.nodes.map(node => [node.id, node]));
-  const lines = orderedPlan(tree.nodes).map(node => {
+  const lines = orderedPlan(tree.nodes).flatMap(node => {
     const depth = depthOf(byId, node.id) - 1, mark = node.id === tree.current ? '▶' : MARK[node.state];
-    return `${'  '.repeat(depth)}${mark} ${nodeLine(node)}${node.state === 'blocked' && node.reason ? ` — ${node.reason}` : ''}`;
+    const indent = '  '.repeat(depth + 1);
+    return [`${'  '.repeat(depth)}${mark} ${nodeLine(node)}${node.state === 'blocked' && node.reason ? ` — ${node.reason}` : ''}`,
+      ...(node.forbid ?? []).map(line => `${indent}禁止: ${line}`), ...(node.caution ?? []).map(line => `${indent}注意: ${line}`)];
   });
   return [`計画 rev${tree.revision}（済み ${tree.nodes.filter(node => node.state === 'done').length}/${tree.nodes.length}）`, ...lines].join('\n');
 }

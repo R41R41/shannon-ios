@@ -20,9 +20,15 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
-import { LLMC_SYSTEM_APPENDIX } from '../surfaces/minecraft/minecraftKnowledge.js';
-import { FIRST_PLAN, FIRST_PLAN_SCHEMA } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
+import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
+import { MC_PROBE_SKILL, type ProbeInput } from '../contracts/minecraftProbeContract.js';
 import { abortedRouteUsage } from './minecraftRouteWiring.js';
+import { minecraftTaskContext } from './fcaMinecraftTools.js';
+import { createHash } from 'node:crypto';
+import { actionResource } from '../contracts/actionThreadContract.js';
+import { currentActionExecution } from '../infra/context/actionExecution.js';
 
 /**
  * SHANNON_MINECRAFT_LLM_CENTRIC (design mb-llm-centric; owner 2026-10-21: the main model is chosen after replaying scenes with Haiku,
@@ -117,6 +123,12 @@ export const LLMC_CATALOG_SELECTOR: FcaToolSelector = {
 
 export interface LlmcWiring {
   names: LlmcModelNames;
+  /**
+   * r4, SHANNON_MINECRAFT_LLMC_PROBE (owner 2026-10-22): a surprise is probed before the decision, `mc.probe` is offered, the body's scan
+   * goes to the first plan and the live state, plan nodes carry forbid and caution, and the knowledge says how to look when stuck. False:
+   * the mode as r3 (fc7bed7) had it, byte for byte.
+   */
+  probe: boolean;
   models: { main: FcaModel; escalate: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
@@ -135,9 +147,12 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   base: Omit<AnthropicFcaOptions, 'model' | 'apiKey' | 'systemAppendix'>, parts: { log?(line: string): void; client?: PlanClient } = {}): LlmcWiring | null {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC')) return null;
   const names = llmcModelNames(values), log = parts.log ?? (line => console.info(line));
+  const probe = switchOn(values, 'SHANNON_MINECRAFT_LLMC_PROBE');
+  // Every decision model of the mode reads the same appendix (r4's with the probe on): the main one and the one it is raised to.
+  const appendix = llmcSystemAppendix(probe);
   const make = (model: string) => {
     const apiKey = keyFor(values, model);
-    return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: LLMC_SYSTEM_APPENDIX }) : null;
+    return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: appendix }) : null;
   };
   const main = make(names.main);
   if (!main) {
@@ -145,13 +160,36 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
     return null;
   }
   const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
-  log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}`);
-  return { names, models: { main, escalate: names.escalate ? make(names.escalate) : null },
+  log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}${probe ? ' probe=on' : ''}`);
+  return { names, probe, models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
         maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
     policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
-    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client) };
+    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, probe ? FIRST_PLAN_SCHEMA_R4 : FIRST_PLAN_SCHEMA) };
+}
+
+/**
+ * r4: the way to send one fixed probe of a surprise to the task's body, or null while the body is not there or has no `probe` (its
+ * catalog). The command goes in the step's lease with the body's resource, as every body command does (the control refuses a lease
+ * without it; the body itself runs a probe beside an act), its deadline `LLMC_PROBE.commandMs`; an answer that does not come is null (the
+ * investigation waits less than that and goes on).
+ */
+export function llmcProbeRunner(control: MinecraftControl, step: TaskStep): () => ((input: ProbeInput, index: number) => Promise<string | null>) | null {
+  return () => {
+    const bodyId = control.store.body(step.taskId) ?? '';
+    const frame = bodyId ? control.frame(bodyId) : null;
+    if (!frame?.poll.skills?.some(skill => skill.name === MC_PROBE_SKILL)) return null;
+    return async (input, index) => {
+      const active = currentActionExecution();
+      if (!active || active.lease.id !== step.lease.id
+        || !await active.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], AbortSignal.timeout(LLMC_PROBE.commandMs))) return null;
+      const receipt = await control.command({ id: `probe:${createHash('sha256').update(`${step.id}:${index}`).digest('hex')}`,
+        context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill', skill: MC_PROBE_SKILL,
+        arguments: input as unknown as Record<string, unknown>, milliseconds: LLMC_PROBE.commandMs });
+      return receipt.outcome === 'completed' ? receipt.result ?? null : null;
+    };
+  };
 }
 
 /**
@@ -163,20 +201,30 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const bodyId = () => control.store.body(step.taskId) ?? '';
   const observe = () => control.observe(bodyId());
   noteLlmcFeet(step.taskId, () => feetOf(observe()));
-  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log });
-  const world = observe()?.state.world;
-  startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log,
-    world: world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null });
+  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
+    ...(llmc.probe ? { rules: true } : {}) });
+  const worldOf = () => {
+    const world = observe()?.state.world;
+    return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
+  };
+  startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
+    ...(llmc.probe ? { r4: { world: worldOf } } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view() };
+  // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
+  const planWhere = () => {
+    const tree = plan.port.tree();
+    return tree.nodes.find(node => node.id === tree.current)?.where ?? null;
+  };
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
-    tools: { llmc: { plan: display } },
+    tools: { llmc: { plan: display, ...(llmc.probe ? { probe: true } : {}) } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
-      observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log }),
+      observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log,
+      ...(llmc.probe ? { r4: { probe: llmcProbeRunner(control, step), planWhere } } : {}) }),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
@@ -196,12 +244,12 @@ export function llmcLifecycle(small: ReturnType<typeof llmcStepParts> | null, li
 type PlanClient ={ messages: { create(body: Anthropic.MessageCreateParamsNonStreaming, options: { signal: AbortSignal }): PromiseLike<Anthropic.Message> } };
 /** The first plan's one structured request (`minecraftFirstPlan.ts`), charged like a decision; none without a key. */
 function firstPlanner(values: Readonly<Record<string, string | undefined>>, model: string, recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>,
-  log: (line: string) => void, given?: PlanClient): { planner?: LlmcWiring['planner'] } {
+  log: (line: string) => void, given?: PlanClient, schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA): { planner?: LlmcWiring['planner'] } {
   const apiKey = keyFor(values, model);
   if (!apiKey && !given) return {};
   const client = given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: FIRST_PLAN.giveUpMs });
   return { planner: async (system, input, signal) => {
-    const body = structuredBody(model, system, input, FIRST_PLAN_SCHEMA, 'low', FIRST_PLAN.outputTokens);
+    const body = structuredBody(model, system, input, schema, 'low', FIRST_PLAN.outputTokens);
     const began = Date.now();
     let message: Anthropic.Message;
     try { message = await client.messages.create(body, { signal }); } catch (error) {

@@ -144,6 +144,13 @@ export interface LlmcLiveParts {
   urgent?: readonly string[];
   /** r3: health lost since the last decision (a fall, a blast), for the hint to look round (`lookHint`). */
   healthLost?: number;
+  /**
+   * r4: the surprises of this step and what the head's probes found (`runInvestigation`, at most 600 tokens): first in the live state,
+   * outside its bound, never cut here. Absent (and no key) when there was none.
+   */
+  investigation?: readonly string[];
+  /** r4: the body's scan of the land, shown once when a new one came (`scanLines`, at most 10 lines): counted in the bound, never cut. */
+  scan?: readonly string[];
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -176,6 +183,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     landmarks: strings(world.mapLandmarks, LANDMARKS),
+    ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
     ...(look ? { look } : {}),
     state: { ...state, ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
@@ -187,14 +195,22 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
   };
   // r3: outside the bound (never cut, at most `LAST_RESULTS_CHARS`): the results shown this once.
+  const shown = shownResults(parts.lastResults ?? []);
+  // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`).
+  return { ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...fitLive(live, planTokens),
+    ...(shown.length ? { lastResults: shown } : {}) };
+}
+
+/** The results shown this once, together at most `LAST_RESULTS_CHARS` (the last one cut). */
+function shownResults(results: readonly string[]): string[] {
   const shown: string[] = [];
   let room = LAST_RESULTS_CHARS;
-  for (const text of parts.lastResults ?? []) {
+  for (const text of results) {
     if (room <= 0) break;
     shown.push(text.length <= room ? text : `${text.slice(0, room)}…（長いため後略）`);
     room -= text.length;
   }
-  return { ...fitLive(live, planTokens), ...(shown.length ? { lastResults: shown } : {}) };
+  return shown;
 }
 
 /** The tokens of a live body as the decision sends it (its JSON). */

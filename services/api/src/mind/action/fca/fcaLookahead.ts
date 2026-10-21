@@ -41,6 +41,8 @@ export interface FcaLookahead {
   keep(prepared: FcaPrepared): void;
   /** The decision prepared for this step, when still good for it (taken once), or null. */
   take(step: TaskStep): FcaPrepared | null;
+  /** mb-llmc r4: the decision prepared for this task is not taken (a surprise came since it was asked); `reason` closed. Absent: none. */
+  drop?(taskId: string, reason: string): void;
   /** How long a call must have run before the next decision is asked (`FCA_LOOKAHEAD.delayMs`). */
   delayMs: number;
 }
@@ -73,6 +75,12 @@ export function createFcaLookahead(options: {
     keep(prepared) {
       kept.set(prepared.taskId, prepared);
       if (kept.size > 32) kept.delete(kept.keys().next().value as string);
+    },
+    drop(taskId, reason) {
+      const prepared = kept.get(taskId);
+      kept.delete(taskId);
+      chains.set(taskId, 0);
+      if (prepared) log(`Shannon FCA lookahead wasted task=${taskId} reason=${/^[a-z_]{1,24}$/u.test(reason) ? reason : 'other'}`);
     },
     take(step) {
       const prepared = kept.get(step.taskId);

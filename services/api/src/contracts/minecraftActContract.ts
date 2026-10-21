@@ -13,6 +13,8 @@
  * `actProblem` before the body sees it; the body's own schema must accept every input these accept. The body's result is the JSON of
  * `ActResult` / `ViewResult` in the receipt's `result` (at most 16,000 characters, the receipt's bound).
  */
+import type { WorldScan } from './minecraftProbeContract.js';
+
 export const MC_ACT_SKILL = 'act' as const;
 export const MC_VIEW_SKILL = 'view' as const;
 export const MC_ACT_TOOL = `mc.${MC_ACT_SKILL}` as const;
@@ -216,6 +218,8 @@ export interface LlmCentricWorld {
   recentStops?: readonly string[];
   /** The hidden food saturation (0–20). */
   saturation?: number;
+  /** r4: the body's own `scan` at a spawn, a new dimension or a respawn (`WorldScan`, `minecraftProbeContract.ts`); absent until the first. */
+  scan?: WorldScan;
 }
 
 /**

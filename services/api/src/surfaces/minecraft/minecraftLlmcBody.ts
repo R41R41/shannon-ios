@@ -1,8 +1,10 @@
 import type { BodyObservation, BodyPlanView, BodyValue } from '../../contracts/bodyControlContract.js';
-import type { FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
+import type { FcaBodyInvestigation, FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
+import type { ProbeInput } from '../../contracts/minecraftProbeContract.js';
 import { createFoodTrend, llmcPlanTokens, minecraftLlmcLive, type FoodTrend } from './minecraftLlmcLive.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
+import { createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame } from './minecraftLlmcProbe.js';
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the task's plan (for the
@@ -120,13 +122,26 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 
 /** The live body of an LLM-centric decision: the map-first state, bounded beside the plan's path. */
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
-  elapsedMinutes: number | null, urgent: readonly string[] = []): Record<string, unknown> {
+  elapsedMinutes: number | null, urgent: readonly string[] = [],
+  r4: { investigation: readonly string[]; scan: readonly string[] } | null = null): Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
   return minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
-    lastResults: events.results(), urgent, healthLost: events.healthLost() }, llmcPlanTokens(plan));
+    lastResults: events.results(), urgent, healthLost: events.healthLost(),
+    ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}) }, llmcPlanTokens(plan));
 }
+
+/**
+ * r4 (SHANNON_MINECRAFT_LLMC_PROBE): what the mode's body takes for its surprises and the body's scan. `probe`: the way to send one probe
+ * to the body now (its result text, or null), or null while the body has no `probe`; `planWhere`: the current plan node's place.
+ */
+export interface LlmcProbeParts {
+  probe(): ((input: ProbeInput, index: number) => Promise<string | null>) | null;
+  planWhere(): string | null;
+}
+/** The shown scan's time, by task (a new scan is shown once). */
+const scansShown = new Map<string, string>();
 
 /** Her health in a frame, or null. */
 const healthOf = (observation: BodyObservation | null): number | null => {
@@ -141,9 +156,14 @@ const healthOf = (observation: BodyObservation | null): number | null => {
  * hostile is close or the last act was cut by one or by a reflex. Everything else is the body's as it was.
  */
 export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyParts; taskId: string; createdAt: string;
-  observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void }): FcaBodyLifecycle {
+  observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void;
+  /** r4: surprises probed before the decision, and the body's scan in the live state. Absent: as r3. */
+  r4?: LlmcProbeParts }): FcaBodyLifecycle {
   const events = createLlmcEvents(parts.taskId), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
   let observation: BodyObservation | null = null, reasons: string[] = [];
+  const r4 = parts.r4, watch = r4 ? createSurpriseWatch(parts.taskId) : null;
+  let investigation: string[] = [], scan: string[] = [];
+  const say = (line: string) => { try { (parts.log ?? (text => console.info(text)))(line); } catch { /* a log never fails a step */ } };
   return { ...body,
     context() {
       const value = body.context();
@@ -151,9 +171,45 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const arrival = parts.arrival();
       events.arrival(arrival.at, arrival.kind);
       events.take(healthOf(observation));
+      if (r4) {
+        // r4: a new scan of the body (a spawn, a portal, a respawn) is shown once.
+        const shown = scanLines((observation?.state.world as { scan?: unknown } | undefined)?.scan, scansShown.get(parts.taskId) ?? null);
+        scan = shown?.lines ?? [];
+        if (shown) {
+          scansShown.delete(parts.taskId);
+          scansShown.set(parts.taskId, shown.at);
+          if (scansShown.size > 32) scansShown.delete(scansShown.keys().next().value as string);
+        }
+      }
       return value;
     },
-    transient: () => llmcTransient(parts.llmc, events, observation, Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null, reasons),
+    transient: () => llmcTransient(parts.llmc, events, observation, Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null, reasons,
+      r4 ? { investigation, scan } : null),
+    ...(r4 && watch ? {
+      /**
+       * r4: before the decision, the surprises since the last one (`createSurpriseWatch`) and their fixed probes, sent at once and waited
+       * for `LLMC_PROBE.budgetMs` at most (an urgent step's `urgentBudgetMs`); what came is said first in this decision's live state.
+       */
+      async investigate(): Promise<FcaBodyInvestigation | null> {
+        const seen = parts.observe();
+        const frame = surpriseFrame(seen, parts.arrival().at);
+        let where: string | null = null;
+        try { where = r4.planWhere(); } catch { where = null; }
+        const surprises = watch.detect(frame, where);
+        investigation = [];
+        if (!surprises.length) return null;
+        const probes = stepProbes(surprises), urgent = urgentReasons(seen, events.cut()).length > 0;
+        let run: ReturnType<LlmcProbeParts['probe']> = null;
+        try { run = r4.probe(); } catch { run = null; }
+        const done = await runInvestigation({ surprises, probes: run ? probes : [], feet: frame.feet, run,
+          budgetMs: urgent ? LLMC_PROBE.urgentBudgetMs : LLMC_PROBE.budgetMs });
+        investigation = done.lines;
+        const codes = surprises.map(item => item.code);
+        const sent = run ? probes.length : 0;
+        say(`Shannon Minecraft surprise task=${parts.taskId} surprises=${codes.join(',')} probes=${sent} answered=${done.answered} ms=${done.ms}`);
+        return { surprises: codes, probes: sent, answered: done.answered, ms: done.ms };
+      },
+    } : {}),
     recallWanted: () => events.wanted(),
     urgent() {
       reasons = urgentReasons(parts.observe(), events.cut());
@@ -171,9 +227,13 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     noteResult(call, result, durationMilliseconds) {
       body.noteResult?.(call, result, durationMilliseconds);
       events.result(call.name, result.ok, result.bodyReflex === true, result.text);
+      watch?.noteResult(call.name, result.ok, result.text, call.input);
     },
   };
 }
 
 /** For tests: no task holds events. */
-export function forgetLlmcEvents(): void { tasks.clear(); }
+export function forgetLlmcEvents(): void {
+  tasks.clear();
+  scansShown.clear();
+}

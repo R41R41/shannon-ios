@@ -21,6 +21,7 @@ import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
 import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
+import { investigateFcaBody } from './fcaBodyInvestigation.js';
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince } from './fcaFailureLadder.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
@@ -150,13 +151,15 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   }, () => ({ allowed: true })));
   await checked();
-  // A decision asked while the previous step's last body call ran, still good for this step (`fcaLookahead.ts`): no model call here.
-  const taken = ports.lookahead?.take(step) ?? null;
-  // The real result of the call it went on from stands where the running one stood (the model and the next lookahead see it).
-  const prepared = taken ? { ...taken, request: withRealResult(taken.request, step.snapshot.history) } : null;
   // A body task's decision carries no recall packet, in either shape (run 15, 2026-10-19: 2.3–7.3k characters of past episodes in every
   // stored decision, and 2.7 s of each step): what she did before is one `memory.search` away (offered to every task) when it matters.
   const bodyTask = ports.keepBodyTools?.() === true;
+  const surprised = bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal);
+  if (surprised) await checked();
+  // A decision asked while the last body call ran, still good for this step (`fcaLookahead.ts`): no model call; none after a surprise (r4).
+  const taken = surprised ? null : ports.lookahead?.take(step) ?? null;
+  // The real result of the call it went on from stands where the running one stood (the model and the next lookahead see it).
+  const prepared = taken ? { ...taken, request: withRealResult(taken.request, step.snapshot.history) } : null;
   // mb-llmc r3 (run 27: a creeper stopped her act at 3.9 m and the next decision came 12.8 s later): an urgent step asks the model at once,
   // with no summary while the replay fits its bound and no recall (`FcaBodyLifecycle.urgent`).
   const urgent = bodyTask && !prepared && ports.body?.urgent?.() === true;

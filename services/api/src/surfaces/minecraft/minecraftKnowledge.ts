@@ -159,3 +159,50 @@ export const DRAGON_KNOWLEDGE = [
 /** The whole appendix of the mode's instructions: rules, the map legend, the knowledge. */
 export const LLMC_SYSTEM_APPENDIX = [LLMC_RULES, MAP_LEGEND, DANGER_KNOWLEDGE, WOOD_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, ORDER_KNOWLEDGE,
   DRAGON_KNOWLEDGE].join('\n\n');
+
+/**
+ * r4 (SHANNON_MINECRAFT_LLMC_PROBE; owner 2026-10-22 「判断のループの sonnet が自力でも調べられるようにしたいので、調査系の道具や詰まった場合には
+ * こう調べると良いという指示を加えたい」): how to look when stuck (the head's investigation, `mc.probe`), the forbid and caution of the plan, and
+ * how to read a dangerous fact. Arch-check 6: a probe that showed the fact did not mend the hand without the knowledge of what to do with
+ * it (S1: seven blocks of air read as a foothold; S2: a lake's section, and she dug down into it).
+ */
+export const INVESTIGATE_KNOWLEDGE = [
+  '## 詰まった時の調べ方（mc.probe: 読むだけ・速い・体は動かない）',
+  '- 驚き（1 判断で体力 −5 以上か 10 未満・落下 5 段以上・酸素 10 未満・同じ止まりの 2 回目・攻撃の当たり 0・同じ掘りの中止 3 回）の後は、'
+    + '頭が先に決まった調べをして、live の body.investigation の先頭に「驚き: …」「調べ …: …」を出す。手を決める前にまずそれを読む。',
+  '- 自分でも調べられる（mc.probe）: 同じ止まりが 2 回 → まず history（その場所の前の手と止まり）と、path（行き先へ掘らず置かずに歩けるか、切れ目、道の点）'
+    + 'か sight（的が見えるか・4.5m で届くか・間のブロック）。落ちた・溺れそう → column（足の列の上下）。当たらない・届かない → sight。'
+    + '周りの敵・危ないブロック → around。何があるか分からない → scan か mc.view。',
+  '- 調べた事実で前提（道・高さ・届く所・材料のある所）を見直してから手を変える。同じ手を同じまま出さない。'
+    + 'mc.probe の答えは次の判断で届く: 答えで変わる手は次の判断で出し、答えに関わらない手（離れる・食べる・囲う）は同じ応答で出してよい。'
+    + 'live の investigation に答えが出ている時は、もう一度同じ調べをしない。',
+  '- 原因が分かったら plan.update で、その節に forbid（してはいけない事: 「この縦穴を下へ掘らない」）か caution（気をつける事: 「東は落差 7」）を書く。'
+    + 'live の plan.rules に、今の節と親の道の禁止・注意が出る。前提が変わって要らなくなったら lift で消す。',
+  '## 危ない事実の読み方',
+  '- 調べの答えは危ない事実を先にそのまま書く。「下 n 段は空気」「落差 n」は、そこを掘る・踏み出すと n 段落ちるという意味で、足がかりではない。',
+  '- 「下 n 段は空気」なら飛び降りない。n が 3 段以下で、鉄の防具（全身）があれば降りてよい。4 段以上は、dig の階段（1 段ずつ前と下）で下りるか、'
+    + '着地の所に水バケツを use してから。',
+  '- 「水深 n」「水」: 水の中や真上で下へ掘らない（周りを塞いでも下が水なら同じ）。「溶岩」: その隣のマスを掘らない・歩かない。'
+    + '「すき間 1」「高さ 1」は通れない（2 マスの高さが要る）。',
+  '- 「見えない」「間に stone (x,y,z)」は、その間のブロックを dig してから、か、見える所（立てる所の候補）へ walk してから。',
+  '- 道の点（path の points）は、そのまま walk の path に入れてよい（泳ぎの点も含む）。行けない時の「切れ目」の座標は、そこから先へ踏み出さない所。',
+  '## 走査（live の body.scan）',
+  '- スポーン・次元の変化・死の後に、体が読み込み済みの範囲（約 160m）を数えて body.scan に一度出す: 原木・村・水・溶岩・構造物・ネザーの幹・要塞・スポナー・ポータルの方角と距離。',
+  '- 走査にある物を、目印と同じく計画の where と次の手に使う。次元が変わった時は、走査を見て計画の次の節（材料・場所・順番）を plan.update で見直す。',
+].join('\n');
+
+/** r4: the check on entering the Nether (the decision's and the first plan's). */
+export const NETHER_ENTRY_KNOWLEDGE = [
+  '## ネザーに入ってすぐの点検（実走26: 作業台・ハーフブロック・盾なしで要塞へ行き、ブレイズの所で詰まった。4m にネザーの幹があった）',
+  '- 入ったらまず: 帰りのゲートの座標を計画の where に書く。body.scan でネザーの幹・要塞（ネザーレンガ）・溶岩の溜まりの方角を見る。around で近くの敵（ガスト・ピグリン）を見る。',
+  '- 持ち物を数える: 作業台・ハーフブロック 12・盾・食料 100 点・足場のブロック 64・金の防具 1。足りない物は、奥へ行く前にゲートのそばで作る。',
+  '- 作業台をネザーで作る: 真紅の幹（crimson_stem）か歪んだ幹（warped_stem）を dig（素手でも取れる）→ craft crimson_planks か warped_planks（幹 1 で板 4）→ '
+    + 'craft crafting_table（板 4）。置いて使い、終わったら dig して持ち歩く。棒も板 2 で 4 本。',
+  '- ハーフブロック: craft cobblestone_slab（丸石 3 で 6）か cobbled_deepslate_slab・blackstone_slab。作業台が要る。ブレイズの待ち場の目の高さの隙間に使う。',
+  '- 盾: craft shield（板 6・鉄の延べ棒 1）を作業台で。equip slot=offhand（体が構える）。ネザーには鉄の鉱石が無い（砦の遺跡の箱くらい）ので、鉄はオーバーワールドで持って来る。',
+].join('\n');
+
+/** r4: the appendix with `INVESTIGATE_KNOWLEDGE` (the same bytes at every decision). */
+export const LLMC_SYSTEM_APPENDIX_R4 = [LLMC_SYSTEM_APPENDIX, INVESTIGATE_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r4's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R4 : LLMC_SYSTEM_APPENDIX; }

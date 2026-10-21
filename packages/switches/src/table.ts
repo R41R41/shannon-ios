@@ -204,6 +204,12 @@ export const SWITCHES = [
       + '_ESCALATE_MODEL, _PLAN_MODEL. The body must run MINEBOT_LLM_CENTRIC=on. Off: as before.',
   },
   {
+    name: 'SHANNON_MINECRAFT_LLMC_PROBE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LLM_CENTRIC'],
+    doc: 'mb-llmc r4 (owner 2026-10-22): a surprise (health, a fall, air, the same stop twice, no hit) has the body probed before the decision '
+      + 'and said first in its live state; the model gets mc.probe, the body\'s world scan goes to the first plan and the live state, plan '
+      + 'nodes carry forbid and caution, and the knowledge says how to look when stuck. Needs the body\'s probe skill. Off: as r3.',
+  },
+  {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
       + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',

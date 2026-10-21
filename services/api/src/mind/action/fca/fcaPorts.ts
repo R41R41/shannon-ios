@@ -54,6 +54,8 @@ export interface FcaModelInput {
   plan?: Readonly<Record<string, unknown>>;
 }
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
+/** What a body's investigation did (`FcaBodyLifecycle.investigate`): closed codes and counts only, for the metrics line. */
+export interface FcaBodyInvestigation { surprises: readonly string[]; probes: number; answered: number; ms: number }
 export interface FcaBodyLifecycle {
   start(signal: AbortSignal): void;
   revision(): number;
@@ -89,6 +91,12 @@ export interface FcaBodyLifecycle {
    * summary while the replay still fits (`prepareFcaHistory`), no recall. Absent: never urgent.
    */
   urgent?(): boolean;
+  /**
+   * mb-llmc r4 (owner 2026-10-22): before the decision, the body's own check for a surprise since the last one (health, a fall, the same
+   * stop twice…) and its fixed probes, bounded in time; what they found goes into this decision's live state (`transient`). A decision
+   * asked ahead (the lookahead) is not taken after a surprise: it was asked without it. Null: no surprise. Absent: never.
+   */
+  investigate?(signal: AbortSignal): Promise<FcaBodyInvestigation | null>;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

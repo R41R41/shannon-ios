@@ -7,7 +7,9 @@ import {
   ACT_DESCRIPTION, ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, LLMC_READ_SKILLS, MC_ACT_SKILL, MC_ACT_TOOL,
   MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
+import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
+import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
 import { validSkillInput } from './minecraftControlValidation.js';
 
 /**
@@ -23,20 +25,27 @@ export const LLMC_URGENT_METERS = 6;
 const COMMAND_MARGIN_MS = 5_000;
 const VIEW_MS = 15_000;
 
-/** The tools of the mode, from the body's catalog: `mc.act` and `mc.view` in the head's own words, and the reads it keeps. */
+/**
+ * The tools of the mode, from the body's catalog: `mc.act` and `mc.view` in the head's own words, r4's `mc.probe` (in the head's words too,
+ * when `probe` is on and the body offers it), and the reads it keeps.
+ */
 export function llmcBodyDefinitions(skills: readonly MinecraftSkillDefinition[],
-  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition): FcaToolDefinition[] {
+  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition, options: { probe?: boolean } = {}): FcaToolDefinition[] {
   const has = (name: string) => skills.some(skill => skill.name === name);
   return [
     ...(has(MC_ACT_SKILL) ? [{ ...definition(MC_ACT_TOOL, ACT_DESCRIPTION, false), nativeInputSchema: ACT_INPUT_SCHEMA }] : []),
     ...(has(MC_VIEW_SKILL) ? [{ ...definition(MC_VIEW_TOOL, VIEW_DESCRIPTION, true), nativeInputSchema: VIEW_INPUT_SCHEMA }] : []),
+    ...(options.probe && has(MC_PROBE_SKILL) ? [{ ...definition(MC_PROBE_TOOL, PROBE_DESCRIPTION, true), nativeInputSchema: PROBE_INPUT_SCHEMA }] : []),
     ...skills.filter(skill => LLMC_READ_SKILLS.has(skill.name))
       .map(skill => ({ ...definition(`mc.${skill.name}`, skill.description, skill.readOnly), nativeInputSchema: skill.inputSchema })),
   ];
 }
-/** The head's schema of a mode tool (`mc.act`, `mc.view`), or undefined for a body skill whose schema is the body's. */
+/**
+ * The head's schema of a mode tool (`mc.act`, `mc.view`; r4 `mc.probe` in the body's form, `PROBE_WIRE_SCHEMA`), or undefined for a body
+ * skill whose schema is the body's.
+ */
 export function llmcSchema(name: string): Readonly<Record<string, unknown>> | undefined {
-  return name === MC_ACT_TOOL ? ACT_INPUT_SCHEMA : name === MC_VIEW_TOOL ? VIEW_INPUT_SCHEMA : undefined;
+  return name === MC_ACT_TOOL ? ACT_INPUT_SCHEMA : name === MC_VIEW_TOOL ? VIEW_INPUT_SCHEMA : name === MC_PROBE_TOOL ? PROBE_WIRE_SCHEMA : undefined;
 }
 
 /**
@@ -54,8 +63,15 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
  * An input made ready for the body: put into the contract's shape where what the model meant is plain (`normalizeActInput`; a view's
  * `only` as a list), then checked. `fixes` are said in the result the model reads.
  */
-export function llmcPrepare(name: string, input: unknown): { input: unknown; fixes: string[]; problem: string | null } {
+export function llmcPrepare(name: string, input: unknown, context: ProbeContext = { feet: null, creatures: [] })
+  : { input: unknown; fixes: string[]; problem: string | null } {
   let prepared = input, fixes: string[] = [];
+  if (name === MC_PROBE_TOOL) {
+    // r4: a probe into the body's form (its kind's fields, a creature's id, a column's bounds from her feet).
+    const probe = prepareProbeInput(input, context);
+    if (probe.problem || !probe.input) return { input, fixes: probe.fixes, problem: probe.problem ?? 'mc.probe の形が違う' };
+    return { input: probe.input, fixes: probe.fixes, problem: llmcInputProblem(name, probe.input) };
+  }
   if (name === MC_ACT_TOOL) ({ input: prepared, fixes } = normalizeActInput(input));
   else if (name === MC_VIEW_TOOL && typeof (input as { only?: unknown } | null)?.only === 'string') {
     prepared = { ...(input as object), only: [(input as { only: string }).only] };
@@ -66,7 +82,7 @@ export function llmcPrepare(name: string, input: unknown): { input: unknown; fix
 
 /** How long the body runs it and how long the head waits for its receipt (`from`: her feet now, for the walks' lengths). */
 export function llmcMilliseconds(name: string, input: unknown, from: ActPos | null = null): number {
-  return name === MC_ACT_TOOL ? actMilliseconds(input as ActInput, from) + COMMAND_MARGIN_MS : VIEW_MS;
+  return name === MC_ACT_TOOL ? actMilliseconds(input as ActInput, from) + COMMAND_MARGIN_MS : name === MC_PROBE_TOOL ? LLMC_PROBE.toolMs : VIEW_MS;
 }
 /** Her feet in a frame, or null. */
 export function feetOf(observation: BodyObservation | null): ActPos | null {
@@ -121,13 +137,18 @@ export function llmcStoredResult(name: string, text: string): { stored: string; 
 
 /** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */
 export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = []): ToolResult {
-  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : actResult(receipt, urgent);
+  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent);
   return fixes.length ? { ...result, text: `（頭が形を直して送った: ${fixes.join('、')}）\n${result.text}` } : result;
 }
 function viewResult(receipt: MinecraftControlReceipt): ToolResult {
   const view = readViewResult(receipt.result);
   if (receipt.outcome !== 'completed' || !view) return toolFailure('failed', `見られなかった: ${receipt.result?.slice(0, 300) ?? receipt.outcome}`);
   return toolOk([view.map, ...(view.landmarks ?? [])].join('\n'));
+}
+/** r4: a probe's answer, its text first and then its fields (`probeAnswerText`). */
+function probeResult(receipt: MinecraftControlReceipt): ToolResult {
+  if (receipt.outcome !== 'completed' || !receipt.result) return toolFailure('failed', `調べられなかった: ${receipt.result?.slice(0, 300) ?? receipt.outcome}`);
+  return toolOk(probeAnswerText(receipt.result, false));
 }
 function actResult(receipt: MinecraftControlReceipt, urgent: string | null): ToolResult {
   const act = readActResult(receipt.result);

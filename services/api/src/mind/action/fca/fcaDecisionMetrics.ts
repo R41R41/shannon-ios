@@ -26,11 +26,13 @@ import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
  *   "gap":{"sinceCommitMs","afterMs","waitMs","admitMs"} — from the previous decision's commit to this step's start: the previous step's
  *     work after its commit (`afterMs`: its budget and receipts), the scheduler's wait for its next turn (`waitMs`), and this step's
  *     admission (`admitMs`: lease, begin, budget, ports); null for a first step, or when the scheduler did not say (`ActionExecution.admission`);
- *   "skipped":[<names>] — body actions of the response left unrun because an earlier one of it failed (`fcaRunner.ts`).
+ *   "skipped":[<names>] — body actions of the response left unrun because an earlier one of it failed (`fcaRunner.ts`);
+ *   "probe":{"surprises":[<codes>],"probes","answered":<n>,"ms"} — mb-llmc r4: the body's investigation before the decision (a surprise's
+ *     fixed probes, `FcaBodyLifecycle.investigate`) and the ms the step waited for it; absent when there was no surprise.
  * The parts may overlap: a check inside the summary, the selection or the completion check is in `permitMs` too, and a freshness wait
  * after a cut-off call in `guardMs` and `toolMs`; read each as where time went, not as a share of `stepMs` to add up.
  */
-type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs' | 'evidenceMs';
+type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs' | 'evidenceMs' | 'probeMs';
 type Other = 'startMs' | 'permitMs' | 'guardMs' | 'contextMs' | 'verifyMs' | 'closeMs' | 'commitMs' | 'progressMs';
 const toolName = (name: string) => /^[A-Za-z0-9_.:-]{1,80}$/u.test(name) ? name : 'other';
 const whole = (value: number) => Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
@@ -41,7 +43,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const before = Number(prior.fcaDecisionIndex), index = (Number.isSafeInteger(before) && before >= 0 ? before : 0) + 1;
   const started = clock(), loopStarted = eventLoopBlockedMilliseconds(), execution = currentActionExecution(), startedAt = now();
   if (execution) delete execution.modelMetrics; // A reading of an earlier decision on the same execution is never this one's.
-  const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0, recallStartMs: 0, evidenceMs: 0 };
+  const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0, recallStartMs: 0, evidenceMs: 0, probeMs: 0 };
   const other: Record<Other, number> = { startMs: options.enteredAt === undefined ? 0 : Math.max(0, started - options.enteredAt),
     permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0, progressMs: 0 };
   const committedBefore = typeof prior.fcaCommittedAt === 'number' && Number.isFinite(prior.fcaCommittedAt) ? prior.fcaCommittedAt : null;
@@ -51,6 +53,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   /** mb-llmc r3: an urgent step (`FcaBodyLifecycle.urgent`), and what the history did beside the decision (`prepareFcaHistory`'s `ahead`). */
   let urgent = false;
   const ahead: string[] = [];
+  /** mb-llmc r4: what the body's investigation did before the decision (`FcaBodyLifecycle.investigate`), or null. */
+  let probe: { surprises: string[]; probes: number; answered: number } | null = null;
   /** The time before this step, from the previous decision's commit (`gap` above). */
   const gap = () => {
     if (committedBefore === null) return null;
@@ -86,6 +90,11 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     urgent(): void { urgent = true; },
     /** What the history's summary ahead did in this step: `started`, `installed`, `waited` (mb-llmc r3). Content-free. */
     ahead(what: string): void { if (ahead.length < 4) ahead.push(/^[a-z_]{1,24}$/u.test(what) ? what : 'other'); },
+    /** The body's investigation (mb-llmc r4): its surprises' closed codes and the probes sent and answered. Content-free. */
+    investigated(found: { surprises: readonly string[]; probes: number; answered: number }): void {
+      probe = { surprises: found.surprises.slice(0, 8).map(code => /^[a-z_]{1,24}$/u.test(code) ? code : 'other'),
+        probes: Number.isSafeInteger(found.probes) ? found.probes : 0, answered: Number.isSafeInteger(found.answered) ? found.answered : 0 };
+    },
     /** `fcaCommittedAt`: when this decision committed (epoch ms), the start of the next one's `gap`. */
     checkpoint: (): Record<string, unknown> => ({ fcaDecisionIndex: index, fcaCommittedAt: now() }),
     /** Writes the line (the decision has committed). Never throws. */
@@ -103,6 +112,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), permitAsks, gap: gap(),
           ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
           ...(urgent ? { urgent } : {}), ...(ahead.length ? { summaryAhead: ahead } : {}),
+          ...(probe ? { probe: { ...probe, ms: Math.round(spent.probeMs) } } : {}),
           ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
       } catch { /* measuring never fails a step */ }
     },

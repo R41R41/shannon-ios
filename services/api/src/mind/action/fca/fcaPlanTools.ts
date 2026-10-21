@@ -40,6 +40,36 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
   } },
 };
 
+/**
+ * mb-llmc r4 (SHANNON_MINECRAFT_LLMC_PROBE; owner 2026-10-22): the same tool with each node's forbid and caution (arch-check 23: of what a
+ * supervisor wrote, those held longest and worked). The ops `forbid` / `caution` add a line to a node (the current one when `id` is absent),
+ * `lift` takes one off; `add` and `split` may carry them. The words and the schema are fixed (part of the cached prefix).
+ */
+const rules = { type: 'array', maxItems: PLAN_LIMITS.rules, items: { type: 'string', maxLength: PLAN_LIMITS.rule } };
+const nodeDraftWithRules = { ...nodeDraft, properties: { ...nodeDraft.properties, forbid: rules, caution: rules } };
+export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
+  ...PLAN_UPDATE_DEFINITION,
+  description: [
+    PLAN_UPDATE_DEFINITION.description,
+    `禁止と注意: forbid（id の節で、してはいけない事を 1 行足す）・caution（気をつける事を 1 行足す）・lift（text の行を消す）。id が無ければ今の節。`,
+    `1 行 ${PLAN_LIMITS.rule}字まで、各 ${PLAN_LIMITS.rules} 行まで（超えると古い行から消える）。add・split の節にも forbid・caution の配列を書ける。`,
+    'live の plan.rules に、今の節と親の道の禁止・注意が出る（その節を離れると出ない）。驚きの後に原因が分かったら書き、要らなくなったら lift する。',
+  ].join(''),
+  nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
+    ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {
+      op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift'] }, id: { type: 'string', maxLength: 32 },
+      parent: { type: ['string', 'null'], maxLength: 32 }, after: { type: ['string', 'null'], maxLength: 32 },
+      title: { type: 'string', maxLength: PLAN_LIMITS.title }, where: { type: 'string', maxLength: PLAN_LIMITS.text },
+      doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
+      reason: { type: 'string', maxLength: PLAN_LIMITS.reason }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
+      into: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.split, items: nodeDraftWithRules },
+      text: { type: 'string', maxLength: PLAN_LIMITS.rule, description: 'forbid・caution・lift の 1 行' },
+      forbid: rules, caution: rules,
+    } } },
+    current: { type: ['string', 'null'], maxLength: 32 },
+  } },
+};
+
 /** A tree handed to the task from outside its decisions (the first plan, `minecraftFirstPlan.ts`): taken at the next read, once. */
 export interface FcaPlanInbox { take(taskId: string, tree: PlanTree): { tree: PlanTree; note: string } | null }
 
@@ -60,7 +90,9 @@ export function planInput(plan: FcaPlanPort | undefined): { plan?: Record<string
   return view ? { plan: { ...view } } : {};
 }
 
-export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void }):
+export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void;
+  /** mb-llmc r4: offer the tool with forbid and caution (`PLAN_UPDATE_RULES_DEFINITION`). Absent: as before. */
+  rules?: boolean }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
@@ -84,7 +116,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     tree: () => tree,
   };
   const tools: FcaExternalTools = {
-    definitions: [PLAN_UPDATE_DEFINITION],
+    definitions: [parts.rules ? PLAN_UPDATE_RULES_DEFINITION : PLAN_UPDATE_DEFINITION],
     checkpoint: () => tree.nodes.length || kept ? { fcaPlanTree: tree } : {},
     async execute(call) {
       call.signal.throwIfAborted();
