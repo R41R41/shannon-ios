@@ -391,7 +391,8 @@ export class SQLiteActionStore {
    */
   private exitUnknown(at:string):number {
     let exited=0;
-    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND (sent=1 OR sent=0 AND kind='minecraft' AND result=?)").all(UNSENT_LIFECYCLE_UNKNOWN)){
+    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND (sent=1 OR sent=0 AND kind='minecraft' AND result=?)")
+      .all(UNSENT_LIFECYCLE_UNKNOWN)){
       const action=view(row);
       const link=actionTaskLink(this.db,action);
       const base=JSON.parse(String(row.base_resources_json)) as string[];
