@@ -3,7 +3,7 @@ import type { TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import { createFastJudgmentMemory, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import {
-  DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, FIGHT_SKILLS, fastBodyState, fastJudgment, fastSkillMilliseconds, type FastDecision,
+  DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, FIGHT_SKILLS, fastBodyState, fastJudgment, fastJudgmentCut, fastSkillMilliseconds, type FastDecision,
 } from '../../mind/action/reflex/fastJudgment.js';
 import type { MinecraftControl } from './minecraftControl.js';
 
@@ -35,7 +35,7 @@ export function createMinecraftFastJudgment(parts: {
    */
   fightOwned?(): boolean;
   /** Cuts off the FCA's body tools in flight. */
-  interrupt(): void;
+  interrupt(reason?: unknown): void;
   /** The body was touched: a decision made meanwhile is stale. */
   touched(): void;
   stepOutcome(value: 'unknown' | 'acknowledged'): void;
@@ -66,7 +66,7 @@ export function createMinecraftFastJudgment(parts: {
     const resting = memory.resting(step.taskId, at);
     for (const skill of FALLBACK_SKILLS) if (!hasSkill(bodyId, skill)) resting.add(skill);
     return fastBodyState(observation, { earlierHealth: earlier.length ? Math.max(...earlier) : null, sinceArrivalMs: arrived === null ? null : at - arrived,
-      resting });
+      resting, arrivalKind: control.arrivalKind?.(bodyId) ?? null });
   };
   /**
    * Her tool is not cut off again for a judgment that may wait: run 16's six failed shelters cut off four `mine-block`s. Health at
@@ -171,7 +171,8 @@ export function createMinecraftFastJudgment(parts: {
       decision = before;
       if (parts.activeAction()) {
         interrupted = true;
-        parts.interrupt();
+        // The tool is cut with the reason, so that a procedure it was running says it was paused, not failed (`cutByFastJudgment`).
+        parts.interrupt(fastJudgmentCut());
         // Her tool was cut off by now: a drop here keeps the full cooldown (the flicker guard above), or the next frames would cut off
         // another one; and the interrupt was spent for nothing.
         if (!await settle(bodyId, id, signal)) return spend(), discard('busy', 'fast_skill_busy', { skill: decision.skill });

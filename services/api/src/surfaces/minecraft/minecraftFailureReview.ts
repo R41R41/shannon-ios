@@ -23,11 +23,33 @@ export function withFailureReview<T extends { failedStepsInARow: number }>(pace:
   return review ? { ...pace, failureReview: review } : pace;
 }
 
-export function failureReview(failures: number, recent: ReadonlyArray<{ name: string; ok: boolean; summary: string }>): Record<string, unknown> | null {
-  if (!Number.isSafeInteger(failures) || failures < FAILURE_REVIEW_AT) return null;
-  const failed = recent.filter(result => !result.ok).slice(-Math.min(failures, 4)).map(result => ({ tool: result.name, result: cut(result.summary) }));
+type Recent = ReadonlyArray<{ name: string; ok: boolean; summary: string }>;
+/** Looks, not work: a find that finds nothing twice is no sign that the work is going round. */
+const LOOK = /find|check|list|recall|observe|read|evidence|inventory/u;
+/** The same words of a failure without its numbers and places (a count, a coordinate, a distance change from call to call). */
+const stem = (summary: string) => summary.replace(/\s+/gu, ' ').replace(/-?\d+(?:\.\d+)?/gu, '#').slice(0, 90);
+/** How many failed calls without progress are alike (the same tool, the same words): the most, with the tool. */
+export function repeatedFailure(recent: Recent): { tool: string; times: number } | null {
+  const alike = new Map<string, { tool: string; times: number }>();
+  for (const result of recent) {
+    // A call that made something, or that a fast skill only paused, is not a failure of the work.
+    if (result.ok || LOOK.test(result.name) || /進み（失敗には数えない）|失敗ではない/u.test(result.summary)) continue;
+    const key = `${result.name}|${stem(result.summary)}`, kept = alike.get(key) ?? { tool: result.name, times: 0 };
+    alike.set(key, { ...kept, times: kept.times + 1 });
+  }
+  return [...alike.values()].filter(item => item.times >= REPEATED_FAILURES).sort((a, b) => b.times - a.times)[0] ?? null;
+}
+/** The same failure this often among the latest results is a review, though a call that worked came between (run 24: 0 obsidian at one pool twice). */
+export const REPEATED_FAILURES = 2;
+
+export function failureReview(failures: number, recent: Recent): Record<string, unknown> | null {
+  const repeated = repeatedFailure(recent);
+  if (!Number.isSafeInteger(failures) || (failures < FAILURE_REVIEW_AT && !repeated)) return null;
+  const shown = Math.min(Math.max(failures, repeated?.times ?? 0), 4);
+  const failed = recent.filter(result => !result.ok).slice(-shown).map(result => ({ tool: result.name, result: cut(result.summary) }));
   return {
     failedStepsInARow: failures,
+    ...(repeated ? { repeatedFailure: `${repeated.tool} が同じ失敗で進みなしのまま${repeated.times}回（間に成功した手があっても数える）。同じ場所・同じ手をもう一度しない` } : {}),
     stops: `連続失敗が${FAILURE_STOP_AFTER + 1}回以上になり、持ち物・節目・場所が${Math.round(FAILURE_STALL_MS / 1000)}秒動かない時。`
       + `${FAILURE_HARD_LIMIT}回続けば動いていても止まる。進みのある手（持ち物が増えた・節目に着いた）は失敗に数えない`,
     failuresLeft: Math.max(0, FAILURE_HARD_LIMIT - failures),

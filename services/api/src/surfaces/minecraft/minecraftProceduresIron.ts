@@ -6,7 +6,7 @@ import { cobbleFor, COBBLE, craft, digLogs, doing, LOGS, PLANKS, planksFor, stic
 import { caveDescent, smithChest, towardRoute } from './minecraftProcedureMap.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 import { dropJunk, guardOutward, healFirst, noteSurface, pickaxeReserve } from './minecraftProcedureCare.js';
-import { waterOnTheSurface } from './minecraftProcedureWater.js';
+import { waterOnTheSurface, waterWhileSmelting } from './minecraftProcedureWater.js';
 import { afterRefusal, refusals, refusedWait } from './minecraftProcedureWaits.js';
 
 /**
@@ -30,6 +30,10 @@ export interface ProcedureTaskStore {
   careStops?: number;
   /** The sheep search showed them far in daylight, and the bed was left for later (`minecraftBedDefer.ts`, mb-r23). */
   bedWaits?: boolean;
+  /** Lava pools where the water made nothing (rock over them, no place to stand), kept across runs: a run cut by a creeper forgot them (mb-r24, run 24). */
+  lavaDuds?: Cell[];
+  /** The raw iron the task has dug in all (held now plus what the pieces made took) that the dig in hand is for: a dig that was cut goes on to it (mb-r24). */
+  ironGoal?: number;
 }
 
 const IRON_PICKAXE = /^(?:iron|diamond|netherite)_pickaxe$/u;
@@ -245,7 +249,38 @@ export function ironShort(facts: MinecraftProcedureFacts): number {
 /** The second dig takes what is left at once, the spare's 3 and the flint's 1 with it (a third dig, far from the furnaces, is a trip of its own). */
 const IRON_DIG_FINISH = 20;
 
-/** The iron still needed dug at once (16 the first time, then what is left up to 20); deeper when none is in reach. */
+/** The iron the pieces made took (the plan's share of each): held now and this are what the task has dug. */
+const ironUsed = (facts: MinecraftProcedureFacts) => IRON_PLAN.filter(planned => planned.have(facts)).reduce((sum, planned) => sum + planned.iron, 0);
+/** What a dig takes: about this many seconds an ore (run 24: 20 in 73 s) and this many to get to it. */
+const DIG_SECONDS_PER_ORE = 3.6, DIG_START_SECONDS = 8;
+/** The fewest ores a dig is cut to for a furnace (a dig of fewer is not worth its start). */
+const MIN_SLICE = 4;
+
+/**
+ * A dig cut to what the furnaces allow (mb-r24, Minecraft run 24): the next piece's ingots are this near in the furnaces, and a dig of 20
+ * (73 s) begun then left them there for 60 s (the pickaxe was made at 400 s with its ingots done at 335). The dig ends about when they
+ * are ready, and the piece is made; the rest of the dig goes on after it.
+ */
+function slicedForFurnace(facts: MinecraftProcedureFacts, batch: number): number {
+  const need = ingotsLacking(facts), until = need > 0 ? msUntilIngots(facts, need) : null;
+  if (until === null || ironJobs(facts).length === 0) return batch;
+  const fit = Math.floor((until / 1000 - DIG_START_SECONDS) / DIG_SECONDS_PER_ORE);
+  return Math.max(Math.min(MIN_SLICE, batch), Math.min(batch, fit));
+}
+
+/**
+ * The raw iron to dig now: the dig in hand if it was cut short (a fight, a creeper: run 24 dug 11 of 24, was cut, and began again with 20,
+ * the dig it had left over and over), else a new one (24 the first time, then what is left up to 20), less what the furnaces allow.
+ */
+function digCount(facts: MinecraftProcedureFacts, store: ProcedureTaskStore, short: number): number {
+  const dug = ironHeld(facts) + ironUsed(facts);
+  const rest = store.ironGoal !== undefined && dug < store.ironGoal ? store.ironGoal - dug : null;
+  const batch = Math.min(short, rest ?? (ironHeld(facts) === 0 ? IRON_DIG_AT_ONCE : IRON_DIG_FINISH));
+  if (rest === null) store.ironGoal = dug + batch;
+  return slicedForFurnace(facts, batch);
+}
+
+/** The iron still needed dug at once (24 the first time, then what is left up to 20); deeper when none is in reach. */
 function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store: ProcedureTaskStore, leg?: RouteLeg): McMove | null {
   const short = ironShort(facts);
   if (short <= 0) return null;
@@ -257,7 +292,7 @@ function digIron(facts: MinecraftProcedureFacts, memory: ProcedureMemory, store:
   if (ready) return ready;
   noteSurface(facts, store);
   if (memory.lastFailure(key) !== 'target_not_found') {
-    const count = Math.min(short, ironHeld(facts) === 0 ? IRON_DIG_AT_ONCE : IRON_DIG_FINISH);
+    const count = digCount(facts, store, short);
     return doing({ tool: 'mc.mine-block', input: { blockName: 'iron_ore', count, searchRadius: 48 }, why: 'まだ要る鉄を掘る',
       expectMs: Math.max(30_000, 5_000 * count), key });
   }
@@ -349,7 +384,10 @@ export function ironMove(facts: MinecraftProcedureFacts, memory: ProcedureMemory
   // The bucket filled the moment it is made, while she is still on the surface (mb-r20): water down below cost run 20 325 s and the Nether.
   // mb-r21: what the furnaces have made comes out (whole, then the part the next piece needs) before the next dig, the raw iron goes in
   // before food, and the dig is not begun while the next ingots are this near.
+  // mb-r24: the water is taken while the iron cooks, below ground too, when its detour is paid for by what the furnaces still cook.
+  const cooking = Math.max(0, ...ironJobs(facts).map(job => job.remainingEstimateMs));
   return makePiece(facts, memory) ?? guard(takeOut(facts, memory)) ?? guard(takeOutPart(facts, memory)) ?? smelt(facts, store, memory)
-    ?? waterOnTheSurface(facts, memory) ?? guard(holdForFurnace(facts, memory)) ?? guard(fromTheMap(facts, store, memory))
-    ?? guard(digIron(facts, memory, store, leg)) ?? waitFurnace(facts, memory) ?? stuck('鉄の手順で次にできる手が無い');
+    ?? waterOnTheSurface(facts, memory) ?? waterWhileSmelting(facts, memory, cooking) ?? guard(holdForFurnace(facts, memory))
+    ?? guard(fromTheMap(facts, store, memory)) ?? guard(digIron(facts, memory, store, leg)) ?? waitFurnace(facts, memory)
+    ?? stuck('鉄の手順で次にできる手が無い');
 }

@@ -20,6 +20,7 @@ const WASTE = new RegExp('^(?:cobblestone|cobbled_deepslate|blackstone|stone|dee
   + 'rotten_flesh|bone|string|spider_eye|gunpowder|arrow|stick|seeds|wheat_seeds)$', 'u');
 
 type Place = { x: number; y: number; z: number };
+type Spot = { x: number; z: number };
 export interface ProgressMark { counts: ReadonlyMap<string, number>; shown: ReadonlySet<string>; at: Place | null; sequence: number | null }
 
 export function progressMark(observation: BodyObservation | null): ProgressMark | null {
@@ -33,8 +34,21 @@ export function progressMark(observation: BodyObservation | null): ProgressMark 
   return { counts, shown: new Set(milestonesShown(counts, dimension)), at, sequence: typeof observation.sequence === 'number' ? observation.sequence : null };
 }
 
+/** The place a call was sent to (its `x` and `z`), or null when it names none. */
+export function targetOf(input: unknown): { x: number; z: number } | null {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : null;
+  const [x, z] = [value?.x, value?.z];
+  return typeof x === 'number' && typeof z === 'number' && Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
+}
+/**
+ * A move counts when it brought her nearer to the place the call was sent to, by half of `MOVED_BLOCKS` at least (mb-r24, Minecraft run 24:
+ * a dig round in circles that moved 20 m was progress; so was every walk, nearer or not). With no place named, any move of that length.
+ */
+const nearerTo = (before: Place, after: Place, target: Spot | null) => !target
+  || Math.hypot(before.x - target.x, before.z - target.z) - Math.hypot(after.x - target.x, after.z - target.z) >= MOVED_BLOCKS / 2;
+
 /** What the call made, in a few words, or null when nothing moved: items carried that were not, a milestone, a move. */
-export function madeProgress(before: ProgressMark | null, after: ProgressMark | null): string | null {
+export function madeProgress(before: ProgressMark | null, after: ProgressMark | null, target: Spot | null = null): string | null {
   if (!before || !after) return null;
   const gained = [...after.counts].flatMap(([name, count]) => {
     const more = count - (before.counts.get(name) ?? 0);
@@ -42,7 +56,8 @@ export function madeProgress(before: ProgressMark | null, after: ProgressMark | 
   });
   const milestones = [...after.shown].filter(name => !before.shown.has(name));
   if (gained.length || milestones.length) return [...gained.slice(0, 4), ...milestones.map(name => `節目 ${name}`)].join('、');
-  if (before.at && after.at && Math.hypot(after.at.x - before.at.x, after.at.y - before.at.y, after.at.z - before.at.z) >= MOVED_BLOCKS) {
+  if (before.at && after.at && Math.hypot(after.at.x - before.at.x, after.at.y - before.at.y, after.at.z - before.at.z) >= MOVED_BLOCKS
+    && nearerTo(before.at, after.at, target)) {
     return `${Math.round(Math.hypot(after.at.x - before.at.x, after.at.y - before.at.y, after.at.z - before.at.z))}m 動いた`;
   }
   return null;
@@ -75,7 +90,7 @@ export function withMinecraftProgress(tools: FcaExternalTools,
     // A frame sent after the call ended: the pack the next move would read, not one a beat behind.
     const ended = parts.observe()?.sequence ?? null, until = Date.now() + FRESH_FRAME_MS;
     while (ended !== null && (parts.observe()?.sequence ?? ended) <= ended && Date.now() < until) await sleep(50);
-    const why = madeProgress(before, progressMark(parts.observe()));
+    const why = madeProgress(before, progressMark(parts.observe()), targetOf(call.input));
     return why ? told(result, why) : result;
   } };
 }

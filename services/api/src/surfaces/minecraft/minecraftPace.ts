@@ -1,4 +1,6 @@
 import type { TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
+// The Nether's first seconds and digs that keep failing there: lines among the pace's (`minecraftNetherCare.ts`, mb-r24).
+export { withNetherCare } from './minecraftNetherCare.js';
 
 // Moved out of minecraftReflexAdapter.ts unchanged (rel25: that file passed the 500-line ceiling); the adapter re-exports them.
 

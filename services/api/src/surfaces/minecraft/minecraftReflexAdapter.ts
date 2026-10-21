@@ -29,7 +29,7 @@ import { bedDeferredNow } from './minecraftProcedureTool.js';
 import { minecraftTransientBody } from './minecraftTransientBody.js';
 import { storedBodyResult } from './minecraftStoredResult.js';
 import { minecraftRecallCues } from './minecraftRecallCues.js';
-import { minecraftMilestones, minecraftPace, waitTimeMilliseconds } from './minecraftPace.js';
+import { minecraftMilestones, minecraftPace, waitTimeMilliseconds, withNetherCare } from './minecraftPace.js';
 export { minecraftMilestones, minecraftPace, waitTimeMilliseconds, type PaceMilestones } from './minecraftPace.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -266,7 +266,7 @@ export function createMinecraftTaskBody(parts: {
     return job;
   };
   const fast = parts.fastJudgment ? createMinecraftFastJudgment({ control, step, governor, now, context, permit: signal => permit(signal),
-    activeAction: () => activeAction, interrupt: () => toolAborts.forEach(abort => abort.abort()), fightOwned,
+    activeAction: () => activeAction, interrupt: reason => toolAborts.forEach(abort => abort.abort(reason)), fightOwned,
     touched: () => { revisions.soft(); }, stepOutcome: value => { execution!.stepOutcome = value; }, unknown: () => { unknown = true; },
     send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), hold, log }) : null;
   const startFast = (job: Promise<void>) => {
@@ -375,9 +375,11 @@ export function createMinecraftTaskBody(parts: {
       // From three failed steps in a row the decision looks back before it acts, and before the task may stop (`minecraftFailureReview.ts`).
       const pace = withFailureReview(minecraftPace(step, recentResults, now(), milestones, idleWaitMs), recentResults);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
-      const situation = routePlan.situate(follow.situate(minecraftSituation(observation, { ...pace, recentIdleWaits, ...bedSearch.facts(observation),
-        bedDeferred: bedDeferredNow(step.taskId, observation),
-        elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) })), observation?.state.world);
+      // mb-r24: with the Nether's first seconds and the digs that keep failing there among the lines every decision carries.
+      const situation = withNetherCare(routePlan.situate(follow.situate(minecraftSituation(observation, {
+        ...pace, recentIdleWaits, ...bedSearch.facts(observation), bedDeferred: bedDeferredNow(step.taskId, observation),
+        elapsedSeconds: Math.max(0, (now() - Date.parse(step.snapshot.task.createdAt)) / 1000) })), observation?.state.world),
+      observation, recentResults, bound() ? control.arrivedAt?.(bound()!) ?? null : null, now());
       const skills = minecraftSkillContext(situation, parts.skillNames?.() ?? new Set(), parts.skillGists);
       gistTools = skills.gistTools;
       pointedSkills = skills.pointed;

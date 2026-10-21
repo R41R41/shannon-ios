@@ -48,10 +48,11 @@ describe('the image-free fast judgment rules (ADR-0011 stage 2)', () => {
 /** A body as the fast judgment sees it: frames, arrivals, pending skill rows and the commands it was sent. */
 function fakeBody() {
   let clock = 1_000_000, skills = ['attack-continuously', 'dig-shelter', 'flee-from', 'build-around-self'], current: BodyObservation | null = null, arrived: number | null = 0, pendingChecks = 0, busyFor = 0, sequence = 0, runMs = 0;
+  let arrivalKind: string | null = null;
   const outcomes: string[] = [];
   const commands: Array<{ skill?: string; arguments?: unknown }> = [], lines: string[] = [], holds: string[] = [];
   const control = {
-    arrivedAt: () => arrived, observe: () => current,
+    arrivedAt: () => arrived, arrivalKind: () => arrivalKind, observe: () => current,
     frame: () => ({ poll: { skills: skills.map(name => ({ name })) } }),
     store: { pending: () => (pendingChecks++ < busyFor ? [{ command: { id: 'fca-skill', kind: 'skill', context: { taskId: 'task' } } }] : []),
       command: (id: string) => commands.some(command => (command as { id?: string }).id === id) },
@@ -88,7 +89,7 @@ function fakeBody() {
     running(name: string | undefined) { active = name; }, busy(polls: number) { busyFor = polls; pendingChecks = 0; },
     /** How long each command the body is sent runs (the clock moves on while it does). */
     runFor(ms: number) { runMs = ms; },
-    respawn() { arrived = clock; }, lose() { current = null; }, without(name: string) { skills = skills.filter(skill => skill !== name); },
+    respawn() { arrived = clock; arrivalKind = 'death'; }, reconnect() { arrived = clock; arrivalKind = 'reconnect'; }, lose() { current = null; }, without(name: string) { skills = skills.filter(skill => skill !== name); },
     /** A frame the judgment is asked about while the latest one already differs (a newer frame arrived meanwhile). */
     seeWhileNewer(shown: Record<string, unknown>, latest: Record<string, unknown>) {
       clock += 250;
@@ -128,6 +129,21 @@ describe('a deterministic replay of Minecraft run 11\'s death loop (task 7e4c437
     }
     expect(body.commands.map(command => command.skill)).toEqual(Array(5).fill('dig-shelter'));
     expect(body.touched).toBe(5);
+  });
+
+  it('digs no shelter for a body that came back on its connection (run 24: 12 s after the server cut it in the Nether, a hole over magma)', async () => {
+    const reconnected = fakeBody();
+    reconnected.advance(40_000);
+    reconnected.reconnect();
+    reconnected.see({ health: 20, nearbyThreats: [zombie(12), zombie(14)] });
+    await reconnected.see({ health: 20, nearbyThreats: [zombie(12), zombie(14)] });
+    expect(reconnected.commands.some(command => command.skill === 'dig-shelter')).toBe(false);
+    const died = fakeBody();
+    died.advance(40_000);
+    died.respawn();
+    died.see({ health: 20, nearbyThreats: [zombie(12), zombie(14)] });
+    await died.see({ health: 20, nearbyThreats: [zombie(12), zombie(14)] });
+    expect(died.commands.map(command => command.skill)).toEqual(['dig-shelter']);
   });
 
   it('never sends a stale answer: a death while the old skill settles drops it (0 stale executions)', async () => {

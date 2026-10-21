@@ -83,6 +83,8 @@ const WATER_LOOK = 64;
 export interface FillOptions {
   /** The most seconds of detour the water may cost (`waterDetour`). */
   maxSeconds?: number;
+  /** A try at a small price (`waterWhileSmelting`): finding none worth it is noted apart and does not give up the look for water. */
+  cheap?: boolean;
   /** Where the next steps are (the furnaces by default): the water on the way to them costs least. */
   after?: readonly Cell[];
 }
@@ -104,7 +106,7 @@ export function fillBucket(facts: MinecraftProcedureFacts, memory: ProcedureMemo
       .filter(candidate => !waterUnreachable(candidate) && memory.failed(`water:walk:${cellKey(candidate)}`) === 0);
     const choice = bestWater(from, known, after, options.maxSeconds ?? SURFACE_DETOUR_S);
     if (!choice) {
-      memory.notes.set('water:none', deep ? 'below' : 'surface');
+      memory.notes.set(options.cheap ? 'water:cheap:none' : 'water:none', options.cheap ? true : deep ? 'below' : 'surface');
       return null;
     }
     const cell = choice.cell;
@@ -132,6 +134,21 @@ export function waterBeforeDescent(facts: MinecraftProcedureFacts, memory: Proce
   if (waterGivenUp(memory, below)) return null;
   const toward = { x: Math.floor(at.x), y: deepY, z: Math.floor(at.z) };
   return fillBucket(facts, memory, { maxSeconds: below ? UNDERGROUND_DETOUR_S : SURFACE_DETOUR_S, after: [toward] });
+}
+
+/**
+ * The bucket filled while the iron cooks (mb-r24, Minecraft run 24: the bucket was made at 433 s and the water fetched at 628 s, after
+ * the armour, as the diamonds' first move: 691 s against 430 meant). The furnaces' remaining time (`cookingMs`) pays for the trip: the
+ * water is taken at once when the detour to it, back to the furnaces, is no more than what they still cook plus 20 s (at most the
+ * detours of `waterBeforeDescent`), wherever she stands. Dearer water is left for the descent (`waterBeforeDescent`), which has its own
+ * price. Null when there is no bucket to fill, the look found none worth it, or a look for water gave up.
+ */
+export function waterWhileSmelting(facts: MinecraftProcedureFacts, memory: ProcedureMemory, cookingMs: number): McMove | null {
+  if (!needsWater(facts) || !facts.at || facts.dimension !== 'overworld' || memory.notes.has('water:cheap:none')) return null;
+  const below = !onSurface(facts);
+  if (waterGivenUp(memory, below)) return null;
+  const worth = Math.min(below ? UNDERGROUND_DETOUR_S : SURFACE_DETOUR_S, Math.max(30, Math.round(cookingMs / 1_000) + 20));
+  return fillBucket(facts, memory, { maxSeconds: worth, cheap: true });
 }
 
 /** The bucket for the obsidian: the water that costs least on the way to the lava the map knows (the pool's own water is the best). */

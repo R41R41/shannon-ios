@@ -13,6 +13,7 @@ import { MINECRAFT_PROCEDURE_TOOL, PROCEDURE_MILESTONES, minecraftProcedureChain
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 import { finalFailure, minecraftStopWhy, minecraftUpkeep, passingFailure } from './minecraftProcedureUpkeep.js';
 import { settledBody } from './minecraftProcedureSettle.js';
+import { cutByFastJudgment } from '../../mind/action/reflex/fastJudgment.js';
 
 /**
  * The planner's one call for a whole procedure (session mb-arch, owner 2026-10-20: 「30分でスムーズにネザーに行く」; run 19 took 64
@@ -131,6 +132,10 @@ function readInput(input: unknown): { from: string; through: string | null } | n
   return through && PROCEDURE_MILESTONES.indexOf(through) < PROCEDURE_MILESTONES.indexOf(value.milestone) ? null : { from: value.milestone, through };
 }
 
+/** Said after a run a fast skill cut off (a fight, a flight of the body's own): it is not a failure, and the same call begins again. */
+export const PAUSED_BY_FAST_SKILL = '体の戦い・逃げ（速い判断）で手順を一時止めた。失敗ではない。済んだら同じ呼び出し（mc.run-procedure）でそのまま続ける'
+  + '（鉄の掘りは残りの数から続く）';
+
 /** How long a procedure waits after a call for a frame the body sent after it (its 200 ms beat), before it reads the next move. */
 const FRESH_FRAME_MS = 800;
 
@@ -238,6 +243,11 @@ export async function runMinecraftProcedure(parts: ProcedureRunParts, call: Call
   });
   const text = resultText(asked.through ? `「${asked.from}」→「${asked.through}」` : `「${asked.from}」`, run, facts());
   state.handedBack = run.outcome === 'done' || run.outcome === 'limit' ? null : run.at;
+  // mb-r24: a fast skill (a fight, a flight) took the body: the run is paused, not failed; the same call goes on from where the world is now.
+  if (run.outcome === 'cancelled' && cutByFastJudgment(call.signal)) {
+    state.handedBack = null;
+    return { ok: false, text: `${text}\n${PAUSED_BY_FAST_SKILL}`, failure: 'failed', retryable: false, bodyReflex: true };
+  }
   // A hand-back for a reason is the call working as meant; only a failure or a stop is a failed call.
   const ok = run.outcome !== 'failed' && run.outcome !== 'cancelled';
   // mb-r23: a run that passed a milestone before it failed made something (run 23: the diamond pickaxe, then two failed moves).

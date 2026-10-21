@@ -234,7 +234,8 @@ describe('the iron procedure (run 21: the iron armour at 1,074 s instead of abou
     expect(move(ironMove(lacking(80_000, 8), memory, s))).toMatchObject({ tool: 'mc.mine-block' });
     // The chestplate takes 8: 8 raw with 80 s left is 80 s away from enough, longer than the hold: the dig goes on.
     const bucketDone = { iron_pickaxe: 1, iron_sword: 1, water_bucket: 1 };
-    expect(move(ironMove(lacking(80_000, 8, bucketDone), new ProcedureMemory(), s))).toMatchObject({ tool: 'mc.mine-block', input: { count: 20 } });
+    const fresh = { furnaces: [{ x: 12, y: 64, z: 2 }], visited: new Set<string>() };
+    expect(move(ironMove(lacking(80_000, 8, bucketDone), new ProcedureMemory(), fresh))).toMatchObject({ tool: 'mc.mine-block', input: { count: 20 } });
     // A furnace with 20 s or less left is waited for as the body takes it.
     expect(move(ironMove(lacking(15_000, 3), new ProcedureMemory(), s))).toMatchObject({ tool: 'mc.withdraw-from-furnace', input: { waitForCompletion: true } });
   });

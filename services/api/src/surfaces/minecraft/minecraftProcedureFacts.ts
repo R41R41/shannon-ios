@@ -32,6 +32,8 @@ export interface MinecraftProcedureFacts {
   milestone: MilestoneFacts;
   /** The body's map of the world it has seen (`world.mapSummary`, mb-body): a line a kind, each place `<m>m <方角> (x,y,z)`. */
   map: string;
+  /** The biomes she has passed (`world.biomesSeen`, `desert（ここ）・river 東 64m`): where trees may grow, for the wood search (mb-r24). */
+  biomes: string;
   /** The tools of the pack that say how much they have left (`{name, count, durability: {left, max}}`, mb-r20: a stone pickaxe broke in the iron dig). */
   tools: Array<{ name: string; left: number; max: number }>;
   /** How many of the four armour slots hold something (`world.worn`: `頭: iron_helmet(残り…)、胴: なし、…`). */
@@ -109,6 +111,7 @@ export function minecraftProcedureFacts(observation: BodyObservation | null, net
     milestone: { counts, dimension, netherReached: reached, bedPlaced: typeof record(world.rememberedPlaces)?.respawn === 'string',
       bedDeferred: bedMayWait(bedWaits, world) },
     map: typeof world.mapSummary === 'string' ? world.mapSummary.slice(0, 3_000) : '',
+    biomes: typeof world.biomesSeen === 'string' ? world.biomesSeen.slice(0, 600) : '',
     tools: toolsOf(world), armorPieces: armorPiecesOf(world.worn), stacks: Array.isArray(world.inventory) ? world.inventory.length : null,
     observation,
   };

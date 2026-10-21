@@ -7,6 +7,7 @@ import { caveDescent, lavaPlaces, mappedObsidian, obsidianAhead, orePlaces, port
 import { dropJunk, guardOutward, healFirst, noteSurface, pickaxeReserve } from './minecraftProcedureCare.js';
 import { needsWater, onSurface, upForWater, waterBeforeDescent, waterForObsidian, waterGivenUp } from './minecraftProcedureWater.js';
 import { tripSeconds } from './minecraftProcedureTrip.js';
+import { NO_OBSIDIAN, rankedPools } from './minecraftLavaPools.js';
 import type { ProcedureTaskStore } from './minecraftProceduresIron.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 
@@ -145,23 +146,25 @@ function lavaBySurface(facts: MinecraftProcedureFacts, store: ProcedureTaskStore
  * Obsidian from the nearest lava pool not tried yet: found, walked to, the water poured on it. One at a time, the obsidian is dug after;
  * with the body's batch (`batch`: how many), the body pours, digs and takes the water back itself, that many times at that pool.
  */
-function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch: number | null, visits: MapVisits): McMove {
+function castOne(facts: MinecraftProcedureFacts, memory: ProcedureMemory, batch: number | null, visits: ProcedureTaskStore): McMove {
   const count = carried(facts, OBSIDIAN);
   const tried = (memory.notes.get('lava:tried') as Set<string> | undefined) ?? new Set<string>();
   memory.notes.set('lava:tried', tried);
   const pick = (text: string): MinecraftWorkItem | null => {
-    const cell = cellsInText(text).find(item => !tried.has(cellKey(item)));
+    const cell = rankedPools(text, 10 - count, facts.at, visits.lavaDuds ?? []).find(item => !tried.has(cellKey(item)));
     if (!cell) {
       memory.notes.set('lava:none', lavaWalks(visits));
       return null;
     }
     tried.add(cellKey(cell));
+    // A pool where the water made nothing is not tried again, in this run or the next (run 24: the same pool twice, 140 s, a creeper between).
+    const dud = (_failure: string, result: string) => { if (NO_OBSIDIAN.test(result)) (visits.lavaDuds ??= []).push(cell); };
     const dig = { tool: 'mc.dig-block-at', input: { ...cell }, why: '黒曜石を掘る', expectMs: 12_000, key: `obsidian:dig:${cellKey(cell)}` };
     const pour = batch === null
-      ? { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket' }, why: '溶岩に水をかける', expectMs: 4_000,
+      ? { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket' }, why: '溶岩に水をかける', expectMs: 4_000, onFail: dud,
         key: `obsidian:pour:${cellKey(cell)}`, then: (result: string) => /黒曜石に変換/u.test(result) ? dig : null, chain: 2 }
       : { tool: 'mc.use-item-on-block', input: { ...cell, itemName: 'water_bucket', count: batch }, why: '溶岩の溜まりで黒曜石をまとめて作る',
-        expectMs: 25_000 * batch, key: `obsidian:batch:${cellKey(cell)}` };
+        expectMs: 25_000 * batch, key: `obsidian:batch:${cellKey(cell)}`, onFail: dud };
     // mb-r23: near, not `block`: the body wants a place from which the block can be dug, and lava cannot be dug (run 23: it stopped 2.6 m
     // from the pool with "no place to stand", 32 s and 23 s, and the procedure failed). Water is poured from a few blocks off.
     return { tool: 'mc.move-to', input: { ...cell, goalType: 'near', range: LAVA_REACH }, why: '溶岩のそばへ行く', expectMs: 20_000,

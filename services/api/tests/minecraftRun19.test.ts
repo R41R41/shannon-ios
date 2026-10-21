@@ -22,7 +22,7 @@ import { minecraftSituation, minecraftSkillContext } from '../src/surfaces/minec
 import { milestoneFollowMemory, milestoneSteps } from '../src/surfaces/minecraft/minecraftMilestoneFollow.js';
 import { MILESTONE_TARGET_SECONDS, milestoneLines } from '../src/surfaces/minecraft/minecraftStage.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
-import { ROUTE_PLAN, createRoutePlanning, forgetRoutes, planWanted, routeFrom, routeInput, routeLines } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
+import { ROUTE_COORDINATES_NOTE, ROUTE_PLAN, createRoutePlanning, forgetRoutes, planWanted, routeFrom, routeInput, routeLines } from '../src/surfaces/minecraft/minecraftRoutePlanner.js';
 import { configuredMinecraftRoutePlanner } from '../src/wiring/minecraftRouteWiring.js';
 
 /**
@@ -208,7 +208,7 @@ describe('her route to the Nether, planned once by a strong model', () => {
     expect(route.legs[1]).toMatchObject({ x: 287, y: 85, z: 13 });
     expect(routeFrom({ legs: [] }, 0, 0, 'start')).toBeNull();
     expect(routeLines(route, '食料と羊とベッド')).toEqual(['ルート（最初の計画、30秒）:', '済 木と石のツルハシ: 近くの森で原木と石／スポーンの北 20m／140秒まで',
-      '▶ 食料と羊とベッド: 村でベッドとパン／東 171m の村（287,85,13）／600秒まで', '・ 鉄: 洞窟で鉄30／北の洞窟／400秒まで']);
+      '▶ 食料と羊とベッド: 村でベッドとパン／東 171m の村（開始時の見立て 287,85,13）／600秒まで', '・ 鉄: 洞窟で鉄30／北の洞窟／400秒まで', ROUTE_COORDINATES_NOTE]);
   });
   it('is asked at the start, and again only when a step is late, with replans left and the last plan old enough', () => {
     const route = routeFrom(answer, 30, 0, 'start')!;

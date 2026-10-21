@@ -155,8 +155,9 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
 
   it('before it, from three failures in a row, tells the decision to look back: the numbers, the last results with their ends, the order of the review', () => {
     const long = `${'あ'.repeat(700)}先に use-item-on-block（water_bucket）で横の溶岩を固めてください`;
+    // Two failures of one tool in other words (a repeated failure of the same words is a review of its own, run 24).
     const recent = [{ name: 'mc.dig-block-at', ok: false, summary: long }, { name: 'mc.use-item-on-block', ok: true, summary: 'ok' },
-      { name: 'mc.use-item-on-block', ok: false, summary: '近くに溶岩がない' }, { name: 'mc.dig-block-at', ok: false, summary: long }];
+      { name: 'mc.use-item-on-block', ok: false, summary: '近くに溶岩がない' }, { name: 'mc.dig-block-at', ok: false, summary: `別の失敗: ${long}` }];
     expect(failureReview(FAILURE_REVIEW_AT - 1, recent)).toBeNull();
     const review = failureReview(FAILURE_REVIEW_AT, recent)!;
     expect(review).toMatchObject({ failedStepsInARow: FAILURE_REVIEW_AT, failuresLeft: FAILURE_HARD_LIMIT - FAILURE_REVIEW_AT });

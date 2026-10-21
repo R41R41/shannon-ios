@@ -8,6 +8,8 @@ import { IRON_PLAN, ironHeld, ironInFurnaces, ironMove, ironShort, makePiece, ty
 import { diamondMove, gateMove, obsidianMove } from './minecraftProceduresDeep.js';
 import type { RouteLeg } from './minecraftRoutePlanner.js';
 import { carried, type Cell } from './minecraftProcedureFacts.js';
+import { wooded } from './minecraftProcedureWood.js';
+import { WOOD_RULE } from './minecraftWoodAdvice.js';
 
 /**
  * The milestones' procedures, one place for both forms (session mb-arch, owner 2026-10-20: the planner chooses the procedure, the
@@ -51,13 +53,13 @@ const BED_WORDS = [
 const IRON_WORDS = ['mc.mine-block（blockName=iron_ore、count=24、searchRadius=48。焼く間に残りの12を続けて掘る）→ かまど2台で mc.start-smelting（inputItem=raw_iron）'
   + '→ mc.craft-one（itemName=iron_pickaxe、続けて iron_sword）'];
 const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
-  ['木', { say: [LOG_STEP], move: woodMove }],
+  ['木', { say: [LOG_STEP, WOOD_RULE], move: woodMove }],
   ['木と石のツルハシ', { say: ['mc.craft-one（itemName=wooden_pickaxe）→ mc.mine-block（blockName=stone、count=8）→ mc.craft-one（itemName=stone_pickaxe）'],
     move: pickaxeMove }],
   ['石の斧', { say: ['mc.craft-one（itemName=stone_axe。丸石3・棒2）'], move: axeMove }],
   // mb-r20: a piece of the iron plan whose ingots are in hand is made before more wood is dug or a sheep hunted (run 20: 150 s from the
   // ingots to the pickaxe, which the step back to wood and the night and a beef hunt came between).
-  ['木材', { say: [LOG_STEP], move: (facts, memory) => readyPiece(facts, memory) ?? storeMove(facts) }],
+  ['木材', { say: [LOG_STEP, WOOD_RULE], move: (facts, memory) => readyPiece(facts, memory) ?? storeMove(facts) }],
   ['食料と羊とベッド', { say: BED_WORDS, move: (facts, memory, context) => readyPiece(facts, memory)
     ?? bedAndFoodMove(facts, memory, context.store, sheepAnchors(context)) }],
   ['鉄', { say: IRON_WORDS, move: (facts, memory, context) => ironMove(facts, memory, context.store, context.leg?.('鉄')) }],
@@ -75,7 +77,9 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
   // mb-body 2026-10-20: the body casts many at a time (use-item-on-block with a count); the words go out with or after that body.
   ['黒曜石', { say: [
     '先に地図で覚えている黒曜石（荒廃したポータルの枠・地上の黒曜石、近い順）: mc.move-to → mc.mine-block（blockName=obsidian、searchRadius=16）',
-    'mc.find-blocks（blockName=lava、maxDistance=32）→ 遠ければ mc.move-to → mc.use-item-on-block（溶岩の溜まりの座標、itemName=water_bucket、count=10）',
+    'mc.find-blocks（blockName=lava、maxDistance=48、count=10）→ 近い順に、大きさ（水源の数）が10個に足りて岩に覆われていない溜まりを選ぶ。'
+      + '水をかけて0個だった溜まりは二度と選ばない。ルートの座標は開始時の見立てで、近くに見える溜まりが先',
+    '遠ければ mc.move-to → mc.use-item-on-block（溶岩の溜まりの座標、itemName=water_bucket、count=10）',
     '体が「水をかける→掘る→水を回収→次の溶岩」を繰り返して黒曜石を10個まで集める（diamond_pickaxe と water_bucket が要る。1回で最大300秒）。'
       + '途中で終わったら、返る文の残りの数と続け方に従う'],
   move: (facts, memory, context) => obsidianMove(facts, memory, context.batchObsidian, context.store, context.leg?.('黒曜石')) }],
@@ -84,6 +88,9 @@ const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
     '平らな地面で mc.build-structure（structureName=nether_portal、x、y、z、facing）→ 点いたか観測で確かめ → mc.enter-portal（枠の内側の座標）'],
   move: (facts, memory, context) => gateMove(facts, memory, context.store) }],
 ]);
+
+/** The steps whose logs are the wood of the opening (`minecraftProcedureWood.ts`). */
+const WOOD_STEPS: ReadonlySet<string> = new Set(['木', '木と石のツルハシ', '石の斧', '木材', '食料と羊とベッド']);
 
 /** The milestones the executor can run, in the owner's order. */
 export const PROCEDURE_MILESTONES: readonly string[] = Object.freeze(MILESTONES.map(milestone => milestone.name).filter(name => STEPS.has(name)));
@@ -124,7 +131,12 @@ export function minecraftProcedureChain(from: string, through: string | null,
       id: name,
       done: facts => name === '黒曜石' ? obsidianDone(facts, context)
         : milestone.done?.(facts.milestone) === true && (name !== '鉄の全身の防具' || spareDone(facts)),
-      next: (facts, memory) => step.move(facts, memory, context),
+      // mb-r24: in the steps of wood, a dig for logs that found none is the wood search's (a tree the map lists, a wooden structure, the way
+      // trees grow). Not the iron step's fuel: coal is near, and a walk across a desert for two logs is no answer.
+      next: (facts, memory) => {
+        const planned = step.move(facts, memory, context);
+        return WOOD_STEPS.has(name) ? wooded(planned, facts, memory, context.store) : planned;
+      },
     };
   });
 }

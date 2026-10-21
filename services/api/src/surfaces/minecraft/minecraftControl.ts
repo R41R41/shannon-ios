@@ -9,6 +9,20 @@ import { MinecraftControlStore } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
 
 interface Frame { poll: MinecraftControlPoll; received: number }
+export type ArrivalKind = 'login' | 'death' | 'reconnect' | 'dimension';
+const dimensionOf = (observation: BodyObservation) => {
+  const world = (observation.state as { world?: { dimension?: unknown } } | undefined)?.world;
+  const value = observation.facts.dimension ?? world?.dimension;
+  return typeof value === 'string' ? value.replace(/^minecraft:/u, '') : null;
+};
+/** Whether a frame is an arrival after `old` (null: the first), and of what kind; null when the body is where it was. */
+function arrivalOf(old: BodyObservation | undefined, now: BodyObservation, newConnection: boolean): ArrivalKind | null {
+  if (!old) return 'login';
+  if (old.facts.alive === false && now.facts.alive !== false) return 'death';
+  if (newConnection || (!old.connected && now.connected)) return 'reconnect';
+  const [before, after] = [dimensionOf(old), dimensionOf(now)];
+  return before !== null && after !== null && before !== after ? 'dimension' : null;
+}
 /** After a capture of this connection came back without a picture, short visual control is not offered for this long. */
 export const MINECRAFT_CAPTURE_RETRY_MILLISECONDS = 10 * 60_000;
 /** A body's first frames after a login, a new connection or a respawn: its facts (health, threats) are not settled yet. */
@@ -58,6 +72,7 @@ export class MinecraftControl {
   }
   /** When each body last arrived: a new connection, connected again, or alive again (`settling`). */
   private readonly arrivals = new Map<string, number>();
+  private readonly arrivalKinds = new Map<string, ArrivalKind>();
   /** Told when a body on the same connection is seen alive and then dead (its facts' `alive` turns false). Listeners never throw. */
   readonly deathListeners = new Set<(bodyId: string) => void>();
   /** Told each frame, and each batch of the body's events as they are taken (MinecraftLive, session dc-live). Never throw into a poll. */
@@ -93,6 +108,12 @@ export class MinecraftControl {
   }
   /** When this body last arrived (login, new connection, respawn), or null (`fastJudgment.ts`: a death changes it). */
   arrivedAt(bodyId: string): number | null { return this.arrivals.get(bodyId) ?? null; }
+  /**
+   * How it last arrived (mb-r24, Minecraft run 24: a body that came back 12 s after the server cut it in the Nether was taken for a
+   * respawn, and the fast judgment dug a shelter over magma): `death` (alive again after being dead), `login` (the first frame),
+   * `reconnect` (connected again or on a new connection, alive all the time), `dimension` (a portal's other side).
+   */
+  arrivalKind(bodyId: string): ArrivalKind | null { return this.arrivalKinds.get(bodyId) ?? null; }
   /** The events this body told while it worked, or null before its first poll that carried any. */
   working(bodyId: string): WorkingEventLog | null { return this.workingLogs.get(bodyId) ?? null; }
   available(): string[] { return [...this.frames.keys()].filter(id => this.frame(id)); }
@@ -135,8 +156,7 @@ export class MinecraftControl {
     const previousImage = old?.poll.connectionId === input.connectionId ? old.poll.observation.image : undefined;
     if (previousImage && this.image(previousImage.ref)) observation.image = previousImage;
     this.frames.set(bodyId, { poll: { ...input, observation, skills: input.skills ?? old!.poll.skills }, received: this.options.now() });
-    if (!old || old.poll.connectionId !== input.connectionId || (!old.poll.observation.connected && input.observation.connected)
-      || (old.poll.observation.facts.alive === false && input.observation.facts.alive !== false)) this.arrivals.set(bodyId, this.options.now());
+    this.noteArrival(bodyId, old?.poll, input);
     if (old?.poll.connectionId === input.connectionId && old.poll.observation.facts.alive !== false && input.observation.facts.alive === false) {
       for (const listener of this.deathListeners) try { listener(bodyId); } catch { /* learning never fails a poll */ }
     }
@@ -197,6 +217,13 @@ export class MinecraftControl {
     const speech = this.speech ? this.liveSpeech(this.speech, input) : [];
     return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
       ...(speech.length ? { speech } : {}) };
+  }
+  /** A poll that is an arrival (a login, a new connection, connected again, alive again, another dimension) keeps when and how. */
+  private noteArrival(bodyId: string, old: MinecraftControlPoll | undefined, input: MinecraftControlPoll): void {
+    const arrival = arrivalOf(old?.observation, input.observation, old ? old.connectionId !== input.connectionId : false);
+    if (!arrival) return;
+    this.arrivals.set(bodyId, this.options.now());
+    this.arrivalKinds.set(bodyId, arrival);
   }
   /** The body's answers and room into the outbox, and the line due: never fails a poll. */
   private liveSpeech(port: NonNullable<MinecraftControl['speech']>, input: MinecraftControlPoll): MinecraftLiveSpeech[] {

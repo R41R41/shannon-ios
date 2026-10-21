@@ -1,4 +1,6 @@
 import { MILESTONES, MILESTONE_TARGET_SECONDS, milestoneTargetSeconds } from './minecraftStage.js';
+import { lineEntries, mapText, partEntries, positionOf, type MapEntry } from './minecraftMapRead.js';
+import { woodAdvice } from './minecraftWoodAdvice.js';
 
 /**
  * Her route to the Nether, planned once by a strong model (owner 2026-10-20: 「30分でスムーズにネザーに行くために…どれだけ大規模な改修
@@ -39,6 +41,9 @@ export const ROUTE_SYSTEM = [
     + '洞窟の入口（底へ歩いて下りられる。階段掘りより早い）と y=16 前後（鉄）、y=-58（ダイヤ）、溶岩の溜まり（水バケツで黒曜石）、砂利（火打石）、'
     + '置かれたベッド（壊せば持てる）。',
   '近い順にまとめ、行ったり来たりを減らす。羊の出ない所（雪原・荒野・砂漠・海・氷）では羊を探さず、村か草地へ向かう。防具を着ていれば夜は地下で掘り続ける。',
+  '木: 砂漠・荒野・海・川・浜には木がほぼ無い。通ったバイオームに川や海があるだけで「川沿いの木」と決めない。入力の「木と木材の出どころ」に木が無い時、'
+    + '最初の行（木）は、難破船・廃坑・村など木材の出どころが近ければそれ、無ければ木の生えるバイオーム（森・タイガ・ジャングル・サバンナ）の方角へ木を探しに出る、と書く。',
+  'x・y・z は開始時の見立て。後で近くに見える候補（溶岩・鉱石）があればそちらが優先される。確かでない座標は入れない。',
   'legs は済ませる順に最大8つ。milestone は上の節目の名前。goal はそこでする事を30字以内、where は場所を30字以内（方角と距離）。分かる時だけ x・y・z を入れる。',
   'targetSeconds はタスク開始からの秒で、その節目を済ませる目安。下の既定の目安より遅くしない。',
 ].join('\n');
@@ -57,8 +62,9 @@ export function routeInput(world: Record<string, unknown>, elapsedSeconds: numbe
     `経過: ${Math.round(elapsedSeconds)}秒。今の節目: ${milestone ?? '不明'}。`,
     `既定の目安（秒）: ${ROUTE_STEPS.map(name => `${name} ${MILESTONE_TARGET_SECONDS[name]}`).join('、')}`,
     ...part('位置', world.position, 80), ...part('バイオーム', world.biome, 60), ...part('時刻', world.time, 20),
-    ...part('持ち物', inventory, 800), ...part('地図の要約', world.mapSummary, 3_000), ...part('場所の記憶', world.rememberedPlaces, 1_200),
-    ...part('通ったバイオーム', world.biomesSeen, 600),
+    ...part('持ち物', inventory, 800), ...part('木と木材の出どころ（地図に木の行が無ければ、木は見えていない）',
+      hasMap(world) ? woodAdvice(world).lines.join(' ／ ') : '', 900),
+    ...part('地図の要約', world.mapSummary, 3_000), ...part('場所の記憶', world.rememberedPlaces, 1_200), ...part('通ったバイオーム', world.biomesSeen, 600),
   ].join('\n').slice(0, ROUTE_PLAN.inputCharacters);
 }
 
@@ -96,13 +102,55 @@ export function planWanted(route: MinecraftRoute | null, milestone: string | nul
   return late && route.replans < ROUTE_PLAN.replans && elapsedSeconds - route.plannedAtSeconds >= ROUTE_PLAN.minGapSeconds ? 'late' : null;
 }
 
-/** The route as the decision carries it (`route`): one line a leg, the step now marked, with its time. */
-export function routeLines(route: MinecraftRoute, milestone: string | null): string[] {
-  const now = route.legs.findIndex(leg => leg.milestone === milestone);
-  return [`ルート（${route.reason === 'late' ? '遅れで立て直し' : '最初の計画'}、${route.plannedAtSeconds}秒）:`, ...route.legs.map((leg, index) => {
-    const at = leg.x !== undefined ? `（${leg.x},${leg.y},${leg.z}）` : '';
-    return `${index === now ? '▶' : index < now ? '済' : '・'} ${leg.milestone}: ${leg.goal}／${leg.where}${at}／${leg.targetSeconds}秒まで`;
-  })];
+/**
+ * A leg's coordinates are the plan's guess at the start, not an order (mb-r24, Minecraft run 24: at the obsidian the line "溶岩の溜まりのそば
+ * （-21,-55,128）" from the first minute was followed to a pool 76 m away while two were in sight at 20 m and 44 m; 111 s of digging, then
+ * 180 s more). The place now in sight comes first; the plan's place is for when none is.
+ */
+export const ROUTE_COORDINATES_NOTE = 'ルートの座標は開始時の見立て（参考）。いま見えている近い候補（find-blocks の結果・地図の近い順）を先に使い、'
+  + '座標へ向かうのは近くに無い時だけ。大きさ・覆いの分かる候補は、10個の黒曜石に足りる大きさのものを選ぶ';
+/** The map's lines that tell, for a step, what is in sight: the head of the line and the label. */
+const SIGHT: Readonly<Record<string, { head: string; part?: string; label: string }>> = Object.freeze({
+  '黒曜石': { head: '溶岩の溜まり', label: '溶岩' }, 'ゲート': { head: '溶岩の溜まり', label: '溶岩' },
+  'ダイヤ': { head: '鉱石', part: 'ダイヤ', label: 'ダイヤ' }, '鉄': { head: '鉱石', part: '鉄', label: '鉄' },
+});
+
+/** What the map shows in sight for a step, nearer to her than the leg's own place: the nearest two, with what the body says of each. */
+function nearerCandidates(leg: RouteLeg, world: Record<string, unknown> | null | undefined): string {
+  const sight = SIGHT[leg.milestone], here = positionOf(world), map = mapText(world?.mapSummary);
+  if (!sight || !here || leg.x === undefined || leg.z === undefined || !map) return '';
+  const away = Math.hypot(leg.x - here.x, leg.z - here.z);
+  const found = sight.part ? partEntries(map, sight.head, sight.part) : lineEntries(map, sight.head);
+  const near = found.filter(entry => entry.distance < away - 4).slice(0, 2);
+  const words = (entry: MapEntry) => `${entry.distance}m ${entry.direction} (${entry.at.x},${entry.at.y},${entry.at.z})${entry.extra}`;
+  return near.length ? `　←いま見える近い${sight.label}: ${near.map(words).join('、')}（座標は今から${Math.round(away)}m）` : '';
+}
+
+/**
+ * The route as the decision carries it (`route`): one line a leg, the step now marked, with its time; the coordinates as the start's guess
+ * (how far from here they lie, and the places in sight that are nearer), and, early on with no tree in sight, where wood may be.
+ */
+export function routeLines(route: MinecraftRoute, milestone: string | null, world?: Record<string, unknown> | null): string[] {
+  const now = route.legs.findIndex(leg => leg.milestone === milestone), here = positionOf(world);
+  const lines = route.legs.map((leg, index) => {
+    const far = here && leg.x !== undefined && leg.z !== undefined ? `・今から${Math.round(Math.hypot(leg.x - here.x, leg.z - here.z))}m` : '';
+    const at = leg.x !== undefined ? `（開始時の見立て ${leg.x},${leg.y},${leg.z}${far}）` : '';
+    const mark = index === now ? '▶' : index < now ? '済' : '・', nearer = index === now ? nearerCandidates(leg, world) : '';
+    return `${mark} ${leg.milestone}: ${leg.goal}／${leg.where}${at}／${leg.targetSeconds}秒まで${nearer}`;
+  });
+  return [`ルート（${route.reason === 'late' ? '遅れで立て直し' : '最初の計画'}、${route.plannedAtSeconds}秒）:`, ...lines,
+    ...(route.legs.some(leg => leg.x !== undefined) ? [ROUTE_COORDINATES_NOTE] : []), ...woodLines(milestone, world)];
+}
+/** The steps of the wood: the line about where wood is shows only while one of them is the step now. */
+const WOOD_STEPS: ReadonlySet<string> = new Set(['木', '木と石のツルハシ', '石の斧', '木材']);
+
+/** Whether the body sends its map (or the biomes it has passed): without one, "no tree in sight" is not known. */
+const hasMap = (world: Record<string, unknown> | null | undefined) => typeof world?.mapSummary === 'string' || typeof world?.biomesSeen === 'string';
+
+/** Where wood is, while a step of the wood is the step now and no tree is in sight (also before the route is planned: the first 20 s). */
+export function woodLines(milestone: string | null, world: Record<string, unknown> | null | undefined): string[] {
+  const wood = milestone !== null && WOOD_STEPS.has(milestone) && hasMap(world) ? woodAdvice(world!) : null;
+  return wood && !wood.trees ? wood.lines : [];
 }
 
 
@@ -170,7 +218,7 @@ export function createRoutePlanning(parts: {
       const reason = parts.planner && world && !slot.pending && slot.asks < ROUTE_PLAN.asks ? planWanted(route, milestone, elapsedSeconds) : null;
       if (reason) {
         let input: string;
-        try { input = routeInput(world!, elapsedSeconds, milestone); } catch { return route ? routeLines(route, milestone) : []; }
+        try { input = routeInput(world!, elapsedSeconds, milestone); } catch { return route ? routeLines(route, milestone, world) : []; }
         slot.asks += 1;
         const pending: Pending = { abort: new AbortController(), at: elapsedSeconds, reason, startedAt: Date.now() };
         slot.pending = pending;
@@ -180,7 +228,7 @@ export function createRoutePlanning(parts: {
           .then(answer => finish(pending, pending.abort.signal.aborted ? null : answer)).finally(() => clearTimeout(timer));
         parts.log(`Shannon Minecraft route asked task=${parts.taskId} reason=${reason} at=${Math.round(elapsedSeconds)}`);
       }
-      return slot.route ? routeLines(slot.route, milestone) : [];
+      return slot.route ? routeLines(slot.route, milestone, world) : woodLines(milestone, world);
     },
     /** The decision's situation with the route's lines (`route`), asking a plan when one is wanted; the seconds come from the situation. */
     situate<T extends { milestoneName?: string | null; elapsedSeconds?: number | null }>(situation: T, world: unknown): T & { route?: readonly string[] } {
