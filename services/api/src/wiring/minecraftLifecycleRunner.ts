@@ -48,10 +48,14 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
      * outcome was lost and the body is not in the server, the operation goes on without the body resource. Nothing is moving then,
      * and the operation is what brings the body back for the re-check that frees it (run 20: twice a lost step kept the body, the
      * body could not come back for the re-check, and every start, login and logout was refused with `lease_conflict`).
+     * Going on without the body still sends the operation: `dispatch` with no resource marks the action `sent` (the operation is
+     * about to act outside) and holds nothing more than it already does. Without it an operation interrupted before any receipt
+     * would end `unknown` with `sent=0`, outside the action store's one unknown exit, and `unresolved()` would refuse every start,
+     * login, logout and stop for good (2026-10-21, run 22's stop f67261ba). A dispatch refused here closes it as never started.
      */
     async takeBody(active: RunningAction, onlyLostSteps?: () => boolean): Promise<boolean> {
       if (await parts.actions.dispatch(active.execution.lease, [body]).catch(() => false)) return true;
-      if (onlyLostSteps?.()) return true;
+      if (onlyLostSteps?.() && await parts.actions.dispatch(active.execution.lease, []).catch(() => false)) return true;
       await active.finish('cancelled', 'lifecycle_body_unavailable').catch(() => {});
       return false;
     },

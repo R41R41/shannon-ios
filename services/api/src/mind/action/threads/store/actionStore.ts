@@ -22,6 +22,8 @@ export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:stri
 export type ActionResourceRetained=(resource:string,resources:readonly string[],action?:Pick<ActionView,'kind'|'sourceId'>)=>boolean;
 /** Whether an unknown action's original work is settled elsewhere (its Agent Host task ended), which releases its retained keys. */
 export type ActionRetainedReleaseProof=(action:ActionView)=>boolean;
+/** The result of a lifecycle operation closed `unknown` once its command was issued (`minecraftLifecycleRunner.ts`, `LIFECYCLE_RESULT_UNKNOWN`). */
+const UNSENT_LIFECYCLE_UNKNOWN='lifecycle_result_unknown';
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
@@ -381,10 +383,15 @@ export class SQLiteActionStore {
    * excluded until a release proof or the owner's release; other added locks (study, folders alone) have no such proof and are
    * released with the slot. The state stays `unknown`, a closed state: held budget stays held, and a late canonical
    * acknowledgement or reconcile can still close the original attempt (and so prove a retained release).
+   *
+   * One more row takes this same exit: a lifecycle operation (`minecraft`) that ended `lifecycle_result_unknown` with `sent=0`.
+   * It issued its command but was never marked sent (the 2026-10-21 production row f67261ba went on without the body, which was
+   * no dispatch). The operation's `unresolved()` waits for this exit, so it is taken here, by the same time and the same rule,
+   * not by a second one. It holds no resource (nothing was dispatched) and is `external`: a command may have acted.
    */
   private exitUnknown(at:string):number {
     let exited=0;
-    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND sent=1").all()){
+    for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state='unknown' AND (sent=1 OR sent=0 AND kind='minecraft' AND result=?)").all(UNSENT_LIFECYCLE_UNKNOWN)){
       const action=view(row);
       const link=actionTaskLink(this.db,action);
       const base=JSON.parse(String(row.base_resources_json)) as string[];

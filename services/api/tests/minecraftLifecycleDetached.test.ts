@@ -262,6 +262,102 @@ describe('minecraft.set_day: the owner alone in a conversation, under its own li
   });
 });
 
+/**
+ * Production 2026-10-21 (run 22's clean-up stop, action f67261ba): a stop went on without the body (only lost steps held it) and was
+ * interrupted before any receipt. It ended `unknown` with `sent=0` (no dispatch had marked it sent), outside the action store's one
+ * unknown exit, so `unresolved()` refused every start, login, logout and stop for good.
+ */
+describe('an operation that goes on without the body still reaches the one unknown exit (2026-10-21)', () => {
+  type Fixture = ReturnType<typeof fixture>;
+  /** A live step holding the body, so the operation's own dispatch of it is refused. */
+  async function holdBody(f: Fixture) {
+    const step = (await f.actions.claim((await f.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request', sourceId: 'fca:held:1' })).id))!;
+    expect(await f.actions.dispatch(leaseOf(step), [body])).toBe(true);
+  }
+  /** The operator's stop under its own action, taken without the body, carried until its wait is interrupted: the unknown row. */
+  async function interruptedStop(f: Fixture, sourceId: string, older: boolean) {
+    await holdBody(f);
+    const runner = createLifecycleRunner({ actions: f.actions, service: f.configured.service, deviceId: 'operator' })!;
+    close.push(() => runner.close());
+    const own = (await runner.admit({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId, ownerInformed: true }, true))!;
+    expect(own).not.toBeNull();
+    expect(await runner.takeBody(own, () => true)).toBe(true);
+    const id = own.execution.lease.id;
+    // An older build never marked it sent: its row is the one left behind in production.
+    if (older) f.db.prepare('UPDATE mind_actions SET sent=0,effect_sent=0 WHERE id=?').run(id);
+    const authority = { scopeKey: 'owner', origin: 'owner_request' as const, executionId: id, lease: own.execution.lease, sourceIds: [sourceId] };
+    const job = runner.detach(own, { id: sourceId, serverId: 'home', action: 'stop', authority }, () => {});
+    await f.command(); // delivered to the body, so a pause of its frames does not cancel it
+    // The command's deadline passes while the action's heartbeat renews its lease; then the cancel wait runs out: no receipt, unknown.
+    for (let left = 121_000 + 6_000; left > 0; left -= 10_000) { f.advance(Math.min(10_000, left)); await f.actions.renew(leaseOf(f.store.get(id)!)); await delay(30); }
+    await job;
+    return id;
+  }
+
+  it.each([['dispatches without a resource, so the action is sent', false], ['a row an older build left with sent=0', true]])(
+    'an interrupted stop (%s) leaves unknown, and the one exit closes it as outcome_unknown_closed and frees the operator', async (_label, older) => {
+      const f = fixture(), id = await interruptedStop(f, `lifecycle:${(older ? 'e' : 'f').repeat(64)}`, older);
+      expect(f.store.get(id)).toMatchObject({ kind: 'minecraft', state: 'unknown', result: 'lifecycle_result_unknown', sent: !older, resources: [] });
+      expect(f.configured.service.store.unresolved()).toBe(true);
+      f.store.sweep(f.at());
+      expect(f.store.get(id)).toMatchObject({ state: 'unknown', result: 'lifecycle_result_unknown' }); // not before the exit is due
+      expect(f.configured.service.store.unresolved()).toBe(true);
+      f.advance(600_001); f.store.sweep(f.at());
+      expect(f.store.get(id)).toMatchObject({ state: 'unknown', result: 'outcome_unknown_closed', sent: false, resources: [] });
+      expect(f.db.prepare('SELECT effect_sent FROM mind_actions WHERE id=?').get(id)?.effect_sent).toBe(1);
+      expect(f.configured.service.store.unresolved()).toBe(false);
+      expect(new ActionLeaseReader(f.db).unknownExitedLifecycle('owner')).toMatchObject([{ action: 'stop' }]);
+      // Closed once: a second sweep changes nothing.
+      const closedAt = f.store.get(id)!.updatedAt;
+      f.advance(1000); f.store.sweep(f.at());
+      expect(f.store.get(id)!.updatedAt).toBe(closedAt);
+    }, 20_000);
+
+  it('closes only a lifecycle operation: other unsent unknown rows are left as they are', async () => {
+    const f = fixture();
+    const other = async (kind: 'minecraft' | 'agentTask', sourceId: string, code: string) => {
+      const view = (await f.actions.claim((await f.actions.enqueue({ scopeKey: 'owner', kind, origin: 'owner_request', sourceId })).id))!;
+      await f.actions.finish(leaseOf(view), 'unknown', code);
+      return view.id;
+    };
+    const ids = [await other('minecraft', 'game-request', 'something_else'), await other('agentTask', 'fca:other:1', 'lifecycle_result_unknown')];
+    f.advance(600_001); f.store.sweep(f.at());
+    for (const id of ids) expect(f.store.get(id)).toMatchObject({ state: 'unknown', sent: false });
+    expect(ids.map(id => f.store.get(id)!.result)).toEqual(['something_else', 'lifecycle_result_unknown']);
+  });
+
+  it('takes the body as before when it is free, and never asks whether only lost steps hold it', async () => {
+    const f = fixture();
+    const runner = createLifecycleRunner({ actions: f.actions, service: f.configured.service, deviceId: 'operator' })!;
+    close.push(() => runner.close());
+    const own = (await runner.admit({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: `lifecycle:${'d'.repeat(64)}` }, true))!;
+    expect(await runner.takeBody(own, () => { throw new Error('asked'); })).toBe(true);
+    expect(f.store.get(own.execution.lease.id)).toMatchObject({ state: 'running', sent: true, resources: [body] });
+  });
+
+  it('is refused as before when the body is held and not only by lost steps', async () => {
+    const f = fixture();
+    await holdBody(f);
+    const runner = createLifecycleRunner({ actions: f.actions, service: f.configured.service, deviceId: 'operator' })!;
+    close.push(() => runner.close());
+    for (const [index, bypass] of [undefined, () => false].entries()) {
+      const own = (await runner.admit({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: `lifecycle:${String(index).repeat(64)}` }, true))!;
+      expect(await runner.takeBody(own, bypass)).toBe(false);
+      expect(f.store.get(own.execution.lease.id)).toMatchObject({ state: 'cancelled', result: 'lifecycle_body_unavailable', sent: false });
+    }
+  });
+
+  it('closes as cancelled when the dispatch without the body is refused too', async () => {
+    const calls: Array<readonly string[] | undefined> = [], closed: Array<[string, string]> = [];
+    const actions = { dispatch: async (_lease: unknown, keys?: readonly string[]) => { calls.push(keys); return false; } };
+    const runner = createLifecycleRunner({ actions: actions as never, service: {} as never, deviceId: 'operator' })!;
+    const active = { execution: { lease: { id: 'own', generation: 1, holder: 'h' } }, finish: async (state: string, code: string) => { closed.push([state, code]); } };
+    expect(await runner.takeBody(active as never, () => true)).toBe(false);
+    expect(calls).toEqual([[body], []]);
+    expect(closed).toEqual([['cancelled', 'lifecycle_body_unavailable']]);
+  });
+});
+
 
 /**
  * The 2026-10-14 incident (production 75a2364c): 「シャノン、マイクラにログインして」 in a voice turn. The first `minecraft.login`
