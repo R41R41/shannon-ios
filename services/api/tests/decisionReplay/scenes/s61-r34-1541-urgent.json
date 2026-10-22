@@ -1,0 +1,31 @@
+{
+  "id": "s61-r34-1541-urgent",
+  "run": "r34",
+  "seq": 1541,
+  "category": [
+    "urgent"
+  ],
+  "title": "近い敵・急ぎ: zombified_piglin #566 6.4m・上 4・見えない（間に (",
+  "situation": "実走34 6.6 分、(253,57,63)（the_nether・ネザー要塞の中）、体力 20。計画の今の節: [p1.2] 歪んだ幹を取り作業台。敵 4 体（#566 zombified_piglin 6.4m (252,61,58)、#402 wither_skeleton 8.9m (245,61,64)）。前の act: （前の結果なし）。急ぎの行: zombified_piglin #566 6.4m・上 4・見えない（間に (253,58,62) netherrack ほか 5）・道はある（回って来る） / 前の act は敵が近づいて止めた。",
+  "correct": "急ぎの行に従い、敵に近づかず、離れる・間にブロックを置く・囲う・食べるを先に。手は急ぎの答え方の行があればその数まで。stopIf hpBelow は今の体力より低く、待つ act には hostileWithin を付ける。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. dig at=(252,57,63)(252,58,63) exposeOk=true / 2. walk to=(252,57,63) / 3. place at=(253,57,63)(253,58,63) block=netherrack onFail=continue。体の結果: act 全部済み（3/3、2.6秒）。",
+  "judge": "always",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ]
+}

@@ -242,7 +242,7 @@ describe('decision replay: the request is the production request', () => {
     const runs = loadRuns(dataFile('export1.txt'), dataFile('journal.txt'));
     const run = runs.get('r34')!;
     const decision = decisions(run)[0]!;
-    const [v1, v2, v3] = await Promise.all(VARIANTS.map(variant => buildRequest(variant, decision, run.core, null)));
+    const [v1, v2, v3] = await Promise.all(VARIANTS.slice(0, 3).map(variant => buildRequest(variant, decision, run.core, null)));
     const text = (request: Awaited<ReturnType<typeof buildRequest>>) => (request.body.system as Array<{ text: string }>).map(block => block.text).join('\n');
     expect(text(v1!)).toContain('シャノン');
     expect(text(v2!)).not.toContain('[シャノンの人格]');

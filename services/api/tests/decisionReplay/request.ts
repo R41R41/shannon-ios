@@ -41,6 +41,8 @@ export interface Variant {
   slim?: Slim;
   /** 10/23 v9: 書き直した live（rewriteLive.ts）を渡す版。指示文に、足した欄の読み方（REWRITE_LEGEND）を足す。 */
   legend?: boolean;
+  /** 10/23 v10: 候補の版（candidateAdapter.ts を通る。指示文・道具・live・短い書き方・守りは候補の頭が作る）。 */
+  cand?: boolean;
 }
 /** 比べる版。足すときはここに 1 行（上げる条件の違い、Haiku など）。 */
 export const VARIANTS: readonly Variant[] = [
@@ -60,6 +62,8 @@ export const VARIANTS: readonly Variant[] = [
   // v9（書き直した live、10/23 の 3 つ目の依頼）: v2（専用の指示文 + 短い出力、r10 なし）の上に live だけを書き直す。
   { id: 'v9b', label: 'v9b v2 + 書き直した live（周り・道・敵 1 行・地図の層をそろえる）', model: MODELS.opus, ownPrompt: true, shortOutput: true, legend: true },
   { id: 'v9c', label: 'v9c v9b + 手の短い書き方', model: MODELS.opus, ownPrompt: true, shortOutput: true, legend: true, slim: { short: true } },
+  // v10（候補の版の確かめ）: v1 = 今の本番（上）を基準にして、cand = 候補の頭（mb-llmc-cand）。cand の要求は candidateAdapter.ts が作る（できるまでは投げる）。
+  { id: 'cand', label: 'cand 候補の版（改修案 2.1〜2.4: 専用の指示文・道具 6 つ・書き直した live・短い書き方・守り）', model: MODELS.opus, ownPrompt: true, shortOutput: false, cand: true },
 ];
 
 /** The console as it was when this module loaded (captureBase silences it while production code logs, and may overlap with another capture). */
@@ -76,6 +80,7 @@ function captureBase(variant: Variant, core: readonly FcaToolDefinition[]): Prom
   return next;
 }
 async function captureOnce(variant: Variant, core: readonly FcaToolDefinition[]): Promise<Capture> {
+  if (variant.cand) throw new Error('DECISION_REPLAY_CANDIDATE_NOT_WIRED: cand は candidateAdapter.ts を通る（run6.ts）');
   const key = `${variant.model}|${variant.ownPrompt}|${variant.shortOutput}|${variant.effort ?? ''}|${variant.r10 ? 'r10' : 'r9'}|${variant.thinkingOff ? 'nothink' : ''}|${JSON.stringify(variant.slim ?? {})}|${variant.legend ? 'legend' : ''}|${createHash('sha256').update(JSON.stringify(core)).digest('hex').slice(0, 12)}`;
   const cached = baseCache.get(key);
   if (cached) return cached;

@@ -76,3 +76,11 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 版: v2 = 今の live（基準）、v9b = 書き直した live（指示文に `REWRITE_LEGEND` を足す）、v9c = v9b + 手の短い書き方。回すのは `run4.ts`（v2 は前の結果を使い、足りない回数だけ回す。`--dry` で要求の組み立てだけ確かめる）、採点は `judgeAll2.ts --out=judge4.jsonl --only=v2,v9b,v9c`（2 回目は `--out=judge4b.jsonl --force --scenes=…`）、表は `report4.ts`。
 - 間違いの仕分け: `failDump4.ts`（× の答えを書き直した live と並べる）、`walkDistance4.ts`（塞がったマスへ walk の × を足からの距離で数える）、`sceneDiff4.ts`（場面ごとの良し悪し）。
 - 結果のまとめ: `results/decision-rewrite-20261023.md`。試験: `tests/decisionRewrite.test.ts`。
+
+## 10/23 の追加 (4): 候補の版の確かめの下ごしらえ（場面 60・頭の変換・基準 v1 の回数・候補の口）
+
+- 場面 60（`makeScenes2.ts`、実走28・30・31・33・34 から 15 足した。`pickScenes.ts` で候補を一覧できる）: 順調に進む 9、止まった直後 3、近い敵・急ぎ 3。前の 45 は止まり・失敗に偏っていたので、足した分で偏りを減らした（60 場面の種類は `report5.ts` の 9 節）。実走27・29 は古い頭の道具・live の形で bootstrap も無いので使わない。足した 15 は良し悪しを検査ではなく後知恵つきの採点（`judge: always`）に任せる。
+- 頭の変換（`headTransform.ts`）: 本番の `fcaMinecraftTools.ts` が mc.act にする順（`llmcPrepare` の形の整え → `checkedStopIf`）を、記録の live だけで写す。stopIf の点検に要る frame（体力・敵の名前と距離・届くか）は live の行から作る近似。写さない物: why の札付け、`fightRefusal`、catalog の変化、lease。`transformEffect.ts` は API を使わず、変換の前後で検査の結果がどう変わるかを数える。
+- 見え方（`views5.ts` の `VIEWS`）: v1 = 生の答え、v1t = 本番の変換を通した答え。候補を足す時はここに cand（生）・candt（候補の変換を通した答え）を足す。`judge5.ts` は本番の記録 + 全見え方を場面ごとに 1 回で採点（基準と候補を同じ呼び出しで、出どころを伏せて混ぜる）、`report5.ts` が表。
+- 候補の口: 版の表に `cand`、`candidateAdapter.ts`（候補の頭の関数につなぐ所。できるまで投げる）。
+- 試験: `tests/decisionTransform.test.ts`。

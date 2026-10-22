@@ -1,0 +1,13 @@
+{
+  "id": "s54-r28-1205-steady",
+  "run": "r28",
+  "seq": 1205,
+  "category": [
+    "progress"
+  ],
+  "title": "順調に進む: 次の節",
+  "situation": "実走28 23.8 分、(181,49,203)（overworld・村の中）、体力 20。計画の今の節: （なし）。敵 8 体（#3644 zombie 23.9m (180,68,217)、#3878 zombie_villager 40.6m (219,64,205)）。前の act: （前の結果なし）。急ぎの行は無い。",
+  "correct": "計画の今の節を進める手を、地図で通れる所にだけ出す（塞がったマス・床の無いマスへ walk しない、埋まったマスへ place しない、頭のマスを掘らずに壁の向こうへ歩かない）。同じ種類の手が続くなら手をまとめ、危険（敵・溶岩・落差・見られる所）を避ける。",
+  "hindsight": "実際の答え（本番）: 1. craft item=furnace / 2. place at=(181,49,204) block=furnace / 3. furnace item=raw_iron op=put。体の結果: （頭が形を直して送った: 手3 の at を配列にした）。",
+  "judge": "always"
+}
