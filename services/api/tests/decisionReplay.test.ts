@@ -2,6 +2,12 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeMap, isAir, isSolid, matches, runCheck, type Answer, type Context, type Hand } from './decisionReplay/checks.js';
 import { decisions, loadRequestSizes, loadRuns } from './decisionReplay/load.js';
+import { loadAllRuns } from './decisionReplay/allRuns.js';
+import { resultsByDecision } from './decisionReplay/preflightFrames.js';
+import { r10Input } from './decisionReplay/r10Live.js';
+import { actToShort, handToLine, lineToHand, shortToAct } from './decisionReplay/shortHands.js';
+import { compactHistory, expandAnswer, shortActTool, slimTools, splitKnowledge, stagesFor, summaryOf } from './decisionReplay/slim.js';
+import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { buildRequest, markCache, VARIANTS, withoutThinking } from './decisionReplay/request.js';
 import { loadScenes, scoreAnswer, decisionOf, type SceneFile } from './decisionReplay/score.js';
 import { contextOf, answerOf } from './decisionReplay/checks.js';
@@ -11,7 +17,7 @@ import { contextOf, answerOf } from './decisionReplay/checks.js';
  * 本番の DB の控え（data/export1.txt、git に入らない）が無い所では、それを使う試験は飛ばす。
  */
 const dataFile = (name: string) => new URL(`./decisionReplay/data/${name}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-const haveData = existsSync(dataFile('export1.txt')) && existsSync(dataFile('journal.txt'));
+const haveData = existsSync(dataFile('export1.txt')) && existsSync(dataFile('journal.txt')) && existsSync(dataFile('export2.txt'));
 
 const MAP = ['地図 v1 足=(10,5,20) x=8..12 z=19..21 方式=layers 上=北', 'y=5 x=8..12 z=19..21', 'z\\x 8 9 0 1 2', ' 19 # . . . #', ' 20 # . @ . #', ' 21 # # # # #',
   'y=4 x=8..12 z=19..21', 'z\\x 8 9 0 1 2', ' 19 # # # # #', ' 20 # # # . #', ' 21 # # # # #', '縦 (10,20) 上: y=6 . / 下: y=4 #'].join('\n');
@@ -91,7 +97,7 @@ describe('decision replay: the scene files', () => {
   });
 
   it.runIf(haveData)('each resolves to a recorded decision, and the production answer is judged by its rubric as the real outcome says', () => {
-    const runs = loadRuns(dataFile('export1.txt'), dataFile('journal.txt'));
+    const runs = loadAllRuns();
     const recorded = Object.fromEntries(scenes.map(scene => {
       const decision = decisionOf(runs, scene);
       const score = scoreAnswer(scene, contextOf(decision), answerOf((decision.assistant?.content ?? []) as never));
@@ -101,6 +107,108 @@ describe('decision replay: the scene files', () => {
     for (const id of ['s19-r32-1336-lava-gap', 's20-r32-1344-accept-seen', 's21-r32-1345-death', 's22-r33-1479-wait-without-guard', 's31-r33-1457-plan-skip',
       's05-r33-1403-solid-target', 's14-r33-1452-walk-solid', 's28-r32-1334-after-plan-update', 's29-r33-1409-head-cell']) expect(recorded[id], id).toBe('×');
     for (const id of ['s24-r32-1325-tunnel', 's25-r33-1411-tunnel', 's27-r34-1548-tunnel', 's07-r33-1436-void-edge']) expect(recorded[id], id).toBe('○');
+  });
+});
+
+describe('decision replay: v4 (the r10 head) adds what the record can make', () => {
+  it.runIf(haveData)('puts the head\'s facts into the result of a stopped act, in the history and in the next decision\'s lastResults, and leaves a decision with nothing to add as it was', () => {
+    const run = loadRuns(dataFile('export1.txt'), dataFile('journal.txt')).get('r34')!;
+    const info = resultsByDecision(run);
+    const stopped = info.ds.find(item => item.row.seq === 1537)!;
+    const added = r10Input(stopped, info);
+    expect(added.notes.lastResults).toBe(true);
+    const live = JSON.parse(String(added.turn.find(entry => entry.role === 'system')!.content)) as { body: { lastResults: string[] } };
+    expect(live.body.lastResults[0]).toContain('頭の補足（1 place）: 空中のマスには支えが要る');
+    expect(live.body.lastResults[0]).toContain('頭の補足（2 walk）: 目的地 (259,57,63) の下は空気が 8 以上 マス');
+    const first = info.ds[0]!;
+    const same = r10Input(first, info);
+    expect(same.rows).toEqual([]);
+    expect(same.turn).toEqual(first.turn);
+  });
+
+  it.runIf(haveData)('v2 keeps the old knowledge line (its recorded requests stay), v4 has the r10 one', async () => {
+    const run = loadRuns(dataFile('export1.txt'), dataFile('journal.txt')).get('r34')!;
+    const decision = decisions(run)[0]!;
+    const text = async (id: string) => (await buildRequest(VARIANTS.find(variant => variant.id === id)!, decision, run.core, null)).body.system
+      .map((block: { text: string }) => block.text).join('\n');
+    expect(await text('v2')).toContain('「届かない」は 4.5m 内へ寄る');
+    expect(await text('v4')).toContain('「一歩ではない」は頭の高さが固い（walk は掘らない: 先に dig）');
+    expect(await text('v4')).not.toContain('4.5m 内へ寄る');
+  }, 60_000);
+
+  it('names the versions: v5 = v4 + the preflight, v6 with effort high, v7 on Sonnet', () => {
+    const by = (id: string) => VARIANTS.find(variant => variant.id === id)!;
+    expect([by('v4').r10, by('v4').preflight]).toEqual([true, undefined]);
+    expect([by('v5').preflight, by('v6').effort, by('v7').model]).toEqual([true, 'high', 'claude-sonnet-5-5']);
+  });
+});
+
+describe('decision replay: v8, the narrowed form', () => {
+  it('writes a hand in a line and reads it back as the same hand; a hand with no short form is a json line', () => {
+    const hands = [{ do: 'walk', to: { x: 225, y: 57, z: 63 } }, { do: 'walk', path: [{ x: 1, y: 2, z: 3 }, { x: 4, y: 2, z: 3 }], sprint: true, range: 2 },
+      { do: 'dig', at: [{ x: 1, y: 2, z: 3 }, { x: 1, y: 3, z: 3 }], tool: 'iron_pickaxe', exposeOk: true, collect: false, onFail: 'continue' },
+      { do: 'place', block: 'cobblestone', at: [{ x: 5, y: 6, z: 7 }], face: 'down' }, { do: 'attack', target: '#12', hold: true, seconds: 8 },
+      { do: 'look', yaw: 90, pitch: -10 }, { do: 'wait', seconds: 3 }, { do: 'sneak', on: false }, { do: 'chest', at: [{ x: 1, y: 2, z: 3 }], op: 'look' }];
+    const lines = hands.map(hand => handToLine(hand as never));
+    expect(lines.slice(0, 8)).toEqual(['walk 225,57,63', 'walk 1,2,3 4,2,3 sprint range=2', 'dig 1,2,3 1,3,3 tool=iron_pickaxe exposeOk collect=false onFail=continue',
+      'place cobblestone 5,6,7 face=down', 'attack #12 hold seconds=8', 'look yaw=90 pitch=-10', 'wait 3', 'sneak off']);
+    expect(lines[8]).toBe('json {"do":"chest","at":[{"x":1,"y":2,"z":3}],"op":"look"}');
+    expect(lines.map(line => lineToHand(line))).toEqual(hands);
+    expect(lineToHand('teleport 1,2,3')).toEqual({ error: 'teleport: 知らない手 teleport' });
+    const { act, errors } = shortToAct({ why: '[p1] 東へ', hands: ['walk 1,2,3', 'dig'], stopIf: 'hpBelow=8 hostileWithin=6', accept: ['blaze'] });
+    expect(act).toEqual({ hands: [{ do: 'walk', to: { x: 1, y: 2, z: 3 } }], why: '[p1] 東へ', stopIf: { hpBelow: 8, hostileWithin: 6 }, accept: ['blaze'] });
+    expect(errors).toEqual(['dig: 座標が無い']);
+    const expanded = expandAnswer([{ type: 'tool_use', id: 't', name: 'mc_act', input: { hands: ['walk 1,2,3', 'dig'] } }]);
+    expect(Object.keys((expanded[0] as { input: object }).input)).toContain('書き方の誤り');
+    expect(actToShort({ hands: [{ do: 'wait', seconds: 1 }], stopIf: { hpBelow: 9 }, why: 'w' } as never)).toEqual({ why: 'w', hands: ['wait 1'], stopIf: 'hpBelow=9' });
+  });
+
+  it.runIf(haveData)('every recorded act of runs 27–34 goes through a line and back as it was (a hand with no line goes as json)', () => {
+    let acts = 0, mismatched = 0, errors = 0;
+    for (const run of loadAllRuns().values()) {
+      for (const decision of decisions(run)) {
+        if (decision.call?.name !== 'mc_act' || !Array.isArray(decision.call.input.hands)) continue;
+        acts += 1;
+        const back = shortToAct(actToShort(decision.call.input));
+        errors += back.errors.length;
+        const norm = (act: { hands: unknown; why?: unknown }) => JSON.stringify({ hands: act.hands, why: act.why }, (_, value) => value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).sort()) : value);
+        if (norm(back.act) !== norm(decision.call.input)) mismatched += 1;
+      }
+    }
+    expect(acts).toBeGreaterThan(450);
+    expect(errors).toBe(0);
+    expect(mismatched).toBe(0);
+  });
+
+  it('keeps six tools, the map of knowledge splits into the always and three stages, and stages are chosen from the live state', () => {
+    expect(slimTools([{ name: 'task_get' }, { name: 'plan_update' }, { name: 'mc_view' }, { name: 'mc_act' }, { name: 'fca_wait' }, { name: 'mc_probe' }, { name: 'fca_complete' }, { name: 'tool_open' }])
+      .map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_wait', 'fca_complete']);
+    const split = splitKnowledge();
+    expect(Object.keys(split.stages)).toEqual(['prep', 'nether', 'end']);
+    expect([split.always, split.stages.prep, split.stages.nether, split.stages.end].join('\n\n')).toBe(llmcCoreKnowledge(true).replace(/\n\n(?=## 材料と手順)/u, '\n\n'));
+    expect(stagesFor({ body: { planNow: '[p1.2] 歪んだ幹で作業台', state: { dimension: 'overworld' } } })).toEqual(['prep']);
+    expect(stagesFor({ body: { planNow: '[p3.1] ブレイズロッド 7 本', state: { dimension: 'the_nether', inside: 'ネザー要塞の中' } } })).toEqual(['nether']);
+    expect(stagesFor({ body: { planNow: '[p4.1] エンダーアイでストロングホールドを探す', state: { dimension: 'overworld' } } })).toEqual(['prep', 'end']);
+    expect(shortActTool().input_schema).toMatchObject({ required: ['hands'], properties: { hands: { items: { type: 'string' } } } });
+    expect(String(shortActTool().description)).toContain('walk X,Y,Z');
+  });
+
+  it.runIf(haveData)('the compact history is the first state + a summary + the last 3 to 8 rounds, the summary renewed every 6 decisions (so the prefix holds)', () => {
+    const run = loadRuns(dataFile('export1.txt'), dataFile('journal.txt')).get('r34')!;
+    const list = decisions(run).filter(item => item.epoch === 1);
+    const windows = list.map(item => compactHistory(item).filter(entry => entry.role === 'assistant').length);
+    expect(Math.min(...windows.slice(3))).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...windows)).toBeLessThanOrEqual(8);
+    const late = list.at(-1)!;
+    const history = compactHistory(late);
+    expect(history[0]!.role).toBe('user');
+    expect(JSON.stringify(history[0]!.content)).toContain('これまでの試しの要約');
+    expect(summaryOf(late, late.epochStart, late.index - 3)).toContain('act ');
+    // the same summary stays for the next decisions of its block (the cache holds)
+    // (the 9th round of the epoch and the 10th share the summary of the first 6; the 15th is a new block)
+    const first = (k: number) => JSON.stringify(compactHistory(list[k]!)[0]);
+    expect([first(9) === first(10), first(10) === first(15)]).toEqual([true, false]);
   });
 });
 

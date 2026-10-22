@@ -25,7 +25,7 @@ export function loadRuns(exportFile: string, journalFile?: string): Map<string, 
   }
   const metrics = journalFile ? loadMetrics(journalFile) : new Map<string, Metrics[]>();
   const runs = new Map<string, Run>();
-  const keys: Record<string, string> = { d1f3d2d4: 'r32', ca976e03: 'r33', ae935fa1: 'r34' };
+  const keys: Record<string, string> = { d1f3d2d4: 'r32', ca976e03: 'r33', ae935fa1: 'r34', e8059775: 'r27', e6da178b: 'r28', '1edd8e09': 'r29', '01416204': 'r30', '53a9e6fe': 'r31' };
   for (const task of by.task ?? []) {
     const p: string = task.p, [taskId, createdAt, , , title] = task.task as string[];
     const rows = (by.hist ?? []).filter(h => h.p === p).sort((a, b) => a.seq - b.seq)
@@ -76,6 +76,14 @@ export interface Decision {
   resultText: string; metrics: Metrics | null;
 }
 
+/** The live state a row's system entry holds (a string of JSON; an older or odd row may hold blocks, or nothing readable: {}). */
+function liveOf(entry: Entry | undefined): Record<string, any> {
+  if (!entry) return {};
+  const raw = entry.content;
+  const text = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw as Array<{ text?: string }>).map(block => block.text ?? '').join('') : '';
+  try { return JSON.parse(text) as Record<string, any>; } catch { return {}; }
+}
+
 export function decisions(run: Run): Decision[] {
   let epoch = 0, epochStart = 0;
   return run.rows.map((row, index) => {
@@ -92,7 +100,7 @@ export function decisions(run: Run): Decision[] {
     const resultEntry = [...row.entries].reverse().find(entry => entry.role === 'user');
     const resultBlock = resultEntry && Array.isArray(resultEntry.content)
       ? (resultEntry.content as Array<Record<string, any>>).find(block => block.type === 'tool_result') : undefined;
-    return { run, index, row, epoch, epochStart, turn, live: liveEntry ? JSON.parse(String(liveEntry.content)) : {}, assistant,
+    return { run, index, row, epoch, epochStart, turn, live: liveOf(liveEntry), assistant,
       call: use ? { id: use.id, name: use.name, input: use.input } : null, resultText: resultBlock ? asText(resultBlock.content) : '',
       metrics: run.metrics[index] ?? null };
   });

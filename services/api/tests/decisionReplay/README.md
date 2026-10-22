@@ -60,3 +60,11 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 ## 試験
 
 `tests/decisionReplay.test.ts`（API を呼ばない）: 地図の読み・検査・場面のファイル・要求の組み立て・本番の要求との文字数の一致。控え（`data/export1.txt`）が無い所では、それを使う試験は飛ばす。
+
+## 10/23 の追加: 送る前の守りと r10 の比べ、v8（絞った形）
+
+- 守り（`src/surfaces/minecraft/minecraftLlmcPreflight*.ts`、branch `codex/shannon/act-preflight` 4f98156）の確かめ: `preflightEval.ts`。本番の記録（実走27〜34 の mc.act）に守りをかけ、体の実際の結果の行と照らして「体が済にした手を止めた数」を数える。地図は act を送る時に体が持っていた最新の地図の見積もり（直前の act の終わりの地図）。`exportPreflightFixture.ts` が試験の控え（`tests/fixtures/act-preflight-*.json`）を作る。
+- 場面を足す: `vm/export-history-27-31.sh`（VM は読むだけ）→ `data/export2.txt`、`makeScenes.ts`（実走27〜31 の 13 場面を本番の記録から文にする）、`makeBootstraps2.ts`。run は `allRuns.ts` が実走27〜34 を引く。
+- 版: v4（`r10Live.ts`: 止まりの補足 H3 を履歴と lastResults に、線上のマス H5 を urgent の行に。H2 は作れない）、v5（v4 の答えに守りをかけ、止めたら事実を tool_result で返して 1 回だけ聞き直す）、v6（effort high。Opus 5.5 は thinking を切れない）、v7（Sonnet + 守り）、v8a〜d（`slim.ts`: 道具 6 つ → + 知識の段 → + 履歴の要約 → + 短い書き方 `shortHands.ts`）。
+- 回す: `run2.ts`（v1/v2/v4/v6/v7、`--variants --reps --scenes --out`）、`run3.ts`（v8）。費用は `DECISION_REPLAY_LEDGER` の帳簿に数え、`DECISION_REPLAY_CAP` で止まる。採点は `judgeAll2.ts`（`--out=judge2b.jsonl --force` で 2 回目）、表は `report2.ts`。
+- 近似: 場面の地図は直前の act の終わりの地図、敵と自分の場所は live の整数（H5 の線は 0.5 ずれる）、守りは 1 回だけ聞き直す、v8 の要約は block 6 判断ごと。

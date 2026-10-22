@@ -5,7 +5,7 @@ import { estimatedAnthropicCostUsd } from '../../src/infra/models/claude/claudeU
  * API の費用の帳簿（data/ledger.jsonl）。台が API を呼ぶたびに 1 行足し、上限（既定 8 ドル、環境変数 DECISION_REPLAY_CAP）を超える前に止める。
  * 帳簿は「作るのと最初の比べを合わせて 8 ドル以内」の数え方の元になる。
  */
-export const LEDGER_FILE = new URL('./data/ledger.jsonl', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+export const LEDGER_FILE = process.env.DECISION_REPLAY_LEDGER ?? new URL('./data/ledger.jsonl', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 export interface Usage { input: number; output: number; cacheWrite: number; cacheRead: number; cacheWrite5m?: number; cacheWrite1h?: number }
 export interface LedgerRow { at: string; kind: string; model: string; usage: Usage; costUsd: number; note?: string }
 

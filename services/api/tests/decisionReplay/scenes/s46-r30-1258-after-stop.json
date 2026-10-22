@@ -1,0 +1,13 @@
+{
+  "id": "s46-r30-1258-after-stop",
+  "run": "r30",
+  "seq": 1258,
+  "category": [
+    "stopped"
+  ],
+  "title": "止まった直後: act 1/4 済みで止まった（failure）",
+  "situation": "実走30 1.5 分、(310,66,73)（the_nether・ネザー要塞の中）、体力 14.5。計画の今の節: [p1.1] 歪んだ幹で作業台と棒＠195,66,60（済み: have:crafting_table&have:stick>=4）（道: 出発の点検）。敵 2 体（#4 blaze 3.4m (308,69,73)、ほか7件（長いため略））。前の act: act 1/4 済みで止まった（failure）。急ぎの行: blaze 3.4m。",
+  "correct": "直前に止まった手（1 walk 止 一歩ではない: (312,66,73) に着いていない（今 (310,66,73)（自分から同じマス）、的まで 2.0m（range 0.5））。頭の高さ (311,67,73) が cobbled_deepslate で）と同じ手を同じまま出さない。返った行と地図で原因を直す（頭の高さが固いなら先に dig、床が無ければ先に place、届かないなら歩いて近づく）。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. walk to=(312,66,73) / 2. place at=(311,66,73) block=cobbled_deepslate face=west / 3. eat item=cooked_mutton。体の結果: act 0/3 済みで止まった（failure）。止まったのは seq 1257 の act。",
+  "judge": "always"
+}

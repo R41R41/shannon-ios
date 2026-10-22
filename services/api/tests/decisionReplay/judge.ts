@@ -69,7 +69,10 @@ export function candidatesOf(scene: SceneFile, decision: Decision, rows: readonl
 export async function judgeScene(client: Anthropic, scene: SceneFile, decision: Decision, candidates: readonly Candidate[]): Promise<JudgeRow[]> {
   const toJudge = candidates.filter(item => item.score.verdict === '?' || (scene.judge === 'always' && item.score.verdict !== '×'));
   if (!toJudge.length) return [];
-  const order = shuffled(toJudge, scene.id);
+  // 同じ答え（同じ手・同じ why）は 1 つにまとめて採点し、同じ採点を全員に付ける（守りで通った v5 は v4 と同じ答え）。
+  const groups = new Map<string, Candidate[]>();
+  for (const item of toJudge) groups.set(answerText(item.answer), [...groups.get(answerText(item.answer)) ?? [], item]);
+  const order = shuffled([...groups.values()].map(list => list[0]!), scene.id);
   const labels = order.map((_, index) => String.fromCharCode(65 + index));
   const body = [
     `# 場面 ${scene.id}: ${scene.title}`, `## 状況\n${scene.situation}`, `## 正しい手の条件\n${scene.correct}`, `## 実際に起きたこと（後知恵）\n${scene.hindsight}`,
@@ -86,7 +89,7 @@ export async function judgeScene(client: Anthropic, scene: SceneFile, decision: 
   return (use?.input.grades ?? []).flatMap(grade => {
     const index = labels.indexOf(grade.label);
     const item = order[index];
-    return item ? [{ scene: scene.id, key: item.key, variant: item.variant, rep: item.rep, verdict: grade.verdict, reason: grade.reason }] : [];
+    return (item ? groups.get(answerText(item.answer)) ?? [] : []).map(member => ({ scene: scene.id, key: member.key, variant: member.variant, rep: member.rep, verdict: grade.verdict, reason: grade.reason }));
   });
 }
 
