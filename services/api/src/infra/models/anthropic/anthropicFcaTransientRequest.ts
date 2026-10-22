@@ -55,7 +55,9 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   input: FcaModelInput; supplied: Record<string, unknown>; history: readonly Anthropic.MessageParam[];
   menu: { tools: Anthropic.Tool[]; appended: Anthropic.MessageParam[] };
   /** The transport block of system[0] (absent: `HAIKU_PROTOCOL_PREFIX`; a Minecraft body task's own: `MINECRAFT_TRANSPORT`). */
-  protocol?: string }) {
+  protocol?: string;
+  /** SHANNON_MINECRAFT_LLMC_V2: the live state rewritten before it is sized, cut and sent. */
+  rewriteLive?(live: Record<string, unknown>): Record<string, unknown> }) {
   const { model, input, supplied, history, menu } = parts, maximum = parts.compactAboveTokens, limit = input.replayTokenLimit;
   const hour = { type: 'ephemeral' as const, ttl: '1h' as const }, protocol = parts.protocol ?? HAIKU_PROTOCOL_PREFIX;
   const system = [{ type: 'text' as const, cache_control: hour, text: parts.systemText }];
@@ -85,7 +87,9 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   const wholeFits = (full: boolean) => (row: Record<string, unknown>, live: Record<string, unknown>) =>
     requestFits(full)(row, live) && (limit === undefined || continuedTokens(row, full) <= limit);
 
-  const live = liveObject(supplied, input.transient), kept = storedFields(supplied);
+  // SHANNON_MINECRAFT_LLMC_V2: the live state as the mode writes it (`rewriteLive`, with the stages' knowledge as its first field).
+  const live = parts.rewriteLive ? parts.rewriteLive(liveObject(supplied, input.transient)) : liveObject(supplied, input.transient);
+  const kept = storedFields(supplied);
   let stored = storedState(kept, history);
   let deferred = false;
   if (stored.hasCut) {

@@ -7,6 +7,7 @@ import {
   ACT_DESCRIPTION, ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, LLMC_READ_SKILLS, MC_ACT_SKILL, MC_ACT_TOOL,
   MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
+import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
 import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
@@ -36,13 +37,17 @@ const VIEW_MS = 15_000;
  * when `probe` is on and the body offers it), and the reads it keeps.
  */
 export function llmcBodyDefinitions(skills: readonly MinecraftSkillDefinition[],
-  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition, options: { probe?: boolean } = {}): FcaToolDefinition[] {
+  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition,
+  options: { probe?: boolean; v2?: boolean } = {}): FcaToolDefinition[] {
   const has = (name: string) => skills.some(skill => skill.name === name);
+  // SHANNON_MINECRAFT_LLMC_V2: the hands written one to a line (`minecraftActShortContract.ts`), and none of the reads.
+  const act = options.v2 ? { ...definition(MC_ACT_TOOL, SHORT_ACT_DESCRIPTION, false), nativeInputSchema: SHORT_ACT_INPUT_SCHEMA }
+    : { ...definition(MC_ACT_TOOL, ACT_DESCRIPTION, false), nativeInputSchema: ACT_INPUT_SCHEMA };
   return [
-    ...(has(MC_ACT_SKILL) ? [{ ...definition(MC_ACT_TOOL, ACT_DESCRIPTION, false), nativeInputSchema: ACT_INPUT_SCHEMA }] : []),
+    ...(has(MC_ACT_SKILL) ? [act] : []),
     ...(has(MC_VIEW_SKILL) ? [{ ...definition(MC_VIEW_TOOL, VIEW_DESCRIPTION, true), nativeInputSchema: VIEW_INPUT_SCHEMA }] : []),
     ...(options.probe && has(MC_PROBE_SKILL) ? [{ ...definition(MC_PROBE_TOOL, PROBE_DESCRIPTION, true), nativeInputSchema: PROBE_INPUT_SCHEMA }] : []),
-    ...skills.filter(skill => LLMC_READ_SKILLS.has(skill.name))
+    ...(options.v2 ? [] : skills).filter(skill => LLMC_READ_SKILLS.has(skill.name))
       .map(skill => ({ ...definition(`mc.${skill.name}`, skill.description, skill.readOnly), nativeInputSchema: skill.inputSchema })),
   ];
 }
@@ -61,6 +66,8 @@ export function llmcSchema(name: string): Readonly<Record<string, unknown>> | un
 export function llmcInputProblem(name: string, input: unknown): string | null {
   const schema = llmcSchema(name);
   if (!schema) return null;
+  const unread = name === MC_ACT_TOOL ? shortHandProblem(input) : null;
+  if (unread) return unread;
   if (!validSkillInput(input, schema)) return `引数が ${name} の形に合わない: ${schemaProblem(input, schema) ?? '形が違う'}`;
   return name === MC_ACT_TOOL ? actProblem(input as ActInput) : null;
 }
