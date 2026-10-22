@@ -1,0 +1,75 @@
+{"scene":"s01-r32-1321-head-cell","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"頭のマスは先に掘るが、歩く前に(308,66)まで掘り続けて止まりそう"}
+{"scene":"s01-r32-1321-head-cell","key":"v9c|1","variant":"v9c","rep":1,"verdict":"○","reason":"頭のマスを掘ってから歩いて通る。要の1歩はできる"}
+{"scene":"s01-r32-1321-head-cell","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"頭のマスを掘ってから歩いて通る。先の手は止まってもよい"}
+{"scene":"s01-r32-1321-head-cell","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"Aと同じ。まとめ掘りが(308,66)で止まり、歩くところまで行かない"}
+{"scene":"s01-r32-1321-head-cell","key":"v2|1","variant":"v2","rep":1,"verdict":"○","reason":"頭のマスを掘ってから歩き、要の1歩が通る見込みが高い"}
+{"scene":"s02-r32-1322-seen-stop","key":"v9b|1","variant":"v9b","rep":1,"verdict":"○","reason":"止まったマスを避け、exposeOk無しで南の岩へ潜る別の道。検査も全て通った"}
+{"scene":"s02-r32-1322-seen-stop","key":"v9b|2","variant":"v9b","rep":2,"verdict":"○","reason":"exposeOk無しで南の岩を掘り進み射線を避ける。最初の数手は通る見込み"}
+{"scene":"s02-r32-1322-seen-stop","key":"v9c|1","variant":"v9c","rep":1,"verdict":"○","reason":"1段下の岩へ下りて西へトンネル。見られない道に変えており条件どおり"}
+{"scene":"s06-r33-1405-pillar-air","key":"v9c|1","variant":"v9c","rep":1,"verdict":"×","reason":"北の空所(298,62,76)へ歩き、縁から離れず落ちる危険"}
+{"scene":"s06-r33-1405-pillar-air","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"縁に立ったままpillarUpし、西の空所上へ進む"}
+{"scene":"s06-r33-1405-pillar-air","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"東の岩トンネルへ退き安全だが、掘り直して進む手がない"}
+{"scene":"s06-r33-1405-pillar-air","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"縁を塞いで少し下がるだけ。安全だが進まない"}
+{"scene":"s06-r33-1405-pillar-air","key":"v9b|1","variant":"v9b","rep":1,"verdict":"×","reason":"Aと同じく北の空所側へ歩き、落ちる危険"}
+{"scene":"s06-r33-1405-pillar-air","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"縁で四方を塞ぐだけ。安全寄りだが進まない"}
+{"scene":"s12-r33-1426-void-piglin","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"縁を塞ぐだけで岩の中へ入らず、置く手も通るか不確か"}
+{"scene":"s12-r33-1426-void-piglin","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"先に縁沿いを2マス歩くため、離れるのが先という条件に合わない"}
+{"scene":"s12-r33-1426-void-piglin","key":"v9c|1","variant":"v9c","rep":1,"verdict":"○","reason":"隣の西を掘って岩の中へ入る。実際に通った手と同じ"}
+{"scene":"s12-r33-1426-void-piglin","key":"v9b|2","variant":"v9b","rep":2,"verdict":"○","reason":"西の岩へ入りさらに奥へ掘る。3手以内で条件を満たす"}
+{"scene":"s12-r33-1426-void-piglin","key":"v9b|1","variant":"v9b","rep":1,"verdict":"○","reason":"隣の西を掘って岩の中へ入る。実際に通った手と同じ"}
+{"scene":"s12-r33-1426-void-piglin","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"(250,59,74)は見えずに失敗した掘りのくり返し"}
+{"scene":"s13-r33-1443-enderman-sight","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"射線を塞がず幹を掘るだけ。間に岩があり掘れない手"}
+{"scene":"s13-r33-1443-enderman-sight","key":"v9c|1","variant":"v9c","rep":1,"verdict":"○","reason":"縁を離れて岩の中に入り、射線と落ちる危険の両方を避ける"}
+{"scene":"s13-r33-1443-enderman-sight","key":"v9b|1","variant":"v9b","rep":1,"verdict":"○","reason":"Bと同じ手。岩の中に入って射線から外れ、縁からも離れる"}
+{"scene":"s13-r33-1443-enderman-sight","key":"v2|2","variant":"v2","rep":2,"verdict":"×","reason":"目を伏せるだけで間を塞がない。幹は間の岩で掘れない"}
+{"scene":"s14-r33-1452-walk-solid","key":"v2|2","variant":"v2","rep":2,"verdict":"×","reason":"内側は東・南なのに北西へ歩き、縁へ向かう恐れ"}
+{"scene":"s14-r33-1452-walk-solid","key":"v9b|2","variant":"v9b","rep":2,"verdict":"×","reason":"歩く先が北西で内側と逆。落ちる危険が残る"}
+{"scene":"s14-r33-1452-walk-solid","key":"v9b|1","variant":"v9b","rep":1,"verdict":"×","reason":"Bと同じく北西へ歩き、縁から離れない恐れ"}
+{"scene":"s14-r33-1452-walk-solid","key":"v9c|1","variant":"v9c","rep":1,"verdict":"×","reason":"視線の中で先に北西へ歩く。内側と逆方向"}
+{"scene":"s14-r33-1452-walk-solid","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"目を外しスニークで安全寄りだが縁を離れない"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"自分の頭のマス(194,73,93)を含み、本番で止まった手と同じ"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"v9b|2","variant":"v9b","rep":2,"verdict":"○","reason":"上と西を塞ぐ。onFail=continueで1マス失敗しても進む"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"v9b|1","variant":"v9b","rep":1,"verdict":"○","reason":"上と西を塞ぎ、置けないマスはonFailで飛ばせる"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"置くマスは妥当。ただしonFailが無く、1つ目が失敗すると全部止まる"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"v2|1","variant":"v2","rep":1,"verdict":"○","reason":"支えのある下から順に置き、上も塞ぐ。onFailありで確実"}
+{"scene":"s15-r33-1476-zpiglin-sight","key":"v2|2","variant":"v2","rep":2,"verdict":"○","reason":"上と西を塞ぐ3マスで、onFailありのため止まりにくい"}
+{"scene":"s16-r34-1522-blaze-close","key":"v2|1","variant":"v2","rep":1,"verdict":"○","reason":"まず頭上の穴を塞ぐ。置く材料も二つ用意してあり通りやすい"}
+{"scene":"s16-r34-1522-blaze-close","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"最初の歩き先286は岩で通らず、塞ぐ手まで進まない"}
+{"scene":"s16-r34-1522-blaze-close","key":"v9b|1","variant":"v9b","rep":1,"verdict":"○","reason":"まず頭上の穴を塞いでから一歩動き、隣も塞ぐ。条件どおり"}
+{"scene":"s16-r34-1522-blaze-close","key":"v9b|2","variant":"v9b","rep":2,"verdict":"○","reason":"最初に穴を塞ぐ。後の東への歩きは失敗しても害は少ない"}
+{"scene":"s16-r34-1522-blaze-close","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"穴は塞げるが、歩き先286は岩で止まる。条件の一部だけ"}
+{"scene":"s16-r34-1522-blaze-close","key":"v2|2","variant":"v2","rep":2,"verdict":"×","reason":"岩の286へ歩く手から始まり、射線に残ったまま止まる"}
+{"scene":"s17-r34-1550-piglin-sight","key":"v2|1","variant":"v2","rep":1,"verdict":"○","reason":"西側の射線を2段で塞ぎ、剣も持つ。離れはしないが要の手は打てている"}
+{"scene":"s17-r34-1550-piglin-sight","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"射線に入ったまま先に歩くので、塞ぐのが遅れて撃たれやすい"}
+{"scene":"s17-r34-1550-piglin-sight","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"5か所に置くので時間がかかり、剣も持たない。考え自体は合う"}
+{"scene":"s17-r34-1550-piglin-sight","key":"v2|2","variant":"v2","rep":2,"verdict":"○","reason":"先に西を塞いでから離れる。剣は持たないが安全の手として十分"}
+{"scene":"s17-r34-1550-piglin-sight","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"塞ぐ・剣を持つ・離れるの3手がそろい、条件をすべて満たす"}
+{"scene":"s18-r34-1552-low-hp","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"西側も塞ぐが食べる手がない。本番の東西壁と同じで回り込まれやすい"}
+{"scene":"s18-r34-1552-low-hp","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"東西4マスだけで食べない。2手目は同じ場所に置き直しで無駄"}
+{"scene":"s18-r34-1552-low-hp","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"東西を塞ぐだけで満腹18にしない。本番で止まった形と同じ"}
+{"scene":"s18-r34-1552-low-hp","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"射線は切るが食べて回復する手がない"}
+{"scene":"s18-r34-1552-low-hp","key":"prod","variant":"prod","rep":"prod","verdict":"△","reason":"東西を塞ぐだけで食べない。回り込まれると進まない"}
+{"scene":"s19-r32-1336-lava-gap","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"周りを見るだけで安全だが、渡る一歩は進まない"}
+{"scene":"s19-r32-1336-lava-gap","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"両脇に壁はあるが高さ1段で天井が無く、条件を一部しか満たさない"}
+{"scene":"s19-r32-1336-lava-gap","key":"v2|1","variant":"v2","rep":1,"verdict":"○","reason":"北の岩へトンネルを掘って西へ回る。条件に合い、落ちる心配もない"}
+{"scene":"s23-r33-1480-death","key":"v9b|1","variant":"v9b","rep":1,"verdict":"×","reason":"届く頃HP6.6で、stopIf 9 だと手を打つ前に止まり、本番と同じく死ぬ"}
+{"scene":"s23-r33-1480-death","key":"v9b|2","variant":"v9b","rep":2,"verdict":"×","reason":"届く頃HP6.6で、stopIf 9 だと手を打つ前に止まり、本番と同じく死ぬ"}
+{"scene":"s23-r33-1480-death","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"エンダーマンまで打って二正面になる。stopIf 9 も届いた瞬間に止まる"}
+{"scene":"s23-r33-1480-death","key":"v9c|1","variant":"v9c","rep":1,"verdict":"×","reason":"剣はもう持っており装備は無駄。stopIf 11 は届いた瞬間に止まる"}
+{"scene":"s23-r33-1480-death","key":"v2|1","variant":"v2","rep":1,"verdict":"×","reason":"ピグリン1体に絞れているが、stopIf 9 は届く頃HP6.6で即座に止まる"}
+{"scene":"s23-r33-1480-death","key":"v2|2","variant":"v2","rep":2,"verdict":"×","reason":"ピグリン1体に絞れているが、stopIf 9 は届く頃HP6.6で即座に止まる"}
+{"scene":"s31-r33-1457-plan-skip","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"安全だが計画を更新せず、要の1歩が進まない"}
+{"scene":"s31-r33-1457-plan-skip","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"p1.2だけ済みにした。p1.3・p1.4と次の節が未設定"}
+{"scene":"s31-r33-1457-plan-skip","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"p1.2だけ済み。p1.3・p1.4と次の節の設定がない"}
+{"scene":"s31-r33-1457-plan-skip","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"p3は避けたが計画を更新せず、済んだp1.2の札で動いている"}
+{"scene":"s31-r33-1457-plan-skip","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"p1側で安全に動くが計画を更新せず、札と金の行き先も合わない"}
+{"scene":"s40-r31-1316-steady","key":"v2|2","variant":"v2","rep":2,"verdict":"△","reason":"経路を調べるだけで安全だが進まない。行き先も地下のまま"}
+{"scene":"s40-r31-1316-steady","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"素手で階段を掘って地上へ上がる。検査も通り、本番でも全部済んだ"}
+{"scene":"s40-r31-1316-steady","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"地上への経路を調べるだけで、体は動かない"}
+{"scene":"s40-r31-1316-steady","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"調べるだけで進まない。行き先も骨の敵に近い"}
+{"scene":"s40-r31-1316-steady","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"地上への経路を調べるだけで、体は動かない"}
+{"scene":"s46-r30-1258-after-stop","key":"v2|2","variant":"v2","rep":2,"verdict":"○","reason":"頭上を塞ぎ食べた後、頭の固い石を掘ってから歩く。原因を直している"}
+{"scene":"s46-r30-1258-after-stop","key":"v2|1","variant":"v2","rep":1,"verdict":"△","reason":"直し方は合うが、(312,67,73)が空気なら掘る手で止まるおそれ"}
+{"scene":"s46-r30-1258-after-stop","key":"v9b|1","variant":"v9b","rep":1,"verdict":"△","reason":"身を守って食べるだけで、頭の石を掘っておらず進まない"}
+{"scene":"s46-r30-1258-after-stop","key":"v9c|1","variant":"v9c","rep":1,"verdict":"△","reason":"安全だが、止まった原因の頭の石に手を付けず進まない"}
+{"scene":"s46-r30-1258-after-stop","key":"v9b|2","variant":"v9b","rep":2,"verdict":"△","reason":"射線は切れるが、頭の高さを掘らず移動しない"}

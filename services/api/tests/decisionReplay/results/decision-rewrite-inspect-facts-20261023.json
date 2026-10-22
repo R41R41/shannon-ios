@@ -1,0 +1,3476 @@
+[
+ {
+  "scene": "s01",
+  "facts": [
+   {
+    "fact": "頭のマス (309,67,73) が cobbled_deepslate で固い（先に掘る必要）",
+    "cells": [
+     "309,67,73"
+    ],
+    "status": "ある",
+    "where": "lastResults の walk 止の本文 / stops / 周り略記 y=67 / 地図 y=67",
+    "lookups": 1,
+    "lookupSteps": "lastResults 本文に座標つきで直接 1",
+    "note": "cellLook でも (309,67,73) は # 。"
+   },
+   {
+    "fact": "ブレイズ #7 (303,67,72) が壁の向こうにいて、(308,66,73) を開けると見られる",
+    "cells": [
+     "308,66,73",
+     "303,67,72"
+    ],
+    "status": "省略",
+    "where": "threats の「ほか7件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "threats は 8 体中 1 体（#5）しか出ず、残り 7 体が略。unreachable も #5・#8 だけで ほか 1/2 件が略。地図 y=67 の (303,67,72) は '.' で '!' が無い。見られるマスは live からは分からない。"
+   },
+   {
+    "fact": "直近のブレイズ #5・#8 は壁の向こう（間 (310,68,73) cobbled_deepslate）で今は届かない",
+    "cells": [
+     "310,68,73"
+    ],
+    "status": "ある",
+    "where": "body.unreachable / urgent / threats",
+    "lookups": 2,
+    "lookupSteps": "unreachable の行 1 + threats の #5 と突き合わせ 1",
+    "note": ""
+   },
+   {
+    "fact": "計画 p1.1 の目的地は (293,67,72)（湧き場から西へ離れる）",
+    "cells": [
+     "293,67,72"
+    ],
+    "status": "ある",
+    "where": "plan.now / body.planNow",
+    "lookups": 1,
+    "lookupSteps": "plan.now の＠座標を読む 1",
+    "note": ""
+   },
+   {
+    "fact": "歩く先 (309,65,73) の足・頭 (309,66,73)・床 (309,64,73) が歩ける（空気・空気・石）",
+    "cells": [
+     "309,65,73",
+     "309,66,73",
+     "309,64,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=65 / y=66 / y=64",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス × 2",
+    "note": "cellLook: 足 '.'、頭 '.'、床 '#'。"
+   }
+  ],
+  "summary": "止まった理由と頭のマスは本文に座標つきで書かれて読みやすいが、次に開けるマス (308,66,73) がブレイズ #7 に見られることは threats の略（ほか7件）の中に隠れていて、正しい手の「見られる側を不用意に開けない」を選ぶ材料が live に無い。"
+ },
+ {
+  "scene": "s02",
+  "facts": [
+   {
+    "fact": "(308,66,73) を開けるとブレイズ #7 から見える（exposeOk が要る）",
+    "cells": [
+     "308,66,73"
+    ],
+    "status": "ある",
+    "where": "lastResults の dig 止の本文 / stops「見られる」",
+    "lookups": 1,
+    "lookupSteps": "lastResults 本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ブレイズ #7 の位置は (303,67,72)（西6・北1・上2、6.0m）",
+    "cells": [
+     "303,67,72"
+    ],
+    "status": "ある",
+    "where": "lastResults の dig 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に直接 1",
+    "note": "threats には #8 しか出ず（ほか7件が略）、#7 の座標は lastResults の本文にだけある。地図 y=67 は x=304.. で (303,67,72) が範囲外。"
+   },
+   {
+    "fact": "注意「射線の中で止まらない」（見られる所に居続けない）",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules（注意（p1）射線の中で止まらない / 注意 同）",
+    "lookups": 1,
+    "lookupSteps": "plan.rules の行 1",
+    "note": ""
+   },
+   {
+    "fact": "足元の下の岩 (309,64,73)・(309,63,73)・(308,64,73) が固く、掘って潜れる",
+    "cells": [
+     "309,64,73",
+     "309,63,73",
+     "308,64,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=64 / y=63",
+    "lookups": 6,
+    "lookupSteps": "3 マス × 2",
+    "note": "cellLook: すべて #。"
+   },
+   {
+    "fact": "下の岩 (309,64,73) 等を掘ると見られないか（視線の判定）",
+    "cells": [
+     "309,64,73",
+     "308,64,73"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "見られるかは dig を実行して初めて分かる。live には敵ごとの視線の通り道が書かれていない。"
+   },
+   {
+    "fact": "頭上の (309,67,73) は自分が掘って開けた空気（ここが開口）",
+    "cells": [
+     "309,67,73"
+    ],
+    "status": "ある",
+    "where": "lastResults の dig 済 1 行目 / 地図 y=67",
+    "lookups": 1,
+    "lookupSteps": "本文に直接 1",
+    "note": "cellLook: '.'。"
+   }
+  ],
+  "summary": "見られて止まった理由・ブレイズの位置・射線の注意は lastResults と plan に書かれ読みやすいが、「見られない別の道」を選ぶために要る（下の岩を掘ると見られないか）は live に無く、別の手は試して初めて分かる。"
+ },
+ {
+  "scene": "s03",
+  "facts": [
+   {
+    "fact": "持ち物に掘る道具が無い（black_bed だけ、手は空）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory / state.heldItem",
+    "lookups": 2,
+    "lookupSteps": "inventory を読む 1 + heldItem と突き合わせ 1",
+    "note": ""
+   },
+   {
+    "fact": "道具が無いとき dig には tool:\"hand\" を付ける必要がある",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live のどこにも書かれていない。実際の Opus は失敗の結果（掘る道具が無い）で初めて知った。"
+   },
+   {
+    "fact": "止まった walk (-37,49,190) は下 3 マスが空気で立てない（立てる隣は今の足 (-37,49,191)）",
+    "cells": [
+     "-37,49,190",
+     "-37,49,191"
+    ],
+    "status": "ある",
+    "where": "lastResults の walk 止の本文 / stops / investigation",
+    "lookups": 1,
+    "lookupSteps": "lastResults 本文に座標つきで直接 1",
+    "note": "cellLook でも (-37,49,190) は空気、(-37,48,190)(-37,47,190) も空気。"
+   },
+   {
+    "fact": "足の真上 (-37,50,191) は空気で、(-37,51,191) から上が石（掘って上れる）",
+    "cells": [
+     "-37,50,191",
+     "-37,51,191"
+    ],
+    "status": "ある",
+    "where": "body.map の「縦 (-37,191) 上」/ 地図 y=50・y=51",
+    "lookups": 2,
+    "lookupSteps": "縦の行を読む 1 + 連なりの記号を座標に直す 1",
+    "note": "cellLook: (-37,50,191) '.'、(-37,51,191) '#'。"
+   },
+   {
+    "fact": "近くの水源 (-36,61,195) の位置（水を避けて掘る向きを決める）",
+    "cells": [
+     "-36,61,195"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks「w 水源 東2・南3・上13」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "landmarks の相対位置は足 (-37,49,191) ではなく古い位置 (-38,48,192) からの値（かまど (-37,48,191) が「東1・北1」だが実際は真下）。足からの実際は 東1・南4・上12。"
+   }
+  ],
+  "summary": "止まった理由と掘り上がれる縦の連なりは読めるが、素手では tool:\"hand\" が要るという肝心の規則が live に無く、look 行は「落ちた」と mc.view を勧めて別の方へ誘い、landmarks の相対位置も古い足からの値でずれている。"
+ },
+ {
+  "scene": "s05",
+  "facts": [
+   {
+    "fact": "頭の高さ (298,64,77) が basalt で通れない（掘る必要）",
+    "cells": [
+     "298,64,77"
+    ],
+    "status": "ある",
+    "where": "lastResults の walk 止の本文 / stops",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook: '#'。"
+   },
+   {
+    "fact": "歩く先 (297,63,77) 自体が basalt（掘ってから歩く）",
+    "cells": [
+     "297,63,77"
+    ],
+    "status": "ある",
+    "where": "地図 y=63 / 周り略記 y=63",
+    "lookups": 2,
+    "lookupSteps": "地図 y=63 の 1 マス 2",
+    "note": "本文は「(297,63,77) への掘らない道が無い」とだけ書き、固さは地図を見ないと分からない。cellLook: '#'。"
+   },
+   {
+    "fact": "(297,64,77) も basalt（(297,63,77) へ歩くには頭上も掘る）",
+    "cells": [
+     "297,64,77"
+    ],
+    "status": "ある",
+    "where": "地図 y=64",
+    "lookups": 2,
+    "lookupSteps": "地図 y=64 の 1 マス 2",
+    "note": "cellLook: '#'。"
+   },
+   {
+    "fact": "西の空洞の落差・底（歩いて入ると段差になる）",
+    "cells": [
+     "296,63,77",
+     "296,62,77",
+     "296,61,77"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面には footing 行が無い。(296,63,77)(296,62,77) は空気だが y=61 の層は x=297.. で (296,61,77) は地図に無く、落差の数が書かれていない。"
+   },
+   {
+    "fact": "計画 p1.1 の目的地は (293,67,72)",
+    "cells": [
+     "293,67,72"
+    ],
+    "status": "ある",
+    "where": "body.planNow",
+    "lookups": 1,
+    "lookupSteps": "＠座標を読む 1",
+    "note": ""
+   }
+  ],
+  "summary": "止まった理由は本文にあるが、本文は頭のマスだけを指し、歩く先そのものも固いことは地図の層を読んで突き合わせないと分からないため、正しい手（両方掘る）を選ぶには読み取りの手間が要る。"
+ },
+ {
+  "scene": "s06",
+  "facts": [
+   {
+    "fact": "足場: 北・西・北西が空所（落差 15、下は basalt）。押されたら落ちる",
+    "cells": [
+     "298,63,76",
+     "297,63,77",
+     "297,63,76"
+    ],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の行 1",
+    "note": "cellLook: 北 (298,63,76)・西 (297,63,77)・北西 (297,63,76) はすべて空気で床 (y=62) も空気。"
+   },
+   {
+    "fact": "南の (298,63,78)・(297,63,78) は固い（縁から離れて掘れる岩）",
+    "cells": [
+     "298,63,78",
+     "297,63,78"
+    ],
+    "status": "ある",
+    "where": "地図 y=63",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: (298,63,78) '#'、(297,63,78) '#'。"
+   },
+   {
+    "fact": "止まった walk の頭の高さ (297,64,77) が basalt で通れない",
+    "cells": [
+     "297,64,77"
+    ],
+    "status": "ある",
+    "where": "lastResults の walk 止の本文 / 周り略記",
+    "lookups": 1,
+    "lookupSteps": "本文に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "(297,63,77) の中身（今は掘って空気）",
+    "cells": [
+     "297,63,77"
+    ],
+    "status": "誤り",
+    "where": "plan.rules「(297,63,77): 的そのものには立てない（足のマスが basalt で埋まっている）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "plan.rules は basalt で埋まっていると言うが、lastResults の dig 済と地図 y=63 は空気（cellLook '.'）。古い注意が残って食い違う。"
+   },
+   {
+    "fact": "西の空洞にブレイズ #5 (285,62,74) が 13.3m にいる",
+    "cells": [
+     "285,62,74"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats の行 1 + 自分の座標との相対 1",
+    "note": ""
+   }
+  ],
+  "summary": "footing 行が空所の向きと落差を一行で言い、止まった理由も本文にあって読みやすいが、plan.rules の古い注意が最新の結果と食い違い、「縁に立ったまま積むな」を選ぶのに要る岩のある側は地図を層で読まないと分からない。"
+ },
+ {
+  "scene": "s07",
+  "facts": [
+   {
+    "fact": "西 (223,58,72) の先が 5 段以上の落差（降りられない）で、止まった walk は繰り返せない",
+    "cells": [
+     "223,58,72"
+    ],
+    "status": "ある",
+    "where": "lastResults の walk 止の本文 / investigation / footing（落差 26、下は溶岩）/ plan.rules",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook: (223,58,72) と (223,57,72) は空気。"
+   },
+   {
+    "fact": "北の (224,58,71)・(224,59,71) は nether_bricks で固い（縁から離れて掘って回れる）",
+    "cells": [
+     "224,58,71",
+     "224,59,71"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 / y=59",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: どちらも N。"
+   },
+   {
+    "fact": "近くの溶岩源 (221,53,69) の相対位置（溶岩の隣を掘らない）",
+    "cells": [
+     "221,53,69"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks「L 溶岩源 (221,53,69) 西5・北3・下5」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "足 (224,58,72) からは西3・北3・下5。landmarks は 2 東の古い位置 (226,58,72) からの値（要塞 東1→実際 東3、スポナー 東85→東87 も同じずれ）。"
+   },
+   {
+    "fact": "計画 p1.2 の行き先は (195,66,60)（西へ約 29・北 12・上 8）",
+    "cells": [
+     "195,66,60"
+    ],
+    "status": "ある",
+    "where": "body.planNow / plan",
+    "lookups": 2,
+    "lookupSteps": "＠座標を読む 1 + 自分の座標との相対 1",
+    "note": ""
+   },
+   {
+    "fact": "注意「崖の縁を歩かない」",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules",
+    "lookups": 1,
+    "lookupSteps": "plan.rules の行 1",
+    "note": ""
+   }
+  ],
+  "summary": "止まった理由・落差・崖の注意は複数の欄にそろって書かれ、掘る側の北の岩も地図で確かめられるが、溶岩源など landmarks の相対位置が古い足からの値でずれていて、ずれていることは書かれていない。"
+ },
+ {
+  "scene": "s08",
+  "facts": [
+   {
+    "fact": "live の look 行「同じ止まりが続いている: 次の act の前に mc.view で周りを広く見て別の道を」",
+    "cells": [],
+    "status": "ある",
+    "where": "body.look",
+    "lookups": 1,
+    "lookupSteps": "look の行 1",
+    "note": ""
+   },
+   {
+    "fact": "上 8m にブレイズ #21 (288,67,73)・#2 (287,67,72)・#3 (291,67,72)・#38 (286,67,72) がいる",
+    "cells": [
+     "288,67,73",
+     "287,67,72",
+     "291,67,72",
+     "286,67,72"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats の行 1 + 自分の座標との相対（上8）1",
+    "note": "ほか4件が略だが、近い 4 体は出ている。地図に y=67 の層が無く '!' は見えない。"
+   },
+   {
+    "fact": "(289,58,73) など下・西のマスを開けるとどのブレイズから見えるか",
+    "cells": [
+     "289,58,73",
+     "286,67,72"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "見られるかは dig を実行して初めて分かる（実際に #38 に見られて止まった）。live に敵ごとの視線は無い。"
+   },
+   {
+    "fact": "頭上 (289,60,73) 空気の上に岩が y=61〜66 まで 6 マスあり、ブレイズの部屋 (y=67〜69) と隔たる",
+    "cells": [
+     "289,60,73",
+     "289,61,73",
+     "289,66,73",
+     "289,67,73"
+    ],
+    "status": "ある",
+    "where": "body.map の「縦 (289,73) 上」",
+    "lookups": 2,
+    "lookupSteps": "縦の行を読む 1 + 連なりの記号を座標に直す 1",
+    "note": "縦の行は y=62〜66 を N×5 と略記。"
+   },
+   {
+    "fact": "西へ掘り進む先 (289,58,73)・(288,59,73)・(288,58,73) が netherrack で固い",
+    "cells": [
+     "289,58,73",
+     "288,59,73",
+     "288,58,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 / y=59",
+    "lookups": 6,
+    "lookupSteps": "3 マス × 2",
+    "note": "cellLook: すべて n。"
+   },
+   {
+    "fact": "近くの溶岩源 (287,66,79) などの相対位置",
+    "cells": [
+     "287,66,79"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks「L 溶岩源 (287,66,79) 西5・南6・上7」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "足 (289,59,73) からは西2・南6・上7。landmarks は 3 東の古い位置 (292,59,73) からの値（要塞 西2→実際 東1、スポナー 東19→東22 も同じ）。"
+   }
+  ],
+  "summary": "look 行が mc.view を勧めて何をするかは分かるが、ブレイズが上にいて下のマスが見られるかは live に出ず、近い 4 体の座標と岩の厚みは読めるものの、landmarks の相対位置は古い足からの値でずれている。"
+ },
+ {
+  "scene": "s09",
+  "facts": [
+   {
+    "fact": "置けなかった (260,57,64) は 6 面とも空気で支えが無い",
+    "cells": [
+     "260,57,64",
+     "259,57,64",
+     "261,57,64",
+     "260,56,64",
+     "260,58,64",
+     "260,57,65",
+     "260,57,63"
+    ],
+    "status": "ある",
+    "where": "地図 y=56 / y=57 / y=58",
+    "lookups": 11,
+    "lookupSteps": "足 @ 1 + 隣 5 マス × 2",
+    "note": "cellLook: 6 隣すべて空気（足を含む）。lastResults は place 失の本文と別の周りしか出さず、(260,57,64) の支え無しは地図からの読み取り。"
+   },
+   {
+    "fact": "西 (259,57,63) は床が無く谷（下 8 以上空気）で歩けない",
+    "cells": [
+     "259,57,63"
+    ],
+    "status": "ある",
+    "where": "地図 方式=surface の先頭格子 z=63 の '.v'",
+    "lookups": 3,
+    "lookupSteps": "surface 格子の 1 マス 2 + 高さコード 'v' の意味 1",
+    "note": "層の地図は y=56 までで床の深さは出ない。コードの凡例は地図の先頭に書かれていない。"
+   },
+   {
+    "fact": "足場: 周り 8 マスのうち空所 4（落差 25、下は溶岩）。押されたら落ちる",
+    "cells": [],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の行 1",
+    "note": "cellLook で数えた床無しは NW・W・SW・S の 4 で一致。向きは文に無い。"
+   },
+   {
+    "fact": "「空所はトンネルか壁付きの橋。壁の無い幅1の橋は使わない」という知識",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live の body・plan には無い（システム側の知識文にある可能性）。look 行は mc.view を勧めるだけ。"
+   },
+   {
+    "fact": "北 (260,57,62) は netherrack の岩で、トンネルで回れる側",
+    "cells": [
+     "260,57,62"
+    ],
+    "status": "ある",
+    "where": "地図 y=57",
+    "lookups": 2,
+    "lookupSteps": "地図 y=57 の 1 マス 2",
+    "note": "cellLook: n。ただし (259,57,62)(259〜260,57,58..61) は空気で、岩が谷の向こうまで続くかは地図の外。"
+   },
+   {
+    "fact": "ランドマークの相対位置（要塞 (262,58,64) など）",
+    "cells": [
+     "262,58,64"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks「N ネザー要塞 (262,58,64) 東1・南1・上1」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "足 (260,57,63) からは東2。landmarks は 1 東の古い位置 (261,57,63) からの値（溶岩源 西5→実際 西4、スポナー 東50→東51 も同じずれ）。"
+   }
+  ],
+  "summary": "止まった手の周りと谷の形は地図に全部あるが、置けない理由（6 面空気）と谷の深さは地図の層と surface のコードを自分で読み解かないと分からず、橋に関する知識文は live に無く、landmarks も 1 つずれている。"
+ },
+ {
+  "scene": "s11",
+  "facts": [
+   {
+    "fact": "ブレイズ #2 (306,67,73) 4.1m・#8 (306,68,72) 4.4m・#1 (311,70,73) 4.5m・#3 (311,70,71) 4.7m が近くにいる",
+    "cells": [
+     "306,67,73",
+     "306,68,72",
+     "311,70,73",
+     "311,70,71"
+    ],
+    "status": "ある",
+    "where": "body.threats / urgent",
+    "lookups": 1,
+    "lookupSteps": "threats の行 1",
+    "note": "地図の '!' は #2 が (305,67,73)、#1 が (311,70,74) で、threats の座標と 1 マスずれる（#8・#3 は一致）。"
+   },
+   {
+    "fact": "ブレイズは壁の向こうで今は届かない",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面の body には unreachable 行が無い（他の場面では出る）。壁越しかどうかは地図から自分で推すしかない。"
+   },
+   {
+    "fact": "禁止（p1）「点検が済むまで湧き場の前で戦わない。受けた時は離れて塞ぐ」",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules",
+    "lookups": 1,
+    "lookupSteps": "plan.rules の行 1",
+    "note": ""
+   },
+   {
+    "fact": "頭 (310,67,73) は北 (310,67,72) だけが空気で、西・東・南は石（塞ぐ候補は頭の北）",
+    "cells": [
+     "310,67,73",
+     "310,67,72",
+     "309,67,73",
+     "311,67,73",
+     "310,67,74"
+    ],
+    "status": "ある",
+    "where": "body.map の縦 (310,73) 上 / 地図 y=67",
+    "lookups": 9,
+    "lookupSteps": "頭は縦の行 1 + 四方の隣 4 マス × 2",
+    "note": "cellLook: (310,67,72) '.'、(309,67,73) '#'、(311,67,73) '#'、(310,67,74) '#'。"
+   },
+   {
+    "fact": "塞ぐ材料 cobbled_deepslate が 53（と 30）ある",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 1,
+    "lookupSteps": "inventory の行 1",
+    "note": ""
+   },
+   {
+    "fact": "答え方: 手は 3 つまで・stopIf を付ける・離れる/置く/囲うを先に",
+    "cells": [],
+    "status": "ある",
+    "where": "body.answer",
+    "lookups": 1,
+    "lookupSteps": "answer の行 1",
+    "note": ""
+   }
+  ],
+  "summary": "急ぎの答え方と禁止が明記され材料も出るが、「壁の向こうで届かない」が書かれず、塞ぐ候補（頭の北だけが空気）は地図の 5 マスを層で読まないと出ないため、最小の一手を選ぶ助けは弱い。"
+ },
+ {
+  "scene": "s12",
+  "facts": [
+   {
+    "fact": "足場: 周り 8 マスのうち空所 1（落差 26、下は溶岩）。押されたら落ちる",
+    "cells": [],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の行 1",
+    "note": "この形の文は空所の向きを言わない。地図では南 (251,58,76) と南西 (250,58,76) の 2 マスが床無しに見える（数は body 自前の数え方かもしれない）。"
+   },
+   {
+    "fact": "空所は南 (251,58,76)（下 (251,57,76) も空気）で、離れる向きは北の岩",
+    "cells": [
+     "251,58,76",
+     "251,57,76"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 / y=57",
+    "lookups": 4,
+    "lookupSteps": "地図 y=58 の 1 マス 2 + y=57 の 1 マス 2",
+    "note": "cellLook: どちらも空気。"
+   },
+   {
+    "fact": "北の (251,58,74)・(251,59,74) が nether_bricks で固い（内側へ掘れる）",
+    "cells": [
+     "251,58,74",
+     "251,59,74"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 / y=59",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: どちらも N。"
+   },
+   {
+    "fact": "ゾンビピグリン #469 6.7m・上3・見えない（間に netherrack）・道はある（回って来る）。位置 (257,61,76)",
+    "cells": [
+     "257,61,76"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats",
+    "lookups": 2,
+    "lookupSteps": "urgent の行 1 + threats の座標から向き（東6）を計算 1",
+    "note": "(257,61,76) は地図の層（y=60 まで・x≤258）に入らない高さ。"
+   },
+   {
+    "fact": "ゾンビピグリンは中立（殴らない・近づかない）",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live に敵の性質は書かれていない。"
+   },
+   {
+    "fact": "掘る先 (250,59,74) は手前の (251,59,74) に遮られ、今の足からは見えず掘れない",
+    "cells": [
+     "250,59,74",
+     "251,59,74"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "dig の届き方（見通し）は live に無い。実際の Opus はここで 0/3 で止まった。"
+   }
+  ],
+  "summary": "急ぎの形で足場・敵・答え方が並び、内側の岩も地図で確かめられるが、空所の向きは文に無く、敵の性質と掘れる先（見通し）は live に無いため、読み取りの手間に加えて「別の岩へ」という最初の失敗を避ける材料が欠ける。"
+ },
+ {
+  "scene": "s13",
+  "facts": [
+   {
+    "fact": "エンダーマン #499 が 5.8m・下4・見える（射線の中）、位置 (200,59,58)（東3・北3）",
+    "cells": [
+     "200,59,58"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats / 地図 surface の '!'",
+    "lookups": 2,
+    "lookupSteps": "urgent の行 1 + threats の座標から向き（東3・北3）を計算 1",
+    "note": "地図の surface 格子の '!' (200,58) は threats と一致。"
+   },
+   {
+    "fact": "エンダーマンと目を合わせない（見る・打つはしない）という注意",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "plan.rules は崖・(293,62,82)・(223,58,72)・(198,60,60)・湧き場の 5 本で、エンダーマンの注意は無い。"
+   },
+   {
+    "fact": "足場: 周り 8 マスのうち空所 3（落差 4）。押されたら落ちる",
+    "cells": [],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の行 1",
+    "note": "向きは文に無い。"
+   },
+   {
+    "fact": "敵の方向の北東 (198,63,60) は 6 面とも空気で、そこには置けない",
+    "cells": [
+     "198,63,60",
+     "197,63,60",
+     "199,63,60",
+     "198,63,59",
+     "198,63,61",
+     "198,64,60",
+     "198,62,60"
+    ],
+    "status": "ある",
+    "where": "地図 y=62 / y=63 / y=64",
+    "lookups": 12,
+    "lookupSteps": "6 面 × 2",
+    "note": "cellLook: 6 面すべて空気。支えのあるマスは足の西 (196,63,61)・南 (197,63,62)・下 (197,62,61)（netherrack）。"
+   },
+   {
+    "fact": "幹 (195,65,60) の場所",
+    "cells": [
+     "195,65,60"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "planNow「歪んだ幹を取る」に＠座標が無い。next の p1.3 に＠195,66,60 があるだけ。"
+   },
+   {
+    "fact": "幹 (195,65,60) へは間の netherrack で見えず掘れない",
+    "cells": [
+     "195,65,60",
+     "196,64,61",
+     "196,65,61"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "dig の見通しは live に無い。実際の Opus は 0/2 で止まった。"
+   }
+  ],
+  "summary": "敵の位置・足場・答え方は一行で読めるが、エンダーマンの注意、幹の場所、掘る先の見通しが live に無く、「間に置く」ための支えは地図 6 マスを層で突き合わせないと出ないため、幹を取り続ける手を誘いやすい。"
+ },
+ {
+  "scene": "s14",
+  "facts": [
+   {
+    "fact": "歩く先 (199,65,64) とその頭 (199,66,64) が netherrack で固い（歩く前に掘る）",
+    "cells": [
+     "199,65,64",
+     "199,66,64"
+    ],
+    "status": "ある",
+    "where": "地図 y=65 / y=66",
+    "lookups": 4,
+    "lookupSteps": "足 2 + 頭 2",
+    "note": "cellLook: どちらも n。"
+   },
+   {
+    "fact": "動き出す時の足の位置は (200,65,63)",
+    "cells": [
+     "200,65,63",
+     "195,65,60"
+    ],
+    "status": "誤り",
+    "where": "state.at / 地図の足 / threats の距離",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live は足 (195,65,60) と書くが、実行の「今」は (200,65,63)（判断を待つ間に動いた）。エンダーマン 7.9m も古い位置から（実際は約 12m）。地図の範囲 x=188..202 には新しい位置も入る。"
+   },
+   {
+    "fact": "エンダーマン #499 が見える（射線の中）、位置 (191,59,57)",
+    "cells": [
+     "191,59,57"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats",
+    "lookups": 1,
+    "lookupSteps": "urgent の行 1",
+    "note": "距離 7.9m・下6 は古い位置からの値。"
+   },
+   {
+    "fact": "足場: 周り 8 マスのうち空所 4（落差 6）。押されたら落ちる",
+    "cells": [],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の行 1",
+    "note": "向きは文に無く、古い位置 (195,65,60) の周りの話。"
+   },
+   {
+    "fact": "東 (196,65,60) は空気だが床 (196,64,60) が無く、歩くと落ちる",
+    "cells": [
+     "196,65,60",
+     "196,66,60",
+     "196,64,60"
+    ],
+    "status": "ある",
+    "where": "地図 y=64 / y=65 / y=66",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス × 2",
+    "note": "cellLook: 足 '*'、頭 '.'、床 '.'。古い位置基準。"
+   }
+  ],
+  "summary": "歩く先が固いことは地図に書かれているが、live の足と距離は判断を待つ間に動いた後の位置とずれていて、歩ける空気のマスを選ぶには地図を層ごとに足・頭・床で読む必要があり、古い位置が正しい手を誤らせやすい。"
+ },
+ {
+  "scene": "s15",
+  "facts": [
+   {
+    "fact": "ゾンビピグリン #1324 が 3.9m・上3・見える、位置 (196,75,93)（東2）",
+    "cells": [
+     "196,75,93"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats / 地図 y=75 の '!'",
+    "lookups": 2,
+    "lookupSteps": "urgent の行 1 + threats の座標から向き（東2）を計算 1",
+    "note": "地図 y=75 の '!' は threats と一致。"
+   },
+   {
+    "fact": "置こうとした (194,73,93) は自分の頭のマスで、置けない",
+    "cells": [
+     "194,73,93",
+     "194,72,93"
+    ],
+    "status": "ある",
+    "where": "state.at（足 (194,72,93)）",
+    "lookups": 2,
+    "lookupSteps": "state.at を読む 1 + 足の y+1 を頭と計算 1",
+    "note": "「体のマスには置けない」という規則自体は live に書かれていない。"
+   },
+   {
+    "fact": "頭上は空に抜けている（(194,73,93) 以上が y=88 まで空気）",
+    "cells": [
+     "194,73,93",
+     "194,74,93"
+    ],
+    "status": "ある",
+    "where": "body.map の「縦 (194,93) 上」",
+    "lookups": 2,
+    "lookupSteps": "縦の行を読む 1 + 連なりを座標に直す 1",
+    "note": "cellLook: (194,73,93)(194,74,93) とも空気。"
+   },
+   {
+    "fact": "西隣 (193,72,93) は空気で、下 (193,71,93) が netherrack（置ける支え）",
+    "cells": [
+     "193,72,93",
+     "193,71,93"
+    ],
+    "status": "ある",
+    "where": "地図 y=72 / y=71",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: (193,72,93) '*'、(193,71,93) n。"
+   },
+   {
+    "fact": "東隣 (195,72,93)・(195,73,93) が netherrack で、東側は壁になっている",
+    "cells": [
+     "195,72,93",
+     "195,73,93"
+    ],
+    "status": "ある",
+    "where": "地図 y=72 / y=73",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: どちらも n。"
+   },
+   {
+    "fact": "足場（縁・落差 36）の状況",
+    "cells": [
+     "193,72,93"
+    ],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面の body に footing 行が無い。西側が空気の連なりで、落差の数は書かれていない。"
+   }
+  ],
+  "summary": "敵の位置と周りの岩は地図で確かめられるが、置けない原因（頭のマス）は座標の足し算で気づく必要があり、足場の行も無いため、「空中には置けない」を避けるための材料が間接的にしか見えない。"
+ },
+ {
+  "scene": "s16",
+  "facts": [
+   {
+    "fact": "ブレイズ #21 が 2.2m・上2・見える（射線の中）、位置 (283,61,73)（西1）",
+    "cells": [
+     "283,61,73"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats / 地図 y=61 の '!'",
+    "lookups": 2,
+    "lookupSteps": "urgent の行 1 + threats の座標から向き（西1）を計算 1",
+    "note": "地図 y=61 の '!' は threats と一致。"
+   },
+   {
+    "fact": "開いた穴は頭上 (284,60,73) と (284,61,73)（上の部屋の床が空いた）",
+    "cells": [
+     "284,60,73",
+     "284,61,73"
+    ],
+    "status": "ある",
+    "where": "body.map の「縦 (284,73) 上」/ 地図 y=60・y=61",
+    "lookups": 2,
+    "lookupSteps": "縦の行を読む 1 + 連なりを座標に直す 1",
+    "note": "cellLook: どちらも空気。「穴が開いた」という文は live に無く、縦の行から自分で気づく必要がある。"
+   },
+   {
+    "fact": "東の逃げ先 (286,59,73) は足・頭・床がそろって歩ける",
+    "cells": [
+     "286,59,73",
+     "286,60,73",
+     "286,58,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=59 / y=60 / y=58",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス × 2",
+    "note": "cellLook: 足 '*'、頭 '.'、床 n。ただし実行時の足は (285,57,73) で、そこからは段差 2 になった。"
+   },
+   {
+    "fact": "塞ぐ先の (285,59,73)・(285,60,73) はトンネルの空気",
+    "cells": [
+     "285,59,73",
+     "285,60,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=59 / y=60",
+    "lookups": 4,
+    "lookupSteps": "2 マス × 2",
+    "note": "cellLook: '*' と '.'。"
+   },
+   {
+    "fact": "動き出す時の足の位置は (285,57,73)",
+    "cells": [
+     "285,57,73",
+     "284,59,73"
+    ],
+    "status": "誤り",
+    "where": "state.at / 地図の足",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live は足 (284,59,73) と書くが、実行の「今」は (285,57,73)（判断を待つ間に動き、体力も 20→16.5）。live が古い。"
+   },
+   {
+    "fact": "ほかのブレイズ #5 (283,61,69) 4.9m、#38 8.3m、#2 9.4m がいる",
+    "cells": [
+     "283,61,69",
+     "286,67,71",
+     "286,68,75"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats の行 1",
+    "note": ""
+   }
+  ],
+  "summary": "ブレイズの位置と周りの空気は地図で確かめられるが、穴が開いた事実と東の逃げ先が歩けるかは座標の突き合わせが要り、live の足が判断待ちの間に動く前の位置で古く、正しい手を選ぶ前提が実行時と食い違う。"
+ },
+ {
+  "scene": "s17",
+  "facts": [
+   {
+    "fact": "ピグリン #848 が 6.4m・上1・見える、位置 (214,58,61)（西6・北2）",
+    "cells": [
+     "214,58,61"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats / 地図 surface の '!'",
+    "lookups": 2,
+    "lookupSteps": "urgent の行 1 + threats の座標から向き（西6・北2）を計算 1",
+    "note": "surface 格子の '!' (214,61) は threats と一致。"
+   },
+   {
+    "fact": "金の防具を着ていない（頭・胴・脚・足とも鉄）",
+    "cells": [],
+    "status": "ある",
+    "where": "state.worn",
+    "lookups": 1,
+    "lookupSteps": "worn の行 1",
+    "note": ""
+   },
+   {
+    "fact": "ピグリンは金の防具が無いと襲う（矢も撃つ）",
+    "cells": [],
+    "status": "無い",
+    "where": "-",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "live に敵の性質は書かれていない（plan の p1.5「金の兜」が間接的）。実際は次の判断までに HP 20→11.3（矢）。"
+   },
+   {
+    "fact": "間に置く西の口 (219,57,63)・(219,58,63) は空気で、床 (219,56,63) が netherrack",
+    "cells": [
+     "219,57,63",
+     "219,58,63",
+     "219,56,63"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 / y=58 / y=56",
+    "lookups": 6,
+    "lookupSteps": "3 マス × 2",
+    "note": "cellLook: 空気・空気・n。"
+   },
+   {
+    "fact": "東の逃げ先 (222,57,63) は足・頭 (222,58,63)・床 (222,56,63) がそろって歩ける",
+    "cells": [
+     "222,57,63",
+     "222,58,63",
+     "222,56,63"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 / y=58 / y=56",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス × 2",
+    "note": "cellLook: '*'・空気・n。"
+   },
+   {
+    "fact": "鉄の剣 iron_sword を持っている（手は diamond_pickaxe）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory / state.heldItem",
+    "lookups": 2,
+    "lookupSteps": "inventory 1 + heldItem と突き合わせ 1",
+    "note": ""
+   }
+  ],
+  "summary": "敵の位置・装備・剣は読めるが、ピグリンが金の防具の無い自分を襲って矢を撃つという肝心の性質が live に無く、塞ぐ口と逃げ先は地図で確かめられるものの座標の突き合わせが要る。"
+ },
+ {
+  "scene": "s18",
+  "facts": [
+   {
+    "fact": "ピグリン #848 が西 (219,58,62) に 7.0m・上1 で見えている（射線の中）",
+    "cells": [
+     "219,58,62"
+    ],
+    "status": "ある",
+    "where": "body.urgent / body.threats / lastResults の attack 本文",
+    "lookups": 2,
+    "lookupSteps": "urgent で見える 1 + threats の座標と突き合わせ +1",
+    "note": "距離が urgent 7.0m・threats 7m・lastResults 6.4m（目から）で基準が違う"
+   },
+   {
+    "fact": "廊下 z=63 の東西 (225,57,63),(225,58,63),(227,57,63),(227,58,63) が空気で置ける",
+    "cells": [
+     "225,57,63",
+     "225,58,63",
+     "227,57,63",
+     "227,58,63"
+    ],
+    "status": "ある",
+    "where": "body.map y=57 / y=58",
+    "lookups": 8,
+    "lookupSteps": "地図 4 マス × 2 = 8（足元の層 y=57 は * の歩いた空気）",
+    "note": ""
+   },
+   {
+    "fact": "東側にもブレイズ #5 (232,61,63) 7.2m とゾンビピグリン #550 (229,64,62) 7.8m がいる（東も塞ぐ）",
+    "cells": [
+     "232,61,63",
+     "229,64,62"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 4,
+    "lookupSteps": "threats 2 行 2 + 自分の座標との相対（東）計算 2",
+    "note": ""
+   },
+   {
+    "fact": "体力 11.3・満腹 17（stopIf hpBelow は 11.3 より低くする）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "自然回復は満腹 18 以上が要る（満腹 17 では戻らない）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面の live に recovery 欄が無く、規則そのものがどこにも書かれていない（答え方の行は『食べる』とだけ言う）"
+   },
+   {
+    "fact": "持ち物に食べ物が無い（食べて満腹 18 にする手が取れるか）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory（14 行・ほか N 件の注記なし）",
+    "lookups": 1,
+    "lookupSteps": "inventory を端から見て食べ物が無いと確かめる 1",
+    "note": "持ち物に食料が無いので CORRECT の『食べる』とは食い違う（実際には食べられない）"
+   },
+   {
+    "fact": "前の act の attack は『届かない』で、ピグリンは打てる位置にいない",
+    "cells": [
+     "219,58,62"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の attack 止",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "射線・敵の位置・東西に置ける空気はそろっているが、回復に満腹 18 が要る規則が書かれておらず、持ち物に食料も無いので『食べて回復』という正しい手の根拠が live から読めない。"
+ },
+ {
+  "scene": "s19",
+  "facts": [
+   {
+    "fact": "(254,56,78) の下 24 段は空気で、その下は溶岩（落差 24）",
+    "cells": [
+     "254,56,78"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の mc_probe path（切れ目）",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "橋の予定線 (254,56,78) の両脇 (254,56,77),(254,56,79) と上 (254,57,78) が空気で、壁も天井も無い",
+    "cells": [
+     "254,56,77",
+     "254,56,79",
+     "254,57,78"
+    ],
+    "status": "ある",
+    "where": "body.map y=56 / y=57",
+    "lookups": 6,
+    "lookupSteps": "地図 y=56 の 2 マス 4 + y=57 の 1 マス 2",
+    "note": ""
+   },
+   {
+    "fact": "壁の無い幅 1 の橋は押されたら落ちる",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面の body には answer（押されたら落ちる）の行が無く、規則が live のどこにも書かれていない"
+   },
+   {
+    "fact": "岩を掘って抜ける候補の壁: (258,56,77) nether_bricks 高さ5、(261,56,77) netherrack 高さ8以上",
+    "cells": [
+     "258,56,77",
+     "261,56,77"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の切れ目",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "x=248 以西（空所の幅・岩の有無・トンネルで回れるか）",
+    "cells": [
+     "248,56,78"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は x=249..263 までで、橋を伸ばす先も回る岩も地図の外"
+   },
+   {
+    "fact": "ゾンビピグリン #249 (256,61,78) は 5m・上5・見えない・道はある（回って来る）",
+    "cells": [
+     "256,61,78"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats",
+    "lookups": 1,
+    "lookupSteps": "urgent に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ほかの敵（ウィザースケルトンなど押してくる敵が近くにいるか）",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか7件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "threats の『ほか7件（長いため略）』の中にウィザースケルトンがいるかもしれない（+330 に実際に現れた）"
+   },
+   {
+    "fact": "壁・天井に置ける建材 cobbled_deepslate×54 と ×30",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 3,
+    "lookupSteps": "同じ品目が 2 行に分かれている 2 + 合計する +1",
+    "note": "ほか22件は略されている"
+   }
+  ],
+  "summary": "落差24と溶岩・両脇が空気という橋の危険は読めるが、『押されたら落ちる』の規則が無く、トンネルで回る先（西）は地図の外で、押してくる敵の有無は略されているため、橋を避ける根拠は薄い。"
+ },
+ {
+  "scene": "s20",
+  "facts": [
+   {
+    "fact": "dig (230,57,79) を開けると wither_skeleton #696 (231,61,71)（東1・北7・上5）から見える。今は届かない",
+    "cells": [
+     "230,57,79",
+     "231,61,71"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の dig 止 / threats #696 8.4m",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ほかのウィザースケルトン: #428 (221,60,68) 14.5m が進路の西側、#697 (243,63,67) 18.4m が東側",
+    "cells": [
+     "221,60,68",
+     "243,63,67"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats 1 + 自分の座標から西側と判定 +1",
+    "note": ""
+   },
+   {
+    "fact": "ほかの敵（ほか4件）と near（ほか8件）",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件 / body.near ほか8件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "near は丸ごと『ほか8件（長いため略）』で、橋の近くの敵が全く見えない"
+   },
+   {
+    "fact": "壁の外（西）は足場が無い: (228,56,78),(228,55,78),(228,54,78) が空気",
+    "cells": [
+     "228,56,78",
+     "228,55,78",
+     "228,54,78"
+    ],
+    "status": "ある",
+    "where": "body.map y=56 / y=55 / y=54",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": ""
+   },
+   {
+    "fact": "空所の深さと、下が溶岩か",
+    "cells": [
+     "228,53,78"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図の底は y=54 までで、縦の連なりも足の列 (230,78) だけ。溶岩の記載は landmarks の (221,53,69) だけで橋の下とは言えない"
+   },
+   {
+    "fact": "壁の無い橋は押されたら落ちる",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "body に answer の行が無く、規則が書かれていない"
+   },
+   {
+    "fact": "見られない別の道（岩の中・別の高さ）があるか",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "どのマスが #696 から見えるかが live に無く、西 x<223 は地図の外"
+   },
+   {
+    "fact": "計画の注意『射線の中で止まらない』",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules",
+    "lookups": 1,
+    "lookupSteps": "rules に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "橋やふたに使える nether_bricks×51 と ×56",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 3,
+    "lookupSteps": "2 行に分かれている 2 + 合計 +1",
+    "note": "ほか12件は略"
+   }
+  ],
+  "summary": "『見られる』の理由と壁の外が空所であることは読めるが、落差・溶岩・押される危険と near が書かれていないため、exposeOk で抜けて橋にする案の危なさは live から判断しにくい。"
+ },
+ {
+  "scene": "s21",
+  "facts": [
+   {
+    "fact": "ウィザースケルトン #696 が東4・北2・上6 (229,62,76) にいて射線が通る（7.5〜7.6m）",
+    "cells": [
+     "229,62,76"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats",
+    "lookups": 3,
+    "lookupSteps": "urgent 1 + threats の座標 +1 + 自分との相対計算 +1",
+    "note": "urgent は 7.5m、threats は 7.6m と食い違う（小差）。マス (229,62,76) は地図の外（y=62 の層が無い）"
+   },
+   {
+    "fact": "足元は y=55 の幅1の橋で、両脇 (225,56,77),(225,56,79) が空気で壁が無い",
+    "cells": [
+     "225,55,78",
+     "225,56,77",
+     "225,56,79"
+    ],
+    "status": "ある",
+    "where": "body.map y=55 / y=56",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": ""
+   },
+   {
+    "fact": "橋の下は y=54 から 15 段以上の空気",
+    "cells": [
+     "225,54,78"
+    ],
+    "status": "ある",
+    "where": "body.map 縦 (225,78) 下",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + 連なりを座標に直す +1",
+    "note": ""
+   },
+   {
+    "fact": "落ちたら溶岩で死ぬ（下に溶岩がある）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "縦 (225,78) は y=40 まで空気で『…』、溶岩の記載は landmarks (221,53,69) 西6・北9 だけ"
+   },
+   {
+    "fact": "来た道（東）へ戻れる: (226,56,78) が歩ける",
+    "cells": [
+     "226,56,78",
+     "226,57,78",
+     "226,55,78"
+    ],
+    "status": "ある",
+    "where": "body.map y=56 / y=57 / y=55",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス = 6",
+    "note": ""
+   },
+   {
+    "fact": "東の要塞の壁 (229,56,77),(229,56,79) があり、そこへ戻ると壁の中に入れる",
+    "cells": [
+     "229,56,77",
+     "229,56,79"
+    ],
+    "status": "ある",
+    "where": "body.map y=56",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": ""
+   },
+   {
+    "fact": "置ける建材 nether_bricks×58 と ×47",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 3,
+    "lookupSteps": "2 行 2 + 合計 +1",
+    "note": "ほか12件は略"
+   },
+   {
+    "fact": "ほかの敵: #427 wither_skeleton (232,61,64) 16.5m、piglin #754 (213,58,61) 21.1m が橋の西の先",
+    "cells": [
+     "213,58,61"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats 1 + 相対（西）+1",
+    "note": "ほか4件・near ほか8件は略"
+   },
+   {
+    "fact": "#696 が橋へ歩いて来られるか・追いつくまでの時間",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "s19 の urgent にあった『道はある（回って来る）』が、この場面の urgent には無い"
+   },
+   {
+    "fact": "この判断に 10 秒かかる間に敵が 3 回打つ（近接の敵を橋の上で待たない）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "LLM 時間・act が体に着くまでの遅れは live に書かれていない"
+   },
+   {
+    "fact": "橋の上では押されたら落ちる",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "body に answer の行が無い"
+   }
+  ],
+  "summary": "射線の敵・橋の両脇・戻る道は読めるが、落ちたら溶岩・敵が来る速さ・押される危険が書かれておらず、『橋を伸ばし続けない』判断の決め手が live に無い。"
+ },
+ {
+  "scene": "s22",
+  "facts": [
+   {
+    "fact": "zombified_piglin #1676 が 13.3m (188,82,125) にいる",
+    "cells": [
+     "188,82,125"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": "SITUATION は『ピグリン #1676』と書くが、live の #1676 は zombified_piglin。マスは地図の外"
+   },
+   {
+    "fact": "実際に襲ってくる piglin #1677 の存在と位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "threats は 4 件だけで『ほか4件（長いため略）』。+998 に 2m に来る piglin はここに入っているかもしれない"
+   },
+   {
+    "fact": "食料 0 点・盾なし・金の防具なし",
+    "cells": [],
+    "status": "ある",
+    "where": "body.shortage / food",
+    "lookups": 1,
+    "lookupSteps": "shortage 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "体力 20・満腹 16",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "狙うエンダーマン #1589 は (204,81,109) 16.2m にいる",
+    "cells": [
+     "204,81,109"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "#1589 に届く・見えるか（待ち打ちが成り立つか）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "plan.rules は別のエンダーマン #113/#1281/#976 が『見えない』と書くだけで #1589 の可視・到達は書かれていない"
+   },
+   {
+    "fact": "待つ・打ち返す act の間に近づく敵で止める手（stopIf hostileWithin）が使えること",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "s18 の lastResults にはあったが、この場面の live には無い（道具の説明に書かれているかもしれないが live の外）"
+   },
+   {
+    "fact": "計画の今は p3.1 エンダーマン狩りだが、準備（食料・盾・金の防具）が足りない",
+    "cells": [],
+    "status": "ある",
+    "where": "body.planNow / shortage",
+    "lookups": 2,
+    "lookupSteps": "planNow 1 + shortage を突き合わせ +1",
+    "note": "『足りない間は追わない』という判断の規則は書かれていない"
+   },
+   {
+    "fact": "直前の walk が (184,78,121) の先の 5 段以上の落差で止まった",
+    "cells": [
+     "184,78,121"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の walk 止",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "マスは地図の外"
+   }
+  ],
+  "summary": "敵の一部・準備不足・体力は読めるが、実際に襲う piglin が略され、待ち打ちの見張り（hostileWithin）も書かれていないので、見張りを付ける判断の材料が薄い。"
+ },
+ {
+  "scene": "s23",
+  "facts": [
+   {
+    "fact": "体力 15.5・満腹 16、鉄の剣を持っている",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "piglin #1677 が 2.0m・上1 (187,79,112) で見える",
+    "cells": [
+     "187,79,112"
+    ],
+    "status": "ある",
+    "where": "body.urgent / threats",
+    "lookups": 2,
+    "lookupSteps": "urgent 1 + threats の座標 +1",
+    "note": ""
+   },
+   {
+    "fact": "届く頃の体力（約6.6）と、判断 3.7 秒 + act が着くまで 4.4 秒かかること",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "遅れの秒数も、その間に減る体力の見込みも live に無い"
+   },
+   {
+    "fact": "ピグリンは 16 HP で、鉄の剣なら 3 回前後で倒せる",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "敵の体力・与ダメージは live に書かれていない"
+   },
+   {
+    "fact": "enderman #1589 が 5.8m (190,81,116) にいる（二正面にしない相手）",
+    "cells": [
+     "190,81,116"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ピグリンの隣 (186,79,112),(186,78,112) が空気で、置く建材 cobbled_deepslate×62 がある",
+    "cells": [
+     "186,79,112",
+     "186,78,112"
+    ],
+    "status": "ある",
+    "where": "body.map y=79 / y=78 / body.inventory",
+    "lookups": 5,
+    "lookupSteps": "地図 2 マス × 2 = 4 + inventory 1",
+    "note": "inventory は 14 行で切れ、『ほか N 件』の注記が無いのに s22 より品目が少ない（nether_bricks・netherrack などが消えている）"
+   },
+   {
+    "fact": "離れる先 (185,78,113) が歩ける（床 (185,77,113) netherrack・足と頭が空気）",
+    "cells": [
+     "185,78,113",
+     "185,79,113",
+     "185,77,113"
+    ],
+    "status": "ある",
+    "where": "body.map y=78 / y=79 / y=77",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス = 6",
+    "note": ""
+   },
+   {
+    "fact": "前の act を反射が止めた",
+    "cells": [],
+    "status": "ある",
+    "where": "body.urgent / events",
+    "lookups": 1,
+    "lookupSteps": "直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "敵の位置・置けるマス・逃げる先は読めるが、act が体に着く遅れと届く頃の体力、敵の体力が無く、『hpBelow を届く頃の体力まで見込む』判断を live だけでは組み立てにくい。"
+ },
+ {
+  "scene": "s24",
+  "facts": [
+   {
+    "fact": "西 (299..293,59,73) と (299..293,60,73) は岩（#）で続いている",
+    "cells": [
+     "299,59,73",
+     "299,60,73",
+     "293,59,73",
+     "293,60,73"
+    ],
+    "status": "ある",
+    "where": "body.map y=59 / y=60 の z=73 の行",
+    "lookups": 4,
+    "lookupSteps": "地図 y=59 の行 2 + y=60 の行 2",
+    "note": "y=60 は東 (300..304,60,73) が空気の通路"
+   },
+   {
+    "fact": "x=292 以西 (292..288,59..60,73) の中身（掘る予定の先 5 マス）",
+    "cells": [
+     "292,59,73",
+     "288,59,73"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は x=293..307 まで。記録の答えは x=288 まで掘る"
+   },
+   {
+    "fact": "真上 (300,64..66,73) が要塞のレンガ、y=67..69 が空気（要塞の部屋）",
+    "cells": [
+     "300,64,73"
+    ],
+    "status": "ある",
+    "where": "body.map 縦 (300,73) 上",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + 連なりを座標に直す +1",
+    "note": ""
+   },
+   {
+    "fact": "要塞の部屋の床が西でどの高さか（y=57-58 へ下げる必要があるか）",
+    "cells": [
+     "295,64,73"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図の層は y=61 までで、y=62 以上の要塞の形が地図に無い（landmarks の N (302,62,73) だけ）"
+   },
+   {
+    "fact": "ブレイズ #21 (295,67,72) 9.3m ほかが上の部屋にいる",
+    "cells": [
+     "295,67,72"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats 1 + 掘る線の上かを相対計算 +1",
+    "note": "座標は地図の外"
+   },
+   {
+    "fact": "ほか4件の敵・near ほか8件",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件 / near ほか8件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   },
+   {
+    "fact": "溶岩源 (301,66,63) は北10・上7 で掘る線 z=73 から離れている",
+    "cells": [
+     "301,66,63"
+    ],
+    "status": "ある",
+    "where": "body.landmarks",
+    "lookups": 2,
+    "lookupSteps": "landmarks 1 + 掘る線との位置関係 +1",
+    "note": ""
+   },
+   {
+    "fact": "体力 20・満腹 19（stopIf hpBelow の基準）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "西の岩と上の要塞・ブレイズは読めるが、地図が x=293 と y=61 で切れており、掘る予定の x=288 までと要塞の部屋の下面の高さが分からない。順調な場面でも先の見通しは薄い。"
+ },
+ {
+  "scene": "s25",
+  "facts": [
+   {
+    "fact": "掘る 8 マス (291,62..60,82),(290,61..59,82),(289,60..59,82) は岩（# または n）",
+    "cells": [
+     "291,62,82",
+     "291,61,82",
+     "291,60,82",
+     "290,61,82",
+     "290,60,82",
+     "290,59,82",
+     "289,60,82",
+     "289,59,82"
+    ],
+    "status": "ある",
+    "where": "body.map y=62 / 61 / 60 / 59",
+    "lookups": 8,
+    "lookupSteps": "地図 4 層 × 2 = 8（層ごとに行を合わせる）",
+    "note": ""
+   },
+   {
+    "fact": "掘る最後の (289,58,82) の中身",
+    "cells": [
+     "289,58,82"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図の層は y=59 まで（y=58 が無い）。縦の連なりも足の列 (292,82) だけ"
+   },
+   {
+    "fact": "西 (286,61,82),(285,61,82) が空所（縁）で、岩は x=291..287 の 5 マス（鉱石含む）しか無い",
+    "cells": [
+     "286,61,82",
+     "285,61,82"
+    ],
+    "status": "ある",
+    "where": "body.map y=61",
+    "lookups": 2,
+    "lookupSteps": "地図 y=61 の行 2",
+    "note": "landmarks の相対位置は 西3 など 1 ずれて見える（小差）"
+   },
+   {
+    "fact": "溶岩源 (290,65,83) が西3・南1・上3 にある（掘る穴の 4〜6 上）",
+    "cells": [
+     "290,65,83"
+    ],
+    "status": "ある",
+    "where": "body.landmarks",
+    "lookups": 2,
+    "lookupSteps": "landmarks 1 + 掘る穴との位置関係 +1",
+    "note": "地図の y=65 の層は無く、マスの確認は landmarks だけ"
+   },
+   {
+    "fact": "計画の注意『崖の縁を歩かない』と (293,62,82) の頭の高さ (293,64,82) が basalt",
+    "cells": [
+     "293,64,82"
+    ],
+    "status": "ある",
+    "where": "plan.rules",
+    "lookups": 1,
+    "lookupSteps": "rules に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "足の下 (292,60..56,82) は固い",
+    "cells": [
+     "292,60,82"
+    ],
+    "status": "ある",
+    "where": "body.map 縦 (292,82) 下",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + 連なりを座標に直す +1",
+    "note": ""
+   },
+   {
+    "fact": "ブレイズ #18 (295,67,73) 11.2m ほかは上の部屋",
+    "cells": [
+     "295,67,73"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ほか4件の敵・near ほか8件",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件 / near ほか8件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   }
+  ],
+  "summary": "掘る岩と西の縁・溶岩の位置は読めるが、最後の 1 マスは地図の外で、岩の層が x=287 までの 5 マスしかないことは行を読み合わせないと分からない。"
+ },
+ {
+  "scene": "s27",
+  "facts": [
+   {
+    "fact": "西 (228..222,57,63) は netherrack で固く、y=58 は (223..228) が岩・(222,58,63) が空気",
+    "cells": [
+     "228,57,63",
+     "222,57,63",
+     "228,58,63",
+     "222,58,63"
+    ],
+    "status": "ある",
+    "where": "body.map y=57 / y=58 の z=63 の行",
+    "lookups": 4,
+    "lookupSteps": "地図 y=57 の行 2 + y=58 の行 2",
+    "note": ""
+   },
+   {
+    "fact": "掘る予定の先 (221,57,63),(220,57,63) の中身",
+    "cells": [
+     "221,57,63",
+     "220,57,63"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は x=222..236 まで"
+   },
+   {
+    "fact": "溶岩源 (234,57,56) は東5・北7 にある（掘る線 z=63 から北に 7）",
+    "cells": [
+     "234,57,56"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "landmarks は『東2・北7』（N は東1・南1・上1）と書くが、at (229,57,63) からは東5（N は東4）。東西の相対だけ 3 ずれる（threats の距離は at から合っている）"
+   },
+   {
+    "fact": "いま同じ止まりが続いているか（look 行）",
+    "cells": [
+     "237,57,63"
+    ],
+    "status": "誤り",
+    "where": "body.look / stops",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "look 行は『同じ所で同じ止まりが続いている』と書くが、記録では前の act は 6/6 成功で、stops の最新は別の場所 (237,57,63) 届かない 19秒前。lastResults は (なし)。SITUATION も古い止まりと言う"
+   },
+   {
+    "fact": "ゾンビピグリン #566 (239,61,58) 11.9m など東にいる",
+    "cells": [
+     "239,61,58"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ほか6件の敵・near ほか8件",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか6件 / near ほか8件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "次の判断でピグリンが 6.4m に来るが、どれが piglin かは略に入っているかもしれない"
+   },
+   {
+    "fact": "目的地 (195,66,60) は西34・上9",
+    "cells": [
+     "195,66,60"
+    ],
+    "status": "ある",
+    "where": "body.planNow",
+    "lookups": 2,
+    "lookupSteps": "planNow 1 + 自分の座標から相対計算 +1",
+    "note": ""
+   },
+   {
+    "fact": "体力 20、食料 0 点",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state / shortage",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "西の岩は読めるが、look 行が古い止まりを『続いている』と言って mc.view を促し、landmarks の東西が 3 ずれており、順調な場面で逆に迷わせる欄が混じる。"
+ },
+ {
+  "scene": "s28",
+  "facts": [
+   {
+    "fact": "(254,56,78) の足元 (254,55,78),(254,54,78) が空気で床が無い（歩くと落ちる）",
+    "cells": [
+     "254,56,78",
+     "254,57,78",
+     "254,55,78",
+     "254,54,78"
+    ],
+    "status": "ある",
+    "where": "body.map y=56 / y=57 / y=55 / y=54",
+    "lookups": 6,
+    "lookupSteps": "足・頭・床の 3 マス = 6（y=54 は予備）",
+    "note": "地図は x=251..265 を持つので床の無さは読める"
+   },
+   {
+    "fact": "(254,56,78) の下 24 段が空気でその下は溶岩（落差 24）",
+    "cells": [
+     "254,56,78"
+    ],
+    "status": "省略",
+    "where": "body.investigation の『調べ path』の切れ目",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "investigation の切れ目の文が『(261,56,77) は netherr…』で末尾が切れている。地図の底は y=54 で、縦も足の列 (258,78) だけ"
+   },
+   {
+    "fact": "要塞の壁 (257..255,56,78) と (257,57,78),(255,57,78) は nether_bricks で、掘れば西へ抜ける",
+    "cells": [
+     "257,56,78",
+     "256,56,78",
+     "255,56,78",
+     "257,57,78",
+     "255,57,78"
+    ],
+    "status": "ある",
+    "where": "body.map y=56 / y=57 / lastResults 本文",
+    "lookups": 4,
+    "lookupSteps": "地図 y=56 の行 2 + y=57 の行 2",
+    "note": ""
+   },
+   {
+    "fact": "目的地 (195,66,60) は 66.3m 先の地図の外で、行ける所で一番近いのは今の (258,56,78)",
+    "cells": [
+     "195,66,60"
+    ],
+    "status": "ある",
+    "where": "body.investigation / lastResults",
+    "lookups": 1,
+    "lookupSteps": "本文に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "x<251 の地形（その先に床があるか）",
+    "cells": [
+     "250,56,78"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は x=251..265。mc.probe / mc.view を使う手がかりも live には無い"
+   },
+   {
+    "fact": "今の計画の節は p1.2 で、why に [p1.2] を付ける",
+    "cells": [],
+    "status": "ある",
+    "where": "body.planNow / plan.now",
+    "lookups": 1,
+    "lookupSteps": "planNow 直接 1",
+    "note": "lastResults の計画は rev3 で、plan は rev4"
+   },
+   {
+    "fact": "ゾンビピグリン #249 (250,63,74) 11.7m・ウィザースケルトン #427 (246,61,63) 19.7m が西側",
+    "cells": [
+     "250,63,74",
+     "246,61,63"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats 1 + 相対（西）+1",
+    "note": "ほか4件・near ほか8件は略"
+   }
+  ],
+  "summary": "床の無いマスは地図から読めるが、落差24と溶岩は切れた文の中で、地図外の先は無い。『床を確かめてから歩く』手の根拠は地図を読み込む人にしか見えない。"
+ },
+ {
+  "scene": "s29",
+  "facts": [
+   {
+    "fact": "斜めに下りる 3 マス (293,64,82),(293,63,82),(293,62,82) がどれも固い（# / basalt）",
+    "cells": [
+     "293,64,82",
+     "293,63,82",
+     "293,62,82"
+    ],
+    "status": "ある",
+    "where": "body.map y=64 / y=63 / y=62",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": "(293,64,82) は足 (294,63,82) から見て斜め上で、頭の高さに当たることは地図からは読み取りにくい"
+   },
+   {
+    "fact": "斜めに 1 段下りるときは、下りる先の隣の柱の頭の高さも空いている必要がある",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面の plan.rules には無い（s25・s31 の plan.rules には同じ型の注意がある）"
+   },
+   {
+    "fact": "溶岩源 (290,65,83) が掘る先の近くにある（西4・南1・上2）",
+    "cells": [
+     "290,65,83"
+    ],
+    "status": "誤り",
+    "where": "body.landmarks",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "landmarks は『西7・南1・上2』と書くが at (294,63,82) からは西4。東西が 3 ずれる（クォーツ 西9 も実際は西6）。threats の距離は at から合っている"
+   },
+   {
+    "fact": "ブレイズ #5 (293,67,73) 9.9m ほかは上（y=67〜68）の部屋",
+    "cells": [
+     "293,67,73"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": "piglin #33 (288,77,77) 15.9m も西の上にいる"
+   },
+   {
+    "fact": "stops『(296,64,79) 掘れない』『(298,63,77) 置けない』の理由",
+    "cells": [
+     "296,64,79"
+    ],
+    "status": "省略",
+    "where": "body.stops ほか3件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "理由の文が無く、ほか3件は略"
+   },
+   {
+    "fact": "計画の節は p1.2 で、why に [p1.2] を付ける",
+    "cells": [],
+    "status": "ある",
+    "where": "body.planNow",
+    "lookups": 1,
+    "lookupSteps": "planNow 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "3 マスが固いことは地図から読めるが、斜め下りに頭上マスが要るという規則が無く、landmarks の東西が 3 ずれるなど、足場づくりの失敗を避ける手がかりが弱い。"
+ },
+ {
+  "scene": "s30",
+  "facts": [
+   {
+    "fact": "(299,61,73) を開けると blaze #2 (311,71,72) など 14.5m 内の blaze から見える。今は届かない",
+    "cells": [
+     "299,61,73",
+     "311,71,72"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の dig 止 / stops",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "どの穴・空気を通して blaze に見えるか（見られる理由の線）",
+    "cells": [
+     "299,62,73"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "周りの略記は y=62 に空気が見えるが、blaze までの線は地図の x=307 より東で、遮る所が分からない"
+   },
+   {
+    "fact": "1 段下の岩 (299,60,73),(299,59,73) は固い（# ）",
+    "cells": [
+     "299,60,73",
+     "299,59,73"
+    ],
+    "status": "ある",
+    "where": "body.map y=60 / y=59",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "1 段下なら見られないかは書かれていない"
+   },
+   {
+    "fact": "東 (301,61,73),(301,62,73) が空気で、射線を塞ぐ石を置ける",
+    "cells": [
+     "301,61,73",
+     "301,62,73"
+    ],
+    "status": "ある",
+    "where": "body.map y=61 / y=62",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "記録では place してもまた見られた"
+   },
+   {
+    "fact": "look 行『同じ所で同じ止まりが続いている: mc.view で周りを広く見る』",
+    "cells": [],
+    "status": "ある",
+    "where": "body.look / stops",
+    "lookups": 1,
+    "lookupSteps": "look 行直接 1",
+    "note": ""
+   },
+   {
+    "fact": "ほか4件の敵・near ほか8件",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件 / near ほか8件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   },
+   {
+    "fact": "西 (298..293,61,73) は岩で続く（掘って離れる先）",
+    "cells": [
+     "298,61,73",
+     "293,61,73"
+    ],
+    "status": "ある",
+    "where": "body.map y=61",
+    "lookups": 2,
+    "lookupSteps": "地図 y=61 の行 2",
+    "note": ""
+   }
+  ],
+  "summary": "同じ (299,61,73) が見られるという止まりと look 行は読めるが、なぜ見られるか（線）と別の高さなら見られないかが書かれておらず、『1 段下へ』を選ぶ根拠は live に無い。"
+ },
+ {
+  "scene": "s31",
+  "facts": [
+   {
+    "fact": "食料 0 点・盾なし・金の防具なし",
+    "cells": [],
+    "status": "ある",
+    "where": "body.shortage / food",
+    "lookups": 1,
+    "lookupSteps": "shortage 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "作業台 crafting_table×1 とハーフブロック cobbled_deepslate_slab×12 を持っている（p1.3・p1.4 済み）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 2,
+    "lookupSteps": "inventory で 2 行を探す 2",
+    "note": "p1.3・p1.4 の済み条件の文は live の next から消えていて、持ち物と照らす条件が直接は書かれていない"
+   },
+   {
+    "fact": "歪んだ幹 4 本（p1.2 の済み条件 have:warped_stem>=4）を持っている",
+    "cells": [],
+    "status": "省略",
+    "where": "body.inventory ほか17件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "inventory は b から n までで切れ、warped_stem は『ほか17件』の中"
+   },
+   {
+    "fact": "次の未済の節は p1.6・p1.7 で、その次が p3.1（p1.5 は next に出ない）",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.next",
+    "lookups": 1,
+    "lookupSteps": "next 直接 1",
+    "note": "p1.3〜p1.5 が next から抜けた理由は書かれていない（SITUATION は p1.5 が残りと言う）"
+   },
+   {
+    "fact": "点検（作業台・ハーフブロック・盾・食料 100）が済むまで湧き場の前で戦わない",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules",
+    "lookups": 1,
+    "lookupSteps": "rules 直接 1",
+    "note": "p1 の済み条件の定義はこの 1 行だけ"
+   },
+   {
+    "fact": "食料・盾・金の防具なしで遠出して敵を追わない（p3.x を current にしない根拠）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "この場面には recall も answer も無く、その規則・過去の死の記録が live に出ていない"
+   },
+   {
+    "fact": "エンダーマン・ピグリンは 24〜26m 先（#944 piglin (202,43,53)、#1281 enderman (180,67,71) ほか）",
+    "cells": [
+     "202,43,53",
+     "180,67,71"
+    ],
+    "status": "ある",
+    "where": "body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats 直接 1",
+    "note": "ほか4件・near ほか8件は略"
+   },
+   {
+    "fact": "体力 20・満腹 17",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "準備不足と点検の定義は読めるが、『準備なしで遠出しない』という判断の根拠と、p1.5 の扱い、幹の所持が live に無く、p3.1 を current にする誤りを止める材料は弱い。"
+ },
+ {
+  "scene": "s32",
+  "facts": [
+   {
+    "fact": "体力 12.4・満腹 14",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "この状態では体力は自然に戻らない（満腹 14 が 18 未満）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.recovery",
+    "lookups": 1,
+    "lookupSteps": "recovery 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "食べ物は cooked_mutton×1 を持っている",
+    "cells": [],
+    "status": "ある",
+    "where": "body.inventory",
+    "lookups": 1,
+    "lookupSteps": "inventory 直接 1",
+    "note": "body.food には items の欄が無い（他の場面にはある）"
+   },
+   {
+    "fact": "羊肉 1 個で満腹が 18 以上になる（14→20）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "食料 15.6 点という数字はあるが、羊肉 1 個で満腹がいくつ上がるかは書かれていない"
+   },
+   {
+    "fact": "縁: 周り 8 マスのうち空所 2（落差 3）で、東 (206,63,66) が空気",
+    "cells": [
+     "206,63,66"
+    ],
+    "status": "ある",
+    "where": "body.investigation / map y=63",
+    "lookups": 3,
+    "lookupSteps": "investigation の足場 1 + 地図 y=63 の 1 マス 2",
+    "note": ""
+   },
+   {
+    "fact": "離れる先 (204,64,66) は歩ける（床 (204,63,66) netherrack・足 (204,64,66) は歩いた空気）",
+    "cells": [
+     "204,64,66",
+     "204,63,66"
+    ],
+    "status": "ある",
+    "where": "body.map y=64 / y=63",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": ""
+   },
+   {
+    "fact": "離れる先の頭のマス (204,65,66) が空気か",
+    "cells": [
+     "204,65,66"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "y=65 の層が無い（surface 格子の最上面から推測するしかない）"
+   },
+   {
+    "fact": "8m 内に生き物は無く、最寄りは piglin #944 (202,43,53) 23.9m と enderman #976 (182,64,74) 24.5m",
+    "cells": [
+     "182,64,74"
+    ],
+    "status": "ある",
+    "where": "body.investigation / threats",
+    "lookups": 2,
+    "lookupSteps": "investigation 1 + threats 1",
+    "note": ""
+   },
+   {
+    "fact": "ほか6件の敵",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか6件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   },
+   {
+    "fact": "体力が 7.6 減った原因（誰に打たれたか・まだいるか）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "驚きの行は体力の変化だけで、打った敵は書かれていない（SITUATION のエンダーマンは live に無い）"
+   },
+   {
+    "fact": "エンダーマンと目が合う向きか・見えているか",
+    "cells": [
+     "182,64,74"
+    ],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "#976 の見える・見えないは、この場面の plan.rules に無い（s33 には同じ敵の『見えない』がある）"
+   },
+   {
+    "fact": "待つ間に近づく敵で止める手（stopIf hostileWithin）",
+    "cells": [],
+    "status": "無い",
+    "where": "",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "answer の行が無く、live に書かれていない"
+   },
+   {
+    "fact": "近くに動物・村・畑は見えない。帰りのゲートまで約 208m",
+    "cells": [],
+    "status": "ある",
+    "where": "body.recovery",
+    "lookups": 1,
+    "lookupSteps": "recovery 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "回復に満腹 18 が要ること、縁、食べ物の所持は読めるが、羊肉で満腹がいくつ上がるか、誰に打たれたか、見張りの手が書かれていない。recovery の欄が効いている。"
+ },
+ {
+  "scene": "s33",
+  "facts": [
+   {
+    "fact": "同じ止まりの 4 回目で、attack は enderman #113 に『届かない』（10.6m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.investigation / lastResults / plan.rules",
+    "lookups": 1,
+    "lookupSteps": "investigation 直接 1",
+    "note": ""
+   },
+   {
+    "fact": "足場: 周り 8 マスのうち空所 3（落差 36、下は溶岩）。押されたら落ちる",
+    "cells": [
+     "190,68,91"
+    ],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing 直接 1",
+    "note": "investigation の足の列は y=67 warped_nylium の下が y=54 以下の空気で、36 段・溶岩は footing だけが書く"
+   },
+   {
+    "fact": "縁は西で、(189,68,91) が空気、東 (191,68,91) は固い",
+    "cells": [
+     "189,68,91",
+     "191,68,91"
+    ],
+    "status": "ある",
+    "where": "body.map y=68",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": ""
+   },
+   {
+    "fact": "東は上り坂の固い陸で、z=95 の行が 1 段ずつ上る歩ける階段（190..195）",
+    "cells": [
+     "191,68,95",
+     "192,69,95",
+     "193,70,95",
+     "194,71,95"
+    ],
+    "status": "ある",
+    "where": "body.map の上から見た格子 z=95 の行",
+    "lookups": 12,
+    "lookupSteps": "格子 6 マス × 2 = 12（高さの数字を並べて 1 段ずつか確かめる）",
+    "note": "z=91 の行は +1,+2,+5 で 3 段跳ぶ。行によって歩けるかが違い、読み取りにくい"
+   },
+   {
+    "fact": "ゾンビピグリン #1324 が東の陸の側 (195,71,96) 8.5m にいる（逃げる東と同じ側）",
+    "cells": [
+     "195,71,96"
+    ],
+    "status": "ある",
+    "where": "body.threats / map 格子の ! ",
+    "lookups": 3,
+    "lookupSteps": "threats 1 + 相対計算 +1 + 格子の ! と突き合わせ +1",
+    "note": "マスは地図の外（y=71 の層が無い）"
+   },
+   {
+    "fact": "エンダーマン #113 の今の位置と届く道",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats ほか4件",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "plan.rules の #113 (203,76,83) は古い位置（今の足 (190,68,91) からは 17m で、届かない 10.6m と合わない）"
+   },
+   {
+    "fact": "計画の今は p3.1 エンダーマン狩りで、食料 0・盾なし",
+    "cells": [],
+    "status": "ある",
+    "where": "body.planNow / shortage",
+    "lookups": 2,
+    "lookupSteps": "planNow 1 + shortage 1",
+    "note": ""
+   },
+   {
+    "fact": "体力 20・満腹 16",
+    "cells": [],
+    "status": "ある",
+    "where": "body.state",
+    "lookups": 1,
+    "lookupSteps": "state 直接 1",
+    "note": ""
+   }
+  ],
+  "summary": "縁・落差・溶岩・止まりの回数と東の敵は読めるが、安全な陸への道を高さの数字から組む必要があり、#113 の位置が古く、SITUATION が言う答え方の行は live に無い。"
+ },
+ {
+  "scene": "s34",
+  "facts": [
+   {
+    "fact": "禁止（p1）: 点検が済むまで湧き場の前で戦わない、受けたら離れて塞ぐ",
+    "cells": [],
+    "status": "ある",
+    "where": "plan.rules の最後の行",
+    "lookups": 1,
+    "lookupSteps": "plan.rules の 1 行をそのまま読む 1",
+    "note": ""
+   },
+   {
+    "fact": "ブレイズ 4 体の位置 (313,70,74),(311,70,71),(310,70,72),(310,70,71) と 6.3〜6.4m",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats と body.urgent",
+    "lookups": 1,
+    "lookupSteps": "threats の座標つき行を読む 1",
+    "note": ""
+   },
+   {
+    "fact": "掘る先 (311,63,74),(311,63,75),(311,64,75) が固い（石の類）",
+    "cells": [
+     "311,63,74",
+     "311,63,75",
+     "311,64,75"
+    ],
+    "status": "ある",
+    "where": "地図 y=63 と y=64（行 z=74,75、x=311 の列）",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": "cellLook で 3 マスとも # を確認"
+   },
+   {
+    "fact": "足の周り (311,64,72),(312,64,73),(310,64,73) が固く囲われ、南 (311,64,74) だけが空気",
+    "cells": [
+     "311,64,72",
+     "312,64,73",
+     "310,64,73",
+     "311,64,74"
+    ],
+    "status": "ある",
+    "where": "地図 y=64",
+    "lookups": 8,
+    "lookupSteps": "地図 4 マス × 2 = 8（足 @ の隣）",
+    "note": "cellLook: 北東西が #、南 (311,64,74) が . "
+   },
+   {
+    "fact": "(311,64,75) は間の固いマス (311,65,74) に遮られて「見えない」ので 2 マス先は掘れない（掘るのは見える隣から順に）",
+    "cells": [
+     "311,64,75",
+     "311,65,74"
+    ],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図には (311,65,74)=# と (311,64,75)=# が載るが、掘る対象が見えるか（視線）の判定は live に無い。実際の止まりの原因そのもの"
+   },
+   {
+    "fact": "ブレイズが壁の向こうで射線が通らない（見えない）こと",
+    "cells": [],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "urgent は blaze 6.4m だけ。s35 の urgent には「見えない（間に…）」が付くが、ここには付かない"
+   }
+  ],
+  "summary": "敵の位置・禁止・足の周りの岩は読めるが、止まりの原因である「2 マス先は間の固いマスで見えない」と、ブレイズの射線が通るかは live に無く、地図の格子から自分で幾何を解くしかない。"
+ },
+ {
+  "scene": "s35",
+  "facts": [
+   {
+    "fact": "足場は幅 1 の橋で左右とも空所（落差 25、下は溶岩）、押されたら落ちる",
+    "cells": [],
+    "status": "ある",
+    "where": "body.footing",
+    "lookups": 1,
+    "lookupSteps": "footing の 1 行をそのまま読む 1",
+    "note": ""
+   },
+   {
+    "fact": "戻り先 (262,57,63) は歩ける（足 '*'、頭 (262,58,63) が空気、床 (262,56,63) が netherrack）",
+    "cells": [
+     "262,57,63",
+     "262,58,63",
+     "262,56,63"
+    ],
+    "status": "ある",
+    "where": "地図 y=58, y=57, y=56 の行 z=63",
+    "lookups": 6,
+    "lookupSteps": "1 歩歩けるか: 足・頭・床 3 マス = 6",
+    "note": "cellLook: 足 *、頭 .、床 n。途中 (260,57,63),(261,57,63) も '*' で歩いた通路"
+   },
+   {
+    "fact": "ゾンビピグリン #565 が 5.9m・上 4・見えない・道はあり回って来る",
+    "cells": [],
+    "status": "ある",
+    "where": "body.urgent と body.threats",
+    "lookups": 2,
+    "lookupSteps": "urgent 1 + threats の座標 (257,61,59) と突き合わせ +1",
+    "note": ""
+   },
+   {
+    "fact": "4 体の敵（(257,61,59)、(258,61,58)、(259,61,72)、(251,61,71)）はすべて西・北・南側で、戻る東 (262,57,63) 側に居ない",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats の 4 行と自分の座標",
+    "lookups": 8,
+    "lookupSteps": "threats 4 行を読む 4 + 自分との相対 4 回 = 8",
+    "note": "threats は 4 件で足りている（略は無い）"
+   }
+  ],
+  "summary": "足場の危険・戻り先の足場・敵の位置は全部 live にあるが、戻り先の歩けるかは地図の 3 マスを突き合わせる必要があり、敵が東に居ないことは座標から自分で計算する。"
+ },
+ {
+  "scene": "s36",
+  "facts": [
+   {
+    "fact": "西の掘る先 1 列目 (301,58,73),(301,59,73) が固い（basalt）",
+    "cells": [
+     "301,58,73",
+     "301,59,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 と y=59 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 #"
+   },
+   {
+    "fact": "その奥 (300,58..59,73),(299,58..59,73),(298,58..59,73) も固く続く（最初の掘り 8 マス分）",
+    "cells": [
+     "300,58,73",
+     "300,59,73",
+     "299,58,73",
+     "299,59,73",
+     "298,58,73",
+     "298,59,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 と y=59 の行 z=73",
+    "lookups": 12,
+    "lookupSteps": "地図 6 マス × 2 = 12",
+    "note": "cellLook: 全部 #"
+   },
+   {
+    "fact": "歩く先の床 (301,57,73),(299,57,73) が固い",
+    "cells": [
+     "301,57,73",
+     "299,57,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 #"
+   },
+   {
+    "fact": "2 回目の掘り（x=297〜294）のうち x=294 の 2 マスは地図に無い",
+    "cells": [
+     "294,58,73",
+     "294,59,73"
+    ],
+    "status": "無い",
+    "where": "地図の x 範囲は 295..309 で x=294 は範囲外",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "cellLook で 地図に無い を確認。本番の答えは x=294 まで 16 マスを 1 回で掘った"
+   },
+   {
+    "fact": "blaze など敵 8 体のうち位置が分かるのは 4 体。残りが壁越しか進路側かは不明",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか4件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "threats は 4 件だけ表示、ほか4件が略。near も「ほか8件」、stops も「ほか3件」"
+   },
+   {
+    "fact": "溶岩源 (303,66,63) などの landmarks の相対位置（西2・北10・上8 など）",
+    "cells": [],
+    "status": "誤り",
+    "where": "body.landmarks",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "自分は (302,58,73) だが相対は (305,58,73) 基準で出ている（3 ずれ）。溶岩 (303,66,63) は実際は東1 なのに 西2、スポナー (311,70,72) は実際は東9 なのに 東6、クォーツ (319,66,79) は東17 なのに 東14、要塞は東3 が欠落。絶対座標は正しい"
+   }
+  ],
+  "summary": "西へ掘る先と床の固さは地図で読めるが 1 マス 2 手間で量が多く、掘りの終点は地図の外、landmarks の相対位置は 3 ずれた誤りで、敵の残りは略されている。"
+ },
+ {
+  "scene": "s37",
+  "facts": [
+   {
+    "fact": "西の掘る先 1 列目 (293,58,73),(293,59,73) が固い",
+    "cells": [
+     "293,58,73",
+     "293,59,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 と y=59 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 #"
+   },
+   {
+    "fact": "歩く先の床 (293,57,73) が固い",
+    "cells": [
+     "293,57,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 の行 z=73",
+    "lookups": 2,
+    "lookupSteps": "地図 1 マス = 2",
+    "note": "cellLook: #"
+   },
+   {
+    "fact": "本番の掘り先 (285,58..59,73),(284,58..59,73) と床 (285,57,73),(284,57,73) の中身",
+    "cells": [
+     "285,58,73",
+     "285,59,73",
+     "284,58,73",
+     "284,59,73",
+     "285,57,73",
+     "284,57,73"
+    ],
+    "status": "無い",
+    "where": "地図の x 範囲は 287..301 で範囲外",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "cellLook は 6 マスとも 地図に無い。自分 (294,58,73) から 9〜10 マス先で、間の (286..292) も x=286 は範囲外"
+   },
+   {
+    "fact": "真上の blaze #21 (294,67,73) との間は石や煉瓦で 6 マス塞がっている（y=60〜66）",
+    "cells": [],
+    "status": "ある",
+    "where": "縦 (294,73) 上 と threats",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + threats の座標と突き合わせ 1 = 2",
+    "note": "縦の連なりは y=60〜64 が # ×5、y=65〜66 が N ×2、y=67〜69 が 空気"
+   },
+   {
+    "fact": "敵 8 体のうち 4 体しか載っていない（残りの位置は不明）",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか4件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "near は「ほか8件」"
+   }
+  ],
+  "summary": "1 列目の固さと真上の敵は読めるが、本番の掘り先は地図の外にあり、先の途中を何も確かめずに長く掘る形になる。"
+ },
+ {
+  "scene": "s38",
+  "facts": [
+   {
+    "fact": "西の掘る先 (271,58..59,73),(270,58..59,73) が固い（netherrack）",
+    "cells": [
+     "271,58,73",
+     "271,59,73",
+     "270,58,73",
+     "270,59,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 と y=59 の行 z=73",
+    "lookups": 8,
+    "lookupSteps": "地図 4 マス × 2 = 8",
+    "note": "cellLook: 4 マスとも n"
+   },
+   {
+    "fact": "歩く先の床 (271,57,73),(270,57,73) が固い",
+    "cells": [
+     "271,57,73",
+     "270,57,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 n"
+   },
+   {
+    "fact": "2 回目の掘りの終点 (264,58..59,73) の中身",
+    "cells": [
+     "264,58,73",
+     "264,59,73"
+    ],
+    "status": "無い",
+    "where": "地図の x 範囲は 265..279 で x=264 は範囲外",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "cellLook: 地図に無い"
+   },
+   {
+    "fact": "溶岩源 (278,61,75) と要塞 (274,59,74) の相対位置（東3・南2・上3、西1・南1・上1 など）",
+    "cells": [],
+    "status": "誤り",
+    "where": "body.landmarks",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "自分は (272,58,73) だが相対は (275,58,73) 基準（3 ずれ）。溶岩は実際は東6 なのに 東3、要塞は東2 なのに 西1、スポナー (311,70,72) は東39 なのに 東36。絶対座標は正しい。溶岩は進む西と逆の東側"
+   },
+   {
+    "fact": "敵 4 体（(282,61,70),(283,61,68),(285,62,74),(286,68,75)）は全部東側で進む西と逆",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats の 4 行と自分の座標",
+    "lookups": 8,
+    "lookupSteps": "threats 4 行を読む 4 + 自分との相対 4 = 8",
+    "note": "plan.rules に #33 は見えない（間に (280,59,72)）とある"
+   },
+   {
+    "fact": "残りの敵 4 体の位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか4件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   }
+  ],
+  "summary": "西へ 2 列の固さと床は読めるが、landmarks の相対位置は 3 ずれた誤りで、掘りの終点は地図外、敵は座標からの自力計算になる。"
+ },
+ {
+  "scene": "s39",
+  "facts": [
+   {
+    "fact": "西の通路 (255〜252,58〜59,73) は実際は既に空気で、掘らずに 4m 歩ける",
+    "cells": [
+     "255,58,73",
+     "255,59,73",
+     "254,58,73",
+     "254,59,73",
+     "253,58,73",
+     "253,59,73",
+     "252,58,73",
+     "252,59,73"
+    ],
+    "status": "誤り",
+    "where": "地図 y=58 と y=59 の行 z=73",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は 8 マスとも N（nether_bricks）の固い壁に見えるが、記録の結果は dig 全部「既に air（掘らずに次へ）」で walk は 4m で到着。地図と事実が食い違う（cellLook で N を確認）"
+   },
+   {
+    "fact": "歩く先の床 (255,57,73),(252,57,73) が固い",
+    "cells": [
+     "255,57,73",
+     "252,57,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=57 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: N。ただし通路の中身が誤りなので使い道は限られる"
+   },
+   {
+    "fact": "zombified_piglin の位置（16.6m 以上、y=72〜75 の高所）で進路に敵が居ない",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats の 4 行",
+    "lookups": 4,
+    "lookupSteps": "threats 4 行を読む 4",
+    "note": ""
+   },
+   {
+    "fact": "残りの敵 4 体の位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか4件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   },
+   {
+    "fact": "溶岩源 (261,63,80) は東5・南7・上5 で進む西と逆",
+    "cells": [],
+    "status": "ある",
+    "where": "body.landmarks",
+    "lookups": 1,
+    "lookupSteps": "landmarks の 1 行を読む 1",
+    "note": "この場面の相対位置は正しい（256,58,73 基準で一致）"
+   }
+  ],
+  "summary": "進路の西 4 マスが地図では固い壁なのに実際は空気という誤りがあり、これでは掘る数も歩ける距離も間違えて読ませる。"
+ },
+ {
+  "scene": "s40",
+  "facts": [
+   {
+    "fact": "持ち物が空で素手、何も落ちなくても掘るなら tool が hand",
+    "cells": [],
+    "status": "ある",
+    "where": "body.investigation 2 行目と inventory（空）と heldItem（空）",
+    "lookups": 1,
+    "lookupSteps": "investigation の文をそのまま読む 1",
+    "note": ""
+   },
+   {
+    "fact": "階段の最初の 3 マス (−41,51,193),(−41,50,192),(−41,51,192) が固い（stone）",
+    "cells": [
+     "-41,51,193",
+     "-41,50,192",
+     "-41,51,192"
+    ],
+    "status": "ある",
+    "where": "地図 y=51 と y=50 の行 z=192,193",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": "cellLook: 3 マスとも #。x 列は 6 5 4 3 2 1 0 9 8 7 6 と負の数で下 1 桁しかなく合わせにくい"
+   },
+   {
+    "fact": "北の (−41,49,192) は stone で段差があり歩けない",
+    "cells": [
+     "-41,49,192",
+     "-41,50,192"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の walk 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "真上は y=51〜61 が石 11 マス、その上 y=62 に水（水源 (−43,61,194)）",
+    "cells": [
+     "-41,62,193"
+    ],
+    "status": "ある",
+    "where": "縦 (−41,193) 上 と landmarks の水源",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + landmarks の水源 1 = 2",
+    "note": ""
+   },
+   {
+    "fact": "敵は遠い（最寄り skeleton 33.3m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行を読む 1",
+    "note": ""
+   },
+   {
+    "fact": "地上の木（原木）の位置",
+    "cells": [],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "landmarks 10 行（略なし）に木は無く、計画の目的 (195,66,60) は歪んだ幹で別世界。階段を北へ上がる理由に当たる情報が live に無い"
+   }
+  ],
+  "summary": "素手・階段の固さ・敵の遠さは読めるが、掘り上がる先の地上の木の位置が無く、北へ登る向きを選ぶ根拠は live から出てこない。"
+ },
+ {
+  "scene": "s41",
+  "facts": [
+   {
+    "fact": "次の階段 3 マス (−41,54,190),(−41,53,189),(−41,54,189) が固い",
+    "cells": [
+     "-41,54,190",
+     "-41,53,189",
+     "-41,54,189"
+    ],
+    "status": "ある",
+    "where": "縦 (−41,190) 上 と 地図 y=53, y=54",
+    "lookups": 6,
+    "lookupSteps": "縦の行 1 + 座標変換 1 + 地図 2 マス × 2 = 6",
+    "note": "cellLook: 3 マスとも #"
+   },
+   {
+    "fact": "2 回目以降の階段 (−41,55..57,186..189) の中身",
+    "cells": [
+     "-41,55,189",
+     "-41,55,188",
+     "-41,56,187",
+     "-41,57,186"
+    ],
+    "status": "無い",
+    "where": "地図の層は y=50〜54 までで y≥55 は層なし",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "cellLook: その高さの層なし。本番の答えは階段 4 回分（y=57 まで）を 1 回で出した"
+   },
+   {
+    "fact": "真上 y=64 に空洞 1 マス、間 y=54〜63 は石 10 マス、y=64 の上は石 3 マス",
+    "cells": [
+     "-41,64,190"
+    ],
+    "status": "ある",
+    "where": "縦 (−41,190) 上",
+    "lookups": 2,
+    "lookupSteps": "縦の行 1 + y から段数に直す 1 = 2",
+    "note": "y=64 が地表とは書かれていない"
+   },
+   {
+    "fact": "敵は遠い（最寄り skeleton 33.1m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行 1",
+    "note": ""
+   },
+   {
+    "fact": "水源 (−43,61,194) の相対位置（西2・南3・上10）",
+    "cells": [],
+    "status": "誤り",
+    "where": "body.landmarks",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "自分は (−41,52,190) なので実際は南4・上9。相対は (−41,53,189) 基準で z と y が 1 ずつずれる。ベッド・かまど・溶岩・銅・石炭なども同じ 1 ずれ"
+   }
+  ],
+  "summary": "次の 1 段は縦の行と地図で読めるが、掘る本番の 4 段のうち先は地図の高さ外で、landmarks の相対は 1 ずれている。"
+ },
+ {
+  "scene": "s42",
+  "facts": [
+   {
+    "fact": "(178,52,197) は間の固いブロック (177,53,197) に遮られて見えない（先に (177,53,197) を掘る）",
+    "cells": [
+     "178,52,197",
+     "177,53,197"
+    ],
+    "status": "ある",
+    "where": "body.investigation の sight 行",
+    "lookups": 1,
+    "lookupSteps": "調べ sight の文に座標つきで直接 1",
+    "note": "この行が正しい手の大半を示している"
+   },
+   {
+    "fact": "(177,53,197) は固く、(177,52,197) は空気",
+    "cells": [
+     "177,53,197",
+     "177,52,197"
+    ],
+    "status": "ある",
+    "where": "地図 y=53 と y=52 の行 z=197",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: # と ."
+   },
+   {
+    "fact": "(178,52,197),(178,53,197) が固く 2 マス高にするには上も掘る",
+    "cells": [
+     "178,52,197",
+     "178,53,197"
+    ],
+    "status": "ある",
+    "where": "地図 y=52 と y=53 の行 z=197",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 #"
+   },
+   {
+    "fact": "同じ (178,52,197) の掘れないが 3 回続いている",
+    "cells": [],
+    "status": "ある",
+    "where": "body.stops と look",
+    "lookups": 1,
+    "lookupSteps": "stops の行 1",
+    "note": ""
+   },
+   {
+    "fact": "掘り進む目的地（鉄鉱石の場所）",
+    "cells": [],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図の層は y=50〜54 で、のちに掘る鉄鉱石は y=49 以下。計画の今の節は (148,81,196) の原木で東向きの掘りと無関係"
+   },
+   {
+    "fact": "敵は遠い（最寄り zombie 26.1m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行 1",
+    "note": ""
+   }
+  ],
+  "summary": "止まりの原因（間の固いブロック）は sight 行に座標つきで書かれていて読みやすいが、東へ掘る目的地は live に無い。"
+ },
+ {
+  "scene": "s43",
+  "facts": [
+   {
+    "fact": "(181,49,200) は間の固いブロック (181,50,199) に遮られて見えない（先に (181,50,199) を掘る）",
+    "cells": [
+     "181,49,200",
+     "181,50,199"
+    ],
+    "status": "ある",
+    "where": "body.investigation の sight 行",
+    "lookups": 1,
+    "lookupSteps": "調べ sight の文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "(181,50,199) は固く、(181,49,199) は掘り済みの空気",
+    "cells": [
+     "181,50,199",
+     "181,49,199"
+    ],
+    "status": "ある",
+    "where": "地図 y=50 と y=49 の行 z=199",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: # と ."
+   },
+   {
+    "fact": "掘る列 (181,49..50,200..202) の 6 マスが固い",
+    "cells": [
+     "181,49,200",
+     "181,50,200",
+     "181,49,201",
+     "181,50,201",
+     "181,49,202",
+     "181,50,202"
+    ],
+    "status": "ある",
+    "where": "地図 y=49 と y=50 の行 z=200〜202",
+    "lookups": 12,
+    "lookupSteps": "地図 6 マス × 2 = 12",
+    "note": "cellLook: 全部 #"
+   },
+   {
+    "fact": "鉄鉱石 (181,49,203) が南の突き当たりにある",
+    "cells": [
+     "181,49,203"
+    ],
+    "status": "ある",
+    "where": "地図 y=49 の 'i'",
+    "lookups": 2,
+    "lookupSteps": "地図 1 マス = 2",
+    "note": "cellLook: i（鉄鉱石）。landmarks には載らない"
+   },
+   {
+    "fact": "敵は遠い（最寄り zombie 27.3m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行 1",
+    "note": ""
+   }
+  ],
+  "summary": "止まりの原因と先の固さ・鉄鉱石の位置は live にあり sight 行は直読できるが、列の固さは地図 6 マスを個別に突き合わせる。"
+ },
+ {
+  "scene": "s44",
+  "facts": [
+   {
+    "fact": "(181,49,204) は間の固いブロック (181,50,203) に遮られて見えない（先に (181,50,203) を掘る）",
+    "cells": [
+     "181,49,204",
+     "181,50,203"
+    ],
+    "status": "ある",
+    "where": "body.investigation の sight 行",
+    "lookups": 1,
+    "lookupSteps": "調べ sight の文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "(181,50,203) は固く、(181,49,203) は空気",
+    "cells": [
+     "181,50,203",
+     "181,49,203"
+    ],
+    "status": "ある",
+    "where": "地図 y=50 と y=49 の行 z=203",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: # と ."
+   },
+   {
+    "fact": "鉄鉱石 (182,49,204) と (182,48,204) がある",
+    "cells": [
+     "182,49,204",
+     "182,48,204"
+    ],
+    "status": "ある",
+    "where": "地図 y=49 と y=48 の 'i'",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 i。landmarks には載らない"
+   },
+   {
+    "fact": "(181,49,204) は stone で掘ってから鉄鉱石に進む",
+    "cells": [
+     "181,49,204"
+    ],
+    "status": "ある",
+    "where": "地図 y=49 の行 z=204",
+    "lookups": 2,
+    "lookupSteps": "地図 1 マス = 2",
+    "note": "cellLook: #"
+   },
+   {
+    "fact": "近くの水 (180,52,205) の位置",
+    "cells": [
+     "180,52,205"
+    ],
+    "status": "誤り",
+    "where": "body.investigation の around 行",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "文末が 南 3m・上 3（undefined マス）と値が未定義のまま出ている。地図は y=47〜51 までで (180,52,205) の層も無い"
+   },
+   {
+    "fact": "敵は遠い（最寄り zombie 24.6m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行 1",
+    "note": ""
+   }
+  ],
+  "summary": "止まりの原因・固さ・鉄鉱石の位置は読めるが、近くの水の行に undefined が混じる。"
+ },
+ {
+  "scene": "s45",
+  "facts": [
+   {
+    "fact": "鉄鉱石 (182,48,204) は埋没していて距離 1.3m",
+    "cells": [
+     "182,48,204"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の先頭",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "同じ文に 10 件の鉱石候補が並ぶ"
+   },
+   {
+    "fact": "(182,48,204) へは掘らず置かずには行けず、行ける最寄りは (181,49,203)",
+    "cells": [
+     "182,48,204",
+     "181,49,203"
+    ],
+    "status": "ある",
+    "where": "body.investigation の path 行",
+    "lookups": 1,
+    "lookupSteps": "調べ path の文に座標つきで直接 1",
+    "note": ""
+   },
+   {
+    "fact": "掘る順 (181,48,203) と (181,48,204) が固い、(182,48,204) が鉄鉱石",
+    "cells": [
+     "181,48,203",
+     "181,48,204",
+     "182,48,204"
+    ],
+    "status": "ある",
+    "where": "地図 y=48 の行 z=203,204",
+    "lookups": 6,
+    "lookupSteps": "地図 3 マス × 2 = 6",
+    "note": "cellLook: # # i"
+   },
+   {
+    "fact": "(181,49,204) は作業台、(182,49,204) はかまどで掘れない障害物",
+    "cells": [
+     "181,49,204",
+     "182,49,204"
+    ],
+    "status": "ある",
+    "where": "body.landmarks の先頭 2 行",
+    "lookups": 2,
+    "lookupSteps": "landmarks 2 行 = 2",
+    "note": "cellLook: T と F"
+   },
+   {
+    "fact": "手は空で、iron_pickaxe を持ち物に持っている",
+    "cells": [],
+    "status": "ある",
+    "where": "state.heldItem と inventory",
+    "lookups": 2,
+    "lookupSteps": "heldItem 1 + inventory 1 = 2",
+    "note": ""
+   },
+   {
+    "fact": "敵は遠い（最寄り zombie 23.9m）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.threats 先頭行",
+    "lookups": 1,
+    "lookupSteps": "threats の先頭行 1",
+    "note": ""
+   }
+  ],
+  "summary": "鉱石の位置・足りない道・障害物は本文と地図にあり比較的読みやすいが、鉱石の探索文が長く、掘る順は地図で自力で組む。"
+ },
+ {
+  "scene": "s46",
+  "facts": [
+   {
+    "fact": "頭のマス (311,67,73) が cobbled_deepslate で通れない（先に掘る）",
+    "cells": [
+     "311,67,73"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の walk 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook(地図 y=67): #"
+   },
+   {
+    "fact": "(311,66,73) は掘り済みで空気、(312,66,73) は既に空気",
+    "cells": [
+     "311,66,73",
+     "312,66,73"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の dig 済の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook: 両方 ."
+   },
+   {
+    "fact": "東の先 (312,67,73) が空気、床 (312,65,73) が固い",
+    "cells": [
+     "312,67,73",
+     "312,65,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=67 と y=65 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: . と N"
+   },
+   {
+    "fact": "ブレイズ #4 が 3.4m (308,69,73)（西2・上3）",
+    "cells": [
+     "308,69,73"
+    ],
+    "status": "ある",
+    "where": "body.urgent と body.threats",
+    "lookups": 2,
+    "lookupSteps": "threats 1 + 相対 +1 = 2",
+    "note": "cellLook(地図 y=69): ! がある"
+   },
+   {
+    "fact": "ブレイズ以外の敵の位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか7件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "敵は全 9 体で 2 体しか載らない。landmarks と stops も ほか4件 略"
+   },
+   {
+    "fact": "ブレイズから自分が見えるか（射線）",
+    "cells": [],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "urgent は blaze 3.4m だけで見える見えないの注記が無い"
+   }
+  ],
+  "summary": "前の止まりの原因（頭のマスが固い）が本文に座標つきで書かれていて読みやすいが、他の敵と射線は live に無い。"
+ },
+ {
+  "scene": "s47",
+  "facts": [
+   {
+    "fact": "西の壁 (309,66,73),(309,67,73) が cobbled_deepslate で歩けない（先に掘る）",
+    "cells": [
+     "309,66,73",
+     "309,67,73"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の walk 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook: 両方 #"
+   },
+   {
+    "fact": "壁の奥 (308,66,73),(308,67,73) も固い（nether_bricks）",
+    "cells": [
+     "308,66,73",
+     "308,67,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=66 と y=67 の行 z=73",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: 両方 N"
+   },
+   {
+    "fact": "歩く先の床 (309,65,73) が固い",
+    "cells": [
+     "309,65,73"
+    ],
+    "status": "ある",
+    "where": "地図 y=65 の行 z=73",
+    "lookups": 2,
+    "lookupSteps": "地図 1 マス = 2",
+    "note": "cellLook: N"
+   },
+   {
+    "fact": "目的 (5,35,12) は 312.6m 先で掘らない道が無く一歩では届かない",
+    "cells": [],
+    "status": "ある",
+    "where": "body.lastResults の walk 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に直接 1",
+    "note": ""
+   },
+   {
+    "fact": "(5,35,12) の位置（地上へ戻る門）が何なのか、どちら向きか",
+    "cells": [],
+    "status": "省略",
+    "where": "landmarks の「ほか4件（長いため略）」の中にあるかもしれない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "表示されている landmarks は要塞とスポナー 2 行だけ。計画の今の節の目的地は (195,66,60)"
+   },
+   {
+    "fact": "blaze #9 が 4.3m (311,70,74)",
+    "cells": [
+     "311,70,74"
+    ],
+    "status": "ある",
+    "where": "body.urgent と body.threats",
+    "lookups": 1,
+    "lookupSteps": "threats の 1 行 1",
+    "note": ""
+   },
+   {
+    "fact": "他の敵 7 体の位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか7件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   }
+  ],
+  "summary": "止まった壁の座標は本文に直接あり読みやすいが、本番が選んだ遠い目的地 (5,35,12) の位置づけは略された欄にしか入らない。"
+ },
+ {
+  "scene": "s48",
+  "facts": [
+   {
+    "fact": "西 (243,58,73) は netherrack で埋まっていて置けない",
+    "cells": [
+     "243,58,73"
+    ],
+    "status": "ある",
+    "where": "body.lastResults の place 止の本文",
+    "lookups": 1,
+    "lookupSteps": "本文に座標つきで直接 1",
+    "note": "cellLook: n"
+   },
+   {
+    "fact": "wither_skeleton #780 が 7.8m (244,63,67) で近づいている（北・上5）",
+    "cells": [],
+    "status": "ある",
+    "where": "body.urgent と body.threats",
+    "lookups": 3,
+    "lookupSteps": "urgent 1 + threats の座標 +1 + 相対 +1 = 3",
+    "note": "地図の層は y=56〜60 で敵のマスは地図に無い"
+   },
+   {
+    "fact": "南 (244,58,74) は空気、(244,59,74) は nether_bricks",
+    "cells": [
+     "244,58,74",
+     "244,59,74"
+    ],
+    "status": "ある",
+    "where": "地図 y=58 と y=59 の行 z=74",
+    "lookups": 4,
+    "lookupSteps": "地図 2 マス × 2 = 4",
+    "note": "cellLook: . と N"
+   },
+   {
+    "fact": "南の (244,58,76) には床が無い（(244,57,76) が空気）ので歩くと落ちる",
+    "cells": [
+     "244,58,76",
+     "244,59,76",
+     "244,57,76"
+    ],
+    "status": "ある",
+    "where": "地図 y=58, y=59, y=57 の行 z=76",
+    "lookups": 6,
+    "lookupSteps": "1 歩歩けるか: 足・頭・床 3 マス = 6",
+    "note": "cellLook: 3 マスとも .（y=56 も空気で縦の連なりは z=73 の列しか無い）"
+   },
+   {
+    "fact": "逃げ先 (200,62,70) までの道",
+    "cells": [
+     "200,62,70"
+    ],
+    "status": "無い",
+    "where": "どこにも書かれていない",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": "地図は x=237〜251 のみで 44m 先は範囲外"
+   },
+   {
+    "fact": "残りの敵 4 体の位置",
+    "cells": [],
+    "status": "省略",
+    "where": "body.threats の「ほか4件（長いため略）」",
+    "lookups": null,
+    "lookupSteps": "",
+    "note": ""
+   }
+  ],
+  "summary": "置けない原因と敵の接近は読めるが、本番が選んだ南の空洞は床が無く、そのことは地図の 3 マスから自分で解く必要があり、逃げ先の道は live に無い。"
+ }
+]

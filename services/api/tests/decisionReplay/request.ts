@@ -6,6 +6,7 @@ import { FCA_TRANSIENT_BETAS } from '../../src/infra/models/anthropic/anthropicF
 import { llmcSystemAppendix } from '../../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { shortActTool, slimTools, splitKnowledge, type Slim } from './slim.js';
+import { REWRITE_LEGEND } from './rewriteLive.js';
 import type { FcaToolDefinition } from '../../src/mind/action/fca/fcaPorts.js';
 import type { Decision, Entry } from './load.js';
 
@@ -38,6 +39,8 @@ export interface Variant {
   thinkingOff?: boolean;
   /** 10/23 v8: 絞った形（道具・知識の段・履歴・短い出力）。 */
   slim?: Slim;
+  /** 10/23 v9: 書き直した live（rewriteLive.ts）を渡す版。指示文に、足した欄の読み方（REWRITE_LEGEND）を足す。 */
+  legend?: boolean;
 }
 /** 比べる版。足すときはここに 1 行（上げる条件の違い、Haiku など）。 */
 export const VARIANTS: readonly Variant[] = [
@@ -54,6 +57,9 @@ export const VARIANTS: readonly Variant[] = [
   { id: 'v8b', label: 'v8b + 知識の段を場面で選ぶ', model: MODELS.opus, ownPrompt: true, shortOutput: true, r10: true, slim: { tools: true, knowledge: true } },
   { id: 'v8c', label: 'v8c + 履歴を要約 + 直近 3〜8 回', model: MODELS.opus, ownPrompt: true, shortOutput: true, r10: true, slim: { tools: true, knowledge: true, history: true } },
   { id: 'v8d', label: 'v8d + 手を短い書き方に（全部入り）', model: MODELS.opus, ownPrompt: true, shortOutput: true, r10: true, slim: { tools: true, knowledge: true, history: true, short: true } },
+  // v9（書き直した live、10/23 の 3 つ目の依頼）: v2（専用の指示文 + 短い出力、r10 なし）の上に live だけを書き直す。
+  { id: 'v9b', label: 'v9b v2 + 書き直した live（周り・道・敵 1 行・地図の層をそろえる）', model: MODELS.opus, ownPrompt: true, shortOutput: true, legend: true },
+  { id: 'v9c', label: 'v9c v9b + 手の短い書き方', model: MODELS.opus, ownPrompt: true, shortOutput: true, legend: true, slim: { short: true } },
 ];
 
 /** The console as it was when this module loaded (captureBase silences it while production code logs, and may overlap with another capture). */
@@ -70,7 +76,7 @@ function captureBase(variant: Variant, core: readonly FcaToolDefinition[]): Prom
   return next;
 }
 async function captureOnce(variant: Variant, core: readonly FcaToolDefinition[]): Promise<Capture> {
-  const key = `${variant.model}|${variant.ownPrompt}|${variant.shortOutput}|${variant.effort ?? ''}|${variant.r10 ? 'r10' : 'r9'}|${variant.thinkingOff ? 'nothink' : ''}|${JSON.stringify(variant.slim ?? {})}|${createHash('sha256').update(JSON.stringify(core)).digest('hex').slice(0, 12)}`;
+  const key = `${variant.model}|${variant.ownPrompt}|${variant.shortOutput}|${variant.effort ?? ''}|${variant.r10 ? 'r10' : 'r9'}|${variant.thinkingOff ? 'nothink' : ''}|${JSON.stringify(variant.slim ?? {})}|${variant.legend ? 'legend' : ''}|${createHash('sha256').update(JSON.stringify(core)).digest('hex').slice(0, 12)}`;
   const cached = baseCache.get(key);
   if (cached) return cached;
   let captured: Capture | null = null;
@@ -91,6 +97,7 @@ async function captureOnce(variant: Variant, core: readonly FcaToolDefinition[])
   const system = base.body.system as Array<{ text: string; cache_control?: unknown }>;
   if (!variant.r10 && variant.ownPrompt) for (const block of system) block.text = block.text.replace(KNOWLEDGE_R10, KNOWLEDGE_R9);
   if (variant.shortOutput) system[1]!.text = `${system[1]!.text}\n\n${SHORT_OUTPUT_RULE}`;
+  if (variant.legend) system[1]!.text = `${system[1]!.text}\n\n${REWRITE_LEGEND}`;
   base.body.output_config = { effort: variant.effort ?? 'low' };
   if (variant.slim?.tools) base.body.tools = slimTools(base.body.tools as Array<{ name: string }>);
   if (variant.slim?.short) base.body.tools = (base.body.tools as Array<{ name: string }>).map(tool => tool.name === 'mc_act' ? shortActTool() : tool);

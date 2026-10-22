@@ -68,3 +68,11 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 版: v4（`r10Live.ts`: 止まりの補足 H3 を履歴と lastResults に、線上のマス H5 を urgent の行に。H2 は作れない）、v5（v4 の答えに守りをかけ、止めたら事実を tool_result で返して 1 回だけ聞き直す）、v6（effort high。Opus 5.5 は thinking を切れない）、v7（Sonnet + 守り）、v8a〜d（`slim.ts`: 道具 6 つ → + 知識の段 → + 履歴の要約 → + 短い書き方 `shortHands.ts`）。
 - 回す: `run2.ts`（v1/v2/v4/v6/v7、`--variants --reps --scenes --out`）、`run3.ts`（v8）。費用は `DECISION_REPLAY_LEDGER` の帳簿に数え、`DECISION_REPLAY_CAP` で止まる。採点は `judgeAll2.ts`（`--out=judge2b.jsonl --force` で 2 回目）、表は `report2.ts`。
 - 近似: 場面の地図は直前の act の終わりの地図、敵と自分の場所は live の整数（H5 の線は 0.5 ずれる）、守りは 1 回だけ聞き直す、v8 の要約は block 6 判断ごと。
+
+## 10/23 の追加 (3): 書き直した live の比べ（情報の形で Opus の誤りが減るか）
+
+- 点検（API を使わない）: `inspectMech.ts`（要らない欄・誤り・省略・地図の形を機械で数える）、`cellLook.ts`（live の地図のマスを引く）、`dumpReadable.ts`（場面の live を読める形で出す）、`inspectReport.ts`（人手の事実の表 + 機械の数 → 場面ごとの表と型ごとの集計）。結果は `results/decision-rewrite-inspect-20261023.md`。
+- 書き直した live: `rewriteLive.ts`（欄の整理・敵の 1 行化・合算・目印の直し）と `rewriteMap.ts`（足の周り `body.around`、目的地への道 `body.route`、地図の全層を同じ範囲に）。決まりは `rewriteRules.md`。`showRewrite.ts s01` で見られる。手は決めず、場面の記録だけから作る。
+- 版: v2 = 今の live（基準）、v9b = 書き直した live（指示文に `REWRITE_LEGEND` を足す）、v9c = v9b + 手の短い書き方。回すのは `run4.ts`（v2 は前の結果を使い、足りない回数だけ回す。`--dry` で要求の組み立てだけ確かめる）、採点は `judgeAll2.ts --out=judge4.jsonl --only=v2,v9b,v9c`（2 回目は `--out=judge4b.jsonl --force --scenes=…`）、表は `report4.ts`。
+- 間違いの仕分け: `failDump4.ts`（× の答えを書き直した live と並べる）、`walkDistance4.ts`（塞がったマスへ walk の × を足からの距離で数える）、`sceneDiff4.ts`（場面ごとの良し悪し）。
+- 結果のまとめ: `results/decision-rewrite-20261023.md`。試験: `tests/decisionRewrite.test.ts`。

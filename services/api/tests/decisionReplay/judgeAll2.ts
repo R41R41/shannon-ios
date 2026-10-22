@@ -7,7 +7,7 @@ import { decisionOf, loadScenes } from './score.js';
 import type { ResultRow } from './run.js';
 
 /**
- * 後知恵つきの採点（10/23 版）: 結果は results.jsonl（v1〜v3）と results2.jsonl（v4〜v7）、場面は実走27〜34。場面ごとに全部の答えをまとめて 1 回（同じ答えは 1 つに）。
+ * 後知恵つきの採点（10/23 版）: 結果は results.jsonl（v1〜v3）と results2.jsonl（v4〜v7）と results3.jsonl（v8）と results4.jsonl（v9、v2 の足し）、場面は実走27〜34。場面ごとに全部の答えをまとめて 1 回（同じ答えは 1 つに）。
  *   node --import tsx tests/decisionReplay/judgeAll2.ts [--out=judge2.jsonl] [--scenes=s01,s36] [--only=v2,v4,v5,v8a] [--force]
  * （v8 の採点は --out=judge3.jsonl --only=v2,v4,v5,v8a,v8b,v8c,v8d。本番の記録は いつも入る。）
  * 2 回目の採点（一致率を見る）は --out=judge2b.jsonl --force で、別のファイルに。
@@ -19,7 +19,7 @@ if (!apiKey) throw new Error('SHANNON_ANTHROPIC_API_KEY');
 const runs = loadAllRuns();
 const read = (name: string) => existsSync(dataFile(name)) ? readFileSync(dataFile(name), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as ResultRow) : [];
 const only = (flag('only') ?? '').split(',').filter(Boolean);
-const rows = [...read('results.jsonl'), ...read('results2.jsonl'), ...read('results3.jsonl')].filter(row => !only.length || only.includes(row.variant));
+const rows = [...read('results.jsonl'), ...read('results2.jsonl'), ...read('results3.jsonl'), ...read('results4.jsonl')].filter(row => !only.length || only.includes(row.variant));
 const file = dataFile(flag('out') ?? 'judge2.jsonl');
 const done = args.includes('--force') ? new Map() : loadJudged(file);
 const wanted = flag('scenes')?.split(',');
