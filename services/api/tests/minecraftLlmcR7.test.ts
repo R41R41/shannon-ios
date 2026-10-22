@@ -85,7 +85,11 @@ describe('the urgent line says whether a hostile reaches, by the body\'s sight (
     await body.investigate!(new AbortController().signal);
     expect(body.urgent!()).toBe(true);
     body.context();
-    expect((body.transient!() as { urgent: string[] }).urgent).toEqual(['blaze #9 4.0m・上 6・見える（射線の中）']);
+    // r10 (H5): a shooter in sight is said with the cell on the line to it, after the line r7 wrote.
+    const urgent = (body.transient!() as { urgent: string[] }).urgent;
+    expect(urgent).toHaveLength(1);
+    expect(urgent[0]!.startsWith('blaze #9 4.0m・上 6・見える（射線の中）')).toBe(true);
+    expect(urgent[0]).toMatch(/。線上のマス \(-?\d+,-?\d+,-?\d+\)/u);
   });
 
   it('no answer (no probe, or none in time): as r3 said it; a creeper is never walled off; a walker not in sight that can come is urgent', () => {

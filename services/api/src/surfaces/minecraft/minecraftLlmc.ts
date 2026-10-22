@@ -12,6 +12,7 @@ import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
+import { stopFacts } from './minecraftLlmcStopFacts.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
@@ -116,7 +117,9 @@ export function actResultText(result: ActResult): string {
       + `${result.container.items.join('、') || '空'}`] : []),
     ...(result.arrowsLeft !== undefined ? [`矢の残り ${result.arrowsLeft}`] : []),
   ];
-  return [head, ...lines, ...extras].join('\n');
+  // r10 (body): the act began after a reflex that held the body let go.
+  const after = typeof result.afterReflex === 'string' && result.afterReflex ? [`（${result.afterReflex.slice(0, 200)}）`] : [];
+  return [head, ...after, ...lines, ...extras].join('\n');
 }
 
 /** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next live state (r3). */
@@ -141,8 +144,9 @@ export function llmcStoredResult(name: string, text: string): { stored: string; 
 }
 
 /** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */
-export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = []): ToolResult {
-  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent);
+export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = [], input?: unknown,
+  observation: BodyObservation | null = null): ToolResult {
+  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent, input, observation);
   return fixes.length ? { ...result, text: `（頭が形を直して送った: ${fixes.join('、')}）\n${result.text}` } : result;
 }
 function viewResult(receipt: MinecraftControlReceipt): ToolResult {
@@ -155,14 +159,17 @@ function probeResult(receipt: MinecraftControlReceipt): ToolResult {
   if (receipt.outcome !== 'completed' || !receipt.result) return toolFailure('failed', `調べられなかった: ${receipt.result?.slice(0, 300) ?? receipt.outcome}`);
   return toolOk(probeAnswerText(receipt.result, false));
 }
-function actResult(receipt: MinecraftControlReceipt, urgent: string | null): ToolResult {
+function actResult(receipt: MinecraftControlReceipt, urgent: string | null, input?: unknown, observation: BodyObservation | null = null): ToolResult {
   const act = readActResult(receipt.result);
   const cut = urgent ? `急ぎ: ${urgent} が近づいたので act を止めた。\n` : '';
   if (!act) {
     const words = receipt.result?.slice(0, 600) ?? '';
     return receipt.outcome === 'completed' ? toolOk(`${cut}${words || 'act 済み'}`) : toolFailure('failed', `${cut}act ${receipt.outcome}: ${words}`);
   }
-  const text = `${cut}${actResultText(act)}`;
+  // r10 (H3): what a stopped hand's cut line leaves out (the cell out of reach and how far, the cells a step must dig…), from the result's own fields.
+  let facts: string[] = [];
+  try { facts = input === undefined ? [] : stopFacts(act, normalizeActInput(input).input, observation); } catch { facts = []; }
+  const text = `${cut}${actResultText(act)}${facts.length ? `\n${facts.join('\n')}` : ''}`;
   if (act.ok && receipt.outcome === 'completed') return toolOk(text);
   // A reflex or an urgent cut is no fault of the decision (`bodyReflex`); an act that did some of its hands moved (`progressed`).
   const failed = toolFailure('failed', text, { retryable: true });

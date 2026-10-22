@@ -7,6 +7,7 @@ import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
 import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { checkedStopIf } from '../surfaces/minecraft/minecraftLlmcStopIf.js';
+import { waitForReflexRelease } from '../surfaces/minecraft/minecraftLlmcReflexHold.js';
 import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -155,6 +156,17 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
   walled?: boolean }) {
   const { control, step, bodyId, call, active } = parts;
   const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal, 250, { walled: parts.walled === true }) : null;
+  let fixes = parts.fixes;
+  try {
+    // r10 (H2, run 34): an act is not sent while a multi-hand reflex holds the body (its lease would cut it and leave it unsettled).
+    if (call.name === MC_ACT_TOOL && parts.walled === true) {
+      const held = await waitForReflexRelease({ observe: () => control.observe(bodyId), signal: watch?.signal ?? call.signal });
+      if (held.kind) {
+        console.info(`Shannon Minecraft act waited for reflex task=${step.taskId} kind=${held.kind} ms=${held.waitedMs} gaveUp=${held.gaveUp ? 1 : 0}`);
+        fixes = [...fixes, `反射 ${held.kind} が体を握っていたので ${(held.waitedMs / 1000).toFixed(1)} 秒待ってから送った${held.gaveUp ? '（放さないまま上限）' : ''}`];
+      }
+    }
+  } catch { /* waiting never fails a call */ }
   active.stepOutcome = 'unknown';
   try {
     // An act's deadline from its hands, a walk's from its length from where she stands now (run 27: 80 m cut at 17 s).
@@ -162,7 +174,7 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
     const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
       kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, watch?.signal ?? call.signal);
     active.stepOutcome = 'acknowledged';
-    return llmcResult(call.name, receipt, watch?.reason() ?? null, parts.fixes);
+    return llmcResult(call.name, receipt, watch?.reason() ?? null, fixes, call.input, control.observe(bodyId));
   } finally { watch?.stop(); }
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {

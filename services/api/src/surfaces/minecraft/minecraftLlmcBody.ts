@@ -17,6 +17,8 @@ import {
   threatSightMeters, threatSightTargets, walledOff, type NearThreat, type ThreatSight,
 } from './minecraftLlmcThreat.js';
 import { planNowLine } from './minecraftLlmcNode.js';
+import { reflexLines } from './minecraftLlmcReflexHold.js';
+import { shooterLineText } from './minecraftLlmcSightLine.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
 
@@ -91,10 +93,14 @@ export function urgentFacts(observation: BodyObservation | null, cut: string | n
   const open = threats.filter(threat => !walled.includes(threat));
   const reasons: string[] = inSight ? [inSight] : [];
   const near = open.find(item => item.distance <= urgentMeters(item.name));
-  if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
+  // r10 (H5): a hostile in sight that hurts from a distance (a shooter, a piglin's crossbow) is said with the cell on the line to it.
+  const lineCell = near ? shooterLineText(observation, near, known(near)) : null;
+  if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}${lineCell ? `。${lineCell}` : ''}`);
   const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
   if (health !== null && health <= LOW_HEALTH && open.some(item => item.distance <= 16)) reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
   if (cut) reasons.push(cut);
+  // r10 (H2): while a multi-hand reflex holds the body, an urgent decision is told so first; its act is sent after the reflex lets go.
+  if (reasons.length) reasons.unshift(...reflexLines(observation));
   const unreachable = walled.filter(item => item.distance <= urgentMeters(item.name)).slice(0, THREAT_SIGHT.max).map(item => threatLine(item, known(item)));
   return { reasons, unreachable };
 }

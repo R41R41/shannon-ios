@@ -26,7 +26,8 @@ import { DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE } from '../src/surfaces/minecraft/
  */
 const PINNED = {
   transport: 'bab1f949f477c4d8',
-  llmc_r9_system: '6db83be5990e06f3',
+  // r10: 「一歩ではない」に頭の高さ、「届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
+  llmc_r9_system: '5309f0c44e4ce9ef',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
