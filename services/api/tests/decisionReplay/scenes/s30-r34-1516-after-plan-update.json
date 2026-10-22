@@ -1,0 +1,41 @@
+{
+  "id": "s30-r34-1516-after-plan-update",
+  "run": "r34",
+  "seq": 1516,
+  "category": [
+    "plan",
+    "stopped"
+  ],
+  "title": "p1.2 の最初の act。直前に「見られる」で止まった所の隣",
+  "situation": "実走34 +109 秒、(300,61,73)。1 判断前に plan.update で p1.1 を済みにし、p1.2「歪んだ幹を取り作業台」が▶。stops「(299,61,73) 見られる 0秒前」「(300,61,73) 届かない 19秒前」。live の look 行（同じ止まりが続いている: mc.view を）。ブレイズ 14.5m が上の部屋。",
+  "correct": "同じ (299,61,73) を exposeOk 無しで掘り直さない。look 行の指示（mc.view）か、見られない別の高さ（1 段下の岩）へ。why は [p1.2]。",
+  "hindsight": "実際は place 2 → dig (299,61,73) が再び「見られる」で 1/3。次の 2 判断も 4/7・3/5 と少しずつ下へ回った。",
+  "must": [
+    {
+      "id": "no-redig-seen",
+      "why": "「見られる」で止まった (299,61,73) を exposeOk 無しで掘り直さない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "dig",
+          "near": [
+            299,
+            61,
+            73,
+            0.6
+          ],
+          "exposeOk": false
+        }
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "why-tag",
+      "why": "why を [p1.2] で始める",
+      "check": {
+        "kind": "whyTag"
+      }
+    }
+  ]
+}

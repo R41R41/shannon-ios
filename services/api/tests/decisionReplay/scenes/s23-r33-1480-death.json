@@ -1,0 +1,41 @@
+{
+  "id": "s23-r33-1480-death",
+  "run": "r33",
+  "seq": 1480,
+  "category": [
+    "death",
+    "urgent"
+  ],
+  "title": "ピグリン 2.0m・見える・HP 15.5（死の判断）",
+  "situation": "実走33 +998 秒、(186,78,113)、HP 15.5、鉄の剣を持つ。ピグリン #1677 が 2.0m・上 1・見える。エンダーマン #1589 が 5.8m。反射が前の act を止めた。答え方の行あり。ピグリンは 16 HP、鉄の剣なら 3 回前後。この判断の LLM は 3.7 秒、act が体に着くまで更に 4.4 秒かかる。",
+  "correct": "手は 3 つまで。stopIf hpBelow は今の HP 15.5 より低く、かつ届く頃の HP（約 6.6）も見込む。ピグリン 1 体に絞って打つ／間に置く／離れる。エンダーマン（5.8m）まで accept に入れて二正面にしない。",
+  "hindsight": "実際の Opus は attack #1677 + attack #1589 + pickup、accept=piglin,enderman、stopIf hpBelow 9 を出した。体に届いた時の HP は 6.6 で、0 手で stopIf により止まり、更に打たれて +999 に死亡した。",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    },
+    {
+      "id": "stopif-below-hp",
+      "why": "stopIf hpBelow は今の HP 15.5 より低い",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 15
+      }
+    },
+    {
+      "id": "one-front",
+      "why": "エンダーマンまで打つ手に入れて二正面にしない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "attack",
+          "target": "ender"
+        }
+      }
+    }
+  ]
+}

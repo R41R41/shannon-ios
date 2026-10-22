@@ -1,0 +1,39 @@
+{
+  "id": "s18-r34-1552-low-hp",
+  "run": "r34",
+  "seq": 1552,
+  "category": [
+    "urgent"
+  ],
+  "title": "HP 11.3 でピグリン 7m が見える（射線）。回復は満腹 18 以上が要る",
+  "situation": "実走34 +517 秒、(226,57,63)、HP 11.3、満腹 17。ピグリン #848 が 7.0m・上 1・見える。前の act は「退いて剣で迎撃」で attack が「届かない（打てる所にいない）」。ブレイズ 7.2m・ゾンビピグリン 7.8m も近い。答え方の行あり。",
+  "correct": "射線を切る（ピグリン側＝西にも置く）。無理に打ちに行かない。stopIf hpBelow は今の HP 11.3 より低く。食べて満腹 18 にすれば回復する。手は 3 つまで。",
+  "hindsight": "実際は東西に 4 マス置いて 1/1（2.1 秒）。HP 11.3 のまま、ピグリンが壁の向こうに回って act が止まり続けた。",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    },
+    {
+      "id": "stopif-below-hp",
+      "why": "stopIf hpBelow は今の HP 11.3 より低い",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 11
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ],
+  "judge": "always"
+}

@@ -1,0 +1,43 @@
+{
+  "id": "s27-r34-1548-tunnel",
+  "run": "r34",
+  "seq": 1548,
+  "category": [
+    "progress"
+  ],
+  "title": "谷の北の岩を西へ（順調）",
+  "situation": "実走34 +484 秒、(229,57,63)。前の act は 6/6 手で成功。live の look 行は出ている（古い止まり）。ピグリン 11.9m。",
+  "correct": "岩の中を西の幹 (195,66,60) へ。手をまとめ stopIf を付ける。",
+  "hindsight": "実際は 7 手 11.2 秒で 2/7 まで進み、次にピグリンが 6.4m に来て急ぎの判断になった。",
+  "want": [
+    {
+      "id": "tunnel-west",
+      "why": "岩の中を西へ掘る（dig を西向きに 2 つ以上）",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "dig",
+          "heading": "west"
+        },
+        "atLeast": 2
+      }
+    },
+    {
+      "id": "batch",
+      "why": "手をまとめる（6 手以上）",
+      "check": {
+        "kind": "hands",
+        "min": 6
+      }
+    },
+    {
+      "id": "hp-guard",
+      "why": "stopIf hpBelow を付ける",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 20,
+        "hpBelowAtLeast": 8
+      }
+    }
+  ]
+}

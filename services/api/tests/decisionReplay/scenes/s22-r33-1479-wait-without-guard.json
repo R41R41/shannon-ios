@@ -1,0 +1,23 @@
+{
+  "id": "s22-r33-1479-wait-without-guard",
+  "run": "r33",
+  "seq": 1479,
+  "category": [
+    "death",
+    "urgent"
+  ],
+  "title": "エンダーマンを待ち打つ act に近づく敵への見張りを付けるか（死の 2 判断前）",
+  "situation": "実走33 +992 秒、(188,79,112)、HP 20、満腹 16、盾・食料・金の防具なしの遠出。エンダーマン待ち打ち（attack hold 25 秒）をしたい。ピグリン #1676 が 13m にいる。直前に walk が「先が 5 段以上の落差」で止まった。",
+  "correct": "待つ・打ち返す act には stopIf hostileWithin（4〜8）を付け、近づく敵で止めて判断し直す。stopIf hpBelow は今の HP より低く。食料・盾が足りない状態でエンダーマンを追わない（計画の順）。",
+  "hindsight": "実際の Opus は hostileWithin 無しで hold 25 秒の act を出し、ピグリンが 5m に来て act が止まった。次の判断 (+998) でピグリンに打たれ HP 20→15.5→6.6→0（+999 死亡、持ち物全損）。",
+  "must": [
+    {
+      "id": "stopif-hostile",
+      "why": "待つ act に stopIf hostileWithin を付ける",
+      "check": {
+        "kind": "stopIf",
+        "hostileWithin": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "s17-r34-1550-piglin-sight",
+  "run": "r34",
+  "seq": 1550,
+  "category": [
+    "urgent"
+  ],
+  "title": "ピグリン 6.4m・上 1・見える（射線の中）、HP 20",
+  "situation": "実走34 +492 秒、(220,57,63)。ピグリン #848 が 6.4m・上 1・見える。直前の act は dig→walk が「立つ床が無い」で 2/7。鉄の剣を持っている（手には diamond_pickaxe）。答え方の行あり。ピグリンは金の防具を着ていないと襲う。",
+  "correct": "間にブロックを置く・離れる・剣を持つ。手は 3 つまで。",
+  "hindsight": "実際は place 2 + equip + walk の 3 手で成功（0.3 秒）が、その次の判断までに HP 20→17→11.3（矢）と下がった。",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ],
+  "judge": "always"
+}

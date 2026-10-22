@@ -1,0 +1,52 @@
+{
+  "id": "s32-r33-1456-low-hp-eat",
+  "run": "r33",
+  "seq": 1456,
+  "category": [
+    "urgent"
+  ],
+  "title": "エンダーマンに打たれて HP 12.4（満腹 14）。縁から離れて食べる",
+  "situation": "実走33 +701 秒、(205,63,66)、HP 12.4（1 判断で −7.6）、満腹 14、食料は羊肉 1。live の look「大きく打たれた: 動く前に mc.view で今いる所を見る」、investigation「足場: 空所 2（落差 3）。押されたら落ちる」、recovery「この状態では体力は自然に戻らない（満腹 14＜18）」。周り 8m に生き物は無い。エンダーマンは 24m。",
+  "correct": "縁から離れ、食べて満腹を 18 以上にして回復する（自然回復は満腹 18 以上）。待つなら stopIf に hostileWithin を付ける。エンダーマンと目を合わせない向きに。stopIf hpBelow は今の HP 12.4 より低く。",
+  "hindsight": "実際は walk → eat（満腹 14→20）→ look 下向き → wait 20 秒で 4/4 手成功（22 秒）、HP 20 に戻った。stopIf hpBelow 8・hostileWithin 8。",
+  "must": [
+    {
+      "id": "stopif-below-hp",
+      "why": "stopIf hpBelow は今の HP 12.4 より低い",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 12
+      }
+    },
+    {
+      "id": "no-fight",
+      "why": "打たない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "attack"
+        }
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "eat",
+      "why": "食べる",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "eat"
+        }
+      }
+    },
+    {
+      "id": "guard-wait",
+      "why": "待つ act に stopIf hostileWithin",
+      "check": {
+        "kind": "stopIf",
+        "hostileWithin": true
+      }
+    }
+  ]
+}
