@@ -17,6 +17,10 @@ import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
  */
 export const LLMC_LIVE_TOKENS = 3_000;
 const THREATS = 8, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 36, EVENTS = 6;
+/** SHANNON_MINECRAFT_LLMC_V2: no `ほか N 件（長いため略）` (人手の点検: 127 か所、見えない件数の合計 848): every hostile, the whole pack, a bound nothing reaches. */
+const V2_THREATS = 24, V2_INVENTORY = 80, V2_LIVE_TOKENS = 12_000;
+const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS };
+const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS };
 
 /**
  * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
@@ -194,13 +198,16 @@ function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 're
 }
 
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
-export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<string, unknown> {
+export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0, v2 = false): Record<string, unknown> {
+  return buildLive(parts, planTokens, v2 ? V2_CAPS : CAPS);
+}
+function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS): Record<string, unknown> {
   const { observation } = parts;
   if (!observation) return { connected: false, events: parts.events.slice(-EVENTS) };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
   const state = stateOf(world, observation);
   parts.trend.note(finite(world.food), finite(world.saturation));
-  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS);
+  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, caps.threats);
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
@@ -213,9 +220,9 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(look ? { look } : {}),
     state: { ...state, ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     food: { points: food.points, items: food.items, lostIn5min: parts.trend.lostIn5min() },
-    inventory: stacks(world.inventory).slice(0, INVENTORY),
+    inventory: stacks(world.inventory).slice(0, caps.inventory),
     threats,
-    near: seen(world.nearbyEntities, OTHERS + THREATS).filter(line => !threats.includes(line)).slice(0, OTHERS),
+    near: seen(world.nearbyEntities, OTHERS + caps.threats).filter(line => !threats.includes(line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
     ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
   };
@@ -223,7 +230,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const shown = shownResults(parts.lastResults ?? []);
   // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by its health stop in the
   // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as before, never cut).
-  const { urgent, ...rest } = fitLive(live, planTokens);
+  const { urgent, ...rest } = fitLive(live, planTokens, caps.bound);
   return { ...(urgent ? { urgent } : {}), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...rest,
     ...(shown.length ? { lastResults: shown } : {}) };
 }
@@ -284,9 +291,9 @@ const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['invento
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
 
 /** Leaves out the parts that matter least until the live body fits beside the plan. */
-function fitLive(live: Record<string, unknown>, planTokens: number): Record<string, unknown> {
+function fitLive(live: Record<string, unknown>, planTokens: number, bound = LLMC_LIVE_TOKENS): Record<string, unknown> {
   const out: Record<string, unknown> = { ...live };
-  const budget = LLMC_LIVE_TOKENS - planTokens;
+  const budget = bound - planTokens;
   for (const [key, keep] of SHRINK) {
     if (llmcLiveTokens(out) <= budget) break;
     if (key === 'food.items') {

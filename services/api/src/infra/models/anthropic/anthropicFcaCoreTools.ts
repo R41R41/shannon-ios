@@ -75,7 +75,7 @@ function logConflicts(taskId: string, skipped: ReadonlySet<string>): void {
  * addition, so what it needs is declared again at its start, beside its bootstrap.
  */
 export function transientFcaTools(input: FcaModelInput, history: readonly Anthropic.MessageParam[], controls: readonly Anthropic.Tool[],
-  auxiliary: readonly Anthropic.Tool[]) {
+  auxiliary: readonly Anthropic.Tool[], fixed?: readonly string[]) {
   const { names, skipped } = claimedNames(input, controls, auxiliary);
   const core = (input.coreTools ?? []).map(fcaNativeTool), coreNames = new Set(core.map(tool => tool.name));
   const others = new Map<string, Anthropic.Tool>();
@@ -85,11 +85,14 @@ export function transientFcaTools(input: FcaModelInput, history: readonly Anthro
     if (names.get(tool.name) !== definition.name || others.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     if (!coreNames.has(tool.name)) others.set(tool.name, tool);
   }
-  names.set(fcaOpenTool.name, TOOL_OPEN_NAME);
+  // SHANNON_MINECRAFT_LLMC_V2: a fixed menu (`fixed`: the provider names in the order they are declared, the controls after them) has no
+  // tool_open and no fca_context; what changes between decisions is only what follows the cached prefix.
+  if (!fixed) names.set(fcaOpenTool.name, TOOL_OPEN_NAME);
   const declared = declaredInline(history);
   const additions = [...others].filter(([name]) => !declared.has(name))
     .map(([, definition]) => ({ type: 'tool_addition', tool: { type: 'tool_definition', definition } }) as BetaRequestToolAdditionBlock);
   const appended: Anthropic.MessageParam[] = additions.length
     ? [{ role: 'system' as const, content: additions as unknown as Anthropic.ContentBlockParam[] }] : [];
+  if (fixed) return { names, tools: [...fixed.flatMap(name => core.filter(tool => tool.name === name)), ...controls], appended };
   return { names, tools: [fcaOpenTool, ...controls, ...auxiliary, ...core], appended };
 }

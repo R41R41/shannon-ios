@@ -86,7 +86,7 @@ export const urgentMeters = (name: string) => name === 'creeper' ? CREEPER_URGEN
  * (`unreachable`). `inSight`: after a stopIf stop, that a hostile sees her where she stopped, said first (run 31).
  */
 export function urgentFacts(observation: BodyObservation | null, cut: string | null, sights: ReadonlyMap<number, ThreatSight> | null = null,
-  inSight: string | null = null): { reasons: string[]; unreachable: string[] } {
+  inSight: string | null = null, shooterLine = true): { reasons: string[]; unreachable: string[] } {
   const world = (observation?.state.world ?? {}) as { health?: unknown };
   const known = (threat: NearThreat) => threat.id !== null ? sights?.get(threat.id) : undefined;
   const threats = nearThreats(observation), walled = threats.filter(threat => walledOff(threat, known(threat)));
@@ -94,7 +94,7 @@ export function urgentFacts(observation: BodyObservation | null, cut: string | n
   const reasons: string[] = inSight ? [inSight] : [];
   const near = open.find(item => item.distance <= urgentMeters(item.name));
   // r10 (H5): a hostile in sight that hurts from a distance (a shooter, a piglin's crossbow) is said with the cell on the line to it.
-  const lineCell = near ? shooterLineText(observation, near, known(near)) : null;
+  const lineCell = near && shooterLine ? shooterLineText(observation, near, known(near)) : null;
   if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}${lineCell ? `。${lineCell}` : ''}`);
   const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
   if (health !== null && health <= LOW_HEALTH && open.some(item => item.distance <= 16)) reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
@@ -182,8 +182,8 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 /** The live body of an LLM-centric decision: the map-first state, bounded beside the plan's path. */
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
-  r4: { investigation: readonly string[]; scan: readonly string[]; unreachable?: readonly string[]; footing?: string | null } | null = null)
-  : Record<string, unknown> {
+  r4: { investigation: readonly string[]; scan: readonly string[]; unreachable?: readonly string[]; footing?: string | null } | null = null,
+  v2 = false): Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
@@ -191,7 +191,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}),
     ...(r4?.unreachable?.length ? { unreachable: r4.unreachable } : {}), ...(r4?.footing ? { footing: r4.footing } : {}),
-    ...(r4 ? readinessParts(llmc, plan, observation) : {}) }, llmcPlanTokens(plan));
+    ...(r4 ? readinessParts(llmc, plan, observation) : {}) }, llmcPlanTokens(plan), v2);
 }
 
 /**
@@ -269,8 +269,10 @@ const healthOf = (observation: BodyObservation | null): number | null => {
 export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyParts; taskId: string; createdAt: string;
   observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void;
   /** r4: surprises probed before the decision, and the body's scan in the live state. Absent: as r3. */
-  r4?: LlmcProbeParts }): FcaBodyLifecycle {
-  const r4 = parts.r4, watch = r4 ? createSurpriseWatch(parts.taskId) : null;
+  r4?: LlmcProbeParts;
+  /** SHANNON_MINECRAFT_LLMC_V2: no line cell of r10's H5, a live state cut for nothing, and no recall (the mode's live state shows none). */
+  v2?: boolean }): FcaBodyLifecycle {
+  const v2 = parts.v2 === true, r4 = parts.r4, watch = r4 ? createSurpriseWatch(parts.taskId) : null;
   const events = createLlmcEvents(parts.taskId, { stopIfHp: !!r4 }), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
   let observation: BodyObservation | null = null, reasons: string[] = [];
   let investigation: string[] = [], scan: string[] = [];
@@ -298,7 +300,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   };
   /** r8: the live state of an urgent decision (`minecraftLlmcUrgentLive`), made on the frame now; its tokens are kept for the log of its seconds. */
   const urgentState = (minutes: number | null): Record<string, unknown> => {
-    const facts = urgentFacts(observation, events.cut(), r4 ? sights : null, r4 ? inSight : null);
+    const facts = urgentFacts(observation, events.cut(), r4 ? sights : null, r4 ? inSight : null, !v2);
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing,
@@ -374,7 +376,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const minutes = Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null;
       // r8: an urgent step, or a decision asked again after an interrupt, reads the short state.
       if (r4 && (reasons.length > 0 || interrupted !== null)) return urgentState(minutes);
-      return llmcTransient(parts.llmc, events, observation, minutes, reasons, r4 ? { investigation, scan, unreachable, footing } : null);
+      return llmcTransient(parts.llmc, events, observation, minutes, reasons, r4 ? { investigation, scan, unreachable, footing } : null, v2);
     },
     ...(r4 ? {
       /** r8: a hostile she must act on that has come since the request was built (once a decision), see `FcaBodyLifecycle.interrupt`. */
@@ -426,13 +428,13 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
         return { surprises: codes, probes: sent, answered: done.answered, ms: done.ms };
       },
     } : {}),
-    recallWanted: () => events.wanted(),
+    recallWanted: () => !v2 && events.wanted(),
     // r5: no decision asked ahead of an act chosen right after a failed one (run 28: 73% of acts failed within seconds).
     troubled: () => events.actFailed(),
     // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {
-      const facts = urgentFacts(parts.observe(), events.cut(), r4 ? sights : null, r4 ? inSight : null);
+      const facts = urgentFacts(parts.observe(), events.cut(), r4 ? sights : null, r4 ? inSight : null, !v2);
       reasons = facts.reasons;
       unreachable = facts.unreachable;
       if (reasons.length) {

@@ -22,6 +22,7 @@ import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../surfaces/minecraft/minecraftKnowledgeCore.js';
+import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R9 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
@@ -68,7 +69,9 @@ export const LLMC_SUMMARY_OUTPUT_TOKENS = 8_000;
  * the plan's and the goal's, and the memory reads. The task tools are the runner's. `minecraft.reflex` (the image reflex) and
  * `skill.read` (her skills for the old tools) are not the mode's.
  */
-export function llmcMenuTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>): boolean {
+export function llmcMenuTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>, v2 = false): boolean {
+  // SHANNON_MINECRAFT_LLMC_V2: six tools, fixed (these four and the model's two controls); no goal, task or memory tool, no reads.
+  if (v2) return v2MenuTool(tool);
   if (tool.name === 'minecraft.reflex' || tool.name === 'skill.read') return false;
   return /^(mc|plan|goal)\./u.test(tool.name) || tool.name === 'minecraft.observe' || tool.domain === 'memory_read';
 }
@@ -77,10 +80,10 @@ export function llmcMenuTool(tool: Pick<FcaToolDefinition, 'name' | 'domain'>): 
  * list grew with every failed act and the whole progress was stated again in the history each time, about 2,800 characters a round; each
  * act's own result says how it failed).
  */
-export function llmcTools(tools: FcaExternalTools): FcaExternalTools {
+export function llmcTools(tools: FcaExternalTools, v2 = false): FcaExternalTools {
   const { skillIndex: _index, ...rest } = tools;
   const progress = tools.progress;
-  return { ...rest, definitions: tools.definitions.filter(llmcMenuTool),
+  return { ...rest, definitions: tools.definitions.filter(tool => llmcMenuTool(tool, v2)),
     ...(progress ? { progress: { ...progress, context: () => ({ ...progress.context(), failures: [], replans: [] }) } } : {}) };
 }
 
@@ -155,6 +158,8 @@ export interface LlmcWiring {
   ownPrompt?: boolean;
   /** SHANNON_MINECRAFT_ACT_PREFLIGHT (ADR-0014 D3): an act the map shows the body would refuse at a hand's start is not sent. */
   preflight?: boolean;
+  /** SHANNON_MINECRAFT_LLMC_V2 (needs the own prompt, the probe and the preflight): six fixed tools, the mode's instructions, live state and guards. */
+  v2?: boolean;
   models: { main: FcaModel; escalate: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
@@ -169,6 +174,14 @@ export interface LlmcWiring {
  * The mode's models, made once (each with the mode's instructions), its Haiku summarizer and its first-plan planner. Null while the
  * switch is off, or without a key for the main model (logged; the mode then does not start and every task runs as before).
  */
+/** SHANNON_MINECRAFT_LLMC_V2: on only with the own prompt, the probe and the act preflight; asked without them, it says so and stays off. */
+function v2On(values: Readonly<Record<string, string | undefined>>, needs: Record<'own' | 'probe' | 'preflight', boolean>,
+  log: (line: string) => void): boolean {
+  if (!switchOn(values, 'SHANNON_MINECRAFT_LLMC_V2')) return false;
+  const on = needs.own && needs.probe && needs.preflight;
+  if (!on) log('Shannon Minecraft LLMC_V2 off: it needs SHANNON_MINECRAFT_OWN_PROMPT, _LLMC_PROBE and _ACT_PREFLIGHT');
+  return on;
+}
 export function configuredMinecraftLlmc(values: Readonly<Record<string, string | undefined>>,
   base: Omit<AnthropicFcaOptions, 'model' | 'apiKey' | 'systemAppendix'>, parts: { log?(line: string): void; client?: PlanClient } = {}): LlmcWiring | null {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC')) return null;
@@ -179,10 +192,11 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   const own = switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT');
   const appendix = own ? llmcCoreKnowledge(probe) : llmcSystemAppendix(probe);
   const preflight = switchOn(values, 'SHANNON_MINECRAFT_ACT_PREFLIGHT');
+  const v2 = v2On(values, { own, probe, preflight }, log);
   const make = (model: string) => {
     const apiKey = keyFor(values, model);
     return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: appendix,
-      ...(own ? { minecraftOwnPrompt: true } : {}) }) : null;
+      ...(own ? { minecraftOwnPrompt: true } : {}), ...(v2 ? { minecraftV2: minecraftV2Hooks() } : {}) }) : null;
   };
   const main = make(names.main);
   if (!main) {
@@ -191,8 +205,8 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   }
   const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}${probe ? ' probe=on' : ''}`
-    + flagWords({ ownPrompt: own, preflight }));
-  return { names, probe, ...flagsOn({ ownPrompt: own, preflight }), models: { main, escalate: names.escalate ? make(names.escalate) : null },
+    + flagWords({ ownPrompt: own, preflight, v2 }));
+  return { names, probe, ...flagsOn({ ownPrompt: own, preflight, v2 }), models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
         ...(own ? { minecraftOwnPrompt: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
@@ -257,16 +271,17 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
-    tools: { llmc: { plan: display, ...flagsOn({ probe: llmc.probe, preflight: llmc.preflight === true }) } },
+    tools: { llmc: { plan: display, ...flagsOn({ probe: llmc.probe, preflight: llmc.preflight === true, v2: llmc.v2 === true }) } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
+      ...(llmc.v2 ? { v2: true } : {}),
       observe, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log,
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       ...(llmc.probe ? { r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } } : {}) }),
     /** The step's ports with the mode's menu (`llmcTools`). */
-    menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
+    menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools, llmc.v2 === true) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.

@@ -26,7 +26,7 @@ import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompa
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
-import { minecraftProfile, type MinecraftProfile } from './anthropicFcaMinecraftSystem.js';
+import { MINECRAFT_V2_TOOLS, minecraftProfile, type MinecraftProfile, type MinecraftV2Hooks } from './anthropicFcaMinecraftSystem.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
   appendixOf, planField, renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
 
@@ -86,6 +86,8 @@ export interface AnthropicFcaOptions {
    * live state carries no owner clock and no shared affect. Absent or false: every request as before, byte for byte.
    */
   minecraftOwnPrompt?: boolean;
+  /** SHANNON_MINECRAFT_LLMC_V2 (needs `minecraftOwnPrompt`): six fixed tools, the mode's instructions and live state (`MinecraftV2Hooks`). */
+  minecraftV2?: MinecraftV2Hooks;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
@@ -140,7 +142,7 @@ export class AnthropicFcaModel implements FcaModel {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
-      const menu = transient ? transientFcaTools(input, history, CONTROL_TOOLS, [FCA_CONTEXT_TOOL])
+      const menu = transient ? transientFcaTools(input, history, CONTROL_TOOLS, [FCA_CONTEXT_TOOL], this.v2() ? MINECRAFT_V2_TOOLS : undefined)
         : nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       if (transient) return this.transientRequest(input, history, menu, ownerClock);
@@ -249,7 +251,9 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
     if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
-    const decision = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
+    const decided = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
+    const hooks = this.v2();
+    const decision = hooks && decided.kind === 'tools' ? { ...decided, calls: decided.calls.map(call => ({ ...call, input: hooks.callInput(call.name, call.input) as typeof call.input })) } : decided;
     // SHANNON_MINECRAFT_OWN_PROMPT: a transient body task is shown no shared context, so its fca_context is answered as not provided.
     const unshared = !input.sharedContext || this.minecraft !== null;
     const context = unshared && transient ? fcaContextNotProvided(message.content) : decodeFcaContext(message.content, decision, input);
@@ -271,9 +275,11 @@ export class AnthropicFcaModel implements FcaModel {
     const supplied = own ? decisionFields({ ...input, sharedContext: undefined }, undefined, true) : decisionFields(input, ownerClock, true);
     const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,
       systemText: own?.transient ?? `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}`, input, history, menu,
-      supplied, ...(own ? { protocol: own.protocol } : {}) });
+      supplied, ...(own ? { protocol: own.protocol } : {}), ...(this.v2() ? { rewriteLive: this.v2()!.rewriteLive } : {}) });
     return { ...built, menu, built: built.built as RequestBuilt };
   }
+  /** The mode's hooks, only with the own prompt (a body task of the mode reads no other instructions). */
+  private v2(): MinecraftV2Hooks | null { return this.minecraft && this.options.minecraftV2 ? this.options.minecraftV2 : null; }
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): Anthropic.MessageParam {
     const ids = new Set<string>();
     if (!results.length) throw new Error('FCA_MODEL_RESULTS_INVALID');

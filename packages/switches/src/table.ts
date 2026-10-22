@@ -224,6 +224,17 @@ export const SWITCHES = [
       + 'show is sent as it is. Off: as before.',
   },
   {
+    name: 'SHANNON_MINECRAFT_LLMC_V2', default: 'off', kind: 'on_only', owner: 'minecraft',
+    requires: ['SHANNON_MINECRAFT_OWN_PROMPT', 'SHANNON_MINECRAFT_LLMC_PROBE', 'SHANNON_MINECRAFT_ACT_PREFLIGHT'],
+    doc: 'ADR-0014 / improvement plan 2026-10-23 (candidate, not in production): a Minecraft body task of the LLM-centric mode is asked what the '
+      + 'decision needs and no more. Six fixed tools (mc.act with the hands one to a line, mc.probe, mc.view, plan.update, fca_wait, fca_complete); '
+      + 'instructions cut again and the knowledge of the stage the code picks put before the live state; a live state with one line to a hostile, '
+      + 'the pack added up, the landmarks from her feet now, no omitted lines, an around and a route made from the map, and no owner clock, waiting '
+      + 'line, observation hash or recall; the stop notes and shooter line cells of r10 left out (its reflex hold kept); the act preflight sends '
+      + 'the hands before the one it holds, and holds a bare one-wide bridge over a fall of four or more while a hostile sees her. Needs the own '
+      + 'prompt, the probe and the act preflight, else it stays off (logged). Off: every request and every move as with the act preflight alone.',
+  },
+  {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
       + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',
